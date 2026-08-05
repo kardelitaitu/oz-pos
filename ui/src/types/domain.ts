@@ -115,10 +115,10 @@ export const isAppError = (e: unknown): e is AppError =>
 
 /** ISO-4217 minor-unit exponent (decimal places) — IDR/JPY/KRW/VND = 0, KWD = 3, USD/EUR = 2.
  *  Canonical frontend convention; `formatMoney` and money-input parsing share
- *  this via `minorUnitExponent`. NOTE: the Rust `Currency::minor_unit_exponent`
- *  defaults IDR to 2, and `modules/currency` seeds IDR with 2, while `oz-cli`
- *  seeds 0 — the frontend (and the dev-mock data) treats IDR as 0. Reconcile
- *  the Rust currency seed in a follow-up. */
+ *  this via `minorUnitExponent`. Aligned with the Rust side: `Currency::minor_unit_exponent`
+ *  (foundation/src/money.rs), the `006_currencies.sql` migration, `oz-cli`
+ *  init-db, and this map all treat IDR as 0 (the Rupiah has no circulating
+ *  minor unit). */
 export const MINOR_UNIT_EXPONENT: Record<string, number> = {
   IDR: 0, JPY: 0, KRW: 0, VND: 0, CLP: 0, ISK: 0, HUF: 0,
   KWD: 3, OMR: 3, BHD: 3, JOD: 3, TND: 3,

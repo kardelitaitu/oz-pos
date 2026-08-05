@@ -491,6 +491,7 @@ fn currency_minor_unit_exponent() {
     assert_eq!(usd().minor_unit_exponent(), 2);
     assert_eq!(eur().minor_unit_exponent(), 2);
     assert_eq!(jpy().minor_unit_exponent(), 0);
+    assert_eq!("IDR".parse::<Currency>().unwrap().minor_unit_exponent(), 0);
     assert_eq!("KRW".parse::<Currency>().unwrap().minor_unit_exponent(), 0);
     assert_eq!("VND".parse::<Currency>().unwrap().minor_unit_exponent(), 0);
     assert_eq!("CLP".parse::<Currency>().unwrap().minor_unit_exponent(), 0);

@@ -10,7 +10,7 @@ use clap::{CommandFactory, Parser};
 use rusqlite::Connection;
 
 use oz_core::db::Store;
-use oz_core::{CoreError, Currency, FeatureRegistry, Money, SaleStatus, Settings};
+use oz_core::{CoreError, Currency, FeatureRegistry, Money, SaleStatus, Settings, format_minor};
 
 use crate::cli::*;
 
@@ -370,11 +370,7 @@ pub(crate) fn run_sale_list(store: &Store<'_>) -> Result<()> {
     );
 
     for s in &sales {
-        let total_str = format!(
-            "{}.{:02}",
-            s.total.minor_units / 100,
-            s.total.minor_units.abs() % 100,
-        );
+        let total_str = format_minor(s.total.minor_units, s.total.currency);
         let status_str = match s.status {
             SaleStatus::Pending => "pending",
             SaleStatus::Active => "active",
@@ -405,9 +401,8 @@ pub(crate) fn run_sale_get(store: &Store<'_>, id: &str, format: &str) -> Result<
                 println!("{json}");
             } else {
                 let total_str = format!(
-                    "{}.{:02} {}",
-                    sale.total.minor_units / 100,
-                    sale.total.minor_units.abs() % 100,
+                    "{} {}",
+                    format_minor(sale.total.minor_units, sale.currency),
                     std::str::from_utf8(&sale.currency.0).unwrap_or("???"),
                 );
                 println!("ID:           {}", sale.id);
@@ -426,11 +421,7 @@ pub(crate) fn run_sale_get(store: &Store<'_>, id: &str, format: &str) -> Result<
                     println!("{:<4} {:<24} {:>6} {:>10}", "#", "SKU", "Qty", "Unit");
                     println!("{:-<4} {:-<24} {:->6} {:->10}", "", "", "", "");
                     for line in &sale.lines {
-                        let unit_str = format!(
-                            "{}.{:02}",
-                            line.unit_price.minor_units / 100,
-                            line.unit_price.minor_units.abs() % 100,
-                        );
+                        let unit_str = format_minor(line.unit_price.minor_units, sale.currency);
                         println!(
                             "{:<4} {:<24} {:>6} {:>10}",
                             line.line_position, line.sku, line.qty, unit_str
@@ -692,11 +683,7 @@ pub(crate) fn run_product_list(store: &Store<'_>) -> Result<()> {
     println!("{:-<12} {:-<24} {:->10}  {:-}", "", "", "", "");
 
     for p in &products {
-        let price_str = format!(
-            "{}.{:02}",
-            p.product.price.minor_units / 100,
-            p.product.price.minor_units.abs() % 100
-        );
+        let price_str = format_minor(p.product.price.minor_units, p.product.price.currency);
         let stock_str = match p.stock_qty {
             Some(q) => q.to_string(),
             None => "-".into(),
@@ -717,9 +704,8 @@ pub(crate) fn run_product_get(store: &Store<'_>, sku: &str) -> Result<()> {
     match store.get_product(sku).context("looking up product")? {
         Some(p) => {
             let price_str = format!(
-                "{}.{:02} {}",
-                p.product.price.minor_units / 100,
-                p.product.price.minor_units.abs() % 100,
+                "{} {}",
+                format_minor(p.product.price.minor_units, p.product.price.currency),
                 std::str::from_utf8(&p.product.price.currency.0).unwrap_or("???"),
             );
             println!("SKU:          {}", p.product.sku.as_str());

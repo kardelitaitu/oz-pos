@@ -48,7 +48,7 @@ pub use contact::{Email, Phone};
 pub use contracts::{EventHandler, Module, Service};
 pub use enums::{InvalidTransition, PaymentMethod, SaleStatus};
 pub use errors::{ConflictError, NotFoundError, ValidationError};
-pub use money::{Currency, InvalidCurrencyCode, Money};
+pub use money::{Currency, InvalidCurrencyCode, Money, format_minor};
 pub use percentage::Percentage;
 pub use sku::{LineId, Sku};
 pub use validation::{

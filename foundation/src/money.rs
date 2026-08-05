@@ -1,8 +1,9 @@
 //! Money and currency primitives.
 //!
 //! Money is **always** stored as integer minor units (e.g., cents for USD,
-//! sen for IDR, paise for INR). Pair with an ISO-4217 currency code for
-//! display. Floating point is forbidden anywhere in the money path.
+//! paise for INR; IDR/JPY/KRW have a 0 exponent so the minor unit IS the
+//! Rupiah/Yen/Won). Pair with an ISO-4217 currency code for display.
+//! Floating point is forbidden anywhere in the money path.
 
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -44,12 +45,41 @@ pub struct Currency(pub [u8; 3]);
 
 impl Currency {
     /// The number of decimal places used by this currency.
+    ///
+    /// ISO-4217 minor-unit exponent: IDR/JPY/KRW/VND/CLP/ISK/HUF = 0,
+    /// KWD/OMR/BHD/JOD/TND = 3, everything else = 2. This must stay in
+    /// sync with the seeds in `crates/oz-core/migrations/006_currencies.sql`,
+    /// `crates/oz-cli` (init-db) and the frontend `MINOR_UNIT_EXPONENT`
+    /// (ui/src/types/domain.ts) — all treat IDR as 0 (the Rupiah has no
+    /// circulating minor unit).
     pub fn minor_unit_exponent(&self) -> u32 {
         match &self.0 {
-            b"JPY" | b"KRW" | b"VND" | b"CLP" | b"ISK" | b"HUF" => 0,
+            b"IDR" | b"JPY" | b"KRW" | b"VND" | b"CLP" | b"ISK" | b"HUF" => 0,
             b"KWD" | b"OMR" | b"BHD" | b"JOD" | b"TND" => 3,
             _ => 2,
         }
+    }
+}
+
+/// Render a minor-unit amount as a major-unit decimal string using the
+/// currency's ISO-4217 minor-unit exponent — e.g. `1_200` USD minor →
+/// `"12.00"`, `4_450_000` IDR minor → `"4450000"`, `12` KWD minor →
+/// `"0.012"`. No currency symbol/code is appended; the caller adds
+/// context (symbol, "off", etc.).
+#[must_use]
+pub fn format_minor(minor: i64, currency: Currency) -> String {
+    let exp = currency.minor_unit_exponent();
+    if exp == 0 {
+        minor.to_string()
+    } else {
+        let div = 10_i64.pow(exp);
+        let major = minor / div;
+        let frac = minor.abs() % div;
+        // Integer division truncates toward zero, so a negative sub-major
+        // amount (e.g. -12 cents) would otherwise render as "0.12" and lose
+        // its sign — prefix it explicitly.
+        let sign = if minor < 0 && major == 0 { "-" } else { "" };
+        format!("{sign}{major}.{:0width$}", frac, width = exp as usize)
     }
 }
 
@@ -470,7 +500,35 @@ mod tests {
     fn minor_unit_exponent_known_codes() {
         assert_eq!(usd().minor_unit_exponent(), 2);
         assert_eq!("JPY".parse::<Currency>().unwrap().minor_unit_exponent(), 0);
+        assert_eq!("IDR".parse::<Currency>().unwrap().minor_unit_exponent(), 0);
         assert_eq!("KWD".parse::<Currency>().unwrap().minor_unit_exponent(), 3);
+    }
+
+    #[test]
+    fn money_from_major_idr_has_no_exponent() {
+        let idr: Currency = "IDR".parse().unwrap();
+        // IDR minor unit IS the Rupiah (exp 0): Rp 12 → 12 minor units.
+        let m = Money::from_major(12, idr).unwrap();
+        assert_eq!(m.minor_units, 12);
+    }
+
+    #[test]
+    fn format_minor_uses_currency_exponent() {
+        let idr: Currency = "IDR".parse().unwrap();
+        let usd: Currency = "USD".parse().unwrap();
+        let kwd: Currency = "KWD".parse().unwrap();
+        // exp 0: minor unit IS the Rupiah.
+        assert_eq!(format_minor(4_450_000, idr), "4450000");
+        // exp 2: 1,200 cents → $12.00.
+        assert_eq!(format_minor(1_200, usd), "12.00");
+        // exp 3: 12 fils → KWD 0.012.
+        assert_eq!(format_minor(12, kwd), "0.012");
+        // Negative keeps sign on the major part.
+        assert_eq!(format_minor(-1_200, usd), "-12.00");
+        // Negative sub-major amount keeps its sign too (refund/void totals).
+        assert_eq!(format_minor(-12, usd), "-0.12");
+        assert_eq!(format_minor(-12, kwd), "-0.012");
+        assert_eq!(format_minor(-4_450_000, idr), "-4450000");
     }
 
     #[test]

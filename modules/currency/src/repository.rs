@@ -452,7 +452,7 @@ mod tests {
     fn create_and_repository_return_equivalent_rows() {
         let conn = fresh();
         seed_currency(&conn, "USD", "840", "US Dollar", 2, "$");
-        seed_currency(&conn, "IDR", "360", "Indonesian Rupiah", 2, "Rp");
+        seed_currency(&conn, "IDR", "360", "Indonesian Rupiah", 0, "Rp");
         let repo = CurrencyRepository::new(&conn);
 
         // Use a large but realistic cross-rate value (USD→IDR) to confirm

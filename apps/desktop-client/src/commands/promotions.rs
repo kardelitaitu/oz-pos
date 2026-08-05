@@ -5,7 +5,7 @@
 use serde::Deserialize;
 use tauri::State;
 
-use oz_core::{Promotion, PromotionApplication, Store};
+use oz_core::{Promotion, PromotionApplication, Store, format_minor};
 
 use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
@@ -508,7 +508,11 @@ fn run_apply_promotion(
         promotion_id: promotion_id.to_string(),
         sale_id: sale_id.to_string(),
         discount_minor,
-        description: format!("{}: {:.2} off", promo.name, discount_minor as f64 / 100.0),
+        description: format!(
+            "{}: {} off",
+            promo.name,
+            format_minor(discount_minor, sale.currency)
+        ),
         created_at: now,
     };
 
