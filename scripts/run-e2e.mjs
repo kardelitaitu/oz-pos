@@ -15,6 +15,7 @@
  *   cd ui && npm run e2e:ui                 # UI tests only
  *   cd ui && npm run e2e -- --no-docker     # skip Docker (use existing servers)
  *   cd ui && npm run e2e -- e2e/auth.spec.ts  # single spec
+ *   cd ui && npm run e2e -- --project=desktop # one Playwright project only
  */
 
 import { execSync, spawn } from 'child_process';
@@ -35,6 +36,10 @@ const API_ONLY = args.includes('--api-only');
 const UI_ONLY = args.includes('--ui-only');
 const NO_DOCKER = args.includes('--no-docker');
 const CHANGED_ONLY = args.includes('--changed-only');
+// Optional --project=<name> passthrough (e.g. --project=desktop) so CI
+// can shard the suite by Playwright project (desktop / tablet) instead
+// of running the full matrix in a single job. Forwarded verbatim.
+const PROJECT = args.find(a => a.startsWith('--project=')) ?? '';
 const SPEC_FILES = args.filter(a => !a.startsWith('-'));
 
 /* ── ANSI helpers ───────────────────────────────────────────────────── */
@@ -354,6 +359,7 @@ function getChangedSpecs() {
 function runPlaywright() {
   let cmd = `npx playwright test --config e2e/playwright.config.ts`;
 
+  if (PROJECT) cmd += ` ${PROJECT}`;
   if (HEADED) cmd += ' --headed';
 
   // Determine which spec files to run
@@ -404,7 +410,12 @@ function runPlaywright() {
   log('Playwright', `Running: ${cmd}`);
 
   try {
-    execSync(cmd, { cwd: UI_DIR, stdio: 'inherit', timeout: 600_000 });
+    // Internal cap: 25 min. The GitHub job timeout-minutes (30 min in
+    // e2e-pr.yml) is the real governor — this cap only needs to stay
+    // comfortably above the longest realistic test phase so it never
+    // fires first (the old 600s could be tight for a many-spec PR shard
+    // with CI's 2 retries).
+    execSync(cmd, { cwd: UI_DIR, stdio: 'inherit', timeout: 1_500_000 });
     log('Playwright', `${GREEN}All tests passed${NC}`);
     return 'pass';
   } catch {

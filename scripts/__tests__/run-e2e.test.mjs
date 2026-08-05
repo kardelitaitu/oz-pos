@@ -30,6 +30,7 @@ function parseArgs(raw) {
     UI_ONLY: raw.includes('--ui-only'),
     NO_DOCKER: raw.includes('--no-docker'),
     CHANGED_ONLY: raw.includes('--changed-only'),
+    PROJECT: raw.find(a => a.startsWith('--project=')) ?? '',
     SPEC_FILES: raw.filter(a => !a.startsWith('-')),
   };
 }
@@ -110,6 +111,17 @@ describe('parseArgs()', () => {
     const p = parseArgs(['--no-docker', 'e2e/api.spec.ts']);
     assert.strictEqual(p.NO_DOCKER, true);
     assert.deepStrictEqual(p.SPEC_FILES, ['e2e/api.spec.ts']);
+  });
+
+  it('captures --project= flag and excludes it from spec files', () => {
+    const p = parseArgs(['--project=desktop', 'e2e/auth.spec.ts']);
+    assert.strictEqual(p.PROJECT, '--project=desktop');
+    assert.deepStrictEqual(p.SPEC_FILES, ['e2e/auth.spec.ts']);
+  });
+
+  it('returns empty PROJECT when no --project= flag is given', () => {
+    const p = parseArgs(['--headed', 'e2e/auth.spec.ts']);
+    assert.strictEqual(p.PROJECT, '');
   });
 
   it('ignores non-flag strings as spec files', () => {
@@ -227,6 +239,13 @@ describe('Playwright command construction', () => {
     let cmd = 'npx playwright test --config e2e/playwright.config.ts';
     if (headed) cmd += ' --headed';
     assert.ok(cmd.includes('--headed'));
+  });
+
+  it('forwards --project= flag into command', () => {
+    const project = '--project=desktop';
+    let cmd = 'npx playwright test --config e2e/playwright.config.ts';
+    if (project) cmd += ` ${project}`;
+    assert.ok(cmd.includes('--project=desktop'));
   });
 
   it('formats spec file paths correctly', () => {
