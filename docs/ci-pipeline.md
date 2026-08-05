@@ -36,7 +36,7 @@
 | `coverage` | PR + push | ~5min | rust-cache | — | ⚠️ Advisory |
 | `audit` | PR + push | ~30s | — | — | ⚠️ Advisory on PR, ✅ Required on push (AUDIT-27 CI-03) |
 | `security-pr` | PR only | ~40s | — | — | ✅ Required when manifests changed — fail-closed if base SHA can't be resolved (AUDIT-27 CI-10) |
-| `fuzz` | Push + PR (fuzz paths) | ~15min | rust-cache | — | ⚠️ Advisory (crash artifacts uploaded) |
+| `fuzz` | Push + PR (fuzz paths) | ~30min cold / ~8min cached | rust-cache (no sccache) | — | ⚠️ Advisory (crash artifacts uploaded) |
 | `skill-drift-tests` | PR + push | ~20s | — | — | ✅ Required |
 | `flaky-quarantine` | PR + push | ~10s | — | — | ✅ Required (AUDIT-27 CI-09) |
 | `windows-config` | PR + push | ~10s | — | — | ✅ Required (AUDIT-28 — NSIS installMode + asInvoker manifests) |

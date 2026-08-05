@@ -669,13 +669,14 @@ jobs:
     name: Fuzz
     runs-on: ubuntu-latest
     continue-on-error: true
-    timeout-minutes: 15
+    timeout-minutes: 30
     # Advisory (crash artifacts uploaded). Runs on every main push; on PRs
     # only when fuzz-relevant code changed (fuzz targets + the crates they
-    # import: foundation, oz-core, oz-lua, oz-plugin). cargo-fuzz install +
-    # 5×60s target runs cost ~15 min, so gating PRs on paths keeps the
-    # signal without taxing every PR commit. Mirrors the security-pr
-    # fail-closed gate pattern.
+    # import: foundation, oz-core, oz-lua, oz-plugin). The cold dep build
+    # (codegen-units=1 + ASAN/sancov, no sccache — see env below) can take
+    # 15-25 min, so the 30-min cap is the outer bound; cached runs finish
+    # in ~8 min. Gating PRs on paths keeps the signal without taxing every
+    # PR commit. Mirrors the security-pr fail-closed gate pattern.
     env:
       # rustup toolchain resolution: the fuzz build runs from the repo
       # root, whose rust-toolchain.toml pins STABLE — but cargo-fuzz
@@ -734,13 +735,28 @@ jobs:
           fi
       - uses: dtolnay/rust-toolchain@nightly
         if: steps.gate.outputs.run == 'true'
+      # The fuzz crate is a STANDALONE workspace, so default workspace
+      # discovery misses its target dir; `workspaces: fuzz` caches
+      # fuzz/target/ — and cargo-fuzz compiles everything there, including
+      # the path deps (foundation, oz-core, oz-lua, oz-plugin). Save on
+      # every push (main + release branches) so PR runs — same Cargo.lock
+      # — restore a warm build; PR runs only restore, never save.
       - uses: Swatinem/rust-cache@v2
         if: steps.gate.outputs.run == 'true'
         with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          workspaces: fuzz
+          save-if: ${{ github.event_name != 'pull_request' }}
       - name: Install cargo-fuzz
         if: steps.gate.outputs.run == 'true'
         run: cargo install cargo-fuzz
+      # Build all fuzz targets + the full dep tree ONCE, outside any timeout
+      # cap. Without this, the per-target `timeout 65` in the loop below
+      # wraps the cold build too and kills it at 65s (exit 124) — the dep
+      # compile (rustls-webpki, flate2, …) alone takes longer than that
+      # on a cold cache.
+      - name: Build fuzz targets
+        if: steps.gate.outputs.run == 'true'
+        run: cargo fuzz build
       - name: Fuzz targets (60s each)
         if: steps.gate.outputs.run == 'true'
         run: |
@@ -748,6 +764,9 @@ jobs:
             echo "::group::Fuzzing $target"
             # AUDIT-27 CI-03: no `|| true` — fuzz failures surface to the
             # advisory job and trigger the crash-artifact upload below.
+            # The target bins are already built above; `cargo fuzz run` only
+            # does a seconds-long incremental rebuild, so the 65s cap now
+            # bounds the 60s fuzz run itself.
             timeout 65 cargo fuzz run "$target" -- -max_total_time=60
             echo "::endgroup::"
           done
