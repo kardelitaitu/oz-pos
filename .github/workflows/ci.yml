@@ -669,22 +669,28 @@ jobs:
     name: Fuzz
     runs-on: ubuntu-latest
     continue-on-error: true
-    timeout-minutes: 10
+    timeout-minutes: 15
     # Advisory (crash artifacts uploaded). Runs on every main push; on PRs
     # only when fuzz-relevant code changed (fuzz targets + the crates they
     # import: foundation, oz-core, oz-lua, oz-plugin). cargo-fuzz install +
-    # 5×60s target runs cost ~10 min, so gating PRs on paths keeps the
+    # 5×60s target runs cost ~15 min, so gating PRs on paths keeps the
     # signal without taxing every PR commit. Mirrors the security-pr
     # fail-closed gate pattern.
     env:
-      # sccache (RUSTC_WRAPPER) resolves the rustup shim against
-      # RUSTUP_TOOLCHAIN / the root rust-toolchain.toml, which pins
-      # STABLE — but this job installs ONLY the nightly toolchain (see
-      # fuzz/rust-toolchain.toml). Without pinning, sccache tries to exec
-      # the uninstalled stable rustc and dies instantly with "could not
-      # execute process sccache .../stable-.../rustc -vV (No such file or
-      # directory)".
+      # rustup toolchain resolution: the fuzz build runs from the repo
+      # root, whose rust-toolchain.toml pins STABLE — but cargo-fuzz
+      # requires nightly (-Z sanitizer flags). RUSTUP_TOOLCHAIN pins
+      # nightly job-wide so rustup resolves it regardless of the toolchain
+      # file (fuzz/rust-toolchain.toml alone is not enough: rustup resolves
+      # from the CWD, which is the repo root during `cargo fuzz run`).
       RUSTUP_TOOLCHAIN: nightly
+      # The ubuntu runner image globally sets RUSTC_WRAPPER=sccache for
+      # every job. That wrapper breaks cargo-fuzz's `--target` build: its
+      # rustc version probe (`sccache .../toolchains/nightly-.../bin/rustc
+      # -vV`) execs the resolved toolchain path directly and dies with
+      # "No such file or directory". Override it to empty so cargo invokes
+      # rustc through rustup normally (as every other job does).
+      RUSTC_WRAPPER: ''
     steps:
       - uses: actions/checkout@v4
         with:
