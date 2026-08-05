@@ -231,7 +231,7 @@ describe('GeneralSection', () => {
   it('renders currency section', () => {
     renderSection({
       currencies: [
-        { code: 'IDR', name: 'Indonesian Rupiah', minor_exponent: 2, symbol: 'Rp' },
+        { code: 'IDR', name: 'Indonesian Rupiah', minor_exponent: 0, symbol: 'Rp' },
         { code: 'USD', name: 'US Dollar', minor_exponent: 2, symbol: '$' },
       ],
       defaultCurrency: 'IDR',
@@ -249,7 +249,7 @@ describe('GeneralSection', () => {
       setDefaultCurrencyState,
       setStore,
       currencies: [
-        { code: 'IDR', name: 'Indonesian Rupiah', minor_exponent: 2, symbol: 'Rp' },
+        { code: 'IDR', name: 'Indonesian Rupiah', minor_exponent: 0, symbol: 'Rp' },
         { code: 'USD', name: 'US Dollar', minor_exponent: 2, symbol: '$' },
       ],
       defaultCurrency: 'IDR',

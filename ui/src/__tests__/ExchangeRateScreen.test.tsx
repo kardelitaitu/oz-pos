@@ -6,6 +6,7 @@ import { ToastProvider } from '@/frontend/shared/Toast';
 import currencyFtl from '@/locales/currency.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 import ExchangeRateScreen from '@/features/currency/ExchangeRateScreen';
+import { minorUnitExponent } from '@/types/domain';
 
 // ── Mocks ────────────────────────────────────────────────────────────
 
@@ -39,7 +40,10 @@ function makeRate(overrides: Record<string, unknown> = {}) {
 }
 
 function makeCurrency(code: string, name: string) {
-  return { code, name, minor_exponent: 2, symbol: code };
+  // Derive the exponent from the canonical MINOR_UNIT_EXPONENT map so the
+  // fixture stays aligned with the Rust `Currency::minor_unit_exponent`
+  // (e.g. IDR = 0, KWD = 3) instead of hardcoding 2 for every code.
+  return { code, name, minor_exponent: minorUnitExponent(code), symbol: code };
 }
 
 function renderScreen() {
