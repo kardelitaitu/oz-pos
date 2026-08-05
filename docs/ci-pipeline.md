@@ -75,6 +75,7 @@ Checks are split into **required** (block merges) and **advisory** (informationa
 ### Rust (cargo)
 - **rust-cache** (`Swatinem/rust-cache@v2`): Caches `target/` keyed by `Cargo.lock`. `save-always: true` persists cache even on job failure.
 - **sccache** (`mozilla/sccache-action@v0.0.10`): Compiler cache shared across jobs.
+- **Exception — the `fuzz` job sets `RUSTC_WRAPPER: ''`** (job env): the ubuntu runner image globally wraps `rustc` with sccache, and that wrapper breaks `cargo-fuzz`'s `--target` build — its rustc version probe execs the resolved toolchain path directly and dies with `could not execute process sccache .../bin/rustc -vV (No such file or directory)`. The fuzz job is the only one affected (nightly + `--target`), so sccache is deliberately disabled there and must not be re-added; its caching comes from `rust-cache@v2` with `workspaces: fuzz` (cargo-fuzz builds everything, including path deps, into `fuzz/target/`, which default workspace discovery misses).
 
 ### Node.js (npm)
 - **npm cache** (`actions/setup-node@v4` with `cache: 'npm'`): Caches `~/.npm` keyed by `package-lock.json`.
@@ -145,6 +146,7 @@ The canonical local entry points and what each covers:
 | `e2e` timeout | Server didn't start in time | Check Docker health, Vite port conflict |
 | `docker` fails | Binary > 50 MB, or Trivy CRITICAL/HIGH finding | Strip/slim the binary; fix or document the vuln in `.trivyignore` |
 | `audit` fails on push | Dependency has known CVE | `cargo update` / pin patched version — this gate is **required on `main` pushes** |
+| `fuzz` fails with `sccache .../bin/rustc -vV (No such file or directory)` | Runner-image sccache wrapper vs cargo-fuzz `--target` build | Keep `RUSTC_WRAPPER: ''` on the fuzz job env — sccache must stay disabled there (see Caching Strategy). If the job times out, check that `cargo fuzz build` runs before the `timeout 65` loop and that `rust-cache` has `workspaces: fuzz` |
 | `flaky-quarantine` fails | An entry is expired / missing issue or owner | Re-investigate the flake, fix it, or renew with an updated issue |
 | Cache miss (all jobs slow) | `Cargo.lock` or `package-lock.json` changed | Expected after dependency updates — first run is cold |
 
