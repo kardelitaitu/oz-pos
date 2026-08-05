@@ -44,8 +44,10 @@ unfamiliar code without reading every file.
 the graph on file saves (AST-only, no LLM cost, deterministic).
 - **When stuck on unfamiliar code:** use `graphify query`/`path`/`explain` to
 navigate the graph instead of reading every file manually.
-- **On commit:** the post-commit hook (already installed) auto-rebuilds the graph
-so it stays in sync across sessions.
+- **On commit:** the graphify post-commit/post-checkout hooks auto-rebuild the
+  graph so it stays in sync across sessions. They are **local-only** tooling:
+  install them with `graphify hook install`, and `.gitignore` keeps them out of
+  the repo so the remote never carries graphify.
 
 The graph is persisted in `graphify-out/` (gitignored). Doc changes (`.md`, `.ftl`)
 require a manual `graphify --update .` to re-extract, but are not needed for
