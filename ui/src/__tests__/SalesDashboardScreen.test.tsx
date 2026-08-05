@@ -25,6 +25,11 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: invokeMock,
 }));
 
+// Canvas widgets render money via the store default currency.
+vi.mock('@/contexts/CurrencyContext', () => ({
+  useCurrency: () => ({ currency: 'USD', setCurrency: vi.fn(), loading: false }),
+}));
+
 vi.mock('@/hooks/useFeatures', () => ({
   useFeatures: () => ({
     enabled: new Set(['simple-retail']),

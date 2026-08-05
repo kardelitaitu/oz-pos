@@ -13,6 +13,11 @@ vi.mock('@/api/purchasing', () => ({
   listSuppliers: vi.fn(),
 }));
 
+// Line totals render via the store default currency (USD fixtures → 45.00).
+vi.mock('@/contexts/CurrencyContext', () => ({
+  useCurrency: () => ({ currency: 'USD', setCurrency: vi.fn(), loading: false }),
+}));
+
 import PurchaseOrderForm from '@/features/purchasing/PurchaseOrderForm';
 import { createPurchaseOrder, listSuppliers } from '@/api/purchasing';
 

@@ -4,6 +4,8 @@ import { useToast } from '@/frontend/shared/Toast';
 import { listProductsScoped, listCategories } from '@/api/products';
 import type { ProductDto, CategoryDto } from '@/api/products';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useCurrency } from '@/contexts/CurrencyContext';
+import { formatMoney } from '@/types/domain';
 import './KioskScreen.css';
 
 const IDLE_TIMEOUT_MS = 60000;
@@ -24,6 +26,7 @@ interface CartItem {
 export default function KioskScreen() {
   const { l10n } = useLocalization();
   const { addToast } = useToast();
+  const { currency } = useCurrency();
   const { sessionToken: rawToken } = useWorkspace();
   const sessionToken = rawToken || '';
   const [products, setProducts] = useState<ProductDto[]>([]);
@@ -112,13 +115,13 @@ export default function KioskScreen() {
           {cart.map((c) => (
             <div key={c.product.sku} className="kiosk-checkout-row">
               <span>{c.product.name} &times; {c.qty}</span>
-              <span>${((c.product.price.minor_units * c.qty) / 100).toFixed(2)}</span>
+              <span>{formatMoney({ minor_units: c.product.price.minor_units * c.qty, currency })}</span>
             </div>
           ))}
         </div>
         <div className="kiosk-checkout-total">
           <span><Localized id="kiosk-total">Total</Localized></span>
-          <span>${(totalMinor / 100).toFixed(2)}</span>
+          <span>{formatMoney({ minor_units: totalMinor, currency })}</span>
         </div>
         <button type="button" className="kiosk-checkout-pay" onClick={() => {
           addToast({ message: 'Payment processed! (simulated)', type: 'success' });
@@ -164,11 +167,11 @@ export default function KioskScreen() {
             key={p.sku}
             className="kiosk-product-card"
             onClick={() => addToCart(p)}
-            aria-label={l10n.getString('kiosk-product-label', { name: p.name, price: `$${(p.price.minor_units / 100).toFixed(2)}` })}
+            aria-label={l10n.getString('kiosk-product-label', { name: p.name, price: formatMoney({ minor_units: p.price.minor_units, currency }) })}
           >
             {isPriceRecent(p) && <span className="kiosk-price-volatility-hint" title="Price changed recently" />}
             <span className="kiosk-product-name">{p.name}</span>
-            <span className="kiosk-product-price">${(p.price.minor_units / 100).toFixed(2)}</span>
+            <span className="kiosk-product-price">{formatMoney({ minor_units: p.price.minor_units, currency })}</span>
             {p.stock_qty !== null && p.stock_qty <= 5 && (
               <span className="kiosk-stock-badge"><Localized id="kiosk-stock-left" vars={{ count: p.stock_qty }}><span>{p.stock_qty} left</span></Localized></span>
             )}
@@ -187,13 +190,13 @@ export default function KioskScreen() {
                   <span>{c.qty}</span>
                   <button type="button" onClick={() => updateQty(c.product.sku, 1)} aria-label={l10n.getString('kiosk-increase')}>+</button>
                 </div>
-                <span className="kiosk-cart-price">${((c.product.price.minor_units * c.qty) / 100).toFixed(2)}</span>
+                <span className="kiosk-cart-price">{formatMoney({ minor_units: c.product.price.minor_units * c.qty, currency })}</span>
               </div>
             ))}
           </div>
           <div className="kiosk-cart-total">
             <span><Localized id="kiosk-total">Total</Localized></span>
-            <span>${(totalMinor / 100).toFixed(2)}</span>
+            <span>{formatMoney({ minor_units: totalMinor, currency })}</span>
           </div>
           <button type="button" className="kiosk-checkout-btn" onClick={() => setCheckout(true)} aria-label={l10n.getString('kiosk-checkout')}>
             <Localized id="kiosk-checkout">Checkout</Localized>

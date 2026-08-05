@@ -23,6 +23,8 @@ import {
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Spinner } from '@/components/Spinner';
+import { useCurrency } from '@/contexts/CurrencyContext';
+import { minorUnitExponent } from '@/types/domain';
 import './MenuEngineeringScreen.css';
 
 const QUADRANT_META: Record<
@@ -69,12 +71,16 @@ function classifyQuadrant(
   return 'Dog';
 }
 
-function fmtCurrency(minor: number): string {
+function fmtCurrency(minor: number, currency: string): string {
+  // Exponent-driven via the shared minorUnitExponent map (IDR/JPY = 0,
+  // KWD = 3, USD/EUR = 2) — mirrors Currency::minor_unit_exponent.
+  const exp = minorUnitExponent(currency);
   return new Intl.NumberFormat('en', {
     style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-  }).format(minor / 100);
+    currency,
+    minimumFractionDigits: exp,
+    maximumFractionDigits: exp,
+  }).format(minor / 10 ** exp);
 }
 
 function fmtCompact(n: number): string {
@@ -113,6 +119,7 @@ function ScatterDot(props: Record<string, unknown>) {
 /** Menu engineering report — scatter chart of menu items by popularity and profitability with quadrant classification (Star, Plowhorse, Puzzle, Dog). */
 export default function MenuEngineeringScreen() {
   const { l10n } = useLocalization();
+  const { currency } = useCurrency();
   const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -210,18 +217,18 @@ export default function MenuEngineeringScreen() {
             <span>{requiredLocalized(l10n, 'menu-eng-tooltip-volume')}:</span>
             <span>{row.total_volume}</span>
             <span>{requiredLocalized(l10n, 'menu-eng-tooltip-revenue')}:</span>
-            <span>{fmtCurrency(row.total_revenue_minor)}</span>
+            <span>{fmtCurrency(row.total_revenue_minor, currency)}</span>
             <span>{requiredLocalized(l10n, 'menu-eng-tooltip-margin')}:</span>
-            <span>{fmtCurrency(row.total_margin_minor)}</span>
+            <span>{fmtCurrency(row.total_margin_minor, currency)}</span>
             <span>{requiredLocalized(l10n, 'menu-eng-tooltip-price')}:</span>
-            <span>{fmtCurrency(row.unit_price_minor)}</span>
+            <span>{fmtCurrency(row.unit_price_minor, currency)}</span>
             <span>{requiredLocalized(l10n, 'menu-eng-tooltip-cost')}:</span>
-            <span>{fmtCurrency(row.unit_cost_minor)}</span>
+            <span>{fmtCurrency(row.unit_cost_minor, currency)}</span>
           </div>
         </div>
       );
     },
-    [l10n],
+    [l10n, currency],
   );
 
   // Compute max axis values for scatter plot (avoids Infinity issues).
@@ -247,11 +254,11 @@ export default function MenuEngineeringScreen() {
       `"${r.name}"`,
       r.sku,
       String(r.total_volume),
-      fmtCurrency(r.total_revenue_minor),
-      fmtCurrency(r.total_margin_minor),
-      fmtCurrency(r.margin_per_unit),
-      fmtCurrency(r.unit_price_minor),
-      fmtCurrency(r.unit_cost_minor),
+      fmtCurrency(r.total_revenue_minor, currency),
+      fmtCurrency(r.total_margin_minor, currency),
+      fmtCurrency(r.margin_per_unit, currency),
+      fmtCurrency(r.unit_price_minor, currency),
+      fmtCurrency(r.unit_cost_minor, currency),
       r.quadrant,
       `"${recommendation(r.quadrant)}"`,
     ]);
@@ -356,13 +363,13 @@ export default function MenuEngineeringScreen() {
           <span className="menu-eng-kpi-label">
             <Localized id="menu-eng-total-revenue">Total Revenue</Localized>
           </span>
-          <span className="menu-eng-kpi-value">{fmtCurrency(totalRevenue)}</span>
+          <span className="menu-eng-kpi-value">{fmtCurrency(totalRevenue, currency)}</span>
         </Card>
         <Card shadow="sm" className="menu-eng-kpi">
           <span className="menu-eng-kpi-label">
             <Localized id="menu-eng-total-margin">Total Margin</Localized>
           </span>
-          <span className="menu-eng-kpi-value">{fmtCurrency(totalMargin)}</span>
+          <span className="menu-eng-kpi-value">{fmtCurrency(totalMargin, currency)}</span>
         </Card>
         <Card shadow="sm" className="menu-eng-kpi">
           <span className="menu-eng-kpi-label">
@@ -611,13 +618,13 @@ export default function MenuEngineeringScreen() {
                 </span>
                 <span role="cell">{row.total_volume}</span>
                 <span role="cell" className="menu-eng-table-mono">
-                  {fmtCurrency(row.total_revenue_minor)}
+                  {fmtCurrency(row.total_revenue_minor, currency)}
                 </span>
                 <span role="cell" className="menu-eng-table-mono">
-                  {fmtCurrency(row.total_margin_minor)}
+                  {fmtCurrency(row.total_margin_minor, currency)}
                 </span>
                 <span role="cell" className="menu-eng-table-mono">
-                  {fmtCurrency(row.margin_per_unit)}
+                  {fmtCurrency(row.margin_per_unit, currency)}
                 </span>
                 <span role="cell">
                   <span

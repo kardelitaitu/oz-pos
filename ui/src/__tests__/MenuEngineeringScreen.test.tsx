@@ -30,6 +30,11 @@ vi.mock('@/api/reports', () => ({
   getMenuEngineering: vi.fn(),
 }));
 
+// The screen renders money via the store default currency.
+vi.mock('@/contexts/CurrencyContext', () => ({
+  useCurrency: () => ({ currency: 'USD', setCurrency: vi.fn(), loading: false }),
+}));
+
 const mockResult: MenuEngineeringResult = {
   median_volume: 50,
   median_margin: 2500,

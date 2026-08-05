@@ -17,6 +17,11 @@ vi.mock('@/api/products', () => ({
   listCategoriesScoped: () => mockListCategories(),
 }));
 
+// Kiosk renders prices/totals via the store default currency (IDR fixtures).
+vi.mock('@/contexts/CurrencyContext', () => ({
+  useCurrency: () => ({ currency: 'IDR', setCurrency: vi.fn(), loading: false }),
+}));
+
 import KioskScreen from '@/features/kiosk/KioskScreen';
 
 // KioskScreen uses useToast — must wrap in ToastProvider via renderWithProviders.

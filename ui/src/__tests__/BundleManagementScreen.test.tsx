@@ -122,10 +122,11 @@ describe('BundleManagementScreen', () => {
     expect(screen.getByText('Items')).toBeDefined();
   });
 
-  it('shows price formatted with 2 decimal places', async () => {
+  it('shows IDR price without a decimal tail (minor units = whole rupiah)', async () => {
     mockListBundles.mockResolvedValue([makeBundleWithItems()]);
     renderScreen();
-    await waitFor(() => expect(screen.getByText('250.00')).toBeDefined());
+    // 25000 IDR minor = Rp 25.000 — formatMoney (exp 0) must NOT emit 250.00.
+    await waitFor(() => expect(screen.getByText('Rp 25.000')).toBeDefined());
   });
 
   it('shows em-dash when price is null', async () => {

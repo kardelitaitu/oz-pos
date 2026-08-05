@@ -7,10 +7,13 @@ import { Skeleton } from '@/components/Skeleton';
 import CanvasHeatmap from '@/components/charts/CanvasHeatmap';
 import type { HeatmapCell } from '@/components/charts/CanvasHeatmap';
 import { l10nErrorMessage } from '@/utils/app-error';
+import { useCurrency } from '@/contexts/CurrencyContext';
+import { minorUnitExponent } from '@/types/domain';
 
 /** Canvas 2D hourly heatmap widget for the reporting dashboard. */
 export default function HourlyHeatmapWidget() {
   const { l10n } = useLocalization();
+  const { currency } = useCurrency();
   const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
   const [cells, setCells] = useState<HeatmapCell[]>([]);
   const [loading, setLoading] = useState(true);
@@ -102,9 +105,10 @@ export default function HourlyHeatmapWidget() {
         formatValue={(v) =>
           new Intl.NumberFormat('en', {
             style: 'currency',
-            currency: 'USD',
+            currency,
             minimumFractionDigits: 0,
-          }).format(v / 100)
+            maximumFractionDigits: minorUnitExponent(currency),
+          }).format(v / 10 ** minorUnitExponent(currency))
         }
         minHeight="140px"
       />

@@ -12,13 +12,17 @@ import {
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
+import { useCurrency } from '@/contexts/CurrencyContext';
+import { minorUnitExponent } from '@/types/domain';
 import PurchaseOrderForm from './PurchaseOrderForm';
 import './PurchaseOrdersScreen.css';
 
 const STATUSES = ['draft', 'pending', 'approved', 'received', 'cancelled'];
 
-function formatMinor(minor: number): string {
-  return (minor / 100).toFixed(2);
+function formatMinor(minor: number, currency: string): string {
+  // Exponent-driven via minorUnitExponent (IDR/JPY = 0, KWD = 3, USD/EUR = 2).
+  const exp = minorUnitExponent(currency);
+  return (minor / 10 ** exp).toFixed(exp);
 }
 
 /** Purchase orders list screen — view, filter, approve, receive, and cancel purchase orders with status management. */
@@ -26,6 +30,7 @@ export default function PurchaseOrdersScreen() {
   const { l10n } = useLocalization();
   const l10nRef = useRef(l10n);
   l10nRef.current = l10n;
+  const { currency } = useCurrency();
   const { addToast } = useToast();
   const [orders, setOrders] = useState<PurchaseOrderDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -201,7 +206,7 @@ export default function PurchaseOrdersScreen() {
                   </td>
                   <td className="po-cell-date">{po.order_date.slice(0, 10)}</td>
                   <td className="po-cell-date">{po.expected_date ? po.expected_date.slice(0, 10) : '\u2014'}</td>
-                  <td className="po-cell-total">{formatMinor(po.total_minor)}</td>
+                  <td className="po-cell-total">{formatMinor(po.total_minor, currency)}</td>
                   <td>{po.lines.length}</td>
                   <td className="po-cell-actions">
                     {po.status === 'draft' && (

@@ -175,8 +175,9 @@ describe('QrisQrDisplay — QR rendering & payment flow', () => {
   it('displays amount and reference correctly', () => {
     const hostRef = makeHostRef();
     render(withFluent(<HostModal hostRef={hostRef} />, salesFtl));
-    // 25000 / 100 = 250.00 IDR
-    expect(screen.getByText('250.00 IDR')).toBeInTheDocument();
+    // 25000 IDR minor = Rp 25.000 → exp-0 exponent renders 25000 IDR,
+    // never the old hardcoded /100 '250.00 IDR'.
+    expect(screen.getByText('25000 IDR')).toBeInTheDocument();
     expect(screen.getByText('REF-1234')).toBeInTheDocument();
     expect(screen.getByText('OZ-POS Store')).toBeInTheDocument();
     expect(screen.getByText('QRIS')).toBeInTheDocument();

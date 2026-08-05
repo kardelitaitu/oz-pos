@@ -36,8 +36,8 @@ describe('GiftCardPayment', () => {
 
   it('shows total due amount', () => {
     renderWithFluentSync(<GiftCardPayment {...defaultProps} />, giftCardsFtl);
-    // IDR has 2 fraction digits with the default formatting: IDR 1,000.00
-    expect(screen.getByText(/IDR/)).toBeInTheDocument();
+    // 100000 IDR minor = Rp 100.000 — formatMoney (exp 0) renders no decimal tail.
+    expect(screen.getByText(/Rp 100\.000/)).toBeInTheDocument();
   });
 
   it('does not call API when card number is empty', async () => {

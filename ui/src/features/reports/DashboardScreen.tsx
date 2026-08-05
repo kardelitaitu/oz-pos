@@ -12,6 +12,7 @@ import {
 } from '@/api/reports';
 import { Card } from '@/components/Card';
 import { Spinner } from '@/components/Spinner';
+import { minorUnitExponent } from '@/types/domain';
 import './DashboardScreen.css';
 
 function today(): string {
@@ -25,11 +26,15 @@ function weekAgo(): string {
 }
 
 function fmtCurrency(minor: number, currency: string): string {
+  // Exponent-driven via the shared minorUnitExponent map (IDR/JPY = 0,
+  // KWD = 3, USD/EUR = 2) — mirrors Currency::minor_unit_exponent.
+  const exp = minorUnitExponent(currency);
   return new Intl.NumberFormat('en', {
     style: 'currency',
     currency,
-    minimumFractionDigits: 2,
-  }).format(minor / 100);
+    minimumFractionDigits: exp,
+    maximumFractionDigits: exp,
+  }).format(minor / 10 ** exp);
 }
 
 /** Dashboard screen — daily revenue summary, weekly trend, top products, and low-stock alerts in a card-based overview. */

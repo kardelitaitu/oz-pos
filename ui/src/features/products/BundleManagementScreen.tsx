@@ -12,6 +12,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { SettingsPopup } from '@/frontend/shared';
+import { formatMoney } from '@/types/domain';
 import './BundleManagementScreen.css';
 
 interface BundleItemForm {
@@ -254,7 +255,7 @@ export default function BundleManagementScreen() {
                   <td className="bundle-mgmt-cell-sku">{b.bundle.bundle_sku}</td>
                   <td className="bundle-mgmt-cell-price">
                     {b.bundle.bundle_price_minor != null
-                      ? (b.bundle.bundle_price_minor / 100).toFixed(2)
+                      ? formatMoney({ minor_units: b.bundle.bundle_price_minor, currency: b.bundle.currency })
                       : '\u2014'}
                   </td>
                   <td>{b.items.length}</td>

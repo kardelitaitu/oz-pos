@@ -7,10 +7,24 @@ import { l10nErrorMessage } from '@/utils/app-error';
 import { Skeleton } from '@/components/Skeleton';
 import CanvasLineChart from '@/components/charts/CanvasLineChart';
 import type { LineChartPoint } from '@/components/charts/CanvasLineChart';
+import { useCurrency } from '@/contexts/CurrencyContext';
+import { minorUnitExponent } from '@/types/domain';
+
+/** Exponent-driven currency formatting for widget KPIs (shared by the canvas widgets). */
+function fmtWidgetMoney(minor: number, currency: string): string {
+  const exp = minorUnitExponent(currency);
+  return new Intl.NumberFormat('en', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: exp,
+    maximumFractionDigits: exp,
+  }).format(minor / 10 ** exp);
+}
 
 /** Canvas 2D revenue line chart widget for the reporting dashboard. */
 export default function RevenueLineChartWidget() {
   const { l10n } = useLocalization();
+  const { currency } = useCurrency();
   const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
   const [data, setData] = useState<LineChartPoint[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,30 +94,23 @@ export default function RevenueLineChartWidget() {
           <h3 className="reporting-widget-title">Revenue (14d)</h3>
         </Localized>
         <span className="reporting-widget-kpi-value reporting-widget-kpi-value--primary" style={{ fontSize: 'var(--text-base)', marginTop: 'var(--space-1)' }}>
-          {new Intl.NumberFormat('en', {
-            style: 'currency',
-            currency: 'USD',
-            minimumFractionDigits: 2,
-          }).format(totalRevenue / 100)}
+          {fmtWidgetMoney(totalRevenue, currency)}
         </span>
       </div>
       <CanvasLineChart
         data={data}
         label={requiredLocalized(l10n, 'sales-dashboard-revenue-aria')}
         summary={requiredLocalized(l10n, 'sales-dashboard-revenue-summary', {
-          total: new Intl.NumberFormat('en', {
-            style: 'currency',
-            currency: 'USD',
-            minimumFractionDigits: 2,
-          }).format(totalRevenue / 100),
+          total: fmtWidgetMoney(totalRevenue, currency),
           days: String(data.length),
         })}
         formatValue={(v) =>
           new Intl.NumberFormat('en', {
             style: 'currency',
-            currency: 'USD',
+            currency,
             minimumFractionDigits: 0,
-          }).format(v / 100)
+            maximumFractionDigits: minorUnitExponent(currency),
+          }).format(v / 10 ** minorUnitExponent(currency))
         }
         minHeight="200px"
       />

@@ -32,6 +32,7 @@ import {
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
+import { minorUnitExponent } from '@/types/domain';
 import './SalesReportScreen.css';
 
 const PIE_COLORS = [
@@ -51,11 +52,16 @@ const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 type RevenueRow = DailyRevenueRow | WeeklyRevenueRow | MonthlyRevenueRow;
 
 function fmtCurrency(minor: number, currency: string): string {
+  // Exponent-driven: IDR/JPY = 0 decimals, KWD = 3, USD/EUR = 2 — the
+  // shared minorUnitExponent map is the single source of truth (mirrors
+  // the Rust Currency::minor_unit_exponent). No hardcoded /100 math.
+  const exp = minorUnitExponent(currency);
   return new Intl.NumberFormat('en', {
     style: 'currency',
     currency,
-    minimumFractionDigits: 2,
-  }).format(minor / 100);
+    minimumFractionDigits: exp,
+    maximumFractionDigits: exp,
+  }).format(minor / 10 ** exp);
 }
 
 function today(): string {
@@ -200,7 +206,7 @@ export default function SalesReportScreen() {
       const period = 'date' in r ? r.date : 'week_start' in r ? r.week_start : r.month;
       return [
         period,
-        (r.total_minor / 100).toFixed(2),
+        (r.total_minor / 10 ** minorUnitExponent(r.currency)).toFixed(minorUnitExponent(r.currency)),
         r.currency,
         r.sale_count,
       ].join(',');

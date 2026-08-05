@@ -11,6 +11,8 @@ import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { l10nErrorMessage } from '@/utils/app-error';
+import { useCurrency } from '@/contexts/CurrencyContext';
+import { minorUnitExponent } from '@/types/domain';
 import './PurchaseOrderForm.css';
 
 interface LineItem {
@@ -31,6 +33,8 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
   const { l10n } = useLocalization();
   const l10nRef = useRef(l10n);
   l10nRef.current = l10n;
+  const { currency } = useCurrency();
+  const poExp = minorUnitExponent(currency);
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([]);
   const [poNumber, setPoNumber] = useState('');
   const [supplierId, setSupplierId] = useState('');
@@ -218,7 +222,7 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
                       />
                     </td>
                     <td className="po-form-line-total">
-                      {(line.qty * line.unit_cost_minor / 100).toFixed(2)}
+                      {(line.qty * line.unit_cost_minor / 10 ** poExp).toFixed(poExp)}
                     </td>
                     <td>
                       {lines.length > 1 && (
@@ -233,7 +237,7 @@ export default function PurchaseOrderForm({ editingId, onClose, onSaved }: Props
                   <td colSpan={4} className="po-form-total-label">
                     <Localized id="po-form-subtotal"><span>Subtotal</span></Localized>
                   </td>
-                  <td className="po-form-total-value">{(subtotal / 100).toFixed(2)}</td>
+                  <td className="po-form-total-value">{(subtotal / 10 ** poExp).toFixed(poExp)}</td>
                   { }
                   <td />
                 </tr>

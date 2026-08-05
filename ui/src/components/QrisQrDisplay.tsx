@@ -3,6 +3,7 @@ import { Localized, useLocalization } from '@fluent/react';
 import { requiredLocalized } from '@/frontend/shared';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { minorUnitExponent } from '@/types/domain';
 import './QrisQrDisplay.css';
 
 interface QrisQrDisplayProps {
@@ -142,7 +143,9 @@ export default function QrisQrDisplay({
         <div className="qris-details">
           <div className="qris-detail-row">
             <span className="qris-detail-label">{requiredLocalized(l10n, 'payment-qris-amount')}</span>
-            <span className="qris-detail-value">{(amount / 100).toFixed(2)} {currency}</span>
+            <span className="qris-detail-value">
+              {(amount / 10 ** minorUnitExponent(currency)).toFixed(minorUnitExponent(currency))} {currency}
+            </span>
           </div>
           <div className="qris-detail-row">
             <span className="qris-detail-label">{requiredLocalized(l10n, 'payment-qris-reference')}</span>
