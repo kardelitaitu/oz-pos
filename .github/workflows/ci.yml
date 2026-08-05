@@ -785,6 +785,14 @@ jobs:
       - name: Start Docker E2E backend & Vite dev server (parallel)
         env:
           OZ_API_SECRET: ci-test-secret
+          # The dev-mode DevToolbar overlay floats bottom-right at tooltip
+          # z-index and would sit on top of the retail cart action buttons,
+          # intercepting pointer events (see sale.spec.ts discount click).
+          # run-e2e.mjs sets this too — but Playwright's webServer.env only
+          # applies when IT starts the server; with reuseExistingServer:true
+          # it reuses THIS manually-started Vite, so the flag must be set
+          # here as well (App.tsx reads VITE_DEV_TOOLBAR to disable it).
+          VITE_DEV_TOOLBAR: '0'
         run: |
           # DOCKER-06: pre-pull the PINNED Redis digest (immutable, matches
           # docker-compose.e2e.yml) to mitigate registry rate-limit timeouts.
