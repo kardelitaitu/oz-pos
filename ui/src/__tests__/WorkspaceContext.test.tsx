@@ -232,7 +232,7 @@ describe('WorkspaceContext', () => {
       expect(result.current.workspace.activeInstance?.instance_id).toBe('inst-store');
     });
 
-    it('clears selection when setting null', async () => {
+    it('clears selection but preserves lastWorkspace when setting null', async () => {
       const { result } = renderWorkspaceHook();
 
       await waitForLoaded(result);
@@ -242,7 +242,11 @@ describe('WorkspaceContext', () => {
 
       expect(result.current.workspace.activeWorkspace).toBeNull();
       expect(result.current.workspace.activeInstance).toBeNull();
-      expect(result.current.workspace.lastWorkspace).toBeNull();
+      // Contract (since 4fa7d14d): returning to the picker clears the
+      // selection but keeps lastWorkspace so WorkspaceHome can highlight
+      // the last-used card (workspace-card--active). Cleared only on a
+      // fresh login/logout via handleSetActiveInstance(null).
+      expect(result.current.workspace.lastWorkspace).toBe('restaurant-pos');
     });
   });
 

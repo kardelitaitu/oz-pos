@@ -30,8 +30,12 @@ const ALLOWED_EXT = ['.ts', '.tsx'];
 // never display them: PaymentModal's error classification + PartialStockResult
 // extraction. Everything rendered goes through l10nErrorMessage/userErrorMessage.
 const WHITELISTED_RAW_PARSE: Array<{ file: string; line: number }> = [
-  { file: path.join(SRC, 'features/sales/PaymentModal.tsx'), line: 119 },
-  { file: path.join(SRC, 'features/sales/PaymentModal.tsx'), line: 847 },
+  // classifyError: reads err.message for retryable/terminal classification;
+  // the surfaced text goes through plainErrorMessage (ERR-05).
+  { file: path.join(SRC, 'features/sales/PaymentModal.tsx'), line: 134 },
+  // complete() catch: reads err.message to JSON-detect PartialStockResult;
+  // never displayed. Non-stock errors are classified for display below.
+  { file: path.join(SRC, 'features/sales/PaymentModal.tsx'), line: 850 },
 ];
 
 function collectFiles(): string[] {
