@@ -7,8 +7,16 @@ use crate::gift_card::{
     GiftCard, GiftCardFilter, GiftCardTransaction, GiftCardWithTransactions, IssueGiftCardInput,
     RedeemGiftCardResult,
 };
+use crate::{Currency, format_minor};
 
 use super::Store;
+
+/// Parse a stored currency code for `format_minor`, falling back to USD
+/// (exp 2) if the code is somehow malformed — transaction notes must
+/// never fail to render. Mirrors `export::email_report::format_amount`.
+fn parse_currency(code: &str) -> Currency {
+    code.parse::<Currency>().unwrap_or(Currency(*b"USD"))
+}
 
 impl Store<'_> {
     /// Issue a new gift card and record the initial issue transaction.
@@ -72,7 +80,7 @@ impl Store<'_> {
                 format!(
                     "Issued gift card {} with {}",
                     input.card_number.trim(),
-                    amount
+                    format_minor(amount, parse_currency(&input.currency)),
                 ),
                 now,
             ],
@@ -406,7 +414,11 @@ impl Store<'_> {
                 sale_id,
                 -amount_minor,
                 new_balance,
-                format!("Redeemed {} on sale {}", amount_minor, sale_id),
+                format!(
+                    "Redeemed {} on sale {}",
+                    format_minor(amount_minor, parse_currency(&card.currency)),
+                    sale_id
+                ),
                 now,
             ],
         )?;
@@ -442,7 +454,11 @@ impl Store<'_> {
                 txn_type: "redeem".into(),
                 amount_minor: -amount_minor,
                 balance_after_minor: new_balance,
-                notes: format!("Redeemed {} on sale {}", amount_minor, sale_id),
+                notes: format!(
+                    "Redeemed {} on sale {}",
+                    format_minor(amount_minor, parse_currency(&card.currency)),
+                    sale_id
+                ),
                 created_at: now,
             },
         })
@@ -501,7 +517,11 @@ impl Store<'_> {
                 card.id,
                 amount_minor,
                 new_balance,
-                format!("Top-up of {} on card {}", amount_minor, card.card_number),
+                format!(
+                    "Top-up of {} on card {}",
+                    format_minor(amount_minor, parse_currency(&card.currency)),
+                    card.card_number
+                ),
                 now,
             ],
         )?;
@@ -1098,5 +1118,112 @@ mod tests {
             .unwrap();
         assert_eq!(result.card.current_balance_minor, 0);
         assert_eq!(result.card.status, "redeemed");
+    }
+
+    #[test]
+    fn notes_format_major_units_via_card_currency() {
+        let conn = fresh();
+        seed_user(&conn, "staff-1");
+        // USD (exp 2): raw minor units must render as a decimal, not a raw int.
+        store(&conn)
+            .issue_gift_card(IssueGiftCardInput {
+                card_number: "GC-12001".into(),
+                pin: None,
+                initial_amount_minor: 50000,
+                currency: "USD".into(),
+                issued_to: None,
+                created_by: "staff-1".into(),
+                expiry_date: None,
+            })
+            .unwrap();
+
+        conn.execute(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at, subtotal_minor, tax_total_minor)
+             VALUES ('sale-12', 25000, 'USD', 0, 'completed', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z', 25000, 0)",
+            [],
+        ).unwrap();
+
+        let result = store(&conn)
+            .redeem_gift_card("GC-12001", 25000, "sale-12")
+            .unwrap();
+        assert_eq!(result.transaction.notes, "Redeemed 250.00 on sale sale-12");
+
+        // The DB-stored row (written inside the transaction) formats the same way.
+        let detail = store(&conn)
+            .get_gift_card_detail("GC-12001")
+            .unwrap()
+            .unwrap();
+        let redeem = detail
+            .transactions
+            .iter()
+            .find(|t| t.txn_type == "redeem")
+            .unwrap();
+        assert_eq!(redeem.notes, "Redeemed 250.00 on sale sale-12");
+
+        let topped = store(&conn).top_up_gift_card("GC-12001", 10000).unwrap();
+        let topup = topped
+            .transactions
+            .iter()
+            .find(|t| t.txn_type == "topup")
+            .unwrap();
+        assert_eq!(topup.notes, "Top-up of 100.00 on card GC-12001");
+    }
+
+    #[test]
+    fn notes_keep_raw_minor_for_idr() {
+        let conn = fresh();
+        seed_user(&conn, "staff-1");
+        // IDR (exp 0): the minor unit IS the Rupiah, so the note stays raw.
+        store(&conn)
+            .issue_gift_card(IssueGiftCardInput {
+                card_number: "GC-12002".into(),
+                pin: None,
+                initial_amount_minor: 50000,
+                currency: "IDR".into(),
+                issued_to: None,
+                created_by: "staff-1".into(),
+                expiry_date: None,
+            })
+            .unwrap();
+
+        conn.execute(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at, subtotal_minor, tax_total_minor)
+             VALUES ('sale-13', 25000, 'IDR', 0, 'completed', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z', 25000, 0)",
+            [],
+        ).unwrap();
+
+        let result = store(&conn)
+            .redeem_gift_card("GC-12002", 25000, "sale-13")
+            .unwrap();
+        assert_eq!(result.transaction.notes, "Redeemed 25000 on sale sale-13");
+    }
+
+    #[test]
+    fn notes_render_kwd_three_decimals() {
+        let conn = fresh();
+        seed_user(&conn, "staff-1");
+        // KWD (exp 3): 12 fils → 0.012 — the case a naive /100 would get wrong.
+        store(&conn)
+            .issue_gift_card(IssueGiftCardInput {
+                card_number: "GC-12003".into(),
+                pin: None,
+                initial_amount_minor: 500,
+                currency: "KWD".into(),
+                issued_to: None,
+                created_by: "staff-1".into(),
+                expiry_date: None,
+            })
+            .unwrap();
+
+        conn.execute(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at, subtotal_minor, tax_total_minor)
+             VALUES ('sale-14', 12, 'KWD', 0, 'completed', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z', 12, 0)",
+            [],
+        ).unwrap();
+
+        let result = store(&conn)
+            .redeem_gift_card("GC-12003", 12, "sale-14")
+            .unwrap();
+        assert_eq!(result.transaction.notes, "Redeemed 0.012 on sale sale-14");
     }
 }

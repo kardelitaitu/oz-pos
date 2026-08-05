@@ -4,8 +4,16 @@ use rusqlite::params;
 
 use crate::error::CoreError;
 use crate::loyalty::{LoyaltyAccount, LoyaltyAccountWithDetails, LoyaltyTier, LoyaltyTransaction};
+use crate::{Currency, format_minor};
 
 use super::Store;
+
+/// Parse a stored currency code for `format_minor`, falling back to USD
+/// (exp 2) if the code is somehow malformed — transaction descriptions
+/// must never fail to render. Mirrors `export::email_report::format_amount`.
+fn parse_currency(code: &str) -> Currency {
+    code.parse::<Currency>().unwrap_or(Currency(*b"USD"))
+}
 
 /// Fixed conversion: 100 points = 100 minor units ($1.00).
 const POINTS_TO_MINOR_RATIO: i64 = 1;
@@ -418,12 +426,17 @@ impl Store<'_> {
         // Redemption is only valid for the customer's completed sale. The
         // sale lookup is deliberately server-side; callers cannot bind points
         // to an unrelated or still-pending sale.
-        let (sale_customer_id, sale_total_minor, sale_status): (Option<String>, i64, String) = self
+        let (sale_customer_id, sale_total_minor, sale_status, sale_currency): (
+            Option<String>,
+            i64,
+            String,
+            String,
+        ) = self
             .conn
             .query_row(
-                "SELECT customer_id, total_minor, status FROM sales WHERE id = ?1",
+                "SELECT customer_id, total_minor, status, currency FROM sales WHERE id = ?1",
                 params![sale_id],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
             )
             .map_err(|error| match error {
                 rusqlite::Error::QueryReturnedNoRows => CoreError::NotFound {
@@ -496,7 +509,11 @@ impl Store<'_> {
                 account.id,
                 sale_id,
                 -points,
-                format!("Redeemed {} points for {} discount", points, discount_minor),
+                format!(
+                    "Redeemed {} points for {} discount",
+                    points,
+                    format_minor(discount_minor, parse_currency(&sale_currency)),
+                ),
                 now,
             ],
         ) {
@@ -540,7 +557,11 @@ impl Store<'_> {
                 sale_id: Some(sale_id.to_owned()),
                 points: -points,
                 txn_type: "redeem".into(),
-                description: format!("Redeemed {} points for {} discount", points, discount_minor),
+                description: format!(
+                    "Redeemed {} points for {} discount",
+                    points,
+                    format_minor(discount_minor, parse_currency(&sale_currency)),
+                ),
                 created_at: now,
             },
             discount_minor,
@@ -853,10 +874,45 @@ mod tests {
         let (txn, discount) = store(&conn).redeem_points("cust-1", 200, "sale-2").unwrap();
         assert_eq!(txn.points, -200);
         assert_eq!(discount, 200); // 200 points = 200 minor units
+        // The seeded sale is USD (exp 2): 200 minor units render as a decimal.
+        assert_eq!(txn.description, "Redeemed 200 points for 2.00 discount");
 
         let details = store(&conn).get_loyalty_account("cust-1").unwrap().unwrap();
         // 5000 * 10 / 100 * 1.0 = 500 earned - 200 redeemed = 300
         assert_eq!(details.account.points, 300);
+    }
+
+    #[test]
+    fn redeem_points_note_uses_sale_currency_exponent() {
+        let conn = fresh();
+        seed_customer(&conn, "cust-1", "Alice");
+        seed_sale_for_customer(&conn, "sale-earn", Some("cust-1"), 5000);
+        // IDR sale (exp 0): the minor unit IS the Rupiah, so the discount
+        // stays raw in the description.
+        conn.execute(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status, customer_id, created_at, updated_at, subtotal_minor, tax_total_minor)
+             VALUES ('sale-idr', 10000, 'IDR', 0, 'completed', 'cust-1', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z', 10000, 0)",
+            [],
+        )
+        .unwrap();
+        store(&conn)
+            .earn_points("cust-1", "sale-earn", 5000)
+            .unwrap();
+
+        let (txn, discount) = store(&conn)
+            .redeem_points("cust-1", 500, "sale-idr")
+            .unwrap();
+        assert_eq!(discount, 500);
+        assert_eq!(txn.description, "Redeemed 500 points for 500 discount");
+
+        // The DB-stored row (written inside the transaction) formats the same way.
+        let details = store(&conn).get_loyalty_account("cust-1").unwrap().unwrap();
+        let stored = details
+            .recent_transactions
+            .iter()
+            .find(|t| t.txn_type == "redeem")
+            .unwrap();
+        assert_eq!(stored.description, "Redeemed 500 points for 500 discount");
     }
 
     #[test]
