@@ -216,7 +216,9 @@ export default function StockTransfersScreen() {
     setCreateSourceTerminalId('');
     setCreateDestTerminalId('');
     setCreateNotes('');
-    setCreateLines([]);
+    // Start with one empty line row (mirrors PurchaseOrderForm) so the
+    // SKU/qty inputs are immediately editable on open.
+    setCreateLines([{ sku: '', productName: '', qty: '1' }]);
     setCreateError(null);
   }, []);
 

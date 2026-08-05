@@ -25,8 +25,12 @@ test.describe('Tablet Shell Entry (index.tablet.html)', () => {
     await page.goto('/index.tablet.html');
     await page.waitForSelector('.staff-login-screen', { timeout: 15_000 });
 
+    // Viewport-relative: this spec runs in both the desktop (1366px) and
+    // tablet (1024px) Playwright projects, so a hardcoded 1024 would fail
+    // the desktop run even with zero overflow.
     const scrollWidth = await page.evaluate(() => document.body.scrollWidth);
-    expect(scrollWidth).toBeLessThanOrEqual(1024);
+    const viewportWidth = await page.evaluate(() => window.innerWidth);
+    expect(scrollWidth).toBeLessThanOrEqual(viewportWidth);
   });
 
   test('touch targets are at least 44px on the tablet entry', async ({ page }) => {
@@ -38,13 +42,15 @@ test.describe('Tablet Shell Entry (index.tablet.html)', () => {
     const inputBox = await usernameInput.boundingBox();
     expect(inputBox).not.toBeNull();
     if (inputBox) {
-      expect(inputBox.height).toBeGreaterThanOrEqual(44);
+      // Math.round: getBoundingClientRect can report 43.99997 for a 44px
+      // target due to sub-pixel rendering — the CSS-px target is what matters.
+      expect(Math.round(inputBox.height)).toBeGreaterThanOrEqual(44);
     }
 
     const submitBtn = page.locator('.staff-login-submit-btn');
     const btnBox = await submitBtn.boundingBox();
     if (btnBox) {
-      expect(btnBox.height).toBeGreaterThanOrEqual(44);
+      expect(Math.round(btnBox.height)).toBeGreaterThanOrEqual(44);
     }
   });
 
@@ -64,7 +70,11 @@ test.describe('Tablet Shell Entry (index.tablet.html)', () => {
     await page.waitForSelector('.workspace-home', { timeout: 15_000 });
     await expect(page.locator('.workspace-home')).toBeVisible();
 
+    // Viewport-relative: this spec runs in both the desktop (1366px) and
+    // tablet (1024px) Playwright projects, so a hardcoded 1024 would fail
+    // the desktop run even with zero overflow.
     const scrollWidth = await page.evaluate(() => document.body.scrollWidth);
-    expect(scrollWidth).toBeLessThanOrEqual(1024);
+    const viewportWidth = await page.evaluate(() => window.innerWidth);
+    expect(scrollWidth).toBeLessThanOrEqual(viewportWidth);
   });
 });

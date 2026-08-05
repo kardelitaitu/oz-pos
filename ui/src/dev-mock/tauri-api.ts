@@ -280,6 +280,23 @@ const saleDetails: Record<string, MockCompletedSale & { subtotal: { minor_units:
   },
 };
 
+// ── Date helpers (for seeded report data) ───────────────────────
+/** List every ISO date (YYYY-MM-DD) from startDate to endDate inclusive. */
+function isoDays(startDate: string, endDate: string): string[] {
+  const out: string[] = [];
+  const s = new Date(`${startDate}T00:00:00`);
+  const e = new Date(`${endDate}T00:00:00`);
+  for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+    out.push(d.toISOString().slice(0, 10));
+  }
+  return out;
+}
+
+/** Deterministic pseudo-random minor-unit value for mock revenue rows. */
+function mockRevenue(i: number): number {
+  return 2_500_000 + ((i * 7919) % 4_500_000);
+}
+
 // ── Active shift state (for pay-btn-enabled E2E test) ──────────
 let mockActiveShift: Record<string, unknown> | null = {
   id: 'shift-1', userId: 'user-1', terminalId: null, openedAt: new Date().toISOString(), closedAt: null,
@@ -289,8 +306,19 @@ let mockActiveShift: Record<string, unknown> | null = {
   createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
 };
 // Closed-shift history so the reconciliation spec can verify shifts appear
-// in the Shift History table after closing.
-const mockShiftHistory: Array<Record<string, unknown>> = [];
+// in the Shift History table after closing. One pre-seeded closed shift
+// guarantees the history table renders on every fresh page load (the older
+// shift.spec asserts .shift-mgmt-table without running an open/close cycle).
+const mockShiftHistory: Array<Record<string, unknown>> = [
+  {
+    id: 'shift-seed-1', userId: 'user-1', terminalId: null,
+    openedAt: new Date(Date.now() - 3600000).toISOString(), closedAt: new Date(Date.now() - 1800000).toISOString(),
+    openingBalanceMinor: 100000, closingBalanceMinor: 150000, expectedCashMinor: 150000, cashDifferenceMinor: 0,
+    totalSalesMinor: 50000, totalCashMinor: 50000, totalCardMinor: 0, totalOtherMinor: 0,
+    totalVoidsMinor: 0, totalRefundsMinor: 0, totalPayoutsMinor: 0, notes: '', status: 'closed',
+    createdAt: new Date(Date.now() - 3600000).toISOString(), updatedAt: new Date(Date.now() - 1800000).toISOString(),
+  },
+];
 const handlers: Record<string, (args: unknown) => unknown> = {
   // ═══════════════════════════════════════════════════════════════
   // AUTH / STAFF
@@ -1026,7 +1054,9 @@ const handlers: Record<string, (args: unknown) => unknown> = {
 
   'create_stock_transfer_scoped': () => null,
   'get_stock_transfer_scoped': () => null,
-  'list_stock_transfers_scoped': () => [],
+  'list_stock_transfers_scoped': () => [
+    { id: 'st-1', transfer_number: 'ST-001', status: 'draft', source_location: 'Warehouse A', destination_location: 'Store B', source_terminal_id: null, destination_terminal_id: null, notes: '', created_by: 'admin-1', received_by: null, created_at: new Date().toISOString(), sent_at: null, received_at: null, updated_at: new Date().toISOString() },
+  ],
   'get_stock_transfer_lines_scoped': () => [],
   'add_stock_transfer_line_scoped': () => null,
   'remove_stock_transfer_line_scoped': () => null,
@@ -1140,10 +1170,10 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'create_supplier': () => null,
   'update_supplier': () => null,
   'list_purchase_orders': () => [
-    { id: 'po-1', po_number: 'PO-001', supplier_id: 'supplier-1', supplier_name: 'PT Teknologi Maju', status: 'pending', total_minor: 5000000, tax_minor: 0, line_count: 2, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    { id: 'po-1', po_number: 'PO-001', supplier_id: 'supplier-1', supplier_name: 'PT Teknologi Maju', status: 'pending', order_date: new Date().toISOString(), expected_date: new Date(Date.now() + 86400000).toISOString(), received_date: null, subtotal_minor: 5000000, tax_minor: 0, total_minor: 5000000, notes: '', created_by: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), lines: [{ id: 'po-line-1', po_id: 'po-1', sku: 'CPU-R7-7800X3D', product_name: 'AMD Ryzen 7 7800X3D 8-Core', qty: 2, unit_cost_minor: 2500000, line_total_minor: 5000000 }] },
   ],
   'list_purchase_orders_scoped': () => [
-    { id: 'po-1', po_number: 'PO-001', supplier_id: 'supplier-1', supplier_name: 'PT Teknologi Maju', status: 'pending', total_minor: 5000000, tax_minor: 0, line_count: 2, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    { id: 'po-1', po_number: 'PO-001', supplier_id: 'supplier-1', supplier_name: 'PT Teknologi Maju', status: 'pending', order_date: new Date().toISOString(), expected_date: new Date(Date.now() + 86400000).toISOString(), received_date: null, subtotal_minor: 5000000, tax_minor: 0, total_minor: 5000000, notes: '', created_by: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), lines: [{ id: 'po-line-1', po_id: 'po-1', sku: 'CPU-R7-7800X3D', product_name: 'AMD Ryzen 7 7800X3D 8-Core', qty: 2, unit_cost_minor: 2500000, line_total_minor: 5000000 }] },
   ],
   'get_purchase_order': () => null,
   'create_purchase_order': () => null,
@@ -1154,14 +1184,109 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // REPORTS
   // ═══════════════════════════════════════════════════════════════
 
-  'get_daily_revenue': () => [],
-  'get_weekly_revenue': () => [],
-  'get_monthly_revenue': () => [],
-  'get_top_products': () => [],
-  'get_hourly_heatmap': () => [],
-  'get_low_stock_alerts': () => [],
-  'get_category_breakdown': () => [],
-  'get_menu_engineering': () => ({ rows: [], median_volume: 0, median_margin: 0 }),
+  // Seeded with realistic rows (not empty arrays) so dashboard/report
+  // charts actually render in browser-mode E2E. The screens guard .length
+  // so empty arrays are safe, but the dashboard weekly chart is an empty
+  // 0-height div ("hidden") when there are no rows.
+  'get_daily_revenue': (args) => {
+    const { startDate, endDate } = (args ?? {}) as { startDate?: string; endDate?: string };
+    const days = isoDays(startDate ?? '2026-01-01', endDate ?? '2026-01-07');
+    return days.map((date, i) => ({
+      date,
+      total_minor: mockRevenue(i),
+      currency: 'IDR',
+      sale_count: 6 + (i % 12),
+    }));
+  },
+  'get_weekly_revenue': (args) => {
+    const { startDate, endDate } = (args ?? {}) as { startDate?: string; endDate?: string };
+    const days = isoDays(startDate ?? '2026-01-01', endDate ?? '2026-01-28');
+    // One row per ISO week (Monday start) within the range.
+    const weeks = new Map<string, { week_start: string; total_minor: number; sale_count: number }>();
+    days.forEach((date, i) => {
+      const d = new Date(`${date}T00:00:00`);
+      const dow = (d.getDay() + 6) % 7; // Monday = 0
+      const monday = new Date(d);
+      monday.setDate(d.getDate() - dow);
+      const key = monday.toISOString().slice(0, 10);
+      const existing = weeks.get(key);
+      const total = mockRevenue(i);
+      if (existing) {
+        existing.total_minor += total;
+        existing.sale_count += 1;
+      } else {
+        weeks.set(key, { week_start: key, total_minor: total, sale_count: 1 });
+      }
+    });
+    return [...weeks.values()].map((w) => ({ ...w, currency: 'IDR' }));
+  },
+  'get_monthly_revenue': (args) => {
+    const { startDate, endDate } = (args ?? {}) as { startDate?: string; endDate?: string };
+    const days = isoDays(startDate ?? '2026-01-01', endDate ?? '2026-06-01');
+    const months = new Map<string, { month: string; total_minor: number; sale_count: number }>();
+    days.forEach((date, i) => {
+      const key = date.slice(0, 7); // YYYY-MM
+      const total = mockRevenue(i);
+      const existing = months.get(key);
+      if (existing) {
+        existing.total_minor += total;
+        existing.sale_count += 1;
+      } else {
+        months.set(key, { month: key, total_minor: total, sale_count: 1 });
+      }
+    });
+    return [...months.values()].map((m) => ({ ...m, currency: 'IDR' }));
+  },
+  'get_top_products': () => MOCK_PRODUCTS.slice(0, 5).map((p, i) => ({
+    product_id: p.sku,
+    sku: p.sku,
+    name: p.name,
+    total_qty: 3 + (i * 7) % 30,
+    total_minor: p.price.minor_units * (3 + (i * 7) % 30),
+  })),
+  'get_hourly_heatmap': () => [0, 3, 5, 8, 11].flatMap((day) =>
+    [9, 12, 15, 18].map((hour, i) => ({
+      day_of_week: day,
+      hour,
+      total_minor: mockRevenue(day * 24 + hour) % 3_000_000,
+      sale_count: (i * 3) % 14,
+    })),
+  ),
+  'get_low_stock_alerts': () => [
+    { product_id: 'RAM-D4-16GB-KF', sku: 'RAM-D4-16GB-KF', name: 'Kingston Fury Beast 16GB DDR4 3200', current_qty: 3, threshold: 10 },
+    { product_id: 'MB-B650-ROG', sku: 'MB-B650-ROG', name: 'ASUS ROG Strix B650-A Gaming WiFi', current_qty: 5, threshold: 10 },
+  ],
+  'get_category_breakdown': () => {
+    const byCat = new Map<string, { category_id: string | null; category_name: string; total_minor: number; sale_count: number }>();
+    MOCK_PRODUCTS.forEach((p, i) => {
+      const total = mockRevenue(i) % 4_000_000;
+      const existing = byCat.get(p.category);
+      if (existing) {
+        existing.total_minor += total;
+        existing.sale_count += 1;
+      } else {
+        byCat.set(p.category, { category_id: p.category, category_name: p.category, total_minor: total, sale_count: 1 });
+      }
+    });
+    const rows = [...byCat.values()];
+    const grand = rows.reduce((s, r) => s + r.total_minor, 0) || 1;
+    return rows.map((r) => ({ ...r, percentage: (r.total_minor / grand) * 100 }));
+  },
+  'get_menu_engineering': () => ({
+    rows: MOCK_PRODUCTS.slice(0, 6).map((p, i) => ({
+      product_id: p.sku,
+      sku: p.sku,
+      name: p.name,
+      total_volume: 2 + (i * 5) % 40,
+      unit_price_minor: p.price.minor_units,
+      unit_cost_minor: Math.floor(p.price.minor_units * 0.6),
+      margin_per_unit: Math.floor(p.price.minor_units * 0.4),
+      total_margin_minor: Math.floor(p.price.minor_units * 0.4) * (2 + (i * 5) % 40),
+      total_revenue_minor: p.price.minor_units * (2 + (i * 5) % 40),
+    })),
+    median_volume: 15,
+    median_margin: 500_000,
+  }),
   'build_custom_report': () => ({
     rows: [], columns: [], total: 0, page: 1, pageSize: 50, totalPages: 1,
   }),
@@ -1207,10 +1332,36 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // ═══════════════════════════════════════════════════════════════
 
   'get_loyalty_account_scoped': () => null,
-  'list_loyalty_accounts_scoped': () => [],
+  // One seeded account + tiers so the Loyalty screen's real table renders
+  // deterministically (the table only exists when accounts.length > 0;
+  // otherwise the empty state shows and the E2E races the loading skeleton).
+  'list_loyalty_accounts_scoped': () => [
+    {
+      account: {
+        id: 'loyalty-acc-1', customer_id: 'cust-1', points: 250, lifetime_points: 1200,
+        tier_id: 'tier-1', updated_at: new Date().toISOString(), created_at: new Date().toISOString(),
+      },
+      tier: {
+        id: 'tier-1', name: 'Gold', min_points: 100, points_per_unit: 1000,
+        earn_multiplier: 1.5, colour: '#f59e0b', sort_order: 1, created_at: new Date().toISOString(),
+      },
+      recent_transactions: [],
+      next_tier: null,
+      points_to_next_tier: 0,
+    },
+  ],
   'earn_loyalty_points_scoped': () => null,
   'redeem_loyalty_points_scoped': () => null,
-  'list_loyalty_tiers_scoped': () => [],
+  'list_loyalty_tiers_scoped': () => [
+    {
+      id: 'tier-1', name: 'Gold', min_points: 100, points_per_unit: 1000,
+      earn_multiplier: 1.5, colour: '#f59e0b', sort_order: 1, created_at: new Date().toISOString(),
+    },
+    {
+      id: 'tier-2', name: 'Platinum', min_points: 500, points_per_unit: 1000,
+      earn_multiplier: 2, colour: '#8b5cf6', sort_order: 2, created_at: new Date().toISOString(),
+    },
+  ],
   'update_loyalty_tier_scoped': () => null,
   'get_points_value_scoped': () => 0,
   'get_or_create_loyalty_account_scoped': () => null,
@@ -1232,7 +1383,19 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // BUNDLES
   // ═══════════════════════════════════════════════════════════════
 
-  'list_bundles': () => [],
+  'list_bundles': () => [
+    {
+      bundle: {
+        id: 'bundle-1', bundle_sku: 'BNDL-PC-1', name: 'PC Starter Bundle',
+        description: 'CPU + RAM + SSD combo', bundle_price_minor: 11500000, currency: 'IDR',
+        active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      },
+      items: [
+        { id: 'bundle-item-1', bundle_id: 'bundle-1', sku: 'CPU-R5-7600', qty: 1, unit_price_minor: 3150000 },
+        { id: 'bundle-item-2', bundle_id: 'bundle-1', sku: 'RAM-D5-32GB-CR', qty: 1, unit_price_minor: 1850000 },
+      ],
+    },
+  ],
   'get_bundle': () => null,
   'create_bundle': () => null,
   'update_bundle': () => null,
@@ -1269,8 +1432,19 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // ═══════════════════════════════════════════════════════════════
 
   'list_audit_log': () => [],
-  'list_audit_log_scoped': () => [],
-  'get_audit_review_status_scoped': () => ({ reviewed: false }),
+  // Must return the AuditLogPageDto shape ({ items, total, has_more }) — the
+  // screen calls setEntries(page.items), so an array return would make items
+  // undefined and crash the render on entries.length (flippy E2E: passes only
+  // when the loading skeleton is caught before the crash lands).
+  'list_audit_log_scoped': () => ({
+    items: [
+      { id: 'audit-1', user_id: 'admin-1', action: 'sale.completed', target_type: 'sale', target_id: 'seed-sale-001', details: 'Sale completed', outcome: 'success', created_at: new Date(Date.now() - 60000).toISOString() },
+      { id: 'audit-2', user_id: 'owner-1', action: 'shift.opened', target_type: 'shift', target_id: 'shift-1', details: 'Shift opened', outcome: 'success', created_at: new Date(Date.now() - 120000).toISOString() },
+    ],
+    total: 2,
+    has_more: false,
+  }),
+  'get_audit_review_status_scoped': () => ({ checkpoint: null, unreviewed_count: 0 }),
   'mark_audit_reviewed_scoped': () => null,
   'export_audit_log_scoped': () => '',
 
@@ -1304,6 +1478,72 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'test_sync_connection': () => ({ ok: true, status: 'connected', latencyMs: 12 }),
   'request_sync_token': () => ({ ok: true, token: 'mock-jwt-token', status: 'issued', expiresAt: new Date(Date.now() + 86400000).toISOString() }),
 
+};
+
+// ── Scoped aliases (ADR #7) ──────────────────────────────────────
+// The API layer calls the *_scoped variant for nearly every command, but
+// several were only ever registered unscoped. Without these, invoke()
+// returns `null` and report/inventory screens crash on `.length` reads
+// (e.g. revenueData.length in DashboardScreen / SalesReportScreen),
+// surfacing as error-boundary failures in browser-mode E2E. Alias the
+// missing scoped names to their unscoped twins so they resolve to the
+// same empty-shaped data instead of null.
+const SCOPED_ALIASES: Array<[string, string]> = [
+  // Reports (reporting-workflows / dashboard)
+  ['get_daily_revenue_scoped', 'get_daily_revenue'],
+  ['get_weekly_revenue_scoped', 'get_weekly_revenue'],
+  ['get_monthly_revenue_scoped', 'get_monthly_revenue'],
+  ['get_top_products_scoped', 'get_top_products'],
+  ['get_hourly_heatmap_scoped', 'get_hourly_heatmap'],
+  ['get_category_breakdown_scoped', 'get_category_breakdown'],
+  ['get_menu_engineering_scoped', 'get_menu_engineering'],
+  ['build_custom_report_scoped', 'build_custom_report'],
+  ['get_low_stock_alerts_scoped', 'get_low_stock_alerts'],
+  // Stock counts (inventory-workflows)
+  ['create_stock_count_scoped', 'create_stock_count'],
+  ['get_stock_count_scoped', 'get_stock_count'],
+  ['list_stock_counts_scoped', 'list_stock_counts'],
+  ['get_count_lines_scoped', 'get_count_lines'],
+  ['add_count_line_scoped', 'add_count_line'],
+  ['update_count_line_scoped', 'update_count_line'],
+  ['remove_count_line_scoped', 'remove_count_line'],
+  ['complete_stock_count_scoped', 'complete_stock_count'],
+  ['update_stock_count_status_scoped', 'update_stock_count_status'],
+  // Categories / customers (admin screens)
+  ['create_category_scoped', 'create_category'],
+  ['update_category_scoped', 'update_category'],
+  ['delete_category_scoped', 'delete_category'],
+  ['create_customer_scoped', 'create_customer'],
+  ['update_customer_scoped', 'update_customer'],
+  ['delete_customer_scoped', 'delete_customer'],
+];
+for (const [scoped, base] of SCOPED_ALIASES) {
+  if (handlers[scoped] === undefined && handlers[base] !== undefined) {
+    handlers[scoped] = handlers[base];
+  }
+}
+
+// Scoped commands without an unscoped twin get minimal direct stubs.
+handlers['search_customers_scoped'] = (args) => {
+  const { query } = (args ?? {}) as { query?: string };
+  const q = (query ?? '').toLowerCase();
+  const items = MOCK_CUSTOMERS.filter(
+    (c) => !q || c.name.toLowerCase().includes(q),
+  );
+  return { items, total: items.length };
+};
+handlers['get_customer_history_scoped'] = (args) => {
+  const { customerId } = (args ?? {}) as { customerId?: string };
+  const customer =
+    MOCK_CUSTOMERS.find((c) => c.id === customerId) ?? MOCK_CUSTOMERS[0]!;
+  return { customer, loyalty: null, sales: [], sales_total: 0 };
+};
+handlers['list_in_transit_transfers_scoped'] = () => [];
+handlers['print_kds_chit_scoped'] = () => true;
+handlers['update_kds_order_items_scoped'] = (args) => {
+  const raw = (args ?? {}) as { id?: string; args?: { id?: string } };
+  const id = raw.id ?? raw.args?.id ?? '';
+  return mockKdsOrders.find((o) => o['id'] === id) ?? null;
 };
 
 /** Mock Tauri invoke — handles common commands with mock data. */

@@ -40,8 +40,9 @@ test.describe('Critical Path: Settings Persistence', () => {
     await expect(sidebar).toBeVisible({ timeout: 10_000 });
 
     // Navigate to Receipt section (inside the "Operations" category).
-    // First ensure the Operations category is expanded.
-    const opsCategory = page.locator('.settings-sidebar-category-btn').filter({ hasText: 'Operations' });
+    // First ensure the Operations category is expanded. Only "Business" is
+    // expanded by default, so click the section header to expand Operations.
+    const opsCategory = page.locator('.settings-sidebar-section-header').filter({ hasText: 'Operations' });
     if (await opsCategory.isVisible({ timeout: 2_000 }).catch(() => false)) {
       const opsExpanded = await opsCategory.getAttribute('aria-expanded');
       if (opsExpanded === 'false') {
@@ -151,7 +152,10 @@ test.describe('Critical Path: Settings Persistence', () => {
     await expect(generalNav).toBeVisible({ timeout: 3_000 });
 
     // ── Step 2: Find the store name input and change it ─────────────
-    const storeNameInput = page.locator('#root input[type="text"]').first();
+    // Target the General-section field by id — `#root input[type="text"]`
+    // would match the sidebar SEARCH box first (it precedes the content in
+    // the DOM), and typing into it filters the nav tree and hides Receipt.
+    const storeNameInput = page.locator('#settings-field-store-name');
     await expect(storeNameInput).toBeVisible({ timeout: 5_000 });
 
     const originalValue = await storeNameInput.inputValue();
@@ -165,7 +169,7 @@ test.describe('Critical Path: Settings Persistence', () => {
 
     // ── Step 3: Navigate away ──────────────────────────────────────
     // Ensure the Operations category is expanded so Receipt nav item is visible.
-    const opsCategory = page.locator('.settings-sidebar-category-btn').filter({ hasText: 'Operations' });
+    const opsCategory = page.locator('.settings-sidebar-section-header').filter({ hasText: 'Operations' });
     if (await opsCategory.isVisible({ timeout: 2_000 }).catch(() => false)) {
       const opsExpanded = await opsCategory.getAttribute('aria-expanded');
       if (opsExpanded === 'false') {
@@ -183,7 +187,7 @@ test.describe('Critical Path: Settings Persistence', () => {
     await page.waitForTimeout(1_000);
 
     // ── Step 5: Verify store name persisted (dirty state kept the value) ──
-    const storeInputAfter = page.locator('#root input[type="text"]').first();
+    const storeInputAfter = page.locator('#settings-field-store-name');
     await expect(storeInputAfter).toBeVisible({ timeout: 5_000 });
     const valueAfter = await storeInputAfter.inputValue();
     expect(valueAfter).toBe(newName);

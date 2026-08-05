@@ -80,8 +80,10 @@ test.describe('Kitchen Display System', () => {
     await expect(numberEl).toBeVisible({ timeout: 3_000 });
     expect(await numberEl.textContent()).toMatch(/#\d+/);
 
-    // Items summary.
-    const itemsEl = page.locator('.kds-ticket-items').first();
+    // Items summary. Line items lazy-fetch via get_kds_order_lines_scoped,
+    // so the course-grouped .kds-ticket-line-items container renders; the
+    // flat .kds-ticket-items span is the loading/old-order fallback.
+    const itemsEl = page.locator('.kds-ticket-line-items, .kds-ticket-items').first();
     await expect(itemsEl).toBeVisible({ timeout: 3_000 });
     const itemsContent = await itemsEl.textContent();
     expect(itemsContent).toBeTruthy();
