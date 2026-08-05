@@ -676,6 +676,15 @@ jobs:
     # 5×60s target runs cost ~10 min, so gating PRs on paths keeps the
     # signal without taxing every PR commit. Mirrors the security-pr
     # fail-closed gate pattern.
+    env:
+      # sccache (RUSTC_WRAPPER) resolves the rustup shim against
+      # RUSTUP_TOOLCHAIN / the root rust-toolchain.toml, which pins
+      # STABLE — but this job installs ONLY the nightly toolchain (see
+      # fuzz/rust-toolchain.toml). Without pinning, sccache tries to exec
+      # the uninstalled stable rustc and dies instantly with "could not
+      # execute process sccache .../stable-.../rustc -vV (No such file or
+      # directory)".
+      RUSTUP_TOOLCHAIN: nightly
     steps:
       - uses: actions/checkout@v4
         with:
