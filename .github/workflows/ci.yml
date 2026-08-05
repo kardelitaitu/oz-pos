@@ -45,6 +45,19 @@ jobs:
       - name: Scan production unwrap/expect inventory
         run: python3 scripts/scan-unwrap-panic.py --fail-on-recoverable
 
+  # ── Rust: Hardcoded money-format gate — fail-closed ─────────────────
+  # Fails when production .rs code hardcodes `/ 100` division or `{}.{:02}`
+  # format strings instead of foundation::format_minor() (a regression
+  # would silently mis-render IDR/JPY/KWD amounts that have 0/3-decimal
+  # minor units). Pure python — no toolchain deps, so it stays fast.
+  rust-money-format:
+    name: Rust Money Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify no hardcoded exp-2 money formatting
+        run: python3 scripts/verify-no-hardcoded-money-format.py
+
   # ── Rust: Clippy (needs system deps for compilation, all-features) ─
   rust-clippy:
     name: Rust Clippy

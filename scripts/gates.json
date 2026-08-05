@@ -64,6 +64,13 @@
       "runners": { "check.sh": ["no-raw-params"] }
     },
     {
+      "id": "no-hardcoded-money-format",
+      "label": "No hardcoded exp-2 money formatting",
+      "status": "required",
+      "runners": { "check.sh": ["hardcoded-money-format"] },
+      "ci": { "workflow": "ci.yml", "job": "rust-money-format" }
+    },
+    {
       "id": "docker-dry-run",
       "label": "Docker build smoke (--docker-dry-run)",
       "status": "required",

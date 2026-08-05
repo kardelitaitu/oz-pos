@@ -22,6 +22,7 @@
 |-----|---------|---------|-------|--------|--------|
 | `rust-fmt` | PR + push | ~30s | none | — | ✅ Required |
 | `rust-panic-inventory` | PR + push | ~10s | none | — | ✅ Required |
+| `rust-money-format` | PR + push | ~5s | none | — | ✅ Required (no hardcoded `/100` or `{}.{:02}` money formatting) |
 | `rust-clippy` | PR + push | ~3min | rust-cache + sccache | — | ✅ Required |
 | `rust-test-fast` | PR only | ~2min each | rust-cache + sccache | 5-way | ✅ Required |
 | `rust-test-apps` | PR + push | ~3min | rust-cache + sccache | — | ✅ Required (AUDIT-27 CI-01) |
@@ -48,7 +49,7 @@
 All gate **names** and **status** live in `scripts/gates.json`. It is the one place a gate is added, renamed, or re-leveled:
 
 - **Shared gates** (declared by BOTH `check.sh` and `check:all`): UI lint, UI typecheck, UI unit tests, i18n lint, FTL dedupe.
-- **check.sh-only** (repo gate): Rust fmt/clippy/tests, migration, skill-drift, panic-inventory, a11y (advisory), feature registry, plugin-guide parity, windows config drift (NSIS installMode + asInvoker), CI docs drift.
+- **check.sh-only** (repo gate): Rust fmt/clippy/tests, migration, skill-drift, panic-inventory, hardcoded-money-format, a11y (advisory), feature registry, plugin-guide parity, windows config drift (NSIS installMode + asInvoker), CI docs drift.
 - **check:all-only** (UI gate): bundle budget, E2E, perf smoke.
 - **CI-only / nightly** gates carry the enforcing `workflow` + `job` and a `status` of `required` | `advisory` | `required-on-push`.
 
@@ -64,7 +65,7 @@ All gate **names** and **status** live in `scripts/gates.json`. It is the one pl
 
 Checks are split into **required** (block merges) and **advisory** (informational, must not be confused with pass):
 
-- **Required:** format, clippy, panic-inventory, all Rust tests (incl. app crates), UI lint/typecheck/tests, Docker build + blocking Trivy scan, E2E, skill drift, flaky-quarantine registry.
+- **Required:** format, clippy, panic-inventory, hardcoded-money-format, all Rust tests (incl. app crates), UI lint/typecheck/tests, Docker build + blocking Trivy scan, E2E, skill drift, flaky-quarantine registry.
 - **Advisory on PR, required on push:** dependency audit (`cargo audit`, `npm audit --audit-level=high`) — findings recorded on PR, blocking on `main` pushes.
 - **Reviewed baseline:** `.cargo/audit.toml` documents the single accepted advisory (RUSTSEC-2023-0071, `rsa` medium, no fix available — private key used only for operator-side signing; re-audit on release). Every ignore entry there carries owner/review-date/justification. Adding entries requires review.
 - **Advisory:** Lighthouse a11y, coverage, fuzz (crash artifacts uploaded), UI A11y regression suite (`continue-on-error`).
@@ -96,6 +97,7 @@ Enforced via GitHub branch protection (`Settings → Branches → main → Requi
 |------|-----|-------------|
 | Format | `rust-fmt` | ✅ Required |
 | Panic policy | `rust-panic-inventory` | ✅ Required |
+| Money format (no hardcoded `/100` or `{}.{:02}`) | `rust-money-format` | ✅ Required |
 | Lint (Rust) | `rust-clippy` | ✅ Required |
 | Lint (UI) | `ui-lint` | ✅ Required |
 | TypeCheck | `ui-typecheck` | ✅ Required |
@@ -119,7 +121,7 @@ The canonical local entry points and what each covers:
 
 | Command | Covers | Skips |
 |---------|--------|-------|
-| `bash scripts/check.sh` (root) | Rust fmt/clippy/tests, migration, skill-drift, panic-inventory, UI lint/typecheck/tests, i18n lint, **FTL dedupe**, a11y (advisory), feature registry, plugin-guide parity, windows config drift (NSIS installMode + asInvoker), optional `--docker-dry-run` build | Production UI build, E2E (backend not provisioned) |
+| `bash scripts/check.sh` (root) | Rust fmt/clippy/tests, migration, skill-drift, panic-inventory, hardcoded-money-format, UI lint/typecheck/tests, i18n lint, **FTL dedupe**, a11y (advisory), feature registry, plugin-guide parity, windows config drift (NSIS installMode + asInvoker), optional `--docker-dry-run` build | Production UI build, E2E (backend not provisioned) |
 | `cd ui && npm run check:all` | UI lint/typecheck/tests, i18n lint, FTL dedupe, bundle budget, E2E (**provisioned** via `npm run e2e` when Docker is up), perf smoke | Rust gates |
 | `cd ui && npm run e2e` | Full managed E2E (Docker backend + Vite + Playwright + cleanup) | — |
 
@@ -137,6 +139,7 @@ The canonical local entry points and what each covers:
 | Symptom | Likely Cause | Fix |
 |---------|-------------|-----|
 | `rust-clippy` fails | New warning introduced | Run `cargo clippy --workspace --all-targets -- -D warnings` locally |
+| `rust-money-format` fails | Hardcoded `/100` or `{}.{:02}` money formatting in production `.rs` | Route through `foundation::format_minor()` / `Currency::minor_unit_exponent()` |
 | `rust-test-apps` fails | Tauri app crate test/compile failure | The app crates ARE tested now (AUDIT-27 CI-01) — fix the crate; system deps are already installed on the runner |
 | `ui-test` act() warning | Component effect fires async without `renderInAct` | Use `renderInAct` / `renderHookInAct` from `ui/src/test-utils/` |
 | `e2e` timeout | Server didn't start in time | Check Docker health, Vite port conflict |

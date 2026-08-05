@@ -46,6 +46,12 @@ step "clippy workspace" "cargo clippy --workspace --all-targets -- -D warnings" 
 # ── ADR #7 Phase 4: no raw store_id/user_id in command signatures ───────
 step "no-raw-params (ADR #7 Phase 4)" "bash scripts/verify-no-raw-params.sh" bash scripts/verify-no-raw-params.sh
 
+# ── Money formatting gate (IDR/JPY/KWD exp-2 regression guard) ───────────
+# Fails when production .rs code hardcodes `/ 100` division or `{}.{:02}`
+# format strings instead of foundation::format_minor(). Pure python — no
+# toolchain deps, so it stays fast.
+step "no-hardcoded-money-format" "python3 scripts/verify-no-hardcoded-money-format.py" python3 scripts/verify-no-hardcoded-money-format.py
+
 # Workspace-wide test via cargo-nextest — runs each test in its own process
 # for 4.5× faster re-runs after compilation. Also run doctests separately
 # because nextest does not execute them. Falls back to cargo test if nextest
