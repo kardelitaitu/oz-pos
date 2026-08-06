@@ -29,7 +29,7 @@ vi.mock('@/frontend/shell/StatusBar', () => ({
   // axe rejects role="status" on <footer> (implicit contentinfo semantics).
   default: () => (
     <div role="status" aria-label="Application status">
-      v0.0.24
+      v0.0.25
     </div>
   ),
 }));

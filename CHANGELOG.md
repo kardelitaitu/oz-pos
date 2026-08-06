@@ -6,6 +6,12 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.0.25] — 2026-08-06
+
+Release notes: see docs/releases/CHANGELOG-0.0.25.md (reviewed before tagging).
+
+---
+
 ## [0.0.23] — 2026-07-28
 
 Desktop App Security & Stability Audit closeout: **all 18 findings resolved** across the `apps/desktop-client` Tauri v2 + `platform/*` stack (`5 CRITICAL + 3 HIGH + 6 MEDIUM + 4 LOW`). The release ships hardened sync pull, multi-store authentication, kernel resource cleanup, session security, and code-quality cleanup. Adds `docs/releases/release-process.md` (L-4 runbook) and 9 new unit tests covering the audit guards (`sync_pull` confirm/backup, `PaymentKind::wire_method`, kernel shutdown channel, brand-path validation, lan retry). Per-finding analysis and verification live in [`docs/specs/_active/2026-07-12-desktop-app-audit.md`](docs/specs/_active/2026-07-12-desktop-app-audit.md).

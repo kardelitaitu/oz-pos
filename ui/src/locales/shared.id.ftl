@@ -58,7 +58,7 @@ staff-login-license-inactive = Lisensi tidak aktif
 statusbar-conflict-count = { $count } konflik sinkronisasi terselesaikan
 # SYNC-12: StatusBar visible labels + ARIA (localized at the render boundary)
 statusbar-app-status-aria = Status aplikasi
-statusbar-version = OZ-POS Enterprise v0.0.24
+statusbar-version = OZ-POS Enterprise v0.0.25
 statusbar-sync-name = Sinkronisasi
 statusbar-gateway-name = Stripe
 statusbar-license = Lisensi Proprieter
