@@ -160,7 +160,10 @@ impl PgTransport {
                     retry_count: row.get("retry_count"),
                     last_error: row.get("last_error"),
                     created_at: row.get::<_, String>("created_at"),
-                    synced_at: Some(row.get::<_, String>("synced_at")),
+                    // A remote row this terminal pushed as `pending` has a
+                    // NULL synced_at until the remote stamps it; decoding as
+                    // Option (not String) avoids a panic on that first row.
+                    synced_at: row.get::<_, Option<String>>("synced_at"),
                     tenant_id: row.get("tenant_id"),
                     priority: oz_core::offline::SyncPriority::Normal,
                 }

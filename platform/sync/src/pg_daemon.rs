@@ -12,6 +12,7 @@ use std::time::Duration;
 use tokio::sync::{Mutex, RwLock, watch};
 
 use oz_core::db::Store;
+use oz_core::offline::OfflineQueueItem;
 use oz_core::settings::Settings;
 
 use crate::pg_transport::PgTransport;
@@ -128,52 +129,58 @@ impl PgSyncDaemon {
     async fn run_tick(db: &DbConnection, daemon_status: &Arc<RwLock<PgDaemonStatus>>) {
         // Phase 1: Read PG settings + pending items from local DB (blocking)
         let db_clone = db.clone();
-        let (pg_config, pending, read_error) = match tokio::task::spawn_blocking(move || {
-            let conn = db_clone.blocking_lock();
-            let store = Store::new(&conn);
+        let (pg_config, pending, pull_since, read_error) =
+            match tokio::task::spawn_blocking(move || {
+                let conn = db_clone.blocking_lock();
+                let store = Store::new(&conn);
 
-            let enabled = Settings::is_pg_sync_enabled(&conn).unwrap_or(false);
-            let pending = store.list_pending_offline().unwrap_or_default();
+                let enabled = Settings::is_pg_sync_enabled(&conn).unwrap_or(false);
+                let pending = store.list_pending_offline().unwrap_or_default();
+                // SYNC-01 parity: the durable pull anchor survives restarts and
+                // advances only after a page applied — never re-derive it from
+                // the local queue's synced timestamps (pulled remote items do
+                // not move those).
+                let pull_since = store.get_sync_pull_state().ok().and_then(|s| s.since);
 
-            let pg_config = if enabled && !pending.is_empty() {
-                let host = Settings::get_pg_sync_host(&conn)
-                    .unwrap_or_default()
-                    .unwrap_or_default();
-                let port: String = Settings::get_pg_sync_port(&conn)
-                    .ok()
-                    .flatten()
-                    .filter(|p| !p.is_empty())
-                    .unwrap_or_else(|| "5432".into());
-                let dbname = Settings::get_pg_sync_dbname(&conn)
-                    .unwrap_or_default()
-                    .unwrap_or_default();
-                let user = Settings::get_pg_sync_user(&conn)
-                    .unwrap_or_default()
-                    .unwrap_or_default();
-                let password = Settings::get_pg_sync_password(&conn)
-                    .unwrap_or_default()
-                    .unwrap_or_default();
+                let pg_config = if enabled && !pending.is_empty() {
+                    let host = Settings::get_pg_sync_host(&conn)
+                        .unwrap_or_default()
+                        .unwrap_or_default();
+                    let port: String = Settings::get_pg_sync_port(&conn)
+                        .ok()
+                        .flatten()
+                        .filter(|p| !p.is_empty())
+                        .unwrap_or_else(|| "5432".into());
+                    let dbname = Settings::get_pg_sync_dbname(&conn)
+                        .unwrap_or_default()
+                        .unwrap_or_default();
+                    let user = Settings::get_pg_sync_user(&conn)
+                        .unwrap_or_default()
+                        .unwrap_or_default();
+                    let password = Settings::get_pg_sync_password(&conn)
+                        .unwrap_or_default()
+                        .unwrap_or_default();
 
-                if !host.is_empty() && !dbname.is_empty() {
-                    Some((host, port, dbname, user, password))
+                    if !host.is_empty() && !dbname.is_empty() {
+                        Some((host, port, dbname, user, password))
+                    } else {
+                        None
+                    }
                 } else {
                     None
-                }
-            } else {
-                None
-            };
+                };
 
-            (pg_config, pending)
-        })
-        .await
-        {
-            Ok((cfg, pending)) => (cfg, pending, None),
-            Err(join_err) => {
-                let msg = format!("pg sync config read panicked: {join_err}");
-                tracing::error!(error = %msg, "pg sync daemon read phase failed");
-                (None, Vec::new(), Some(msg))
-            }
-        };
+                (pg_config, pending, pull_since)
+            })
+            .await
+            {
+                Ok((cfg, pending, since)) => (cfg, pending, since, None),
+                Err(join_err) => {
+                    let msg = format!("pg sync config read panicked: {join_err}");
+                    tracing::error!(error = %msg, "pg sync daemon read phase failed");
+                    (None, Vec::new(), None, Some(msg))
+                }
+            };
 
         // Phase 2: Do async PG sync if configured
         let mut pushed = 0usize;
@@ -192,46 +199,43 @@ impl PgSyncDaemon {
                 Ok(results) => {
                     pushed = results.len(); // Phase 3: Apply push results to local DB (blocking)
                     let db_clone = db.clone();
-                    let ids: Vec<String> = pending.iter().map(|i| i.id.clone()).collect();
                     let outcome = tokio::task::spawn_blocking(move || {
                         let conn = db_clone.blocking_lock();
                         let store = Store::new(&conn);
-                        for (i, outcome) in ids.iter().zip(results.iter()) {
+                        let queue = SyncQueue::new();
+                        for (item, outcome) in pending.iter().zip(results.iter()) {
                             match outcome {
                                 crate::transport::PushOutcome::Accepted => {
-                                    if let Err(e) = store.mark_offline_synced(i) {
+                                    if let Err(e) = store.mark_offline_synced(&item.id) {
                                         tracing::error!(
-                                            item_id = %i,
+                                            item_id = %item.id,
                                             error = %e,
                                             "pg sync daemon: failed to mark item synced"
                                         );
                                     }
                                 }
                                 crate::transport::PushOutcome::Rejected { reason } => {
-                                    if let Err(e) = store.mark_offline_failed(i, reason) {
+                                    if let Err(e) = store.mark_offline_failed(&item.id, reason) {
                                         tracing::error!(
-                                            item_id = %i,
+                                            item_id = %item.id,
                                             error = %e,
                                             "pg sync daemon: failed to mark item failed"
                                         );
                                     }
                                 }
-                                crate::transport::PushOutcome::Conflict(remote) => {
-                                    if let Err(e) = store.mark_offline_synced(i) {
-                                        tracing::error!(
-                                            item_id = %i,
-                                            error = %e,
-                                            "pg sync daemon: failed to mark conflicted item synced"
-                                        );
-                                    }
+                                crate::transport::PushOutcome::Conflict(server_item) => {
+                                    // SYNC-02 parity: route the conflict through the shared
+                                    // ADR #21 service (version LWW / sale status DAG / stock
+                                    // CRDT merge) instead of blanket mark-synced + re-enqueue,
+                                    // which could resurrect stale remote state.
                                     if let Err(e) =
-                                        store.enqueue_offline(&remote.action, &remote.payload)
+                                        queue.apply_push_conflict(&store, item, server_item)
                                     {
                                         tracing::error!(
-                                            item_id = %i,
-                                            action = %remote.action,
+                                            item_id = %item.id,
+                                            action = %item.action,
                                             error = %e,
-                                            "pg sync daemon: failed to re-enqueue remote winner"
+                                            "pg sync daemon: conflict resolution failed"
                                         );
                                     }
                                 }
@@ -250,25 +254,30 @@ impl PgSyncDaemon {
             }
 
             // Phase 4: Pull remote updates and apply them locally.
-            match transport.pull_updates(None).await {
+            // SYNC-01 parity: the `since` anchor comes from the durable
+            // `sync_pull_state` row, each item applies atomically with the
+            // idempotency ledger, and the anchor advances only after the
+            // page applied — so a replaying remote queue can never re-apply
+            // a mutation, and a poison item dead-letters instead of erroring
+            // forever.
+            match transport.pull_updates(pull_since.as_deref()).await {
                 Ok(pull_resp) => {
                     pulled = pull_resp.items.len();
                     if !pull_resp.items.is_empty() {
                         let db_clone = db.clone();
                         let items = pull_resp.items;
+                        let prev_since = pull_since;
                         let outcome = tokio::task::spawn_blocking(move || {
                             let conn = db_clone.blocking_lock();
                             let store = Store::new(&conn);
-                            let queue = SyncQueue::new();
-                            for item in &items {
-                                if let Err(e) = queue.apply_remote(&store, item) {
-                                    tracing::error!(
-                                        item_id = %item.id,
-                                        action = %item.action,
-                                        error = %e,
-                                        "failed to apply remote item"
-                                    );
-                                }
+                            if let Some(new_since) =
+                                apply_pulled_page(&store, &items, prev_since.as_deref())
+                                && let Err(e) = store.set_sync_pull_state(Some(&new_since), None)
+                            {
+                                tracing::error!(
+                                    error = %e,
+                                    "pg sync daemon: failed to persist pull anchor"
+                                );
                             }
                         })
                         .await;
@@ -348,6 +357,80 @@ impl Default for PgSyncDaemon {
     }
 }
 
+/// Apply one page of pulled remote items atomically (SYNC-01 parity with the
+/// SQLite daemon).
+///
+/// Each item is applied via [`SyncQueue::apply_remote_atomic`] — the domain
+/// mutation and its idempotency receipt commit in one transaction, and a
+/// poison item is dead-lettered after its retry budget. Returns the next
+/// durable pull anchor to persist: `Some(max(prev_since, newest synced_at))`
+/// when the whole page applied (dead-lettered items count as applied), or
+/// `None` when a retryable failure requires retaining the current anchor so
+/// the next cycle re-pulls the same page. A replayed page never re-applies a
+/// mutation (the ledger skips it), so a crash mid-pull is safe.
+fn apply_pulled_page(
+    store: &Store<'_>,
+    page: &[OfflineQueueItem],
+    prev_since: Option<&str>,
+) -> Option<String> {
+    let queue = SyncQueue::new();
+    let mut page_all_applied = true;
+
+    for remote_item in page {
+        match queue.apply_remote_atomic(store, remote_item) {
+            Ok(applied) => {
+                if !applied
+                    && store
+                        .is_remote_failure_dead_lettered(&remote_item.id)
+                        .unwrap_or(false)
+                {
+                    tracing::error!(
+                        item_id = %remote_item.id,
+                        action = %remote_item.action,
+                        "remote item remains quarantined; advancing page anchor"
+                    );
+                }
+            }
+            Err(e) => {
+                let dead_lettered = store
+                    .is_remote_failure_dead_lettered(&remote_item.id)
+                    .unwrap_or(false);
+                if dead_lettered {
+                    tracing::error!(
+                        item_id = %remote_item.id,
+                        action = %remote_item.action,
+                        error = %e,
+                        "remote item quarantined after repeated failures; advancing page anchor"
+                    );
+                } else {
+                    page_all_applied = false;
+                    tracing::error!(
+                        item_id = %remote_item.id,
+                        action = %remote_item.action,
+                        error = %e,
+                        "failed to atomically apply remote item; retaining pull anchor for retry"
+                    );
+                }
+            }
+        }
+    }
+
+    if !page_all_applied {
+        return None;
+    }
+
+    // Monotonic anchor: take the later of the current anchor and the page's
+    // newest synced_at watermark. `.or()` alone could regress the anchor
+    // when the remote returns rows older than `since` (clock skew / late
+    // delivery), which would re-fetch history on every cycle. ISO-8601
+    // timestamps are fixed-format, so lexicographic ordering equals
+    // chronological ordering here. Rows with a NULL synced_at (e.g. items
+    // pushed by this terminal but not yet stamped remotely) never advance
+    // the anchor — the ledger absorbs any re-pull.
+    let page_max = page.iter().filter_map(|i| i.synced_at.as_deref()).max();
+    std::cmp::max(prev_since, page_max).map(str::to_owned)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -373,7 +456,7 @@ mod tests {
     fn remote_stock_adjustment(id: &str, delta: i64, synced_at: &str) -> OfflineQueueItem {
         let mut item = OfflineQueueItem::new(
             "stock.adjusted",
-            &format!(r#"{{"sku":"COFFEE","delta":{delta}}}"#),
+            format!(r#"{{"sku":"COFFEE","delta":{delta}}}"#),
         );
         item.id = id.into();
         item.created_at = "2026-01-01T00:00:00.000Z".into();
