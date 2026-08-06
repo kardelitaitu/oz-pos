@@ -782,6 +782,202 @@ impl Store<'_> {
         Ok(())
     }
 
+    /// Insert a stock movement using a caller-owned transaction.
+    ///
+    /// Sync replay handling uses this form so the immutable ledger row and
+    /// its remote receipt can commit or roll back together.
+    #[allow(clippy::too_many_arguments)]
+    pub fn insert_stock_movement_in_tx(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
+        id: &str,
+        item_id: &str,
+        delta: i64,
+        reason: Option<&str>,
+        source_terminal_id: Option<&str>,
+        source_user_id: Option<&str>,
+        store_id: &str,
+        created_at: &str,
+    ) -> Result<(), CoreError> {
+        tx.execute(
+            "INSERT INTO stock_movements (id, item_id, delta, reason,
+                                          source_terminal_id, source_user_id,
+                                          store_id, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                id,
+                item_id,
+                delta,
+                reason,
+                source_terminal_id,
+                source_user_id,
+                store_id,
+                created_at,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Create a product and its initial stock inside a caller-owned
+    /// transaction, unless the SKU already exists.
+    ///
+    /// Returns `true` when a row was inserted and `false` when the SKU was
+    /// already present. The operation is intentionally idempotent by SKU so
+    /// a replay after a commit-before-receipt crash cannot create a duplicate.
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_product_if_absent_in_tx(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
+        sku: &str,
+        name: &str,
+        price: Money,
+        category_id: Option<&str>,
+        barcode: Option<&str>,
+        initial_stock: i64,
+        product_type: &str,
+    ) -> Result<bool, CoreError> {
+        if sku.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "sku",
+                message: "SKU must not be empty".into(),
+            });
+        }
+        if name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "name must not be empty".into(),
+            });
+        }
+        if price.minor_units < 0 {
+            return Err(CoreError::Validation {
+                field: "price",
+                message: "price must be ≥ 0".into(),
+            });
+        }
+        if initial_stock < 0 {
+            return Err(CoreError::Validation {
+                field: "initial_stock",
+                message: "initial_stock must be ≥ 0".into(),
+            });
+        }
+
+        let cur_str = std::str::from_utf8(&price.currency.0)
+            .map_err(|e| CoreError::Validation {
+                field: "currency",
+                message: format!("invalid UTF-8 in currency bytes: {e}"),
+            })?
+            .to_owned();
+        let id = uuid::Uuid::now_v7().to_string();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let inserted = tx.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode,
+                                   created_at, updated_at, price_updated_at, track_serial,
+                                   product_type, version)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8, ?8, 0, ?9, 1)
+             ON CONFLICT(sku) DO NOTHING",
+            params![
+                id,
+                sku.trim(),
+                name.trim(),
+                price.minor_units,
+                cur_str,
+                category_id,
+                barcode,
+                now,
+                product_type,
+            ],
+        )?;
+
+        if inserted == 0 || initial_stock == 0 || product_type == "service" {
+            return Ok(inserted == 1);
+        }
+
+        tx.execute(
+            "INSERT INTO inventory (product_id, qty, updated_at) VALUES (?1, ?2, ?3)",
+            params![id, initial_stock, now],
+        )?;
+        let movement_id = uuid::Uuid::now_v7().to_string();
+        tx.execute(
+            "INSERT INTO stock_movements (id, item_id, delta, reason,
+                                          source_terminal_id, source_user_id, created_at)
+             VALUES (?1, ?2, ?3, 'initial-stock', NULL, NULL, ?4)",
+            params![movement_id, id, initial_stock, now],
+        )?;
+        upsert_stock_summary_in_tx(
+            tx,
+            &id,
+            crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID,
+            initial_stock,
+            &now,
+        )?;
+
+        Ok(true)
+    }
+
+    /// Adjust stock for a product by SKU inside a caller-owned transaction.
+    ///
+    /// This compatibility path mirrors [`Store::adjust_stock`] while allowing
+    /// sync replay to commit the stock mutation and remote receipt together.
+    /// New checkout code should use the location-aware canonical API below.
+    #[deprecated(note = "use adjust_stock_at_location_with_reason instead")]
+    pub fn adjust_stock_in_tx(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
+        sku: &str,
+        delta: i64,
+    ) -> Result<i64, CoreError> {
+        let product_id: String = tx
+            .query_row(
+                "SELECT id FROM products WHERE sku = ?1",
+                params![sku],
+                |row| row.get(0),
+            )
+            .map_err(|e| match e {
+                rusqlite::Error::QueryReturnedNoRows => CoreError::NotFound {
+                    entity: "product",
+                    id: sku.to_owned(),
+                },
+                other => CoreError::Db(other),
+            })?;
+        let previous_qty: i64 = match tx.query_row(
+            "SELECT qty FROM inventory WHERE product_id = ?1",
+            params![product_id],
+            |row| row.get(0),
+        ) {
+            Ok(qty) => qty,
+            Err(rusqlite::Error::QueryReturnedNoRows) => 0,
+            Err(error) => return Err(CoreError::Db(error)),
+        };
+        let new_qty = previous_qty
+            .checked_add(delta)
+            .filter(|&v| v >= 0)
+            .ok_or_else(|| CoreError::Validation {
+                field: "delta",
+                message: format!(
+                    "adjustment would cause negative stock (previous: {previous_qty}, delta: {delta})"
+                ),
+            })?;
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        tx.execute(
+            "INSERT INTO stock_movements (id, item_id, delta, reason, created_at)
+             VALUES (?1, ?2, ?3, 'remote-sync', ?4)",
+            params![uuid::Uuid::now_v7().to_string(), product_id, delta, now],
+        )?;
+        tx.execute(
+            "INSERT INTO inventory (product_id, qty, updated_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT(product_id) DO UPDATE SET qty = excluded.qty, updated_at = excluded.updated_at",
+            params![product_id, new_qty, now],
+        )?;
+        upsert_stock_summary_in_tx(
+            tx,
+            &product_id,
+            crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID,
+            new_qty,
+            &now,
+        )?;
+        Ok(new_qty)
+    }
+
     /// Adjust stock for a product by SKU inside a transaction.
     ///
     /// Writes a delta row to the `stock_movements` ledger (ADR #6)

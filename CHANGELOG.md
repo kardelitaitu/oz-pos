@@ -8,7 +8,29 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.0.25] — 2026-08-06
 
-Release notes: see docs/releases/CHANGELOG-0.0.25.md (reviewed before tagging).
+Architecture enforcement and release baseline update for the 0.0.25 cycle.
+
+### Added
+
+- **Architecture boundary checker** — Added `scripts/verify-architecture-boundaries.py` to inspect Cargo path dependencies and production UI Tauri IPC usage. It detects module-to-module dependencies, `oz-core` upward dependencies, non-composition platform-to-business dependencies, and direct `invoke()` calls outside approved API or infrastructure adapters.
+- **Transitional boundary baseline** — Added `scripts/architecture-boundaries-baseline.json` with 17 individually tracked findings, owners, reasons, and expiry dates. Existing debt remains visible while new, expired, or stale findings fail validation.
+- **Deterministic checker coverage** — Added 14 fixture-based tests covering dependency direction, dev-dependency exclusions, UI imports and calls, generic/aliased/namespace invokes, comments and test exclusions, baseline behavior, malformed metadata, Windows paths, and JSON output.
+- **CI architecture gate** — Added the required `architecture-boundaries` job to `.github/workflows/ci.yml` and registered it in `scripts/gates.json`.
+
+### Changed
+
+- **Local validation** — Added the architecture gate to `scripts/check.sh` and `scripts/check.ps1`; the Windows runner now fails closed when Python is unavailable.
+- **Architecture documentation** — Documented the enforced dependency and UI IPC boundaries in `ARCHITECTURE.md` and `docs/ARCHITECTURE.md`, and synchronized the CI pipeline dashboard.
+- **Release version synchronization** — Bumped workspace, desktop, tablet, Docker, UI, health endpoint, localized status-bar, test, and lockfile versions from 0.0.24 to 0.0.25.
+- **Atomic remote sync replay handling** — Remote mutations now apply through transaction-aware stock, product, movement, and receipt helpers. The sync daemon commits each mutation with its `sync_applied_items` receipt, preventing crash-window replays from duplicating stock or sale effects; unsupported actions fail closed without recording a receipt.
+- **Replay regression coverage** — Added focused tests for exactly-once replay suppression, rollback when a later sale line fails, and rejection of unknown remote actions. The implementation is documented in spec `0044-critical-delivery-and-sync-replay-safety`.
+
+### Validation
+
+- Full script test suite: **46/46 passed**.
+- Architecture-boundary tests: **14/14 passed**.
+- Strict live boundary check: **17 tracked findings, 0 blocking findings**.
+- CI documentation drift check: **0 drift items**.
 
 ---
 

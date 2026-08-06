@@ -195,6 +195,131 @@ impl SyncQueue {
         self.apply_resolution(store, &resolved)
     }
 
+    /// Apply a remote item and its idempotency receipt atomically.
+    ///
+    /// The existence check, domain mutation, and receipt insert share one
+    /// SQLite transaction. A crash before commit therefore rolls back both
+    /// the mutation and the receipt, while a replay after commit is skipped.
+    pub fn apply_remote_atomic(
+        &self,
+        store: &Store<'_>,
+        item: &OfflineQueueItem,
+    ) -> Result<bool, CoreError> {
+        let tx = store.conn().unchecked_transaction()?;
+        let already: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sync_applied_items WHERE item_id = ?1)",
+            rusqlite::params![item.id],
+            |row| row.get(0),
+        )?;
+        if already {
+            tx.commit()?;
+            return Ok(false);
+        }
+
+        self.apply_remote_in_tx(&tx, item)?;
+        store.mark_remote_item_applied_in_tx(&tx, &item.id, &item.action)?;
+        tx.commit()?;
+        Ok(true)
+    }
+
+    /// Apply a remote mutation using a caller-owned transaction.
+    #[allow(deprecated)]
+    fn apply_remote_in_tx(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
+        item: &OfflineQueueItem,
+    ) -> Result<(), CoreError> {
+        match item.action.as_str() {
+            "complete_sale" => {
+                let payload: SalePayload = serde_json::from_str(&item.payload)
+                    .map_err(|e| CoreError::Internal(format!("invalid sale payload: {e}")))?;
+                for line in &payload.line_items {
+                    Store::new(tx).adjust_stock_in_tx(tx, &line.sku, -line.qty)?;
+                }
+            }
+            "stock.adjusted" => {
+                let payload: Value = serde_json::from_str(&item.payload)
+                    .map_err(|e| CoreError::Internal(format!("invalid stock payload: {e}")))?;
+                let apply_one = |value: Value| -> Result<(), CoreError> {
+                    let sub: StockAdjustmentPayload = serde_json::from_value(value)
+                        .map_err(|e| CoreError::Internal(format!("invalid stock payload: {e}")))?;
+                    Store::new(tx).adjust_stock_in_tx(tx, &sub.sku, sub.delta)?;
+                    Ok(())
+                };
+                if payload.get("merge_type").and_then(|m| m.as_str()) == Some("crdt_delta") {
+                    apply_one(payload.get("local").cloned().unwrap_or(Value::Null))?;
+                    apply_one(payload.get("remote").cloned().unwrap_or(Value::Null))?;
+                } else {
+                    apply_one(payload)?;
+                }
+            }
+            "product.created" => {
+                let payload: Value = serde_json::from_str(&item.payload)
+                    .map_err(|e| CoreError::Internal(format!("invalid product payload: {e}")))?;
+                let sku = payload["sku"].as_str().unwrap_or("");
+                let name = payload["name"].as_str().unwrap_or("");
+                let price_minor = payload["price_minor"].as_i64().unwrap_or(-1);
+                let currency = payload["currency"].as_str().unwrap_or("");
+                let currency_parsed: oz_core::Currency =
+                    currency
+                        .parse()
+                        .map_err(|e: oz_core::money::InvalidCurrencyCode| {
+                            CoreError::Internal(format!("invalid currency in sync payload: {e}"))
+                        })?;
+                let initial_stock = payload["initial_stock"].as_i64().unwrap_or(0);
+                let product_type = payload["product_type"].as_str().unwrap_or("retail");
+                Store::new(tx).create_product_if_absent_in_tx(
+                    tx,
+                    sku,
+                    name,
+                    oz_core::Money {
+                        minor_units: price_minor,
+                        currency: currency_parsed,
+                    },
+                    payload["category_id"].as_str(),
+                    payload["barcode"].as_str(),
+                    initial_stock,
+                    product_type,
+                )?;
+            }
+            "stock.movement" => {
+                let payload: Value = serde_json::from_str(&item.payload).map_err(|e| {
+                    CoreError::Internal(format!("invalid stock.movement payload: {e}"))
+                })?;
+                let apply_one = |value: &Value| -> Result<(), CoreError> {
+                    let m: StockMovementPayload =
+                        serde_json::from_value(value.clone()).map_err(|e| {
+                            CoreError::Internal(format!("invalid stock.movement payload: {e}"))
+                        })?;
+                    Store::new(tx).insert_stock_movement_in_tx(
+                        tx,
+                        &m.id,
+                        &m.item_id,
+                        m.delta,
+                        m.reason.as_deref(),
+                        m.source_terminal_id.as_deref(),
+                        m.source_user_id.as_deref(),
+                        &m.store_id,
+                        &m.created_at,
+                    )
+                };
+                if payload.get("merge_type").and_then(|m| m.as_str()) == Some("crdt_delta") {
+                    apply_one(payload.get("local").unwrap_or(&Value::Null))?;
+                    apply_one(payload.get("remote").unwrap_or(&Value::Null))?;
+                } else {
+                    apply_one(&payload)?;
+                }
+            }
+            _ => {
+                return Err(CoreError::Internal(format!(
+                    "unsupported remote sync action: {}",
+                    item.action
+                )));
+            }
+        }
+        Ok(())
+    }
+
     /// Apply a remote item to the local store.
     ///
     /// Parses the `action` field and dispatches to the appropriate local
@@ -738,6 +863,42 @@ mod tests {
     }
 
     #[test]
+    fn apply_remote_atomic_replay_changes_stock_once() {
+        let store = setup_store();
+        seed_product_and_inventory(&store);
+        let queue = SyncQueue::new();
+        let remote = OfflineQueueItem {
+            id: "remote-sale-once".into(),
+            action: "complete_sale".into(),
+            payload: r#"{"line_items":[{"sku":"COFFEE","qty":2}]}"#.into(),
+            ..OfflineQueueItem::new("complete_sale", "{}")
+        };
+
+        assert!(queue.apply_remote_atomic(&store, &remote).unwrap());
+        assert!(!queue.apply_remote_atomic(&store, &remote).unwrap());
+        assert_eq!(inventory_qty(&store, "COFFEE"), 48);
+        assert!(store.is_remote_item_applied(&remote.id).unwrap());
+    }
+
+    #[test]
+    fn apply_remote_atomic_failure_rolls_back_mutation_and_receipt() {
+        let store = setup_store();
+        seed_product_and_inventory(&store);
+        let queue = SyncQueue::new();
+        let remote = OfflineQueueItem {
+            id: "remote-sale-invalid".into(),
+            action: "complete_sale".into(),
+            payload: r#"{"line_items":[{"sku":"COFFEE","qty":2},{"sku":"MISSING","qty":1}]}"#
+                .into(),
+            ..OfflineQueueItem::new("complete_sale", "{}")
+        };
+
+        assert!(queue.apply_remote_atomic(&store, &remote).is_err());
+        assert_eq!(inventory_qty(&store, "COFFEE"), 50);
+        assert!(!store.is_remote_item_applied(&remote.id).unwrap());
+    }
+
+    #[test]
     fn apply_remote_stock_adjustment() {
         let store = setup_store();
         seed_product_and_inventory(&store);
@@ -775,6 +936,15 @@ mod tests {
         assert!(result.is_ok(), "unknown action should not error");
         let all = store.list_all_offline().unwrap();
         assert!(all.is_empty(), "no queue items should be created");
+    }
+
+    #[test]
+    fn apply_remote_atomic_rejects_unknown_action_without_receipt() {
+        let store = setup_store();
+        let queue = SyncQueue::new();
+        let remote = OfflineQueueItem::new("unknown.action", r#"{\"data\":\"test\"}"#);
+        assert!(queue.apply_remote_atomic(&store, &remote).is_err());
+        assert!(!store.is_remote_item_applied(&remote.id).unwrap());
     }
 
     // ── stock.movement cross-store delta routing (ADR #6) ────────

@@ -440,6 +440,24 @@ impl Store<'_> {
         Ok(())
     }
 
+    /// Record a remote item using a caller-owned transaction.
+    ///
+    /// The sync applier uses this method in the same transaction as the
+    /// domain mutation, preventing a crash between mutation and receipt from
+    /// causing a second application on replay.
+    pub fn mark_remote_item_applied_in_tx(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
+        item_id: &str,
+        action: &str,
+    ) -> Result<(), CoreError> {
+        tx.execute(
+            "INSERT OR IGNORE INTO sync_applied_items (item_id, action) VALUES (?1, ?2)",
+            params![item_id, action],
+        )?;
+        Ok(())
+    }
+
     fn row_to_offline_queue_item(row: &rusqlite::Row) -> rusqlite::Result<OfflineQueueItem> {
         let status_str: String = row.get("status")?;
         Ok(OfflineQueueItem {

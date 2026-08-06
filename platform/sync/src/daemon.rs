@@ -390,112 +390,90 @@ impl SyncDaemon {
                                 let next_cursor = pull_resp.next_cursor;
                                 let prev_since = pull_since.clone();
                                 let outcome = tokio::task::spawn_blocking(move || {
-                                let conn = db_clone.blocking_lock();
-                                let store = Store::new(&conn);
-                                let queue = SyncQueue::new();
-                                let mut has_stock_movements = false;
-                                let mut all_applied = true;
-                                // SYNC-01: captured so anchor-persistence
-                                // failures surface in the daemon status
-                                // (returned from the closure below) instead of
-                                // being silently swallowed by tracing only.
-                                let mut anchor_error: Option<String> = None;
-                                for item in &items {
-                                    if item.action == "stock.movement" {
-                                        has_stock_movements = true;
+                                    let conn = db_clone.blocking_lock();
+                                    let store = Store::new(&conn);
+                                    let queue = SyncQueue::new();
+                                    let mut has_stock_movements = false;
+                                    let mut all_applied = true;
+                                    // SYNC-01: captured so anchor-persistence
+                                    // failures surface in the daemon status
+                                    // (returned from the closure below) instead of
+                                    // being silently swallowed by tracing only.
+                                    let mut anchor_error: Option<String> = None;
+                                    for item in &items {
+                                        if item.action == "stock.movement" {
+                                            has_stock_movements = true;
+                                        }
+                                        // SYNC-01: the domain mutation and its
+                                        // idempotency receipt commit together. A
+                                        // crash before commit rolls back both, so
+                                        // replay is safe rather than duplicating a
+                                        // committed stock mutation with a missing
+                                        // receipt.
+                                        match queue.apply_remote_atomic(&store, item) {
+                                            Ok(_) => {}
+                                            Err(e) => {
+                                                all_applied = false;
+                                                tracing::error!(
+                                                    item_id = %item.id,
+                                                    action = %item.action,
+                                                    error = %e,
+                                                    "failed to atomically apply remote item"
+                                                );
+                                            }
+                                        }
                                     }
-                                    // SYNC-01: idempotency ledger — skip any
-                                    // remote item already applied in a prior
-                                    // cycle (replay is harmless).
-                                    let already = store
-                                        .is_remote_item_applied(&item.id)
-                                        .unwrap_or(false);
-                                    if already {
-                                        continue;
+                                    // ADR #6: Rebuild the materialized stock_summary
+                                    // cache before advancing the pull anchor. If the
+                                    // rebuild fails, the old anchor is retained so a
+                                    // retry can restore the derived state as well.
+                                    let summary_rebuilt = if has_stock_movements {
+                                        match store.rebuild_stock_summary() {
+                                            Ok(_) => true,
+                                            Err(e) => {
+                                                tracing::error!(
+                                                    error = %e,
+                                                    "failed to rebuild stock summary after sync pull"
+                                                );
+                                                anchor_error = Some(format!(
+                                                    "rebuild stock summary after sync pull: {e}"
+                                                ));
+                                                false
+                                            }
+                                        }
+                                    } else {
+                                        true
+                                    };
+                                    // SYNC-01: advance the pull anchor ONLY after
+                                    // the whole page and its derived stock cache
+                                    // applied successfully. A crash mid-pull leaves
+                                    // the old anchor so the ledger absorbs replay.
+                                    if all_applied && summary_rebuilt {
+                                        let new_since = items
+                                            .iter()
+                                            .map(|i| i.created_at.clone())
+                                            .max()
+                                            .or(prev_since);
+                                        if let Err(e) = store.set_sync_pull_state(
+                                            new_since.as_deref(),
+                                            next_cursor.as_deref(),
+                                        ) {
+                                            tracing::error!(
+                                                error = %e,
+                                                "failed to persist sync pull anchor"
+                                            );
+                                            anchor_error =
+                                                Some(format!("persist sync pull anchor: {e}"));
+                                        }
                                     }
-                                    // Apply the mutation, then record the
-                                    // ledger receipt. NOTE: we deliberately do
-                                    // NOT wrap these in a single outer
-                                    // transaction — `apply_remote`'s
-                                    // `adjust_stock` path opens its OWN
-                                    // `unchecked_transaction()` internally, so
-                                    // nesting would fail with a SQLite
-                                    // "cannot start a transaction within a
-                                    // transaction" error and roll the item
-                                    // back entirely (observed in the SYNC-01
-                                    // regression test). Instead:
-                                    //  1. If the apply FAILS, `all_applied`
-                                    //     goes false → anchor does not advance
-                                    //     → the item replays next cycle.
-                                    //  2. If the apply SUCCEEDS, the mutation
-                                    //     is committed. The receipt write is
-                                    //     best-effort: even if it fails, we
-                                    //     advance the anchor past the item,
-                                    //     because re-applying an already-
-                                    //     committed mutation is the worse
-                                    //     failure. A lost receipt only matters
-                                    //     if the server replays history after
-                                    //     an anchor reset — which the snapshot
-                                    //     import path handles separately.
-                                    if let Err(e) = queue.apply_remote(&store, item) {
-                                        all_applied = false;
-                                        tracing::error!(
-                                            item_id = %item.id,
-                                            action = %item.action,
-                                            error = %e,
-                                            "failed to apply remote item"
-                                        );
-                                    } else if let Err(e) =
-                                        store.mark_remote_item_applied(&item.id, &item.action)
-                                    {
-                                        tracing::warn!(
-                                            item_id = %item.id,
-                                            action = %item.action,
-                                            error = %e,
-                                            "failed to write ledger receipt (item still applied; anchor advances)"
-                                        );
-                                    }
-                                }
-                                // SYNC-01: advance the pull anchor ONLY after
-                                // the whole page applied successfully. A crash
-                                // mid-pull leaves the old anchor so the ledger
-                                // absorbs the replay.
-                                if all_applied {
-                                    let new_since = items
-                                        .iter()
-                                        .map(|i| i.created_at.clone())
-                                        .max()
-                                        .or(prev_since);
-                                    if let Err(e) = store.set_sync_pull_state(
-                                        new_since.as_deref(),
-                                        next_cursor.as_deref(),
-                                    ) {
-                                        tracing::error!(
-                                            error = %e,
-                                            "failed to persist sync pull anchor"
-                                        );
-                                        anchor_error = Some(format!(
-                                            "persist sync pull anchor: {e}"
-                                        ));
-                                    }
-                                }
-                                // ADR #6: Rebuild the materialized stock_summary
-                                // cache after applying remote stock movements.
-                                if has_stock_movements && let Err(e) = store.rebuild_stock_summary()
-                                {
-                                    tracing::error!(
-                                        error = %e,
-                                        "failed to rebuild stock summary after sync pull"
-                                    );
-                                }
-                                // Return the anchor-persistence error (if any)
-                                // so the caller can surface it in the daemon
-                                // status — a lost anchor makes the NEXT cycle
-                                // re-pull the whole page, which is exactly the
-                                // corruption class SYNC-01 prevents.
-                                anchor_error
-                            })
-                            .await;
+                                    // Return the anchor-persistence error (if any)
+                                    // so the caller can surface it in the daemon
+                                    // status — a lost anchor makes the NEXT cycle
+                                    // re-pull the whole page, which is exactly the
+                                    // corruption class SYNC-01 prevents.
+                                    anchor_error
+                                })
+                                .await;
                                 // SYNC-01: propagate both spawn_blocking panics AND
                                 // anchor-persistence failures into sync_error so the
                                 // daemon status/backoff reflect them.
