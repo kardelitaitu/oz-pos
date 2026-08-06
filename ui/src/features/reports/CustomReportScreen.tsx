@@ -272,8 +272,14 @@ export default function CustomReportScreen() {
             </div>
             <div className="custom-report-columns-search">
               <input
-                type="text"
+                type="search"
                 className="custom-report-search-input"
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                data-1p-ignore="true"
+                data-lpignore="true"
+                data-bwignore="true"
                 placeholder={requiredLocalized(l10n, 'custom-report-search-placeholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}

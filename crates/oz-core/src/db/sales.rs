@@ -2916,6 +2916,35 @@ mod tests {
         assert_eq!(trunc.minor_units, 333);
     }
 
+    // ── MONEY-01: unchecked qty × price overflow in compute_cart_tax ──
+    //
+    // CartLineTaxInput comes straight off the IPC boundary (untrusted
+    // renderer input) and compute_cart_tax runs on the hot path — the
+    // live tax preview fires on every cart change. The per-line total
+    // must use checked arithmetic like compute_line_tax (TAX-04); a
+    // wrap in release would feed a wrong tax to the register, and a
+    // debug build panics.
+    #[test]
+    fn compute_cart_tax_line_total_overflow_returns_validation_error() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_tax_rate(&conn, "VAT 10%", 1000, true, false);
+
+        // (i64::MAX / 2) * 4 overflows i64.
+        let lines = vec![CartLineTaxInput {
+            sku: "COFFEE".into(),
+            qty: i64::MAX / 2,
+            unit_price_minor: 4,
+        }];
+        match s.compute_cart_tax(&lines, usd(), RoundingMode::HalfUp) {
+            Err(e) => assert!(
+                e.to_string().contains("overflow"),
+                "expected a structured overflow error, got: {e}"
+            ),
+            Ok(m) => panic!("overflow must not wrap silently, got Ok({m:?})"),
+        }
+    }
+
     #[test]
     fn refund_full_amount_after_half_up_tax() {
         let conn = fresh();

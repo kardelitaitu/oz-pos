@@ -253,6 +253,11 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={handleSearchKeyDown}
                 autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                data-1p-ignore="true"
+                data-lpignore="true"
+                data-bwignore="true"
               />
             </Localized>
           </Localized>

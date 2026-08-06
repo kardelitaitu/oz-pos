@@ -246,6 +246,12 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
               <input
                 type="search"
                 className="void-orders-search"
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                data-1p-ignore="true"
+                data-lpignore="true"
+                data-bwignore="true"
                 placeholder="Search by order ID or payment method…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}

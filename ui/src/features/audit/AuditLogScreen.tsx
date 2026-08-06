@@ -319,6 +319,12 @@ export default function AuditLogScreen() {
             className="audit-log-search"
             id="audit-log-search"
             name="audit-log-search"
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+            data-1p-ignore="true"
+            data-lpignore="true"
+            data-bwignore="true"
             placeholder={l10n.getString('audit-log-search-placeholder')}
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}

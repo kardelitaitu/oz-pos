@@ -1017,24 +1017,45 @@ impl Store<'_> {
 
     /// Verify that a user has access to a specific workspace instance.
     ///
-    /// Resolution order (mirrors `list_workspaces_inner`):
+    /// This is the server-side authorization gate `create_session` calls in
+    /// both desktop and tablet clients (ADR #4 / ADR #7). It FAILS CLOSED:
+    ///
+    /// 0. The caller identity is bound to the database — the user must
+    ///    exist, be active, and the claimed `role_id` must equal the user's
+    ///    actual role. A claimed role is never trusted for the privilege
+    ///    checks below; otherwise any caller who knew an owner's user id
+    ///    could mint a session as that owner (privilege escalation) in any
+    ///    store's active instance (cross-store session minting).
     /// 1. Owner/admin role keys — instance must exist and be active (with
     ///    `user_store_access` check for multi-store mode)
     /// 2. `user_workspace_instances` — direct assignment for this user
     /// 3. `role_workspace_types` — role grants access to the instance's type
     ///
     /// Returns `Ok(true)` if the user may create a session against this
-    /// instance, `Ok(false)` if access is denied.
-    ///
-    /// Called by `create_session` in both desktop and tablet clients as a
-    /// server-side authorization gate (ADR #4 / ADR #7).
+    /// instance, `Ok(false)` if access is denied. Denials (unknown user,
+    /// inactive user, forged role, missing instance) all return `Ok(false)`
+    /// so the caller surfaces one uniform "no access" error without
+    /// revealing which identity records exist.
     pub fn verify_instance_access(
         &self,
-        role_id: &str,
+        claimed_role_id: &str,
         user_id: &str,
         instance_id: &str,
         store_id: &str,
     ) -> Result<bool, CoreError> {
+        // 0. Bind the caller identity to the database. Every later branch
+        // uses the REAL role resolved from `users`, never the claim.
+        let Some(user) = self.get_user(user_id)? else {
+            return Ok(false); // unknown identity — fail closed
+        };
+        if !user.is_active {
+            return Ok(false); // deactivated account — fail closed
+        }
+        if user.role_id != claimed_role_id {
+            return Ok(false); // forged role claim — fail closed
+        }
+        let role_id = &user.role_id;
+
         // 1. Owner/admin bypass — check store access if user_store_access is active.
         if role_id == "role-owner"
             || role_id == "role-admin"
@@ -2089,5 +2110,169 @@ mod tests {
             .update_workspace_instance("ws-1", "", None, None)
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field: "name", .. }));
+    }
+
+    // ── Session-mint authorization gate (audit/06 residual) ────────────
+    //
+    // `verify_instance_access` is the server-side gate `create_session`
+    // calls in both desktop and tablet clients (ADR #4 / ADR #7). TDD red:
+    // the gate must FAIL CLOSED when the caller identity cannot be trusted
+    // — unknown user, inactive user, or a claimed `role_id` that does not
+    // match the user's actual database role. The previous implementation
+    // trusted the caller-supplied `role_id` for the owner/manager bypass
+    // and never resolved the user, so any IPC caller who knew a user id
+    // could mint a session AS that user (privilege escalation) in ANY
+    // store's active instance (cross-store session minting) — the residual
+    // recorded in audit/06.
+
+    /// Seed the built-in roles plus an owner user (role-owner carries `*`).
+    fn seed_owner_user(conn: &rusqlite::Connection) {
+        let store = Store::new(conn);
+        store.seed_default_roles().unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-owner', 'owner', 'hash', 'Owner', 'role-owner', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn verify_instance_access_denies_unknown_user() {
+        let (store, _) = fresh();
+        // A ghost user id with the owner claim previously passed the owner
+        // bypass (no `user_store_access` rows → single-store mode) and
+        // would have minted a session for an identity that does not exist.
+        let ok = store
+            .verify_instance_access(
+                "role-owner",
+                "ghost-user",
+                "default-restaurant-pos",
+                "default",
+            )
+            .unwrap();
+        assert!(!ok, "unknown user must not be able to open a session");
+    }
+
+    #[test]
+    fn verify_instance_access_rejects_forged_owner_role() {
+        let (store, user_id) = fresh();
+        // user-1's ACTUAL role is role-test. Claiming role-owner must be
+        // rejected even though the instance exists and is active.
+        let ok = store
+            .verify_instance_access("role-owner", &user_id, "default-restaurant-pos", "default")
+            .unwrap();
+        assert!(
+            !ok,
+            "a claimed role differing from the user's real role must be denied"
+        );
+    }
+
+    #[test]
+    fn verify_instance_access_denies_inactive_user() {
+        let (store, user_id) = fresh();
+        store
+            .conn
+            .execute(
+                "UPDATE users SET is_active = 0 WHERE id = ?1",
+                params![user_id],
+            )
+            .unwrap();
+        // Owner claim + inactive account previously sailed through the
+        // bypass and minted a session for a deactivated staff member.
+        let ok = store
+            .verify_instance_access("role-owner", &user_id, "default-restaurant-pos", "default")
+            .unwrap();
+        assert!(!ok, "deactivated users must not be able to open a session");
+    }
+
+    #[test]
+    fn verify_instance_access_allows_real_owner() {
+        let (store, _) = fresh();
+        seed_owner_user(store.conn);
+        let ok = store
+            .verify_instance_access(
+                "role-owner",
+                "user-owner",
+                "default-restaurant-pos",
+                "default",
+            )
+            .unwrap();
+        assert!(
+            ok,
+            "a real owner with the matching role keeps instance access"
+        );
+    }
+
+    #[test]
+    fn verify_instance_access_allows_explicit_assignment_with_real_role() {
+        let (store, user_id) = fresh();
+        store
+            .set_user_workspace_instances(&user_id, ["default-admin"], None)
+            .unwrap();
+        let ok = store
+            .verify_instance_access("role-test", &user_id, "default-admin", "default")
+            .unwrap();
+        assert!(
+            ok,
+            "explicit instance assignment with the real role stays allowed"
+        );
+    }
+
+    #[test]
+    fn verify_instance_access_multi_store_owner_limited_to_assigned_stores() {
+        let (store, _) = fresh();
+        seed_owner_user(store.conn);
+        store
+            .conn
+            .execute(
+                "INSERT INTO store_profiles (id, name, address, currency, timezone)
+                 VALUES ('store-b', 'Store B', '456 Elm', 'IDR', 'Asia/Jakarta')",
+                [],
+            )
+            .unwrap();
+        store
+            .create_workspace_instance(
+                "store-b-restaurant-pos",
+                "restaurant-pos",
+                "store-b",
+                "Store B POS",
+                "",
+                None,
+            )
+            .unwrap();
+        store
+            .conn
+            .execute(
+                "INSERT INTO user_store_access (user_id, store_id, access_level)
+                 VALUES ('user-owner', 'default', 'manager')",
+                [],
+            )
+            .unwrap();
+
+        let ok_default = store
+            .verify_instance_access(
+                "role-owner",
+                "user-owner",
+                "default-restaurant-pos",
+                "default",
+            )
+            .unwrap();
+        let ok_store_b = store
+            .verify_instance_access(
+                "role-owner",
+                "user-owner",
+                "store-b-restaurant-pos",
+                "store-b",
+            )
+            .unwrap();
+        assert!(
+            ok_default,
+            "owner with store access keeps their assigned store"
+        );
+        assert!(
+            !ok_store_b,
+            "multi-store owner must not open a session in an unassigned store"
+        );
     }
 }

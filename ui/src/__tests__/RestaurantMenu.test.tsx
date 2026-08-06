@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor, act } from '@testing-library/react';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
+import { withFluent } from '@/locales/test-utils';
 import userEvent from '@testing-library/user-event';
 import RestaurantMenu from '@/features/restaurant/RestaurantMenu';
 import type { Product } from '@/types/domain';
@@ -82,6 +83,7 @@ vi.mock('@/api/settings', () => ({
   getUserPreferences: (...args: unknown[]) => mockGetUserPreferences(...args),
   getUserPreferencesScoped: (...args: unknown[]) => mockGetUserPreferences(...args),
   setUserPreferences: (...args: unknown[]) => mockSetUserPreferences(...args),
+  setUserPreferencesScoped: (...args: unknown[]) => mockSetUserPreferences(...args),
 }));
 
 beforeEach(() => {
@@ -140,6 +142,52 @@ describe('RestaurantMenu', () => {
     expect(screen.getByText('Minuman')).toBeTruthy();
   });
 
+  it('derives category pills from restaurant products only', () => {
+    const retailProduct = {
+      sku: 'RETAIL-COFFEE', name: 'Retail Coffee', category: 'Retail Only',
+      productType: 'retail', price: { minor_units: 1000, currency: 'IDR' },
+      inStock: true, createdAt: '2026-01-03',
+    } as Product;
+    mockUseProducts.mockReturnValue({
+      products: [...mockProducts, retailProduct],
+      categories: ['Makanan', 'Minuman', 'Retail Only'],
+      categoryMeta: [],
+      loading: false,
+    });
+
+    renderMenu();
+
+    expect(screen.getByText('Makanan')).toBeTruthy();
+    expect(screen.getByText('Minuman')).toBeTruthy();
+    expect(screen.queryByText('Retail Only')).toBeNull();
+    expect(screen.queryByText('Retail Coffee')).toBeNull();
+  });
+
+  it('falls back to All when the selected category disappears after a refresh', async () => {
+    const updatedProducts = [mockProducts[0]!];
+    mockUseProducts.mockReturnValue({
+      products: mockProducts,
+      categories: ['Makanan', 'Minuman'],
+      categoryMeta: [],
+      loading: false,
+    });
+    const renderResult = renderMenu();
+    const user = userEvent.setup();
+    await user.click(screen.getByText('Minuman'));
+    expect(screen.getByText('Es Teh')).toBeTruthy();
+
+    mockUseProducts.mockReturnValue({
+      products: updatedProducts,
+      categories: ['Makanan'],
+      categoryMeta: [],
+      loading: false,
+    });
+    renderResult.rerender(withFluent(<RestaurantMenu />, sharedFtl, productsFtl));
+
+    expect(screen.getByRole('tab', { name: 'All' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('Nasi Goreng')).toBeTruthy();
+  });
+
   it('filters by category', async () => {
     renderMenu();
     const user = userEvent.setup();
@@ -148,6 +196,18 @@ describe('RestaurantMenu', () => {
 
     expect(screen.getByText('Nasi Goreng')).toBeTruthy();
     expect(screen.queryByText('Es Teh')).toBeNull();
+  });
+
+  it('disables browser saved-info/autofill on the menu search field', () => {
+    renderMenu();
+    const input = screen.getByRole('searchbox', { name: 'Search menu items' });
+
+    expect(input).toHaveAttribute('autocomplete', 'off');
+    expect(input).toHaveAttribute('autocorrect', 'off');
+    expect(input).toHaveAttribute('spellcheck', 'false');
+    expect(input).toHaveAttribute('data-1p-ignore', 'true');
+    expect(input).toHaveAttribute('data-lpignore', 'true');
+    expect(input).toHaveAttribute('data-bwignore', 'true');
   });
 
   it('filters by search query', async () => {
@@ -186,6 +246,35 @@ describe('RestaurantMenu', () => {
     await waitFor(() => {
       expect(screen.getByText('Manual')).toBeTruthy();
     });
+  });
+
+  it('persists hamburger menu settings through the scoped preference API', async () => {
+    renderMenu();
+    const user = userEvent.setup();
+    await user.click(document.querySelector('.restaurant-hamburger-btn') as HTMLButtonElement);
+
+    await user.click(screen.getByRole('button', { name: 'Increase size' }));
+    expect(mockSetUserPreferences).not.toHaveBeenCalled();
+
+    // The test workspace has no session token, so local persistence is used.
+    expect(localStorage.getItem('restaurant-user-1-cardsize')).toBe('1');
+  });
+
+  it('does not add an unavailable card to the sale', async () => {
+    const unavailableProduct = { ...mockProducts[0]!, inStock: false };
+    mockUseProducts.mockReturnValue({
+      products: [unavailableProduct, mockProducts[1]!],
+      categories: ['Makanan', 'Minuman'],
+      categoryMeta: [],
+      loading: false,
+    });
+    const onAddProduct = vi.fn();
+    renderMenu({ onAddProduct });
+    const user = userEvent.setup();
+
+    await user.click(screen.getByText('Nasi Goreng'));
+
+    expect(onAddProduct).not.toHaveBeenCalled();
   });
 
   it('shows context menu on right-click', async () => {

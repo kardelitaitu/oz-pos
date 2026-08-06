@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useTheme } from '@/frontend/shell/ThemeProvider';
 import { useFullscreen } from '@/hooks/useFullscreen';
-import { getUserPreferencesScoped, setUserPreferences } from '@/api/settings';
+import { getUserPreferencesScoped, setUserPreferencesScoped } from '@/api/settings';
 import './RestaurantMenu.css';
 
 // ── Props ──────────────────────────────────────────────────────────
@@ -216,7 +216,7 @@ function PinIcon() {
  */
 export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
   const { l10n } = useLocalization();
-  const { products, categories, categoryMeta, loading } = useProducts();
+  const { products, categoryMeta, loading } = useProducts();
   const { goToWorkspacePicker } = useWorkspaceNav();
   const { session, logout } = useAuth();
   const { sessionToken } = useWorkspace();
@@ -260,8 +260,10 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
   const addCountRef = useRef<Record<string, number>>(loadPop(userId));
   const [, forceRender] = useState(0);
   const [sortMode, setSortMode] = useState<SortMode>(() => {
-    try { return (localStorage.getItem(key(userId, 'sort')) as SortMode) || 'manual'; }
-    catch { return 'manual'; }
+    try {
+      const stored = localStorage.getItem(key(userId, 'sort'));
+      return stored === 'a-z' || stored === 'date' || stored === 'popularity' ? stored : 'manual';
+    } catch { return 'manual'; }
   });
   const [cardSize, setCardSize] = useState(() => {
     try { return Math.min(4, Math.max(0, parseInt(localStorage.getItem(key(userId, 'cardsize')) ?? '0', 10) || 0)); }
@@ -279,10 +281,35 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
     };
   }, []);
 
-  // Load preferences from backend on mount, syncing to localStorage
+  const persistMenuPreference = useCallback((preferenceKey: string, value: string) => {
+    try { localStorage.setItem(key(userId, preferenceKey), value); } catch { /* offline / quota */ }
+    if (!sessionToken) return;
+    void setUserPreferencesScoped(sessionToken, [{ key: preferenceKey, value }]).catch(() => {
+      // Keep the local preference when the scoped backend is temporarily offline.
+    });
+  }, [sessionToken, userId]);
+
+  const changeCardSize = useCallback((delta: number) => {
+    const next = Math.min(4, Math.max(0, cardSize + delta));
+    if (next === cardSize) return;
+    setCardSize(next);
+    persistMenuPreference('cardsize', String(next));
+  }, [cardSize, persistMenuPreference]);
+
+  const changeFontSize = useCallback((delta: number) => {
+    const next = Math.min(4, Math.max(0, fontSize + delta));
+    if (next === fontSize) return;
+    setFontSize(next);
+    persistMenuPreference('fontsize', String(next));
+  }, [fontSize, persistMenuPreference]);
+
+  // Load preferences from backend on mount, syncing to localStorage. Ignore
+  // late responses when the active user or store session changes.
   useEffect(() => {
     if (!sessionToken) return;
+    let cancelled = false;
     getUserPreferencesScoped(sessionToken).then((prefs) => {
+      if (cancelled) return;
       const cs = prefs['cardsize'];
       if (cs !== undefined) {
         const v = Math.min(4, Math.max(0, parseInt(cs, 10) || 0));
@@ -295,11 +322,17 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
         setFontSize(v);
         try { localStorage.setItem(key(userId, 'fontsize'), String(v)); } catch { /* noop */ }
       }
+      const savedSort = prefs['sort'];
+      if (savedSort === 'manual' || savedSort === 'a-z' || savedSort === 'date' || savedSort === 'popularity') {
+        setSortMode(savedSort);
+        try { localStorage.setItem(key(userId, 'sort'), savedSort); } catch { /* noop */ }
+      }
       const fsm = prefs['font-smoothing'];
       if (fsm === 'antialiased' || fsm === 'subpixel') {
         document.documentElement.setAttribute('data-font-smoothing', fsm);
       }
     }).catch(() => { /* offline — keep localStorage values */ });
+    return () => { cancelled = true; };
   }, [userId, sessionToken]);
 
   // Sync pinned/colors/unavailable to localStorage whenever state changes.
@@ -460,10 +493,32 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
     closeContextMenu();
   }, [closeContextMenu]);
 
-  const categoryOptions = useMemo<Category[]>(
-    () => ['All', ...categories],
-    [categories],
+  // Restaurant and retail are separate workspaces. Category tabs must be
+  // derived from restaurant products rather than the shared catalog category
+  // list, otherwise a retail-only category can leak into this menu.
+  const restaurantProducts = useMemo(
+    () => products.filter((p) => p.productType === 'restaurant'),
+    [products],
   );
+
+  const categoryOptions = useMemo<Category[]>(
+    () => ['All', ...new Set(restaurantProducts.map((p) => p.category))].sort((a, b) => {
+      if (a === 'All') return -1;
+      if (b === 'All') return 1;
+      return a.localeCompare(b);
+    }),
+    [restaurantProducts],
+  );
+
+  // Keep the selection valid when products are refreshed or removed. The
+  // derived value prevents a transient empty result while the state catches
+  // up; the effect also clears the stale selection if that category returns.
+  const effectiveCategory = categoryOptions.includes(activeCategory) ? activeCategory : 'All';
+  useEffect(() => {
+    if (activeCategory !== 'All' && !categoryOptions.includes(activeCategory)) {
+      setActiveCategory('All');
+    }
+  }, [activeCategory, categoryOptions]);
 
   const catMetaMap = useMemo(() => {
     const m = new Map<string, { colour: string; icon: string }>();
@@ -472,8 +527,8 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
   }, [categoryMeta]);
 
   const filtered = useMemo(() => {
-    let result = products.filter((p) => p.productType === 'restaurant');
-    if (activeCategory !== 'All') result = result.filter((p) => p.category === activeCategory);
+    let result = restaurantProducts;
+    if (effectiveCategory !== 'All') result = result.filter((p) => p.category === effectiveCategory);
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       result = result.filter((p) => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q));
@@ -492,7 +547,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
         break;
     }
     return sortPinnedFirst(result, pinned);
-  }, [activeCategory, products, searchQuery, pinned, sortMode]);
+  }, [effectiveCategory, restaurantProducts, searchQuery, pinned, sortMode]);
 
   return (
     <div className="restaurant-menu" style={{ '--card-size': cardSize, '--font-size': fontSize } as React.CSSProperties}>
@@ -524,7 +579,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
                   role="menuitem"
                   onClick={() => {
                     setSortMode(mode);
-                    localStorage.setItem(key(userId, 'sort'), mode);
+                    persistMenuPreference('sort', mode);
                     setMenuOpen(false);
                   }}
                 >
@@ -542,7 +597,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
                     type="button"
                     className="restaurant-size-btn"
                     disabled={cardSize <= 0}
-                    onClick={() => { setCardSize((s) => { const v = Math.max(0, s - 1); localStorage.setItem(key(userId, 'cardsize'), String(v)); setUserPreferences(userId, [{ key: 'cardsize', value: String(v) }]); return v; }); }}
+                    onClick={() => changeCardSize(-1)}
                     aria-label={l10n.getString('restaurant-size-decrease-aria')}
                   >
                     &minus;
@@ -552,7 +607,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
                     type="button"
                     className="restaurant-size-btn"
                     disabled={cardSize >= 4}
-                    onClick={() => { setCardSize((s) => { const v = Math.min(4, s + 1); localStorage.setItem(key(userId, 'cardsize'), String(v)); setUserPreferences(userId, [{ key: 'cardsize', value: String(v) }]); return v; }); }}
+                    onClick={() => changeCardSize(1)}
                     aria-label={l10n.getString('restaurant-size-increase-aria')}
                   >
                     +
@@ -569,7 +624,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
                     type="button"
                     className="restaurant-size-btn"
                     disabled={fontSize <= 0}
-                    onClick={() => { setFontSize((s) => { const v = Math.max(0, s - 1); localStorage.setItem(key(userId, 'fontsize'), String(v)); setUserPreferences(userId, [{ key: 'fontsize', value: String(v) }]); return v; }); }}
+                    onClick={() => changeFontSize(-1)}
                     aria-label={l10n.getString('restaurant-font-size-decrease-aria')}
                   >
                     &minus;
@@ -579,7 +634,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
                     type="button"
                     className="restaurant-size-btn"
                     disabled={fontSize >= 4}
-                    onClick={() => { setFontSize((s) => { const v = Math.min(4, s + 1); localStorage.setItem(key(userId, 'fontsize'), String(v)); setUserPreferences(userId, [{ key: 'fontsize', value: String(v) }]); return v; }); }}
+                    onClick={() => changeFontSize(1)}
                     aria-label={l10n.getString('restaurant-font-size-increase-aria')}
                   >
                     +
@@ -636,10 +691,16 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
           <line x1="21" y1="21" x2="16.65" y2="16.65" />
         </svg>
         <input
-          type="text"
+          type="search"
           className="restaurant-search-input"
           id="restaurant-menu-search"
           name="restaurant-menu-search"
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+          data-1p-ignore="true"
+          data-lpignore="true"
+          data-bwignore="true"
           ref={searchInputRef}
           placeholder={l10n.getString('restaurant-menu-search-placeholder')}
           value={searchQuery}
@@ -663,7 +724,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
       <div className="restaurant-categories" role="tablist" aria-label={l10n.getString('restaurant-categories-aria')}>
           {categoryOptions.map((cat) => {
             const meta = catMetaMap.get(cat);
-            const isActive = activeCategory === cat;
+            const isActive = effectiveCategory === cat;
             return (
               <button
                 key={cat}
@@ -802,6 +863,9 @@ interface RestaurantCardProps {
 function RestaurantCard({ product, pinned, color, onAdd, onContextMenu, added, index }: RestaurantCardProps) {
   const { l10n } = useLocalization();
   const handleClick = useCallback(() => {
+    // Unavailable cards remain context-menu accessible so they can be marked
+    // available again, but must never add an out-of-stock item to the sale.
+    if (!product.inStock) return;
     onAdd?.(product);
   }, [product, onAdd]);
 
@@ -836,7 +900,8 @@ function RestaurantCard({ product, pinned, color, onAdd, onContextMenu, added, i
     <button
       type="button"
       className={cardClass}
-      tabIndex={product.inStock ? 0 : -1}
+      tabIndex={0}
+      aria-disabled={!product.inStock}
       onClick={handleClick}
       onContextMenu={handleContext}
       onKeyDown={handleKeyDown}

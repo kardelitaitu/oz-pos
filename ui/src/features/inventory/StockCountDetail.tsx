@@ -266,6 +266,12 @@ export default function StockCountDetail({ countId, onBack }: Props) {
           <div className="sc-add-line-search">
             <input
               type="search"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              data-1p-ignore="true"
+              data-lpignore="true"
+              data-bwignore="true"
               placeholder={l10n.getString('sc-search-placeholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}

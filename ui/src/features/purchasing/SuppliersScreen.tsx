@@ -175,6 +175,12 @@ export default function SuppliersScreen() {
           <input
             type="search"
             className="suppliers-search"
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+            data-1p-ignore="true"
+            data-lpignore="true"
+            data-bwignore="true"
             placeholder="Search by name, code, or contact…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}

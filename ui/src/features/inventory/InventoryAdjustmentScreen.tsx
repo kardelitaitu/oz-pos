@@ -239,6 +239,12 @@ export default function InventoryAdjustmentScreen() {
                 <input
                   type="search"
                   className="inv-adjust-search"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  data-1p-ignore="true"
+                  data-lpignore="true"
+                  data-bwignore="true"
                   placeholder="Search by SKU, name, or barcode…"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}

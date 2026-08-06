@@ -386,6 +386,122 @@ mod tests {
         }
     }
 
+    // ── SYNC-01 parity: engine pull is replay-safe + anchor-advanced ─
+
+    /// Spawn a mock server whose pull endpoint ALWAYS returns the same
+    /// remote `stock.adjusted` item regardless of the `since`/`cursor`
+    /// request params — simulates a server that replays history or a
+    /// client whose anchor was lost. `/api/health` is served so the
+    /// engine's pre-sync health check passes.
+    async fn spawn_replaying_engine_server() -> String {
+        use crate::transport::{PullResponse, PushOutcome, PushResponse};
+        use axum::{
+            Json, Router,
+            routing::{get, post},
+        };
+
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        async fn handle_push(Json(items): Json<Vec<serde_json::Value>>) -> Json<PushResponse> {
+            Json(PushResponse {
+                results: vec![PushOutcome::Accepted; items.len()],
+            })
+        }
+        async fn handle_pull(Json(_req): Json<serde_json::Value>) -> Json<PullResponse> {
+            let mut item = oz_core::offline::OfflineQueueItem::new(
+                "stock.adjusted",
+                r#"{"sku":"COFFEE","delta":10}"#,
+            );
+            // Fixed id + timestamp so the SAME remote item is returned on
+            // every pull — exactly the replay scenario SYNC-01 targets.
+            // Deliberately ignores the since/cursor params, like a server
+            // that no longer retains history past its anchor.
+            item.id = "remote-engine-replay-1".into();
+            item.created_at = "2026-01-01T00:00:00.000Z".into();
+            Json(PullResponse {
+                items: vec![item],
+                next_cursor: None,
+            })
+        }
+
+        let app = Router::new()
+            .route("/api/health", get(|| async { axum::http::StatusCode::OK }))
+            .route("/api/sync/push", post(handle_push))
+            .route("/api/sync/pull", post(handle_pull));
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        format!("http://localhost:{port}")
+    }
+
+    /// SYNC-01 regression at the ENGINE level: the immediate/manual sync
+    /// path must apply a replayed remote item exactly once and persist the
+    /// durable pull anchor, matching the daemon. Previously the engine
+    /// derived `since` from the local queue's synced timestamps — which
+    /// pulled remote items never move — so every cycle re-fetched and
+    /// re-applied the same remote mutations (silent inventory corruption).
+    #[tokio::test]
+    async fn engine_applies_replayed_remote_item_only_once() {
+        use oz_core::db::Store;
+        use oz_core::migrations;
+
+        let server_url = spawn_replaying_engine_server().await;
+        let db = migrations::fresh_db();
+        let store = Store::new(&db);
+
+        // Seed product + inventory so the remote +10 adjustment has a target.
+        db.execute_batch(
+            "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at)
+             VALUES ('prod-coffee', 'COFFEE', 'Coffee', 350, 'USD', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
+             INSERT INTO inventory (product_id, qty, updated_at)
+             VALUES ('prod-coffee', 50, '2026-01-01T00:00:00.000Z');",
+        )
+        .unwrap();
+
+        let engine = SyncEngine::new(SyncConfig {
+            server_url: server_url.clone(),
+            api_key: None,
+        });
+
+        // Cycle 1: applies the +10 delta (50 → 60) and advances the anchor.
+        let result_1 = engine.run_sync_cycle(&store).await.unwrap();
+        assert_eq!(result_1.pulled, 1, "first cycle must pull the remote item");
+        assert_eq!(store.get_stock("prod-coffee").unwrap(), 60);
+
+        let pull_state = store.get_sync_pull_state().unwrap();
+        assert_eq!(
+            pull_state.since.as_deref(),
+            Some("2026-01-01T00:00:00.000Z"),
+            "durable pull anchor must be persisted after the first cycle"
+        );
+
+        // Cycle 2: the server replays the SAME item. The idempotency
+        // ledger must skip it — stock stays 60, not 70.
+        let result_2 = engine.run_sync_cycle(&store).await.unwrap();
+        assert_eq!(
+            result_2.pulled, 1,
+            "second cycle re-pulls the replayed item"
+        );
+        assert_eq!(
+            store.get_stock("prod-coffee").unwrap(),
+            60,
+            "replayed remote item must NOT be applied a second time (SYNC-01)"
+        );
+
+        let ledger_rows: i64 = db
+            .query_row(
+                "SELECT COUNT(*) FROM sync_applied_items WHERE item_id = 'remote-engine-replay-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(ledger_rows, 1, "ledger must hold exactly one receipt");
+    }
+
     // ── P1-4: import_snapshot tests ───────────────────────────────
 
     /// Seed a role so user FK constraints are satisfied.
@@ -1409,16 +1525,24 @@ impl SyncEngine {
 
         // Phase 2: Pull remote updates from the server.
         // P-3: Paginated pull — loop until next_cursor is null.
-        let last_sync = queue.last_synced_at(store)?;
+        // SYNC-01 (parity with the daemon): the `since` anchor comes from
+        // the DURABLE `sync_pull_state` row, not from the local queue's
+        // synced timestamps. `last_synced_at` only reflects what THIS
+        // terminal pushed — pulled remote items never move it — so the old
+        // anchor re-fetched and re-applied the same remote pages on every
+        // cycle. The durable anchor advances only after a page applied
+        // successfully, so a crash mid-pull replays safely.
+        let pull_state = store.get_sync_pull_state()?;
+        let mut pull_since = pull_state.since;
         let mut total_pulled = 0usize;
-        let mut cursor: Option<String> = None;
+        let mut cursor = pull_state.cursor;
         let mut pages = 0u32;
 
         loop {
             pages += 1;
             let pull_result = match self
                 .transport
-                .pull_updates(last_sync.as_deref(), cursor.as_deref())
+                .pull_updates(pull_since.as_deref(), cursor.as_deref())
                 .await
             {
                 Ok(result) => result,
@@ -1470,10 +1594,70 @@ impl SyncEngine {
                 "pulled page"
             );
 
+            // SYNC-01: apply each item atomically — the domain mutation and
+            // its idempotency receipt commit together, and a poison item is
+            // dead-lettered after its retry budget — exactly like the
+            // daemon. An already-applied replay is a no-op. A retryable
+            // failure retains the durable anchor so the next cycle re-pulls
+            // the same page; a dead-lettered item is quarantined and counts
+            // as applied (the page may advance past it).
+            let mut page_all_applied = true;
             for remote_item in &pull_result.items {
-                queue.apply_remote(store, remote_item)?;
+                match queue.apply_remote_atomic(store, remote_item) {
+                    Ok(applied) => {
+                        if !applied
+                            && store
+                                .is_remote_failure_dead_lettered(&remote_item.id)
+                                .unwrap_or(false)
+                        {
+                            tracing::error!(
+                                item_id = %remote_item.id,
+                                action = %remote_item.action,
+                                "remote item remains quarantined; advancing page anchor"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        let dead_lettered = store
+                            .is_remote_failure_dead_lettered(&remote_item.id)
+                            .unwrap_or(false);
+                        if dead_lettered {
+                            tracing::error!(
+                                item_id = %remote_item.id,
+                                action = %remote_item.action,
+                                error = %e,
+                                "remote item quarantined after repeated failures; advancing page anchor"
+                            );
+                        } else {
+                            page_all_applied = false;
+                            tracing::error!(
+                                item_id = %remote_item.id,
+                                action = %remote_item.action,
+                                error = %e,
+                                "failed to atomically apply remote item; retaining pull anchor for retry"
+                            );
+                        }
+                    }
+                }
             }
 
+            // SYNC-01: advance the durable anchor ONLY after the whole
+            // page applied successfully (dead-lettered items count as
+            // applied — they are quarantined). A retryable failure leaves
+            // the old anchor and stops pagination so the next cycle
+            // re-pulls from the same point; the idempotency ledger absorbs
+            // any replay.
+            if !page_all_applied {
+                break;
+            }
+            let new_since = pull_result
+                .items
+                .iter()
+                .map(|i| i.created_at.clone())
+                .max()
+                .or(pull_since.clone());
+            store.set_sync_pull_state(new_since.as_deref(), pull_result.next_cursor.as_deref())?;
+            pull_since = new_since;
             cursor = pull_result.next_cursor;
             if !has_more {
                 break;

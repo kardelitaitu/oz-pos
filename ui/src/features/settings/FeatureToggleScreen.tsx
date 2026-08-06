@@ -138,6 +138,9 @@ export default function FeatureToggleScreen() {
     autoCorrect: 'off' as const,
     spellCheck: false as const,
     'data-gramm': 'false' as const,
+    'data-1p-ignore': 'true' as const,
+    'data-lpignore': 'true' as const,
+    'data-bwignore': 'true' as const,
     onContextMenu: (e: React.MouseEvent<HTMLInputElement>) => cm.open(e, e.currentTarget),
   }), [cm]);
 

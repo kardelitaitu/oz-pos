@@ -368,6 +368,12 @@ const LocationPicker = memo(function LocationPicker({
                 ref={searchRef}
                 type="search"
                 className="location-picker-search"
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                data-1p-ignore="true"
+                data-lpignore="true"
+                data-bwignore="true"
                 value={search}
                 onChange={(e) => {
                   setSearch(e.target.value);
