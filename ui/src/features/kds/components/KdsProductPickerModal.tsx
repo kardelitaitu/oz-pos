@@ -170,21 +170,20 @@ export const KdsProductPickerModal = memo(function KdsProductPickerModal({
     [onClose],
   );
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    },
-    [onClose],
-  );
+  // NOTE: Escape is handled by useFocusTrap above (onEscape = onClose) —
+  // do NOT add a second Escape handler here; it would fire onClose twice
+  // per keypress (regression pinned by KdsProductPickerModal.test.tsx).
 
   if (!isOpen) return null;
 
   return (
-    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
+    // Backdrop click is a convenience — keyboard users close via the Close
+    // button and Escape (handled by the focus trap), so the click needs no
+    // keyboard twin here.
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
     <div
       className="kds-picker-overlay"
       onClick={handleBackdropClick}
-      onKeyDown={handleKeyDown}
       role="dialog"
       aria-modal="true"
       aria-label={requiredLocalized(l10n, 'kds-picker-title')}

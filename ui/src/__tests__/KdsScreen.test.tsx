@@ -7,11 +7,13 @@ import KdsScreen from '@/features/kds/KdsScreen';
 import kdsFtl from '@/locales/kds.ftl?raw';
 import type { KdsOrder } from '@/api/kds';
 
-const { mockGetKdsQueue, mockUpdateKdsStatus, mockListKdsOrdersScoped, mockGetKdsOrderLines, mockUseTicketSla, mockPlayAlert, mockSpeak, mockUseWorkspaceScope } = vi.hoisted(() => ({
+const { mockGetKdsQueue, mockUpdateKdsStatus, mockListKdsOrdersScoped, mockGetKdsOrderLines, mockUpdateKdsOrderItems, mockListProducts, mockUseTicketSla, mockPlayAlert, mockSpeak, mockUseWorkspaceScope } = vi.hoisted(() => ({
   mockGetKdsQueue: vi.fn(),
   mockUpdateKdsStatus: vi.fn(),
   mockListKdsOrdersScoped: vi.fn().mockResolvedValue([]),
   mockGetKdsOrderLines: vi.fn().mockResolvedValue([]),
+  mockUpdateKdsOrderItems: vi.fn(),
+  mockListProducts: vi.fn().mockResolvedValue([]),
   mockUseTicketSla: vi.fn((): { level: 'green' | 'yellow' | 'red'; elapsedSeconds: number; display: string } => ({
     level: 'green',
     elapsedSeconds: 120,
@@ -34,6 +36,12 @@ vi.mock('@/api/kds', () => ({
     status: string,
   ) => mockUpdateKdsStatus(id, status),
   getKdsOrderLinesScoped: (_token: string, _orderId: string) => mockGetKdsOrderLines(),
+  updateKdsOrderItemsScoped: (_token: string, args: unknown) =>
+    mockUpdateKdsOrderItems(args),
+}));
+
+vi.mock('@/api/products', () => ({
+  listProductsScoped: () => mockListProducts(),
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -659,5 +667,38 @@ describe('KdsScreen', () => {
       const tickets = document.querySelectorAll('.kds-ticket');
       expect(tickets[1]?.classList.contains('kds-ticket--selected')).toBe(true);
     });
+  });
+
+  it('a double-tap on the picker Confirm adds the items once (no duplicate merge)', async () => {
+    mockGetKdsQueue.mockResolvedValue([makeOrder()]);
+    mockGetKdsOrderLines.mockResolvedValue([]);
+    mockListProducts.mockResolvedValue([
+      {
+        sku: 'ESPR', name: 'Espresso Shot', category: 'Hot Drinks',
+        price: { minor_units: 15000, currency: 'IDR' }, barcode: '8990000000001',
+        in_stock: true, stock_qty: 10, tax_rate_ids: [], created_at: '',
+        price_updated_at: '', product_type: 'restaurant',
+      },
+    ]);
+    // Defer the merge so the modal stays open with Confirm enabled — the
+    // second tap lands while the first merge is still in flight.
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    mockUpdateKdsOrderItems.mockReturnValue(gate.then(() => ({ id: 'o-1' })));
+
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Burger x1, Fries x1')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /add items to order/i }));
+    await waitFor(() => expect(screen.getByText('Espresso Shot')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /^espresso shot( \(added\))?$/i }));
+    const confirmBtn = screen.getByRole('button', { name: /add .* item/i });
+    await userEvent.click(confirmBtn);
+    await userEvent.click(confirmBtn); // double-tap before the merge resolves
+
+    release();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    // The second tap must NOT re-merge the picked items onto the ticket.
+    expect(mockUpdateKdsOrderItems).toHaveBeenCalledTimes(1);
   });
 });
