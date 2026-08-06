@@ -50,6 +50,7 @@ What do you want to do?
 | If you want to… | Read this skill first |
 |---|---|
 | Add or change Rust code in any `oz-*` crate, work with the `Money` struct, write SQL transactions, define error types, or add a `#[cfg(test)]` block | **`rust-backend`** |
+| Write or review tests, drive a change test-first (red-green-refactor), or run the fast TDD loop (`scripts/test-tdd.sh`) | **`tdd`** |
 | Add a new Tauri command on the backend, register it, and call it from the front-end via `pos.ts` | **`tauri-ipc`** |
 | Add or change React component, screen, hook, or any user-visible string; review accessibility, i18n, or strict TypeScript | **`ui-components`** |
 | Add a symmetric CSS entry/exit animation (mirror keyframe + class toggle + useRef cleanup + ID-set-compare race guard) on a pill, badge, banner, modal, or any dismissable UI element | **`exit-animation-pattern`** |
@@ -96,7 +97,7 @@ When a skill becomes relevant, this guide should be updated to point to it.
 
 ### "I'm fixing a bug"
 
-1. Reproduce with a failing test in the appropriate crate.
+1. Read **`tdd`** first — reproduce with a failing test, then go Red → Green → Refactor.
 2. Read the skill for the layer where the bug lives.
 3. Make the fix. Add a regression test. Run the full local check script.
 4. Commit with `fix(<scope>): <summary>`.
