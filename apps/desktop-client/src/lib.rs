@@ -48,7 +48,7 @@ static TEST_MANIFEST_DIRECTIVES: [u8; 184] = *b" /MANIFEST:EMBED /MANIFESTDEPEND
 
 use crate::error::AppError;
 use crate::state::AppState;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 /// Application entry point, called by `main.rs`.
 ///
@@ -77,6 +77,21 @@ pub fn run() {
 
             // ── Module system lifecycle (shared startup) ──────────────
             platform_startup::init_module_system(&state.kernel, &state.db_path)?;
+
+            // ── settings_updated → Tauri event bridge (ADR #22 Phase 0e) ─
+            // The frontend SettingsContext subscribes to `settings_updated`
+            // and triggers a debounced scoped refetch. Without this the
+            // SettingsUpdated handler only logs "settings_updated Tauri
+            // bridge not yet wired" and settings changes never reach the
+            // UI via the event bus (the save-handler markSettingsUpdated
+            // path covers same-terminal saves; this closes the loop for
+            // the EventBus-published events).
+            let app_handle = app.handle().clone();
+            platform_startup::event_handlers::set_settings_emit_fn(Box::new(
+                move |event_name, payload| {
+                    let _ = app_handle.emit(event_name, payload);
+                },
+            ));
 
             app.manage(state);
 
