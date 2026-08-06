@@ -10,12 +10,20 @@
 //!
 //! A panic here is a real bug in the manifest schema code — CI uploads
 //! the crashing input as an artifact.
+//!
+//! This target requires the `oz-plugin-fuzz` feature:
+//!   `cargo fuzz run --features oz-plugin-fuzz manifest_parse`
 
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
+
+// When oz-plugin-fuzz feature is not enabled, compile a no-op stub so the
+// binary still links cleanly without pulling in oz-plugin's C deps.
+#[cfg(feature = "oz-plugin-fuzz")]
 use oz_plugin::manifest::PluginManifest;
 
+#[cfg(feature = "oz-plugin-fuzz")]
 fuzz_target!(|data: &[u8]| {
     // Manifests are TOML text; non-UTF-8 bytes are simply not manifests.
     if let Ok(text) = std::str::from_utf8(data) {
@@ -31,4 +39,10 @@ fuzz_target!(|data: &[u8]| {
             }
         }
     }
+});
+
+#[cfg(not(feature = "oz-plugin-fuzz"))]
+fuzz_target!(|_data: &[u8]| {
+    // Stub: oz-plugin-fuzz feature not enabled. Run with:
+    //   cargo fuzz run --features oz-plugin-fuzz manifest_parse
 });

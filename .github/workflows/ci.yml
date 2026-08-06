@@ -749,18 +749,39 @@ jobs:
       - name: Install cargo-fuzz
         if: steps.gate.outputs.run == 'true'
         run: cargo install cargo-fuzz
-      # Build all fuzz targets + the full dep tree ONCE, outside any timeout
-      # cap. Without this, the per-target `timeout 65` in the loop below
-      # wraps the cold build too and kills it at 65s (exit 124) — the dep
-      # compile (rustls-webpki, flate2, …) alone takes longer than that
-      # on a cold cache.
-      - name: Build fuzz targets
-        if: steps.gate.outputs.run == 'true'
-        run: cargo fuzz build
-      - name: Fuzz targets (60s each)
+      # Build fuzz targets in three feature tiers to isolate C-dep linking:
+      #
+      # Tier 1 (no features): sku_parse, money_parse, lua_sandbox
+      #   Pure Rust + foundation + oz-lua only; NO bundled SQLite.
+      #   These binaries are the ones that were crashing (exit 77) because
+      #   oz-plugin's bundled SQLite conflicted with libFuzzer's signal-handler
+      #   setup when the fuzz crate became a standalone workspace.
+      #
+      # Tier 2 (oz-core-fuzz): cart_deser
+      #   Adds oz-core (bundled SQLite via rusqlite). Separate from Tier 1 to
+      #   keep SQL-free targets isolated.
+      #
+      # Tier 3 (oz-plugin-fuzz): ozpkg_parse, manifest_parse
+      #   Adds oz-plugin (implies oz-core-fuzz). Needed for PLG-01/06/08 tests.
+      - name: Build fuzz targets (tier 1 — no C deps)
         if: steps.gate.outputs.run == 'true'
         run: |
-          for target in sku_parse money_parse cart_deser ozpkg_parse manifest_parse; do
+          for target in sku_parse money_parse lua_sandbox; do
+            cargo fuzz build "$target"
+          done
+      - name: Build fuzz targets (tier 2 — oz-core-fuzz)
+        if: steps.gate.outputs.run == 'true'
+        run: cargo fuzz build --features oz-core-fuzz cart_deser
+      - name: Build fuzz targets (tier 3 — oz-plugin-fuzz)
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          for target in ozpkg_parse manifest_parse; do
+            cargo fuzz build --features oz-plugin-fuzz "$target"
+          done
+      - name: Fuzz tier-1 targets (60s each, no C deps)
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          for target in sku_parse money_parse; do
             echo "::group::Fuzzing $target"
             # AUDIT-27 CI-03: no `|| true` — fuzz failures surface to the
             # advisory job and trigger the crash-artifact upload below.
@@ -768,6 +789,20 @@ jobs:
             # does a seconds-long incremental rebuild, so the 65s cap now
             # bounds the 60s fuzz run itself.
             timeout 65 cargo fuzz run "$target" -- -max_total_time=60
+            echo "::endgroup::"
+          done
+      - name: Fuzz tier-2 targets (60s each, oz-core-fuzz)
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          echo "::group::Fuzzing cart_deser"
+          timeout 65 cargo fuzz run --features oz-core-fuzz cart_deser -- -max_total_time=60
+          echo "::endgroup::"
+      - name: Fuzz tier-3 targets (60s each, oz-plugin-fuzz)
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          for target in ozpkg_parse manifest_parse; do
+            echo "::group::Fuzzing $target"
+            timeout 65 cargo fuzz run --features oz-plugin-fuzz "$target" -- -max_total_time=60
             echo "::endgroup::"
           done
       - name: Upload crash artifacts
