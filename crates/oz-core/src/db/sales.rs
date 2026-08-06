@@ -174,6 +174,19 @@ impl Store<'_> {
         use crate::inventory_transaction::InventoryTransactionId;
         use crate::sale_deduction::{Shortfall, StockDeduction};
 
+        // MONEY-03 follow-up: a negative line qty would record a negative
+        // ledger total AND credit stock (the deduction delta is `-qty`, which
+        // is positive when qty is negative). CartLine asserts qty > 0, but this
+        // is the ledger boundary — reject hostile or hand-built sales up front.
+        for line in &sale.lines {
+            if line.qty < 0 {
+                return Err(CoreError::Validation {
+                    field: "qty",
+                    message: format!("sale line quantity must be positive, got {}", line.qty),
+                });
+            }
+        }
+
         // ADR-19 §5.2: single transaction prevents two concurrent sales from
         // racing on the same inventory row. Same pattern as create_sale().
         let tx = self.conn.unchecked_transaction()?;
@@ -541,6 +554,17 @@ impl Store<'_> {
     ) -> Result<crate::sale_deduction::CompleteSaleResult, CoreError> {
         use crate::inventory_transaction::InventoryTransactionId;
         use crate::sale_deduction::ResolvedShortfall;
+
+        // MONEY-03 follow-up: same negative-qty rejection as
+        // complete_sale_deduction — a negative qty would credit stock.
+        for line in &sale.lines {
+            if line.qty < 0 {
+                return Err(CoreError::Validation {
+                    field: "qty",
+                    message: format!("sale line quantity must be positive, got {}", line.qty),
+                });
+            }
+        }
 
         // ── BEGIN IMMEDIATE ───────────────────────────────────────
         let tx = self.conn.unchecked_transaction()?;
@@ -3637,6 +3661,73 @@ mod tests {
                 );
             }
             other => panic!("overflowing split sum must not complete the sale, got: {other:?}"),
+        }
+    }
+
+    /// MONEY-03 follow-up: a negative line qty on a hand-built `Sale` would
+    /// record a negative ledger total AND credit stock (the deduction delta is
+    /// `-qty`, positive when qty is negative). `CartLine::new` asserts qty > 0
+    /// so this is unreachable from the front-end, but this Store API is the
+    /// ledger boundary — reject it up front.
+    #[test]
+    fn complete_sale_deduction_rejects_negative_line_qty() {
+        use crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID;
+        let conn = fresh();
+        let s = store(&conn);
+        seed_product_with_stock(&conn, "COFFEE", 10);
+
+        let sale = make_single_line_sale("COFFEE", -2, 350);
+        let result = s.complete_sale_deduction(&sale, None, &tender(700), "cashier-1", None);
+
+        match result {
+            Err(CoreError::Validation { field, message }) => {
+                assert_eq!(field, "qty", "expected field 'qty', got '{field}'");
+                assert!(
+                    message.contains("positive"),
+                    "expected a positive-qty message, got: {message}"
+                );
+            }
+            other => panic!("negative qty must not complete the sale, got: {other:?}"),
+        }
+
+        // Stock must be untouched — a negative qty must never credit it.
+        let remaining: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary \
+                 WHERE item_id = (SELECT id FROM products WHERE sku = 'COFFEE') \
+                 AND location_id = ?1",
+                rusqlite::params![CANONICAL_DEFAULT_LOCATION_UUID],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            remaining, 10,
+            "stock must not be credited by a negative qty"
+        );
+    }
+
+    /// The resolved-shortfalls command shares the same ledger-write path.
+    #[test]
+    fn complete_sale_with_resolved_shortfalls_rejects_negative_line_qty() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_product_with_stock(&conn, "COFFEE", 10);
+
+        let sale = make_single_line_sale("COFFEE", -2, 350);
+        let result = s.complete_sale_with_resolved_shortfalls(
+            &sale,
+            None,
+            &tender(700),
+            "cashier-1",
+            None,
+            &[],
+        );
+
+        match result {
+            Err(CoreError::Validation { field, .. }) => {
+                assert_eq!(field, "qty", "expected field 'qty', got '{field}'");
+            }
+            other => panic!("negative qty must not complete the sale, got: {other:?}"),
         }
     }
 

@@ -300,12 +300,10 @@ impl PgSyncDaemon {
                             let store = Store::new(&conn);
                             // None = retryable failure: the durable anchor is
                             // retained and pagination stops so the next cycle
-                            // re-pulls the same page.
-                            let Some(new_since) =
-                                apply_pulled_page(&store, &items, prev_since.as_deref())
-                            else {
-                                return None;
-                            };
+                            // re-pulls the same page (`?` early-returns None
+                            // from the closure).
+                            let new_since =
+                                apply_pulled_page(&store, &items, prev_since.as_deref())?;
                             if let Err(e) = store.set_sync_pull_state(
                                 Some(&new_since),
                                 next_cursor_for_persist.as_deref(),
