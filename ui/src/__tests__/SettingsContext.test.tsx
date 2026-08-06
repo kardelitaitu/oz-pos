@@ -43,6 +43,14 @@ const mocks = vi.hoisted(() => ({
   failPrefs: false, failBrand: false, failVersion: false,
 }));
 
+// Device-id + terminal-list identity mocks (own-terminal event suppression).
+// `getDeviceId` is what the backend matches against the `device_id` column;
+// `listTerminals` lets the frontend resolve its registered terminal row id.
+const identityMocks = vi.hoisted(() => ({
+  deviceId: 'test-device-id',
+  terminals: [] as Array<{ id: string; deviceId: string; isActive: boolean }>,
+}));
+
 // ── API mocks (single unified vi.mock per module) ───────────────
 // IMPORTANT: mock factories reference mocks.* by closure — values
 // MUST be mutated in-place, never replaced with = { ... }. Use
@@ -82,6 +90,11 @@ vi.mock('@/api/system', () => ({
   getVersionScoped: vi.fn(() =>
     mocks.failVersion ? Promise.reject(new Error('Version fail')) : Promise.resolve({ ...mocks.versionInfo }),
   ),
+  getDeviceId: vi.fn(() => Promise.resolve(identityMocks.deviceId)),
+}));
+
+vi.mock('@/api/terminals', () => ({
+  listTerminals: vi.fn(() => Promise.resolve([...identityMocks.terminals])),
 }));
 
 // ── Tauri event listener mock ───────────────────────────────────
@@ -167,6 +180,8 @@ function resetFailures() {
   Object.assign(mocks.userPreferences, { cardsize: '2', fontsize: '1', 'font-smoothing': 'antialiased' });
   Object.assign(mocks.brandSettings, { primary_colour: '#10b981', logo_path: null, store_name: 'My Store' });
   Object.assign(mocks.versionInfo, { name: 'oz-pos', version: '0.0.19', rustVersion: '1.80', target: 'x86_64' });
+  identityMocks.deviceId = 'test-device-id';
+  identityMocks.terminals = [];
   mocks.currencies.length = 0;
   mocks.currencies.push(
     { code: 'USD', name: 'US Dollar', minor_exponent: 2, symbol: '$' },
@@ -576,6 +591,94 @@ describe('SettingsContext', () => {
 
     // After unmount, the listener should be cleaned up
     expect(tauriListenHandler.fn).toBeNull();
+  });
+
+  // ── Own-terminal event suppression (SYNC-10) ────────────────
+  // A local save already refetches via the save handler's
+  // markSettingsUpdated call; the backend ALSO publishes a
+  // settings_updated event for that same change. The listener must
+  // ignore events it can attribute to this terminal so the UI doesn't
+  // double-refetch. Events from another terminal must still refetch.
+
+  it('skips settings_updated events from its own registered terminal row id', async () => {
+    vi.useFakeTimers();
+    identityMocks.deviceId = 'dev-local';
+    identityMocks.terminals = [{ id: 'term-row-1', deviceId: 'dev-local', isActive: true }];
+    const { result } = renderHook(() => useSettings(), { wrapper });
+
+    // Flush initial loadAll + listener registration + identity resolution
+    await act(async () => { await Promise.resolve(); vi.advanceTimersByTime(0); });
+    await act(async () => { await Promise.resolve(); vi.advanceTimersByTime(0); });
+    await act(async () => { await Promise.resolve(); vi.advanceTimersByTime(0); });
+    expect(result.current.loading).toBe(false);
+    expect(tauriListenHandler.fn).not.toBeNull();
+
+    // A settings_updated event carrying OUR row id (a local save echo)
+    // must NOT trigger a refetch.
+    Object.assign(mocks.storeSettings, { name: 'Should Not Apply' });
+    tauriListenHandler.fn!({ payload: { changed_keys: ['store.name'], terminal_id: 'term-row-1' } });
+    await act(async () => { vi.advanceTimersByTime(400); });
+
+    expect(result.current.settings.store.name).toBe('Test Store');
+    vi.useRealTimers();
+  });
+
+  it('skips settings_updated events carrying the device id when no row id is resolved', async () => {
+    vi.useFakeTimers();
+    identityMocks.deviceId = 'dev-only';
+    identityMocks.terminals = []; // no registered terminal matches
+    const { result } = renderHook(() => useSettings(), { wrapper });
+
+    await act(async () => { await Promise.resolve(); vi.advanceTimersByTime(0); });
+    await act(async () => { await Promise.resolve(); vi.advanceTimersByTime(0); });
+    await act(async () => { await Promise.resolve(); vi.advanceTimersByTime(0); });
+    expect(result.current.loading).toBe(false);
+
+    Object.assign(mocks.storeSettings, { name: 'Should Not Apply 2' });
+    tauriListenHandler.fn!({ payload: { changed_keys: ['store.name'], terminal_id: 'dev-only' } });
+    await act(async () => { vi.advanceTimersByTime(400); });
+
+    expect(result.current.settings.store.name).toBe('Test Store');
+    vi.useRealTimers();
+  });
+
+  it('skips "unknown" origin when no terminal is registered for this device', async () => {
+    vi.useFakeTimers();
+    identityMocks.terminals = []; // unregistered single-terminal deployment
+    const { result } = renderHook(() => useSettings(), { wrapper });
+
+    await act(async () => { await Promise.resolve(); vi.advanceTimersByTime(0); });
+    await act(async () => { await Promise.resolve(); vi.advanceTimersByTime(0); });
+    await act(async () => { await Promise.resolve(); vi.advanceTimersByTime(0); });
+    expect(result.current.loading).toBe(false);
+
+    Object.assign(mocks.storeSettings, { name: 'Should Not Apply 3' });
+    tauriListenHandler.fn!({ payload: { changed_keys: ['store.name'], terminal_id: 'unknown' } });
+    await act(async () => { vi.advanceTimersByTime(400); });
+
+    expect(result.current.settings.store.name).toBe('Test Store');
+    vi.useRealTimers();
+  });
+
+  it('refetches on "unknown" origin when a terminal IS registered (future-safe guard)', async () => {
+    vi.useFakeTimers();
+    identityMocks.deviceId = 'dev-registered';
+    identityMocks.terminals = [{ id: 'term-row-1', deviceId: 'dev-registered', isActive: true }];
+    const { result } = renderHook(() => useSettings(), { wrapper });
+
+    await act(async () => { await Promise.resolve(); vi.advanceTimersByTime(0); });
+    await act(async () => { await Promise.resolve(); vi.advanceTimersByTime(0); });
+    await act(async () => { await Promise.resolve(); vi.advanceTimersByTime(0); });
+    expect(result.current.loading).toBe(false);
+
+    // We ARE registered — "unknown" can only be an unregistered peer's
+    // change, so it must NOT be suppressed.
+    Object.assign(mocks.storeSettings, { name: 'Unregistered Peer' });
+    tauriListenHandler.fn!({ payload: { changed_keys: ['store.name'], terminal_id: 'unknown' } });
+    await act(async () => { vi.advanceTimersByTime(400); });
+
+    expect(result.current.settings.store.name).toBe('Unregistered Peer');
+    vi.useRealTimers();
   });
 
   // ── Edge cases ──────────────────────────────────────────────

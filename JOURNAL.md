@@ -1,5 +1,16 @@
 
-## 2026-08-07 — TDD cycle: remote settings changes are now reactive (SYNC-10)
+## 2026-08-07 — Frontend skips its own terminal's settings_updated events (SYNC-10 follow-up)
+
+### The new event loop double-refetched on local saves — the payload's terminal_id was never used
+**Problem:** SYNC-10 made the daemon re-emit `settings_updated` for remote settings changes, but the frontend listener refetched on EVERY event. A local save therefore fired twice: the save handler's `markSettingsUpdated` AND the event echo from the backend's local publish — two backend round-trips per save.
+
+**Solution:** The listener now attributes the event to its own terminal and skips it. Identity resolution: the device id (`getDeviceId()` / `useWorkspace().terminalId`) plus the registered terminal's ROW id — the value the backend actually emits (`state.terminal_id`) — resolved by matching `listTerminals()` against the device id. Skip rule: ignore events whose `terminal_id` is the device id, the resolved row id, or `"unknown"` **only when this device has no registered terminal** (single-terminal / MultiTerminal-off: "unknown" is exclusively the local echo; if we ARE registered, an "unknown" origin can only be an unregistered peer and must still refetch — the guard that keeps the future settings-sync enqueue slice safe). The resolution effect is fully try/catch-wrapped so no provider mount can crash on unmocked IPC.
+
+**Verify:** 4 new tests (row-id skip, device-id skip, unknown-unregistered skip, unknown-registered refetch) — Red confirmed (the 3 skip tests failed before the listener change). 30/30 SettingsContext tests · 91/91 across the affected shell/settings suites · **full suite 261/261 files green** · typecheck + eslint clean.
+
+**Deliberately NOT done:** the enqueue slice (local settings commands pushing `settings.update`) is still the open half of the loop — the terminal_id identity work here is the frontend half of what makes it safe when it lands.
+
+
 
 ### The sync settings-apply path did not exist — remote settings rows were quarantined as unsupported
 **Problem:** The previous cycle wired `set_settings_emit_fn`, but the journal's follow-up was bigger than "publish from the apply path": there IS no settings-apply path. `apply_remote_atomic` (used by both daemons and the SyncEngine) handles exactly four actions — a remote `settings.update` hit `_ => Err(unsupported)` and got **dead-lettered after 3 retries**. The reactive half of the event loop (frontend `SettingsContext` already listens for `settings_updated`) was unreachable for cross-terminal changes.

@@ -25,7 +25,8 @@ import {
   type CurrencyDto,
 } from '@/api/currency';
 import { getBrandSettingsScoped } from '@/api/branding';
-import { getVersionScoped, type VersionInfo } from '@/api/system';
+import { getVersionScoped, getDeviceId, type VersionInfo } from '@/api/system';
+import { listTerminals } from '@/api/terminals';
 import { useWorkspace } from './WorkspaceContext';
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -168,8 +169,61 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
   const pendingKeysRef = useRef<Set<string>>(new Set());
   const mountedRef = useRef(true);
 
-  // Read sessionToken for scoped settings APIs
-  const { sessionToken } = useWorkspace();
+  // Read sessionToken for scoped settings APIs. `terminalId` is the
+  // device id (`getDeviceId()`); the backend tags `settings_updated` events
+  // with the originating terminal's ROW id (or "unknown" when this device
+  // has no registered terminal).
+  const { sessionToken, terminalId } = useWorkspace();
+
+  // ── Local terminal identity (SYNC-10) ────────────────────────
+  // A local save already refetches via the save handler's
+  // markSettingsUpdated call; the backend ALSO publishes a
+  // settings_updated event for that same change. The listener must ignore
+  // events it can positively attribute to this terminal so the UI doesn't
+  // double-refetch, while still reacting to events from other terminals.
+  //
+  // Identities: the device id (the value the backend matches against the
+  // terminals.device_id column) plus the registered terminal's row id
+  // (the value the backend actually emits in events). "unknown" is the
+  // backend's signature for an unregistered device — when no terminal is
+  // registered here, every "unknown" event is a local echo, so it is
+  // skipped too; when we ARE registered, "unknown" can only be an
+  // unregistered peer's change and must still refetch.
+  const localIdentityRef = useRef<{ ids: Set<string>; hasRegisteredTerminal: boolean }>({
+    ids: new Set(),
+    hasRegisteredTerminal: false,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const ids = new Set<string>();
+        let hasRegisteredTerminal = false;
+        const deviceId = terminalId || (await getDeviceId().catch(() => ''));
+        if (deviceId) ids.add(deviceId);
+        try {
+          const terminals = await listTerminals();
+          const match = terminals.find((t) => t.deviceId === deviceId);
+          if (match) {
+            ids.add(match.id);
+            hasRegisteredTerminal = true;
+          }
+        } catch {
+          // IPC unavailable (browser dev) — device id only.
+        }
+        if (!cancelled) {
+          localIdentityRef.current = { ids, hasRegisteredTerminal };
+        }
+      } catch {
+        // Never let identity resolution crash the provider (e.g. a test or
+        // non-Tauri shell that leaves getDeviceId unmocked).
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [terminalId]);
 
   // ── Full load (all APIs) ────────────────────────────────────
 
@@ -409,6 +463,15 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
           'settings_updated',
           (event) => {
             const keys = event.payload.changed_keys;
+            const origin = event.payload.terminal_id;
+            // Skip our own change — the save handler already refetched via
+            // markSettingsUpdated (see the identity effect above).
+            const identity = localIdentityRef.current;
+            const isOwn =
+              origin !== undefined &&
+              (identity.ids.has(origin) ||
+                (origin === 'unknown' && !identity.hasRegisteredTerminal));
+            if (isOwn) return;
             if (keys && keys.length > 0) {
               markSettingsUpdated(keys);
             }
