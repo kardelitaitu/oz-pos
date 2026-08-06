@@ -477,7 +477,16 @@ export default function NodeTopologyEditor({
     inspectorHistoryPushedForRef.current = null;
     setZoom(1);
     setPan({ x: 0, y: 0 });
-  }, [pushHistory]);
+    // Preset ids only partially overlap — the re-validation effect will
+    // clear a selection pointing at an element the new preset lacks.
+    // Surface it so the user knows why the inspector closed instead of
+    // the drop happening silently.
+    if (selectedNodeId && !data.nodes.some((n) => n.id === selectedNodeId)) {
+      addToast({ message: l10n.getString('topology-toast-selection-dropped'), type: 'info' });
+    } else if (selectedWireId && !data.wires.some((w) => w.id === selectedWireId)) {
+      addToast({ message: l10n.getString('topology-toast-selection-dropped'), type: 'info' });
+    }
+  }, [pushHistory, selectedNodeId, selectedWireId, addToast, l10n]);
 
   const popUndo = useCallback(() => {
     const stack = historyRef.current;

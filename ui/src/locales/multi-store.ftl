@@ -59,6 +59,7 @@ topology-inspector-node-name = Node Name
 topology-inspector-subtitle = Subtitle / Location
 topology-tier-suffix = { $tier } TIER
 topology-toast-multi-warehouse = Multi-Warehouse storage locations require a Pro Tier license.
+topology-toast-selection-dropped = The selected element is not part of this preset and was deselected.
 topology-toast-wire-duplicate = A wire already connects these ports.
 topology-toast-fallback-warehouse = Multi-warehouse stock deduction fallback wires require a Pro Tier license.
 topology-toast-load-error = Failed to load topology

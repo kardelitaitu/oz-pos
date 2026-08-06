@@ -35,6 +35,7 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-toast-wire-duplicate': 'A wire already connects these ports.',
   'topology-toast-fallback-warehouse': 'Multi-warehouse stock deduction fallback wires require a Pro Tier license.',
   'topology-toast-load-error': 'Failed to load topology',
+  'topology-toast-selection-dropped': 'The selected element is not part of this preset and was deselected.',
   'topology-confirm-delete-node-title': 'Delete Node',
   'topology-confirm-delete-wire-title': 'Delete Wire',
   'topology-confirm-delete-node-msg':
@@ -1190,5 +1191,62 @@ describe('NodeTopologyEditor Component', () => {
     fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
     expect(getWireCount()).toBe(2);
     expect(screen.queryByText('Delete Selected Element')).not.toBeInTheDocument();
+  });
+
+  // ── Toast when a preset load drops the selection (#18) ────────────
+
+  it('shows a toast when a preset load drops the selected node', () => {
+    renderEditor();
+
+    // wh-1 (Main Warehouse) exists only in the retail preset.
+    const warehouse = document.querySelector('.node-type-warehouse') as HTMLElement;
+    expect(warehouse).not.toBeNull();
+    fireEvent.mouseDown(warehouse, { button: 0 });
+    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+
+    // The restaurant preset has no warehouse node — the selection is dropped.
+    fireEvent.click(screen.getByText('Resto & KDS Preset'));
+
+    expect(
+      screen.getByText('The selected element is not part of this preset and was deselected.'),
+    ).toBeInTheDocument();
+  });
+
+  it('shows a toast when a preset load drops the selected wire', () => {
+    renderEditor();
+
+    // Load the restaurant preset, then select w-3 — it exists only there.
+    fireEvent.click(screen.getByText('Resto & KDS Preset'));
+    const hitboxes = document.querySelectorAll('.wire-hitbox');
+    expect(hitboxes.length).toBe(4);
+    fireEvent.click(hitboxes[2]!);
+    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+
+    // Retail preset has only w-1/w-2 — the wire selection is dropped.
+    fireEvent.click(screen.getByText('Retail Preset'));
+
+    expect(
+      screen.getByText('The selected element is not part of this preset and was deselected.'),
+    ).toBeInTheDocument();
+  });
+
+  it('does not toast when the selected node survives a preset load', () => {
+    renderEditor();
+
+    // store-1 exists in BOTH presets — its selection must survive.
+    const store = document.querySelector('.node-type-store') as HTMLElement;
+    expect(store).not.toBeNull();
+    fireEvent.mouseDown(store, { button: 0 });
+    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Resto & KDS Preset'));
+
+    expect(
+      screen.queryByText('The selected element is not part of this preset and was deselected.'),
+    ).not.toBeInTheDocument();
+    // The inspector stays open on the surviving store node (restaurant name).
+    expect(
+      (document.querySelector('.inspector-field input[type="text"]') as HTMLInputElement).value,
+    ).toBe('Grand Bistro');
   });
 });

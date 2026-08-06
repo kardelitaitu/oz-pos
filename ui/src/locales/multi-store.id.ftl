@@ -57,6 +57,7 @@ topology-inspector-node-name = Nama Node
 topology-inspector-subtitle = Subtitle / Lokasi
 topology-tier-suffix = { $tier } TIER
 topology-toast-multi-warehouse = Beberapa lokasi gudang memerlukan lisensi Pro Tier.
+topology-toast-selection-dropped = Elemen yang dipilih tidak ada di preset ini dan dibatalkan pemilihannya.
 topology-toast-wire-duplicate = Koneksi sudah ada di antara port ini.
 topology-toast-fallback-warehouse = Koneksi fallback multi-gudang memerlukan lisensi Pro Tier.
 topology-toast-load-error = Gagal memuat topologi
