@@ -332,3 +332,36 @@
   border-radius: 50%;
   animation: spinner-rotate var(--duration-600) var(--ease-linear) infinite;
 }
+
+/* ── Quarantined remote items (SYNC-11) ──────────────────────────── */
+
+.offline-queue-quarantine {
+  margin-top: var(--space-5);
+}
+
+.offline-queue-quarantine-header {
+  margin-bottom: var(--space-3);
+}
+
+.offline-queue-quarantine-title {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg);
+}
+
+.offline-queue-quarantine-description {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-fg-tertiary);
+}
+
+.offline-queue-quarantine-empty {
+  padding: var(--space-4);
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+  background: var(--color-bg-surface);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+}

@@ -54,6 +54,7 @@ pos-item-removed = Item dihapus
 pos-cart-remove = Hapus
 pos-cart-title = Penjualan Saat Ini
 pos-cart-panel-title = Penjualan Saat Ini
+pos-cart-panel-title-order = Pesanan Saat Ini
 pos-cart-deducting-label = Mengurangkan: { $name }
 pos-cart-deduction-badge-aria = Mengurangkan dari { $name }
 pos-cart-unbound-error = Keranjang tidak memiliki lokasi pengurangan — tidak dapat menambahkan item
@@ -74,6 +75,10 @@ pos-login-desc = Silakan masuk untuk menggunakan POS.
 pos-shift-loading = Memuat shift…
 pos-shift-open-since = Shift dibuka sejak { $time }
 pos-shift-no-active = Tidak ada shift aktif
+pos-shift-elapsed = { $h ->
+    [0] { $m }mnt
+   *[other] { $h }j { $m }mnt
+}
 pos-shift-header-open = Buka Shift
 pos-shift-header-close = Tutup Shift
 pos-hold-title = Tahan Pesanan Saat Ini

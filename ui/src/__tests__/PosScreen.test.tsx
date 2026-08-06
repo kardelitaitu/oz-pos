@@ -18,6 +18,7 @@ import settingsFtl from '@/locales/settings.ftl?raw';
 import PosScreen from '@/features/sales/PosScreen';
 import * as productsApi from '@/api/products';
 import * as bundlesApi from '@/api/bundles';
+import * as shiftsApi from '@/api/shifts';
 import { mockedBarcode } from '@/__tests__/test-utils/mocks/barcodeScanner';
 
 // ── Hoisted mock helpers ──────────────────────────────────────────
@@ -670,4 +671,70 @@ describe('PosScreen – bundle scanning toast', () => {
     expect(screen.getByText(/Cart is empty/i)).toBeInTheDocument();
   });
 
+});
+
+// ── Live elapsed shift timer ────────────────────────────────────────
+
+/** A minimal open ShiftDto fixture with the given opening time. */
+function shiftFixture(openedAt: Date) {
+  return {
+    id: 'shift-1',
+    userId: 'user-1',
+    terminalId: null,
+    openedAt: openedAt.toISOString(),
+    closedAt: null,
+    openingBalanceMinor: 0,
+    closingBalanceMinor: null,
+    expectedCashMinor: null,
+    cashDifferenceMinor: null,
+    totalSalesMinor: 0,
+    totalCashMinor: 0,
+    totalCardMinor: 0,
+    totalOtherMinor: 0,
+    totalVoidsMinor: 0,
+    totalRefundsMinor: 0,
+    totalPayoutsMinor: 0,
+    notes: '',
+    status: 'open' as const,
+    createdAt: openedAt.toISOString(),
+    updatedAt: openedAt.toISOString(),
+  };
+}
+
+// Fluent wraps interpolated variables in Unicode isolate markers
+// (U+2068 / U+2069), so strip them before comparing exact text.
+const stripIsolates = (s: string) => s.replace(/[\u2068\u2069]/g, '');
+
+describe('PosScreen – live elapsed shift timer', () => {
+  it('shows the elapsed shift duration instead of the opening time', async () => {
+    // Shift opened 2h 15m before "now".
+    const openedAt = new Date(Date.now() - (2 * 60 + 15) * 60_000);
+    vi.mocked(shiftsApi.getActiveShiftScoped).mockResolvedValueOnce(shiftFixture(openedAt));
+
+    await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
+    await screen.findByText('Close');
+
+    // The header shows a duration — not a bare clock time.
+    expect(screen.getByText((content) => stripIsolates(content) === '2h 15m')).toBeInTheDocument();
+  });
+
+  it('ticks the elapsed duration up every minute while the shift is open', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      // Shift opened 80 minutes before the (faked) clock.
+      const openedAt = new Date(Date.now() - 80 * 60_000);
+      vi.mocked(shiftsApi.getActiveShiftScoped).mockResolvedValueOnce(shiftFixture(openedAt));
+
+      await renderWithProviders(<PosScreen />, salesFtl, productsFtl, inventoryFtl, settingsFtl);
+      await screen.findByText((content) => stripIsolates(content) === '1h 20m');
+
+      // Advance one minute — the timer re-renders with the new duration.
+      await act(async () => {
+        vi.advanceTimersByTime(60_000);
+      });
+      await screen.findByText((content) => stripIsolates(content) === '1h 21m');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

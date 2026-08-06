@@ -469,7 +469,10 @@
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-1_5) var(--space-4);
-  background: var(--color-bg-elevated);
+  /* THM-08: opaque panel — elevated is an 8% alpha tint in the glass theme,
+     so the HUD's text blended with canvas nodes beneath it. The whole-panel
+     opacity was also dropped: with an opaque bg it only re-introduced bleed. */
+  background: var(--color-bg-popover);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
   box-shadow: var(--shadow-sm);
@@ -477,7 +480,6 @@
   color: var(--color-fg-tertiary);
   pointer-events: none;
   z-index: 5;
-  opacity: 0.85;
 }
 
 .canvas-hud-item {
@@ -570,10 +572,11 @@
 
 
 
-/* Right Inspector Drawer */
+/* Right Inspector Drawer — floats over the canvas, so it needs an opaque
+   panel (THM-08): surface is a 5% alpha tint in the glass theme. */
 .node-inspector-drawer {
   width: 340px;
-  background-color: var(--color-bg-surface);
+  background-color: var(--color-bg-popover);
   border-left: 1px solid var(--color-border);
   padding: var(--space-5);
   display: flex;

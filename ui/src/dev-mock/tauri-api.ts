@@ -319,6 +319,31 @@ const mockShiftHistory: Array<Record<string, unknown>> = [
     createdAt: new Date(Date.now() - 3600000).toISOString(), updatedAt: new Date(Date.now() - 1800000).toISOString(),
   },
 ];
+// ── User preferences (stateful mock) ─────────────────────────────
+// The real backend persists per-user preferences to the store-scoped
+// `user_preferences` table. The mock previously returned static values
+// while discarding writes, which made the restaurant-menu hamburger
+// configuration (sort / card size / font size) revert on every reload.
+// Seed from localStorage so previews behave like a real store DB.
+const MOCK_USER_PREFS_KEY = 'oz-dev-mock:user-prefs';
+function loadMockUserPrefs(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(MOCK_USER_PREFS_KEY);
+    if (raw) return JSON.parse(raw) as Record<string, string>;
+  } catch {
+    // storage unavailable — start empty
+  }
+  return {};
+}
+function saveMockUserPrefs(prefs: Record<string, string>): void {
+  try {
+    localStorage.setItem(MOCK_USER_PREFS_KEY, JSON.stringify(prefs));
+  } catch {
+    // storage unavailable — keep in-memory copy for this session
+  }
+}
+const mockUserPrefs: Record<string, string> = loadMockUserPrefs();
+
 const handlers: Record<string, (args: unknown) => unknown> = {
   // ═══════════════════════════════════════════════════════════════
   // AUTH / STAFF
@@ -353,12 +378,19 @@ const handlers: Record<string, (args: unknown) => unknown> = {
         role_name: staff.role,
         role_id: staff.role === 'owner' ? '1' : staff.role === 'manager' ? '2' : '3',
       },
+      // audit/06 parity: the real backend mints a short-lived picker
+      // ticket at login; without it the workspace picker never loads
+      // (WorkspaceProvider bails when pickerTicket is null). The mock
+      // must return one so browser dev previews work like the client.
+      picker_ticket: `mock-picker-${staff.user_id}-${Date.now()}`,
     };
   },
 
   'bootstrap_owner': (_args) => {
     return {
       session: { user_id: 'owner-1', display_name: 'Owner', role_name: 'owner', role_id: '1' },
+      // audit/06 parity: the first-owner flow also mints a picker ticket.
+      picker_ticket: `mock-picker-owner-1-${Date.now()}`,
     };
   },
 
@@ -559,10 +591,20 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'get_setting': () => '',
   'set_setting_scoped': () => null,
 
-  'get_user_preferences': () => ({ cardsize: '2', fontsize: '1', 'font-smoothing': 'antialiased' }),
-  'get_user_preferences_scoped': () => ({ cardsize: '2', fontsize: '1', 'font-smoothing': 'antialiased' }),
-  'set_user_preferences': () => null,
-  'set_user_preferences_scoped': () => null,
+  'get_user_preferences': () => ({ ...mockUserPrefs }),
+  'get_user_preferences_scoped': () => ({ ...mockUserPrefs }),
+  'set_user_preferences': (args) => {
+    const { prefs } = (args as { prefs?: Array<{ key: string; value: string }> }) ?? {};
+    for (const p of prefs ?? []) mockUserPrefs[p.key] = p.value;
+    saveMockUserPrefs(mockUserPrefs);
+    return null;
+  },
+  'set_user_preferences_scoped': (args) => {
+    const { prefs } = (args as { prefs?: Array<{ key: string; value: string }> }) ?? {};
+    for (const p of prefs ?? []) mockUserPrefs[p.key] = p.value;
+    saveMockUserPrefs(mockUserPrefs);
+    return null;
+  },
 
   'get_hardware_settings': () => ({
     printerConnection: 'usb', printerDevicePath: '', printerPaperSize: '80mm',
@@ -1458,6 +1500,8 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'pending_offline_count': () => 0,
   'retry_offline_sync': () => ({ syncedCount: 0, failedCount: 0, totalCount: 0 }),
   'delete_offline_item': () => null,
+  'list_remote_failures': () => [],
+  'requeue_remote_failure': () => null,
 
   'get_sync_settings': () => ({ serverUrl: null, hasApiKey: false, enabled: false }),
   'get_sync_settings_scoped': () => ({ serverUrl: null, hasApiKey: false, enabled: false }),
@@ -1546,8 +1590,40 @@ handlers['update_kds_order_items_scoped'] = (args) => {
   return mockKdsOrders.find((o) => o['id'] === id) ?? null;
 };
 
-/** Mock Tauri invoke — handles common commands with mock data. */
-export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+/**
+ * True when running inside a real Tauri webview (packaged app or `tauri dev`).
+ *
+ * The mock is aliased in for the dev server, but a real webview provides
+ * `window.__TAURI_INTERNALS__` — in that case we MUST delegate to the actual
+ * Rust backend instead of serving mock data (the Jul 2026 regression where
+ * the unconditional alias shipped mock IPC into production builds).
+ */
+function hasTauriInternals(): boolean {
+  try {
+    return (
+      typeof window !== 'undefined' &&
+      typeof (window as unknown as { __TAURI_INTERNALS__?: { invoke?: unknown } })
+        .__TAURI_INTERNALS__?.invoke === 'function'
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Mock Tauri invoke — delegates to real IPC in a webview, else mock data. */
+export async function invoke<T>(
+  cmd: string,
+  args?: Record<string, unknown>,
+  options?: unknown,
+): Promise<T> {
+  if (hasTauriInternals()) {
+    // Real Tauri webview — pass straight through to the Rust backend.
+    // Default args to {} like the real invoke(cmd, args = {}, options).
+    return (window as unknown as {
+      __TAURI_INTERNALS__: { invoke: (c: string, a?: Record<string, unknown>, o?: unknown) => Promise<T> };
+    }).__TAURI_INTERNALS__.invoke(cmd, args ?? {}, options);
+  }
+
   console.log('[TAURI MOCK] invoke:', cmd, args);
 
   // Small delay to simulate async IPC
@@ -1562,13 +1638,18 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
   return null as T;
 }
 
-/** Mock convertFileSrc — returns the path as-is in browser. */
-export function convertFileSrc(path: string): string {
+/** Mock convertFileSrc — delegates to real IPC in a webview, else path as-is. */
+export function convertFileSrc(path: string, protocol = 'asset'): string {
+  if (hasTauriInternals()) {
+    return (window as unknown as {
+      __TAURI_INTERNALS__: { convertFileSrc: (p: string, pr: string) => string };
+    }).__TAURI_INTERNALS__.convertFileSrc(path, protocol);
+  }
   return path;
 }
 
 export function isTauri(): boolean {
-  return false;
+  return hasTauriInternals();
 }
 
 export class Resource {}

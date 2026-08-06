@@ -262,7 +262,7 @@
 .custom-context-menu {
   position: fixed;
   z-index: 1000;
-  background: var(--color-bg-overlay);
+  background: var(--color-bg-popover);
   backdrop-filter: blur(var(--blur-amount, 20px));
   border: 1px solid var(--color-border);
   box-shadow: var(--shadow-glow);

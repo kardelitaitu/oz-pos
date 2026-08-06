@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
-import { getUserPreferencesScoped, setUserPreferences } from '@/api/settings';
+import { getUserPreferencesScoped, setUserPreferencesScoped } from '@/api/settings';
 
 export type KdsLayout = 'kanban' | 'focus' | 'metro';
 
@@ -102,16 +102,19 @@ export function useKdsPreferences(): {
 
   const persist = useCallback(
     (patch: Partial<Record<string, string>>) => {
-      if (!userId) return;
+      if (!userId || !sessionToken) return;
       const entries = Object.entries(patch).map(([key, value]) => ({
         key,
         value: value ?? '',
       }));
-      setUserPreferences(userId, entries).catch(() => {
+      // Scoped write must match the scoped read above: the unscoped
+      // variant writes to the global DB while get_user_preferences_scoped
+      // reads the store DB, so unscoped writes never survive a reload.
+      setUserPreferencesScoped(sessionToken, entries).catch(() => {
         // Server persistence is best-effort; localStorage already saved.
       });
     },
-    [userId],
+    [userId, sessionToken],
   );
 
   const setLayout = useCallback(

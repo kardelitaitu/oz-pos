@@ -63,7 +63,7 @@
   left: 0;
   min-width: calc(var(--space-24) + var(--space-24) + var(--space-12));
   max-width: min(calc(var(--space-24) + var(--space-24) + var(--space-12) + var(--space-12) + var(--space-8)), calc(100vw - var(--space-4)));
-  background: var(--color-bg-primary);
+  background: var(--color-bg-popover);
   opacity: 1;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -343,7 +343,9 @@
 /* ── Restaurant card (diagonal layout) ──────────── */
 .restaurant-card {
   position: relative;
-  --card-add-width: 32%;
+  /* Slimmer accent strip: keeps the + Add affordance while giving the name
+     and price far more horizontal room (was 32% of the card width). */
+  --card-add-width: 26%;
   display: flex;
   min-width: 0;
   padding: 0;
@@ -359,7 +361,13 @@
   border-radius: var(--radius-lg);
   overflow: hidden;
   cursor: pointer;
-  min-height: var(--space-16);
+  /* Uniform box per menu size: every card is exactly this tall regardless of
+     content length, so the grid stays perfectly aligned at every size level.
+     The height scales with both the card-size and font-size controls so the
+     two-line name + price + status chip always fit without clipping. The
+     base was slimmed (was --space-16 + --space-10) so cards read compact;
+     the --space-1 term stays as a safety buffer for unpinned line-heights. */
+  height: calc(var(--space-14) + var(--space-8) + var(--space-1) + var(--card-size, 0) * 14px + var(--font-size, 0) * 8px);
   transition:
     border-color var(--duration-150) var(--ease-out),
     transform var(--duration-200) cubic-bezier(0.16, 1, 0.3, 1),
@@ -463,8 +471,8 @@
   .restaurant-card:active:not(.restaurant-card--disabled),
   .restaurant-card--disabled:hover,
   .restaurant-card--disabled:active,
-  .restaurant-card:hover:not(.restaurant-card--disabled) .restaurant-card-add-icon,
-  .restaurant-card:active:not(.restaurant-card--disabled) .restaurant-card-add-icon {
+  .restaurant-card:hover:not(.restaurant-card--disabled) .restaurant-card-add-badge,
+  .restaurant-card:active:not(.restaurant-card--disabled) .restaurant-card-add-badge {
     transform: none;
     transition: none;
   }
@@ -494,9 +502,21 @@
   z-index: 1;
   min-width: 0;
   flex: 1;
-  padding: calc(var(--space-2) + var(--card-size, 0) * 4px) var(--card-add-width) calc(var(--space-2) + var(--card-size, 0) * 4px) calc(var(--space-3) + var(--card-size, 0) * 4px);
+  /* Vertically centre the name/price/status stack inside the fixed-height
+     box so short cards look balanced next to long ones. */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: calc(var(--space-2) + var(--card-size, 0) * 4px) var(--card-add-width) calc(var(--space-1_5) + var(--card-size, 0) * 4px) calc(var(--space-3) + var(--card-size, 0) * 2px);
   padding-top: calc(var(--space-3) + var(--card-size, 0) * 4px);
-  padding-left: calc(var(--space-8) + var(--card-size, 0) * 4px);
+  /* Compact side padding: 12px at the smallest size (was 32px). */
+  padding-left: calc(var(--space-3) + var(--card-size, 0) * 2px);
+}
+
+/* Pinned cards keep extra left clearance so the pin badge never overlaps
+   the first line of the name (badge spans 8-28px in the body). */
+.restaurant-card--pinned .restaurant-card-body {
+  padding-left: calc(var(--space-7) + var(--card-size, 0) * 2px);
 }
 
 .restaurant-card-name {
@@ -504,24 +524,32 @@
   font-weight: var(--font-weight-semibold);
   color: var(--color-fg);
   margin: 0;
+  /* Menu titles are hard-capped at TWO lines at every card/font size.
+     -webkit-line-clamp is the primary clamp; `line-clamp` (standard) and
+     `max-height` cover engines without webkit-box support so the title can
+     never spill a third line. max-height = 2 lines x --leading-normal. */
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  max-height: calc(var(--leading-normal) * 2em);
   line-height: var(--leading-normal);
 }
 
 .restaurant-card-price {
   display: block;
-  margin-top: var(--space-1);
-  font-size: calc(var(--text-sm) + var(--font-size, 0) * 1px);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-fg-secondary);
+  margin-top: var(--space-0_5);
+  /* Secondary detail on a resto card: the cashier reads the name, not the
+     price — keep it one step smaller (10px vs the 12px title) and muted. */
+  font-size: calc(var(--text-xs) + var(--font-size, 0) * 1px);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg-tertiary);
 }
 
 .restaurant-card-status {
   display: inline-flex;
-  margin-top: var(--space-1);
+  margin-top: var(--space-0_5);
   padding: var(--space-0_5) var(--space-1_5);
   border-radius: var(--radius-sm);
   background: var(--color-bg-hover);
@@ -530,28 +558,41 @@
   font-weight: var(--font-weight-semibold);
 }
 
-/* Add icon + text — decorative, bottom-right corner */
+/* Add badge — icon-only circle centred in the accent strip.
+   The strip's ::after supplies the coloured background; the badge is a
+   two-tone circle (--color-accent-fg fill, accent glyph) that reads as a
+   tappable button. The visible "Add" label moved to an sr-only span so
+   screen readers and bundle parity are unaffected. */
 .restaurant-card-add-icon {
   position: absolute;
-  bottom: 0;
-  right: 0;
+  inset: 0 0 0 auto;
   width: var(--card-add-width);
-  min-width: var(--space-14);
+  min-width: var(--space-12);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-1);
-  padding: calc(var(--space-1) + var(--card-size, 0) * 2px);
-  font-family: var(--font-sans);
-  font-size: calc(var(--text-sm) - 2px + var(--card-size, 0) * 2px + var(--font-size, 0) * 1.5px);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-accent-fg);
   pointer-events: none;
   z-index: 1;
-  transition:
-    background-color var(--duration-150) var(--ease-out),
-    color var(--duration-150) var(--ease-out),
-    transform var(--duration-150) var(--ease-out);
+}
+
+.restaurant-card-add-badge {
+  display: block;
+  flex-shrink: 0;
+  width: calc(28px + var(--card-size, 0) * 4px);
+  height: calc(28px + var(--card-size, 0) * 4px);
+  transition: transform var(--duration-150) var(--ease-out);
+}
+
+.restaurant-card-add-badge circle {
+  fill: var(--color-accent-fg);
+}
+
+.restaurant-card-add-badge path {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .restaurant-card:hover:not(.restaurant-card--disabled)::after {
@@ -559,34 +600,54 @@
   background-color: color-mix(in srgb, var(--btn-color, var(--color-accent)) 82%, white);
 }
 
-.restaurant-card:hover:not(.restaurant-card--disabled) .restaurant-card-add-icon {
-  background-color: var(--color-accent);
-  background-color: color-mix(in srgb, var(--btn-color, var(--color-accent)) 82%, white);
-  color: var(--color-accent-fg);
+.restaurant-card:hover:not(.restaurant-card--disabled) .restaurant-card-add-badge {
+  transform: scale(1.1);
 }
 
 .restaurant-card:active:not(.restaurant-card--disabled)::after {
   background-color: var(--color-accent-hover, var(--color-accent));
 }
 
-.restaurant-card:active:not(.restaurant-card--disabled) .restaurant-card-add-icon {
-  transform: scale(0.96);
+.restaurant-card:active:not(.restaurant-card--disabled) .restaurant-card-add-badge {
+  transform: scale(0.94);
 }
 
-.restaurant-card-add-icon--disabled {
-  color: var(--color-fg-tertiary);
-  font-size: var(--text-xs);
-}
-
-.restaurant-card--added .restaurant-card-add-icon {
-  /* --color-accent-fg gives high-contrast: dark (#07111d) on light green in dark themes, white (#fff) on dark green in light themes */
+/* Added flash (400ms) — the whole strip turns success (same signal as the
+   old text button) while the badge swaps its glyph to a check; the circle
+   keeps its accent-fg fill so it stays legible on the green field. */
+.restaurant-card--added::after {
   background-color: var(--color-success);
-  color: var(--color-accent-fg);
 }
 
-.restaurant-card-add-icon svg {
-  width: calc(18px + var(--card-size, 0) * 3px);
-  height: calc(18px + var(--card-size, 0) * 3px);
+/* Unavailable — muted badge */
+.restaurant-card-add-icon--disabled .restaurant-card-add-badge circle {
+  fill: var(--color-bg-hover);
+}
+
+.restaurant-card-add-icon--disabled .restaurant-card-add-badge path {
+  stroke: var(--color-fg-tertiary);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .restaurant-card--added .restaurant-card-add-badge {
+    animation: restaurant-add-badge-pop 300ms var(--ease-out);
+  }
+
+  .restaurant-card--added::after {
+    animation: restaurant-add-strip-flash 400ms var(--ease-out);
+  }
+
+  @keyframes restaurant-add-strip-flash {
+    0%   { background-color: var(--btn-color, var(--color-accent)); }
+    30%  { background-color: var(--color-success); }
+    100% { background-color: var(--color-success); }
+  }
+
+  @keyframes restaurant-add-badge-pop {
+    0%   { transform: scale(0.6); }
+    60%  { transform: scale(1.15); }
+    100% { transform: scale(1); }
+  }
 }
 
 /* ── Empty / loading state ───────────────────────── */
@@ -608,7 +669,10 @@
 .restaurant-context-menu {
   position: fixed;
   z-index: 1000;
-  background: var(--color-bg-surface);
+  /* Opaque panel: --color-bg-surface is a 5% alpha tint in the glass theme,
+     which makes menu text blend with the cards underneath (THM-08). The
+     popover token is opaque in every theme. */
+  background: var(--color-bg-popover);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: var(--space-1);

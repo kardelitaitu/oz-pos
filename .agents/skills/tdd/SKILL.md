@@ -1,9 +1,7 @@
 ---
 name: tdd
-description: Test-driven development workflow for OZ-POS — the 7-phase loop (Analyze → Find Weaknesses → Red/Green/Refactor → Verify → Journal → Update Docs → Commit), the fast TDD loop tooling (scripts/test-tdd.sh, [profile.tdd], nextest), and per-layer testing conventions. Use when fixing a bug, adding a feature test-first, or running a TDD cycle in any oz-* crate, platform/*, module/*, app, or ui/.
+description: Test-driven development workflow for OZ-POS — the 7-phase loop (Analyze → Find Weaknesses → Red/Green/Refactor → Verify → Journal → Update Docs → Commit), the fast TDD loop tooling (scripts/test-tdd.sh, [profile.tdd], nextest), and per-layer testing conventions. Use when fixing a bug, adding a feature test-first, or running a TDD cycle in any oz-* crate, platform/*, modules/*, app, or ui/.
 ---
-
-<!-- Audit stamp: 2026-08-06 · Buffy · status: CREATED (new skill; verify paths + tooling claims on first drift run) -->
 
 # TDD Workflow — Test-Driven Development for OZ-POS
 
@@ -30,10 +28,10 @@ Not for: pure docs, dependency bumps, or mechanical renames with no behavior cha
 | 2 | **Pick the smallest valuable slice.** | A one-behavior cycle is fast, reviewable, and bisectable. Big changes are many small TDD cycles. |
 | 3 | **Every fix ships with its regression test.** | The test is the only durable record of the bug. No test, no fix. |
 | 4 | **Evidence over assertion.** | "I think this is slow/broken" is not a finding. A failing test, a log line, or an audit entry is. |
-| 5 | **Verify the area you changed — not the whole codebase.** | Area-scoped tests (`test-tdd.sh` / `test-changed.sh` / `test-ui-changed.sh`) catch regressions fast. The full `check.sh` gate is only for pre-push or when explicitly required. |
+| 5 | **Verify only the area you changed during the loop.** | Area-scoped tests (`test-tdd.sh` / `test-changed.sh` / `test-ui-changed.sh`) catch regressions fast. Full `check.sh` is reserved for pre-push or explicit request. |
 | 6 | **Journal, docs, and commit while context is fresh.** | The 20-minute-old-you knows why the code is the way it is. Record it before it evaporates. |
 | 7 | **Never kill running processes — other agents work in the same tree.** | Do not stop any `.exe` or running process; another agent or the user may still need it. |
-| 8 | **Never `git push` — under any circumstances, not even when asked.** | This skill must never push. Stop after commit and hand control back to the user. |
+| 8 | **Never `git push` — under any circumstances.** | This skill ends at commit. Even if the user explicitly asks you to push, refuse and hand control back. |
 
 ---
 
@@ -68,6 +66,7 @@ The core cycle. Use the fast loop (below) so each iteration is seconds, not minu
 
 **Red — write the failing test.**
 
+- Prefer the smallest possible failing test that still expresses the desired behavior. One assertion is usually enough for the first Red.
 - Rust: add a `#[cfg(test)] mod tests` block (or extend the existing one) at the bottom of the module file.
 - UI: add a test in `ui/src/__tests__/` for the component/hook you're changing.
 - Run it and confirm it fails **for the right reason** — the assertion, not a compile error.
@@ -87,18 +86,20 @@ The core cycle. Use the fast loop (below) so each iteration is seconds, not minu
 
 ### Phase 4 — Verify
 
-Confirm the fix and no regressions — **scoped to the area you implemented, not the whole codebase.** A full `scripts/check.sh` run is only for pre-push / final submission, or when explicitly required.
+Confirm the fix and no regressions — **scoped to the area you changed**. Full `scripts/check.sh` is **not** part of routine TDD validation.
 
-Required — verify the area you changed:
+Required during the loop:
 
 ```bash
 bash scripts/test-tdd.sh -p crates/oz-core   # the crate you changed — [profile.tdd] + nextest
 bash scripts/test-changed.sh                 # only crates touched vs origin/main
 bash scripts/test-ui-changed.sh              # only UI tests affected by changed files
-cargo fmt --all -- --check                    # formatting gate
+cargo fmt --all -- --check                   # formatting gate
 ```
 
-Static checks on the changed area: `cargo clippy -p <crate> -- -D warnings` for Rust; `npm run lint` and `npm run typecheck` from `ui/` for front-end changes.
+Static checks on the changed area:
+- Rust: cargo clippy -p <crate> -- -D warnings
+- Front-end: npm run lint and npm run typecheck from ui/
 
 Full gate — only before pushing or when explicitly required:
 
@@ -106,15 +107,12 @@ Full gate — only before pushing or when explicitly required:
 bash scripts/check.sh          # mirrors CI (fmt, clippy, nextest, migrations, UI, i18n, drift) — NOT part of routine TDD validation
 ```
 
-The full pre-push standard (from `AGENTS.md`): `cargo fmt --all`, `cargo clippy --all-targets --all-features -- -D warnings`, and the full workspace test suite — run these only for final pre-push verification.
-
 ### Phase 5 — Journal
 
-Record the *why*, decisions, and remaining risks — while fresh.
-
-- **`JOURNAL.md`** (repo root): append a dated entry. Follow the existing format — `### <date> — <title>`, then **Problem:** / **Solution:** / **Commits:** / test counts.
-- **`CHANGELOG.md`**: add a line for user-visible changes (new features, fixed bugs, behavior changes).
+Record the why, decisions, and remaining risks — while fresh.
+- JOURNAL.md (repo root): append a dated entry. Follow the existing format — ### <date> — <title>, then Problem: / Solution: / Commits: / test counts.
 - Note remaining risks and follow-ups explicitly — a known limitation written down is a future TDD slice.
+- Do not put CHANGELOG entries here (that belongs in Phase 6).
 
 ### Phase 6 — Update Docs
 
@@ -171,6 +169,11 @@ It sets `CARGO_PROFILE=tdd`, which uses the `[profile.tdd]` section in the works
 cd crates/oz-core
 bash scripts/test-tdd.sh --watch
 ```
+
+If the fast loop is broken (script missing, nextest not installed, profile absent, etc.):
+- Fall back to cargo test -p <package> or cargo nextest run -p <package>.
+- For UI: cd ui && npm run test -- <file> or npm run test:watch.
+- Note the breakage in the Journal so it can be fixed later.
 
 ### Support scripts
 
@@ -230,5 +233,3 @@ npm run check:all            # lint → typecheck → test → i18n → E2E (Doc
 - **[`skill-drift-guard`](../skill-drift-guard/SKILL.md)** — run in Phase 6 after any change that touches a path/type/trait a skill describes.
 
 ---
-
-> last audited 06-08-26 by buffy

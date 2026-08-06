@@ -52,7 +52,7 @@
   gap: var(--space-2);
   min-width: 220px;
   padding: var(--space-3);
-  background: var(--kds-header-bg, #16213e);
+  background: var(--color-bg-popover);
   border: 1px solid var(--kds-header-border, #0f3460);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-xl);

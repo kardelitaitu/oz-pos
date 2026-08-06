@@ -17,6 +17,14 @@ interface AppProvidersProps {
 }
 
 /**
+ * Full-page "Something went wrong" boundaries self-heal: auto-reload
+ * after 30s if the user doesn't act. Embedded card-level boundaries
+ * (workspace settings, topology editor, …) intentionally do NOT set
+ * this, so a scoped failure never reloads the whole POS.
+ */
+const ERROR_AUTO_REFRESH_MS = 30_000;
+
+/**
  * Composite provider wrapper that establishes application contexts in optimal dependency order.
  * 
  * Order of nesting:
@@ -34,12 +42,12 @@ interface AppProvidersProps {
  */
 export function AppProviders({ children }: AppProvidersProps) {
   return (
-    <ErrorBoundary>
+    <ErrorBoundary autoRefreshMs={ERROR_AUTO_REFRESH_MS}>
       <LocaleProvider>
         {/* ERR-02: inner boundary resolves fallback copy through the active
             locale; the outer ErrorBoundary stays as the locale-independent
             emergency fallback in case LocaleProvider itself fails. */}
-        <LocalizedErrorBoundary>
+        <LocalizedErrorBoundary autoRefreshMs={ERROR_AUTO_REFRESH_MS}>
         <BrandProvider>
           <ThemeProvider>
             <CurrencyProvider>

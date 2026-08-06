@@ -1,7 +1,10 @@
 .ctx-menu {
   position: fixed;
   z-index: 9999;
-  background: var(--color-bg-elevated);
+  /* Opaque panel: --color-bg-elevated is an 8% alpha tint in the glass
+     theme, making menu text blend with whatever it floats over (THM-08).
+     The popover token is opaque in every theme. */
+  background: var(--color-bg-popover);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);

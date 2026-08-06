@@ -13,6 +13,8 @@ const mockPendingOfflineCount = vi.fn();
 const mockRetryOfflineSync = vi.fn();
 const mockDeleteOfflineItem = vi.fn();
 const mockOfflineQueueStatusSummary = vi.fn();
+const mockListRemoteFailures = vi.fn();
+const mockRequeueRemoteFailure = vi.fn();
 
 vi.mock('@/api/offline', () => ({
   listAllOffline: (...args: unknown[]) => mockListAllOffline(...args),
@@ -20,6 +22,8 @@ vi.mock('@/api/offline', () => ({
   retryOfflineSync: (...args: unknown[]) => mockRetryOfflineSync(...args),
   deleteOfflineItem: (...args: unknown[]) => mockDeleteOfflineItem(...args),
   getOfflineQueueStatusSummary: (...args: unknown[]) => mockOfflineQueueStatusSummary(...args),
+  listRemoteFailures: (...args: unknown[]) => mockListRemoteFailures(...args),
+  requeueRemoteFailure: (...args: unknown[]) => mockRequeueRemoteFailure(...args),
 }));
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -37,6 +41,18 @@ function makeQueueItem(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function makeFailure(overrides: Record<string, unknown> = {}) {
+  return {
+    itemId: 'remote-sale-1',
+    action: 'upsert_sale',
+    payload: '{"id":"remote-sale-1"}',
+    attempts: 3,
+    lastError: 'missing product sku-X',
+    deadLettered: true,
+    ...overrides,
+  };
+}
+
 function renderScreen() {
   return renderWithFluentSync(<OfflineQueueScreen />, offlineFtl, sharedFtl);
 }
@@ -50,8 +66,11 @@ describe('OfflineQueueScreen', () => {
     mockRetryOfflineSync.mockReset();
     mockDeleteOfflineItem.mockReset();
     mockOfflineQueueStatusSummary.mockReset();
+    mockListRemoteFailures.mockReset();
+    mockRequeueRemoteFailure.mockReset();
     mockListAllOffline.mockResolvedValue([]);
     mockPendingOfflineCount.mockResolvedValue(0);
+    mockListRemoteFailures.mockResolvedValue([]);
     mockOfflineQueueStatusSummary.mockResolvedValue({
       pendingCount: 0, syncedCount: 0, failedCount: 0, conflictCount: 0,
       lastSyncedAt: null, oldestPendingAt: null,
@@ -80,6 +99,69 @@ describe('OfflineQueueScreen', () => {
 
     await waitFor(() => {
       expect(screen.getByText('All transactions synced. No pending items.')).toBeTruthy();
+    });
+  });
+
+  // ── SYNC-11: quarantined remote items ───────────────────────────
+
+  it('shows the quarantined section with no failures as empty', async () => {
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('Quarantined Remote Items')).toBeTruthy();
+      expect(screen.getByText('No quarantined items.')).toBeTruthy();
+    });
+  });
+
+  it('renders quarantined remote items with attempts and last error', async () => {
+    mockListRemoteFailures.mockResolvedValue([
+      makeFailure(),
+      makeFailure({ itemId: 'remote-tax-2', action: 'upsert_tax_rate', attempts: 7, lastError: 'unknown tax rate' }),
+    ]);
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('remote-sale-1')).toBeTruthy();
+      expect(screen.getByText('upsert_sale')).toBeTruthy();
+      expect(screen.getByText('remote-tax-2')).toBeTruthy();
+      expect(screen.getByText('unknown tax rate')).toBeTruthy();
+    });
+  });
+
+  it('calls requeueRemoteFailure with the item id on Requeue', async () => {
+    mockListRemoteFailures.mockResolvedValueOnce([makeFailure()]);
+    mockListRemoteFailures.mockResolvedValueOnce([]);
+    mockRequeueRemoteFailure.mockResolvedValue(undefined);
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('Requeue')).toBeTruthy();
+    });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByText('Requeue'));
+
+    await waitFor(() => {
+      expect(mockRequeueRemoteFailure).toHaveBeenCalledWith('remote-sale-1');
+      // Reloaded after requeue → the quarantined row is gone.
+      expect(screen.getByText('No quarantined items.')).toBeTruthy();
+    });
+  });
+
+  it('shows a localized error when requeue fails', async () => {
+    mockListRemoteFailures.mockResolvedValue([makeFailure()]);
+    mockRequeueRemoteFailure.mockRejectedValue(new Error('not found'));
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('Requeue')).toBeTruthy();
+    });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByText('Requeue'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to requeue item')).toBeTruthy();
     });
   });
 

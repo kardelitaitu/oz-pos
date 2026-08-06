@@ -5,8 +5,10 @@ import { requiredLocalized } from '@/frontend/shared/requiredLocalized';
 
 interface LocalizedErrorBoundaryProps {
   children: ReactNode;
-  /** Called after the user clicks "Try Again". */
+  /** Called after the user clicks "Try Again" — replaces the default hard reload. */
   onReset?: () => void;
+  /** Auto-reload the fallback after this many ms (full-page boundaries only). */
+  autoRefreshMs?: number;
 }
 
 /**
@@ -21,6 +23,7 @@ interface LocalizedErrorBoundaryProps {
 export function LocalizedErrorBoundary({
   children,
   onReset,
+  autoRefreshMs,
 }: LocalizedErrorBoundaryProps) {
   const { l10n } = useLocalization();
   return (
@@ -28,6 +31,7 @@ export function LocalizedErrorBoundary({
       title={requiredLocalized(l10n, 'error-boundary-title')}
       retryLabel={requiredLocalized(l10n, 'error-boundary-retry')}
       {...(onReset ? { onReset } : {})}
+      {...(autoRefreshMs ? { autoRefreshMs } : {})}
     >
       {children}
     </ErrorBoundary>

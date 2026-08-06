@@ -3,7 +3,7 @@ import { Localized, useLocalization } from '@fluent/react';
 import {
   setReceiptSettings,
   setStoreSettings,
-  setUserPreferences,
+  setUserPreferencesScoped,
   setSettingScoped,
   type ReceiptSettingsDto,
   type StoreSettingsDto,
@@ -465,11 +465,17 @@ function SettingsPageContent() {
       setReceiptSettings(receipt, session?.user_id ?? ''),
       setStoreSettings(syncedStore, session?.user_id ?? ''),
       setCtxCurrency(defaultCurrency),
-      setUserPreferences(userId, [
-        { key: 'cardsize', value: String(displayCardSize) },
-        { key: 'fontsize', value: String(displayFontSize) },
-        { key: 'font-smoothing', value: displayFontSmoothing },
-      ]),
+      // Scoped write matches the scoped read in SettingsContext: the
+      // unscoped variant writes the global DB while every consumer reads
+      // the store-scoped user_preferences table, so unscoped writes would
+      // silently vanish on the next reload.
+      sessionToken
+        ? setUserPreferencesScoped(sessionToken, [
+            { key: 'cardsize', value: String(displayCardSize) },
+            { key: 'fontsize', value: String(displayFontSize) },
+            { key: 'font-smoothing', value: displayFontSmoothing },
+          ])
+        : Promise.resolve(),
       updateSyncSettings({
         serverUrl: syncServerUrl || null,
         ...(syncApiKey ? { apiKey: syncApiKey } : {}),

@@ -763,7 +763,9 @@
 .retail-cart-table-inner th {
   position: sticky;
   top: 0;
-  background: var(--color-border-hover);
+  /* Opaque so rows scrolling under the header don't bleed through (THM-08);
+     matches the product-table header (--color-dark-bg-pos). */
+  background: var(--color-dark-bg-pos);
   padding: var(--space-1) var(--space-1_5);
   text-align: left;
   font-size: var(--text-xs);
@@ -1604,7 +1606,7 @@
   min-width: 16rem;
   max-width: 20rem;
   padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
-  background: var(--color-bg-elevated);
+  background: var(--color-bg-popover);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
@@ -1904,7 +1906,7 @@
   bottom: var(--space-9);
   right: 0;
   min-width: 13.75rem;
-  background: var(--color-bg-surface);
+  background: var(--color-bg-popover);
   border: 1px solid var(--color-border-strong);
   border-bottom: none;
   box-shadow: var(--shadow-glow);
@@ -2217,7 +2219,7 @@
   left: 0;
   z-index: 50;
   min-width: 140px;
-  background: var(--color-bg-elevated);
+  background: var(--color-bg-popover);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);

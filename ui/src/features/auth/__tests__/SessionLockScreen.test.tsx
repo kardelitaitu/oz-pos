@@ -83,14 +83,22 @@ describe('SessionLockScreen', () => {
   describe('1. Mounting & Rendering', () => {
     it('renders the clock and date', () => {
       vi.useFakeTimers();
-      const now = new Date('2026-07-25T14:30:00');
-      vi.setSystemTime(now);
-      render(<SessionLockScreen onUnlock={mockOnUnlock} />);
-      expect(screen.getByText(/02:30|2:30/)).toBeInTheDocument();
-      expect(screen.getByText(/Saturday/)).toBeInTheDocument();
-      expect(screen.getByText(/July/)).toBeInTheDocument();
-      expect(screen.getByText(/25/)).toBeInTheDocument();
-      vi.useRealTimers();
+      try {
+        const now = new Date('2026-07-25T14:30:00');
+        vi.setSystemTime(now);
+        render(<SessionLockScreen onUnlock={mockOnUnlock} />);
+        expect(screen.getByText(/02:30|2:30/)).toBeInTheDocument();
+        // Scope the date assertions to the date element — the footer version
+        // text ("OZ-POS Enterprise v0.0.25") also contains digits, so a bare
+        // getByText(/25/) would match multiple nodes.
+        const dateEl = screen.getByText(/Saturday/);
+        expect(dateEl.textContent).toMatch(/July/);
+        expect(dateEl.textContent).toMatch(/25/);
+      } finally {
+        // Always restore real timers — a leaked fake-timer clock would
+        // hang every later waitFor in this file (cascade failures).
+        vi.useRealTimers();
+      }
     });
 
     it('renders "Enter PIN to unlock" text', () => {

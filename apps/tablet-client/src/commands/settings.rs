@@ -397,6 +397,52 @@ pub async fn set_user_preferences(
     Ok(UserPreferences::set_batch(&conn, &user_id, &pairs)?)
 }
 
+#[command]
+/// Get user preferences resolved from a session token. ADR #7.
+///
+/// Uses `session.user_id` for the preference lookup against the
+/// session's store database, so a tablet terminal persists the same
+/// per-user preferences (menu sort, card/font size) that the desktop
+/// client writes.
+pub async fn get_user_preferences_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<HashMap<String, String>, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(UserPreferences::get_all(&db, &session.user_id)?)
+}
+
+#[command]
+/// Set user preferences resolved from a session token. ADR #7.
+///
+/// Uses `session.user_id` for the preference write against the
+/// session's store database — parity with the desktop client so
+/// the restaurant-menu hamburger configuration persists to the
+/// shared user settings on tablet terminals.
+pub async fn set_user_preferences_scoped(
+    session_token: String,
+    prefs: Vec<UserPrefEntry>,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let conn = state
+        .db_manager
+        .open_store(&session.store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let pairs: Vec<(String, String)> = prefs.into_iter().map(|e| (e.key, e.value)).collect();
+    Ok(UserPreferences::set_batch(&db, &session.user_id, &pairs)?)
+}
+
 // ── Generic key-value settings ────────────────────────────────
 
 /// Read a single setting value by key.
@@ -909,6 +955,110 @@ mod tests {
             loaded,
             Some("jwt-token-xyz".into()),
             "C-3 regression: token saved via SettingsPage must be readable via get_setting"
+        );
+    }
+
+    // ── Scoped user preferences (tablet parity — AUDIT-25) ─────────
+
+    use oz_core::session::SessionContext;
+    use platform_core::StoreDatabaseManager;
+    use tauri::Manager as _;
+
+    /// Seed a session for `token` bound to `store_id` and `user_id`.
+    fn seed_session(state: &mut AppState, token: &str, store_id: &str, user_id: &str) {
+        state.session_store.write().unwrap().insert(
+            token.into(),
+            SessionContext::new(
+                user_id.into(),
+                "role-cashier".into(),
+                "terminal-1".into(),
+                store_id.into(),
+                "instance-1".into(),
+                "restaurant-pos".into(),
+                None,
+                0,
+            ),
+        );
+    }
+
+    fn pref(key: &str, value: &str) -> UserPrefEntry {
+        UserPrefEntry {
+            key: key.into(),
+            value: value.into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn scoped_user_preferences_rejects_invalid_token() {
+        let app = tauri::test::mock_builder()
+            .manage(AppState::for_test())
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let read = get_user_preferences_scoped("missing-token".into(), app.state()).await;
+        assert!(matches!(read, Err(AppError::InvalidSession)));
+
+        let write = set_user_preferences_scoped(
+            "missing-token".into(),
+            vec![pref("cardsize", "3")],
+            app.state(),
+        )
+        .await;
+        assert!(matches!(write, Err(AppError::InvalidSession)));
+    }
+
+    #[tokio::test]
+    async fn scoped_user_preferences_roundtrip_targets_session_store_and_user() {
+        let conn = oz_core::migrations::fresh_db();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut state = AppState::for_test_with_conn(conn);
+        state.db_manager =
+            StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
+        seed_session(&mut state, "store-a-token", "store-a", "cashier-a");
+        seed_session(&mut state, "store-b-token", "store-b", "cashier-a");
+        seed_session(&mut state, "other-user-token", "store-a", "cashier-b");
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        // The restaurant-menu hamburger configuration for cashier-a in
+        // store-a — the exact keys RestaurantMenu persists scoped.
+        set_user_preferences_scoped(
+            "store-a-token".into(),
+            vec![
+                pref("sort", "popularity"),
+                pref("cardsize", "3"),
+                pref("fontsize", "2"),
+            ],
+            app.state(),
+        )
+        .await
+        .unwrap();
+
+        let prefs = get_user_preferences_scoped("store-a-token".into(), app.state())
+            .await
+            .unwrap();
+        assert_eq!(prefs.get("sort").map(String::as_str), Some("popularity"));
+        assert_eq!(prefs.get("cardsize").map(String::as_str), Some("3"));
+        assert_eq!(prefs.get("fontsize").map(String::as_str), Some("2"));
+
+        // Isolated per store: the same user in store-b must not see store-a.
+        let store_b = get_user_preferences_scoped("store-b-token".into(), app.state())
+            .await
+            .unwrap();
+        assert!(
+            store_b.is_empty(),
+            "store B must not see store A user preferences"
+        );
+
+        // Isolated per user: another user in store-a must not see them.
+        let other = get_user_preferences_scoped("other-user-token".into(), app.state())
+            .await
+            .unwrap();
+        assert!(
+            other.is_empty(),
+            "another user in the same store must not see cashier-a preferences"
         );
     }
 }

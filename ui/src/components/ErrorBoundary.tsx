@@ -17,8 +17,19 @@ const _ebL10n = new ReactLocalization([_ebBundle]);
 
 interface Props {
   children: ReactNode;
-  /** Called after the user clicks "Try Again" — useful for external side effects (e.g. reload data). */
+  /**
+   * Called after the user clicks "Try Again" — replaces the default hard
+   * reload with a scoped recovery. When omitted, the button hard-refreshes
+   * the app (`window.location.reload()`).
+   */
   onReset?: () => void;
+  /**
+   * When the fallback is shown, auto-reload the page after this many
+   * milliseconds (self-healing). Only set this on full-page boundaries;
+   * embedded card-level boundaries should leave it unset so a scoped
+   * failure never reloads the whole app.
+   */
+  autoRefreshMs?: number;
   /** Pre-localized fallback title (injected by LocalizedErrorBoundary). */
   title?: string;
   /** Pre-localized retry label (injected by LocalizedErrorBoundary). */
@@ -32,7 +43,14 @@ interface State {
 /**
  * React class-based error boundary that catches render errors and
  * displays a fallback UI with the error message and a "Try Again"
- * button that resets the error state, remounting the children.
+ * button.
+ *
+ * "Try Again" hard-refreshes the app (`window.location.reload()`) by
+ * default — the safest recovery for an app that just failed to render.
+ * Pass `onReset` to replace that with a scoped recovery (e.g. an
+ * embedded card that can safely remount its own children). When
+ * `autoRefreshMs` is set (full-page boundaries only), the fallback also
+ * self-heals by reloading automatically.
  *
  * ERR-02: layout and colors come from token-backed CSS classes
  * (ErrorBoundary.css) instead of inline styles, so the fallback follows
@@ -46,6 +64,8 @@ interface State {
 export default class ErrorBoundary extends Component<Props, State> {
   override state: State = { error: null };
 
+  private reloadTimer: ReturnType<typeof setTimeout> | null = null;
+
   static getDerivedStateFromError(error: Error) {
     return { error };
   }
@@ -54,9 +74,49 @@ export default class ErrorBoundary extends Component<Props, State> {
     console.error('[ErrorBoundary]', error, info.componentStack);
   }
 
+  override componentDidMount() {
+    if (this.state.error) {
+      this.scheduleAutoReload();
+    }
+  }
+
+  override componentDidUpdate(_prevProps: Props, prevState: State) {
+    // Start the self-heal timer the moment the fallback appears.
+    if (!prevState.error && this.state.error) {
+      this.scheduleAutoReload();
+    }
+  }
+
+  override componentWillUnmount() {
+    this.clearAutoReload();
+  }
+
+  private scheduleAutoReload() {
+    if (!this.props.autoRefreshMs || this.props.autoRefreshMs <= 0) return;
+    this.clearAutoReload();
+    this.reloadTimer = setTimeout(() => {
+      window.location.reload();
+    }, this.props.autoRefreshMs);
+  }
+
+  private clearAutoReload() {
+    if (this.reloadTimer !== null) {
+      clearTimeout(this.reloadTimer);
+      this.reloadTimer = null;
+    }
+  }
+
   private handleReset = () => {
-    this.setState({ error: null });
-    this.props.onReset?.();
+    this.clearAutoReload();
+    if (this.props.onReset) {
+      this.setState({ error: null });
+      this.props.onReset();
+      return;
+    }
+    // Default recovery: a hard refresh. The app just failed to render,
+    // so remounting children in place is less trustworthy than a clean
+    // reload of the whole process.
+    window.location.reload();
   };
 
   override render() {

@@ -13,6 +13,7 @@ sale-pay-button = Pay
 sale-pay-button-aria = Charge the customer for the current cart
 pos-title = POS Terminal
 pos-cart-panel-title = Current Sale
+pos-cart-panel-title-order = Current Order
 pos-cart-deducting-label = Deducting: { $name }
 pos-cart-deduction-badge-aria = Deducting from { $name }
 pos-cart-unbound-error = Cart has no deduction location — cannot add items
@@ -592,6 +593,10 @@ pos-shift-header-open-aria =
     .aria-label = Open a new shift
 pos-shift-loading = Loading shift…
 pos-shift-no-active = No active shift
+pos-shift-elapsed = { $h ->
+    [0] { $m }m
+   *[other] { $h }h { $m }m
+}
 pos-shift-notes = Notes
 pos-shift-open-since = Shift open since { $time }
 pos-shift-summary-done = Done

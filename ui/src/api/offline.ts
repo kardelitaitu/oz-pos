@@ -91,6 +91,51 @@ export const retryOfflineSync = (): Promise<SyncResult> =>
 export const deleteOfflineItem = (id: string): Promise<void> =>
   loggedInvoke('delete_offline_item', { args: { id } });
 
+// ── Remote Dead-Letter (quarantined pulls) ────────────────────────
+
+/**
+ * A remote sync item that repeatedly failed to apply during a pull and
+ * was quarantined in `sync_remote_failures` (SYNC-09 / SYNC-11).
+ *
+ * Matches the Rust `RemoteSyncFailureDto` serializer exactly
+ * (camelCase `itemId` / `deadLettered`).
+ */
+export interface RemoteSyncFailureDto {
+  /** Remote item identifier. */
+  itemId: string;
+  /** Remote action name. */
+  action: string;
+  /** Original payload retained for operator inspection. */
+  payload: string;
+  /** Number of failed application attempts. */
+  attempts: number;
+  /** Most recent application error. */
+  lastError: string;
+  /** Whether retry is exhausted and the item is quarantined. */
+  deadLettered: boolean;
+}
+
+/**
+ * List remote items quarantined after repeated pull-application failures.
+ *
+ * The listing is not session-scoped: the sync daemon runs server-side in
+ * both clients, so an operator with backend access can inspect the dead
+ * letter without an active POS session (SYNC-11).
+ */
+export const listRemoteFailures = (): Promise<RemoteSyncFailureDto[]> =>
+  loggedInvoke<RemoteSyncFailureDto[]>('list_remote_failures');
+
+/**
+ * Requeue a dead-lettered remote item so the next sync cycle retries it.
+ *
+ * Operators call this after remediating the item's source (e.g. creating
+ * the missing product a remote sale referenced). Returns `NotFound` for
+ * ids that are not currently dead-lettered, so a mistyped id is never a
+ * silent no-op.
+ */
+export const requeueRemoteFailure = (itemId: string): Promise<void> =>
+  loggedInvoke('requeue_remote_failure', { args: { itemId } });
+
 // ── Cloud Sync Settings ──────────────────────────────────────────
 
 /** Cloud sync configuration. */

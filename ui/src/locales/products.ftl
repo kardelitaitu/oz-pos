@@ -20,6 +20,7 @@ restaurant-menu-empty = Menu is empty
 restaurant-size-label = Size
 restaurant-sort-label = Sort
 restaurant-card-add = Add
+restaurant-card-unavailable = Unavailable
 restaurant-context-color-label = Color
 restaurant-search-aria = Search menu items
 restaurant-search-clear-aria = Clear search

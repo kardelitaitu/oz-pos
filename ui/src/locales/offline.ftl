@@ -35,3 +35,13 @@ offline-queue-status-stale = Queue status may be out of date.
 offline-queue-last-refreshed = Last refreshed { $time }
 # ERR-09: Accessible status while a reload is in flight with rows visible
 offline-queue-refreshing = Refreshing…
+# SYNC-11: Quarantined remote items (dead-lettered sync pulls)
+offline-queue-quarantine-title = Quarantined Remote Items
+offline-queue-quarantine-description = Items from the sync server that repeatedly failed to apply. Requeue after fixing the underlying issue.
+offline-queue-quarantine-empty = No quarantined items.
+offline-queue-quarantine-item-id = Item ID
+offline-queue-quarantine-attempts = Attempts
+offline-queue-quarantine-requeue = Requeue
+offline-queue-quarantine-requeue-aria = Requeue { $itemId }
+offline-queue-quarantine-requeue-error = Failed to requeue item
+offline-queue-quarantine-table-aria = Quarantined remote sync items

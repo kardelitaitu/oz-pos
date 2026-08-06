@@ -42,6 +42,8 @@ import {
   listAllOffline,
   pendingOfflineCount,
   deleteOfflineItem,
+  listRemoteFailures,
+  requeueRemoteFailure,
   type SyncResult,
 } from '@/api/offline';
 
@@ -213,6 +215,41 @@ describe('offline.ts IPC contract', () => {
     mockInvoke.mockResolvedValue(undefined);
     await deleteOfflineItem('oq-1');
     expect(mockInvoke).toHaveBeenCalledWith('delete_offline_item', { args: { id: 'oq-1' } });
+  });
+
+  // ── SYNC-11: remote dead-letter (quarantined pulls) ────────
+
+  it('listRemoteFailures invokes "list_remote_failures" with no args', async () => {
+    mockInvoke.mockResolvedValue([]);
+    await listRemoteFailures();
+    expect(mockInvoke).toHaveBeenCalledWith('list_remote_failures', undefined);
+  });
+
+  it('listRemoteFailures returns the camelCase RemoteSyncFailureDto shape', async () => {
+    mockInvoke.mockResolvedValue([
+      {
+        itemId: 'remote-sale-1',
+        action: 'upsert_sale',
+        payload: '{"id":"remote-sale-1"}',
+        attempts: 3,
+        lastError: 'missing product sku-X',
+        deadLettered: true,
+      },
+    ]);
+    const failures = await listRemoteFailures();
+    expect(failures).toHaveLength(1);
+    const first = failures[0]!;
+    expect(first.itemId).toBe('remote-sale-1');
+    expect(first.deadLettered).toBe(true);
+    expect(first.attempts).toBe(3);
+  });
+
+  it('requeueRemoteFailure invokes "requeue_remote_failure" with camelCase itemId arg', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await requeueRemoteFailure('remote-sale-1');
+    expect(mockInvoke).toHaveBeenCalledWith('requeue_remote_failure', {
+      args: { itemId: 'remote-sale-1' },
+    });
   });
 
   it('propagates backend errors (does not swallow)', async () => {

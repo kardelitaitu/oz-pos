@@ -352,6 +352,8 @@ pub fn run() {
                 commands::settings::set_hardware_settings,
                 commands::settings::get_user_preferences,
                 commands::settings::set_user_preferences,
+                commands::settings::get_user_preferences_scoped,
+                commands::settings::set_user_preferences_scoped,
                 commands::settings::get_setting,
                 commands::settings::set_setting,
                 commands::setup::get_enabled_features,

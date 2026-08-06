@@ -8,7 +8,10 @@ import {
   retryOfflineSync,
   deleteOfflineItem,
   getOfflineQueueStatusSummary,
+  listRemoteFailures,
+  requeueRemoteFailure,
   type OfflineQueueItemDto,
+  type RemoteSyncFailureDto,
   type SyncResult,
 } from '@/api/offline';
 import { Card } from '@/components/Card';
@@ -69,6 +72,9 @@ export default function OfflineQueueScreen() {
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [conflictCount, setConflictCount] = useState<number>(0);
+  // SYNC-11: remote items quarantined after repeated pull-application failures.
+  const [failures, setFailures] = useState<RemoteSyncFailureDto[]>([]);
+  const [requeueError, setRequeueError] = useState<string | null>(null);
   // ERR-07: generation guard + last-refresh tracking for the poll loop.
   // A late poll response after unmount/supersession is ignored, and repeated
   // failures surface a non-blocking stale indicator instead of being silent.
@@ -81,14 +87,18 @@ export default function OfflineQueueScreen() {
     setLoading(true);
     setError(null);
     try {
-      const [data, count, summary] = await Promise.all([
+      const [data, count, summary, remoteFailures] = await Promise.all([
         listAllOffline(),
         pendingOfflineCount(),
         getOfflineQueueStatusSummary().catch(() => null),
+        // Tolerate a dead-letter read failure: the local queue must not
+        // blank out because the quarantine listing is unavailable.
+        listRemoteFailures().catch(() => [] as RemoteSyncFailureDto[]),
       ]);
       setItems(data);
       setPendingCount(count);
       if (summary) setConflictCount(summary.conflictCount);
+      setFailures(remoteFailures);
     } catch {
       setError(l10n.getString('offline-queue-error'));
     } finally {
@@ -157,6 +167,18 @@ export default function OfflineQueueScreen() {
       setError(l10n.getString('offline-queue-sync-error'));
     } finally {
       setSyncing(false);
+    }
+  }, [load, l10n]);
+
+  // ── Requeue dead-lettered remote item ─────────────────────────
+
+  const handleRequeue = useCallback(async (itemId: string) => {
+    setRequeueError(null);
+    try {
+      await requeueRemoteFailure(itemId);
+      await load();
+    } catch {
+      setRequeueError(l10n.getString('offline-queue-quarantine-requeue-error'));
     }
   }, [load, l10n]);
 
@@ -414,6 +436,70 @@ export default function OfflineQueueScreen() {
 </tbody>
           </table>
         </div>
+      )}
+
+      {/* SYNC-11: quarantined remote items — visible even when the local
+          queue is empty so operators can remediate and requeue them. */}
+      {phase !== 'loading' && phase !== 'error' && (
+        <section className="offline-queue-quarantine" aria-label={requiredLocalized(l10n, 'offline-queue-quarantine-table-aria')}>
+          <div className="offline-queue-quarantine-header">
+            <Localized id="offline-queue-quarantine-title">
+              <h2 className="offline-queue-quarantine-title">Quarantined Remote Items</h2>
+            </Localized>
+            <Localized id="offline-queue-quarantine-description">
+              <p className="offline-queue-quarantine-description">Items from the sync server that repeatedly failed to apply. Requeue after fixing the underlying issue.</p>
+            </Localized>
+          </div>
+
+          {requeueError && (
+            <div className="offline-queue-error" role="alert">
+              <span>{requeueError}</span>
+            </div>
+          )}
+
+          {failures.length === 0 ? (
+            <Localized id="offline-queue-quarantine-empty">
+              <p className="offline-queue-quarantine-empty">No quarantined items.</p>
+            </Localized>
+          ) : (
+            <div className="offline-queue-table-wrap">
+              <table className="offline-queue-table" aria-label={requiredLocalized(l10n, 'offline-queue-quarantine-table-aria')}>
+                <thead>
+                  <tr>
+                    <Localized id="offline-queue-quarantine-item-id"><th>Item ID</th></Localized>
+                    <Localized id="offline-queue-action"><th>Action</th></Localized>
+                    <Localized id="offline-queue-quarantine-attempts"><th>Attempts</th></Localized>
+                    <Localized id="offline-queue-last-error"><th>Last Error</th></Localized>
+                    <th aria-label={l10n.getString('offline-queue-table-actions')}> </th>
+                  </tr>
+                </thead>
+                <tbody>{failures.map((failure) => (
+                    <tr key={failure.itemId}>
+                      <td className="offline-queue-cell-action">{failure.itemId}</td>
+                      <td>{failure.action}</td>
+                      <td className="offline-queue-cell-retries">{failure.attempts}</td>
+                      <td className="offline-queue-cell-error">
+                        <span title={failure.lastError}>{failure.lastError}</span>
+                      </td>
+                      <td>
+                        <div className="offline-queue-cell-actions">
+                          <button
+                            type="button"
+                            className="offline-queue-action-btn"
+                            onClick={() => handleRequeue(failure.itemId)}
+                            aria-label={l10n.getString('offline-queue-quarantine-requeue-aria', { itemId: failure.itemId })}
+                          >
+                            <Localized id="offline-queue-quarantine-requeue"><span>Requeue</span></Localized>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+</tbody>
+              </table>
+            </div>
+          )}
+        </section>
       )}
     </div>
   );

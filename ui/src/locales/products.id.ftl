@@ -29,6 +29,7 @@ restaurant-menu-empty = Menu kosong
 restaurant-size-label = Ukuran
 restaurant-sort-label = Urutkan
 restaurant-card-add = Tambah
+restaurant-card-unavailable = Tidak tersedia
 restaurant-context-color-label = Warna
 restaurant-search-aria = Cari item menu
 restaurant-search-clear-aria = Hapus pencarian

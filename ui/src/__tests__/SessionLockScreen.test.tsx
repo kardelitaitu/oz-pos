@@ -432,3 +432,47 @@ describe('SessionLockScreen license status', () => {
     });
   });
 });
+
+// ── Visual contract (login PIN-step parity) ───────────────────────
+
+describe('SessionLockScreen visual contract', () => {
+  it('renders the login-style 3-section card structure', () => {
+    renderScreen();
+    expect(document.querySelector('.session-lock-overlay')).toBeTruthy();
+    expect(document.querySelector('.session-lock-backdrop')).toBeTruthy();
+    expect(document.querySelector('.session-lock-top-bar')).toBeTruthy();
+    expect(document.querySelector('.session-lock-main-area')).toBeTruthy();
+    expect(document.querySelector('.session-lock-bottom-bar')).toBeTruthy();
+  });
+
+  it('places lock icon, time, and date in the top bar', () => {
+    renderScreen();
+    const topBar = document.querySelector('.session-lock-top-bar');
+    expect(topBar?.querySelector('.session-lock-icon svg')).toBeTruthy();
+    expect(topBar?.querySelector('.session-lock-time')?.textContent).toBeTruthy();
+    expect(topBar?.querySelector('.session-lock-date')?.textContent).toBeTruthy();
+  });
+
+  it('places hint, dots, and keypad in the main area', () => {
+    renderScreen();
+    const mainArea = document.querySelector('.session-lock-main-area');
+    expect(mainArea?.querySelector('.session-lock-sub')).toBeTruthy();
+    expect(mainArea?.querySelectorAll('.session-lock-pin-dot')).toHaveLength(4);
+    expect(mainArea?.querySelector('.session-lock-pad')).toBeTruthy();
+  });
+
+  it('moves the connection status pills into the login-style footer', () => {
+    renderScreen();
+    const footer = document.querySelector('.session-lock-footer');
+    expect(footer).toBeTruthy();
+    expect(footer?.querySelector('.session-lock-footer-version')?.textContent).toContain('OZ-POS');
+    expect(footer?.querySelectorAll('.connection-status').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('Auth')).toBeInTheDocument();
+    expect(screen.getByText('Sync')).toBeInTheDocument();
+  });
+
+  it('keeps the card token-backed with no inline styles', () => {
+    renderScreen();
+    expect(document.querySelector('.session-lock-card')?.getAttribute('style')).toBeNull();
+  });
+});

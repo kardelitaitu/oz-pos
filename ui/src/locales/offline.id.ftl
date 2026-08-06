@@ -33,5 +33,15 @@ offline-queue-status-stale = Status antrean mungkin tidak terbarui.
 offline-queue-last-refreshed = Terakhir diperbarui { $time }
 # ERR-09: Status yang dapat diakses saat muat ulang sedang berlangsung dengan baris terlihat
 offline-queue-refreshing = Menyegarkan…
+# SYNC-11: Item jarak jauh yang dikarantina (pull sinkron yang gagal)
+offline-queue-quarantine-title = Item Jarak Jauh Terkarantina
+offline-queue-quarantine-description = Item dari server sinkron yang gagal diterapkan berulang kali. Antrekan ulang setelah memperbaiki penyebabnya.
+offline-queue-quarantine-empty = Tidak ada item terkarantina.
+offline-queue-quarantine-item-id = ID Item
+offline-queue-quarantine-attempts = Percobaan
+offline-queue-quarantine-requeue = Antre Ulang
+offline-queue-quarantine-requeue-aria = Antre ulang { $itemId }
+offline-queue-quarantine-requeue-error = Gagal mengantrekan ulang item
+offline-queue-quarantine-table-aria = Item sinkron jarak jauh terkarantina
 
 # ── Terminal Management ──
