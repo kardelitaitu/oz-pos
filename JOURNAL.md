@@ -1,4 +1,15 @@
 
+## 2026-08-06 — Wire the settings_updated Tauri bridge (ADR #22 Phase 0e)
+
+### The bridge was built and tested but never connected — the emit callback was never set
+**Problem:** Investigation found the full pipeline existed except one link: `SettingsUpdatedHandler` (platform/startup) subscribes to `settings.updated`, builds `{changed_keys, terminal_id}` JSON, and calls the global `SETTINGS_EMIT_FN` — but no app ever called `set_settings_emit_fn`, so in production every settings publish hit the debug log "settings_updated Tauri bridge not yet wired" and the Tauri event never fired. The frontend `SettingsContext` listener was already in place and tested; the missing piece was purely the app setup closure.
+
+**Solution:** In `apps/desktop-client/src/lib.rs` setup, right after `init_module_system`, the app now registers the emit callback: `set_settings_emit_fn(Box::new(move |event_name, payload| { let _ = app_handle.emit(event_name, payload); }))` (clone the `AppHandle`, `tauri::Emitter` added to the import). Same-terminal saves already refetch via the save-handler `markSettingsUpdated` path, so this closes the loop for EventBus-published events (e.g. other settings commands) and future remote-change publishers.
+
+**Validation:** `cargo check -p oz-pos-app` clean · `cargo clippy -p oz-pos-app -- -D warnings` clean · `cargo test -p platform-startup` 36/36 + 1 doctest (incl. the SettingsUpdatedHandler non-blocking / rapid-fire / replaced-callback tests).
+
+**Follow-up (open):** the sync settings-apply path still does not publish `SettingsUpdated`, so a settings change arriving from ANOTHER terminal via sync still won't fire the event — true cross-terminal reactivity needs that publisher, plus optionally using `terminal_id` in the frontend listener to skip this terminal's own events.
+
 ## 2026-08-06 — TDD cycle: dev-mock lockout + shift history survive reloads (audit gaps closed)
 
 ### A reloaded preview bypassed the login lockout and wiped every closed shift
