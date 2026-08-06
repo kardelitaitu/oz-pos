@@ -1,4 +1,15 @@
 
+## 2026-08-06 — TDD cycle: clear undo stack after save+idMap remap (pre-remap ids)
+
+### Undo could restore pre-remap UUIDs that contradict the backend after Apply
+**Problem:** The Apply handler remaps node/wire ids client-side when `onSave` returns an `oldId -> newId` map (archive+recreate assigns new UUIDs) — but the undo/redo stacks were never touched. Every pre-save history entry holds the OLD ids, which no longer exist on the canvas or in the DB; pressing Undo after a remapping save would resurrect phantom nodes/wires with dangling ids.
+
+**Solution:** Red→Green. In the idMap branch of the save handler, alongside the existing selection clear, both stacks are now dropped: `setHistory([]); setRedo([])`. The guard test pins the non-remap path: a plain save (`{}` idMap, ids unchanged) keeps the stack so undo-after-save still works.
+
+**Validation:** 50/50 editor tests (2 new) · 28/28 TopologyScreen + InspectorIntegration · typecheck clean · eslint clean.
+
+**Follow-up:** A successful save does NOT reset `isDirtyRef` — after Apply, clicking a preset still asks "unsaved changes" confirmation even though everything is persisted (pre-existing; the skip-path reload also leaves it set). Also, a save with no remap leaves undo enabled so Undo can revert to a pre-save canvas state that contradicts the saved DB — deliberate, ids stay valid; revisit if save-as-baseline semantics are ever wanted.
+
 ## 2026-08-06 — TDD cycle: selection re-validation on undo/redo/preset (dangling selection)
 
 ### Undo/preset left selectedNodeId / selectedWireId dangling at removed elements
