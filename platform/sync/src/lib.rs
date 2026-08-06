@@ -602,6 +602,183 @@ mod tests {
         assert_eq!(attempts, 3);
     }
 
+    // ── AnchorExpired snapshot recovery: durable anchor reset ───────
+
+    /// Spawn a mock server whose pull endpoint mirrors the real cloud
+    /// server's P-1 retention check: it returns 410 `anchor_expired` ONLY
+    /// when the client's `since` predates the server's oldest retained row
+    /// (`2026-02-01`), and otherwise serves a remote `stock.adjusted` item.
+    /// The snapshot endpoint returns a valid reference-data snapshot and
+    /// counts every hit via the shared [`std::sync::atomic::AtomicUsize`].
+    async fn spawn_anchor_expired_then_healthy_server()
+    -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        use crate::transport::{PullResponse, PushOutcome, PushResponse};
+        use axum::{
+            Json, Router,
+            extract::State,
+            http::StatusCode,
+            response::IntoResponse,
+            routing::{get, post},
+        };
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        const OLDEST_AVAILABLE: &str = "2026-02-01T00:00:00.000Z";
+
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let snapshot_hits = std::sync::Arc::new(AtomicUsize::new(0));
+
+        async fn handle_push(Json(items): Json<Vec<serde_json::Value>>) -> Json<PushResponse> {
+            Json(PushResponse {
+                results: vec![PushOutcome::Accepted; items.len()],
+            })
+        }
+
+        // 410 only when `since` predates the retention floor; a reset anchor
+        // (== oldest_available) flows items normally.
+        async fn handle_pull(Json(req): Json<crate::transport::PullRequest>) -> impl IntoResponse {
+            if let Some(ref since) = req.since
+                && since.as_str() < OLDEST_AVAILABLE
+            {
+                return (
+                    StatusCode::GONE,
+                    Json(serde_json::json!({
+                        "error": "anchor_expired",
+                        "oldest_available": OLDEST_AVAILABLE,
+                    })),
+                )
+                    .into_response();
+            }
+            let mut item = oz_core::offline::OfflineQueueItem::new(
+                "stock.adjusted",
+                r#"{"sku":"COFFEE","delta":5}"#,
+            );
+            item.id = "post-snapshot-item".into();
+            item.created_at = "2026-03-01T00:00:00.000Z".into();
+            Json(PullResponse {
+                items: vec![item],
+                next_cursor: None,
+            })
+            .into_response()
+        }
+
+        async fn handle_snapshot(
+            State(hits): State<std::sync::Arc<AtomicUsize>>,
+        ) -> Json<crate::transport::SyncSnapshotResponse> {
+            hits.fetch_add(1, Ordering::SeqCst);
+            Json(crate::transport::SyncSnapshotResponse {
+                version: 1,
+                products: vec![crate::transport::SnapshotProduct {
+                    id: "p-snap".into(),
+                    sku: "SNAPSHOT-COFFEE".into(),
+                    name: "Snapshot Coffee".into(),
+                    price_minor: 350,
+                    currency: "USD".into(),
+                    category_id: None,
+                    barcode: None,
+                    created_at: None,
+                    updated_at: None,
+                    price_updated_at: None,
+                    track_serial: false,
+                    store_id: None,
+                }],
+                tax_rates: vec![],
+                users: vec![],
+            })
+        }
+
+        async fn handle_health() -> impl IntoResponse {
+            (StatusCode::OK, Json(serde_json::json!({"status": "ok"})))
+        }
+
+        let app = Router::new()
+            .route("/api/health", get(handle_health))
+            .route("/api/sync/push", post(handle_push))
+            .route("/api/sync/pull", post(handle_pull))
+            .route("/api/sync/snapshot", get(handle_snapshot))
+            .with_state(snapshot_hits.clone());
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        (format!("http://localhost:{port}"), snapshot_hits)
+    }
+
+    /// Regression: after an `AnchorExpired` snapshot import succeeds, the
+    /// durable pull anchor must be reset (to the server's oldest retained
+    /// row, or cleared) so the next cycle is not expired again. Previously
+    /// the stale anchor was kept, so every cycle re-triggered AnchorExpired
+    /// and re-fetched the whole snapshot.
+    #[tokio::test]
+    async fn engine_resets_anchor_after_snapshot_import() {
+        use oz_core::db::Store;
+        use oz_core::migrations;
+        use std::sync::atomic::Ordering;
+
+        let (server_url, snapshot_hits) = spawn_anchor_expired_then_healthy_server().await;
+        let db = migrations::fresh_db();
+        let store = Store::new(&db);
+
+        // Seed product + inventory so the post-reset +5 adjustment has a
+        // target.
+        db.execute_batch(
+            "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at)
+             VALUES ('prod-coffee', 'COFFEE', 'Coffee', 350, 'USD', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
+             INSERT INTO inventory (product_id, qty, updated_at)
+             VALUES ('prod-coffee', 50, '2026-01-01T00:00:00.000Z');",
+        )
+        .unwrap();
+
+        // A pre-existing stale anchor, older than the server's oldest
+        // retained row — P-1 retention has pruned the gap.
+        store
+            .set_sync_pull_state(Some("2025-01-01T00:00:00.000Z"), None)
+            .unwrap();
+
+        let engine = SyncEngine::new(SyncConfig {
+            server_url: server_url.clone(),
+            api_key: None,
+        });
+
+        // Cycle 1: stale anchor → 410 → snapshot fetched + imported.
+        let result_1 = engine.run_sync_cycle(&store).await.unwrap();
+        assert_eq!(result_1.pulled, 0, "cycle 1 expires before pulling items");
+        assert_eq!(
+            snapshot_hits.load(Ordering::SeqCst),
+            1,
+            "snapshot fetched exactly once in cycle 1"
+        );
+        // The durable anchor must be reset to the server's oldest retained
+        // row so the next pull is not expired again.
+        let state = store.get_sync_pull_state().unwrap();
+        assert_eq!(
+            state.since.as_deref(),
+            Some("2026-02-01T00:00:00.000Z"),
+            "durable anchor must advance to oldest_available after snapshot import"
+        );
+        assert_eq!(
+            state.cursor, None,
+            "cursor must be cleared after snapshot import"
+        );
+
+        // Cycle 2: the reset anchor is no longer expired — items flow, and
+        // the snapshot is NOT fetched again.
+        let result_2 = engine.run_sync_cycle(&store).await.unwrap();
+        assert_eq!(result_2.pulled, 1, "cycle 2 pulls the post-snapshot item");
+        assert_eq!(
+            store.get_stock("prod-coffee").unwrap(),
+            55,
+            "post-snapshot +5 adjustment must apply"
+        );
+        assert_eq!(
+            snapshot_hits.load(Ordering::SeqCst),
+            1,
+            "snapshot must NOT be re-fetched after the anchor reset"
+        );
+    }
+
     // ── P1-4: import_snapshot tests ───────────────────────────────
 
     /// Seed a role so user FK constraints are satisfied.
@@ -1669,6 +1846,18 @@ impl SyncEngine {
                                 imported = snapshot_count,
                                 "snapshot imported successfully after anchor expiry"
                             );
+                            // The snapshot is the authoritative full state,
+                            // so the durable pull anchor can advance to the
+                            // server's oldest retained row — the client no
+                            // longer needs anything older. Without this
+                            // reset the STALE anchor survives the import and
+                            // every subsequent cycle re-triggers
+                            // AnchorExpired → re-fetches the whole snapshot
+                            // (wasted bandwidth + server load). When the
+                            // server omitted `oldest_available`, clear the
+                            // anchor instead — the next pull starts fresh
+                            // and the idempotency ledger absorbs any replay.
+                            store.set_sync_pull_state(oldest_available.as_deref(), None)?;
                         }
                         Err(e) => {
                             // ADR #11: Propagate server migration redirect so
