@@ -16,6 +16,7 @@ Architecture enforcement and release baseline update for the 0.0.25 cycle.
 - **Transitional boundary baseline** — Added `scripts/architecture-boundaries-baseline.json` with 17 individually tracked findings, owners, reasons, and expiry dates. Existing debt remains visible while new, expired, or stale findings fail validation.
 - **Deterministic checker coverage** — Added 14 fixture-based tests covering dependency direction, dev-dependency exclusions, UI imports and calls, generic/aliased/namespace invokes, comments and test exclusions, baseline behavior, malformed metadata, Windows paths, and JSON output.
 - **CI architecture gate** — Added the required `architecture-boundaries` job to `.github/workflows/ci.yml` and registered it in `scripts/gates.json`.
+- **Dead-letter requeue workflow** — Added `Store::requeue_remote_failure(item_id)` (oz-core) plus a `requeue_remote_failure` Tauri command in both desktop and tablet clients. Operators can now clear a quarantined remote item (e.g. after creating the missing product a remote sale referenced); the failure row is deleted and the durable pull anchor is rewound so the next sync cycle re-fetches and retries the item with a fresh attempt budget. Requeueing an id that is not dead-lettered fails with `NotFound` rather than silently no-op'ing. The full re-pull is safe because the `sync_applied_items` idempotency ledger skips already-applied items. 8 new tests (2 store + 3 command per client).
 
 ### Changed
 

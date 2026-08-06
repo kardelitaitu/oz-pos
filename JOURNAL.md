@@ -2,6 +2,19 @@
 
 # OZ-POS Development Journal
 
+## 2026-08-06 — TDD cycle: dead-letter requeue workflow
+
+### Dead-lettered remote items are now requeueable (audit/09 SYNC-01 follow-up)
+**Problem:** Remote items that exhaust their apply retry budget were permanently quarantined. `sync_remote_failures` rows are only ever written (on failure) or deleted (on success) — once `dead_lettered = 1`, `apply_remote_atomic` skips the item and the daemon advances the pull anchor past it, so it is never retried. Migration 119's comment promised "an operator can inspect or manually requeue a quarantined item after remediation", but no store method, command, or UI existed (the workflow was explicitly deferred in audit/09 SYNC-08). An operator who fixed the source (e.g. created the missing product a remote sale referenced) had no way to make the item retry.
+
+**Solution:** Red→Green TDD cycle. RED: store tests `requeue_remote_failure_clears_quarantine_and_rewinds_anchor` + `requeue_remote_failure_refuses_non_dead_lettered` (failed with `no method named requeue_remote_failure`). GREEN: `Store::requeue_remote_failure(item_id)` (oz-core `db/offline.rs`) — requires the item to be currently dead-lettered (else `NotFound`, never a silent no-op), deletes the quarantine row, and rewinds the durable `sync_pull_state` anchor (`since = NULL, cursor = NULL`) so the next daemon cycle re-fetches the item and retries it with a fresh 3-attempt budget. The full re-pull is safe because the `sync_applied_items` idempotency ledger skips every already-applied item. Command surface: `requeue_remote_failure` Tauri command (`RequeueRemoteFailureArgs { itemId }`) added to BOTH desktop (`oz-pos-app`) and tablet (`oz-pos-tablet`) `commands/offline.rs` + registered in both `lib.rs` invoke handlers; extracted `run_requeue_remote_failure` helper for command-level tests.
+
+**Commits:** code swept into `06e9fb7d` (authored by another agent thread — see note). Docs in this cycle's follow-up commit.
+
+**Validation:** oz-core `db::offline` 44/44; desktop `commands::offline` 18/18; tablet `commands::offline` 18/18; `cargo fmt` clean; clippy `--no-deps -D warnings` clean on desktop + tablet and no warnings in oz-core's new code (workspace clippy still fails only on the pre-existing `products.rs:876` type_complexity).
+
+**Note on history:** commit `06e9fb7d` (restaurant agent's "harden menu keyboard interactions") swept this cycle's five files (`oz-core db/offline.rs`, desktop + tablet `commands/offline.rs` + `lib.rs`) into its diff via the shared index. The requeue code is intact and was verified green on identical content; history was NOT rewritten (shared working tree, agents actively committing). Follow-ups: expose `list_remote_failures` as a command + UI surface so operators can discover dead-letter ids before requeueing; consider storing the remote item's `created_at` on the failure row so requeue can rewind the anchor precisely instead of a full re-pull.
+
 ## 2026-08-06 — TDD cycle: checked cart-tax line totals (MONEY-01)
 
 ### `compute_cart_tax` unchecked `qty × unit_price_minor` overflow
