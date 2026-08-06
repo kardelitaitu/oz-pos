@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import type { CartLine, CourseId, LineId, Money, Product } from '@/types/domain';
+import type { CartLine, CourseId, LineId, ModifierSelection, Money, Product } from '@/types/domain';
 import { triggerInteraction } from '@/utils/interaction';
 
 let nextLineId = 0;
@@ -45,14 +45,25 @@ export function usePosState() {
    * without re-querying the product catalogue for every line.
    * @param product The product to add.
    * @param qty Quantity to add (defaults to 1). Used for bundle expansion.
+   * @param meta Optional line attributes to apply to the created/merged
+   *   line — used by the retail undo path to restore a removed line's
+   *   course assignment and modifiers faithfully instead of re-adding a
+   *   bare product.
    */
-  const addProduct = useCallback((product: Product, qty: number = 1) => {
+  const addProduct = useCallback((product: Product, qty: number = 1, meta?: { courseId?: CourseId; modifiers?: ModifierSelection[] }) => {
     triggerInteraction('add-to-cart');
     setLines((prev) => {
       const existing = prev.find((l) => l.sku === product.sku);
+      const metaSpread =
+        meta?.courseId !== undefined || (meta?.modifiers && meta.modifiers.length > 0)
+          ? {
+              ...(meta?.courseId !== undefined ? { courseId: meta.courseId, coursingStatus: 'hold' as const } : {}),
+              ...(meta?.modifiers && meta.modifiers.length > 0 ? { modifiers: meta.modifiers } : {}),
+            }
+          : {};
       if (existing) {
         return prev.map((l) =>
-          l.id === existing.id ? { ...l, qty: l.qty + qty } : l,
+          l.id === existing.id ? { ...l, qty: l.qty + qty, ...metaSpread } : l,
         );
       }
       return [
@@ -64,6 +75,7 @@ export function usePosState() {
           category: product.category,
           qty,
           unit_price: product.price,
+          ...metaSpread,
         },
       ];
     });

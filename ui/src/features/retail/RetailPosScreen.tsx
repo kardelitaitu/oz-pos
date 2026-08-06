@@ -27,7 +27,7 @@ import { holdCartScoped, listHeldCartsScoped, getHeldCartScoped, deleteHeldCartS
 import { getStoreSettingsScoped, listCreditSales, settleCreditScoped, type StoreSettingsDto, type CreditSaleDto } from '@/api/settings';
 import { computeCartTax, type CartLineTaxInput } from '@/api/tax';
 import { recordMark } from '@/utils/perf-metrics';
-import { type CartId, type CartLine, type CourseId, type LineId, type Money, type Product, type Sku } from '@/types/domain';
+import { type CartId, type CartLine, type CourseId, type LineId, type ModifierSelection, type Money, type Product, type Sku } from '@/types/domain';
 import { useSound } from '@/frontend/shared/useSound';
 import { useOptionalTheme } from '@/frontend/shell/ThemeProvider';
 import RetailFnBar from './RetailFnBar';
@@ -337,9 +337,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   // ── Undo stack ───────────────────────────────────────────────────
   const MAX_UNDO = 5;
-  const [undoStack, setUndoStack] = useState<{ sku: Sku; name: string; category: string; unit_price: Money; qty: number }[]>([]);
+  const [undoStack, setUndoStack] = useState<{ sku: Sku; name: string; category: string; unit_price: Money; qty: number; courseId?: CourseId; modifiers?: ModifierSelection[] }[]>([]);
 
-  const handleRemoveLine = useCallback((id: string, line: { sku: Sku; name: string; category: string; unit_price: Money; qty: number }) => {
+  const handleRemoveLine = useCallback((id: string, line: { sku: Sku; name: string; category: string; unit_price: Money; qty: number; courseId?: CourseId; modifiers?: ModifierSelection[] }) => {
     removeLine(id as LineId);
     setUndoStack((prev) => [line, ...prev].slice(0, MAX_UNDO));
   }, [removeLine]);
@@ -347,7 +347,12 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const handleUndoRemove = useCallback(() => {
     if (undoStack.length === 0) return;
     const item = undoStack[0]!;
-    addProduct({ sku: item.sku, name: item.name, category: item.category, productType: 'retail', price: item.unit_price, barcode: null, inStock: true, stockQty: null }, item.qty);
+    // Restore the exact line — including its course assignment and
+    // modifiers — not a bare re-add (the modifiers would be lost).
+    addProduct({ sku: item.sku, name: item.name, category: item.category, productType: 'retail', price: item.unit_price, barcode: null, inStock: true, stockQty: null }, item.qty, {
+      ...(item.courseId !== undefined ? { courseId: item.courseId } : {}),
+      ...(item.modifiers !== undefined ? { modifiers: item.modifiers } : {}),
+    });
     announce(requiredLocalized(l10nRef.current, 'retail-added-to-cart', { name: item.name }));
     setUndoStack((prev) => prev.slice(1));
   }, [undoStack, addProduct, announce]);

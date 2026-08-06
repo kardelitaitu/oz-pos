@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, type CSSProperties } from 'react';
 import { requiredLocalized } from '@/frontend/shared';
 import { useLocalization, Localized } from '@fluent/react';
-import { formatMoney, type Money, type LineId, type Sku, type CourseId } from '@/types/domain';
+import { formatMoney, type Money, type LineId, type Sku, type CourseId, type ModifierSelection } from '@/types/domain';
 import { COURSES, courseLabel, courseEmoji } from '@/types/domain';
 import type { CartLine } from '@/types/domain';
 import type { CustomerDto } from '@/api/customers';
@@ -18,7 +18,7 @@ export interface CartTotalsData {
 }
 
 export interface CartLineActions {
-  onRemoveLine: (id: string, line: { sku: Sku; name: string; category: string; unit_price: Money; qty: number }) => void;
+  onRemoveLine: (id: string, line: { sku: Sku; name: string; category: string; unit_price: Money; qty: number; courseId?: CourseId; modifiers?: ModifierSelection[] }) => void;
   onIncreaseQty: (line: { sku: string; id: LineId; qty: number }) => void;
   onUpdateQty: (lineId: LineId, qty: number) => void;
   onSerialChange: (lineId: string, serial: string) => void;
@@ -254,7 +254,11 @@ export default function RetailCartPanel({
                             onClick={() => {
                               const newQty = line.qty - 1;
                               if (newQty <= 0) {
-                                lineActions.onRemoveLine(line.id, { sku: line.sku, name: line.name ?? '', category: line.category ?? '', unit_price: line.unit_price, qty: line.qty });
+                                lineActions.onRemoveLine(line.id, {
+                                  sku: line.sku, name: line.name ?? '', category: line.category ?? '', unit_price: line.unit_price, qty: line.qty,
+                                  ...(line.courseId !== undefined ? { courseId: line.courseId } : {}),
+                                  ...(line.modifiers !== undefined ? { modifiers: line.modifiers } : {}),
+                                });
                               } else {
                                 lineActions.onUpdateQty(line.id, newQty);
                               }
@@ -304,7 +308,11 @@ export default function RetailCartPanel({
                       </td>
                       <td className="retail-cart-line-subtotal">{formatMoney({ minor_units: line.unit_price.minor_units * line.qty, currency: line.unit_price.currency })}</td>
                         <td>
-                          <button type="button" className="retail-cart-remove-btn" onClick={() => lineActions.onRemoveLine(line.id, { sku: line.sku, name: line.name ?? '', category: line.category ?? '', unit_price: line.unit_price, qty: line.qty })} aria-label={requiredLocalized(l10n, 'retail-cart-remove-aria', { sku: line.sku })}>
+                          <button type="button" className="retail-cart-remove-btn" onClick={() => lineActions.onRemoveLine(line.id, {
+                            sku: line.sku, name: line.name ?? '', category: line.category ?? '', unit_price: line.unit_price, qty: line.qty,
+                            ...(line.courseId !== undefined ? { courseId: line.courseId } : {}),
+                            ...(line.modifiers !== undefined ? { modifiers: line.modifiers } : {}),
+                          })} aria-label={requiredLocalized(l10n, 'retail-cart-remove-aria', { sku: line.sku })}>
                             &times;
                           </button>
                       </td>

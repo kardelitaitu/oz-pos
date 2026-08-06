@@ -321,4 +321,45 @@ describe('usePosState', () => {
       expect(result.current.lines.every((l) => l.coursingStatus === undefined)).toBe(true);
     });
   });
+
+  describe('addProduct meta (undo-restore fidelity)', () => {
+    it('applies the meta course and modifiers to a freshly added line', () => {
+      const { result } = renderHook(() => usePosState());
+
+      act(() => {
+        result.current.addProduct(makeProduct(), 1, {
+          courseId: 'main',
+          modifiers: [{ groupId: 'g1', groupName: 'Topping', modifierId: 'm1', modifierName: 'Extra Cheese', priceMinor: 500 }],
+        });
+      });
+
+      expect(result.current.lines).toHaveLength(1);
+      expect(result.current.lines[0]!.courseId).toBe('main');
+      expect(result.current.lines[0]!.modifiers).toEqual([
+        expect.objectContaining({ modifierName: 'Extra Cheese', priceMinor: 500 }),
+      ]);
+    });
+
+    it('applies meta to the merged line when the SKU already exists', () => {
+      const { result } = renderHook(() => usePosState());
+      act(() => { result.current.addProduct(makeProduct()); });
+
+      act(() => {
+        result.current.addProduct(makeProduct(), 2, { courseId: 'drinks' });
+      });
+
+      expect(result.current.lines).toHaveLength(1);
+      expect(result.current.lines[0]!.qty).toBe(3);
+      expect(result.current.lines[0]!.courseId).toBe('drinks');
+    });
+
+    it('leaves the line untouched when meta is omitted (default add behavior)', () => {
+      const { result } = renderHook(() => usePosState());
+
+      act(() => { result.current.addProduct(makeProduct()); });
+
+      expect(result.current.lines[0]!.courseId).toBeUndefined();
+      expect(result.current.lines[0]!.modifiers).toBeUndefined();
+    });
+  });
 });
