@@ -149,6 +149,14 @@ pub struct AppState {
     /// tokio workers). Consumers (Redis pub/sub subscriber, inventory
     /// change publisher) read this field.
     pub terminal_id: Arc<Mutex<Option<String>>>,
+
+    /// Per-process secret for the pre-session picker ticket HMAC.
+    ///
+    /// Generated once at startup (audit/06 residual). Tickets are
+    /// short-lived (5 min) and die with the process, so the secret is
+    /// never persisted — there is nothing to leak from the OS keyring
+    /// and a restart simply invalidates outstanding tickets.
+    pub picker_ticket_secret: Vec<u8>,
 }
 
 impl AppState {
@@ -293,6 +301,7 @@ impl AppState {
             session_store: Arc::new(RwLock::new(HashMap::new())),
             session_ttl_seconds,
             terminal_id,
+            picker_ticket_secret: uuid::Uuid::new_v4().as_bytes().to_vec(),
         })
     }
 }
@@ -632,6 +641,7 @@ impl AppState {
             session_store: Arc::new(RwLock::new(HashMap::new())),
             session_ttl_seconds: 86400,
             terminal_id: Arc::new(Mutex::new(None)),
+            picker_ticket_secret: b"test-picker-ticket-secret".to_vec(),
         }
     }
 

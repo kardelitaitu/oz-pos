@@ -14,6 +14,7 @@ use oz_core::session::SessionContext;
 
 use foundation::validate_not_empty;
 
+use crate::commands::picker_ticket;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -37,6 +38,13 @@ pub struct StaffLoginArgs {
 pub struct StaffLoginResult {
     /// Session info including user id, display name, and role.
     pub session: LoginSession,
+    /// Short-lived picker ticket (audit/06 residual).
+    ///
+    /// The pre-session `list_workspaces` / `list_workspace_screens`
+    /// commands verify this ticket and resolve the caller's REAL role
+    /// from the database — caller-supplied `role_id` / `user_id` are
+    /// never trusted for the workspace picker.
+    pub picker_ticket: String,
 }
 
 /// Arguments for the `staff_check_username` command.
@@ -196,6 +204,19 @@ pub async fn staff_login(
 
     drop(db);
 
+    // Mint the short-lived picker ticket bound to this authenticated
+    // user. It is only valid for the pre-session workspace picker;
+    // `create_session` hands out the opaque session token afterwards.
+    let now_ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let picker_ticket = picker_ticket::sign_picker_ticket(
+        &state.picker_ticket_secret,
+        &user.id,
+        now_ts + picker_ticket::PICKER_TICKET_TTL_SECS,
+    );
+
     Ok(StaffLoginResult {
         session: LoginSession {
             user_id: user.id,
@@ -203,6 +224,7 @@ pub async fn staff_login(
             role_name: role.name,
             role_id: role.id,
         },
+        picker_ticket,
     })
 }
 
@@ -489,7 +511,10 @@ mod tests {
             role_name: "Manager".into(),
             role_id: "r1".into(),
         };
-        let result = StaffLoginResult { session };
+        let result = StaffLoginResult {
+            session,
+            picker_ticket: String::new(),
+        };
         let json = serde_json::to_value(&result).unwrap();
         assert_eq!(json["session"]["user_id"], "u1");
         assert_eq!(json["session"]["role_name"], "Manager");
@@ -503,7 +528,10 @@ mod tests {
             role_name: "Cashier".into(),
             role_id: "r2".into(),
         };
-        let result = StaffLoginResult { session };
+        let result = StaffLoginResult {
+            session,
+            picker_ticket: String::new(),
+        };
         let d = format!("{result:?}");
         assert!(d.contains("Alice"));
     }
@@ -518,7 +546,10 @@ mod tests {
             role_name: "Cashier".into(),
             role_id: "r3".into(),
         };
-        let result = StaffLoginResult { session };
+        let result = StaffLoginResult {
+            session,
+            picker_ticket: String::new(),
+        };
         let json = serde_json::to_value(&result).unwrap();
         assert_eq!(json["session"]["display_name"], "");
     }
@@ -531,7 +562,10 @@ mod tests {
             role_name: "".into(),
             role_id: "".into(),
         };
-        let result = StaffLoginResult { session };
+        let result = StaffLoginResult {
+            session,
+            picker_ticket: String::new(),
+        };
         let json = serde_json::to_value(&result).unwrap();
         assert_eq!(json["session"]["role_name"], "");
         assert_eq!(json["session"]["role_id"], "");

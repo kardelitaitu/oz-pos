@@ -352,10 +352,143 @@ impl Default for PgSyncDaemon {
 mod tests {
     use super::*;
     use oz_core::migrations;
-    use oz_core::offline::OfflineQueueStatus;
+    use oz_core::offline::{OfflineQueueItem, OfflineQueueStatus};
 
     fn setup_db() -> DbConnection {
         Arc::new(Mutex::new(migrations::fresh_db()))
+    }
+
+    fn seed_product_and_inventory(conn: &rusqlite::Connection) {
+        conn.execute_batch(
+            "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at) VALUES
+                ('prod-coffee', 'COFFEE', 'Coffee', 350, 'USD', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+             INSERT INTO inventory (product_id, qty, updated_at) VALUES
+                ('prod-coffee', 50, '2025-01-01T00:00:00.000Z');",
+        )
+        .unwrap();
+    }
+
+    /// A remote item shaped as the PG pull decodes it (fixed id, `synced_at`
+    /// as the durable-anchor watermark the remote query filters on).
+    fn remote_stock_adjustment(id: &str, delta: i64, synced_at: &str) -> OfflineQueueItem {
+        let mut item = OfflineQueueItem::new(
+            "stock.adjusted",
+            &format!(r#"{{"sku":"COFFEE","delta":{delta}}}"#),
+        );
+        item.id = id.into();
+        item.created_at = "2026-01-01T00:00:00.000Z".into();
+        item.synced_at = Some(synced_at.into());
+        item
+    }
+
+    fn remote_poison_sale(id: &str) -> OfflineQueueItem {
+        let mut item = OfflineQueueItem::new(
+            "complete_sale",
+            r#"{"line_items":[{"sku":"MISSING","qty":1}]}"#,
+        );
+        item.id = id.into();
+        item.created_at = "2026-01-01T00:00:00.000Z".into();
+        item.synced_at = Some("2026-01-02T00:00:00.000Z".into());
+        item
+    }
+
+    // ── SYNC-01 parity: atomic pull apply + durable anchor ────────────
+
+    #[test]
+    fn apply_pulled_page_applies_stock_adjustment_and_records_receipt() {
+        let conn = migrations::fresh_db();
+        seed_product_and_inventory(&conn);
+        let store = Store::new(&conn);
+
+        let page = vec![remote_stock_adjustment(
+            "pg-item-1",
+            10,
+            "2026-01-02T00:00:00.000Z",
+        )];
+        let new_since = apply_pulled_page(&store, &page, None);
+
+        assert_eq!(store.get_stock("prod-coffee").unwrap(), 60);
+        assert!(
+            store.is_remote_item_applied("pg-item-1").unwrap(),
+            "ledger receipt must be recorded with the mutation"
+        );
+        assert_eq!(new_since.as_deref(), Some("2026-01-02T00:00:00.000Z"));
+    }
+
+    #[test]
+    fn apply_pulled_page_replay_is_idempotent() {
+        let conn = migrations::fresh_db();
+        seed_product_and_inventory(&conn);
+        let store = Store::new(&conn);
+        let page = vec![remote_stock_adjustment(
+            "pg-item-replay",
+            10,
+            "2026-01-02T00:00:00.000Z",
+        )];
+
+        let _ = apply_pulled_page(&store, &page, None);
+        let _ = apply_pulled_page(&store, &page, None);
+
+        assert_eq!(
+            store.get_stock("prod-coffee").unwrap(),
+            60,
+            "a replayed page must NOT re-apply the mutation (SYNC-01)"
+        );
+    }
+
+    #[test]
+    fn apply_pulled_page_retains_anchor_on_retryable_failure() {
+        let conn = migrations::fresh_db();
+        let store = Store::new(&conn);
+        let page = vec![remote_poison_sale("pg-poison-1")];
+
+        let new_since = apply_pulled_page(&store, &page, None);
+        assert!(
+            new_since.is_none(),
+            "retryable failure must retain the pull anchor"
+        );
+        assert!(
+            !store
+                .is_remote_failure_dead_lettered("pg-poison-1")
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn apply_pulled_page_dead_letters_then_advances() {
+        let conn = migrations::fresh_db();
+        let store = Store::new(&conn);
+        let page = vec![remote_poison_sale("pg-poison-2")];
+
+        // Attempts 1-2 retain the anchor; the 3rd dead-letters the item and
+        // allows the page anchor to advance.
+        assert!(apply_pulled_page(&store, &page, None).is_none());
+        assert!(apply_pulled_page(&store, &page, None).is_none());
+        let new_since = apply_pulled_page(&store, &page, None);
+        assert!(
+            new_since.is_some(),
+            "dead-lettered item may advance the anchor"
+        );
+        assert!(
+            store
+                .is_remote_failure_dead_lettered("pg-poison-2")
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn apply_pulled_page_anchor_is_monotonic_max_synced_at() {
+        let conn = migrations::fresh_db();
+        seed_product_and_inventory(&conn);
+        let store = Store::new(&conn);
+
+        let earlier = remote_stock_adjustment("pg-item-a", 1, "2026-01-01T00:00:00.000Z");
+        let later = remote_stock_adjustment("pg-item-b", 1, "2026-01-03T00:00:00.000Z");
+
+        // A prior anchor newer than one page row must not regress.
+        let new_since =
+            apply_pulled_page(&store, &[earlier, later], Some("2026-01-02T00:00:00.000Z"));
+        assert_eq!(new_since.as_deref(), Some("2026-01-03T00:00:00.000Z"));
     }
 
     /// Helper: enqueue an offline item and return its actual ID (from the returned OfflineQueueItem).

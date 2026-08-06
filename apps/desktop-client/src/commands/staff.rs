@@ -13,6 +13,7 @@ use oz_core::{Role, User};
 use foundation::{validate_min_length, validate_not_empty};
 
 use crate::commands::authz::require_permission_for_user;
+use crate::commands::picker_ticket;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -524,6 +525,13 @@ pub struct BootstrapOwnerArgs {
 pub struct BootstrapOwnerResult {
     /// LoginSession dto.
     pub session: oz_core::auth::LoginSession,
+    /// Short-lived picker ticket (audit/06 residual).
+    ///
+    /// The pre-session `list_workspaces` / `list_workspace_screens`
+    /// commands verify this ticket and resolve the caller's REAL role
+    /// from the database — caller-supplied `role_id` / `user_id` are
+    /// never trusted for the workspace picker.
+    pub picker_ticket: String,
 }
 
 /// Create the first owner user in a fresh installation.
@@ -543,7 +551,22 @@ pub async fn bootstrap_owner(
     state: State<'_, AppState>,
 ) -> Result<BootstrapOwnerResult, AppError> {
     let db = state.db.lock().await;
-    run_bootstrap_owner(&db, &args)
+    let mut result = run_bootstrap_owner(&db, &args)?;
+    drop(db);
+
+    // Mint the short-lived picker ticket bound to the new owner. It is
+    // only valid for the pre-session workspace picker; `create_session`
+    // hands out the opaque session token afterwards.
+    let now_ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    result.picker_ticket = picker_ticket::sign_picker_ticket(
+        &state.picker_ticket_secret,
+        &result.session.user_id,
+        now_ts + picker_ticket::PICKER_TICKET_TTL_SECS,
+    );
+    Ok(result)
 }
 
 /// Business logic for `bootstrap_owner` (extracted for testing).
@@ -594,6 +617,9 @@ fn run_bootstrap_owner(
             role_name: role.name,
             role_id: role.id,
         },
+        // The command wrapper attaches the picker ticket after the pure
+        // function returns (it needs the per-process secret).
+        picker_ticket: String::new(),
     })
 }
 
@@ -1574,6 +1600,7 @@ mod tests {
                 role_name: "Owner".into(),
                 role_id: "role-owner".into(),
             },
+            picker_ticket: String::new(),
         };
         let json = serde_json::to_value(&result).unwrap();
         assert_eq!(json["session"]["user_id"], "u1");
@@ -1589,6 +1616,7 @@ mod tests {
                 role_name: "Owner".into(),
                 role_id: "role-owner".into(),
             },
+            picker_ticket: String::new(),
         };
         let d = format!("{result:?}");
         assert!(d.contains("Alice"));

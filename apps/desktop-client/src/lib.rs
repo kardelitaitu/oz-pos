@@ -596,6 +596,7 @@ pub fn run() {
             commands::tables::list_sections_scoped,
             commands::workspaces::list_workspaces_scoped,
             commands::workspaces::list_workspaces,
+            commands::workspaces::list_workspaces_for_store_scoped,
             commands::workspaces::get_workspace_instance_scoped,
             commands::workspaces::create_workspace_instance_scoped,
             commands::workspaces::update_workspace_instance_scoped,

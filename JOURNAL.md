@@ -2,6 +2,17 @@
 
 # OZ-POS Development Journal
 
+## 2026-08-06 — TDD cycle: checked BOM deduction quantities (MONEY-03)
+
+### `complete_sale*` BOM ingredient totals overflow silently
+**Problem:** Both stock-deduction entry points multiplied the sale-line qty by the recipe's `quantity_required` with a bare `line.qty * ingredient.quantity_required` — `complete_sale_deduction` (line ~247) and `complete_sale_with_resolved_shortfalls` (non-resolution BOM branch, line ~644). `line.qty` comes from the front-end sale over IPC (untrusted) and dev/test builds disable overflow checks, so an overflowing qty silently wrapped: the Red run showed both paths returning `Ok(CompleteSaleResult)` while the ingredient stock was **credited** by ~4.6e18 — the register completed a sale with a corrupt stock delta instead of failing.
+
+**Solution:** Red→Green TDD cycle. RED tests `complete_sale_deduction_bom_quantity_overflow_returns_validation_error` and `complete_sale_with_resolved_shortfalls_bom_quantity_overflow_returns_validation_error` pin the contract — `(i64::MAX / 2) × 3` overflows, and both paths must return `CoreError::Validation { field: "qty", message: "ingredient deduction quantity overflow" }` with stock untouched. Both failed on `Ok(CompleteSaleResult …)` (the silent wrap) before the fix. GREEN: both sites now use `checked_mul(...).ok_or_else(Validation { field: "qty", … })?` — the same pattern as `compute_line_tax` (TAX-04) and MONEY-01. `quantity_required` is DB-backed with a `CHECK (quantity_required > 0)` so that operand needs no validation. Field `"qty"` deliberately avoids `"stock"`, which the caller special-cases to deserialize `PartialStockResult`.
+
+**Refactor:** extracted `seed_bom_composite` test helper (composite `service` product + tracked ingredient + recipe row) per review; 79/79 sales-module tests, 1623/1623 oz-core lib.
+
+**Deliberately NOT done (follow-ups):** (1) negative `line.qty` on a hand-built `Sale` remains unchecked on this path — `checked_mul` rejects only overflow, and a negative qty would *credit* stock (same MONEY-02 gap class); unreachable from the front-end since `CartLine::new` asserts `qty > 0` and `Sale::from_cart` is the only real producer, but worth a validation slice; (2) `oz-lua` plugin `apply_discount` (lib.rs 577/608) and purchase-order subtotals still use unchecked `qty × price` — same class, separate slices.
+
 ## 2026-08-06 — TDD cycle: reject negative cart-tax inputs (MONEY-02)
 
 ### `compute_cart_tax` negative `qty` / `unit_price_minor` accepted

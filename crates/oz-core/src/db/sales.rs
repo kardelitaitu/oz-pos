@@ -244,7 +244,18 @@ impl Store<'_> {
                         let ing_ptype = crate::product::ProductType::parse_str(&ing_ptype_str)
                             .unwrap_or_default();
                         if ing_ptype.tracks_inventory() {
-                            let required_qty = line.qty * ingredient.quantity_required;
+                            // MONEY-03: line.qty arrives from untrusted IPC input
+                            // and must use checked arithmetic like `compute_line_tax`
+                            // (TAX-04). Dev/test builds disable overflow checks, so
+                            // a bare `*` silently wraps and completes the sale with
+                            // a corrupt stock delta.
+                            let required_qty = line
+                                .qty
+                                .checked_mul(ingredient.quantity_required)
+                                .ok_or_else(|| CoreError::Validation {
+                                field: "qty",
+                                message: "ingredient deduction quantity overflow".into(),
+                            })?;
                             let available: i64 = tx
                                 .query_row(
                                     "SELECT COALESCE(qty, 0) FROM stock_summary \
@@ -641,7 +652,16 @@ impl Store<'_> {
                             let ing_ptype = crate::product::ProductType::parse_str(&ing_ptype_str)
                                 .unwrap_or_default();
                             if ing_ptype.tracks_inventory() {
-                                let required_qty = line.qty * ingredient.quantity_required;
+                                // MONEY-03: same overflow contract as the primary
+                                // deduction path — the non-resolution BOM branch
+                                // must reject an overflowing line qty up front.
+                                let required_qty = line
+                                    .qty
+                                    .checked_mul(ingredient.quantity_required)
+                                    .ok_or_else(|| CoreError::Validation {
+                                        field: "qty",
+                                        message: "ingredient deduction quantity overflow".into(),
+                                    })?;
                                 deductions.push(crate::sale_deduction::StockDeduction {
                                     sku: ing_sku,
                                     location_id: primary_location.clone(),
@@ -3094,6 +3114,39 @@ mod tests {
         product_id
     }
 
+    /// Seed a composite `service` product with a BOM recipe whose ingredient
+    /// tracks inventory. The composite does not track inventory itself, so
+    /// only the ingredient deduction path runs. Returns (parent, ingredient)
+    /// product ids.
+    fn seed_bom_composite(
+        conn: &Connection,
+        parent_sku: &str,
+        ingredient_sku: &str,
+        ingredient_stock: i64,
+        qty_required: i64,
+    ) -> (String, String) {
+        let parent_id = uuid::Uuid::now_v7().to_string();
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type) \
+             VALUES (?1, ?2, ?2, 1000, 'USD', 'service')",
+            rusqlite::params![parent_id, parent_sku],
+        )
+        .unwrap();
+        let ingredient_id = seed_product_with_stock(conn, ingredient_sku, ingredient_stock);
+        conn.execute(
+            "INSERT INTO product_recipes (id, parent_product_id, ingredient_product_id, \
+             quantity_required, unit) VALUES (?1, ?2, ?3, ?4, 'pcs')",
+            rusqlite::params![
+                uuid::Uuid::now_v7().to_string(),
+                parent_id,
+                ingredient_id,
+                qty_required,
+            ],
+        )
+        .unwrap();
+        (parent_id, ingredient_id)
+    }
+
     /// Helper: seed a product with stock at TWO locations for split-fulfillment tests.
     fn setup_locations_with_stock(
         conn: &Connection,
@@ -3464,6 +3517,95 @@ mod tests {
         assert!(
             matches!(&err, CoreError::InsufficientStockAtLocation { .. }),
             "expected InsufficientStockAtLocation for over-allocation, got: {err}"
+        );
+    }
+
+    /// MONEY-03: the BOM ingredient total (`line.qty × quantity_required`)
+    /// comes from untrusted IPC qty and must use checked arithmetic like
+    /// `compute_line_tax` (TAX-04). Dev/test builds disable overflow
+    /// checks, so a bare `*` silently wraps and the deduction path either
+    /// completes the sale with a corrupt stock delta or fails downstream.
+    #[test]
+    fn complete_sale_deduction_bom_quantity_overflow_returns_validation_error() {
+        use crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID;
+        let conn = fresh();
+        let s = store(&conn);
+
+        // Composite 'service' product with a BOM recipe: the composite does
+        // not track inventory, so only the ingredient path runs.
+        let (_burger_id, bun_id) = seed_bom_composite(&conn, "BURGER", "BUN", 10, 3);
+
+        // (i64::MAX / 2) * 3 overflows i64.
+        let sale = make_single_line_sale("BURGER", i64::MAX / 2, 1);
+        let result = s.complete_sale_deduction(&sale, None, &[], "cashier-1", None);
+
+        match result {
+            Err(CoreError::Validation { field, message }) => {
+                assert_eq!(field, "qty", "expected field 'qty', got '{field}'");
+                assert!(
+                    message.contains("overflow"),
+                    "expected an overflow message, got: {message}"
+                );
+            }
+            other => panic!(
+                "BOM qty × quantity_required overflow must not wrap silently, got: {other:?}"
+            ),
+        }
+
+        // The deduction must never be applied.
+        let bun_stock: i64 = conn
+            .query_row(
+                "SELECT COALESCE(qty, 0) FROM stock_summary \
+                 WHERE item_id = ?1 AND location_id = ?2",
+                rusqlite::params![bun_id, CANONICAL_DEFAULT_LOCATION_UUID],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            bun_stock, 10,
+            "stock must be untouched when the BOM total overflows"
+        );
+    }
+
+    /// MONEY-03: the resolved-shortfalls command shares the same unchecked
+    /// BOM multiply for non-resolution lines; pin the same overflow contract.
+    #[test]
+    fn complete_sale_with_resolved_shortfalls_bom_quantity_overflow_returns_validation_error() {
+        use crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID;
+        let conn = fresh();
+        let s = store(&conn);
+
+        let (_burger_id, bun_id) = seed_bom_composite(&conn, "BURGER", "BUN", 10, 3);
+
+        // No resolutions: the non-resolution BOM path runs.
+        let sale = make_single_line_sale("BURGER", i64::MAX / 2, 1);
+        let result =
+            s.complete_sale_with_resolved_shortfalls(&sale, None, &[], "cashier-1", None, &[]);
+
+        match result {
+            Err(CoreError::Validation { field, message }) => {
+                assert_eq!(field, "qty", "expected field 'qty', got '{field}'");
+                assert!(
+                    message.contains("overflow"),
+                    "expected an overflow message, got: {message}"
+                );
+            }
+            other => panic!(
+                "BOM qty × quantity_required overflow must not wrap silently, got: {other:?}"
+            ),
+        }
+
+        let bun_stock: i64 = conn
+            .query_row(
+                "SELECT COALESCE(qty, 0) FROM stock_summary \
+                 WHERE item_id = ?1 AND location_id = ?2",
+                rusqlite::params![bun_id, CANONICAL_DEFAULT_LOCATION_UUID],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            bun_stock, 10,
+            "stock must be untouched when the BOM total overflows"
         );
     }
 
