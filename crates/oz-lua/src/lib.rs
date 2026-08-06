@@ -336,7 +336,7 @@ impl LuaRuntime {
             }
         };
         let result: mlua::Value = hook
-            .call((sku, qty, unit_price_minor, currency))
+            .call((sku, qty as f64, unit_price_minor as f64, currency))
             .map_err(|e| LuaError::Script(e.to_string()))?;
         Ok(parse_tax_override(result))
     }
@@ -357,7 +357,7 @@ impl LuaRuntime {
             Err(_) => return Ok(None),
         };
         let result: mlua::Value = hook
-            .call((sku, qty, unit_price_minor, currency))
+            .call((sku, qty as f64, unit_price_minor as f64, currency))
             .map_err(|e| LuaError::Script(e.to_string()))?;
         Ok(parse_tax_override(result))
     }
@@ -378,7 +378,7 @@ impl LuaRuntime {
         };
         let table = build_lines_table(&self.lua, lines)?;
         let result: mlua::Value = hook
-            .call((table, total_minor, currency))
+            .call((table, total_minor as f64, currency))
             .map_err(|e| LuaError::Script(e.to_string()))?;
         let mut errors = Vec::new();
         if let mlua::Value::Table(tbl) = &result {
@@ -407,7 +407,7 @@ impl LuaRuntime {
         };
         let table = build_lines_table(&self.lua, lines)?;
         let result: mlua::Value = hook
-            .call((table, total_minor, currency))
+            .call((table, total_minor as f64, currency))
             .map_err(|e| LuaError::Script(e.to_string()))?;
         let mut errors = Vec::new();
         if let mlua::Value::Table(tbl) = &result {
@@ -464,9 +464,15 @@ fn build_lines_table<'lua>(
             .map_err(|e| LuaError::Script(e.to_string()))?;
         row.set("sku", line.sku.as_str())
             .map_err(|e| LuaError::Script(e.to_string()))?;
-        row.set("qty", line.qty)
+        // MONEY-05: hand qty / money values to the VM as Lua *floats*.
+        // Plugin arithmetic such as `qty * unit_price_minor` otherwise runs as
+        // Lua 5.4 integer math, which wraps silently on overflow (confirmed by
+        // apply_discount_with_overflow_scale_qty_runs_cleanly). Realistic
+        // minor-unit values are exact in f64 (below 2^53), so this removes the
+        // wrap class without changing normal plugin behavior.
+        row.set("qty", line.qty as f64)
             .map_err(|e| LuaError::Script(e.to_string()))?;
-        row.set("unit_price_minor", line.unit_price_minor)
+        row.set("unit_price_minor", line.unit_price_minor as f64)
             .map_err(|e| LuaError::Script(e.to_string()))?;
         row.set("currency", line.currency.as_str())
             .map_err(|e| LuaError::Script(e.to_string()))?;
@@ -627,6 +633,45 @@ end
     }
 
     #[test]
+    /// MONEY-05 evidence pin: the MONEY-03 journal flagged `qty *
+    /// unit_price_minor` inside plugin discount scripts (lib.rs 577/608) as
+    /// the same unchecked-multiply class. Those lines are plugin-authored Lua
+    /// test scripts, not host code: `build_lines_table` hands the i64s to the
+    /// VM and mlua (default `Lua::new()`) evaluates plugin arithmetic as Lua
+    /// numbers (f64), where i64 overflow cannot occur — worst case is f64
+    /// precision loss above 2^53. This test pins that the host passes
+    /// overflow-scale values through cleanly: the hook runs, returns a
+    /// discount decision, and the host never wraps an integer.
+    #[test]
+    fn apply_discount_with_overflow_scale_qty_runs_cleanly() {
+        let lua = runtime();
+        lua.load_str(
+            r#"
+function apply_discount(lines)
+    local total = 0
+    for i = 1, #lines do
+        total = total + lines[i].qty * lines[i].unit_price_minor
+    end
+    if total > 0 then
+        return { percent = 5, label = "Scale" }
+    end
+    return nil
+end
+"#,
+        )
+        .unwrap();
+
+        let lines = vec![CartLineData {
+            sku: "HUGE".into(),
+            qty: i64::MAX / 2,
+            unit_price_minor: i64::MAX / 2,
+            currency: "USD".into(),
+        }];
+        let result = lua.apply_discount(&lines).unwrap();
+        let d = result.expect("f64 total is positive — the hook must run, not wrap");
+        assert_eq!(d.percent, 5);
+    }
+
     fn calc_line_tax_returns_override() {
         let lua = runtime();
         lua.load_str(

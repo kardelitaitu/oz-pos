@@ -183,7 +183,22 @@ impl Store<'_> {
                     message: "unit cost must not be negative".into(),
                 });
             }
-            subtotal += line.qty * line.unit_cost_minor;
+            // MONEY-05: CreatePoLineInput arrives over IPC (untrusted) and
+            // dev/test builds disable overflow checks, so a bare `*` silently
+            // wraps and the PO is persisted with a corrupt subtotal. Match the
+            // compute_line_tax (TAX-04) checked-arithmetic pattern.
+            let line_total = line.qty.checked_mul(line.unit_cost_minor).ok_or_else(|| {
+                CoreError::Validation {
+                    field: "line_total",
+                    message: "line total overflow".into(),
+                }
+            })?;
+            subtotal = subtotal
+                .checked_add(line_total)
+                .ok_or_else(|| CoreError::Validation {
+                    field: "subtotal",
+                    message: "purchase order subtotal overflow".into(),
+                })?;
         }
 
         let tx = self.conn.unchecked_transaction()?;
@@ -211,7 +226,15 @@ impl Store<'_> {
         let mut created_lines: Vec<PurchaseOrderLine> = Vec::with_capacity(lines.len());
         for line in lines {
             let line_id = uuid::Uuid::now_v7().to_string();
-            let line_total = line.qty * line.unit_cost_minor;
+            // MONEY-05: re-validate per line — the same overflow contract as
+            // the subtotal pass above. (Recompute is intentional: the insert
+            // loop must never trust a bare multiply.)
+            let line_total = line.qty.checked_mul(line.unit_cost_minor).ok_or_else(|| {
+                CoreError::Validation {
+                    field: "line_total",
+                    message: "line total overflow".into(),
+                }
+            })?;
             tx.execute(
                 "INSERT INTO purchase_order_lines (id, po_id, sku, product_name, qty,
                                                     unit_cost_minor, line_total_minor)
@@ -798,6 +821,76 @@ mod tests {
     }
 
     #[test]
+    /// MONEY-05: the per-line `qty × unit_cost_minor` product comes from
+    /// untrusted IPC input (`CreatePoLineInput`) and dev/test builds disable
+    /// overflow checks, so an overflowing line silently wraps and the PO is
+    /// persisted with a corrupt (negative) subtotal. Must return a structured
+    /// Validation error instead.
+    #[test]
+    fn create_po_line_total_overflow_rejected() {
+        let conn = fresh();
+        seed_supplier(&conn);
+
+        // (i64::MAX / 2) * 3 overflows i64.
+        let lines = vec![CreatePoLineInput {
+            sku: "SKU-001".into(),
+            product_name: "Widget".into(),
+            qty: i64::MAX / 2,
+            unit_cost_minor: 3,
+        }];
+        let err = store(&conn)
+            .create_purchase_order("PO-OVF-LINE", "sup-po", "", "", None, &lines)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "line_total"));
+
+        // Nothing may be persisted.
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM purchase_orders WHERE po_number = 'PO-OVF-LINE'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 0, "no PO row may exist when a line total overflows");
+    }
+
+    /// MONEY-05: individual line products fit i64 but their SUM overflows
+    /// (i64::MAX + 1). The subtotal accumulator must use checked_add so the
+    /// PO cannot be persisted with a wrapped negative subtotal.
+    #[test]
+    fn create_po_subtotal_accumulation_overflow_rejected() {
+        let conn = fresh();
+        seed_supplier(&conn);
+
+        let lines = vec![
+            CreatePoLineInput {
+                sku: "SKU-001".into(),
+                product_name: "Widget".into(),
+                qty: i64::MAX,
+                unit_cost_minor: 1,
+            },
+            CreatePoLineInput {
+                sku: "SKU-002".into(),
+                product_name: "Gadget".into(),
+                qty: 1,
+                unit_cost_minor: 1,
+            },
+        ];
+        let err = store(&conn)
+            .create_purchase_order("PO-OVF-SUM", "sup-po", "", "", None, &lines)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "subtotal"));
+
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM purchase_orders WHERE po_number = 'PO-OVF-SUM'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 0, "no PO row may exist when the subtotal overflows");
+    }
+
     fn create_po_with_notes() {
         let conn = fresh();
         seed_supplier(&conn);

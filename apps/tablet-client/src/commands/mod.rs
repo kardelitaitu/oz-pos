@@ -41,6 +41,8 @@ pub mod kds;
 pub mod loyalty;
 /// Offline-mode commands.
 pub mod offline;
+/// Pre-session picker-ticket HMAC (audit/06 residual, desktop parity).
+pub mod picker_ticket;
 /// POS flow commands.
 pub mod pos;
 /// Product-variant commands.
@@ -75,3 +77,5 @@ pub mod tax;
 pub mod terminals;
 /// Void / cancel commands.
 pub mod void;
+/// Workspace listing + boot-resolution commands (audit/06 residual, desktop parity).
+pub mod workspaces;

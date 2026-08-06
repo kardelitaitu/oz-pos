@@ -2,6 +2,17 @@
 
 # OZ-POS Development Journal
 
+## 2026-08-06 — TDD cycle: checked PO money math + plugin float hand-off (MONEY-05)
+
+### Purchase orders wrap silently; plugin Lua arithmetic wraps in the VM
+**Problem:** Two remaining unchecked-multiply sites from the MONEY-03 scan. (1) `create_purchase_order` (`crates/oz-core/src/db/purchase_orders.rs`) computed `subtotal += line.qty * line.unit_cost_minor` and per-line `line_total` with bare multiplies — `CreatePoLineInput` arrives over IPC (untrusted) and dev/test builds disable overflow checks, so an overflowing line wrapped and the PO was persisted with a corrupt (negative) subtotal. (2) The MONEY-03 follow-up flagged `oz-lua/src/lib.rs:577/608` — investigation showed those are plugin-authored Lua test scripts, but an evidence test PROVED the concern is real: mlua pushes i64 as Lua 5.4 *integers*, so plugin `qty * unit_price_minor` runs as integer math that **wraps silently in the VM** (overflow-scale input made the hook's total wrap negative → discount silently not applied). The same hand-off exists in `oz-plugin`'s `fire_sale_before_complete` sale table.
+
+**Solution:** Red→Green TDD cycle. PO: two Red tests (`create_po_line_total_overflow_rejected`, `create_po_subtotal_accumulation_overflow_rejected`) failed on `Ok(...)` with the PO persisted; Green adds `checked_mul` (field `"line_total"`) at both sites + `checked_add` (field `"subtotal"`) — negatives were already rejected, so only overflow is new. Plugin boundary: Green converts every money/qty value handed to the VM to Lua **floats** — `build_lines_table` (qty/unit_price_minor), `calc_line_tax`×2 args, `validate_order`×2 total_minor (oz-lua), and the `sale.before_complete` sale table (oz-plugin). Realistic minor-unit values are exact in f64 (< 2^53), comparisons like `total_minor == 5000` still work (Lua number equality across subtypes), and the integer-wrap class is eliminated host-side. Evidence tests: `apply_discount_with_overflow_scale_qty_runs_cleanly` (oz-lua) and `fire_sale_before_complete_overflow_scale_money_uses_float_semantics` (oz-plugin) pin that overflow-scale plugin math now produces a float result instead of wrapping.
+
+**Verify:** oz-core full suite green (incl. 25/25 purchase_orders) · oz-lua 62/62 · oz-plugin 173/173 + doctests · fmt clean · clippy clean on changed files (oz-core still fails only on the pre-existing `products.rs:876` type_complexity, which blocks the oz-lua `-D warnings` run through the dependency). Docs: `docs/plugin-guide.md` now states money/qty arrive as Lua numbers and warns against integer-only ops.
+
+**Deliberately NOT done (follow-ups):** (1) plugin scripts remain trusted operator-installed business logic — the float hand-off removes the *wrap* class, but a plugin can still compute whatever it likes; the returned discount percent is validated 0–100 host-side. (2) f64 values above 2^53 lose exactness (e.g. `2^62 − 1` rounds to `2^62`) — irrelevant for realistic retail values, documented in the plugin guide. (3) The insert-loop `checked_mul` in `create_purchase_order` is technically unreachable today (the validation loop already passed on the same immutable slice) — kept as deliberate defense-in-depth with a comment, per the MONEY-03 precedent.
+
 ## 2026-08-06 — TDD cycle: AnchorExpired snapshot import resets the stale durable anchor
 
 ### Every cycle re-fetched the whole snapshot after anchor expiry

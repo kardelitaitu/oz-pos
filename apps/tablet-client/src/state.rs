@@ -80,6 +80,14 @@ pub struct AppState {
     /// Store-scoped database manager (ADR #4 Phase 2 / ADR #7).
     /// Each resolved store is opened in its own migrated SQLite database.
     pub db_manager: StoreDatabaseManager,
+
+    /// Per-process secret for the pre-session picker ticket HMAC.
+    ///
+    /// Parity with the desktop client (audit/06 residual). Generated
+    /// once at startup. Tickets are short-lived (5 min) and die with
+    /// the process, so the secret is never persisted — a restart
+    /// simply invalidates outstanding tickets.
+    pub picker_ticket_secret: Vec<u8>,
 }
 
 impl AppState {
@@ -130,6 +138,7 @@ impl AppState {
             session_ttl_seconds,
             terminal_id: Mutex::new(None),
             db_manager,
+            picker_ticket_secret: uuid::Uuid::new_v4().as_bytes().to_vec(),
         })
     }
 
@@ -308,6 +317,7 @@ impl AppState {
             session_ttl_seconds: 86400,
             terminal_id: Mutex::new(None),
             db_manager: StoreDatabaseManager::new(std::env::temp_dir(), oz_core::migrations::ALL),
+            picker_ticket_secret: b"test-picker-ticket-secret".to_vec(),
         }
     }
 
@@ -325,6 +335,7 @@ impl AppState {
             session_ttl_seconds: 86400,
             terminal_id: Mutex::new(None),
             db_manager: StoreDatabaseManager::new(std::env::temp_dir(), oz_core::migrations::ALL),
+            picker_ticket_secret: b"test-picker-ticket-secret".to_vec(),
         }
     }
 

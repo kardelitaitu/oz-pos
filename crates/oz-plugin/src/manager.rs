@@ -413,7 +413,11 @@ impl PluginManager {
         let tbl = lua
             .create_table()
             .map_err(|e| LuaError::Script(e.to_string()))?;
-        tbl.set("total_minor", total_minor)
+        // MONEY-05: hand money/qty values to the VM as Lua *floats* (see
+        // oz-lua build_lines_table). Plugin arithmetic such as
+        // `qty * unit_price_minor` otherwise runs as Lua 5.4 integer math,
+        // which wraps silently on overflow.
+        tbl.set("total_minor", total_minor as f64)
             .map_err(|e| LuaError::Script(e.to_string()))?;
         tbl.set("currency", currency)
             .map_err(|e| LuaError::Script(e.to_string()))?;
@@ -429,9 +433,9 @@ impl PluginManager {
                 .map_err(|e| LuaError::Script(e.to_string()))?;
             row.set("sku", line.sku.as_str())
                 .map_err(|e| LuaError::Script(e.to_string()))?;
-            row.set("qty", line.qty)
+            row.set("qty", line.qty as f64)
                 .map_err(|e| LuaError::Script(e.to_string()))?;
-            row.set("unit_price_minor", line.unit_price_minor)
+            row.set("unit_price_minor", line.unit_price_minor as f64)
                 .map_err(|e| LuaError::Script(e.to_string()))?;
             row.set("currency", line.currency.as_str())
                 .map_err(|e| LuaError::Script(e.to_string()))?;
@@ -960,6 +964,46 @@ oz.register_hook("sale.before_complete", "count_lines")
     }
 
     #[test]
+    /// MONEY-05: the sale table hands qty / unit_price_minor / total_minor to
+    /// the VM as Lua floats, so plugin `qty * unit_price_minor` arithmetic
+    /// cannot silently integer-wrap. Pinned with overflow-scale input — before
+    /// the float conversion this hook's total wrapped negative and the
+    /// discount never fired.
+    #[test]
+    fn fire_sale_before_complete_overflow_scale_money_uses_float_semantics() {
+        let lua = r#"
+function on_sale(sale)
+    local total = 0
+    for i = 1, #sale.lines do
+        total = total + sale.lines[i].qty * sale.lines[i].unit_price_minor
+    end
+    if total > 0 then
+        oz.apply_discount("cart", 5)
+    end
+end
+oz.register_hook("sale.before_complete", "on_sale")
+"#;
+        let (_dir, plugins_root) =
+            create_plugin_dir("scale-hook", lua, &["cart:read", "cart:write"]);
+        let mgr = PluginManager::new(&plugins_root).unwrap();
+
+        mgr.fire_sale_before_complete(
+            &[line("HUGE", i64::MAX / 2, i64::MAX / 2, "USD")],
+            i64::MAX / 2,
+            "USD",
+            "user-1",
+        )
+        .unwrap();
+
+        let discounts = mgr.drain_pending_discounts();
+        assert_eq!(
+            discounts.len(),
+            1,
+            "float total is positive — the hook must fire, not wrap"
+        );
+        assert_eq!(discounts[0].percent, 5);
+    }
+
     fn fire_sale_before_complete_preserves_sale_fields() {
         let lua = r#"
 function check_sale(sale)

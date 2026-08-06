@@ -129,18 +129,20 @@ impl PgSyncDaemon {
     async fn run_tick(db: &DbConnection, daemon_status: &Arc<RwLock<PgDaemonStatus>>) {
         // Phase 1: Read PG settings + pending items from local DB (blocking)
         let db_clone = db.clone();
-        let (pg_config, pending, pull_since, read_error) =
+        let (pg_config, pending, pull_since, pull_cursor, read_error) =
             match tokio::task::spawn_blocking(move || {
                 let conn = db_clone.blocking_lock();
                 let store = Store::new(&conn);
 
                 let enabled = Settings::is_pg_sync_enabled(&conn).unwrap_or(false);
                 let pending = store.list_pending_offline().unwrap_or_default();
-                // SYNC-01 parity: the durable pull anchor survives restarts and
-                // advances only after a page applied — never re-derive it from
-                // the local queue's synced timestamps (pulled remote items do
-                // not move those).
-                let pull_since = store.get_sync_pull_state().ok().and_then(|s| s.since);
+                // SYNC-01 parity: the durable pull anchor (since + composite
+                // cursor) survives restarts and advances only after a page
+                // applied — never re-derive it from the local queue's synced
+                // timestamps (pulled remote items do not move those).
+                let pull_state = store.get_sync_pull_state().ok();
+                let pull_since = pull_state.as_ref().and_then(|s| s.since.clone());
+                let pull_cursor = pull_state.as_ref().and_then(|s| s.cursor.clone());
 
                 // Build the transport whenever PG sync is ENABLED — not only
                 // when there are pending items — so a pull-only terminal (a
@@ -176,15 +178,15 @@ impl PgSyncDaemon {
                     None
                 };
 
-                (pg_config, pending, pull_since)
+                (pg_config, pending, pull_since, pull_cursor)
             })
             .await
             {
-                Ok((cfg, pending, since)) => (cfg, pending, since, None),
+                Ok((cfg, pending, since, cursor)) => (cfg, pending, since, cursor, None),
                 Err(join_err) => {
                     let msg = format!("pg sync config read panicked: {join_err}");
                     tracing::error!(error = %msg, "pg sync daemon read phase failed");
-                    (None, Vec::new(), None, Some(msg))
+                    (None, Vec::new(), None, None, Some(msg))
                 }
             };
 
@@ -264,42 +266,81 @@ impl PgSyncDaemon {
             }
 
             // Phase 4: Pull remote updates and apply them locally.
-            // SYNC-01 parity: the `since` anchor comes from the durable
-            // `sync_pull_state` row, each item applies atomically with the
-            // idempotency ledger, and the anchor advances only after the
-            // page applied — so a replaying remote queue can never re-apply
-            // a mutation, and a poison item dead-letters instead of erroring
-            // forever. The pull runs on every enabled cycle, independent of
-            // whether anything was pending to push.
-            match transport.pull_updates(pull_since.as_deref()).await {
-                Ok(pull_resp) => {
-                    pulled = pull_resp.items.len();
-                    if !pull_resp.items.is_empty() {
+            // SYNC-01 parity: the `since` anchor + composite `(created_at,
+            // id)` cursor come from the durable `sync_pull_state` row, each
+            // item applies atomically with the idempotency ledger, and the
+            // anchor advances only after the page applied — so a replaying
+            // remote queue can never re-apply a mutation, and a poison item
+            // dead-letters instead of erroring forever. Pages loop while the
+            // remote returns a next cursor (P-3 pagination). The pull runs on
+            // every enabled cycle, independent of whether anything was
+            // pending to push.
+            let mut pull_since = pull_since;
+            let mut pull_cursor = pull_cursor;
+            loop {
+                match transport
+                    .pull_updates(pull_since.as_deref(), pull_cursor.as_deref())
+                    .await
+                {
+                    Ok(pull_resp) => {
+                        pulled += pull_resp.items.len();
+                        let next_cursor = pull_resp.next_cursor;
+                        if pull_resp.items.is_empty() {
+                            break;
+                        }
                         let db_clone = db.clone();
                         let items = pull_resp.items;
                         let prev_since = pull_since;
+                        // The closure needs the cursor to persist it with the
+                        // anchor; the outer loop re-owns the original for the
+                        // next pull iteration.
+                        let next_cursor_for_persist = next_cursor.clone();
                         let outcome = tokio::task::spawn_blocking(move || {
                             let conn = db_clone.blocking_lock();
                             let store = Store::new(&conn);
-                            if let Some(new_since) =
+                            // None = retryable failure: the durable anchor is
+                            // retained and pagination stops so the next cycle
+                            // re-pulls the same page.
+                            let Some(new_since) =
                                 apply_pulled_page(&store, &items, prev_since.as_deref())
-                                && let Err(e) = store.set_sync_pull_state(Some(&new_since), None)
-                            {
+                            else {
+                                return None;
+                            };
+                            if let Err(e) = store.set_sync_pull_state(
+                                Some(&new_since),
+                                next_cursor_for_persist.as_deref(),
+                            ) {
                                 tracing::error!(
                                     error = %e,
                                     "pg sync daemon: failed to persist pull anchor"
                                 );
                             }
+                            Some(new_since)
                         })
                         .await;
-                        if let Err(e) = outcome {
-                            sync_error = Some(format!("apply pull phase: {e}"));
+                        match outcome {
+                            Ok(Some(new_since)) => {
+                                pull_since = Some(new_since);
+                                pull_cursor = next_cursor;
+                                if pull_cursor.is_none() {
+                                    break;
+                                }
+                            }
+                            // Retryable failure — retain anchor, stop paginating.
+                            Ok(None) => break,
+                            Err(e) => {
+                                if sync_error.is_none() {
+                                    sync_error = Some(format!("apply pull phase: {e}"));
+                                }
+                                break;
+                            }
                         }
                     }
-                }
-                Err(e) => {
-                    if sync_error.is_none() {
-                        sync_error = Some(format!("pull phase: {e}"));
+                    Err(e) => {
+                        if sync_error.is_none() {
+                            sync_error = Some(format!("pull phase: {e}"));
+                        }
+                        break;
                     }
                 }
             }
@@ -374,11 +415,17 @@ impl Default for PgSyncDaemon {
 /// Each item is applied via [`SyncQueue::apply_remote_atomic`] — the domain
 /// mutation and its idempotency receipt commit in one transaction, and a
 /// poison item is dead-lettered after its retry budget. Returns the next
-/// durable pull anchor to persist: `Some(max(prev_since, newest synced_at))`
+/// durable pull anchor to persist: `Some(max(prev_since, newest created_at))`
 /// when the whole page applied (dead-lettered items count as applied), or
 /// `None` when a retryable failure requires retaining the current anchor so
 /// the next cycle re-pulls the same page. A replayed page never re-applies a
 /// mutation (the ledger skips it), so a crash mid-pull is safe.
+///
+/// The anchor is the page's newest `created_at` — the composite cursor's
+/// first key — never `synced_at`, which the remote may leave NULL forever
+/// (rows pushed as `pending` are only stamped later). Anchoring on
+/// `created_at` means a queue whose rows are never stamped still advances
+/// and is never re-pulled in full.
 fn apply_pulled_page(
     store: &Store<'_>,
     page: &[OfflineQueueItem],
@@ -431,14 +478,16 @@ fn apply_pulled_page(
     }
 
     // Monotonic anchor: take the later of the current anchor and the page's
-    // newest synced_at watermark. `.or()` alone could regress the anchor
-    // when the remote returns rows older than `since` (clock skew / late
-    // delivery), which would re-fetch history on every cycle. ISO-8601
+    // newest `created_at` watermark — the composite cursor's first key, so
+    // the durable anchor tracks exactly what the next pull filters on. The
+    // remote may never stamp `synced_at` (rows pushed as `pending` stay
+    // NULL), so anchoring on `synced_at` could stall the anchor forever and
+    // re-pull the whole queue every cycle. `.or()` alone could regress the
+    // anchor when the remote returns rows older than `since` (clock skew /
+    // late delivery), which would re-fetch history on every cycle. ISO-8601
     // timestamps are fixed-format, so lexicographic ordering equals
-    // chronological ordering here. Rows with a NULL synced_at (e.g. items
-    // pushed by this terminal but not yet stamped remotely) never advance
-    // the anchor — the ledger absorbs any re-pull.
-    let page_max = page.iter().filter_map(|i| i.synced_at.as_deref()).max();
+    // chronological ordering here.
+    let page_max = page.iter().map(|i| i.created_at.as_str()).max();
     std::cmp::max(prev_since, page_max).map(str::to_owned)
 }
 
@@ -462,16 +511,17 @@ mod tests {
         .unwrap();
     }
 
-    /// A remote item shaped as the PG pull decodes it (fixed id, `synced_at`
-    /// as the durable-anchor watermark the remote query filters on).
-    fn remote_stock_adjustment(id: &str, delta: i64, synced_at: &str) -> OfflineQueueItem {
+    /// A remote item shaped as the PG pull decodes it. `created_at` is the
+    /// durable-anchor watermark (the composite cursor orders on it);
+    /// `synced_at` is deliberately left NULL — the remote may never stamp it,
+    /// and the anchor must still advance on `created_at`.
+    fn remote_stock_adjustment(id: &str, delta: i64, created_at: &str) -> OfflineQueueItem {
         let mut item = OfflineQueueItem::new(
             "stock.adjusted",
             format!(r#"{{"sku":"COFFEE","delta":{delta}}}"#),
         );
         item.id = id.into();
-        item.created_at = "2026-01-01T00:00:00.000Z".into();
-        item.synced_at = Some(synced_at.into());
+        item.created_at = created_at.into();
         item
     }
 
@@ -482,7 +532,6 @@ mod tests {
         );
         item.id = id.into();
         item.created_at = "2026-01-01T00:00:00.000Z".into();
-        item.synced_at = Some("2026-01-02T00:00:00.000Z".into());
         item
     }
 
@@ -506,7 +555,36 @@ mod tests {
             store.is_remote_item_applied("pg-item-1").unwrap(),
             "ledger receipt must be recorded with the mutation"
         );
-        assert_eq!(new_since.as_deref(), Some("2026-01-02T00:00:00.000Z"));
+        assert_eq!(
+            new_since.as_deref(),
+            Some("2026-01-02T00:00:00.000Z"),
+            "anchor advances on created_at, not synced_at"
+        );
+    }
+
+    /// Regression (composite-cursor slice): the durable anchor must advance
+    /// on `created_at` even when the remote NEVER stamps `synced_at` (NULL)
+    /// — otherwise a queue whose rows all lack a synced_at watermark never
+    /// advances and re-pulls everything every cycle.
+    #[test]
+    fn apply_pulled_page_advances_anchor_on_created_at_when_synced_at_null() {
+        let conn = migrations::fresh_db();
+        seed_product_and_inventory(&conn);
+        let store = Store::new(&conn);
+
+        let page = vec![remote_stock_adjustment(
+            "pg-item-null",
+            10,
+            "2026-01-02T00:00:00.000Z",
+        )];
+        let new_since = apply_pulled_page(&store, &page, None);
+
+        assert_eq!(store.get_stock("prod-coffee").unwrap(), 60);
+        assert_eq!(
+            new_since.as_deref(),
+            Some("2026-01-02T00:00:00.000Z"),
+            "anchor must advance on created_at even when synced_at is NULL"
+        );
     }
 
     #[test]
@@ -571,7 +649,7 @@ mod tests {
     }
 
     #[test]
-    fn apply_pulled_page_anchor_is_monotonic_max_synced_at() {
+    fn apply_pulled_page_anchor_is_monotonic_max_created_at() {
         let conn = migrations::fresh_db();
         seed_product_and_inventory(&conn);
         let store = Store::new(&conn);
