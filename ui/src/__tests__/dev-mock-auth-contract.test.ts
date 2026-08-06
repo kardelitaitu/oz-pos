@@ -361,3 +361,84 @@ describe('dev-mock KDS persistence (restart parity)', () => {
     expect(lines.find((l) => l['id'] === 'kds-line-1-1')?.['item_status']).toBe('preparing');
   });
 });
+
+// The real backend persists login attempts (login_attempts 074 + device
+// 111) and closed-shift history (shifts 021), so a reload cannot defeat an
+// active lockout and reconciliation history survives restarts. The mock
+// kept both in module memory — a reloaded preview bypassed the lockout and
+// lost every closed shift (only the seed regenerated). Pin the
+// localStorage-backed contracts so previews mirror the DB.
+describe('dev-mock lockout + shift-history persistence (restart parity)', () => {
+  const LOCK_KEY = 'oz-dev-mock:login-attempts';
+  const SHIFT_KEY = 'oz-dev-mock:shift-history';
+
+  afterEach(() => {
+    localStorage.removeItem(LOCK_KEY);
+    localStorage.removeItem(SHIFT_KEY);
+    vi.resetModules();
+  });
+
+  it('a lockout survives a module reload so a reloaded page cannot bypass it', async () => {
+    const first = await import('@/dev-mock/tauri-api');
+    // Four failed attempts for kasir → the fifth is blocked.
+    for (let i = 0; i < 4; i++) {
+      await expect(
+        first.invoke('staff_login', { args: { username: 'kasir', pin: '0000' } }),
+      ).rejects.toThrow(/Invalid credentials/);
+    }
+
+    // Simulate a restart: re-import the module so the in-memory copy is
+    // rebuilt from localStorage (like a fresh page load).
+    vi.resetModules();
+    const second = await import('@/dev-mock/tauri-api');
+    // Even with the CORRECT pin, the persisted attempt count still blocks.
+    await expect(
+      second.invoke('staff_login', { args: { username: 'kasir', pin: '1234' } }),
+    ).rejects.toThrow(/Account locked/);
+  });
+
+  it('a successful login clears the persisted lockout', async () => {
+    const first = await import('@/dev-mock/tauri-api');
+    for (let i = 0; i < 3; i++) {
+      await expect(
+        first.invoke('staff_login', { args: { username: 'kasir', pin: '0000' } }),
+      ).rejects.toThrow(/Invalid credentials/);
+    }
+    // Correct pin resets the counter (the persisted delete must survive).
+    await first.invoke('staff_login', { args: { username: 'kasir', pin: '1234' } });
+
+    vi.resetModules();
+    const second = await import('@/dev-mock/tauri-api');
+    // A wrong pin afterwards is a fresh first failure, not a lockout.
+    await expect(
+      second.invoke('staff_login', { args: { username: 'kasir', pin: '0000' } }),
+    ).rejects.toThrow(/Invalid credentials/);
+  });
+
+  it('a closed shift survives a module reload in the shift history', async () => {
+    const first = await import('@/dev-mock/tauri-api');
+    await first.invoke('open_shift_scoped', { sessionToken: 'session-1' });
+    const closed = (await first.invoke('close_shift_scoped', {
+      sessionToken: 'session-1',
+      args: { id: 'shift-1', closingBalanceMinor: 0, notes: null },
+    })) as unknown as { id: string };
+
+    vi.resetModules();
+    const second = await import('@/dev-mock/tauri-api');
+    const shifts = (await second.invoke('list_shifts_scoped', {
+      sessionToken: 'session-1',
+    })) as unknown as Array<Record<string, unknown>>;
+
+    // The closed shift must be in the reloaded history, not just the seed.
+    expect(shifts.some((s) => s['id'] === closed.id)).toBe(true);
+  });
+
+  it('a fresh browser seeds exactly the one pre-seeded closed shift', async () => {
+    const first = await import('@/dev-mock/tauri-api');
+    const shifts = (await first.invoke('list_shifts_scoped', {
+      sessionToken: 'session-1',
+    })) as unknown as Array<Record<string, unknown>>;
+    expect(shifts.length).toBe(1);
+    expect(shifts[0]!['id']).toBe('shift-seed-1');
+  });
+});

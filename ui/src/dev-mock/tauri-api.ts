@@ -283,7 +283,29 @@ function pushKdsOrderFromCart(lines: CartLine[], storeId: string) {
 }
 
 // ── Lockout state (for E2E rate-limit tests) ──────────────────
-const loginAttempts: Record<string, number> = {};
+// The real backend persists login attempts (login_attempts 074 + device
+// 111), so a reload cannot bypass an active lockout. Persist the flat
+// attempt counter (same stateful pattern as the other mocks) so a
+// reloaded preview keeps enforcing the threshold — previously a reload
+// cleared the counter and defeated the lockout entirely.
+const MOCK_LOGIN_ATTEMPTS_KEY = 'oz-dev-mock:login-attempts';
+function loadMockLoginAttempts(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(MOCK_LOGIN_ATTEMPTS_KEY);
+    if (raw) return JSON.parse(raw) as Record<string, number>;
+  } catch {
+    // storage unavailable or corrupt — start with a clean counter
+  }
+  return {};
+}
+function saveMockLoginAttempts(): void {
+  try {
+    localStorage.setItem(MOCK_LOGIN_ATTEMPTS_KEY, JSON.stringify(loginAttempts));
+  } catch {
+    // storage unavailable — keep the in-memory copy for this session
+  }
+}
+const loginAttempts: Record<string, number> = loadMockLoginAttempts();
 const LOCKOUT_THRESHOLD = 4;
 // LOCKOUT_DURATION_MS = 30_000 is defined for documentation;
 // the mock uses a simple attempt-count lockout that resets on
@@ -469,7 +491,12 @@ if (!hasPersistedShiftState()) {
 // in the Shift History table after closing. One pre-seeded closed shift
 // guarantees the history table renders on every fresh page load (the older
 // shift.spec asserts .shift-mgmt-table without running an open/close cycle).
-const mockShiftHistory: Array<Record<string, unknown>> = [
+// The real backend keeps closed shifts in the `shifts` table, so persist
+// the history (same stateful pattern as the other mocks) — previously a
+// reload reverted to just the seed and every reconciliation record
+// vanished.
+const MOCK_SHIFT_HISTORY_KEY = 'oz-dev-mock:shift-history';
+const _initialShiftHistory: Array<Record<string, unknown>> = [
   {
     id: 'shift-seed-1', userId: 'user-1', terminalId: null,
     openedAt: new Date(Date.now() - 3600000).toISOString(), closedAt: new Date(Date.now() - 1800000).toISOString(),
@@ -479,6 +506,28 @@ const mockShiftHistory: Array<Record<string, unknown>> = [
     createdAt: new Date(Date.now() - 3600000).toISOString(), updatedAt: new Date(Date.now() - 1800000).toISOString(),
   },
 ];
+function loadMockShiftHistory(): Array<Record<string, unknown>> {
+  try {
+    const raw = localStorage.getItem(MOCK_SHIFT_HISTORY_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Array<Record<string, unknown>>;
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {
+    // storage unavailable or corrupt — fall through to the seed
+  }
+  // First load: seed one closed shift so the history table renders without
+  // an open/close cycle. Shallow-clone so pushes never bleed into the seed.
+  return _initialShiftHistory.map((s) => ({ ...s }));
+}
+function saveMockShiftHistory(): void {
+  try {
+    localStorage.setItem(MOCK_SHIFT_HISTORY_KEY, JSON.stringify(mockShiftHistory));
+  } catch {
+    // storage unavailable — keep the in-memory copy for this session
+  }
+}
+const mockShiftHistory: Array<Record<string, unknown>> = loadMockShiftHistory();
 // ── User preferences (stateful mock) ─────────────────────────────
 // The real backend persists per-user preferences to the store-scoped
 // `user_preferences` table. The mock previously returned static values
@@ -526,11 +575,13 @@ const handlers: Record<string, (args: unknown) => unknown> = {
 
     if (!staff || pin !== staff.pin_hash) {
       loginAttempts[key] = attempts + 1;
+      saveMockLoginAttempts();
       throw new Error('Invalid credentials');
     }
 
-    // Reset on success.
+    // Reset on success — persisted so a reloaded preview stays unlocked.
     delete loginAttempts[key];
+    saveMockLoginAttempts();
     return {
       session: {
         user_id: staff.user_id,
@@ -1190,6 +1241,8 @@ const handlers: Record<string, (args: unknown) => unknown> = {
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     };
     mockShiftHistory.push(closed);
+    // Persist the closed shift so a reload keeps the reconciliation record.
+    saveMockShiftHistory();
     return closed;
   },
   'close_shift_scoped': () => {
@@ -1203,6 +1256,8 @@ const handlers: Record<string, (args: unknown) => unknown> = {
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     };
     mockShiftHistory.push(closed);
+    // Persist the closed shift so a reload keeps the reconciliation record.
+    saveMockShiftHistory();
     return closed;
   },
   'list_shifts': () => mockShiftHistory,
