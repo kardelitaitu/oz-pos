@@ -1,4 +1,15 @@
 
+## 2026-08-06 — TDD cycle: retail cart remove→undo restores modifiers and course (first RetailCartPanel suite)
+
+### Undo of a removed line re-added a bare product — course assignment and modifiers were silently dropped
+**Problem:** RetailCartPanel had zero direct test coverage, and the flow had a real data-loss bug: the remove payload / undo stack only carried `{ sku, name, category, unit_price, qty }`, so `handleUndoRemove` re-added a bare product line. A resto cashier removing a course-assigned line with modifiers (e.g. Latte + Extra Cheese on course 'main') and hitting Undo got back an un-coursed, modifier-less line — the ticket and kitchen course would be wrong.
+
+**Solution:** Red→Green. Three interaction tests in `RetailPosScreenInteractions.test.tsx` pin the flow — remove reveals the undo bar with the item count (aria-live), Undo restores the exact line, dismiss discards without re-adding. The restore test carries `courseId` + `modifiers` and failed Red: `addProduct` was called without the meta (the bar/count and dismiss tests passed as guards). Green threads the line's full metadata through: `CartLineActions.onRemoveLine` payload + the undo stack now include optional `courseId`/`modifiers`, and `usePosState.addProduct` accepts an optional third `meta` arg that applies them to the created/merged line (`coursingStatus: 'hold'` when a course is set — so the kitchen fires it like any assigned line). Two earlier Red attempts failed for the wrong reason (my test override swapped `mockAddProduct` for the mock's internal fn; and `'beverage'` isn't a valid `CourseId` literal) — each corrected before Green. The `exactOptionalPropertyTypes` build surfaced three spots passing `undefined` explicitly into optional props; fixed with conditional spreads.
+
+**Validation:** 173/173 across retail/sales/restaurant suites (33 interaction + 29 usePosState with 3 new meta unit tests) · typecheck clean · eslint clean.
+
+**Follow-ups:** `PosScreen.tsx` has its own `pos-cart-undo-bar` with the same SKU-level undo pattern — it likely shares the bare-restore gap and is a clean next cycle. The meta merge is SKU-keyed like `addProduct` itself, so undoing a removed line whose SKU is still in the cart merges qty onto the existing line and re-applies the restored modifiers — faithful for the single-line-per-SKU model, but note it if lines ever diverge by modifiers.
+
 ## 2026-08-06 — TDD cycle: dev-mock KDS state survives reloads (restart parity)
 
 ### A preview reload wiped the kitchen queue, reverted every status, and restarted ticket numbering at 104
