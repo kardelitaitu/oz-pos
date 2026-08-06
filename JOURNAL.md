@@ -8,7 +8,7 @@
 
 **Validation:** 256/256 crate tests (1 new) · 19/19 gated integration suite · fmt + `clippy -D warnings` clean.
 
-**Follow-ups:** The re-read-then-write is not atomic; a rewind landing in the microseconds between the two calls can still be lost. A CAS-style `set_sync_pull_state_if(since=captured)` store method would close even that window.
+**Follow-ups:** The re-read and the (skipped) write hold the same `blocking_lock()`, so no rewind can interleave between them — the fix is race-free under the shared-connection model. If a future operator path opens a separate SQLite connection, verify this still holds; a full-state compare-and-skip was chosen over a CAS store method precisely because the mutex already serializes the two calls. The comparison is full-state `(since, cursor)`, so a concurrent writer moving the anchor forward cannot regress it to our stale `new_since` either.
 
 <!-- Audit stamp: 2026-07-29 · Codebuff · status: UPDATED — July 29 full-codebase i18n audit session appended -->
 
