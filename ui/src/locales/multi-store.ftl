@@ -82,6 +82,7 @@ topology-ws-type-warehouse = Warehouse
 topology-node-drag-hint = Drag to move
 topology-wire-toggle-aria = Toggle wire direction
 topology-inspector-close-aria = Close inspector
+topology-inspector-hardware-title = Hardware Device
 topology-ws-type-select-aria = Select workspace type
 # $name (String) — node display name · $port (String) — port position (top/right/bottom/left)
 topology-port-aria = { $name } { $port } port

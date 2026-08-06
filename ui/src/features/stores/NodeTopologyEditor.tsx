@@ -1483,6 +1483,18 @@ export default function NodeTopologyEditor({
               {selectedNode.type === 'store' && (
                 <StoreInfoCard variant="inspector-drawer" />
               )}
+              {selectedNode.type === 'hardware' && (
+                <div className="inspector-section" data-testid="hardware-inspector">
+                  <h4>
+                    <Localized id="topology-inspector-hardware-title">Hardware Device</Localized>
+                  </h4>
+                  {selectedNode.telemetryBadge && (
+                    <span className={`node-telemetry-badge telemetry-${selectedNode.telemetryStatus ?? 'online'}`}>
+                      {selectedNode.telemetryBadge}
+                    </span>
+                  )}
+                </div>
+              )}
               </ErrorBoundary>
             </div>
           </div>

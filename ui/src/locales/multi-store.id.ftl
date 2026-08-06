@@ -80,6 +80,7 @@ topology-ws-type-warehouse = Gudang
 topology-node-drag-hint = Seret untuk memindahkan
 topology-wire-toggle-aria = Alihkan arah koneksi
 topology-inspector-close-aria = Tutup inspektur
+topology-inspector-hardware-title = Perangkat Keras
 topology-ws-type-select-aria = Pilih tipe workspace
 # $name (String) — node display name · $port (String) — port position (top/right/bottom/left)
 topology-port-aria = Port { $port } { $name }
