@@ -1,4 +1,15 @@
 
+## 2026-08-06 — Full UI suite back to green: reduced-motion gate + stale test contracts + picker pending state
+
+### Four lingering vitest failures closed, plus the picker double-tap follow-up
+**Problem:** The full-suite run showed 3984/4 — all four failures pre-existing from earlier resto work, not the topology cycles: the SessionLockScreen rate-limit pulse animated ungated (violating the reduced-motion compliance test), the card-height test still asserted the pre-slim 108px/16px·10px formula, and the screen-extraction allowlist never learned that the + Add label moved to a global `sr-only` utility. Separately, the KDS picker's double-tap guard silently dropped the second tap — no visual feedback that a save was in flight.
+
+**Solution:** (1) Wrapped `session-lock-rate-pulse` in `@media (prefers-reduced-motion: no-preference)` — the warning text stays visible either way; (2) re-pinned the height test to the deliberate slimming (`* 14px`/`* 8px`, base `--space-14 + --space-8 + --space-1` = 92px); (3) added `sr-only` to the RestaurantMenu `knownDynamicFragments`; (4) `pickerSaving` state in KdsScreen drives a `pending` prop on the modal that disables Confirm (and the handler guard drops stray taps) — the ref guard stays for timing-immune re-entry detection.
+
+**Validation:** Full vitest suite **4012/4012 across 261 files — zero failures** · typecheck clean · eslint 0 errors (40 pre-existing warnings) · i18n clean. New pins: modal `pending` disables Confirm even with picked items; the screen double-tap test asserts the button disables between taps.
+
+**Follow-ups:** The `platform/startup` unwired `settings_updated` Tauri bridge (`event_handlers.rs:429`) remains the one Rust-side item on the radar — needs a wire-up decision before it becomes a TDD slice.
+
 ## 2026-08-06 — TDD cycle: KDS product picker contract + double-confirm merge guard (TODO 3f)
 
 ### The mid-preparation picker had no test suite, a double-fired Escape, and a double-tap duplicate-add race
