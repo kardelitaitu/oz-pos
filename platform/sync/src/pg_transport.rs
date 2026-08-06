@@ -47,13 +47,26 @@ fn decode_pull_cursor(cursor: Option<&str>) -> (Option<String>, Option<String>) 
 /// cursor branch carries the composite `(created_at, id)` tiebreak — so
 /// rows sharing the anchor's exact timestamp are never skipped — matching
 /// the HTTP server's paginated pull semantics.
-pub fn build_pull_sql(since: Option<&str>, cursor: Option<&str>) -> &'static str {
-    if cursor.is_some() {
-        "SELECT id, action, payload, status, retry_count, last_error,\n\n                tenant_id, created_at::TEXT, synced_at::TEXT\n\n         FROM offline_queue\n\n         WHERE created_at >= $1 AND (created_at > $2 OR (created_at = $2 AND id > $3))\n\n         ORDER BY created_at ASC, id ASC\n\n         LIMIT $4"
-    } else if since.is_some() {
-        "SELECT id, action, payload, status, retry_count, last_error,\n\n                tenant_id, created_at::TEXT, synced_at::TEXT\n\n         FROM offline_queue\n\n         WHERE created_at >= $1\n\n         ORDER BY created_at ASC, id ASC\n\n         LIMIT $2"
-    } else {
-        "SELECT id, action, payload, status, retry_count, last_error,\n\n                tenant_id, created_at::TEXT, synced_at::TEXT\n\n         FROM offline_queue\n\n         ORDER BY created_at ASC, id ASC\n\n         LIMIT $1"
+///
+/// The cursor-without-since variant OMITS the `created_at >=` clause:
+/// PostgreSQL would reject an empty string cast to `timestamptz`
+/// (`invalid input syntax`), and a cursor alone already encodes the exact
+/// resume point. (The HTTP server tolerates `''` because SQLite compares
+/// text; PG does not.)
+fn build_pull_sql(since: Option<&str>, cursor: Option<&str>) -> &'static str {
+    match (since, cursor) {
+        (None, Some(_)) => {
+            "SELECT id, action, payload, status, retry_count, last_error,\n\n                tenant_id, created_at::TEXT, synced_at::TEXT\n\n         FROM offline_queue\n\n         WHERE (created_at > $1 OR (created_at = $1 AND id > $2))\n\n         ORDER BY created_at ASC, id ASC\n\n         LIMIT $3"
+        }
+        (Some(_), Some(_)) => {
+            "SELECT id, action, payload, status, retry_count, last_error,\n\n                tenant_id, created_at::TEXT, synced_at::TEXT\n\n         FROM offline_queue\n\n         WHERE created_at >= $1 AND (created_at > $2 OR (created_at = $2 AND id > $3))\n\n         ORDER BY created_at ASC, id ASC\n\n         LIMIT $4"
+        }
+        (Some(_), None) => {
+            "SELECT id, action, payload, status, retry_count, last_error,\n\n                tenant_id, created_at::TEXT, synced_at::TEXT\n\n         FROM offline_queue\n\n         WHERE created_at >= $1\n\n         ORDER BY created_at ASC, id ASC\n\n         LIMIT $2"
+        }
+        (None, None) => {
+            "SELECT id, action, payload, status, retry_count, last_error,\n\n                tenant_id, created_at::TEXT, synced_at::TEXT\n\n         FROM offline_queue\n\n         ORDER BY created_at ASC, id ASC\n\n         LIMIT $1"
+        }
     }
 }
 
@@ -187,22 +200,30 @@ impl PgTransport {
 
         let (cursor_ts, cursor_id) = decode_pull_cursor(cursor);
         let limit = PG_PULL_FETCH_LIMIT;
-        // `since` for the cursor/since branches; PG binds an empty string
-        // as the lower bound when no since is given (matches the HTTP
-        // server passing `req.since.unwrap_or("")` to the cursor query).
-        let since_param = since.unwrap_or("");
 
         let rows = if let (Some(ts), Some(cid)) = (&cursor_ts, &cursor_id) {
+            if let Some(since) = since {
+                // Cursor + since: bind the lower bound plus the composite
+                // (created_at, id) tiebreak against the 4-placeholder SQL.
+                client
+                    .query(
+                        build_pull_sql(Some(since), cursor),
+                        &[&since, ts, cid, &limit],
+                    )
+                    .await
+                    .map_err(|e| SyncError::Transport(format!("pg query failed: {e}")))?
+            } else {
+                // Cursor without since: the SQL omits the `created_at >=`
+                // clause (PG rejects an empty-string cast to timestamptz),
+                // so bind only the 3-placeholder tiebreak + limit.
+                client
+                    .query(build_pull_sql(None, cursor), &[ts, cid, &limit])
+                    .await
+                    .map_err(|e| SyncError::Transport(format!("pg query failed: {e}")))?
+            }
+        } else if let Some(since) = since {
             client
-                .query(
-                    build_pull_sql(since, cursor),
-                    &[&since_param, ts, cid, &limit],
-                )
-                .await
-                .map_err(|e| SyncError::Transport(format!("pg query failed: {e}")))?
-        } else if since.is_some() {
-            client
-                .query(build_pull_sql(since, cursor), &[&since_param, &limit])
+                .query(build_pull_sql(Some(since), None), &[&since, &limit])
                 .await
                 .map_err(|e| SyncError::Transport(format!("pg query failed: {e}")))?
         } else {
@@ -425,6 +446,28 @@ mod tests {
         assert!(
             sql.contains("created_at > $2 OR (created_at = $2 AND id > $3)"),
             "cursor branch must carry the composite tiebreak, got: {sql}"
+        );
+    }
+
+    #[test]
+    fn build_pull_sql_cursor_without_since_omits_lower_bound() {
+        // Regression (review RUST-07): a cursor-without-since must not emit
+        // `created_at >= $1` — the HTTP server can bind '' (SQLite text
+        // comparison) but PostgreSQL rejects an empty-string cast to
+        // timestamptz with `invalid input syntax`. The cursor alone already
+        // encodes the exact resume point, so the lower bound is redundant.
+        let sql = build_pull_sql(None, Some("2026-01-02|item-42"));
+        assert!(
+            !sql.contains("created_at >="),
+            "cursor-without-since must omit the lower bound, got: {sql}"
+        );
+        assert!(
+            sql.contains("created_at > $1 OR (created_at = $1 AND id > $2)"),
+            "cursor-only branch must carry the composite tiebreak, got: {sql}"
+        );
+        assert!(
+            sql.contains("LIMIT $3"),
+            "cursor-only branch has 3 params, got: {sql}"
         );
     }
 
