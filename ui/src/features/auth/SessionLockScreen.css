@@ -84,6 +84,13 @@
 
 .session-lock-bottom-bar {
   flex: 1 0 0;
+  /* Empty spacer — reserve breathing room so the keypad never presses
+     against the card's bottom edge. Without a min-height this bar collapses
+     to 0px: flex min-height:auto lets the content-driven top-bar and
+     main-area (keypad) grab the full card height, leaving the last key row
+     flush with the card edge (was a 1px gap). The login screen's bottom bar
+     holds the step-dots so it never collapses; this one is aria-hidden. */
+  min-height: clamp(var(--space-4), 4vh, var(--space-6));
 }
 
 /* Short viewports (landscape tablet / small laptop): shrink the card so
