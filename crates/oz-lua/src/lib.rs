@@ -632,7 +632,6 @@ end
         assert!(result.is_none());
     }
 
-    #[test]
     /// MONEY-05 evidence pin: the MONEY-03 journal flagged `qty *
     /// unit_price_minor` inside plugin discount scripts (lib.rs 577/608) as
     /// the same unchecked-multiply class. Those lines are plugin-authored Lua
@@ -672,6 +671,7 @@ end
         assert_eq!(d.percent, 5);
     }
 
+    #[test]
     fn calc_line_tax_returns_override() {
         let lua = runtime();
         lua.load_str(

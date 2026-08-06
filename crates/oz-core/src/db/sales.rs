@@ -1760,6 +1760,23 @@ impl Store<'_> {
         let mut total_tax: Option<Money> = None;
         let mut subtotal: Option<Money> = None;
 
+        // MONEY-02 follow-up: reject negative line totals in a pre-pass so a
+        // hand-built `Sale` cannot record negative tax on the ledger, and so
+        // the error path leaves no partially-mutated Sale behind. CartLine
+        // asserts qty > 0 so this is unreachable from the front-end, but this
+        // is the tax boundary.
+        for line in &sale.lines {
+            if line.line_total.minor_units < 0 {
+                return Err(CoreError::Validation {
+                    field: "line_total",
+                    message: format!(
+                        "line total must be non-negative, got {}",
+                        line.line_total.minor_units
+                    ),
+                });
+            }
+        }
+
         for line in &mut sale.lines {
             let line_subtotal = line.line_total;
             let mut line_tax = Money::zero(currency);
@@ -3148,6 +3165,30 @@ mod tests {
     }
 
     #[test]
+    /// MONEY-02 follow-up: a hand-built `Sale` with a negative `line_total`
+    /// flows straight into `compute_line_tax` and records a negative tax on
+    /// the sale. `Sale::from_cart` only produces non-negative line totals
+    /// (CartLine asserts qty > 0), but this is the tax boundary — reject it
+    /// up front so a hostile or malformed sale cannot distort the ledger.
+    #[test]
+    fn compute_sale_tax_rejects_negative_line_total() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_tax_rate(&conn, "VAT 10%", 1000, true, false);
+        seed_product_with_category(&conn, "COFFEE", None);
+
+        let mut sale = make_single_line_sale("COFFEE", 2, 350);
+        sale.lines[0].line_total = price(-700);
+
+        let err = s
+            .compute_sale_tax(&mut sale, &[], RoundingMode::HalfUp)
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation { field, .. } if field == "line_total"
+        ));
+    }
+
     fn void_sale_succeeds_regardless_of_stock() {
         let conn = fresh();
         let s = store(&conn);

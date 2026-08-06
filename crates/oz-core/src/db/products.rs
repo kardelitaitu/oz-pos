@@ -873,8 +873,11 @@ impl Store<'_> {
         // receipt while discarding a legitimate remote catalog conflict.
         {
             use rusqlite::OptionalExtension;
-            let existing: Option<(String, i64, String, Option<String>, Option<String>, String)> =
-                tx.query_row(
+            // Existing-product row for the idempotency comparison (clippy
+            // type_complexity — factored into a named type).
+            type ExistingRow = (String, i64, String, Option<String>, Option<String>, String);
+            let existing: Option<ExistingRow> = tx
+                .query_row(
                     "SELECT p.name, p.price_minor, p.currency, p.category_id, p.barcode,
                             p.product_type
                      FROM products p

@@ -8,15 +8,21 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use hmac::{Hmac, Mac};
 use serde::Serialize;
+use sha2::Sha256;
 use tauri::State;
 
 use oz_core::db::Store;
 use oz_core::db::workspaces::WorkspaceDto;
+use platform_core::StoreDatabaseManager;
 
 use crate::commands::picker_ticket;
+use crate::commands::terminals::DEVICE_BINDING_KEYRING_NAME;
 use crate::error::AppError;
 use crate::state::AppState;
+
+type HmacSha256 = Hmac<Sha256>;
 
 /// Screen within a workspace as seen by the front-end.
 #[derive(Debug, Serialize)]
@@ -135,33 +141,174 @@ pub struct BootResolution {
     pub instance_id: Option<String>,
 }
 
+/// Verify a device-binding HMAC signature using constant-time comparison.
+///
+/// Uses `mac.verify_slice()` which internally uses `subtle::ConstantTimeEq`
+/// to prevent timing side-channel attacks (parity with the desktop client).
+fn verify_binding_hmac(
+    secret: &str,
+    terminal_id: &str,
+    store_id: &str,
+    instance_id: &str,
+    hex_signature: &str,
+) -> bool {
+    let expected_bytes = match hex::decode(hex_signature) {
+        Ok(b) => b,
+        Err(_) => return false,
+    };
+    let mut mac = match HmacSha256::new_from_slice(secret.as_bytes()) {
+        Ok(m) => m,
+        Err(_) => return false,
+    };
+    mac.update(terminal_id.as_bytes());
+    mac.update(b":");
+    mac.update(store_id.as_bytes());
+    mac.update(b":");
+    mac.update(instance_id.as_bytes());
+    mac.verify_slice(&expected_bytes).is_ok()
+}
+
 /// Resolve the active store at boot time (before authentication).
 ///
-/// Parity with the desktop client's boot flow: falls back to the primary
-/// store profile. Device binding is not implemented on the tablet client,
-/// so the resolution is never `is_bound: true` here.
+/// Parity with the desktop client: when the device has a stored binding
+/// (terminal row + HMAC signature made with the OS-keyring secret), the
+/// tablet auto-boots into that store + instance. A missing/tampered
+/// binding, an unknown device, or a bound instance that no longer exists
+/// all fall back to the primary store profile — a boot can never fail
+/// because of a stale binding.
 #[tauri::command]
 pub async fn resolve_boot_store(
     state: State<'_, AppState>,
-    _device_id: Option<String>,
+    device_id: Option<String>,
 ) -> Result<BootResolution, AppError> {
-    let primary_id = {
-        let db = state.db.lock().await;
-        let store = Store::new(&db);
+    let device_id = device_id
+        .filter(|d| !d.is_empty())
+        .or_else(|| {
+            std::env::var("COMPUTERNAME")
+                .or_else(|_| std::env::var("HOSTNAME"))
+                .ok()
+        })
+        .unwrap_or_default();
+
+    // A keyring failure must never break boot: without a keyring there is
+    // no way to verify a binding, so resolution degrades to primary store.
+    let keyring = oz_security::default_keyring().ok();
+    let db = state.db.lock().await;
+    let resolution =
+        resolve_boot_store_core(&db, &state.db_manager, &device_id, keyring.as_deref())?;
+    drop(db);
+    Ok(resolution)
+}
+
+/// Core boot-resolution logic (extracted for testing).
+///
+/// `keyring` is `None` when the OS keyring is unavailable or when the
+/// caller only wants the primary-store fallback; the binding path is only
+/// reachable with a keyring present.
+fn resolve_boot_store_core(
+    conn: &rusqlite::Connection,
+    db_manager: &StoreDatabaseManager,
+    device_id: &str,
+    keyring: Option<&dyn oz_security::Keyring>,
+) -> Result<BootResolution, AppError> {
+    let primary_store = |conn: &rusqlite::Connection| -> Result<BootResolution, AppError> {
+        let store = Store::new(conn);
         let primary = store
             .get_primary_store()?
             .ok_or_else(|| AppError::Internal("no primary store found".into()))?;
-        primary.id
+        tracing::info!(
+            store_id = %primary.id,
+            "tablet boot resolution: primary store"
+        );
+        Ok(BootResolution {
+            is_bound: false,
+            store_id: primary.id,
+            instance_id: None,
+        })
     };
-    tracing::info!(
-        store_id = %primary_id,
-        "tablet boot resolution: primary store"
-    );
-    Ok(BootResolution {
-        is_bound: false,
-        store_id: primary_id,
-        instance_id: None,
-    })
+
+    if device_id.is_empty() {
+        return primary_store(conn);
+    }
+    let Some(keyring) = keyring else {
+        return primary_store(conn);
+    };
+
+    let binding_info: Option<(String, String, String, String)> = {
+        let store = Store::new(conn);
+        store
+            .get_terminal_by_device_id(device_id)?
+            .and_then(|terminal| {
+                let tid = terminal.id;
+                store
+                    .get_terminal_binding(&tid)
+                    .ok()
+                    .flatten()
+                    .map(|(s, i, sig)| (tid, s, i, sig))
+            })
+    };
+
+    if let Some((terminal_id, bound_store_id, bound_instance_id, signature)) = binding_info {
+        let secret = keyring
+            .get_secret(DEVICE_BINDING_KEYRING_NAME)
+            .map_err(|e| AppError::Internal(format!("keyring read failed: {e}")))?;
+        let signature_valid = match secret {
+            Some(secret) => verify_binding_hmac(
+                &secret,
+                &terminal_id,
+                &bound_store_id,
+                &bound_instance_id,
+                &signature,
+            ),
+            None => false,
+        };
+
+        if !signature_valid {
+            tracing::warn!(
+                terminal_id = %terminal_id,
+                bound_store_id = %bound_store_id,
+                "tablet device binding HMAC validation failed — falling back to primary store"
+            );
+        } else {
+            let instance_exists = {
+                db_manager
+                    .open_store(&bound_store_id)
+                    .ok()
+                    .and_then(|db_arc| {
+                        let db = db_arc.lock().ok()?;
+                        let store = Store::new(&db);
+                        store
+                            .get_workspace_instance(&bound_instance_id, None)
+                            .ok()
+                            .map(|_| true)
+                    })
+                    .unwrap_or(false)
+            };
+
+            if !instance_exists {
+                tracing::warn!(
+                    terminal_id = %terminal_id,
+                    bound_store_id = %bound_store_id,
+                    bound_instance_id = %bound_instance_id,
+                    "tablet bound instance not found or not active — falling back to primary store"
+                );
+            } else {
+                tracing::info!(
+                    terminal_id = %terminal_id,
+                    store_id = %bound_store_id,
+                    instance_id = %bound_instance_id,
+                    "tablet device binding resolved — auto-booting into bound workspace"
+                );
+                return Ok(BootResolution {
+                    is_bound: true,
+                    store_id: bound_store_id,
+                    instance_id: Some(bound_instance_id),
+                });
+            }
+        }
+    }
+
+    primary_store(conn)
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────
@@ -374,5 +521,157 @@ mod tests {
         assert_eq!(resolution.store_id, "store-main");
         assert!(!resolution.is_bound);
         assert!(resolution.instance_id.is_none());
+    }
+
+    // ── Device binding auto-boot (parity with desktop client) ───────────
+
+    use oz_core::Terminal;
+    use oz_security::Keyring as _;
+
+    /// HMAC-SHA256 hex over `{terminal}:{store}:{instance}` with a fixed
+    /// secret — mirrors `sign_binding` so tests can forge bindings.
+    fn hmac_hex(secret: &str, terminal_id: &str, store_id: &str, instance_id: &str) -> String {
+        let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).unwrap();
+        mac.update(terminal_id.as_bytes());
+        mac.update(b":");
+        mac.update(store_id.as_bytes());
+        mac.update(b":");
+        mac.update(instance_id.as_bytes());
+        hex::encode(mac.finalize().into_bytes())
+    }
+
+    /// Global DB with a bound terminal (device "tablet-1" → store-a/ws-a-1,
+    /// signed with a known in-memory keyring secret) + a store-a DB with the
+    /// instance. Primary store row exists in the global DB for fallbacks.
+    fn binding_state() -> (AppState, tempfile::TempDir, oz_security::InMemoryKeyring) {
+        let conn = migrations::fresh_db();
+        let store = Store::new(&conn);
+        let keyring = oz_security::InMemoryKeyring::new();
+        keyring
+            .set_secret(
+                crate::commands::terminals::DEVICE_BINDING_KEYRING_NAME,
+                "test-binding-secret",
+            )
+            .unwrap();
+
+        let terminal = Terminal::new("Tablet-1", "tablet-1");
+        store.create_terminal(&terminal).unwrap();
+        // `bound_store_id` is FK-enforced against the global `store_profiles`,
+        // and `resolve_boot_store` reads the primary from the same table.
+        let now = "2026-07-31T00:00:00.000Z";
+        conn.execute(
+            "INSERT INTO store_profiles (id, name, address, tax_id, currency, timezone, is_primary, created_at, updated_at)
+             VALUES ('store-a', 'Store A', '', '', 'USD', 'UTC', 0, ?1, ?1), ('store-main', 'Main', '', '', 'USD', 'UTC', 1, ?1, ?1)",
+            [now],
+        )
+        .unwrap();
+        let sig = hmac_hex("test-binding-secret", &terminal.id, "store-a", "ws-a-1");
+        store
+            .update_terminal_binding(&terminal.id, "store-a", "ws-a-1", &sig)
+            .unwrap();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut state = AppState::for_test_with_conn(conn);
+        state.db_manager =
+            StoreDatabaseManager::new(temp_dir.path().to_path_buf(), migrations::ALL);
+        let conn = state.db_manager.open_store("store-a").unwrap();
+        let db = conn.lock().unwrap();
+        let store = Store::new(&db);
+        store
+            .create_store_profile(&make_profile("store-a", "Store A"))
+            .unwrap();
+        store
+            .create_workspace_instance("ws-a-1", "store-pos", "store-a", "POS", "", None)
+            .unwrap();
+        drop(db);
+        (state, temp_dir, keyring)
+    }
+
+    #[tokio::test]
+    async fn resolve_boot_store_autoboots_into_bound_instance() {
+        let (state, _dir, keyring) = binding_state();
+        let db = state.db.lock().await;
+        let resolution =
+            resolve_boot_store_core(&db, &state.db_manager, "tablet-1", Some(&keyring)).unwrap();
+        assert!(resolution.is_bound, "valid binding must auto-boot");
+        assert_eq!(resolution.store_id, "store-a");
+        assert_eq!(resolution.instance_id.as_deref(), Some("ws-a-1"));
+    }
+
+    #[tokio::test]
+    async fn resolve_boot_store_tampered_binding_falls_back_to_primary() {
+        let (state, _dir, keyring) = binding_state();
+        // A DIFFERENT keyring secret — the DB row was not signed by this
+        // device's secret, so the HMAC must fail and resolution degrades.
+        let other = oz_security::InMemoryKeyring::new();
+        other
+            .set_secret(
+                crate::commands::terminals::DEVICE_BINDING_KEYRING_NAME,
+                "attacker-secret",
+            )
+            .unwrap();
+        let db = state.db.lock().await;
+        let resolution =
+            resolve_boot_store_core(&db, &state.db_manager, "tablet-1", Some(&other)).unwrap();
+        assert!(!resolution.is_bound);
+        assert_eq!(resolution.store_id, "store-main");
+    }
+
+    #[tokio::test]
+    async fn resolve_boot_store_bound_instance_missing_falls_back_to_primary() {
+        let (state, _dir, keyring) = binding_state();
+        // Valid signature, but the bound instance was archived/deleted.
+        {
+            let conn = state.db_manager.open_store("store-a").unwrap();
+            let db = conn.lock().unwrap();
+            let store = Store::new(&db);
+            store.archive_instance("ws-a-1").unwrap();
+            drop(db);
+        }
+        let db = state.db.lock().await;
+        let resolution =
+            resolve_boot_store_core(&db, &state.db_manager, "tablet-1", Some(&keyring)).unwrap();
+        assert!(!resolution.is_bound);
+        assert_eq!(resolution.store_id, "store-main");
+    }
+
+    #[tokio::test]
+    async fn resolve_boot_store_unknown_device_falls_back_to_primary() {
+        let (state, _dir, keyring) = binding_state();
+        let db = state.db.lock().await;
+        let resolution =
+            resolve_boot_store_core(&db, &state.db_manager, "ghost-device", Some(&keyring))
+                .unwrap();
+        assert!(!resolution.is_bound);
+        assert_eq!(resolution.store_id, "store-main");
+    }
+
+    #[test]
+    fn verify_binding_hmac_valid_signature_passes() {
+        let sig = hmac_hex("secret", "term-1", "store-a", "ws-a-1");
+        assert!(verify_binding_hmac(
+            "secret", "term-1", "store-a", "ws-a-1", &sig
+        ));
+    }
+
+    #[test]
+    fn verify_binding_hmac_tampered_signature_fails() {
+        let sig = hmac_hex("secret", "term-1", "store-a", "ws-a-1");
+        assert!(!verify_binding_hmac(
+            "secret", "term-1", "store-a", "ws-a-2", &sig
+        ));
+        assert!(!verify_binding_hmac(
+            "other", "term-1", "store-a", "ws-a-1", &sig
+        ));
+    }
+
+    #[test]
+    fn verify_binding_hmac_garbage_hex_fails() {
+        assert!(!verify_binding_hmac(
+            "secret", "term-1", "store-a", "ws-a-1", "not-hex!"
+        ));
+        assert!(!verify_binding_hmac(
+            "secret", "term-1", "store-a", "ws-a-1", ""
+        ));
     }
 }

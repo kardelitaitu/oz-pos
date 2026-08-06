@@ -478,21 +478,43 @@ impl SyncDaemon {
                                     // applied successfully. A crash mid-pull leaves
                                     // the old anchor so the ledger absorbs replay.
                                     if all_applied && !retryable_failure && summary_rebuilt {
-                                        let new_since = items
-                                            .iter()
-                                            .map(|i| i.created_at.clone())
-                                            .max()
-                                            .or(prev_since);
-                                        if let Err(e) = store.set_sync_pull_state(
-                                            new_since.as_deref(),
-                                            next_cursor.as_deref(),
-                                        ) {
-                                            tracing::error!(
-                                                error = %e,
-                                                "failed to persist sync pull anchor"
+                                        // SYNC-09: re-read the DURABLE pull state
+                                        // before advancing. An operator rewind
+                                        // (`requeue_remote_failure` sets since = NULL
+                                        // to force a full re-pull) can land while this
+                                        // page was in flight; blindly writing new_since
+                                        // would clobber it and the requeued item would
+                                        // never be re-fetched. Skip the advance when the
+                                        // durable state no longer matches what this tick
+                                        // captured (a captured Some→durable None
+                                        // transition is exactly the rewind signature).
+                                        let durable = store
+                                            .get_sync_pull_state()
+                                            .unwrap_or_default();
+                                        let rewound = durable.since.is_none()
+                                            && prev_since.is_some();
+                                        if rewound {
+                                            tracing::warn!(
+                                                "operator rewind detected mid-pull — retaining rewound anchor for full re-pull"
                                             );
-                                            anchor_error =
-                                                Some(format!("persist sync pull anchor: {e}"));
+                                        } else {
+                                            let new_since = items
+                                                .iter()
+                                                .map(|i| i.created_at.clone())
+                                                .max()
+                                                .or(prev_since);
+                                            if let Err(e) = store.set_sync_pull_state(
+                                                new_since.as_deref(),
+                                                next_cursor.as_deref(),
+                                            ) {
+                                                tracing::error!(
+                                                    error = %e,
+                                                    "failed to persist sync pull anchor"
+                                                );
+                                                anchor_error = Some(format!(
+                                                    "persist sync pull anchor: {e}"
+                                                ));
+                                            }
                                         }
                                     }
                                     // Keep quarantine visible in daemon status even
@@ -663,9 +685,10 @@ impl Default for SyncDaemon {
 mod tests {
     use super::*;
     use crate::transport::{PullResponse, PushOutcome, PushResponse};
-    use axum::{Json, Router, routing::post};
+    use axum::{Json, Router, extract::State, routing::post};
     use oz_core::migrations;
     use oz_core::settings::Settings;
+    use tokio::sync::Notify;
 
     fn setup_db() -> DbConnection {
         Arc::new(Mutex::new(migrations::fresh_db()))
@@ -1159,6 +1182,149 @@ mod tests {
             "retryable item must retain the anchor"
         );
         assert_eq!(retry_attempts, 1);
+    }
+
+    /// Spawn a slow mock sync server whose pull handler BLOCKS on a
+    /// [`tokio::sync::Notify`] until the test releases it, then returns one
+    /// remote `stock.adjusted` item.
+    ///
+    /// The "pull arrived" notify fires as soon as the daemon's pull request
+    /// reaches the handler — by then the daemon has already captured the
+    /// durable anchor, so the test has a deterministic window to rewind it
+    /// mid-pull (the race this regression pins).
+    async fn spawn_slow_mock_sync_server() -> (String, Arc<Notify>, Arc<Notify>) {
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let arrived = Arc::new(Notify::new());
+        let release = Arc::new(Notify::new());
+
+        async fn handle_push(Json(items): Json<Vec<serde_json::Value>>) -> Json<PushResponse> {
+            Json(PushResponse {
+                results: vec![PushOutcome::Accepted; items.len()],
+            })
+        }
+        async fn handle_pull(
+            State((arrived, release)): State<(Arc<Notify>, Arc<Notify>)>,
+            Json(_req): Json<serde_json::Value>,
+        ) -> Json<PullResponse> {
+            // Signal that the daemon's pull is in flight (anchor captured),
+            // then block until the test rewinds the anchor and releases us.
+            arrived.notify_one();
+            release.notified().await;
+            let mut item = oz_core::offline::OfflineQueueItem::new(
+                "stock.adjusted",
+                r#"{"sku":"COFFEE","delta":10}"#,
+            );
+            item.id = "remote-rewind-race-1".into();
+            item.created_at = "2026-01-02T00:00:00.000Z".into();
+            Json(PullResponse {
+                items: vec![item],
+                next_cursor: None,
+            })
+        }
+
+        let app = Router::new()
+            .route("/api/sync/push", post(handle_push))
+            .route("/api/sync/pull", post(handle_pull))
+            .with_state((arrived.clone(), release.clone()));
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        (format!("http://localhost:{port}"), arrived, release)
+    }
+
+    /// SYNC-09 regression: an operator rewind (`requeue_remote_failure`
+    /// sets `sync_pull_state.since = NULL`) landing while a pull page is in
+    /// flight must SURVIVE the daemon's apply phase. Previously the apply
+    /// closure wrote its computed `new_since` blindly, clobbering the
+    /// rewind — the next cycle then pulled from the advanced anchor and
+    /// never re-fetched the requeued dead-lettered item.
+    #[tokio::test]
+    async fn daemon_pull_does_not_clobber_operator_rewind() {
+        let (server_url, pull_arrived, release_pull) = spawn_slow_mock_sync_server().await;
+        let db = setup_db();
+
+        // Seed a product + inventory (so the remote adjustment applies
+        // cleanly), configure sync, and pre-set a DURABLE anchor so the
+        // daemon captures `Some(since)` at tick start.
+        let db_setup = db.clone();
+        let url = server_url.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db_setup.blocking_lock();
+            let store = Store::new(&conn);
+            Settings::set_sync_enabled(&conn, true).unwrap();
+            Settings::set_sync_server_url(&conn, &url).unwrap();
+            conn.execute_batch(
+                "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at)
+                 VALUES ('prod-coffee', 'COFFEE', 'Coffee', 350, 'USD', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
+                 INSERT INTO inventory (product_id, qty, updated_at)
+                 VALUES ('prod-coffee', 50, '2026-01-01T00:00:00.000Z');",
+            )
+            .unwrap();
+            store
+                .set_sync_pull_state(Some("2026-01-01T00:00:00.000Z"), None)
+                .unwrap();
+        })
+        .await
+        .unwrap();
+
+        let status = Arc::new(RwLock::new(DaemonStatus::default()));
+        // Run the tick in the background so the pull is genuinely in flight
+        // when we rewind (the race is between the anchor capture and the
+        // apply-phase write).
+        let tick = {
+            let db = db.clone();
+            let status = status.clone();
+            tokio::spawn(async move {
+                SyncDaemon::run_tick(&db, &status).await;
+            })
+        };
+
+        // Wait until the daemon's pull request reached the server — the
+        // anchor is captured by now — then rewind it exactly as an operator
+        // requeue would.
+        pull_arrived.notified().await;
+        let db_rewind = db.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db_rewind.blocking_lock();
+            let store = Store::new(&conn);
+            store.set_sync_pull_state(None, None).unwrap();
+        })
+        .await
+        .unwrap();
+        release_pull.notify_one();
+
+        tick.await.unwrap();
+
+        // The page still applied (stock 50 → 60) — only the anchor advance
+        // must be skipped so the rewind survives for a full re-pull.
+        let (anchor, stock) = tokio::task::spawn_blocking({
+            let db = db.clone();
+            move || {
+                let conn = db.blocking_lock();
+                let store = Store::new(&conn);
+                (
+                    store.get_sync_pull_state().unwrap(),
+                    store.get_stock("prod-coffee").unwrap(),
+                )
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(stock, 60, "pull page must still apply despite the rewind");
+        assert!(
+            anchor.since.is_none(),
+            "operator rewind must survive the apply phase (anchor.since = {:?})",
+            anchor.since
+        );
+        assert!(
+            anchor.cursor.is_none(),
+            "rewound cursor must survive the apply phase (cursor = {:?})",
+            anchor.cursor
+        );
     }
 
     /// Spawn a mock pull server returning one already-quarantined item and

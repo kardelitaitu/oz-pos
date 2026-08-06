@@ -2,6 +2,8 @@
 //!
 //! These commands are the IPC surface for the Staff Management UI.
 
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
@@ -13,6 +15,7 @@ use oz_core::{Role, User};
 use foundation::{validate_min_length, validate_not_empty};
 
 use crate::commands::authz::require_permission_for_user;
+use crate::commands::picker_ticket;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -496,6 +499,130 @@ pub async fn update_staff_scoped(
     Ok(to_staff_dto(&user, &roles))
 }
 
+// ── Bootstrap first owner (no authentication required) ────────────────
+//
+// Parity with the desktop client (audit/06 residual): the tablet needs the
+// same first-owner path so a fresh installation can be provisioned from the
+// tablet itself. Like `staff_login`, the command mints a short-lived picker
+// ticket so the pre-session workspace picker stays bound to the real user.
+
+/// Arguments for the `bootstrap_owner` command.
+#[derive(Debug, Deserialize)]
+/// Bootstrapownerargs.
+pub struct BootstrapOwnerArgs {
+    /// Username for the first owner account.
+    pub username: String,
+    /// Plain-text PIN (minimum 4 characters).
+    pub pin: String,
+    /// Display name for the first owner.
+    pub display_name: String,
+}
+
+/// Result of a successful owner bootstrap — returns a login session
+/// so the front-end can auto-login immediately.
+#[derive(Debug, Serialize)]
+/// Bootstrapownerresult.
+pub struct BootstrapOwnerResult {
+    /// LoginSession dto.
+    pub session: oz_core::auth::LoginSession,
+    /// Short-lived picker ticket (audit/06 residual).
+    ///
+    /// The pre-session `list_workspaces` / `list_workspace_screens`
+    /// commands verify this ticket and resolve the caller's REAL role
+    /// from the database — caller-supplied `role_id` / `user_id` are
+    /// never trusted for the workspace picker.
+    pub picker_ticket: String,
+}
+
+/// Create the first owner user in a fresh installation.
+///
+/// This is the only command that does NOT require an existing session,
+/// because there are no users yet. It seeds the default roles first,
+/// then creates a user with the `role-owner` role.
+///
+/// # Errors
+///
+/// Returns `Invalid` if any users already exist, preventing accidental
+/// re-bootstrapping after staff accounts have been created.
+/// Returns `Invalid` if validation fails (empty username, short PIN, etc.).
+#[command]
+pub async fn bootstrap_owner(
+    args: BootstrapOwnerArgs,
+    state: State<'_, AppState>,
+) -> Result<BootstrapOwnerResult, AppError> {
+    let db = state.db.lock().await;
+    let mut result = run_bootstrap_owner(&db, &args)?;
+    drop(db);
+
+    // Mint the short-lived picker ticket bound to the new owner. It is
+    // only valid for the pre-session workspace picker; `create_session`
+    // hands out the opaque session token afterwards.
+    let now_ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    result.picker_ticket = picker_ticket::sign_picker_ticket(
+        &state.picker_ticket_secret,
+        &result.session.user_id,
+        now_ts + picker_ticket::PICKER_TICKET_TTL_SECS,
+    );
+    Ok(result)
+}
+
+/// Business logic for `bootstrap_owner` (extracted for testing).
+fn run_bootstrap_owner(
+    conn: &rusqlite::Connection,
+    args: &BootstrapOwnerArgs,
+) -> Result<BootstrapOwnerResult, AppError> {
+    let username = args.username.trim().to_lowercase();
+    let display_name = args.display_name.trim();
+
+    validate_not_empty("username", &username).map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_not_empty("display_name", display_name)
+        .map_err(|e| AppError::Invalid(e.to_string()))?;
+    validate_min_length("pin", &args.pin, 4).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let pin_hash =
+        hash_pin(&args.pin).map_err(|e| AppError::Internal(format!("hashing PIN: {e}")))?;
+
+    let store = Store::new(conn);
+
+    // Guard: refuse to bootstrap if users already exist.
+    let existing = store.list_users()?;
+    if !existing.is_empty() {
+        return Err(AppError::Invalid(
+            "cannot bootstrap: staff accounts already exist".into(),
+        ));
+    }
+
+    // Seed roles first so role-owner exists.
+    store.seed_default_roles()?;
+
+    let user = store.create_user(
+        &username,
+        &pin_hash,
+        display_name,
+        oz_core::builtin_roles::OWNER,
+    )?;
+    let role = store
+        .get_role(oz_core::builtin_roles::OWNER)?
+        .ok_or_else(|| AppError::Internal("owner role not found after seeding".into()))?;
+
+    tracing::info!(username = %username, "owner account bootstrapped");
+
+    Ok(BootstrapOwnerResult {
+        session: oz_core::auth::LoginSession {
+            user_id: user.id,
+            display_name: user.display_name,
+            role_name: role.name,
+            role_id: role.id,
+        },
+        // The command wrapper attaches the picker ticket after the pure
+        // function returns (it needs the per-process secret).
+        picker_ticket: String::new(),
+    })
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -612,5 +739,221 @@ mod tests {
         };
         let d = format!("{args:?}");
         assert!(d.contains("z"));
+    }
+
+    // ── BootstrapOwnerArgs / BootstrapOwnerResult ────────────────────────
+
+    #[test]
+    fn bootstrap_owner_args_deserialize() {
+        let json = r##"{"username":"owner","pin":"1234","display_name":"Store Owner"}"##;
+        let args: BootstrapOwnerArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.username, "owner");
+        assert_eq!(args.pin, "1234");
+        assert_eq!(args.display_name, "Store Owner");
+    }
+
+    #[test]
+    fn bootstrap_owner_args_debug() {
+        let args = BootstrapOwnerArgs {
+            username: "owner".into(),
+            pin: "0000".into(),
+            display_name: "Owner".into(),
+        };
+        let d = format!("{args:?}");
+        assert!(d.contains("owner"));
+        assert!(d.contains("Owner"));
+    }
+
+    #[test]
+    fn bootstrap_owner_result_serialize() {
+        let result = BootstrapOwnerResult {
+            session: oz_core::auth::LoginSession {
+                user_id: "u1".into(),
+                display_name: "Owner".into(),
+                role_name: "Owner".into(),
+                role_id: "role-owner".into(),
+            },
+            picker_ticket: "ticket".into(),
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["session"]["role_id"], "role-owner");
+        assert_eq!(json["picker_ticket"], "ticket");
+    }
+
+    #[test]
+    fn bootstrap_owner_result_debug() {
+        let result = BootstrapOwnerResult {
+            session: oz_core::auth::LoginSession {
+                user_id: "u2".into(),
+                display_name: "Boss".into(),
+                role_name: "Owner".into(),
+                role_id: "role-owner".into(),
+            },
+            picker_ticket: String::new(),
+        };
+        let d = format!("{result:?}");
+        assert!(d.contains("Boss"));
+    }
+
+    // ── run_bootstrap_owner logic ───────────────────────────────────────
+
+    use oz_core::migrations;
+    use tauri::Manager as _;
+
+    #[test]
+    fn run_bootstrap_owner_creates_owner_role_user() {
+        let conn = migrations::fresh_db();
+        let result = run_bootstrap_owner(
+            &conn,
+            &BootstrapOwnerArgs {
+                username: "owner".into(),
+                pin: "1234".into(),
+                display_name: "Store Owner".into(),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result.session.role_id, "role-owner");
+        assert_eq!(result.session.role_name, "Owner");
+        assert_eq!(result.session.display_name, "Store Owner");
+
+        let store = Store::new(&conn);
+        let user = store.get_user(&result.session.user_id).unwrap().unwrap();
+        assert_eq!(user.role_id, oz_core::builtin_roles::OWNER);
+        assert!(user.is_active);
+    }
+
+    #[test]
+    fn run_bootstrap_owner_lowercases_username() {
+        let conn = migrations::fresh_db();
+        let result = run_bootstrap_owner(
+            &conn,
+            &BootstrapOwnerArgs {
+                username: "  OWNER  ".into(),
+                pin: "1234".into(),
+                display_name: "  Store Owner  ".into(),
+            },
+        )
+        .unwrap();
+        // `create_user` assigns a UUID id; the USERNAME must be normalized.
+        assert_eq!(result.session.display_name, "Store Owner");
+        let user = Store::new(&conn)
+            .get_user_by_username("owner")
+            .unwrap()
+            .unwrap();
+        assert_eq!(user.id, result.session.user_id);
+    }
+
+    #[test]
+    fn run_bootstrap_owner_rejects_when_users_exist() {
+        let conn = migrations::fresh_db();
+        // Bootstrap once, then try again — the second call must fail closed.
+        run_bootstrap_owner(
+            &conn,
+            &BootstrapOwnerArgs {
+                username: "owner".into(),
+                pin: "1234".into(),
+                display_name: "Owner".into(),
+            },
+        )
+        .unwrap();
+        let err = run_bootstrap_owner(
+            &conn,
+            &BootstrapOwnerArgs {
+                username: "owner2".into(),
+                pin: "1234".into(),
+                display_name: "Owner 2".into(),
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, AppError::Invalid(_)));
+        // No second user may exist.
+        assert_eq!(Store::new(&conn).list_users().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn run_bootstrap_owner_rejects_empty_username() {
+        let conn = migrations::fresh_db();
+        let err = run_bootstrap_owner(
+            &conn,
+            &BootstrapOwnerArgs {
+                username: "  ".into(),
+                pin: "1234".into(),
+                display_name: "Owner".into(),
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, AppError::Invalid(_)));
+    }
+
+    #[test]
+    fn run_bootstrap_owner_rejects_empty_display_name() {
+        let conn = migrations::fresh_db();
+        let err = run_bootstrap_owner(
+            &conn,
+            &BootstrapOwnerArgs {
+                username: "owner".into(),
+                pin: "1234".into(),
+                display_name: "  ".into(),
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, AppError::Invalid(_)));
+    }
+
+    #[test]
+    fn run_bootstrap_owner_rejects_short_pin() {
+        let conn = migrations::fresh_db();
+        let err = run_bootstrap_owner(
+            &conn,
+            &BootstrapOwnerArgs {
+                username: "owner".into(),
+                pin: "123".into(),
+                display_name: "Owner".into(),
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, AppError::Invalid(_)));
+    }
+
+    #[tokio::test]
+    async fn bootstrap_owner_mints_verifiable_picker_ticket() {
+        // audit/06 (parity with the desktop client): the command-level
+        // bootstrap must mint a ticket bound to the NEW owner so the
+        // pre-session workspace picker works immediately after setup.
+        let conn = migrations::fresh_db();
+        let app = tauri::test::mock_builder()
+            .manage(AppState::for_test_with_conn(conn))
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result = bootstrap_owner(
+            BootstrapOwnerArgs {
+                username: "owner".into(),
+                pin: "1234".into(),
+                display_name: "Store Owner".into(),
+            },
+            app.state(),
+        )
+        .await
+        .unwrap();
+
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        let state = app.state::<AppState>();
+        assert_eq!(
+            picker_ticket::verify_picker_ticket(
+                &state.picker_ticket_secret,
+                &result.picker_ticket,
+                now
+            )
+            .as_deref(),
+            Some(result.session.user_id.as_str()),
+            "bootstrap must mint a ticket bound to the new owner"
+        );
+        assert!(!result.picker_ticket.is_empty());
+        assert_eq!(result.session.role_id, "role-owner");
     }
 }

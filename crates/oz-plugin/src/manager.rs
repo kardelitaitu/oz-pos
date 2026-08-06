@@ -963,7 +963,6 @@ oz.register_hook("sale.before_complete", "count_lines")
         assert_eq!(discounts[0].percent, 15);
     }
 
-    #[test]
     /// MONEY-05: the sale table hands qty / unit_price_minor / total_minor to
     /// the VM as Lua floats, so plugin `qty * unit_price_minor` arithmetic
     /// cannot silently integer-wrap. Pinned with overflow-scale input — before
@@ -1004,6 +1003,7 @@ oz.register_hook("sale.before_complete", "on_sale")
         assert_eq!(discounts[0].percent, 5);
     }
 
+    #[test]
     fn fire_sale_before_complete_preserves_sale_fields() {
         let lua = r#"
 function check_sale(sale)
