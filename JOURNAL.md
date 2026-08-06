@@ -2,6 +2,19 @@
 
 # OZ-POS Development Journal
 
+## 2026-08-06 — TDD cycle: checked cart-tax line totals (MONEY-01)
+
+### `compute_cart_tax` unchecked `qty × unit_price_minor` overflow
+**Problem:** `Store::compute_cart_tax` (`crates/oz-core/src/db/sales.rs`) computed the per-line taxable total with a bare `line.qty * line.unit_price_minor`. `CartLineTaxInput` is deserialised straight off the IPC boundary (untrusted renderer input) and this function runs on the hot path — the live tax preview fires on every cart change in both desktop and tablet POS. The workspace deliberately sets `overflow-checks = false` for dev/test builds (`Cargo.toml` `[profile.dev]`), so an overflowing line total **silently wraps** and feeds a wrong tax to the register in every normal build; it would panic only under a profile with overflow checks on. This is the exact arithmetic class TAX-04 already eliminated in `compute_line_tax` (checked_mul + structured error) — it was missed at the line-total product. Red test `compute_cart_tax_line_total_overflow_returns_validation_error` (qty = i64::MAX/2, price = 4) failed for the right reason: `Ok(Money { minor_units: 0 })` — the wrapped tax — instead of an overflow error.
+
+**Solution:** Red→Green TDD cycle. GREEN: the line total now uses `qty.checked_mul(unit_price_minor)` and returns `CoreError::Validation { field: "tax", message: "cart line total overflow" }` on overflow — the same structured error contract as `compute_line_tax`. No signature change, so no caller updates (`compute_cart_tax_scoped` in desktop + tablet `pos.rs` forward unchanged).
+
+**Deliberately NOT done (follow-ups):** (1) same-class unchecked `qty × price` products remain in `crates/oz-lua/src/lib.rs:577/608` (plugin `apply_discount` line math — plugin-supplied values), `crates/oz-core/src/db/purchase_orders.rs:186/214` (PO subtotals), `crates/oz-core/src/db/sales.rs:247/644` (recipe BOM `line.qty * quantity_required`), and `modules/inventory/src/handlers.rs:141` — each a separate TDD slice; (2) the broader sale-to-ledger totals policy (recorded `sale.total` excludes tax / tip / service-charge that the UI charges separately; tax computed on pre-discount line totals) is a product-policy question (inclusive vs exclusive tax) and deliberately NOT changed here; (3) pre-existing `clippy::type_complexity` in `crates/oz-core/src/db/products.rs:876` remains (documented in the 08-06 session-mint entry) — unrelated to this change.
+
+**Commits:** (this cycle) — `crates/oz-core/src/db/sales.rs` only.
+
+**Validation:** Red test failed (silent wrap) then passed; `db::sales::tests` 76/76; full `cargo test -p oz-core --lib` 1618/1618; `cargo fmt --all` clean (only sales.rs changed); clippy `-D warnings` clean on the changed file (workspace clippy still fails only on the pre-existing `products.rs:876`). `scripts/test-changed.sh` was blocked by a running `oz-pos-app.exe` holding the linker output lock — process left running per TDD skill rule 7; equivalent coverage obtained via the direct `oz-core --lib` run.
+
 ## 2026-08-06 — TDD cycle: session-mint authorization gate (right user, right store, right permission)
 
 ### `verify_instance_access` fail-closed identity binding (audit/06 residual)
@@ -11,7 +24,7 @@
 
 **Deliberately NOT done (follow-ups):** (1) the pre-session `list_workspaces`/`list_workspace_screens` reads still trust the claimed role for listing (workspace-name disclosure only, no data access) — a server-issued picker credential remains the architectural fix per audit/06; (2) `create_session` does not cross-check `type_key` against the instance's real type (UI-routing cosmetic); (3) pre-existing `clippy::type_complexity` in `crates/oz-core/src/db/products.rs:876` remains (documented in the 08-06 pull-parity entry).
 
-**Commits:** (this cycle) — `oz-core` `db/workspaces.rs` + `apps/desktop-client/src/commands/auth.rs` only.
+**Commits:** gate + desktop tests were swept into `da842f32` (another thread's mixed commit, same as the sync hunks — history not rewritten per shared-tree convention); this cycle's follow-up `42dab989` pins the inactive-user test uniquely and adds tablet `create_session` parity tests. The `.githooks/pre-commit` fmt gate swept a third file — `crates/oz-core/src/db/sales.rs` (another thread's uncommitted work) — into `42dab989`; its content is intact in the commit and the working tree matches HEAD, splitting left to the owner if desired.
 
 **Validation:** `cargo test -p oz-core --lib db::workspaces` 54/54 (6 new); `cargo test -p oz-pos-app --lib commands::auth` 18/18 (3 new); `cargo test -p oz-pos-tablet --lib commands::auth` 9/9; `store_scoping_integration` 9/9; `cargo fmt --all -- --check` clean; clippy `-D warnings` clean on the changed files (workspaces.rs, auth.rs); tablet lib compiles.
 

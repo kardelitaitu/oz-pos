@@ -28,6 +28,7 @@ Architecture enforcement and release baseline update for the 0.0.25 cycle.
 
 ### Fixed
 
+- **Checked cart-tax line totals (MONEY-01)** — `Store::compute_cart_tax` no longer computes the per-line taxable total with an unchecked `qty × unit_price_minor` multiply. `CartLineTaxInput` arrives over the IPC boundary and the function runs on every cart change (live tax preview), while dev/test builds have `overflow-checks = false`, so an overflowing line total silently wrapped and returned a wrong tax to the register. The line total now uses `checked_mul` and returns the same structured `Validation` overflow error as `compute_line_tax` (TAX-04). Regression test: `compute_cart_tax_line_total_overflow_returns_validation_error`.
 - **Session-mint authorization gate (right user, right store, right permission)** — `Store::verify_instance_access` (the gate `create_session` calls in both clients) now resolves the caller from `users` and fails closed for unknown users, inactive users, and claimed `role_id` values that differ from the user's actual database role. Previously the claimed role was trusted for the owner/manager bypass, so a caller who knew an owner's user id could mint a session as that owner — without their PIN — and inherit every permission, in any store's active instance (privilege escalation + cross-store session minting; audit/06 residual).
 
 ### Validation
