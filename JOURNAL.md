@@ -1,4 +1,15 @@
 
+## 2026-08-06 — TDD quad: topology editor undo/redo hardening (inspector, ghost-drag, arrow repeat, reload)
+
+### Four undo-state hazards: silent inspector edits, ghost drags, key-repeat flood, stale stacks on reload
+**Problem:** Four independent undo-state defects in `NodeTopologyEditor` after the click/dirty fix. (1) Inspector edits (node name, subtitle, workspace type) mutated nodes with no `pushHistory()` — a rename was not undoable AND never set `isDirtyRef`, so hitting a preset button silently discarded it without the confirm dialog. (2) Node drags were only cancelled by the canvas `onMouseUp` — releasing outside the canvas left `draggingNodeId` latched, so the node kept following the cursor on re-entry with no button held, and those ghost moves were not undoable. (3) Arrow-key nudges pushed one history entry per `keydown` with no `e.repeat` guard — holding a key flooded the 50-entry stack. (4) The non-skip topology load path rebuilt nodes/wires but never cleared `history`/`redo` — pressing Undo after a fresh instance load restored a stale pre-reload canvas that contradicted the DB.
+
+**Solution:** Four Red→Green cycles. (1) New `beginInspectorEdit(nodeId)` pushes at most ONE history entry per node selection session (guarded by `inspectorHistoryPushedForRef`, reset on selection change and undo/redo) and is called from the name, subtitle, and type-select `onChange` handlers — a typing burst is a single undo step, and the dirty flag now fires the preset confirm dialog. (2) Node mousedown now arms a document-level `mouseup` listener (new `dragCleanupRef`, cleaned on unmount alongside `panCleanupRef`) that cancels the drag on any release, inside or outside the canvas. (3) The arrow-nudge branch ignores `e.repeat` so one held gesture = one history entry. (4) Both non-skip load paths (workspaceInstances rebuild + legacy saved-diagram) call `setHistory([]); setRedo([])` — the skip-after-save path deliberately does NOT clear, preserving in-flight edits.
+
+**Validation:** 43/43 editor tests (6 new across the 4 cycles) · 3 related suites green (TopologyScreen, InspectorIntegration, api-ipc-contract) · typecheck clean · eslint clean. Drift guard: only the pre-existing tdd SKILL.md finding.
+
+**Follow-ups:** (1) Undo/redo restore nodes/wires but leave `selectedNodeId`/`selectedWireId` untouched — undoing a node-add leaves a stale selection that Delete would target at a missing node; a future slice should clear or re-validate selection after pop. (2) The idMap remap after save rewrites node ids but history entries captured pre-remap ids — undo after a save+remap could restore dangling ids; consider clearing history after a successful apply. (3) Undo of a delete restores the node but the `freshNodeIds` animation set and timers are not restored — cosmetic, but the fresh timer still fires on a restored node.
+
 ## 2026-08-06 — TDD cycle: plain click no longer pollutes topology undo history
 
 ### Clicking a node created no-op undo entries and dirtied the canvas
