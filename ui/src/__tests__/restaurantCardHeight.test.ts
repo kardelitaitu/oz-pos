@@ -50,11 +50,11 @@ describe('RestaurantMenu card uniform height', () => {
 
   it('fits the two-line name plus price and status chip at the smallest settings', () => {
     // Base = --space-14 (3.5rem) + --space-8 (2rem) + --space-1 (0.25rem)
-    // = 5.75rem = 92px at card-size 0 / font-size 0. The slimmed box still
-    // clears the tallest content stack (2×18px name lines + 4px + 18px
-    // price + 4px + 22px status chip + 20px vertical padding ≈ 104px) —
-    // the price and status chip are secondary on a resto card, so the box
-    // may clip the chip rather than grow (deliberate compact design).
+    // = 5.75rem = 92px at card-size 0 / font-size 0 (80.5px at the app's
+    // 14px root). Live-preview verified 2026-08-06: forcing a long
+    // two-line name clamps at exactly 2 lines with contentOverflow 0 and
+    // the price + status chip fully visible (≈15px and ≈26px clearance),
+    // and the fit holds (with more headroom) at card-size 2 / font-size 2.
     const body = ruleBody('\\.restaurant-card');
     const baseMatch = body?.match(/var\(--space-14\)\s*\+\s*var\(--space-8\)\s*\+\s*var\(--space-1\)/);
     expect(baseMatch).toBeTruthy();
