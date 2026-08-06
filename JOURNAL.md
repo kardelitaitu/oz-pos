@@ -1,5 +1,16 @@
 
-## 2026-08-06 — Wire the settings_updated Tauri bridge (ADR #22 Phase 0e)
+## 2026-08-07 — TDD cycle: remote settings changes are now reactive (SYNC-10)
+
+### The sync settings-apply path did not exist — remote settings rows were quarantined as unsupported
+**Problem:** The previous cycle wired `set_settings_emit_fn`, but the journal's follow-up was bigger than "publish from the apply path": there IS no settings-apply path. `apply_remote_atomic` (used by both daemons and the SyncEngine) handles exactly four actions — a remote `settings.update` hit `_ => Err(unsupported)` and got **dead-lettered after 3 retries**. The reactive half of the event loop (frontend `SettingsContext` already listens for `settings_updated`) was unreachable for cross-terminal changes.
+
+**Solution:** Red→Green. (1) Queue layer: `apply_remote_in_tx` + `apply_remote` gained `settings.update` / `settings.change` arms that write the value row via `Settings::set` and a versioned delta row via `Settings::write_delta` (SAVEPOINT-nesting-safe inside the caller's transaction; a delta failure is non-fatal and the change is still reported — matches `set_tracked`'s philosophy). New `apply_remote_atomic_full` reports `ApplyOutcome { applied, settings_change: Option<(key, terminal_id)> }`; the legacy `apply_remote_atomic` stays a thin bool wrapper so ~12 existing callers are untouched. (2) Daemon: `SettingsChangedSink` (an owned `Arc<dyn Fn(&SettingsUpdated)>`) threaded through `start_with_sink` → `run_tick` → the pull apply closure, which publishes per applied settings item after its tx commits. (3) Desktop `lib.rs`: the sink emits `settings_updated` with `{changed_keys, terminal_id}` via the AppHandle — the exact wire shape the frontend expects. 6 new tests: 4 queue (row+delta+receipt, outcome surfacing, replay no-republish, non-atomic + `settings.change` alias) + 1 daemon end-to-end (mock pull → sink records the key → row applied).
+
+**Verify:** 262/262 platform-sync tests · `cargo check -p oz-pos-app` clean · clippy `-D warnings` clean on both crates · fmt clean. Reviewer flagged the sink's DB contract (it runs while holding `blocking_lock()`) — documented on the type.
+
+**Deliberately NOT done (follow-ups):** (1) **The enqueue side** — no local settings command enqueues a `settings.update` offline item today, so the full loop (local change → cloud → other terminal) still needs the emit slice: wire `run_set_setting` / `set_settings` (and ideally the typed `set_*_settings` commands) to `enqueue_offline("settings.update", {key, value, terminal_id, version})`. (2) PG daemon parity — `apply_pulled_page` still uses the bool `apply_remote_atomic`, so PG sync applies settings rows but never publishes (PgSyncDaemon isn't started in production; wire the sink there if it becomes live).
+
+
 
 ### The bridge was built and tested but never connected — the emit callback was never set
 **Problem:** Investigation found the full pipeline existed except one link: `SettingsUpdatedHandler` (platform/startup) subscribes to `settings.updated`, builds `{changed_keys, terminal_id}` JSON, and calls the global `SETTINGS_EMIT_FN` — but no app ever called `set_settings_emit_fn`, so in production every settings publish hit the debug log "settings_updated Tauri bridge not yet wired" and the Tauri event never fired. The frontend `SettingsContext` listener was already in place and tested; the missing piece was purely the app setup closure.

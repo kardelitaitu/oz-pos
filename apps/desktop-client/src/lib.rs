@@ -46,6 +46,8 @@ pub mod state;
 #[rustfmt::skip]
 static TEST_MANIFEST_DIRECTIVES: [u8; 184] = *b" /MANIFEST:EMBED /MANIFESTDEPENDENCY:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"\x00";
 
+use std::sync::Arc;
+
 use crate::error::AppError;
 use crate::state::AppState;
 use tauri::{Emitter, Manager};
@@ -107,9 +109,28 @@ pub fn run() {
             // ── Background sync daemon ────────────────────────────────
             let db = app.state::<AppState>().db.clone();
             let app_handle = app.handle().clone();
+            // SYNC-10: a settings change made on ANOTHER terminal and pulled
+            // by the daemon is re-emitted as the `settings_updated` Tauri
+            // event — the same wire shape the frontend SettingsContext
+            // listens for — so the UI refetches the changed scope. Local
+            // saves already publish the domain event; this closes the loop
+            // for the sync-applied path.
+            let settings_sink: platform_sync::daemon::SettingsChangedSink = {
+                let app_handle = app_handle.clone();
+                Arc::new(move |event: &oz_core::events::SettingsUpdated| {
+                    let payload = serde_json::json!({
+                        "changed_keys": event.changed_keys,
+                        "terminal_id": event.terminal_id,
+                    });
+                    let _ = app_handle.emit("settings_updated", payload);
+                })
+            };
             platform_startup::spawn_daemon("sync daemon", async move {
                 let state = app_handle.state::<AppState>();
-                state.sync_daemon.start(db).await;
+                state
+                    .sync_daemon
+                    .start_with_sink(db, settings_sink)
+                    .await;
             });
 
             // ── Background prune daemon (ADR #6 Q4 / P-1 Ledger Retention) ─

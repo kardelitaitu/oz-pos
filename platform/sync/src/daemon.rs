@@ -15,6 +15,7 @@ use rand::Rng;
 use tokio::sync::{Mutex, RwLock, watch};
 
 use oz_core::db::Store;
+use oz_core::events::SettingsUpdated;
 use oz_core::settings::Settings;
 use oz_core::sync_client::SyncConfig;
 
@@ -64,6 +65,19 @@ pub struct DaemonStatus {
 /// temporary [`Store`] instances inside `spawn_blocking` closures.
 pub type DbConnection = Arc<Mutex<rusqlite::Connection>>;
 
+/// Callback invoked after the daemon applies a remote `settings.update`
+/// (SYNC-10) so the app can re-emit `SettingsUpdated` for UI reactivity.
+///
+/// The desktop client wires this to emit the `settings_updated` Tauri event
+/// (the same wire shape the frontend `SettingsContext` listens for).
+///
+/// **Contract:** the callback runs on the daemon's blocking apply thread
+/// WHILE the database connection lock is held, so it must NOT acquire the
+/// database lock itself (that would deadlock against the mutex it already
+/// owns). Keep it to side effects without DB access — a Tauri emit, a bus
+/// publish, a channel send.
+pub type SettingsChangedSink = Arc<dyn Fn(&SettingsUpdated) + Send + Sync>;
+
 /// A background task that periodically syncs the local offline queue with a
 /// remote server.
 ///
@@ -73,6 +87,7 @@ pub struct SyncDaemon {
     interval: Duration,
     status: Arc<RwLock<DaemonStatus>>,
     shutdown_tx: Arc<Mutex<Option<watch::Sender<bool>>>>,
+    settings_sink: SettingsChangedSink,
 }
 
 /// Read sync configuration and pending offline items from a database
@@ -97,6 +112,7 @@ impl SyncDaemon {
             interval: DEFAULT_SYNC_INTERVAL,
             status: Arc::new(RwLock::new(DaemonStatus::default())),
             shutdown_tx: Arc::new(Mutex::new(None)),
+            settings_sink: Arc::new(|_: &SettingsUpdated| {}),
         }
     }
 
@@ -106,6 +122,7 @@ impl SyncDaemon {
             interval,
             status: Arc::new(RwLock::new(DaemonStatus::default())),
             shutdown_tx: Arc::new(Mutex::new(None)),
+            settings_sink: Arc::new(|_: &SettingsUpdated| {}),
         }
     }
 
@@ -121,6 +138,23 @@ impl SyncDaemon {
     ///
     /// If the daemon is already running, this is a no-op.
     pub async fn start(&self, db: DbConnection) {
+        self.start_inner(db, self.settings_sink.clone()).await;
+    }
+
+    /// Start the background sync daemon with a custom settings-change sink
+    /// (SYNC-10).
+    ///
+    /// The sink is invoked after each remote `settings.update` the pull
+    /// phase applies, carrying the changed key and its originating terminal
+    /// — the desktop client uses this to emit the `settings_updated` Tauri
+    /// event so the UI refetches a setting changed on another terminal.
+    pub async fn start_with_sink(&self, db: DbConnection, settings_sink: SettingsChangedSink) {
+        self.start_inner(db, settings_sink).await;
+    }
+
+    /// Shared start path used by [`SyncDaemon::start`] and
+    /// [`SyncDaemon::start_with_sink`].
+    async fn start_inner(&self, db: DbConnection, settings_sink: SettingsChangedSink) {
         if self.is_running().await {
             tracing::warn!("sync daemon is already running");
             return;
@@ -183,7 +217,7 @@ impl SyncDaemon {
 
                 tokio::select! {
                     _ = tokio::time::sleep(sleep_dur) => {
-                        Self::run_tick(&db, &daemon_status).await;
+                        Self::run_tick(&db, &daemon_status, &settings_sink).await;
 
                         // Track consecutive failures for backoff on the
                         // next cycle. Reset to 0 on success.
@@ -213,7 +247,15 @@ impl SyncDaemon {
     }
 
     /// Run a single sync tick: read → send → apply.
-    async fn run_tick(db: &DbConnection, daemon_status: &Arc<RwLock<DaemonStatus>>) {
+    ///
+    /// `settings_sink` is invoked after the pull phase applies a remote
+    /// `settings.update` (SYNC-10) so the change is reactive in this
+    /// terminal's UI even though it was made elsewhere.
+    async fn run_tick(
+        db: &DbConnection,
+        daemon_status: &Arc<RwLock<DaemonStatus>>,
+        settings_sink: &SettingsChangedSink,
+    ) {
         // Phase 1: Read config + pending items from DB (blocking)
         let db_clone = db.clone();
         let (config, pending, read_error) = match tokio::task::spawn_blocking(move || {
@@ -390,6 +432,10 @@ impl SyncDaemon {
                                 let next_cursor = pull_resp.next_cursor;
                                 let prev_since = pull_since.clone();
                                 let prev_cursor = pull_cursor.clone();
+                                // SYNC-10: own the sink (an owned `Arc`) so the
+                                // `'static` spawn_blocking closure can call it
+                                // after each applied settings item.
+                                let settings_sink = settings_sink.clone();
                                 let outcome = tokio::task::spawn_blocking(move || {
                                     let conn = db_clone.blocking_lock();
                                     let store = Store::new(&conn);
@@ -413,9 +459,25 @@ impl SyncDaemon {
                                         // replay is safe rather than duplicating a
                                         // committed stock mutation with a missing
                                         // receipt.
-                                        match queue.apply_remote_atomic(&store, item) {
-                                            Ok(applied) => {
-                                                if !applied
+                                        match queue.apply_remote_atomic_full(&store, item) {
+                                            Ok(outcome) => {
+                                                // SYNC-10: a settings change
+                                                // applied from a remote
+                                                // terminal is re-emitted as
+                                                // `SettingsUpdated` so the UI
+                                                // refetches. The tx committed
+                                                // inside apply_remote_atomic_full
+                                                // before this runs.
+                                                if let Some((key, terminal_id)) =
+                                                    outcome.settings_change
+                                                {
+                                                    let event = SettingsUpdated {
+                                                        changed_keys: vec![key],
+                                                        terminal_id,
+                                                    };
+                                                    settings_sink(&event);
+                                                }
+                                                if !outcome.applied
                                                     && store
                                                         .is_remote_failure_dead_lettered(&item.id)
                                                         .unwrap_or(false)
@@ -1057,7 +1119,7 @@ mod tests {
         let status = Arc::new(RwLock::new(DaemonStatus::default()));
 
         // Tick 1: pulls + applies the remote +10 (50 → 60), records ledger.
-        SyncDaemon::run_tick(&db, &status).await;
+        SyncDaemon::run_tick(&db, &status, &noop_settings_sink()).await;
         let after_tick_1 = tokio::task::spawn_blocking({
             let db = db.clone();
             move || {
@@ -1072,7 +1134,7 @@ mod tests {
 
         // Tick 2: the server replays the SAME item. The idempotency ledger
         // must skip it — stock stays 60, not 70.
-        SyncDaemon::run_tick(&db, &status).await;
+        SyncDaemon::run_tick(&db, &status, &noop_settings_sink()).await;
         let after_tick_2 = tokio::task::spawn_blocking({
             let db = db.clone();
             move || {
@@ -1167,7 +1229,7 @@ mod tests {
         .unwrap();
 
         let status = Arc::new(RwLock::new(DaemonStatus::default()));
-        SyncDaemon::run_tick(&db, &status).await;
+        SyncDaemon::run_tick(&db, &status, &noop_settings_sink()).await;
 
         let db_check = db.clone();
         let (anchor, retry_attempts) = tokio::task::spawn_blocking(move || {
@@ -1288,7 +1350,7 @@ mod tests {
             let db = db.clone();
             let status = status.clone();
             tokio::spawn(async move {
-                SyncDaemon::run_tick(&db, &status).await;
+                SyncDaemon::run_tick(&db, &status, &noop_settings_sink()).await;
             })
         };
 
@@ -1398,7 +1460,7 @@ mod tests {
 
         let status = Arc::new(RwLock::new(DaemonStatus::default()));
         for attempt in 1..=3 {
-            SyncDaemon::run_tick(&db, &status).await;
+            SyncDaemon::run_tick(&db, &status, &noop_settings_sink()).await;
             let db_check = db.clone();
             let (anchor, dead_lettered, failures) = tokio::task::spawn_blocking(move || {
                 let conn = db_check.blocking_lock();
@@ -1502,7 +1564,7 @@ mod tests {
         .unwrap();
 
         let status = Arc::new(RwLock::new(DaemonStatus::default()));
-        SyncDaemon::run_tick(&db, &status).await;
+        SyncDaemon::run_tick(&db, &status, &noop_settings_sink()).await;
 
         let db_check = db.clone();
         let (all, pending) = tokio::task::spawn_blocking(move || {
@@ -1614,7 +1676,7 @@ mod tests {
         let status = Arc::new(RwLock::new(DaemonStatus::default()));
         // One tick: push → conflict → CRDT merge resolved locally; pull →
         // merged winner applied by apply_remote. Both deltas must land.
-        SyncDaemon::run_tick(&db, &status).await;
+        SyncDaemon::run_tick(&db, &status, &noop_settings_sink()).await;
 
         let db_check = db.clone();
         let (stock, all) = tokio::task::spawn_blocking(move || {
@@ -1658,12 +1720,111 @@ mod tests {
         let db = setup_db();
         let status = Arc::new(RwLock::new(DaemonStatus::default()));
 
-        SyncDaemon::run_tick(&db, &status).await;
+        SyncDaemon::run_tick(&db, &status, &noop_settings_sink()).await;
 
         let s = status.read().await;
         assert!(s.last_sync_at.is_some(), "status should be updated");
         assert!(s.last_error.is_none(), "no error expected for empty config");
         assert_eq!(s.last_pushed, 0);
         assert_eq!(s.last_pulled, 0);
+    }
+
+    /// A settings sink that records nothing — for run_tick call sites that
+    /// only care about the sync pipeline, not settings reactivity.
+    fn noop_settings_sink() -> SettingsChangedSink {
+        Arc::new(|_: &SettingsUpdated| {})
+    }
+
+    /// Spawn a mock pull server returning one remote `settings.update` item
+    /// (fixed id + timestamp so the SYNC-01 ledger absorbs replays).
+    async fn spawn_settings_mock_sync_server() -> String {
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        async fn handle_push(Json(items): Json<Vec<serde_json::Value>>) -> Json<PushResponse> {
+            Json(PushResponse {
+                results: vec![PushOutcome::Accepted; items.len()],
+            })
+        }
+        async fn handle_pull(Json(_req): Json<serde_json::Value>) -> Json<PullResponse> {
+            let mut item = oz_core::offline::OfflineQueueItem::new(
+                "settings.update",
+                r#"{"key":"store.name","value":"Remote Acme","terminal_id":"term-remote","version":3}"#,
+            );
+            item.id = "remote-setting-sync-1".into();
+            item.created_at = "2026-01-02T00:00:00.000Z".into();
+            Json(PullResponse {
+                items: vec![item],
+                next_cursor: None,
+            })
+        }
+
+        let app = Router::new()
+            .route("/api/sync/push", post(handle_push))
+            .route("/api/sync/pull", post(handle_pull));
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        format!("http://localhost:{port}")
+    }
+
+    /// SYNC-10: when the pull applies a remote `settings.update`, the
+    /// daemon must invoke its settings sink with the changed key so the app
+    /// can re-emit `SettingsUpdated` — and the value row must actually land.
+    #[tokio::test]
+    async fn daemon_publishes_settings_updated_for_remote_settings_change() {
+        let server_url = spawn_settings_mock_sync_server().await;
+        let db = setup_db();
+
+        let db_setup = db.clone();
+        let url = server_url.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db_setup.blocking_lock();
+            Settings::set_sync_enabled(&conn, true).unwrap();
+            Settings::set_sync_server_url(&conn, &url).unwrap();
+        })
+        .await
+        .unwrap();
+
+        let recorded: Arc<std::sync::Mutex<Vec<(String, String)>>> =
+            Arc::new(std::sync::Mutex::new(vec![]));
+        let sink: SettingsChangedSink = Arc::new({
+            let recorded = recorded.clone();
+            move |event: &SettingsUpdated| {
+                for key in &event.changed_keys {
+                    recorded
+                        .lock()
+                        .unwrap()
+                        .push((key.clone(), event.terminal_id.clone()));
+                }
+            }
+        });
+
+        let status = Arc::new(RwLock::new(DaemonStatus::default()));
+        SyncDaemon::run_tick(&db, &status, &sink).await;
+
+        assert_eq!(
+            *recorded.lock().unwrap(),
+            vec![("store.name".to_string(), "term-remote".to_string())],
+            "the daemon must publish the remote settings change via the sink"
+        );
+
+        let value = tokio::task::spawn_blocking({
+            let db = db.clone();
+            move || {
+                let conn = db.blocking_lock();
+                Settings::get(&conn, "store.name").unwrap()
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            value.as_deref(),
+            Some("Remote Acme"),
+            "the settings row must be applied from the pull"
+        );
     }
 }
