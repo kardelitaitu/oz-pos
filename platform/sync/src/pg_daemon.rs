@@ -304,7 +304,22 @@ impl PgSyncDaemon {
                             // from the closure).
                             let new_since =
                                 apply_pulled_page(&store, &items, prev_since.as_deref())?;
-                            if let Err(e) = store.set_sync_pull_state(
+                            // SYNC-09: re-read the DURABLE pull state before
+                            // advancing (parity with the SQLite daemon). An
+                            // operator rewind (`requeue_remote_failure` sets
+                            // since = NULL) can land while this page was in
+                            // flight; writing new_since blindly would clobber
+                            // it and the requeued item would never be
+                            // re-fetched. Skip the write when the durable
+                            // state no longer matches what this tick captured.
+                            let durable = store
+                                .get_sync_pull_state()
+                                .unwrap_or_default();
+                            if durable.since.is_none() && prev_since.is_some() {
+                                tracing::warn!(
+                                    "pg sync daemon: operator rewind detected mid-pull — retaining rewound anchor for full re-pull"
+                                );
+                            } else if let Err(e) = store.set_sync_pull_state(
                                 Some(&new_since),
                                 next_cursor_for_persist.as_deref(),
                             ) {

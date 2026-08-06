@@ -1,3 +1,15 @@
+
+## 2026-08-06 — TDD cycle: operator rewind survives daemon apply phase (SYNC-09)
+
+### Daemon clobbered an operator's anchor rewind landing mid-pull
+**Problem:** The sync daemon's apply-pull phase captured the durable `sync_pull_state` anchor at tick start, then wrote its computed `new_since` blindly after applying the page. If an operator requeued a dead-lettered item (`requeue_remote_failure` sets `since = NULL`) while the pull was in flight, the apply-phase write clobbered the rewind — the next cycle pulled from the advanced anchor and never re-fetched the requeued item, silently defeating the requeue.
+
+**Solution:** Red→Green: a slow mock pull server (axum handler blocking on a `tokio::sync::Notify`) let the test rewind the anchor deterministically mid-pull. The apply closure now re-reads `get_sync_pull_state()` before `set_sync_pull_state()` and skips the advance when the durable `since` transitioned Some→None (the exact rewind signature), logging a warning and retaining the rewind for a full re-pull next cycle. The page still applies (stock mutation + ledger) — only the anchor write is skipped. The PG daemon got the same parity guard.
+
+**Validation:** 256/256 crate tests (1 new) · 19/19 gated integration suite · fmt + `clippy -D warnings` clean.
+
+**Follow-ups:** The re-read-then-write is not atomic; a rewind landing in the microseconds between the two calls can still be lost. A CAS-style `set_sync_pull_state_if(since=captured)` store method would close even that window.
+
 <!-- Audit stamp: 2026-07-29 · Codebuff · status: UPDATED — July 29 full-codebase i18n audit session appended -->
 
 # OZ-POS Development Journal
