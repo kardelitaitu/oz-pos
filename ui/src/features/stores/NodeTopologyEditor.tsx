@@ -1075,9 +1075,14 @@ export default function NodeTopologyEditor({
                   if (idMap && Object.keys(idMap).length > 0) {
                     // Remap old UUIDs to new UUIDs from archive+recreate
                     // operations so the canvas stays in sync with the backend.
-                    // Clear selection to avoid dangling references to old IDs.
+                    // Clear selection to avoid dangling references to old IDs,
+                    // and drop the undo/redo stacks — every pre-save entry
+                    // holds the OLD ids, which no longer exist on the canvas
+                    // or in the DB. Undo must not restore dangling ids.
                     setSelectedNodeId(null);
                     setSelectedWireId(null);
+                    setHistory([]);
+                    setRedo([]);
                     setNodes((prev) =>
                       prev.map((n) => {
                         const newId = idMap[n.id];

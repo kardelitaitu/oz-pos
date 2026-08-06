@@ -685,6 +685,59 @@ describe('NodeTopologyEditor Component', () => {
     });
   });
 
+  it('clears the undo stack when a save remaps node ids', async () => {
+    // Custom topology with a stable workspace id so the remap is deterministic.
+    mockLoadTopology.mockResolvedValue({
+      nodes: [
+        { id: 'store-test', type: 'store', name: 'Remap Store', x: 100, y: 100 },
+        { id: 'ws-test', type: 'workspace', name: 'Remap POS', x: 300, y: 100 },
+      ],
+      wires: [{ id: 'w-test', from_node_id: 'store-test', to_node_id: 'ws-test', direction: 'one-way' }],
+    });
+
+    const onSave = vi.fn().mockResolvedValue({ 'ws-test': 'ws-remapped-id' });
+    renderEditor({ onSave });
+
+    await waitFor(() => {
+      expect(screen.getByText('Remap POS')).toBeInTheDocument();
+    });
+
+    // Make an edit so the undo stack holds a pre-save entry.
+    fireEvent.click(screen.getByText('+ Store Node'));
+    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+
+    // Apply — archive+recreate remaps 'ws-test' → 'ws-remapped-id' after
+    // onSave resolves. The undo stack must be cleared: every pre-save entry
+    // holds the OLD id, which no longer exists on the canvas or in the DB.
+    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledTimes(1);
+    });
+
+    expect(screen.queryByText('Undo (Ctrl+Z)')).not.toBeInTheDocument();
+  });
+
+  it('keeps the undo stack when a save does not remap ids', async () => {
+    const onSave = vi.fn().mockResolvedValue({});
+    renderEditor({ onSave });
+
+    await waitFor(() => {
+      expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('+ Store Node'));
+    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledTimes(1);
+    });
+
+    // No remap → ids unchanged → the pre-save undo entry stays valid, so
+    // undo-after-save keeps working (the entry restores real, existing ids).
+    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+  });
+
   it('handles empty idMap gracefully (no remapping)', async () => {
     const onSave = vi.fn().mockResolvedValue({});
     renderEditor({ onSave });
