@@ -1,4 +1,15 @@
 
+## 2026-08-06 — TDD cycle: selection re-validation on undo/redo/preset (dangling selection)
+
+### Undo/preset left selectedNodeId / selectedWireId dangling at removed elements
+**Problem:** `popUndo`, `popRedo`, and `loadPreset` restored `nodes`/`wires` but never re-validated `selectedNodeId`/`selectedWireId`. Undoing a node-add removed the new node while the selection still pointed at it — the tool-rack Delete button rendered for a node that no longer existed, and arrow keys on the dangling selection would push no-op undo entries and mark the canvas dirty. Same class of bug: loading Retail Preset while a restaurant-only wire (w-3) was selected left `selectedWireId` pointing at a removed wire.
+
+**Solution:** Red→Green. A centralized re-validation `useEffect` watches `selectedNodeId`/`selectedWireId` against `nodeMap`/`wires` and clears only when the selection no longer exists — a still-valid selection (undo of a drag or direction toggle) is preserved. One invariant covers undo, redo, preset loads, and fresh topology reloads, instead of patching each path. Red tests: (1) undo of node-add clears the dangling selection (Delete button disappears); (2) preset load over a selected wire clears the dangling wire selection. Guard tests pin the preserved-selection behavior: undo of a drag keeps the node selected; undo of a wire direction toggle keeps the wire selected.
+
+**Validation:** 48/48 editor tests (4 new) · 28/28 TopologyScreen + InspectorIntegration · typecheck clean · eslint clean.
+
+**Follow-ups:** The same invariant now silently protects loadPreset, but a preset swap that REMOVES a still-selected node id (e.g. `ws-kds` selected then Retail Preset loaded) clears the selection without notifying the user — acceptable for now. A richer UX would re-select a node restored by undo-of-delete; deliberately out of scope (selection is cleared on delete and stays cleared, matching the "clear or re-validate" rule).
+
 ## 2026-08-06 — TDD quad: topology editor undo/redo hardening (inspector, ghost-drag, arrow repeat, reload)
 
 ### Four undo-state hazards: silent inspector edits, ghost drags, key-repeat flood, stale stacks on reload
