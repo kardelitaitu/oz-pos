@@ -371,6 +371,9 @@ export default function NodeTopologyEditor({
           // instances. Clear them so Undo can never restore a phantom canvas.
           setHistory([]);
           setRedo([]);
+          // A reloaded node with a surviving id must start a fresh inspector
+          // edit session, or its next edit would silently skip pushHistory.
+          inspectorHistoryPushedForRef.current = null;
           isDirtyRef.current = false;
           return;
         }
@@ -396,6 +399,9 @@ export default function NodeTopologyEditor({
         // Fresh authoritative load — drop stale pre-load undo/redo state.
         setHistory([]);
         setRedo([]);
+        // A reloaded node with a surviving id must start a fresh inspector
+        // edit session, or its next edit would silently skip pushHistory.
+        inspectorHistoryPushedForRef.current = null;
         isDirtyRef.current = false;
       })
       .catch((err) => {
@@ -449,6 +455,10 @@ export default function NodeTopologyEditor({
     setWires(data.wires);
     setFreshNodeIds(new Set());
     isDirtyRef.current = false;
+    // The canvas was replaced — a still-selected node (preset ids overlap)
+    // must start a fresh inspector edit session, or its next edit would
+    // silently skip pushHistory (no undo entry, no dirty flag).
+    inspectorHistoryPushedForRef.current = null;
     setZoom(1);
     setPan({ x: 0, y: 0 });
   }, [pushHistory]);

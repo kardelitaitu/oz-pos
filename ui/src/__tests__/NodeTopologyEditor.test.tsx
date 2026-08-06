@@ -545,6 +545,34 @@ describe('NodeTopologyEditor Component', () => {
     expect(screen.queryByText('Undo (Ctrl+Z)')).not.toBeInTheDocument();
   });
 
+  it('resets the inspector edit session when a preset loads over a selected node', () => {
+    renderEditor();
+
+    const firstNode = document.querySelector('.topology-node') as HTMLElement;
+    const nameInput = () => document.querySelector('.inspector-field input[type="text"]') as HTMLInputElement;
+
+    // Select store-1 and edit its name — one session entry.
+    fireEvent.mouseDown(firstNode, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.change(nameInput(), { target: { value: 'Renamed Branch' } });
+    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+
+    // Dirty — the preset load asks for confirmation, then replaces the
+    // canvas. store-1 stays selected (both presets have store-1).
+    fireEvent.click(screen.getByText('Resto & KDS Preset'));
+    const confirmBtn = screen.getAllByText('Load Preset').find((el) => el.tagName === 'BUTTON');
+    fireEvent.click(confirmBtn as Element);
+    expect(screen.getByText('Grand Bistro')).toBeInTheDocument();
+    expect(nameInput().value).toBe('Grand Bistro');
+
+    // Editing the SAME node after the preset load must start a fresh
+    // session — one undo returns to the preset name, not the pre-preset
+    // renamed state (which would prove the entry was never pushed).
+    fireEvent.change(nameInput(), { target: { value: 'Grand Bistro Edited' } });
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+
+    expect(nameInput().value).toBe('Grand Bistro');
+  });
+
   // ── Wire direction toggle ───────────────────────────────────────
 
   it('toggles wire direction on label click', () => {
