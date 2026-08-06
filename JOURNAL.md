@@ -1,4 +1,15 @@
 
+## 2026-08-06 — TDD cycle: dev-mock KDS state survives reloads (restart parity)
+
+### A preview reload wiped the kitchen queue, reverted every status, and restarted ticket numbering at 104
+**Problem:** The browser dev-mock kept `mockKdsOrders`, `mockKdsLineItems`, and `kdsDisplayCounter` in module memory — exactly the gap the audit doc flagged as the top parity hole. A reload dropped pushed orders (the KDS preview showed only the 3 seeds), reverted per-item `item_status` advances, and renumbered the next ticket 104, while the real backend persists all three (`kds_orders` 032, `kds_line_items` 105, `kds_daily_counters` 032).
+
+**Solution:** Red→Green, following the established `oz-dev-mock:*` pattern. Three contract tests in `dev-mock-auth-contract.test.ts` pin the restart-parity contract: a pushed order (from `complete_sale_scoped`) plus its course-grouped line items survive a module reload; the display counter continues one past the pre-reload ticket (105, not 104 again); a line-item status flip (`update_kds_line_item_status`) survives. All three failed for the right reasons (pushed order undefined, `[101,102,103,104]` had no 105, status reverted to `pending`). Green persists all KDS state under one key `oz-dev-mock:kds` (orders + line items; counter derived as max persisted `display_number` + 1, floor 104) and saves on every mutation — the push path in `pushKdsOrderFromCart` and all four `update_kds_status*` / `update_kds_line_item_status*` handlers. `update_kds_order_items_scoped` is a read-only lookup, nothing to save.
+
+**Validation:** 16/16 contract tests (3 new) · 187/187 across the dev-mock/offline/KDS test files (10 files) · typecheck clean · eslint clean. `docs/dev-mock-state-audit.md` updated — KDS rows moved from the ❌ gaps table to ✅ persisted, follow-up #1 marked done.
+
+**Follow-ups:** The two remaining reload gaps are now `loginAttempts` (a reload defeats the lockout in dev — backend is richer with sliding-window + per-device limits) and `mockShiftHistory` (closed shifts vanish). The counter derives from max `display_number` rather than a persisted scalar — correct for a single-store preview, but if the mock ever models multiple stores/days, the per-store per-day baseline should be persisted explicitly.
+
 ## 2026-08-06 — TDD cycle: reset dirty flag after a successful Apply (save-as-baseline)
 
 ### Preset loads asked "unsaved changes?" even right after Apply persisted everything
