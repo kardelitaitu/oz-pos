@@ -2,6 +2,15 @@
 
 # OZ-POS Development Journal
 
+## 2026-08-06 — TDD cycle: AnchorExpired snapshot import resets the stale durable anchor
+
+### Every cycle re-fetched the whole snapshot after anchor expiry
+**Problem:** When `SyncEngine::run_sync_cycle`'s pull returned `AnchorExpired` (P-1 retention pruned the client's sync gap), the engine fetched and imported the server snapshot — but never touched the durable `sync_pull_state` anchor. The stale `since` survived the import, so the NEXT cycle pulled with the same expired anchor, got 410 again, and re-fetched the entire snapshot — forever. Wasteful bandwidth + server load (snapshot is the full reference-data baseline) on every sync cycle.
+**Solution:** After a successful snapshot import, advance the durable anchor to the server's reported `oldest_available` (the oldest retained row — the snapshot already captured everything older, so the client needs nothing below it), or clear the anchor when the server omitted it. The next pull starts from a non-expired point; the `sync_applied_items` ledger absorbs any replay. Regression test `engine_resets_anchor_after_snapshot_import` uses a mock server that mirrors the real P-1 check (410 only when `since` predates `oldest_available`) and counts snapshot hits — cycle 2 must flow items without a second snapshot fetch.
+**Commits:** `platform/sync/src/lib.rs` — single-file fix + test.
+**Tests:** 245 crate tests (1 new) · 19/19 gated integration suite · fmt + clippy `-D warnings` clean.
+**Follow-ups:** the SQLite daemon has NO snapshot path — an expired anchor there just logs `pull phase: anchor expired` every cycle forever. Wiring the daemon to the same snapshot-recovery + anchor-reset flow is a natural next slice.
+
 ## 2026-08-06 — TDD cycle: payment splits must cover the sale total (MONEY-04)
 
 ### `complete_sale*` accepted under-paid / empty / negative payment splits
