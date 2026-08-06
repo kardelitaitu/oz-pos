@@ -343,15 +343,24 @@ pub fn apply_sync_outcomes(
                 global_error = Some(reason.clone());
             }
             PushOutcome::Conflict(server_item) => {
+                // OFF-11: the server already holds this queued action, so the
+                // server's copy wins. Record it as a *resolved* conflict (via
+                // `mark_offline_resolved`) rather than a bare failure — this is
+                // the marker the `offline_queue_status_summary` conflict_count
+                // query counts (`last_error LIKE 'resolved: conflict%'`), so the
+                // UI's conflict observability reflects real command-boundary
+                // conflicts instead of always reading zero.
                 tracing::warn!(
                     item_id = %item.id,
                     server_action = %server_item.action,
-                    "sync conflict: item already exists on server with different data"
+                    "sync conflict: item already exists on server with different data; server copy wins"
                 );
-                let msg = "server conflict: item already exists with different data";
-                store.mark_offline_failed(&item.id, msg)?;
-                failed += 1;
-                global_error = Some(msg.into());
+                let resolution = format!(
+                    "server item wins (action={} already on server)",
+                    server_item.action
+                );
+                store.mark_offline_resolved(&item.id, &resolution)?;
+                synced += 1;
             }
         }
     }
@@ -570,6 +579,14 @@ struct SnapshotProduct {
     /// Whether the product requires serial-number capture at checkout.
     #[serde(default)]
     track_serial: bool,
+    /// Store scoping for the soft-scoping layer (migration 069/117).
+    ///
+    /// `None`/absent means the shared global catalog; `Some(id)` means the
+    /// row is visible only to that store. Backward compatible: servers that
+    /// omit the field deserialize as `None`, so every pulled row lands in
+    /// the global catalog exactly as before.
+    #[serde(default)]
+    store_id: Option<String>,
 }
 
 /// Flat tax-rate row matching the `tax_rates` table columns.
@@ -593,15 +610,32 @@ struct SnapshotTaxRate {
     updated_at: Option<String>,
 }
 
-/// Flat user row matching the `users` table columns.
+/// Placeholder written into `users.pin_hash` for snapshot-imported users.
+///
+/// SYNC-06: the snapshot contract deliberately carries NO credential
+/// material, so `upsert_users` cannot write a real verifier. This sentinel
+/// can never match a bcrypt/argon2 verification, so a snapshot-imported
+/// user cannot authenticate until a local administrator provisions their
+/// PIN through the normal identity-management flow.
+///
+/// Shared with `platform-sync`'s `import_snapshot` so the sentinel lives
+/// in exactly one place.
+pub const SNAPSHOT_PIN_HASH_PLACEHOLDER: &str = "!snapshot-no-credential!";
+
+/// Flat user row matching the `users` table columns (minus secrets).
+///
+/// SYNC-06: `pin_hash` is intentionally absent from the snapshot
+/// contract — a sync token with snapshot access must never receive
+/// credential-verifier material for tenant users. `deny_unknown_fields`
+/// makes the client fail loudly if a (buggy/older) server ever sends a
+/// `pin_hash` field instead of silently importing it.
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct SnapshotUser {
     /// Internal row id (UUID v4).
     id: Option<String>,
     /// Login username — UNIQUE column used for the upsert conflict target.
     username: String,
-    /// Bcrypt/argon2 hash of the PIN/password.
-    pin_hash: String,
     /// Display name shown on the POS UI.
     display_name: String,
     /// FK to `roles.id`.
@@ -700,9 +734,9 @@ fn upsert_products(
     let mut stmt = tx.prepare(
         "INSERT INTO products (id, sku, name, price_minor, currency,
                                category_id, barcode, created_at, updated_at,
-                               price_updated_at, track_serial)
+                               price_updated_at, track_serial, store_id)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7,
-                 COALESCE(?8, ?11), COALESCE(?9, ?11), COALESCE(?10, ?11), ?12)
+                 COALESCE(?8, ?11), COALESCE(?9, ?11), COALESCE(?10, ?11), ?12, ?13)
          ON CONFLICT(sku) DO UPDATE SET
              name            = excluded.name,
              price_minor     = excluded.price_minor,
@@ -711,7 +745,8 @@ fn upsert_products(
              barcode         = excluded.barcode,
              updated_at      = COALESCE(excluded.updated_at, ?11),
              price_updated_at = COALESCE(excluded.price_updated_at, ?11),
-             track_serial    = excluded.track_serial",
+             track_serial    = excluded.track_serial,
+             store_id        = excluded.store_id",
     )?;
     for p in rows {
         let id =
@@ -730,6 +765,7 @@ fn upsert_products(
             p.price_updated_at,
             now,
             p.track_serial as i64,
+            p.store_id,
         ])?;
         count += 1;
     }
@@ -775,13 +811,17 @@ fn upsert_tax_rates(
 fn upsert_users(tx: &rusqlite::Transaction<'_>, rows: &[SnapshotUser]) -> Result<usize, CoreError> {
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let mut count = 0usize;
+    // SYNC-06: `pin_hash` is never taken from the snapshot. New rows get a
+    // non-verifiable placeholder, and on conflict the EXISTING local hash
+    // is preserved (the UPDATE clause deliberately omits `pin_hash`) — a
+    // snapshot pull can neither replicate credentials nor lock out an
+    // operator who already has a working PIN.
     let mut stmt = tx.prepare(
         "INSERT INTO users (id, username, pin_hash, display_name, role_id,
                             is_active, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6,
                  COALESCE(?7, ?9), COALESCE(?8, ?9))
          ON CONFLICT(username) DO UPDATE SET
-             pin_hash     = excluded.pin_hash,
              display_name = excluded.display_name,
              role_id      = excluded.role_id,
              is_active    = excluded.is_active,
@@ -792,15 +832,15 @@ fn upsert_users(tx: &rusqlite::Transaction<'_>, rows: &[SnapshotUser]) -> Result
             u.id.clone()
                 .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
         stmt.execute(rusqlite::params![
-            id,                 // ?1
-            u.username,         // ?2
-            u.pin_hash,         // ?3
-            u.display_name,     // ?4
-            u.role_id,          // ?5
-            u.is_active as i64, // ?6
-            u.created_at,       // ?7
-            u.updated_at,       // ?8
-            now,                // ?9 — default for created_at / updated_at
+            id,                            // ?1
+            u.username,                    // ?2
+            SNAPSHOT_PIN_HASH_PLACEHOLDER, // ?3 — never a real verifier
+            u.display_name,                // ?4
+            u.role_id,                     // ?5
+            u.is_active as i64,            // ?6
+            u.created_at,                  // ?7
+            u.updated_at,                  // ?8
+            now,                           // ?9 — default for created_at / updated_at
         ])?;
         count += 1;
     }
@@ -933,6 +973,286 @@ mod tests {
         let config = SyncConfig::from_settings(&store).unwrap().unwrap();
         assert_eq!(config.server_url, "http://sync.example.com");
         assert_eq!(config.api_key, Some("sk-test-key".into()));
+    }
+
+    // ── SYNC-04: per-outcome application contract ───────────────
+    //
+    // `retry_offline_sync` and `sync_run` both delegate here. These tests
+    // pin that an item is marked synced ONLY on an accepted outcome, and
+    // marked failed (never falsely synced) on rejection or conflict.
+
+    #[test]
+    fn apply_sync_outcomes_accepted_marks_synced() {
+        let store = setup();
+        let items = [
+            store
+                .enqueue_offline("complete_sale", r#"{"id":1}"#)
+                .unwrap(),
+            store.enqueue_offline("void_sale", r#"{"id":2}"#).unwrap(),
+        ];
+
+        let outcomes = vec![PushOutcome::Accepted, PushOutcome::Accepted];
+        let result = apply_sync_outcomes(&store, &items, &outcomes).unwrap();
+        assert_eq!(result.synced, 2);
+        assert_eq!(result.failed, 0);
+        assert!(result.error.is_none());
+
+        let all = store.list_all_offline().unwrap();
+        assert!(
+            all.iter()
+                .all(|i| i.status == crate::offline::OfflineQueueStatus::Synced)
+        );
+    }
+
+    #[test]
+    fn apply_sync_outcomes_rejected_marks_failed() {
+        let store = setup();
+        let items = [store
+            .enqueue_offline("complete_sale", r#"{"id":1}"#)
+            .unwrap()];
+
+        let outcomes = vec![PushOutcome::Rejected {
+            reason: "invalid action".into(),
+        }];
+        let result = apply_sync_outcomes(&store, &items, &outcomes).unwrap();
+        assert_eq!(result.synced, 0);
+        assert_eq!(result.failed, 1);
+        assert_eq!(result.error.as_deref(), Some("invalid action"));
+
+        let all = store.list_all_offline().unwrap();
+        assert_eq!(all[0].status, crate::offline::OfflineQueueStatus::Failed);
+        assert_eq!(all[0].last_error.as_deref(), Some("invalid action"));
+    }
+
+    #[test]
+    fn apply_sync_outcomes_conflict_resolves_with_server_copy_wins() {
+        let store = setup();
+        let local = store
+            .enqueue_offline("complete_sale", r#"{"id":1}"#)
+            .unwrap();
+        let items = [local.clone()];
+
+        // A conflict outcome carries the server's copy of the item.
+        let server_item = OfflineQueueItem {
+            id: local.id.clone(),
+            action: local.action.clone(),
+            payload: r#"{"id":1,"remote":true}"#.into(),
+            status: local.status,
+            retry_count: local.retry_count,
+            last_error: None,
+            tenant_id: local.tenant_id.clone(),
+            created_at: local.created_at.clone(),
+            synced_at: None,
+            priority: local.priority,
+        };
+        let outcomes = vec![PushOutcome::Conflict(server_item)];
+        let result = apply_sync_outcomes(&store, &items, &outcomes).unwrap();
+        assert_eq!(result.synced, 1);
+        assert_eq!(result.failed, 0);
+
+        // The local item is marked *resolved* (server copy wins), not silently
+        // dropped — OFF-11: the resolution marker is what the summary's
+        // conflict_count query counts, so the UI sees real conflicts.
+        let all = store.list_all_offline().unwrap();
+        assert_eq!(all[0].status, crate::offline::OfflineQueueStatus::Synced);
+        assert!(
+            all[0]
+                .last_error
+                .as_deref()
+                .unwrap_or_default()
+                .starts_with("resolved: conflict"),
+            "conflict resolution marker must be recorded, got {:?}",
+            all[0].last_error
+        );
+
+        // The summary's conflict_count must now reflect the real path.
+        let summary = store.offline_queue_status_summary().unwrap();
+        assert_eq!(summary.conflict_count, 1);
+        assert_eq!(summary.synced_count, 1);
+    }
+
+    #[test]
+    fn apply_sync_outcomes_truncates_on_outcome_len_mismatch() {
+        // Documented behaviour: if the server returns fewer outcomes than
+        // pending items, `zip` silently truncates. The unpaired items are
+        // neither marked synced nor failed (they stay pending) — the
+        // retry caller must re-list them next cycle. This pins the
+        // current contract so a future refactor can't silently mark them
+        // synced without an outcome.
+        let store = setup();
+        let items = [
+            store
+                .enqueue_offline("complete_sale", r#"{"id":1}"#)
+                .unwrap(),
+            store
+                .enqueue_offline("complete_sale", r#"{"id":2}"#)
+                .unwrap(),
+        ];
+        let outcomes = vec![PushOutcome::Accepted]; // one outcome for two items
+        let result = apply_sync_outcomes(&store, &items, &outcomes).unwrap();
+        assert_eq!(result.synced, 1);
+        assert_eq!(result.failed, 0);
+
+        let all = store.list_all_offline().unwrap();
+        // One synced, one still pending — never falsely synced.
+        assert_eq!(
+            all.iter()
+                .filter(|i| i.status == crate::offline::OfflineQueueStatus::Synced)
+                .count(),
+            1
+        );
+        assert_eq!(
+            all.iter()
+                .filter(|i| i.status == crate::offline::OfflineQueueStatus::Pending)
+                .count(),
+            1
+        );
+    }
+
+    // ── SYNC-06: snapshot credential-exposure contract ──────────
+    //
+    // The snapshot must NEVER carry `pin_hash`. These tests pin both
+    // directions: (1) the client rejects a snapshot that (incorrectly)
+    // includes the field, and (2) applying a valid snapshot writes a
+    // non-verifiable placeholder for new users while preserving any
+    // existing local credential hash on conflict.
+
+    #[test]
+    fn snapshot_user_without_pin_hash_deserializes() {
+        // A snapshot user row with NO pin_hash field is the normal
+        // contract and must deserialize cleanly.
+        let json = r#"{
+            "users": [{
+                "id": "u1",
+                "username": "alice",
+                "display_name": "Alice",
+                "role_id": "r-owner",
+                "is_active": true
+            }]
+        }"#;
+        let snap: Snapshot = serde_json::from_str(json).unwrap();
+        assert_eq!(snap.users.len(), 1);
+        assert_eq!(snap.users[0].username, "alice");
+    }
+
+    #[test]
+    fn snapshot_user_with_pin_hash_is_rejected() {
+        // Defense in depth: a snapshot that (incorrectly) carries pin_hash
+        // must fail loudly instead of silently importing credential
+        // material into the local users table.
+        let json = r#"{
+            "users": [{
+                "id": "u1",
+                "username": "alice",
+                "pin_hash": "SENSITIVE-HASH",
+                "display_name": "Alice",
+                "role_id": "r-owner",
+                "is_active": true
+            }]
+        }"#;
+        assert!(
+            serde_json::from_str::<Snapshot>(json).is_err(),
+            "snapshot with pin_hash must be rejected"
+        );
+    }
+
+    #[test]
+    fn apply_snapshot_writes_placeholder_pin_hash_for_new_users() {
+        let store = setup();
+        // Seed a role so the users FK is satisfied.
+        store
+            .conn()
+            .execute(
+                "INSERT INTO roles (id, name, permissions) VALUES ('r-owner', 'Owner', '[]')",
+                [],
+            )
+            .unwrap();
+
+        let snap = Snapshot {
+            products: vec![],
+            tax_rates: vec![],
+            users: vec![SnapshotUser {
+                id: Some("u1".into()),
+                username: "alice".into(),
+                display_name: "Alice".into(),
+                role_id: "r-owner".into(),
+                is_active: true,
+                created_at: None,
+                updated_at: None,
+            }],
+        };
+        let result = apply_snapshot(&store, &snap).unwrap();
+        assert_eq!(result.users_pulled, 1);
+
+        let hash: String = store
+            .conn()
+            .query_row(
+                "SELECT pin_hash FROM users WHERE username = 'alice'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(hash, SNAPSHOT_PIN_HASH_PLACEHOLDER);
+        assert_ne!(hash, "SENSITIVE-HASH", "never a real verifier");
+    }
+
+    #[test]
+    fn apply_snapshot_preserves_existing_local_pin_hash_on_conflict() {
+        let store = setup();
+        store
+            .conn()
+            .execute(
+                "INSERT INTO roles (id, name, permissions) VALUES ('r-owner', 'Owner', '[]')",
+                [],
+            )
+            .unwrap();
+        // Pre-existing local user with a REAL credential hash.
+        store
+            .conn()
+            .execute(
+                "INSERT INTO users (id, username, pin_hash, display_name, role_id)
+                 VALUES ('u-local', 'bob', 'REAL-LOCAL-HASH', 'Bob', 'r-owner')",
+                [],
+            )
+            .unwrap();
+
+        // Snapshot upserts the same username with a fresh remote id.
+        let snap = Snapshot {
+            products: vec![],
+            tax_rates: vec![],
+            users: vec![SnapshotUser {
+                id: Some("u-remote".into()),
+                username: "bob".into(),
+                display_name: "Bob Updated".into(),
+                role_id: "r-owner".into(),
+                is_active: true,
+                created_at: None,
+                updated_at: None,
+            }],
+        };
+        apply_snapshot(&store, &snap).unwrap();
+
+        // The conflict-update must NOT clobber the local credential hash.
+        let hash: String = store
+            .conn()
+            .query_row(
+                "SELECT pin_hash FROM users WHERE username = 'bob'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(hash, "REAL-LOCAL-HASH");
+
+        // ...but the non-secret metadata from the snapshot still lands.
+        let name: String = store
+            .conn()
+            .query_row(
+                "SELECT display_name FROM users WHERE username = 'bob'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(name, "Bob Updated");
     }
 
     #[test]

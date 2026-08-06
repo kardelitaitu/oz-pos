@@ -3,7 +3,7 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFullscreen } from '@/hooks/useFullscreen';
 import { Localized, useLocalization } from '@fluent/react';
-import { ConfirmDialog } from '@/frontend/shared';
+import { ConfirmDialog, requiredLocalized } from '@/frontend/shared';
 import { WorkspaceIcon } from '@/components/WorkspaceIcon';
 import { RoleIcon } from '@/components/RoleIcon';
 import type { LoginSessionDto } from '@/api/staff';
@@ -76,7 +76,7 @@ function getIcon(key: string) {
 
 function SkeletonGrid({ l10n: skL10n }: { l10n: ReturnType<typeof useLocalization>['l10n'] }) {
   return (
-    <div className="workspace-skeleton-grid" aria-label={skL10n.getString('workspace-home-loading-aria') || 'Loading workspaces'}>
+    <div className="workspace-skeleton-grid" aria-label={requiredLocalized(skL10n, 'workspace-home-loading-aria')}>
       {[1, 2, 3].map((i) => (
         <div key={i} className="workspace-skeleton-card">
           <div className="workspace-skeleton-icon" />
@@ -205,7 +205,7 @@ function LayerFloatingButtons({
           className="workspace-home-fullscreen-btn"
           onClick={toggleFullscreen}
           aria-label={l10n.getString('workspace-home-fullscreen-aria')}
-          title={l10n.getString('workspace-home-fullscreen-hint') || 'F11'}
+          title={requiredLocalized(l10n, 'workspace-home-fullscreen-hint')}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="18" height="18">
             <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
@@ -553,7 +553,7 @@ export default function WorkspaceHome() {
 
         {/* SR-only status */}
         <span className="ws-sr-status" role="status" aria-live="polite">
-          {loading ? l10n.getString('workspace-home-loading') || 'Loading workspaces...' : error && !loading ? l10n.getString('workspace-home-sr-error') || 'Connection error' : l10n.getString('workspace-home-available', { count: sortedWorkspaces.length }) || `${sortedWorkspaces.length} workspaces available`}
+          {loading ? requiredLocalized(l10n, 'workspace-home-loading') : error && !loading ? requiredLocalized(l10n, 'workspace-home-sr-error') : requiredLocalized(l10n, 'workspace-home-available', { count: sortedWorkspaces.length })}
         </span>
 
         {/* Layer 5: Overlays */}
@@ -740,7 +740,7 @@ export default function WorkspaceHome() {
                       </svg>
                     </span>
                     {isActive && (
-                      <div className="workspace-card-active-dot" aria-label={l10n.getString('workspace-card-active-aria') || 'Active workspace'}>
+                      <div className="workspace-card-active-dot" aria-label={requiredLocalized(l10n, 'workspace-card-active-aria')}>
                         <svg viewBox="0 0 24 24" fill="currentColor" width="10" height="10" aria-hidden="true">
                           <circle cx="12" cy="12" r="6" />
                         </svg>

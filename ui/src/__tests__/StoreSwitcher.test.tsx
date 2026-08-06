@@ -318,11 +318,130 @@ describe('StoreSwitcher', () => {
     const trigger = screen.getByText('HQ').closest('button')!;
     expect(trigger.getAttribute('aria-haspopup')).toBe('listbox');
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(trigger.getAttribute('aria-controls')).toBe('store-switcher-listbox');
 
     await userEvent.click(trigger);
 
     await waitFor(() => {
       expect(trigger.getAttribute('aria-expanded')).toBe('true');
     });
+  });
+
+  // ── A11Y-05: listbox keyboard navigation ───────────────────────
+  // Mirrors the LOC-04 pattern from LocationPicker: ArrowUp/Down wrap through
+  // options, Home/End jump, Enter/Space selects the active option, Escape
+  // closes and restores focus to the trigger, and aria-activedescendant
+  // tracks the highlighted option.
+
+  async function openListbox() {
+    mockListStores.mockResolvedValue([
+      makeStore({ name: 'HQ', is_primary: true }),
+      makeStore({ id: 'store-2', name: 'Branch A', is_primary: false }),
+      makeStore({ id: 'store-3', name: 'Branch B', is_primary: false }),
+    ]);
+    renderComponent();
+    await waitFor(() => expect(screen.getByText('HQ')).toBeDefined());
+    await userEvent.click(screen.getByText('HQ').closest('button')!);
+    await waitFor(() => expect(screen.getByRole('listbox')).toBeDefined());
+  }
+
+  it('moves focus to the listbox when opened', async () => {
+    await openListbox();
+    expect(screen.getByRole('listbox')).toHaveFocus();
+  });
+
+  it('highlights the primary store on open via aria-activedescendant', async () => {
+    await openListbox();
+    const listbox = screen.getByRole('listbox');
+    expect(listbox.getAttribute('aria-activedescendant')).toBe('store-switcher-option-store-1');
+  });
+
+  it('moves the active descendant with ArrowDown (wrapping)', async () => {
+    await openListbox();
+    const listbox = screen.getByRole('listbox');
+
+    await userEvent.keyboard('{ArrowDown}');
+    expect(listbox.getAttribute('aria-activedescendant')).toBe('store-switcher-option-store-2');
+
+    await userEvent.keyboard('{ArrowDown}');
+    expect(listbox.getAttribute('aria-activedescendant')).toBe('store-switcher-option-store-3');
+
+    // Wrap to the first option.
+    await userEvent.keyboard('{ArrowDown}');
+    expect(listbox.getAttribute('aria-activedescendant')).toBe('store-switcher-option-store-1');
+  });
+
+  it('moves the active descendant with ArrowUp (wrapping)', async () => {
+    await openListbox();
+    const listbox = screen.getByRole('listbox');
+
+    await userEvent.keyboard('{ArrowUp}');
+    expect(listbox.getAttribute('aria-activedescendant')).toBe('store-switcher-option-store-3');
+
+    await userEvent.keyboard('{ArrowUp}');
+    expect(listbox.getAttribute('aria-activedescendant')).toBe('store-switcher-option-store-2');
+  });
+
+  it('jumps to the first option with Home and the last with End', async () => {
+    await openListbox();
+    const listbox = screen.getByRole('listbox');
+
+    await userEvent.keyboard('{End}');
+    expect(listbox.getAttribute('aria-activedescendant')).toBe('store-switcher-option-store-3');
+
+    await userEvent.keyboard('{Home}');
+    expect(listbox.getAttribute('aria-activedescendant')).toBe('store-switcher-option-store-1');
+  });
+
+  it('selects the active option with Enter', async () => {
+    await openListbox();
+
+    await userEvent.keyboard('{ArrowDown}');
+    await userEvent.keyboard('{ArrowDown}');
+    await userEvent.keyboard('{Enter}');
+
+    await waitFor(() => {
+      expect(mockSetPrimaryStore).toHaveBeenCalledWith('store-3');
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole('listbox')).toBeNull();
+    });
+  });
+
+  it('selects the active option with Space', async () => {
+    await openListbox();
+
+    await userEvent.keyboard('{ArrowDown}');
+    await userEvent.keyboard(' ');
+
+    await waitFor(() => {
+      expect(mockSetPrimaryStore).toHaveBeenCalledWith('store-2');
+    });
+  });
+
+  it('closes with Escape and restores focus to the trigger', async () => {
+    await openListbox();
+    // The dropdown is open, so 'HQ' appears twice (trigger + option). The
+    // trigger is the only role="button" — options use role="option".
+    const trigger = screen.getByRole('button', { name: /HQ/ });
+
+    await userEvent.keyboard('{Escape}');
+
+    await waitFor(() => {
+      expect(screen.queryByRole('listbox')).toBeNull();
+    });
+    expect(trigger).toHaveFocus();
+  });
+
+  it('highlights the active option with the highlighted class', async () => {
+    await openListbox();
+
+    await userEvent.keyboard('{ArrowDown}');
+    const options = screen.getAllByRole('option');
+    const highlighted = options.find((o) =>
+      o.classList.contains('store-switcher-option--highlighted'),
+    );
+    expect(highlighted).toBeDefined();
+    expect(highlighted?.textContent).toContain('Branch A');
   });
 });

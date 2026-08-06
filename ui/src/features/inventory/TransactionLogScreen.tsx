@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/Button';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { l10nErrorMessage } from '@/utils/app-error';
 import {
   listInventoryTransactions,
   listInventoryLocations,
@@ -23,6 +24,7 @@ export default function TransactionLogScreen() {
   const [transactions, setTransactions] = useState<InventoryTransaction[]>([]);
   const [locations, setLocations] = useState<InventoryLocation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Expanded row tracking
   const [expandedTxId, setExpandedTxId] = useState<string | null>(null);
@@ -36,21 +38,31 @@ export default function TransactionLogScreen() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  useEffect(() => {
+  // Durable load with retry (INV-08): the initial failure previously only
+  // surfaced a transient toast. Now a persistent error block with a Retry
+  // button renders in place of the table until the reload succeeds.
+  const load = useCallback(async () => {
     if (!sessionToken) return;
-
     setLoading(true);
-    Promise.all([
-      listInventoryTransactions(sessionToken),
-      listInventoryLocations(sessionToken),
-    ])
-      .then(([txs, locs]) => {
-        setTransactions(txs);
-        setLocations(locs);
-      })
-      .catch((err) => addToast({ message: err instanceof Error ? err.message : (l10nRef.current.getString('inv-log-error-load') || 'Failed to load transactions'), type: 'error' }))
-      .finally(() => setLoading(false));
+    setLoadError(null);
+    try {
+      const [txs, locs] = await Promise.all([
+        listInventoryTransactions(sessionToken),
+        listInventoryLocations(sessionToken),
+      ]);
+      setTransactions(txs);
+      setLocations(locs);
+    } catch (err) {
+      setLoadError(l10nErrorMessage(err, l10nRef.current, 'inv-log-error-load'));
+      addToast({ message: l10nErrorMessage(err, l10nRef.current, 'inv-log-error-load'), type: 'error' });
+    } finally {
+      setLoading(false);
+    }
   }, [sessionToken, addToast]); // l10n via ref — stable dep chain
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const handleRowClick = async (txId: string) => {
     if (!sessionToken) return;
@@ -68,7 +80,7 @@ export default function TransactionLogScreen() {
         setExpandedLines(detail[1]);
       }
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : (l10nRef.current.getString('inv-log-error-lines') || 'Failed to load transaction details'), type: 'error' });
+      addToast({ message: l10nErrorMessage(err, l10nRef.current, 'inv-log-error-lines'), type: 'error' });
     } finally {
       setLoadingLines(false);
     }
@@ -194,6 +206,13 @@ export default function TransactionLogScreen() {
             <span>Loading...</span>
           </Localized>
         </div>
+      ) : loadError ? (
+        <div className="log-error" role="alert">
+          <p className="log-error-text">{loadError}</p>
+          <Button variant="secondary" size="sm" onClick={load}>
+            <Localized id="retry"><span>Retry</span></Localized>
+          </Button>
+        </div>
       ) : (
         <div aria-live="polite" aria-relevant="additions text">
         <table className="log-table">
@@ -219,13 +238,13 @@ export default function TransactionLogScreen() {
                     <td>{new Date(tx.created_at).toLocaleString()}</td>
                     <td>
                       <span className={`badge badge-${tx.type}`}>
-                        {tx.type.replace('-', ' ')}
+                        {l10n.getString(`inv-log-type-${tx.type}`) ?? tx.type.replace('-', ' ')}
                       </span>
                     </td>
                     <td>{locationName}</td>
                     <td>{tx.staff_id}</td>
                     <td>
-                      <Button variant="primary" size="sm" className="shift-btn shift-btn-primary" style={{ padding: '4px 10px' }}>
+                      <Button variant="primary" size="sm" className="shift-btn shift-btn-primary log-detail-btn">
                         <Localized id="inv-log-expand-btn">
                           <span>Details</span>
                         </Localized>
@@ -265,10 +284,9 @@ export default function TransactionLogScreen() {
                               <tbody>{expandedLines.map(line => (
                                   <tr key={line.id}>
                                     <td>{line.sku}</td>
-                                    <td>{line.product_name}</td>
-                                    <td style={{ color: line.qty >= 0 ? '#22c55e' : '#ef4444' }}>
-                                      {line.qty >= 0 ? `+${line.qty}` : line.qty}
-                                    </td>
+                                    <td>{line.product_name}</td>                    <td className={line.qty >= 0 ? 'log-qty-positive' : 'log-qty-negative'}>
+                      {line.qty >= 0 ? `+${line.qty}` : line.qty}
+                    </td>
                                     <td>{line.barcode_scanned || '-'}</td>
                                   </tr>
                                 ))}

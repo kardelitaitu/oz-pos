@@ -1,13 +1,20 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useContext, useState, useCallback, useEffect } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
+import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import { getHourlyHeatmap } from '@/api/reports';
 import { Skeleton } from '@/components/Skeleton';
 import CanvasHeatmap from '@/components/charts/CanvasHeatmap';
 import type { HeatmapCell } from '@/components/charts/CanvasHeatmap';
+import { l10nErrorMessage } from '@/utils/app-error';
+import { useCurrency } from '@/contexts/CurrencyContext';
+import { minorUnitExponent } from '@/types/domain';
 
 /** Canvas 2D hourly heatmap widget for the reporting dashboard. */
 export default function HourlyHeatmapWidget() {
   const { l10n } = useLocalization();
+  const { currency } = useCurrency();
+  const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
   const [cells, setCells] = useState<HeatmapCell[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -22,6 +29,7 @@ export default function HourlyHeatmapWidget() {
       const rows = await getHourlyHeatmap(
         start.toISOString().slice(0, 10),
         end.toISOString().slice(0, 10),
+        sessionToken,
       );
       setCells(
         rows.map((r) => ({
@@ -31,11 +39,12 @@ export default function HourlyHeatmapWidget() {
         })),
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      // ERR-05: never render raw backend messages — map to user-safe copy.
+      setError(l10nErrorMessage(e, l10n, 'app-error-generic'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sessionToken, l10n]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -81,7 +90,7 @@ export default function HourlyHeatmapWidget() {
   }
 
   return (
-    <div className="reporting-widget reporting-widget--heatmap" aria-label={l10n.getString('sales-dashboard-heatmap-aria') || 'Hourly sales heatmap'}>
+    <div className="reporting-widget reporting-widget--heatmap" aria-label={requiredLocalized(l10n, 'sales-dashboard-heatmap-aria')}>
       <div className="reporting-widget-header">
         <Localized id="sales-dashboard-heatmap-title">
           <h3 className="reporting-widget-title">Busiest Hours</h3>
@@ -89,12 +98,17 @@ export default function HourlyHeatmapWidget() {
       </div>
       <CanvasHeatmap
         data={cells}
+        label={requiredLocalized(l10n, 'sales-dashboard-heatmap-aria')}
+        summary={requiredLocalized(l10n, 'sales-dashboard-heatmap-summary', {
+          count: String(cells.filter((c) => c.value > 0).length),
+        })}
         formatValue={(v) =>
           new Intl.NumberFormat('en', {
             style: 'currency',
-            currency: 'USD',
+            currency,
             minimumFractionDigits: 0,
-          }).format(v / 100)
+            maximumFractionDigits: minorUnitExponent(currency),
+          }).format(v / 10 ** minorUnitExponent(currency))
         }
         minHeight="140px"
       />

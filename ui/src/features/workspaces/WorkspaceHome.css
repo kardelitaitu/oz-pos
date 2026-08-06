@@ -1096,8 +1096,12 @@
     /* transform: none; */
   }
 
-  .workspace-card:hover {
-    /* transform: none; */
+  .workspace-card:hover,
+  .workspace-card:focus-visible {
+    /* The infinite hover sway must not run under reduced motion — it also
+       makes the card's bounding box continuously change, which stalls
+       Playwright's click actionability check. */
+    animation: none;
   }
 
   .workspace-grid {

@@ -11,9 +11,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-bg-overlay);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: var(--color-pos-modal-overlay);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   will-change: backdrop-filter;
   transform: translateZ(0);
   animation: settings-popup-fade-in 250ms var(--ease-out);
@@ -31,10 +31,10 @@
   flex-direction: column;
   width: 90%;
   max-height: 85vh;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
+  background: var(--color-pos-modal-bg);
+  border: 1px solid var(--color-pos-modal-border);
   border-radius: var(--radius-2xl);
-  box-shadow: var(--shadow-2xl);
+  box-shadow: var(--color-pos-modal-shadow);
   animation: settings-popup-slide-up 250ms var(--ease-out);
 }
 

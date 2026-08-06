@@ -1,5 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { Localized, useLocalization } from '@fluent/react';
+import { requiredLocalized } from '@/frontend/shared';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { minorUnitExponent } from '@/types/domain';
 import './QrisQrDisplay.css';
 
 interface QrisQrDisplayProps {
@@ -33,6 +37,7 @@ export default function QrisQrDisplay({
   onClose,
   onPaymentConfirmed,
 }: QrisQrDisplayProps) {
+  const { l10n } = useLocalization();
   const [pollCount, setPollCount] = useState(0);
   const [status, setStatus] = useState<'waiting' | 'confirmed' | 'expired'>('waiting');
 
@@ -85,14 +90,20 @@ export default function QrisQrDisplay({
   // two mirrored keyframes play in parallel.
   const exit = useExitAnimation(isOpen, onClose);
 
+  // A11Y-02: complete dialog semantics — initial focus, Tab containment,
+  // Escape, scroll lock, and focus restoration all via the shared trap.
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+  useFocusTrap(overlayRef, exit.shouldRender && !exit.exiting, () => exit.requestClose());
+
   if (!exit.shouldRender) return null;
 
   return (
     <div
+      ref={overlayRef}
       className={`qris-overlay${exit.exiting ? ' qris-overlay--exiting' : ''}`}
       role="dialog"
       aria-modal="true"
-      aria-label="QRIS QR payment"
+      aria-label={requiredLocalized(l10n, 'payment-qris-dialog-aria')}
     >
       <div
         className={`qris-container${exit.exiting ? ' qris-container--exiting' : ''}`}
@@ -102,18 +113,20 @@ export default function QrisQrDisplay({
           className="qris-close"
           onClick={() => exit.requestClose()}
           disabled={exit.exiting}
-          aria-label="Close QR payment"
+          aria-label={requiredLocalized(l10n, 'payment-qris-close-aria')}
         >
           &times;
         </button>
 
         <div className="qris-header">
-          <h2 className="qris-title">Scan with your payment app</h2>
+          <Localized id="payment-qris-scan">
+            <h2 className="qris-title">Scan with your payment app</h2>
+          </Localized>
           <p className="qris-subtitle">QRIS</p>
         </div>
 
         <div className={`qris-qr-wrapper ${status === 'waiting' ? 'qris-pulse' : ''}`}>
-          <div className="qris-qr-placeholder" aria-label="QR code">
+          <div className="qris-qr-placeholder" aria-label={requiredLocalized(l10n, 'payment-qris-qr-aria')}>
             <div className="qris-qr-grid">
               {qrCells.map((row, i) =>
                 row.map((cell, j) => (
@@ -129,29 +142,35 @@ export default function QrisQrDisplay({
 
         <div className="qris-details">
           <div className="qris-detail-row">
-            <span className="qris-detail-label">Amount</span>
-            <span className="qris-detail-value">{(amount / 100).toFixed(2)} {currency}</span>
+            <span className="qris-detail-label">{requiredLocalized(l10n, 'payment-qris-amount')}</span>
+            <span className="qris-detail-value">
+              {(amount / 10 ** minorUnitExponent(currency)).toFixed(minorUnitExponent(currency))} {currency}
+            </span>
           </div>
           <div className="qris-detail-row">
-            <span className="qris-detail-label">Reference</span>
+            <span className="qris-detail-label">{requiredLocalized(l10n, 'payment-qris-reference')}</span>
             <span className="qris-detail-value qris-detail-value--mono">{reference}</span>
           </div>
           <div className="qris-detail-row">
-            <span className="qris-detail-label">Merchant</span>
-            <span className="qris-detail-value">OZ-POS Store</span>
+            <span className="qris-detail-label">{requiredLocalized(l10n, 'payment-qris-merchant')}</span>
+            <span className="qris-detail-value">{requiredLocalized(l10n, 'payment-qris-merchant-name')}</span>
           </div>
         </div>
 
         {status === 'waiting' && (
-          <div className="qris-status" role="status" aria-label="Waiting for payment">
+          <div className="qris-status" role="status" aria-label={requiredLocalized(l10n, 'payment-qris-waiting-aria')}>
             <div className="qris-spinner" aria-hidden="true" />
-            <span>Waiting for payment...</span>
+            <Localized id="payment-qris-waiting">
+              <span>Waiting for payment...</span>
+            </Localized>
           </div>
         )}
 
         {status === 'confirmed' && (
-          <div className="qris-status qris-status--success" role="status" aria-label="Payment confirmed">
-            <span>Payment confirmed!</span>
+          <div className="qris-status qris-status--success" role="status" aria-label={requiredLocalized(l10n, 'payment-qris-confirmed-aria')}>
+            <Localized id="payment-qris-confirmed">
+              <span>Payment confirmed!</span>
+            </Localized>
           </div>
         )}
       </div>

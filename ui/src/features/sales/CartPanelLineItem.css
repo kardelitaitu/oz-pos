@@ -138,19 +138,16 @@
   font-family: var(--font-sans);
   letter-spacing: 0;
   user-select: none;
+  box-shadow: inset 0 1px 0 var(--color-fg-primary); /* P1-5 fallback */
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-fg-primary) 15%, transparent); /* thumb inset highlight */
 }
 
 /* Dark mode thumb — a slightly darker tile tones the avatar down
- * against the elevated panel surface. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .pos-cart-line-thumb {
-    background: hsl(var(--thumb-hue, var(--thumb-hue-default, 200)) var(--thumb-saturation, 60%) var(--thumb-lightness-dark, 35%));
-    color: hsl(var(--thumb-hue, var(--thumb-hue-default, 200)) 100% 95%);
-  }
-}
-
-[data-theme='dark'] .pos-cart-line-thumb {
+ * against the elevated panel surface. Keyed off the app theme, not
+ * the OS: `:root:not([data-theme='light'])` covers both the default
+ * (dark glass) and dark themes so light-OS devices still render dark
+ * thumbs (THM-02). */
+:root:not([data-theme='light']) .pos-cart-line-thumb {
   background: hsl(var(--thumb-hue, var(--thumb-hue-default, 200)) var(--thumb-saturation, 60%) var(--thumb-lightness-dark, 35%));
   color: hsl(var(--thumb-hue, var(--thumb-hue-default, 200)) 100% 95%);
 }
@@ -199,13 +196,7 @@
   pointer-events: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .pos-cart-line-ribbon {
-    background: hsl(var(--thumb-hue, var(--thumb-hue-default, 200)) var(--thumb-saturation, 60%) var(--thumb-lightness-dark, 35%));
-  }
-}
-
-[data-theme='dark'] .pos-cart-line-ribbon {
+:root:not([data-theme='light']) .pos-cart-line-ribbon {
   background: hsl(var(--thumb-hue, var(--thumb-hue-default, 200)) var(--thumb-saturation, 60%) var(--thumb-lightness-dark, 35%));
 }
 

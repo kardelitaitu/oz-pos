@@ -1,18 +1,18 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "OZ-POS",
-  "version": "0.0.23",
+  "version": "0.0.24",
   "identifier": "com.ozpos.tablet",
   "build": {
-    "beforeDevCommand": "npm run dev --prefix ../../ui",
-    "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "",
-    "frontendDist": "../../ui/dist"
+    "beforeDevCommand": "npm run dev:tablet --prefix ../../ui",
+    "devUrl": "http://localhost:1422",
+    "beforeBuildCommand": "npm run build:tablet --prefix ../../ui",
+    "frontendDist": "../../ui/dist-tablet"
   },
   "app": {
     "windows": [],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost:1420; img-src 'self' data: asset: https://asset.localhost; font-src 'self' data:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost:1422; img-src 'self' data: asset: https://asset.localhost; font-src 'self' data:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
     },
     "withGlobalTauri": true
   },

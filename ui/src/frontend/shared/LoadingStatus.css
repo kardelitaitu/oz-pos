@@ -1,0 +1,20 @@
+/* Shared accessible loading wrapper (LOAD-05). */
+
+.loading-status {
+  /* role="status" + aria-live="polite" announce the label once; the
+     label is also visible so sighted users get the same message. */
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.loading-status__label {
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+  text-align: center;
+}
+
+.loading-status__visual {
+  display: contents;
+}

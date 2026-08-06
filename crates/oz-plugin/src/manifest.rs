@@ -4,7 +4,13 @@ use std::path::Path;
 use crate::error::PluginError;
 
 /// A plugin manifest (`plugin.toml`).
+///
+/// `deny_unknown_fields` (PLG-08 tail): a typo'd field name — e.g.
+/// `required_permissionss` or `cappabilities` — must fail loudly at load
+/// instead of being silently dropped and changing the manifest author's
+/// intent without anyone noticing.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PluginManifest {
     /// Plugin metadata (name, version, etc.).
     pub plugin: PluginMeta,
@@ -18,6 +24,7 @@ pub struct PluginManifest {
 
 /// Metadata section of a plugin manifest.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PluginMeta {
     /// Plugin name (must be unique).
     pub name: String,
@@ -33,6 +40,7 @@ pub struct PluginMeta {
 
 /// Declared capabilities of a plugin.
 #[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PluginCapabilities {
     /// Script files to load into the Lua sandbox.
     #[serde(default)]
@@ -86,9 +94,9 @@ impl std::fmt::Display for Permission {
 }
 
 /// Sanity-check that a string value is a known permission name.
-/// Returns `None` for unrecognised values so unknown permissions are
-/// silently ignored (forward compatibility: a newer merchant's plugin
-/// may declare permissions this older runtime doesn't understand).
+/// Returns `None` for unrecognised values. Callers must treat `None` as a
+/// hard rejection (PLG-08): the manifest deserialiser errors out with the
+/// unknown value so intent is never silently changed.
 pub fn permission_from_str(s: &str) -> Option<Permission> {
     match s {
         "cart:read" => Some(Permission::CartRead),
@@ -99,9 +107,21 @@ pub fn permission_from_str(s: &str) -> Option<Permission> {
         "reporting:read" => Some(Permission::ReportingRead),
         "system:time" => Some(Permission::SystemTime),
         "log:write" => Some(Permission::LogWrite),
-        _ => None, // Unknown permission — silently ignore for forward compat.
+        _ => None,
     }
 }
+
+/// All recognised permission names, used for actionable error diagnostics.
+pub const ALL_PERMISSION_NAMES: &[&str] = &[
+    "cart:read",
+    "cart:write",
+    "tax:read",
+    "inventory:read",
+    "inventory:write",
+    "reporting:read",
+    "system:time",
+    "log:write",
+];
 
 /// Deserialize a single permission or a list of permissions from TOML.
 /// Supports both single-string and array-of-strings forms.
@@ -113,6 +133,16 @@ where
 
     // Try array first, then single string.
     struct PermVisitor;
+
+    impl PermVisitor {
+        fn unknown<E: de::Error>(v: &str) -> E {
+            de::Error::custom(format!(
+                "unknown permission '{v}' — recognised permissions: {}",
+                ALL_PERMISSION_NAMES.join(", ")
+            ))
+        }
+    }
+
     impl<'de> de::Visitor<'de> for PermVisitor {
         type Value = Vec<Permission>;
 
@@ -121,14 +151,17 @@ where
         }
 
         fn visit_str<E: de::Error>(self, v: &str) -> Result<Vec<Permission>, E> {
-            Ok(permission_from_str(v).into_iter().collect())
+            permission_from_str(v)
+                .map(|p| vec![p])
+                .ok_or_else(|| Self::unknown(v))
         }
 
         fn visit_seq<A: de::SeqAccess<'de>>(self, mut seq: A) -> Result<Vec<Permission>, A::Error> {
             let mut perms = Vec::new();
             while let Some(val) = seq.next_element::<String>()? {
-                if let Some(p) = permission_from_str(&val) {
-                    perms.push(p);
+                match permission_from_str(&val) {
+                    Some(p) => perms.push(p),
+                    None => return Err(Self::unknown(&val)),
                 }
             }
             Ok(perms)
@@ -140,6 +173,7 @@ where
 
 /// Sandbox permissions for a plugin.
 #[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PluginPermissions {
     /// Whether the plugin may make network requests.
     #[serde(default)]
@@ -151,19 +185,74 @@ pub struct PluginPermissions {
     #[serde(default)]
     pub allow_http: bool,
     /// Declared permissions this plugin needs (e.g., `["cart:read", "cart:write"]`).
-    /// Rejected at load time if any permission is not recognised.
-    /// Unknown permissions are silently ignored for forward compatibility.
+    /// Deserialisation fails with an actionable error if any permission is
+    /// not recognised (PLG-08) — unknown intent is never silently dropped.
     #[serde(default, deserialize_with = "deserialize_permissions")]
     pub required_permissions: Vec<Permission>,
 }
 
 impl PluginManifest {
-    /// Load a manifest from a `plugin.toml` file.
+    /// Load a manifest from a `plugin.toml` file, validating the schema
+    /// (PLG-08): plugin ID format, strict SemVer, and hook-name shape.
     pub fn load(path: &Path) -> Result<Self, PluginError> {
         let content = std::fs::read_to_string(path)
             .map_err(|e| PluginError::Manifest(format!("cannot read {path:?}: {e}")))?;
-        toml::from_str(&content)
-            .map_err(|e| PluginError::Manifest(format!("invalid manifest {path:?}: {e}")))
+        let manifest: Self = toml::from_str(&content)
+            .map_err(|e| PluginError::Manifest(format!("invalid manifest {path:?}: {e}")))?;
+        manifest.validate()?;
+        Ok(manifest)
+    }
+
+    /// Validate the manifest against the documented plugin schema (PLG-08).
+    ///
+    /// Checks plugin ID format (kebab-case, 1–64 chars), strict SemVer, and
+    /// hook-name shape. Unknown permissions are already rejected during
+    /// deserialisation with an actionable diagnostic.
+    pub fn validate(&self) -> Result<(), PluginError> {
+        let name = &self.plugin.name;
+
+        // Plugin ID: lowercase letters/digits/hyphens, must start with a
+        // lowercase letter or digit, max 64 chars (kebab-case convention).
+        let valid_id = !name.is_empty()
+            && name.len() <= 64
+            && name
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+            && name
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+        if !valid_id {
+            return Err(PluginError::Manifest(format!(
+                "plugin name '{name}' is invalid — use lowercase letters, digits \
+                 and hyphens (kebab-case, max 64 chars)"
+            )));
+        }
+
+        // Version: strict SemVer (e.g. `1.0.0`, `1.2.3-beta.1`).
+        semver::Version::parse(&self.plugin.version).map_err(|e| {
+            PluginError::Manifest(format!(
+                "plugin '{name}' has invalid version '{}': {e}",
+                self.plugin.version
+            ))
+        })?;
+
+        // Hook names: non-empty, safe identifier characters.
+        for hook in &self.capabilities.hooks {
+            let valid_hook = !hook.is_empty()
+                && hook.len() <= 128
+                && hook.chars().all(|c| {
+                    c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '_' | '-')
+                });
+            if !valid_hook {
+                return Err(PluginError::Manifest(format!(
+                    "plugin '{name}' declares invalid hook name '{hook}' — use lowercase \
+                     letters, digits, dots, underscores or hyphens"
+                )));
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -350,6 +439,199 @@ allow_http = true
         let debug = format!("{perms:?}");
         assert!(debug.contains("true"));
         assert!(debug.contains("CartRead"));
+    }
+
+    // ── PLG-08 schema validation ───────────────────────────────────────
+
+    #[test]
+    fn unknown_permission_is_rejected() {
+        let toml = r#"
+[plugin]
+name = "test-plugin"
+version = "1.0.0"
+
+[permissions]
+required_permissions = ["cart:read", "super:admin"]
+"#;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("plugin.toml");
+        std::fs::write(&path, toml).unwrap();
+        let err = PluginManifest::load(&path).unwrap_err();
+        assert!(err.to_string().contains("super:admin"));
+        assert!(err.to_string().contains("unknown permission"));
+    }
+
+    #[test]
+    fn invalid_plugin_name_format_is_rejected() {
+        for bad in ["UPPERCASE", "with space", "with/slash", "has.dot", ""] {
+            let toml = format!(
+                "[plugin]\nname = \"{bad}\"\nversion = \"1.0.0\"\n\n[permissions]\nrequired_permissions = [\"cart:read\"]\n"
+            );
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("plugin.toml");
+            std::fs::write(&path, toml).unwrap();
+            let err = PluginManifest::load(&path).unwrap_err();
+            assert!(
+                err.to_string().contains("plugin name"),
+                "expected name rejection for {bad:?}, got: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn overlong_plugin_name_is_rejected() {
+        let long = "a".repeat(65);
+        let toml = format!(
+            "[plugin]\nname = \"{long}\"\nversion = \"1.0.0\"\n\n[permissions]\nrequired_permissions = [\"cart:read\"]\n"
+        );
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("plugin.toml");
+        std::fs::write(&path, toml).unwrap();
+        assert!(PluginManifest::load(&path).is_err());
+    }
+
+    #[test]
+    fn valid_kebab_case_name_is_accepted() {
+        for good in ["my-plugin", "a", "plugin-0", "example-discount"] {
+            let toml = format!(
+                "[plugin]\nname = \"{good}\"\nversion = \"1.0.0\"\n\n[permissions]\nrequired_permissions = [\"cart:read\"]\n"
+            );
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("plugin.toml");
+            std::fs::write(&path, toml).unwrap();
+            PluginManifest::load(&path)
+                .unwrap_or_else(|e| panic!("expected {good:?} accepted, got: {e}"));
+        }
+    }
+
+    #[test]
+    fn invalid_semver_is_rejected() {
+        for bad in ["1.0", "v1.0.0", "1.0.0.0", "abc", "1.0.0-", ""] {
+            let toml = format!(
+                "[plugin]\nname = \"my-plugin\"\nversion = \"{bad}\"\n\n[permissions]\nrequired_permissions = [\"cart:read\"]\n"
+            );
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("plugin.toml");
+            std::fs::write(&path, toml).unwrap();
+            let err = PluginManifest::load(&path).unwrap_err();
+            assert!(
+                err.to_string().contains("invalid version"),
+                "expected version rejection for {bad:?}, got: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn valid_semver_with_prerelease_is_accepted() {
+        for good in ["1.0.0", "0.1.0", "1.2.3-beta.1", "2.0.0+build.5"] {
+            let toml = format!(
+                "[plugin]\nname = \"my-plugin\"\nversion = \"{good}\"\n\n[permissions]\nrequired_permissions = [\"cart:read\"]\n"
+            );
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("plugin.toml");
+            std::fs::write(&path, toml).unwrap();
+            PluginManifest::load(&path)
+                .unwrap_or_else(|e| panic!("expected {good:?} accepted, got: {e}"));
+        }
+    }
+
+    #[test]
+    fn invalid_hook_name_is_rejected() {
+        let toml = r#"
+[plugin]
+name = "my-plugin"
+version = "1.0.0"
+
+[capabilities]
+hooks = ["bad hook name!"]
+
+[permissions]
+required_permissions = ["cart:read"]
+"#;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("plugin.toml");
+        std::fs::write(&path, toml).unwrap();
+        let err = PluginManifest::load(&path).unwrap_err();
+        assert!(err.to_string().contains("invalid hook name"));
+    }
+
+    // ── PLG-08 tail: unknown-field (typo) rejection ──────────────────
+
+    #[test]
+    fn typo_in_permission_field_name_is_rejected() {
+        let toml = r#"
+[plugin]
+name = "test-plugin"
+version = "1.0.0"
+
+[permissions]
+required_permissionss = ["cart:read"]
+"#;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("plugin.toml");
+        std::fs::write(&path, toml).unwrap();
+        let err = PluginManifest::load(&path).unwrap_err();
+        assert!(
+            err.to_string().contains("required_permissionss"),
+            "expected the unknown field named in the error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn typo_in_plugin_meta_field_name_is_rejected() {
+        let toml = r#"
+[plugin]
+name = "test-plugin"
+versoin = "1.0.0"
+"#;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("plugin.toml");
+        std::fs::write(&path, toml).unwrap();
+        let err = PluginManifest::load(&path).unwrap_err();
+        assert!(
+            err.to_string().contains("versoin"),
+            "expected the unknown field named in the error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn typo_in_capabilities_field_name_is_rejected() {
+        let toml = r#"
+[plugin]
+name = "test-plugin"
+version = "1.0.0"
+
+[capabilities]
+scritps = ["main.lua"]
+"#;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("plugin.toml");
+        std::fs::write(&path, toml).unwrap();
+        let err = PluginManifest::load(&path).unwrap_err();
+        assert!(
+            err.to_string().contains("scritps"),
+            "expected the unknown field named in the error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn typo_in_permissions_boolean_field_is_rejected() {
+        let toml = r#"
+[plugin]
+name = "test-plugin"
+version = "1.0.0"
+
+[permissions]
+allow_netwrk = false
+"#;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("plugin.toml");
+        std::fs::write(&path, toml).unwrap();
+        let err = PluginManifest::load(&path).unwrap_err();
+        assert!(
+            err.to_string().contains("allow_netwrk"),
+            "expected the unknown field named in the error, got: {err}"
+        );
     }
 
     #[test]

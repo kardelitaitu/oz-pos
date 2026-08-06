@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { useLocalization } from '@fluent/react';
 import { readScaleWeight, type WeightReading } from '@/api/hardware';
 import type { Sku } from '@/types/domain';
@@ -15,9 +16,14 @@ export default function ScaleIndicator({ weighTarget, onWeighAdd, onClearWeighTa
   const [reading, setReading] = useState<WeightReading | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
+
   useEffect(() => {
     let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const poll = async () => {
+      if (cancelled) return;
       try {
         const r = await readScaleWeight();
         if (!cancelled) {
@@ -25,13 +31,13 @@ export default function ScaleIndicator({ weighTarget, onWeighAdd, onClearWeighTa
           setError(null);
         }
       } catch {
-        if (!cancelled) setError(l10n.getString('scale-read-error') || 'Scale error');
+        if (!cancelled) setError(requiredLocalized(l10nRef.current, 'scale-read-error'));
       }
+      if (!cancelled) timeoutId = setTimeout(poll, 2000);
     };
     poll();
-    const id = setInterval(poll, 2000);
-    return () => { cancelled = true; clearInterval(id); };
-  }, [l10n]);
+    return () => { cancelled = true; if (timeoutId !== null) clearTimeout(timeoutId); };
+  }, []);
 
   const formatWeight = (g: number): string => {
     if (g >= 1000) return `${(g / 1000).toFixed(2)} kg`;
@@ -46,7 +52,7 @@ export default function ScaleIndicator({ weighTarget, onWeighAdd, onClearWeighTa
 
   if (error) {
     return (
-      <div className="scale-indicator scale-indicator--error" role="status" aria-label={l10n.getString('scale-indicator-aria') || 'Scale'}>
+      <div className="scale-indicator scale-indicator--error" role="status" aria-label={requiredLocalized(l10n, 'scale-indicator-aria')}>
         <span className="scale-indicator-error">{error}</span>
       </div>
     );
@@ -54,19 +60,19 @@ export default function ScaleIndicator({ weighTarget, onWeighAdd, onClearWeighTa
 
   if (!reading) {
     return (
-      <div className="scale-indicator scale-indicator--idle" role="status" aria-label={l10n.getString('scale-indicator-aria') || 'Scale'}>
-        <span className="scale-indicator-label">{l10n.getString('scale-idle') || 'Scale'}</span>
+      <div className="scale-indicator scale-indicator--idle" role="status" aria-label={requiredLocalized(l10n, 'scale-indicator-aria')}>
+        <span className="scale-indicator-label">{requiredLocalized(l10n, 'scale-idle')}</span>
       </div>
     );
   }
 
   return (
-    <div className={`scale-indicator ${reading.stable ? 'scale-indicator--stable' : 'scale-indicator--unstable'}`} role="status" aria-label={l10n.getString('scale-indicator-aria') || 'Scale weight indicator'}>
+    <div className={`scale-indicator ${reading.stable ? 'scale-indicator--stable' : 'scale-indicator--unstable'}`} role="status" aria-label={requiredLocalized(l10n, 'scale-indicator-aria')}>
       <div className="scale-indicator-display">
         <span className={`scale-indicator-dot ${reading.stable ? 'scale-indicator-dot--stable' : 'scale-indicator-dot--unstable'}`} aria-hidden="true" />
         <span className="scale-indicator-weight">{formatWeight(reading.weightGrams)}</span>
         <span className="scale-indicator-stable-label">
-          {reading.stable ? (l10n.getString('scale-stable') || 'Stable') : (l10n.getString('scale-unstable') || '…')}
+          {reading.stable ? (requiredLocalized(l10n, 'scale-stable')) : (requiredLocalized(l10n, 'scale-unstable'))}
         </span>
       </div>
       {weighTarget && reading.stable && reading.weightGrams > 0 && (
@@ -81,15 +87,15 @@ export default function ScaleIndicator({ weighTarget, onWeighAdd, onClearWeighTa
             type="button"
             className="scale-indicator-add-btn"
             onClick={handleWeighAdd}
-            aria-label={l10n.getString('scale-weigh-add-aria', { name: weighTarget.name }) || `Weigh & add ${weighTarget.name}`}
+            aria-label={requiredLocalized(l10n, 'scale-weigh-add-aria', { name: weighTarget.name })}
           >
-            {l10n.getString('scale-weigh-add') || 'Weigh & Add'}
+            {requiredLocalized(l10n, 'scale-weigh-add')}
           </button>
           <button
             type="button"
             className="scale-indicator-clear-btn"
             onClick={onClearWeighTarget}
-            aria-label={l10n.getString('scale-clear-aria') || 'Clear'}
+            aria-label={requiredLocalized(l10n, 'scale-clear-aria')}
           >
             &times;
           </button>

@@ -35,6 +35,14 @@ impl Store<'_> {
         let id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
+        // Validate name is not empty
+        if name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "location name must not be empty".into(),
+            });
+        }
+
         // Validate location type against allowed values
         match location_type {
             "store" | "warehouse" | "transit" | "damaged" | "virtual" => {}
@@ -91,6 +99,14 @@ impl Store<'_> {
         location_type: &str,
         description: &str,
     ) -> Result<(), CoreError> {
+        // Validate name is not empty
+        if name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "location name must not be empty".into(),
+            });
+        }
+
         // Validate location type against allowed values
         match location_type {
             "store" | "warehouse" | "transit" | "damaged" | "virtual" => {}
@@ -120,14 +136,41 @@ impl Store<'_> {
     }
 
     /// Deactivate an inventory location. Enforces constraints that the location
-    /// must have zero stock and no pending in-flight transfers.
+    /// must exist, be active, have a zero stock balance (positive or negative),
+    /// and have no pending in-flight transfers.
     pub fn deactivate_inventory_location(&self, id: &str) -> Result<(), CoreError> {
         let tx = self.conn.unchecked_transaction()?;
 
-        // Constraint 1: Check that there is no positive stock in stock_summary for this location
+        // Constraint 0: The location must exist and be active. A stale or
+        // cross-workspace ID must not be reported as a successful no-op.
+        let active_res = tx.query_row(
+            "SELECT is_active FROM inventory_locations WHERE id = ?1",
+            params![id],
+            |row| row.get::<_, i64>(0),
+        );
+        let active = match active_res {
+            Ok(v) => v,
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                return Err(CoreError::NotFound {
+                    entity: "inventory_location",
+                    id: id.to_owned(),
+                });
+            }
+            Err(e) => return Err(CoreError::Db(e)),
+        };
+        if active == 0 {
+            return Err(CoreError::Validation {
+                field: "location",
+                message: "location is already inactive".into(),
+            });
+        }
+
+        // Constraint 1: Block deactivation when ANY balance is non-zero. A
+        // negative balance would otherwise be hidden from active-location
+        // workflows while its ledger still needs reconciliation.
         let stock_count: i64 = tx
             .query_row(
-                "SELECT COUNT(*) FROM stock_summary WHERE location_id = ?1 AND qty > 0",
+                "SELECT COUNT(*) FROM stock_summary WHERE location_id = ?1 AND qty <> 0",
                 params![id],
                 |row| row.get(0),
             )
@@ -136,7 +179,7 @@ impl Store<'_> {
         if stock_count > 0 {
             return Err(CoreError::Validation {
                 field: "location",
-                message: "cannot deactivate location with active stock".into(),
+                message: "cannot deactivate location with a non-zero stock balance".into(),
             });
         }
 
@@ -240,7 +283,7 @@ impl Store<'_> {
     // ── Inventory Shifts ────────────────────────────────────────────────
 
     /// Start a new inventory shift for a user at a location.
-    /// Checks that the user does not already have an open shift.
+    /// Checks that the user does not already have an open shift at that location.
     pub fn start_inventory_shift(
         &self,
         user_id: &str,
@@ -250,11 +293,14 @@ impl Store<'_> {
     ) -> Result<InventoryShift, CoreError> {
         let tx = self.conn.unchecked_transaction()?;
 
-        // Enforce that only one shift is open at a time for this user.
+        // Migration 086 permits one active shift per user/location pair.
+        // Keep the application check aligned with that partial unique index;
+        // a worker may legitimately work at two locations concurrently.
         let active_count: i64 = tx
             .query_row(
-                "SELECT COUNT(*) FROM inventory_shifts WHERE user_id = ?1 AND status = 'active'",
-                params![user_id],
+                "SELECT COUNT(*) FROM inventory_shifts
+                 WHERE user_id = ?1 AND location_id = ?2 AND status = 'active'",
+                params![user_id, location_id],
                 |row| row.get(0),
             )
             .unwrap_or(0);
@@ -262,7 +308,7 @@ impl Store<'_> {
         if active_count > 0 {
             return Err(CoreError::Validation {
                 field: "shift",
-                message: "user already has an active inventory shift open".into(),
+                message: "user already has an active inventory shift open at this location".into(),
             });
         }
 
@@ -311,14 +357,20 @@ impl Store<'_> {
         Ok(())
     }
 
-    /// Retrieve the currently active shift for a user, if any.
+    /// Retrieve the most recently started active shift for a user, if any.
+    ///
+    /// Multiple locations may be active concurrently under migration 086's
+    /// per-user/location invariant. The existing IPC shape returns one
+    /// optional shift, so the UI receives the latest one; history remains
+    /// available through `list_inventory_shifts`.
     pub fn get_active_inventory_shift(
         &self,
         user_id: &str,
     ) -> Result<Option<InventoryShift>, CoreError> {
         let res = self.conn.query_row(
             "SELECT id, user_id, location_id, terminal_id, started_at, ended_at, status, notes \
-             FROM inventory_shifts WHERE user_id = ?1 AND status = 'active'",
+             FROM inventory_shifts WHERE user_id = ?1 AND status = 'active'
+             ORDER BY started_at DESC LIMIT 1",
             params![user_id],
             |row| {
                 Ok(InventoryShift {
@@ -608,6 +660,51 @@ impl Store<'_> {
         Ok(thresholds)
     }
 
+    /// List inventory transactions for a given staff member, location, and
+    /// time window. Returns transactions ordered by created_at DESC.
+    ///
+    /// This is used by the inventory shift summary to avoid client-side
+    /// filtering of all transactions.
+    pub fn list_inventory_transactions_for_shift(
+        &self,
+        staff_id: &str,
+        location_id: &str,
+        since: &str,
+    ) -> Result<Vec<InventoryTransaction>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, type, location_id, staff_id, transfer_id, purchase_order_id, notes, created_at \
+             FROM inventory_transactions \
+             WHERE staff_id = ?1 AND location_id = ?2 AND created_at >= ?3 \
+             ORDER BY created_at DESC",
+        )?;
+        let rows = stmt.query_map(params![staff_id, location_id, since], |row| {
+            let type_str: String = row.get(1)?;
+            let ttype =
+                crate::inventory_transaction::InventoryTransactionType::from_stored_str(&type_str)
+                    .unwrap_or(
+                        crate::inventory_transaction::InventoryTransactionType::ManualAdjustment,
+                    );
+            Ok(InventoryTransaction {
+                id: crate::inventory_transaction::InventoryTransactionId::from(
+                    row.get::<_, String>(0)?,
+                ),
+                transaction_type: ttype,
+                location_id: row.get(2)?,
+                staff_id: row.get(3)?,
+                transfer_id: row.get(4)?,
+                purchase_order_id: row.get(5)?,
+                notes: row.get(6).unwrap_or_default(),
+                created_at: row.get(7)?,
+            })
+        })?;
+
+        let mut txs = Vec::new();
+        for r in rows {
+            txs.push(r?);
+        }
+        Ok(txs)
+    }
+
     /// Delete a stock threshold configuration by ID.
     pub fn delete_stock_threshold(&self, id: &str) -> Result<(), CoreError> {
         let tx = self.conn.unchecked_transaction()?;
@@ -724,7 +821,7 @@ mod tests {
         assert_eq!(shift.status, "active");
         assert!(shift.ended_at.is_none());
 
-        // Attempting to open another active shift should error
+        // Attempting to open another active shift at the same location should error
         let err = s
             .start_inventory_shift("u-1", &loc_id, None, "")
             .unwrap_err();
@@ -776,6 +873,22 @@ mod tests {
     }
 
     #[test]
+    fn create_inventory_location_empty_name_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        let err = s.create_inventory_location("", "store", "").unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
+    }
+
+    #[test]
+    fn create_inventory_location_whitespace_name_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        let err = s.create_inventory_location("   ", "store", "").unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
+    }
+
+    #[test]
     fn update_inventory_location_nonexistent_errors() {
         let conn = fresh();
         let s = store(&conn);
@@ -821,18 +934,132 @@ mod tests {
             }
         ));
         assert!(
-            err.to_string().contains("active stock"),
-            "expected active stock message, got: {}",
+            err.to_string().contains("non-zero stock balance"),
+            "expected non-zero stock balance message, got: {}",
             err
         );
     }
 
     #[test]
-    fn deactivate_inventory_location_nonexistent_succeeds() {
+    fn deactivate_inventory_location_with_negative_stock_errors() {
         let conn = fresh();
         let s = store(&conn);
-        // deactivate on a non-existent location currently succeeds (no row matched)
-        assert!(s.deactivate_inventory_location("nonexistent").is_ok());
+
+        let loc_id = s
+            .create_inventory_location("Negative Loc", "store", "")
+            .unwrap();
+        // Seed a product with a NEGATIVE balance at this location — a negative
+        // balance must block deactivation just like a positive one (LOC-02).
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type) \
+             VALUES ('prod-neg', 'SKU-NEG', 'Prod', 100, 'USD', 'retail')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO stock_summary (item_id, location_id, qty) VALUES ('prod-neg', ?1, -3)",
+            params![loc_id],
+        )
+        .unwrap();
+
+        let err = s.deactivate_inventory_location(&loc_id).unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "location",
+                ..
+            }
+        ));
+        assert!(
+            err.to_string().contains("non-zero stock balance"),
+            "expected non-zero stock balance message, got: {}",
+            err
+        );
+        // The location must still be active afterwards.
+        let active: i64 = conn
+            .query_row(
+                "SELECT is_active FROM inventory_locations WHERE id = ?1",
+                params![loc_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            active, 1,
+            "location must remain active after failed deactivation"
+        );
+    }
+
+    #[test]
+    fn deactivate_inventory_location_with_zero_balance_succeeds() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let loc_id = s
+            .create_inventory_location("Zero Loc", "store", "")
+            .unwrap();
+        // A zero-balance row must NOT block deactivation.
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type) \
+             VALUES ('prod-zero', 'SKU-ZERO', 'Prod', 100, 'USD', 'retail')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO stock_summary (item_id, location_id, qty) VALUES ('prod-zero', ?1, 0)",
+            params![loc_id],
+        )
+        .unwrap();
+
+        s.deactivate_inventory_location(&loc_id).unwrap();
+        let active: i64 = conn
+            .query_row(
+                "SELECT is_active FROM inventory_locations WHERE id = ?1",
+                params![loc_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(active, 0, "zero-balance location should deactivate");
+    }
+
+    #[test]
+    fn deactivate_inventory_location_nonexistent_errors() {
+        let conn = fresh();
+        let s = store(&conn);
+        // A missing ID must surface a NotFound error rather than a silent no-op (LOC-03).
+        let err = s.deactivate_inventory_location("nonexistent").unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::NotFound {
+                entity: "inventory_location",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn deactivate_inventory_location_already_inactive_errors() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let loc_id = s
+            .create_inventory_location("Inactive Loc", "store", "")
+            .unwrap();
+        s.deactivate_inventory_location(&loc_id).unwrap();
+
+        // Deactivating an already-inactive location should report a clear error.
+        let err = s.deactivate_inventory_location(&loc_id).unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "location",
+                ..
+            }
+        ));
+        assert!(
+            err.to_string().contains("already inactive"),
+            "expected already-inactive message, got: {}",
+            err
+        );
     }
 
     #[test]
@@ -954,6 +1181,99 @@ mod tests {
         let s = store(&conn);
         let txns = s.list_inventory_transactions().unwrap();
         assert!(txns.is_empty());
+    }
+
+    #[test]
+    fn list_inventory_transactions_for_shift_filters_by_staff_location_and_time() {
+        let conn = fresh();
+        let s = store(&conn);
+        conn.execute(
+            "INSERT INTO roles (id, name, description, permissions) VALUES ('r-inv3', 'InvRole3', '', '[]')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id) VALUES ('staff-a', 'a', 'hash', 'A', 'r-inv3')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id) VALUES ('staff-b', 'b', 'hash', 'B', 'r-inv3')",
+            [],
+        )
+        .unwrap();
+
+        let loc_a = s.create_inventory_location("Loc A", "store", "").unwrap();
+        let loc_b = s
+            .create_inventory_location("Loc B", "warehouse", "")
+            .unwrap();
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type) \
+             VALUES ('p-shift', 'SKU-SHIFT', 'Shift Item', 100, 'USD', 'retail')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO stock_summary (item_id, location_id, qty) VALUES ('p-shift', ?1, 100)",
+            params![loc_a],
+        )
+        .unwrap();
+
+        let line = InventoryTransactionLineInput {
+            sku: "SKU-SHIFT".into(),
+            product_name: "Shift".into(),
+            qty: 1,
+            delta: 0,
+            barcode_scanned: None,
+        };
+
+        // Create a transaction for staff-a at loc-a (within window).
+        let tx_a = s
+            .create_inventory_transaction(
+                crate::inventory_transaction::InventoryTransactionType::StockCount,
+                &loc_a,
+                "staff-a",
+                "staff-a at loc-a",
+                std::slice::from_ref(&line),
+            )
+            .unwrap();
+
+        // Create a transaction for staff-a at loc-b (different location).
+        let _tx_a_loc_b = s
+            .create_inventory_transaction(
+                crate::inventory_transaction::InventoryTransactionType::StockCount,
+                &loc_b,
+                "staff-a",
+                "staff-a at loc-b",
+                std::slice::from_ref(&line),
+            )
+            .unwrap();
+
+        // Create a transaction for staff-b at loc-a (different staff).
+        let _tx_b = s
+            .create_inventory_transaction(
+                crate::inventory_transaction::InventoryTransactionType::StockCount,
+                &loc_a,
+                "staff-b",
+                "staff-b at loc-a",
+                std::slice::from_ref(&line),
+            )
+            .unwrap();
+
+        let since = "2020-01-01T00:00:00.000Z";
+
+        // Should only return staff-a at loc-a.
+        let filtered = s
+            .list_inventory_transactions_for_shift("staff-a", &loc_a, since)
+            .unwrap();
+        assert_eq!(filtered.len(), 1, "should only find the matching tx");
+        assert_eq!(filtered[0].id.as_str(), tx_a);
+
+        // Empty result for a different staff.
+        let none = s
+            .list_inventory_transactions_for_shift("staff-b", &loc_b, since)
+            .unwrap();
+        assert!(none.is_empty(), "no transactions for staff-b at loc-b");
     }
 
     #[test]
@@ -1085,6 +1405,17 @@ mod tests {
             .update_inventory_location(&loc_id, "Bad", "invalid_type", "")
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field: "type", .. }));
+    }
+
+    #[test]
+    fn update_inventory_location_empty_name_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        let loc_id = s.create_inventory_location("Valid", "store", "").unwrap();
+        let err = s
+            .update_inventory_location(&loc_id, "", "store", "")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
     }
 
     #[test]

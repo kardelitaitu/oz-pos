@@ -61,19 +61,126 @@ pub struct PullResponse {
     pub next_cursor: Option<String>,
 }
 
+/// Snapshot schema version understood by this client.
+///
+/// Snapshots claiming a newer version are rejected (RUST-04 fail-closed).
+pub const SNAPSHOT_SCHEMA_VERSION: u32 = 1;
+
+/// Legacy servers omit the version field — treat them as schema v1.
+fn default_snapshot_version() -> u32 {
+    SNAPSHOT_SCHEMA_VERSION
+}
+
+/// A product row in a server snapshot (typed, RUST-04).
+///
+/// Required fields (id, sku, name, price_minor, currency) fail
+/// deserialization when missing, so malformed reference data is rejected
+/// at the transport boundary instead of imported with defaults.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnapshotProduct {
+    /// Server-side row id.
+    pub id: String,
+    /// Unique product SKU.
+    pub sku: String,
+    /// Display name.
+    pub name: String,
+    /// Price in minor currency units.
+    pub price_minor: i64,
+    /// ISO-4217 currency code.
+    pub currency: String,
+    /// Optional category foreign key.
+    #[serde(default)]
+    pub category_id: Option<String>,
+    /// Optional barcode.
+    #[serde(default)]
+    pub barcode: Option<String>,
+    /// ISO-8601 creation timestamp; `None` lets the DB default fill it.
+    #[serde(default)]
+    pub created_at: Option<String>,
+    /// ISO-8601 last-update timestamp; defaults to `now()` on insert.
+    #[serde(default)]
+    pub updated_at: Option<String>,
+    /// ISO-8601 last price-change timestamp; defaults to `now()`.
+    #[serde(default)]
+    pub price_updated_at: Option<String>,
+    /// Serial-number tracking flag.
+    #[serde(default)]
+    pub track_serial: bool,
+    /// Store scoping for the soft-scoping layer (migration 069/117).
+    ///
+    /// `None`/absent means the shared global catalog; `Some(id)` means the
+    /// row is visible only to that store. Backward compatible: servers that
+    /// omit the field deserialize as `None`, so every imported row lands in
+    /// the global catalog exactly as before.
+    #[serde(default)]
+    pub store_id: Option<String>,
+}
+
+/// A tax-rate row in a server snapshot (typed, RUST-04).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnapshotTaxRate {
+    /// Server-side row id.
+    pub id: String,
+    /// Tax-rate display name.
+    pub name: String,
+    /// Rate in basis points (1/10000); must be >= 0.
+    pub rate_bps: i64,
+    /// Whether this is the store's default tax rate.
+    #[serde(default)]
+    pub is_default: bool,
+    /// Whether tax is included in the displayed price.
+    #[serde(default)]
+    pub is_inclusive: bool,
+    /// ISO-8601 creation timestamp.
+    #[serde(default)]
+    pub created_at: Option<String>,
+    /// ISO-8601 last-update timestamp.
+    #[serde(default)]
+    pub updated_at: Option<String>,
+}
+
+/// A user row in a server snapshot (typed, RUST-04).
+///
+/// `pin_hash` is deliberately absent — credential verifier material
+/// never travels over the sync channel (SYNC-06).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnapshotUser {
+    /// Server-side row id.
+    pub id: String,
+    /// Login username.
+    pub username: String,
+    /// Display name.
+    pub display_name: String,
+    /// Role foreign key.
+    pub role_id: String,
+    /// Whether the user can log in.
+    #[serde(default)]
+    pub is_active: bool,
+    /// ISO-8601 creation timestamp.
+    #[serde(default)]
+    pub created_at: Option<String>,
+    /// ISO-8601 last-update timestamp.
+    #[serde(default)]
+    pub updated_at: Option<String>,
+}
+
 /// Response from the snapshot endpoint (P-3 Steps 3-5).
 ///
 /// Contains the server's authoritative reference data for a tenant.
 /// The client imports this wholesale when its sync anchor has expired
-/// (data pruned server-side).
+/// (data pruned server-side). All rows are typed (RUST-04) so malformed
+/// reference data fails at the boundary rather than importing defaults.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncSnapshotResponse {
+    /// Snapshot schema version. Missing defaults to 1 (legacy servers).
+    #[serde(default = "default_snapshot_version")]
+    pub version: u32,
     /// Product rows keyed by SKU.
-    pub products: Vec<serde_json::Value>,
+    pub products: Vec<SnapshotProduct>,
     /// Tax-rate rows keyed by ID.
-    pub tax_rates: Vec<serde_json::Value>,
+    pub tax_rates: Vec<SnapshotTaxRate>,
     /// User rows keyed by username.
-    pub users: Vec<serde_json::Value>,
+    pub users: Vec<SnapshotUser>,
 }
 
 /// Classifies a `reqwest::Error` into a human-readable transport error message
@@ -107,12 +214,12 @@ pub struct SyncTransport {
 impl SyncTransport {
     /// Create a new transport targeting the given server URL.
     ///
-    ///
-    /// If the HTTP client cannot be built (e.g. TLS backend unavailable),
-    /// falls back to a default client and logs an error. Previously this
-    /// fallback was silent — now the error is logged so operators can
-    /// detect the degraded state.
-    pub fn new(server_url: &str, api_key: Option<&str>) -> Self {
+    /// RUST-05: fails **closed**. If the HTTP client cannot be built with
+    /// the configured bearer token and 30-second timeout, returns an error
+    /// instead of silently falling back to an unauthenticated,
+    /// timeout-less `reqwest::Client`. Production callers (e.g. the sync
+    /// daemon) use this and degrade the cycle gracefully.
+    pub fn try_new(server_url: &str, api_key: Option<&str>) -> Result<Self, SyncError> {
         let mut headers = reqwest::header::HeaderMap::new();
         if let Some(key) = api_key
             && let Ok(val) = reqwest::header::HeaderValue::from_str(&format!("Bearer {key}"))
@@ -125,21 +232,31 @@ impl SyncTransport {
             .default_headers(headers)
             .timeout(std::time::Duration::from_secs(30))
             .build()
-            .unwrap_or_else(|e| {
-                tracing::error!(
-                    error = %e,
-                    "failed to build HTTP client for sync transport — falling back to default (no auth, no timeout)"
-                );
-                tracing::warn!(
-                    "sync transport operating without timeout — requests may hang indefinitely"
-                );
-                reqwest::Client::new()
-            });
+            .map_err(|e| {
+                SyncError::Transport(format!(
+                    "failed to build sync HTTP client with configured auth/timeout: {e}"
+                ))
+            })?;
 
-        Self {
+        Ok(Self {
             client,
             base_url: server_url.trim_end_matches('/').to_owned(),
-        }
+        })
+    }
+
+    /// Convenience constructor for tests and [`crate::SyncEngine::new`].
+    ///
+    /// Delegates to [`SyncTransport::try_new`] and panics only when the
+    /// client cannot be built — a documented impossible invariant (the
+    /// builder is called with a valid header value and fixed options).
+    /// Production paths call [`SyncTransport::try_new`] and degrade the
+    /// cycle gracefully instead of panicking.
+    pub fn new(server_url: &str, api_key: Option<&str>) -> Self {
+        // SAFETY: documented convenience wrapper over `try_new` — panics only when
+        // the client cannot be built with valid config, an impossible invariant (RUST-05).
+        Self::try_new(server_url, api_key).expect(
+            "sync transport client construction must succeed with valid config (RUST-05 invariant)",
+        )
     }
 
     /// Push pending items to the server.
@@ -255,7 +372,11 @@ impl SyncTransport {
             .no_proxy()
             .timeout(std::time::Duration::from_secs(5))
             .build()
-            .unwrap_or_default();
+            .map_err(|e| {
+                SyncError::Transport(format!(
+                    "failed to build health-check client with 5s timeout: {e}"
+                ))
+            })?;
         let resp = health_client
             .get(&url)
             .send()
@@ -644,13 +765,48 @@ mod tests {
 
     // ── SyncSnapshotResponse tests ──────────────────────────────
 
+    /// Build a typed snapshot response (RUST-04) with valid rows.
+    fn typed_response() -> SyncSnapshotResponse {
+        SyncSnapshotResponse {
+            version: 1,
+            products: vec![SnapshotProduct {
+                id: "p-1".into(),
+                sku: "ITEM-1".into(),
+                name: "Item One".into(),
+                price_minor: 100,
+                currency: "USD".into(),
+                category_id: None,
+                barcode: None,
+                created_at: None,
+                updated_at: None,
+                price_updated_at: None,
+                track_serial: false,
+                store_id: None,
+            }],
+            tax_rates: vec![SnapshotTaxRate {
+                id: "t-1".into(),
+                name: "Tax One".into(),
+                rate_bps: 1000,
+                is_default: false,
+                is_inclusive: false,
+                created_at: None,
+                updated_at: None,
+            }],
+            users: vec![SnapshotUser {
+                id: "u-1".into(),
+                username: "admin".into(),
+                display_name: "Admin".into(),
+                role_id: "r-1".into(),
+                is_active: true,
+                created_at: None,
+                updated_at: None,
+            }],
+        }
+    }
+
     #[test]
     fn sync_snapshot_response_debug() {
-        let resp = SyncSnapshotResponse {
-            products: vec![],
-            tax_rates: vec![],
-            users: vec![],
-        };
+        let resp = typed_response();
         let debug = format!("{resp:?}");
         assert!(debug.contains("products"));
         assert!(debug.contains("tax_rates"));
@@ -659,25 +815,48 @@ mod tests {
 
     #[test]
     fn sync_snapshot_response_serde_roundtrip() {
-        let resp = SyncSnapshotResponse {
-            products: vec![serde_json::json!({"sku": "ITEM-1"})],
-            tax_rates: vec![serde_json::json!({"id": 1, "rate": 10})],
-            users: vec![serde_json::json!({"username": "admin"})],
-        };
+        let resp = typed_response();
         let json = serde_json::to_string(&resp).unwrap();
         let rt: SyncSnapshotResponse = serde_json::from_str(&json).unwrap();
         assert_eq!(rt.products.len(), 1);
         assert_eq!(rt.tax_rates.len(), 1);
         assert_eq!(rt.users.len(), 1);
+        assert_eq!(rt.version, 1);
+    }
+
+    #[test]
+    fn sync_snapshot_response_defaults_version_to_one_when_absent() {
+        // RUST-04: legacy servers omit `version`; it must default to 1.
+        let wire = r#"{"products":[],"tax_rates":[],"users":[]}"#;
+        let rt: SyncSnapshotResponse = serde_json::from_str(wire).unwrap();
+        assert_eq!(rt.version, 1, "missing version defaults to schema v1");
+    }
+
+    #[test]
+    fn sync_snapshot_response_rejects_missing_required_product_fields() {
+        // RUST-04: missing required fields fail deserialization at the
+        // transport boundary instead of importing with defaults.
+        let wire = r#"{"products":[{"name":"No Sku"}],"tax_rates":[],"users":[]}"#;
+        let result: Result<SyncSnapshotResponse, _> = serde_json::from_str(wire);
+        assert!(
+            result.is_err(),
+            "product missing sku must fail deserialization"
+        );
+    }
+
+    #[test]
+    fn sync_snapshot_response_rejects_missing_required_user_fields() {
+        let wire = r#"{"products":[],"tax_rates":[],"users":[{"username":"x"}]}"#;
+        let result: Result<SyncSnapshotResponse, _> = serde_json::from_str(wire);
+        assert!(
+            result.is_err(),
+            "user missing display_name/role_id must fail"
+        );
     }
 
     #[test]
     fn sync_snapshot_response_clone() {
-        let resp = SyncSnapshotResponse {
-            products: vec![serde_json::json!({"sku": "ITEM-1"})],
-            tax_rates: vec![],
-            users: vec![],
-        };
+        let resp = typed_response();
         let cloned = resp.clone();
         let json1 = serde_json::to_string(&resp).unwrap();
         let json2 = serde_json::to_string(&cloned).unwrap();
@@ -776,6 +955,89 @@ mod tests {
     }
 
     // ── health_check integration test ───────────────────────────────
+
+    // ── RUST-05: fail-closed auth/timeout guarantees ────────────────
+
+    /// Spawn a push endpoint that records the Authorization header it
+    /// received, so tests can assert the transport never silently drops
+    /// the configured bearer token (RUST-05).
+    async fn spawn_push_server_capturing_auth()
+    -> (String, std::sync::Arc<std::sync::Mutex<Option<String>>>) {
+        use axum::{Router, routing::post};
+        use std::sync::{Arc, Mutex};
+
+        let seen: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+        let seen_clone = Arc::clone(&seen);
+
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        async fn handle_push(
+            axum::extract::State(seen): axum::extract::State<Arc<Mutex<Option<String>>>>,
+            request: axum::extract::Request,
+        ) -> (axum::http::StatusCode, axum::Json<PushResponse>) {
+            let auth = request
+                .headers()
+                .get(reqwest::header::AUTHORIZATION)
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.to_owned());
+            *seen.lock().unwrap() = auth;
+            let body = axum::body::to_bytes(request.into_body(), 1024 * 1024)
+                .await
+                .unwrap_or_default();
+            let item_count = serde_json::from_slice::<Vec<serde_json::Value>>(&body)
+                .map(|v| v.len())
+                .unwrap_or(0);
+            (
+                axum::http::StatusCode::OK,
+                axum::Json(PushResponse {
+                    results: vec![PushOutcome::Accepted; item_count],
+                }),
+            )
+        }
+
+        let app = Router::new()
+            .route("/api/sync/push", post(handle_push))
+            .with_state(seen_clone);
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        (format!("http://localhost:{port}"), seen)
+    }
+
+    #[tokio::test]
+    async fn push_items_sends_bearer_token_when_api_key_configured() {
+        let (server_url, seen) = spawn_push_server_capturing_auth().await;
+        let transport = SyncTransport::new(&server_url, Some("sk-test-123"));
+
+        let item = OfflineQueueItem::new("complete_sale", r#"{"id":1}"#);
+        transport.push_items(&[item]).await.unwrap();
+
+        let captured = seen.lock().unwrap().clone();
+        assert_eq!(
+            captured.as_deref(),
+            Some("Bearer sk-test-123"),
+            "the configured bearer token must reach the server (RUST-05)"
+        );
+    }
+
+    #[tokio::test]
+    async fn push_items_without_api_key_sends_no_auth_header() {
+        let (server_url, seen) = spawn_push_server_capturing_auth().await;
+        let transport = SyncTransport::new(&server_url, None);
+
+        let item = OfflineQueueItem::new("complete_sale", r#"{"id":2}"#);
+        transport.push_items(&[item]).await.unwrap();
+
+        let captured = seen.lock().unwrap().clone();
+        assert_eq!(
+            captured, None,
+            "no Authorization header may be sent when no API key is configured"
+        );
+    }
 
     #[tokio::test]
     async fn health_check_succeeds_with_healthy_server() {

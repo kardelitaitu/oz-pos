@@ -273,6 +273,8 @@
 .workspace-card::after,
 /* Reusable utility class — recommended for new components */
 .noise-dither::after,
+/* Emergency fallback card — elevated surface (ERR-02) */
+.error-boundary__card::after,
 /* ⚠ DEPRECATED LEGACY SELECTORS — do not add new ones here.
    Instead, add className="noise-dither" to the TSX element. */
 .retail-shift-modal::after,
@@ -334,14 +336,18 @@
 .reverse-btn::after,
 .kds-layout-popover::after,
 .kds-ticket--green::after,
+.kds-ticket-rush-badge::after,
+.retail-cart-course-dropdown::after,
 .kds-ticket-urgent-badge::after,
 .kds-settings-popover::after,
+.kds-picker-modal::after,
 .product-mgmt-alert-drawer::after,
 .promo-mgmt-table::after,
 .menu-eng-tooltip::after,
 .retail-menu::after,
 .pos-cart-undo-bar::after,
 .pos-cart-tip-segment[aria-pressed='true']::after,
+.retail-reminder-popup::after,
 .modifier-modal::after,
 .pos-hold-modal::after,
 .pos-held-list-modal::after,
@@ -352,12 +358,12 @@
 .settings-footer-shortcut kbd::after,
 .toggle-thumb::after,
 .topology-node::after,
-.node-selected::after,
-.settings-shortcuts-popover::after,
-.canvas-hud::after,
-.panel::after,
-:global(.dark) .panel::after {
-  content: '';
+.node-selected::after,  .settings-shortcuts-popover::after,
+  .canvas-hud::after,
+  .customer-mgmt-history::after,
+  .panel::after,
+  :global(.dark) .panel::after {
+    content: '';
   position: absolute;
   inset: 0;
   border-radius: inherit;
@@ -381,6 +387,7 @@
   .staff-login-card::after,
   .workspace-card::after,
   .noise-dither::after,
+  .error-boundary__card::after,
   .retail-shift-modal::after,
   .retail-held-carts-modal::after,
   .retail-discount-modal::after,
@@ -440,29 +447,34 @@
 .reverse-btn::after,
 .kds-layout-popover::after,
 .kds-ticket--green::after,
+.kds-ticket-rush-badge::after,
+.retail-cart-course-dropdown::after,
 .kds-ticket-urgent-badge::after,
 .kds-settings-popover::after,
+.kds-picker-modal::after,
 .product-mgmt-alert-drawer::after,
 .promo-mgmt-table::after,
 .menu-eng-tooltip::after,
 .retail-menu::after,
-.pos-cart-undo-bar::after,
-.pos-cart-tip-segment[aria-pressed='true']::after,
-.modifier-modal::after,
-.pos-hold-modal::after,
-.pos-held-list-modal::after,
-.pos-close-shift-modal::after,
-.receipt-preview-paper::after,
-.refund-modal::after,
-.shortfall-modal::after,
-.settings-footer-shortcut kbd::after,
-.toggle-thumb::after,
-.topology-node::after,
-.node-selected::after,
-.settings-shortcuts-popover::after,
-.canvas-hud::after,
-.panel::after,
-:global(.dark) .panel::after { display: none; }
+  .pos-cart-undo-bar::after,
+  .pos-cart-tip-segment[aria-pressed='true']::after,
+  .retail-reminder-popup::after,
+  .modifier-modal::after,
+  .pos-hold-modal::after,
+  .pos-held-list-modal::after,
+  .pos-close-shift-modal::after,
+  .receipt-preview-paper::after,
+  .refund-modal::after,
+  .shortfall-modal::after,
+  .settings-footer-shortcut kbd::after,
+  .toggle-thumb::after,
+  .topology-node::after,
+  .node-selected::after,
+  .settings-shortcuts-popover::after,
+  .canvas-hud::after,
+  .customer-mgmt-history::after,
+  .panel::after,
+  :global(.dark) .panel::after { display: none; }
 }
 
 /* Reduced motion — hide noise overlay to reduce GPU compositing
@@ -473,6 +485,7 @@
   .staff-login-card::after,
   .workspace-card::after,
   .noise-dither::after,
+  .error-boundary__card::after,
   .retail-shift-modal::after,
   .retail-held-carts-modal::after,
   .retail-discount-modal::after,
@@ -532,14 +545,18 @@
 .reverse-btn::after,
 .kds-layout-popover::after,
 .kds-ticket--green::after,
+.kds-ticket-rush-badge::after,
+.retail-cart-course-dropdown::after,
 .kds-ticket-urgent-badge::after,
 .kds-settings-popover::after,
+.kds-picker-modal::after,
 .product-mgmt-alert-drawer::after,
 .promo-mgmt-table::after,
 .menu-eng-tooltip::after,
 .retail-menu::after,
 .pos-cart-undo-bar::after,
 .pos-cart-tip-segment[aria-pressed='true']::after,
+.retail-reminder-popup::after,
 .modifier-modal::after,
 .pos-hold-modal::after,
 .pos-held-list-modal::after,
@@ -553,6 +570,7 @@
 .node-selected::after,
 .settings-shortcuts-popover::after,
 .canvas-hud::after,
+.customer-mgmt-history::after,
 .panel::after,
 :global(.dark) .panel::after { display: none; }
 }
@@ -604,9 +622,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: var(--color-pos-modal-overlay);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   will-change: backdrop-filter;
   transform: translateZ(0);
   animation: modal-fade-in var(--duration-300) var(--ease-out);
@@ -619,10 +637,10 @@
 
 .modal-panel {
   position: relative;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
+  background: var(--color-pos-modal-bg);
+  border: 1px solid var(--color-pos-modal-border);
   border-radius: var(--radius-2xl);
-  box-shadow: var(--shadow-2xl);
+  box-shadow: var(--color-pos-modal-shadow);
   width: 90%;
   max-width: 560px;
   max-height: 85vh;
@@ -881,10 +899,11 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-3);
-  width: min(90vw, 25rem);
+  gap: var(--space-2);
+  width: min(90vw, 26rem);
   pointer-events: none;
 }
+
 .toast {
   display: flex;
   align-items: center;
@@ -892,21 +911,31 @@
   width: 100%;
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-lg);
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-lg);
+  /* Fully opaque panel — no alpha channel on background */
+  background: var(--color-toast-bg);
+  border: 1px solid var(--color-toast-border);
+  box-shadow: var(--color-toast-shadow);
+  /* GPU-composite layer so the panel never inherits opacity from ancestors */
+  will-change: transform, opacity;
+  transform: translateZ(0);
   pointer-events: auto;
+  /* Left accent border is set per-variant below */
+  border-left-width: 4px;
+  border-left-style: solid;
 }
 
 .toast__message {
   flex: 1;
   min-width: 0;
   font-size: var(--text-sm);
+  font-weight: 500;
   line-height: var(--leading-normal);
-  color: var(--color-fg);
+  /* Locked foreground — won't bleed through from a transparent parent */
+  color: var(--color-toast-fg);
   word-break: break-word;
   overflow-wrap: anywhere;
 }
+
 .toast__dismiss {
   flex-shrink: 0;
   display: inline-flex;
@@ -918,43 +947,59 @@
   margin-top: calc(-1 * var(--space-2));
   margin-bottom: calc(-1 * var(--space-2));
   border-radius: var(--radius-sm);
-  color: var(--color-fg-tertiary);
+  /* Locked colour — independent of parent opacity */
+  color: var(--color-toast-fg-muted);
   background: transparent;
   border: none;
   cursor: pointer;
-  transition: background-color var(--duration-150) var(--ease-out);
+  transition: background-color var(--duration-150) var(--ease-out), color var(--duration-150) var(--ease-out);
 }
+
 .toast__dismiss:hover {
-  background: var(--color-bg-surface);
-  color: var(--color-fg);
+  background: var(--color-toast-hover-bg);
+  color: var(--color-toast-fg);
 }
-.toast--success { border-left: 3px solid var(--color-success); }
-.toast--error   { border-left: 3px solid var(--color-danger); }
-.toast--warning { border-left: 3px solid var(--color-warning); }
-.toast--info    { border-left: 3px solid var(--color-info); }
+
+/* ── Per-variant accent colours (left border + icon tint) ── */
+.toast--success {
+  border-left-color: var(--color-toast-accent-success);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--color-toast-accent-success) 12%, transparent) 0%, var(--color-toast-bg) 40%);
+}
+.toast--error {
+  border-left-color: var(--color-toast-accent-error);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--color-toast-accent-error) 12%, transparent) 0%, var(--color-toast-bg) 40%);
+}
+.toast--warning {
+  border-left-color: var(--color-toast-accent-warning);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--color-toast-accent-warning) 12%, transparent) 0%, var(--color-toast-bg) 40%);
+}
+.toast--info {
+  border-left-color: var(--color-toast-accent-info);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--color-toast-accent-info) 12%, transparent) 0%, var(--color-toast-bg) 40%);
+}
 
 @media (prefers-reduced-motion: no-preference) {
   .toast {
-    animation: toast-slide-in var(--duration-200) var(--ease-out);
+    animation: toast-slide-in var(--duration-200) var(--ease-out) both;
   }
   @keyframes toast-slide-in {
     from {
       opacity: 0;
-      transform: translateX(100%);
+      transform: translateY(0.5rem) scale(0.97) translateZ(0);
     }
     to {
       opacity: 1;
-      transform: translateX(0);
+      transform: translateY(0) scale(1) translateZ(0);
     }
   }
   @keyframes toast-slide-out {
     from {
       opacity: 1;
-      transform: translateX(0);
+      transform: translateY(0) scale(1) translateZ(0);
     }
     to {
       opacity: 0;
-      transform: translateX(100%);
+      transform: translateY(0.5rem) scale(0.97) translateZ(0);
     }
   }
   .toast--exiting {
@@ -999,10 +1044,29 @@
   text-align: center;
   padding: var(--space-12) var(--space-6);
 }
+
+/* EMPTY-08: region variants — one tokenized layout primitive with
+   spacing tailored to the surface that hosts the empty state.
+   Feature screens must use these (or the EmptyState component's
+   `region` prop) instead of bespoke empty wrappers. */
+.empty-state--region-full {
+  padding: var(--space-16) var(--space-8);
+}
+.empty-state--region-table {
+  padding: var(--space-10) var(--space-4);
+}
+.empty-state--region-grid {
+  padding: var(--space-10) var(--space-4);
+}
+.empty-state--region-modal {
+  padding: var(--space-8) var(--space-4);
+}
+
 .empty-state__icon {
-  font-size: 2.5rem;
+  font-size: var(--text-5xl);
   margin-bottom: var(--space-4);
   color: var(--color-fg-tertiary);
+  line-height: 1;
 }
 .empty-state__title {
   font-size: var(--text-lg);
@@ -1018,6 +1082,12 @@
 }
 .empty-state__action {
   margin-top: var(--space-2);
+}
+
+/* Ensure feature screens' actions inside empty states keep the shared
+   touch-friendly sizing without duplicating Button rules. */
+.empty-state__action .btn {
+  margin-top: 0;
 }
 
 /* ── Touch-friendly sizing ─────────────────────────── */
@@ -1045,7 +1115,7 @@
   padding: var(--space-12) var(--space-6);
 }
 .error-state__icon {
-  font-size: 2.5rem;
+  font-size: var(--text-5xl);
   margin-bottom: var(--space-4);
   color: var(--color-danger);
 }
@@ -1063,6 +1133,17 @@
 }
 .error-state__action {
   margin-top: var(--space-2);
+}
+
+/* ── Lazy chunk Suspense fallback (PERF-01) ────────────────────── */
+.lazy-boundary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: var(--color-fg-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
 }
 
 /* Screen reader only utility (globally accessible) */

@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { Localized, useLocalization } from '@fluent/react';
 import { exportSalesByHourScoped, type SalesByHourRow } from '@/api/sales';
 import { formatMoney, type Money } from '@/types/domain';
@@ -57,13 +58,13 @@ export default function SalesByHourWidget() {
   }
 
   return (
-    <div className="reporting-widget reporting-widget--hourly" aria-label={l10n.getString('sales-dashboard-hourly-aria') || 'Sales by hour'}>
+    <div className="reporting-widget reporting-widget--hourly" aria-label={requiredLocalized(l10n, 'sales-dashboard-hourly-aria')}>
       <div className="reporting-widget-header">
         <Localized id="sales-dashboard-hourly-title">
           <h3 className="reporting-widget-title">Sales by Hour</h3>
         </Localized>
       </div>
-      <div className="reporting-widget-hourly-chart" role="list" aria-label={l10n.getString('sales-dashboard-hourly-bars-aria') || 'Hourly sales bars'}>
+      <div className="reporting-widget-hourly-chart" role="list" aria-label={requiredLocalized(l10n, 'sales-dashboard-hourly-bars-aria')}>
         {hourly.map((h) => {
           const barPct = peakHour > 0 ? Math.round((h.total_minor / peakHour) * 100) : 0;
           return (

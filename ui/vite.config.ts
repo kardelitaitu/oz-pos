@@ -23,6 +23,14 @@ export default defineConfig({
         replacement: `${fileURLToPath(new URL('./src/dev-mock/tauri-api.ts', import.meta.url))}`,
       },
       {
+        // Dev event bridge — the real @tauri-apps/api/event module needs
+        // window.__TAURI_INTERNALS__ (undefined in a plain browser) and
+        // crashes the KDS screen's kds:orders-changed listener. The mock
+        // provides in-memory pub/sub so E2E dev flows work end to end.
+        find: /^@tauri-apps\/api\/event$/,
+        replacement: `${fileURLToPath(new URL('./src/dev-mock/tauri-event.ts', import.meta.url))}`,
+      },
+      {
         find: /^@\//,
         replacement: `${fileURLToPath(new URL('./src/', import.meta.url))}/`,
       },
@@ -31,6 +39,30 @@ export default defineConfig({
 
   // Vite options tailored for Tauri development.
   clearScreen: false,
+
+  // ── Build: vendor chunking + code-splitting (PERF-05) ─────────────
+  // Lazy-loaded routes (PERF-01) already split feature screens into
+  // per-route chunks. manualChunks additionally isolates the heavy
+  // vendor libraries so their long-lived cache stays stable and the
+  // entry bundle stays small.
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-fluent': ['@fluent/bundle', '@fluent/react'],
+          'vendor-charts': ['recharts'],
+          'vendor-search': ['fuse.js'],
+          'vendor-window': ['react-window'],
+        },
+      },
+    },
+    // The recharts vendor chunk legitimately exceeds Vite's default 500 kB
+    // raw threshold; real enforcement lives in scripts/check-bundle.mjs
+    // (PERF-02), which measures gzip against explicit budgets.
+    chunkSizeWarningLimit: 600,
+  },
+
   server: {
     port: 1420,
     strictPort: true,

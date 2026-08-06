@@ -1,17 +1,18 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   listExchangeRates,
   createExchangeRate,
   deleteExchangeRate,
   listCurrencies,
+  formatExchangeRate,
   type ExchangeRateDto,
   type CurrencyDto,
 } from '@/api/currency';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
-import { SettingsPopup } from '@/frontend/shared';
+import { SettingsPopup, requiredLocalized } from '@/frontend/shared';
 import { useToast } from '@/frontend/shared/Toast';
 import './ExchangeRateScreen.css';
 
@@ -51,7 +52,12 @@ export default function ExchangeRateScreen() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
 
+  // LOAD-07: request-generation guard — a slow response from an earlier
+  // load/unmount must never overwrite newer state.
+  const loadSeqRef = useRef(0);
+
   const load = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -59,12 +65,16 @@ export default function ExchangeRateScreen() {
         listExchangeRates(),
         listCurrencies(),
       ]);
+      if (seq !== loadSeqRef.current) return;
       setRates(items);
       setCurrencies(currs);
     } catch {
+      if (seq !== loadSeqRef.current) return;
       setError(l10n.getString('currency-load-error'));
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) {
+        setLoading(false);
+      }
     }
   }, [l10n]);
 
@@ -79,20 +89,21 @@ export default function ExchangeRateScreen() {
     setSaving(true);
     try {
       const rate = parseFloat(form.rate);
-      if (Number.isNaN(rate) || rate <= 0) return;
+      const rateMillionths = Math.round(rate * 1_000_000);
+      if (!Number.isFinite(rate) || rate <= 0 || !Number.isSafeInteger(rateMillionths) || rateMillionths <= 0) return;
 
       const args: Parameters<typeof createExchangeRate>[0] = {
-        fromCurrency: form.fromCurrency,
-        toCurrency: form.toCurrency,
-        rate,
+        from_currency: form.fromCurrency,
+        to_currency: form.toCurrency,
+        rate_millionths: rateMillionths,
       };
       if (form.source) args.source = form.source;
-      if (form.effectiveDate) args.effectiveDate = form.effectiveDate;
+      if (form.effectiveDate) args.effective_date = form.effectiveDate;
       await createExchangeRate(args);
       setShowModal(false);
       await load();
     } catch {
-      addToast({ message: l10n.getString('currency-save-error') || 'Failed to save exchange rate', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'currency-save-error'), type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -105,7 +116,7 @@ export default function ExchangeRateScreen() {
       setDeleting(null);
       await load();
     } catch {
-      addToast({ message: l10n.getString('currency-delete-error') || 'Failed to delete exchange rate', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'currency-delete-error'), type: 'error' });
       setDeleting(null);
     }
   }, [load, l10n, addToast]);
@@ -201,7 +212,7 @@ export default function ExchangeRateScreen() {
                 <tr key={r.id}>
                   <td>{r.from_currency}</td>
                   <td>{r.to_currency}</td>
-                  <td>{r.rate}</td>
+                  <td>{formatExchangeRate(r)}</td>
                   <td>{r.source === 'manual' ? <Localized id="currency-source-manual"><span>manual</span></Localized> : r.source}</td>
                   <td>{r.effective_date}</td>
                   <td className="exchange-rate-cell-actions">

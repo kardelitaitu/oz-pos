@@ -8,6 +8,8 @@ export interface ErrorStateProps {
   icon?: ReactNode;
   /** Heading text. */
   title: string;
+  /** Heading level — use 1/2/3 matching the page hierarchy. Default 3 for backward compat. */
+  headingLevel?: 1 | 2 | 3;
   /** Detailed error message. */
   message?: string;
   /** Called when the user clicks the retry button. */
@@ -25,6 +27,7 @@ export interface ErrorStateProps {
 export function ErrorState({
   icon,
   title,
+  headingLevel = 3,
   message,
   onRetry,
   retryLabel,
@@ -38,7 +41,13 @@ export function ErrorState({
           {icon}
         </div>
       )}
-      <h3 className="error-state__title">{title}</h3>
+      {headingLevel === 1 ? (
+        <h1 className="error-state__title">{title}</h1>
+      ) : headingLevel === 2 ? (
+        <h2 className="error-state__title">{title}</h2>
+      ) : (
+        <h3 className="error-state__title">{title}</h3>
+      )}
       {message && <p className="error-state__message">{message}</p>}
       {onRetry && (
         <div className="error-state__action">

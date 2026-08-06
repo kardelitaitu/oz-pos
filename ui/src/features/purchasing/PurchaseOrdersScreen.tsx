@@ -1,6 +1,8 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized, EmptyState } from '@/frontend/shared';
+import { NoPurchaseOrdersIcon } from '@/components/EmptyStateIllustrations';
 import {
   listPurchaseOrders,
   updatePoStatus,
@@ -10,13 +12,17 @@ import {
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
+import { useCurrency } from '@/contexts/CurrencyContext';
+import { minorUnitExponent } from '@/types/domain';
 import PurchaseOrderForm from './PurchaseOrderForm';
 import './PurchaseOrdersScreen.css';
 
 const STATUSES = ['draft', 'pending', 'approved', 'received', 'cancelled'];
 
-function formatMinor(minor: number): string {
-  return (minor / 100).toFixed(2);
+function formatMinor(minor: number, currency: string): string {
+  // Exponent-driven via minorUnitExponent (IDR/JPY = 0, KWD = 3, USD/EUR = 2).
+  const exp = minorUnitExponent(currency);
+  return (minor / 10 ** exp).toFixed(exp);
 }
 
 /** Purchase orders list screen — view, filter, approve, receive, and cancel purchase orders with status management. */
@@ -24,6 +30,7 @@ export default function PurchaseOrdersScreen() {
   const { l10n } = useLocalization();
   const l10nRef = useRef(l10n);
   l10nRef.current = l10n;
+  const { currency } = useCurrency();
   const { addToast } = useToast();
   const [orders, setOrders] = useState<PurchaseOrderDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,7 +45,7 @@ export default function PurchaseOrdersScreen() {
       const data = await listPurchaseOrders();
       setOrders(data);
     } catch {
-      addToast({ message: l10nRef.current.getString('po-error-load') || 'Failed to load purchase orders', type: 'error' });
+      addToast({ message: requiredLocalized(l10nRef.current, 'po-error-load'), type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -57,7 +64,7 @@ export default function PurchaseOrdersScreen() {
       await updatePoStatus({ id, status });
       await load();
     } catch {
-      addToast({ message: l10nRef.current.getString('po-error-update') || 'Failed to update purchase order', type: 'error' });
+      addToast({ message: requiredLocalized(l10nRef.current, 'po-error-update'), type: 'error' });
     } finally {
       setActionLoading(null);
     }
@@ -69,7 +76,7 @@ export default function PurchaseOrdersScreen() {
       await receivePurchaseOrder(id);
       await load();
     } catch {
-      addToast({ message: l10nRef.current.getString('po-error-receive') || 'Failed to receive purchase order', type: 'error' });
+      addToast({ message: requiredLocalized(l10nRef.current, 'po-error-receive'), type: 'error' });
     } finally {
       setActionLoading(null);
     }
@@ -157,24 +164,23 @@ export default function PurchaseOrdersScreen() {
         </div>
       ) : filtered.length === 0 ? (
         <Card shadow="sm">
-          <div className="po-empty">
-            {statusFilter === 'all' ? (
-              <Localized id="po-empty">
-                <p>No purchase orders yet.</p>
-              </Localized>
-            ) : (
-              <Localized id="po-empty-filtered" vars={{ status: statusFilter }}>
-                <p>{`No purchase orders with status "${statusFilter}".`}</p>
-              </Localized>
-            )}
-            <Localized id="po-add">
-              <Button variant="secondary" onClick={openCreate}>Create Purchase Order</Button>
-            </Localized>
-          </div>
+          <EmptyState
+            region="table"
+            icon={<NoPurchaseOrdersIcon />}
+            title={
+              statusFilter === 'all'
+                ? requiredLocalized(l10n, 'po-empty')
+                : requiredLocalized(l10n, 'po-empty-filtered', { status: statusFilter })
+            }
+            action={{
+              label: requiredLocalized(l10n, 'po-add'),
+              onClick: openCreate,
+            }}
+          />
         </Card>
       ) : (
         <div className="po-table-wrap">
-          <table className="po-table" aria-label={l10n.getString('po-title') || 'Purchase Orders'}>
+          <table className="po-table" aria-label={requiredLocalized(l10n, 'po-title')}>
             <thead>
               <tr>
                 <Localized id="po-col-number"><th>PO #</th></Localized>
@@ -200,7 +206,7 @@ export default function PurchaseOrdersScreen() {
                   </td>
                   <td className="po-cell-date">{po.order_date.slice(0, 10)}</td>
                   <td className="po-cell-date">{po.expected_date ? po.expected_date.slice(0, 10) : '\u2014'}</td>
-                  <td className="po-cell-total">{formatMinor(po.total_minor)}</td>
+                  <td className="po-cell-total">{formatMinor(po.total_minor, currency)}</td>
                   <td>{po.lines.length}</td>
                   <td className="po-cell-actions">
                     {po.status === 'draft' && (

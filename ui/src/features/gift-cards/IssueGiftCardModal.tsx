@@ -1,10 +1,12 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { animDuration } from '@/utils/animation';
 import { Localized, useLocalization } from '@fluent/react';
 import { issueGiftCard, type IssueGiftCardInput } from '@/api/giftCards';
 import { Button } from '@/components/Button';
 import { generateGiftCardNumber } from '@/utils/giftCardBarcode';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { l10nErrorMessage } from '@/utils/app-error';
 
 /** Props for the IssueGiftCardModal component. */
 export interface IssueGiftCardModalProps {
@@ -52,11 +54,11 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
   useFocusTrap(panelRef, !exiting && !processing, handleClose);
 
   const handleSubmit = async () => {
-    const initialAmountMinor = parseInt(amount, 10);
-    if (Number.isNaN(initialAmountMinor) || initialAmountMinor <= 0) {
+    if (!/^\d+$/.test(amount) || parseInt(amount, 10) <= 0) {
       setError(l10n.getString('gift-cards-issue-invalid-amount'));
       return;
     }
+    const initialAmountMinor = parseInt(amount, 10);
     if (!cardNumber.trim()) {
       setError(l10n.getString('gift-cards-issue-invalid-number'));
       return;
@@ -77,21 +79,19 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
       await issueGiftCard(input);
       onIssued();
     } catch (err) {
-      setError(err instanceof Error ? err.message : (l10n.getString('gift-cards-error-issue') || 'Failed to issue gift card'));
+      setError(l10nErrorMessage(err, l10n, 'gift-cards-error-issue'));
     } finally {
       setProcessing(false);
     }
   };
 
   return (
-    <button
-      type="button"
+    <div
       className={`gift-cards-modal-overlay${exiting ? ' gift-cards-modal-overlay--exiting' : ''}`}
-      onClick={handleClose}
-      aria-label={l10n.getString('modal-close-aria')}
+      role="presentation"
+      onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
     >
-      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */}
-      <div className={`gift-cards-modal${exiting ? ' gift-cards-modal--exiting' : ''}`} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()} ref={panelRef}>
+      <div className={`gift-cards-modal${exiting ? ' gift-cards-modal--exiting' : ''}`} role="dialog" aria-modal="true" ref={panelRef}>
         <Localized id="gift-cards-issue-title">
           <h2 className="gift-cards-modal-title">Issue Gift Card</h2>
         </Localized>
@@ -138,9 +138,9 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
               className="gift-cards-modal-input"
               id="gift-card-issued-to"
               name="gift-card-issued-to"
-              placeholder={l10n.getString('gift-cards-issue-to-placeholder') || 'Customer name'}
+              placeholder={requiredLocalized(l10n, 'gift-cards-issue-to-placeholder')}
               value={issuedTo}
-              onChange={(e) => setIssuedTo(e.target.value)}
+              onChange={(e) => { setIssuedTo(e.target.value); setError(''); }}
               aria-label={l10n.getString('gift-cards-issue-to-aria')}
             />
           </div>
@@ -150,13 +150,14 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
               <div className="gift-cards-modal-label">PIN (optional)</div>
             </Localized>
             <input
-              type="text"
+              type="password"
+              autoComplete="new-password"
               className="gift-cards-modal-input"
               id="gift-card-pin"
               name="gift-card-pin"
-              placeholder={l10n.getString('gift-cards-issue-pin-placeholder') || 'For balance checks'}
+              placeholder={requiredLocalized(l10n, 'gift-cards-issue-pin-placeholder')}
               value={pin}
-              onChange={(e) => setPin(e.target.value)}
+              onChange={(e) => { setPin(e.target.value); setError(''); }}
               aria-label={l10n.getString('gift-cards-issue-pin-aria')}
             />
           </div>
@@ -173,6 +174,6 @@ export default function IssueGiftCardModal({ onClose, onIssued }: IssueGiftCardM
           </div>
         </div>
       </div>
-    </button>
+    </div>
   );
 }

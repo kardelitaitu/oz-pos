@@ -1,0 +1,186 @@
+# ── E2E PR Workflow ──────────────────────────────────────────────────
+#
+# Runs the E2E test suite on Pull Requests targeting main.
+# Uses the new `npm run e2e` runner (scripts/run-e2e.mjs) which handles
+# Docker setup, Vite startup, Playwright, and cleanup automatically.
+#
+# Two triggers:
+#   • pull_request — runs on every PR commit (2 project shards)
+#   • workflow_dispatch — manual re-run from Actions tab
+#
+# Differences from the main-branch E2E job (in ci.yml):
+#   • 2 project shards (desktop / tablet) instead of 3-way count shards —
+#     faster feedback, adequate for PRs
+#   • Uses `--changed-only` to run only changed spec files when possible
+#   • No Docker image push to GHCR
+#   • No Rust toolchain needed (uses pre-built Docker images)
+#
+# Target: < 6 min on a cache hit, < 10 min on cold start for small
+# spec changes; a full-matrix run (all specs changed) is ~15 min per
+# shard (each project runs ~125 of the 250 tests).
+
+name: E2E (PR)
+
+on:
+  pull_request:
+    branches: [main]
+    # AUDIT-27 CI-02: narrowed from `ui/**` so the workflow only fires
+    # when E2E specs or E2E infrastructure actually changed. Main CI's
+    # `e2e` job already runs the FULL 3-shard Playwright suite on every
+    # PR, so this workflow is a fast, changed-spec focused complement —
+    # it must never be the only E2E signal for production-only changes.
+    paths:
+      - 'ui/e2e/**'
+      - 'scripts/run-e2e.mjs'
+      - 'scripts/__tests__/**'
+      - 'docker-compose.e2e.yml'
+      - 'Dockerfile.server'
+      - 'apps/license-server/**'
+  workflow_dispatch:
+    inputs:
+      specs:
+        description: 'Spec files to run (space-separated, relative to ui/)'
+        required: false
+        default: ''
+      headed:
+        description: 'Run with browser visible (true/false)'
+        required: false
+        default: 'false'
+      changed_only:
+        description: 'Only run changed spec files (true/false)'
+        required: false
+        default: 'true'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  e2e-pr:
+    name: E2E (PR) — ${{ matrix.project }}
+    runs-on: ubuntu-latest
+    # One shard per Playwright project (desktop / tablet) so each job
+    # runs ~half the suite (~125 of 250 tests) in parallel. A single
+    # full-matrix job took ~25-30 min (canceled at 15 min mid-suite on
+    # 2026-08-05); a project shard should finish in ~15 min. 30 min is
+    # the outer cap, not the target.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [desktop, tablet]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for --changed-only (git merge-base)
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: 'ui/package-lock.json'
+
+      - name: Install UI dependencies
+        run: cd ui && npm ci --no-audit --no-fund
+
+      - name: Verify esbuild binary
+        run: |
+          cd ui
+          node -e "try { require('esbuild'); console.log('esbuild OK'); } catch (e) { console.error('esbuild missing', e); process.exit(1); }"
+
+      - name: Install Playwright browser (${{ matrix.project }})
+        # Each shard only exercises ONE project, so install only the
+        # browser it needs: desktop = Chromium (Desktop Chrome device),
+        # tablet = WebKit (iPad Pro 11 emulation). This halves
+        # browser-install time vs installing both in every shard. (ci.yml
+        # + nightly.yml only run --project=desktop, so Chromium alone
+        # suffices there too.)
+        run: cd ui && npx playwright install ${{ matrix.project == 'tablet' && 'webkit' || 'chromium' }} --with-deps
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build E2E cloud server image (with GHA cache)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.server
+          load: true
+          tags: e2e-cloud-server:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build E2E license server image (with GHA cache)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./apps/license-server
+          file: ./apps/license-server/Dockerfile
+          load: true
+          tags: e2e-license-server:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run E2E tests (${{ matrix.project }})
+        env:
+          OZ_API_SECRET: ci-test-secret
+          VITE_STARTUP_TIMEOUT: 120000
+          VITE_LOG_LEVEL: info
+        run: |
+          cd ui
+
+          # Build the CLI args
+          ARGS=""
+
+          # workflow_dispatch: use inputs if provided
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if [[ "${{ github.event.inputs.headed }}" == "true" ]]; then
+              ARGS="$ARGS --headed"
+            fi
+            if [[ "${{ github.event.inputs.changed_only }}" == "true" ]]; then
+              ARGS="$ARGS --changed-only"
+            fi
+            if [[ -n "${{ github.event.inputs.specs }}" ]]; then
+              ARGS="$ARGS ${{ github.event.inputs.specs }}"
+            fi
+          else
+            # pull_request: run the specs that changed (or all if none
+            # match). AUDIT-27 CI-02: main CI's `e2e` job already runs the
+            # full suite on every PR, so this focused run uses the changed
+            # specs — and run-e2e.mjs reports a distinct `skipped-no-spec`
+            # status instead of silently passing with zero tests.
+            ARGS="$ARGS --changed-only"
+          fi
+
+          echo "Running: npm run e2e -- --project=${{ matrix.project }} ${ARGS}"
+          npm run e2e -- --project=${{ matrix.project }} ${ARGS}
+          RC=$?
+          # AUDIT-27 CI-02: run-e2e.mjs exits 2 (SKIPPED-NO-SPEC) when
+          # --changed-only found no spec changes (e.g. an infra-only PR
+          # touching Dockerfile/compose/runner). Main CI's `e2e` job still
+          # runs the FULL suite on every PR, so a skip here is a legitimate
+          # distinct result — annotate it and pass, rather than a red check.
+          if [ "$RC" -eq 2 ]; then
+            # Emit the notice once (desktop shard) to avoid duplicate
+            # notices from both matrix shards on infra-only PRs.
+            if [[ "${{ matrix.project }}" == "desktop" ]]; then
+              echo "::notice::E2E skipped — no changed spec files (main CI runs full E2E on this PR)"
+            fi
+            exit 0
+          fi
+          exit $RC
+
+      - name: Upload E2E test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results-${{ matrix.project }}
+          path: ui/e2e-results/
+          retention-days: 7
+
+      - name: Upload Playwright trace
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-traces-${{ matrix.project }}
+          path: ui/test-results/
+          retention-days: 7

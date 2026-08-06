@@ -46,6 +46,7 @@ services:
 
   # ── License Server ───────────────────────────────────────────────
   e2e-license-server:
+    image: e2e-license-server:latest
     build:
       context: ./apps/license-server
       dockerfile: Dockerfile
@@ -63,8 +64,12 @@ services:
       start_period: 10s
 
   # ── Redis Cache ──────────────────────────────────────────────────
+  # DOCKER-06: pinned to an immutable digest so E2E startup does not
+  # depend on a mutable tag resolving to different bytes over time or
+  # on registry rate limits. runners pre-pull this digest (scripts/run-e2e.mjs
+  # and CI workflows) before `compose up --pull=missing`.
   e2e-redis:
-    image: public.ecr.aws/docker/library/redis:7-alpine
+    image: public.ecr.aws/docker/library/redis:7-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
     ports:
       - "6379:6379"
     healthcheck:

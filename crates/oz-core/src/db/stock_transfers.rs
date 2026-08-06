@@ -31,7 +31,11 @@ impl Store<'_> {
         let id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let ts = chrono::Utc::now().timestamp_millis();
-        let short = &id[..8];
+        // Use the random tail of the UUID v7 for the short suffix. The first
+        // 8 hex chars of a UUID v7 encode the millisecond timestamp, so two
+        // transfers created in the same millisecond would collide and trip
+        // the UNIQUE constraint on `transfer_number`. The tail is random.
+        let short = &id[24..];
         let transfer_number = format!("TRF-{ts}-{short}");
 
         // ADR-18 §13-36 canonical default-location UUID (see
@@ -177,6 +181,92 @@ impl Store<'_> {
         rows.map(|r| Ok(r?)).collect()
     }
 
+    /// List transfers in a given status with their line items, newest first.
+    ///
+    /// Runs two queries (transfers, then one `IN` query for every line) so
+    /// the front end does not need to fetch lines one transfer at a time.
+    /// This powers the transit audit screen without an N+1 request pattern.
+    pub fn list_transfers_with_lines_by_status(
+        &self,
+        status: &str,
+    ) -> Result<Vec<(StockTransfer, Vec<StockTransferLine>)>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, transfer_number, status,
+                    source_location_id AS source_location,
+                    destination_location_id AS destination_location,
+                    source_terminal_id, destination_terminal_id,
+                    notes, created_by, received_by,
+                    created_at, sent_at, received_at, updated_at
+             FROM stock_transfers WHERE status = ?1 ORDER BY created_at DESC",
+        )?;
+        let transfers: Vec<StockTransfer> = stmt
+            .query_map(params![status], |row| {
+                Ok(StockTransfer {
+                    id: row.get("id")?,
+                    transfer_number: row.get("transfer_number")?,
+                    status: row.get("status")?,
+                    source_location: row.get("source_location")?,
+                    destination_location: row.get("destination_location")?,
+                    source_terminal_id: row.get("source_terminal_id")?,
+                    destination_terminal_id: row.get("destination_terminal_id")?,
+                    notes: row.get("notes")?,
+                    created_by: row.get("created_by")?,
+                    received_by: row.get("received_by")?,
+                    created_at: row.get("created_at")?,
+                    sent_at: row.get("sent_at")?,
+                    received_at: row.get("received_at")?,
+                    updated_at: row.get("updated_at")?,
+                })
+            })?
+            .collect::<Result<_, _>>()?;
+
+        if transfers.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Fetch all matching lines in one IN query, then group them back onto
+        // their transfers in transfer order.
+        let placeholders = std::iter::repeat_n("?", transfers.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "SELECT id, transfer_id, sku, product_name, qty, received_qty
+             FROM stock_transfer_lines WHERE transfer_id IN ({placeholders})
+             ORDER BY transfer_id, id"
+        );
+        let mut line_stmt = self.conn.prepare(&sql)?;
+        let ids: Vec<&str> = transfers.iter().map(|t| t.id.as_str()).collect();
+        let lines: Vec<StockTransferLine> = line_stmt
+            .query_map(rusqlite::params_from_iter(ids.iter().copied()), |row| {
+                Ok(StockTransferLine {
+                    id: row.get("id")?,
+                    transfer_id: row.get("transfer_id")?,
+                    sku: row.get("sku")?,
+                    product_name: row.get("product_name")?,
+                    qty: row.get("qty")?,
+                    received_qty: row.get("received_qty")?,
+                })
+            })?
+            .collect::<Result<_, _>>()?;
+
+        let mut by_transfer: std::collections::HashMap<String, Vec<StockTransferLine>> =
+            std::collections::HashMap::new();
+        for line in lines {
+            by_transfer
+                .entry(line.transfer_id.clone())
+                .or_default()
+                .push(line);
+        }
+
+        Ok(transfers
+            .into_iter()
+            .map(|transfer| {
+                let transfer_lines = by_transfer.remove(&transfer.id).unwrap_or_default();
+                (transfer, transfer_lines)
+            })
+            .collect())
+    }
+
     /// Get lines for a transfer.
     pub fn get_transfer_lines(
         &self,
@@ -288,28 +378,72 @@ impl Store<'_> {
     ///
     /// Only allowed when status is `draft` or `pending`.
     pub fn send_transfer(&self, id: &str) -> Result<StockTransfer, CoreError> {
-        let transfer = self.get_transfer(id)?.ok_or_else(|| CoreError::NotFound {
-            entity: "stock_transfer",
-            id: id.to_owned(),
-        })?;
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let tx = self.conn.unchecked_transaction()?;
 
-        if transfer.status != "draft" && transfer.status != "pending" {
+        // Claim the lifecycle transition before touching inventory. If a
+        // concurrent cancel/receive wins the status claim, this transaction
+        // fails without deducting stock. Any later stock error rolls back the
+        // claim and all deductions together.
+        let status: String = tx
+            .query_row(
+                "SELECT status FROM stock_transfers WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .map_err(|error| match error {
+                rusqlite::Error::QueryReturnedNoRows => CoreError::NotFound {
+                    entity: "stock_transfer",
+                    id: id.to_owned(),
+                },
+                other => CoreError::Db(other),
+            })?;
+        if status != "draft" && status != "pending" {
             return Err(CoreError::Validation {
                 field: "status",
                 message: format!(
-                    "cannot send transfer in status '{}'; expected 'draft' or 'pending'",
-                    transfer.status
+                    "cannot send transfer in status '{status}'; expected 'draft' or 'pending'"
                 ),
             });
         }
+        let claimed = tx.execute(
+            "UPDATE stock_transfers SET status = 'in_transit', sent_at = ?1, updated_at = ?2
+             WHERE id = ?3 AND status IN ('draft', 'pending')",
+            params![now, now, id],
+        )?;
+        if claimed != 1 {
+            return Err(CoreError::Validation {
+                field: "status",
+                message: "transfer changed concurrently; send was not applied".into(),
+            });
+        }
 
-        let lines = self.get_transfer_lines(id)?;
-        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-
-        let tx = self.conn.unchecked_transaction()?;
+        let mut lines_stmt = tx.prepare(
+            "SELECT id, transfer_id, sku, product_name, qty, received_qty
+             FROM stock_transfer_lines WHERE transfer_id = ?1 ORDER BY id",
+        )?;
+        let lines: Vec<StockTransferLine> = lines_stmt
+            .query_map(params![id], |row| {
+                Ok(StockTransferLine {
+                    id: row.get("id")?,
+                    transfer_id: row.get("transfer_id")?,
+                    sku: row.get("sku")?,
+                    product_name: row.get("product_name")?,
+                    qty: row.get("qty")?,
+                    received_qty: row.get("received_qty")?,
+                })
+            })?
+            .collect::<Result<_, _>>()?;
+        drop(lines_stmt);
 
         // Decrement source inventory for each line.
         for line in &lines {
+            if line.qty <= 0 {
+                return Err(CoreError::Validation {
+                    field: "qty",
+                    message: "transfer quantity must be greater than zero".into(),
+                });
+            }
             let product_id = tx
                 .query_row(
                     "SELECT id FROM products WHERE sku = ?1",
@@ -350,11 +484,6 @@ impl Store<'_> {
             )?;
         }
 
-        tx.execute(
-            "UPDATE stock_transfers SET status = 'in_transit', sent_at = ?1, updated_at = ?2 WHERE id = ?3",
-            params![now, now, id],
-        )?;
-
         tx.commit()?;
 
         self.get_transfer(id)?.ok_or_else(|| CoreError::NotFound {
@@ -366,38 +495,56 @@ impl Store<'_> {
     /// Mark a transfer as `received`, record received quantities, and
     /// increment destination inventory.
     ///
-    /// Only allowed when status is `in_transit`.
+    /// Only allowed when status is `in_transit` or `received_partial`.
     pub fn receive_transfer(
         &self,
         id: &str,
         received_by: &str,
         received_lines: &[ReceivedLine],
     ) -> Result<StockTransfer, CoreError> {
-        let transfer = self.get_transfer(id)?.ok_or_else(|| CoreError::NotFound {
-            entity: "stock_transfer",
-            id: id.to_owned(),
-        })?;
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let tx = self.conn.unchecked_transaction()?;
 
-        if transfer.status != "in_transit" {
+        // Claim the in-transit lifecycle inside the same transaction as the
+        // destination inventory writes. A pre-transaction status read would
+        // allow a concurrent cancellation to win and still let this receive
+        // path credit stock on a cancelled transfer.
+        let status: String = tx
+            .query_row(
+                "SELECT status FROM stock_transfers WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .map_err(|error| match error {
+                rusqlite::Error::QueryReturnedNoRows => CoreError::NotFound {
+                    entity: "stock_transfer",
+                    id: id.to_owned(),
+                },
+                other => CoreError::Db(other),
+            })?;
+        if status != "in_transit" && status != "received_partial" {
             return Err(CoreError::Validation {
                 field: "status",
                 message: format!(
-                    "cannot receive transfer in status '{}'; expected 'in_transit'",
-                    transfer.status
+                    "cannot receive transfer in status '{status}'; expected 'in_transit' or 'received_partial'"
                 ),
             });
         }
 
-        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        let tx = self.conn.unchecked_transaction()?;
-
         for rl in received_lines {
             // Validate that received_qty does not exceed the line's ordered qty.
-            let ordered_qty: i64 = tx.query_row(
-                "SELECT qty FROM stock_transfer_lines WHERE id = ?1 AND transfer_id = ?2",
+            let (ordered_qty, previous_received_qty): (i64, i64) = tx.query_row(
+                "SELECT qty, received_qty FROM stock_transfer_lines
+                 WHERE id = ?1 AND transfer_id = ?2",
                 params![rl.line_id, id],
-                |row| row.get(0),
+                |row| Ok((row.get(0)?, row.get(1)?)),
             )?;
+            if rl.received_qty < 0 {
+                return Err(CoreError::Validation {
+                    field: "received_qty",
+                    message: "received quantity must be non-negative".into(),
+                });
+            }
             if rl.received_qty > ordered_qty {
                 return Err(CoreError::Validation {
                     field: "received_qty",
@@ -407,6 +554,14 @@ impl Store<'_> {
                     ),
                 });
             }
+            if rl.received_qty < previous_received_qty {
+                return Err(CoreError::Validation {
+                    field: "received_qty",
+                    message: "received quantity cannot decrease after inventory was credited"
+                        .into(),
+                });
+            }
+            let newly_received = rl.received_qty - previous_received_qty;
 
             // Update received_qty on the line.
             tx.execute(
@@ -414,7 +569,7 @@ impl Store<'_> {
                 params![rl.received_qty, rl.line_id, id],
             )?;
 
-            if rl.received_qty > 0 {
+            if newly_received > 0 {
                 let sku: String = tx.query_row(
                     "SELECT sku FROM stock_transfer_lines WHERE id = ?1",
                     params![rl.line_id],
@@ -444,7 +599,7 @@ impl Store<'_> {
                 };
 
                 let new_qty = prev_qty
-                    .checked_add(rl.received_qty)
+                    .checked_add(newly_received)
                     .ok_or_else(|| CoreError::Internal("inventory overflow on receive".into()))?;
 
                 tx.execute(
@@ -482,10 +637,17 @@ impl Store<'_> {
             "in_transit"
         };
 
-        tx.execute(
-            "UPDATE stock_transfers SET status = ?1, received_by = ?2, received_at = ?3, updated_at = ?4 WHERE id = ?5",
+        let claimed = tx.execute(
+            "UPDATE stock_transfers SET status = ?1, received_by = ?2, received_at = ?3, updated_at = ?4
+             WHERE id = ?5 AND status IN ('in_transit', 'received_partial')",
             params![final_status, received_by, now, now, id],
         )?;
+        if claimed != 1 {
+            return Err(CoreError::Validation {
+                field: "status",
+                message: "transfer changed concurrently; receive was not applied".into(),
+            });
+        }
 
         tx.commit()?;
 
@@ -495,25 +657,106 @@ impl Store<'_> {
         })
     }
 
-    /// Cancel a transfer (only allowed when not already received/cancelled).
+    /// Cancel a transfer and reverse source stock deducted at dispatch.
+    ///
+    /// Draft and pending transfers have not moved stock and are only marked
+    /// cancelled. An in-transit transfer is reversed atomically: each line's
+    /// dispatched quantity is credited back to the source inventory before the
+    /// status changes. Received and partially received transfers are rejected;
+    /// their destination-side movement requires a separate audited correction
+    /// rather than an ambiguous cancellation.
     pub fn cancel_transfer(&self, id: &str) -> Result<StockTransfer, CoreError> {
-        let transfer = self.get_transfer(id)?.ok_or_else(|| CoreError::NotFound {
-            entity: "stock_transfer",
-            id: id.to_owned(),
-        })?;
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let tx = self.conn.unchecked_transaction()?;
 
-        if transfer.status == "received" || transfer.status == "cancelled" {
+        // Read the lifecycle state inside the same transaction as the
+        // reversal. The previous implementation read it before opening the
+        // transaction, which allowed a concurrent send to be observed as
+        // `draft` and then cancelled without restoring the stock that send
+        // deducted.
+        let status: String = tx
+            .query_row(
+                "SELECT status FROM stock_transfers WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .map_err(|error| match error {
+                rusqlite::Error::QueryReturnedNoRows => CoreError::NotFound {
+                    entity: "stock_transfer",
+                    id: id.to_owned(),
+                },
+                other => CoreError::Db(other),
+            })?;
+
+        if matches!(
+            status.as_str(),
+            "received" | "received_partial" | "cancelled"
+        ) {
             return Err(CoreError::Validation {
                 field: "status",
-                message: format!("cannot cancel transfer in status '{}'", transfer.status),
+                message: format!("cannot cancel transfer in status '{status}'"),
             });
         }
 
-        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        self.conn.execute(
-            "UPDATE stock_transfers SET status = 'cancelled', updated_at = ?1 WHERE id = ?2",
+        if status == "in_transit" {
+            let mut lines_stmt =
+                tx.prepare("SELECT sku, qty FROM stock_transfer_lines WHERE transfer_id = ?1")?;
+            let lines: Vec<(String, i64)> = lines_stmt
+                .query_map(params![id], |row| Ok((row.get(0)?, row.get(1)?)))?
+                .collect::<Result<_, _>>()?;
+            drop(lines_stmt);
+
+            for (sku, qty) in lines {
+                let product_id: String = tx
+                    .query_row(
+                        "SELECT id FROM products WHERE sku = ?1",
+                        params![sku],
+                        |row| row.get(0),
+                    )
+                    .map_err(|error| match error {
+                        rusqlite::Error::QueryReturnedNoRows => CoreError::NotFound {
+                            entity: "product",
+                            id: sku.clone(),
+                        },
+                        other => CoreError::Db(other),
+                    })?;
+                let previous_qty: i64 = match tx.query_row(
+                    "SELECT qty FROM inventory WHERE product_id = ?1",
+                    params![product_id],
+                    |row| row.get(0),
+                ) {
+                    Ok(value) => value,
+                    Err(rusqlite::Error::QueryReturnedNoRows) => 0,
+                    Err(other) => return Err(CoreError::Db(other)),
+                };
+                let restored_qty =
+                    previous_qty
+                        .checked_add(qty)
+                        .ok_or_else(|| CoreError::Validation {
+                            field: "qty",
+                            message: format!("stock overflow while cancelling SKU '{sku}'"),
+                        })?;
+                tx.execute(
+                    "INSERT INTO inventory (product_id, qty, updated_at) VALUES (?1, ?2, ?3)
+                     ON CONFLICT(product_id) DO UPDATE SET qty = excluded.qty,
+                                                             updated_at = excluded.updated_at",
+                    params![product_id, restored_qty, now],
+                )?;
+            }
+        }
+
+        let changed = tx.execute(
+            "UPDATE stock_transfers SET status = 'cancelled', updated_at = ?1
+             WHERE id = ?2 AND status IN ('draft', 'pending', 'in_transit')",
             params![now, id],
         )?;
+        if changed != 1 {
+            return Err(CoreError::Validation {
+                field: "status",
+                message: "transfer changed concurrently; cancellation was not applied".into(),
+            });
+        }
+        tx.commit()?;
 
         self.get_transfer(id)?.ok_or_else(|| CoreError::NotFound {
             entity: "stock_transfer",
@@ -779,6 +1022,38 @@ mod tests {
         // Verify the line's received_qty was recorded.
         let lines = store(&conn).get_transfer_lines(&t.id).unwrap();
         assert_eq!(lines[0].received_qty, 4);
+
+        // A partial transfer remains receivable. Only the delta is credited,
+        // so completing it must add six rather than re-adding the first four.
+        let completed = store(&conn)
+            .receive_transfer(
+                &t.id,
+                "user-2",
+                &[ReceivedLine {
+                    line_id: lines[0].id.clone(),
+                    received_qty: 10,
+                }],
+            )
+            .unwrap();
+        assert_eq!(completed.status, "received");
+        let final_lines = store(&conn).get_transfer_lines(&t.id).unwrap();
+        assert_eq!(final_lines[0].received_qty, 10);
+        let pid: String = conn
+            .query_row("SELECT id FROM products WHERE sku = 'SKU-001'", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        let destination_qty: i64 = conn
+            .query_row(
+                "SELECT qty FROM inventory WHERE product_id = ?1",
+                params![pid],
+                |row| row.get(0),
+            )
+            .unwrap();
+        // The source and destination are represented by the shared legacy
+        // inventory table in this core test fixture. The net quantity is
+        // unchanged after dispatch (50 - 10) and receipt (+4 + 6).
+        assert_eq!(destination_qty, 50);
     }
 
     #[test]
@@ -951,7 +1226,25 @@ mod tests {
         // Cancel while in_transit
         let cancelled = store(&conn).cancel_transfer(&t.id).unwrap();
         assert_eq!(cancelled.status, "cancelled");
-        // Note: inventory is NOT restored on cancel (intentional design)
+
+        // Cancelling an in-transit transfer is a true reversal: the source
+        // inventory returns to the pre-dispatch quantity exactly once.
+        let pid: String = conn
+            .query_row("SELECT id FROM products WHERE sku = 'SKU-001'", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        let qty: i64 = conn
+            .query_row(
+                "SELECT qty FROM inventory WHERE product_id = ?1",
+                params![pid],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(qty, 50);
+
+        let second = store(&conn).cancel_transfer(&t.id).unwrap_err();
+        assert!(matches!(second, CoreError::Validation { field, .. } if field == "status"));
     }
 
     #[test]
@@ -1098,6 +1391,76 @@ mod tests {
         assert_eq!(fetched_lines.len(), 2);
         assert_eq!(fetched_lines[0].sku, "SKU-001");
         assert_eq!(fetched_lines[1].sku, "SKU-002");
+    }
+
+    #[test]
+    fn list_transfers_with_lines_by_status_batches_lines() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_user(&conn, "user-1");
+        seed_product(&conn, "SKU-001", "Widget");
+        seed_product(&conn, "SKU-002", "Gadget");
+        seed_inventory(&conn, "SKU-001", 100);
+        seed_inventory(&conn, "SKU-002", 50);
+
+        // Two in-transit transfers (each with lines) and one draft transfer.
+        let t1 = s
+            .create_transfer(
+                None,
+                None,
+                None,
+                None,
+                "",
+                "user-1",
+                &[
+                    make_line("SKU-001", "Widget", 10),
+                    make_line("SKU-002", "Gadget", 5),
+                ],
+            )
+            .unwrap();
+        s.send_transfer(&t1.id).unwrap();
+        let t2 = s
+            .create_transfer(
+                None,
+                None,
+                None,
+                None,
+                "",
+                "user-1",
+                &[make_line("SKU-001", "Widget", 3)],
+            )
+            .unwrap();
+        s.send_transfer(&t2.id).unwrap();
+        let _t3 = s
+            .create_transfer(None, None, None, None, "draft", "user-1", &[])
+            .unwrap();
+
+        let batched = s.list_transfers_with_lines_by_status("in_transit").unwrap();
+        assert_eq!(batched.len(), 2, "only in-transit transfers are returned");
+
+        let t1_batch = batched
+            .iter()
+            .find(|(t, _)| t.id == t1.id)
+            .expect("transfer 1 present");
+        assert_eq!(t1_batch.1.len(), 2, "both lines batched for transfer 1");
+        assert_eq!(t1_batch.1[0].sku, "SKU-001");
+        assert_eq!(t1_batch.1[1].sku, "SKU-002");
+
+        let t2_batch = batched
+            .iter()
+            .find(|(t, _)| t.id == t2.id)
+            .expect("transfer 2 present");
+        assert_eq!(t2_batch.1.len(), 1);
+        assert_eq!(t2_batch.1[0].qty, 3);
+    }
+
+    #[test]
+    fn list_transfers_with_lines_empty_status_is_empty() {
+        let conn = fresh();
+        let result = store(&conn)
+            .list_transfers_with_lines_by_status("in_transit")
+            .unwrap();
+        assert!(result.is_empty());
     }
 
     #[test]

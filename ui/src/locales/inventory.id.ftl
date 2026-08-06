@@ -97,6 +97,7 @@ inv-shift-no-transactions = Tidak ada transaksi yang tercatat.
 
 # Inventory Shift — error toasts + a11y
 inv-shift-error-locations = Gagal memuat lokasi
+inv-error-load = Gagal memuat produk
 inv-shift-error-active = Gagal memuat shift aktif
 inv-shift-error-start = Gagal memulai shift
 inv-shift-error-end = Gagal mengakhiri shift
@@ -144,6 +145,7 @@ inv-log-type-void = Void
 inv-log-type-refund = Refund
 inv-log-type-transfer = Transfer
 inv-log-type-po-receive = PO Diterima
+inv-log-type-purchase-order-receive = PO Diterima
 inv-log-type-stock-count = Stok Opname
 inv-log-type-manual-adjustment = Penyesuaian Manual
 inv-log-loading-lines = Memuat baris...
@@ -198,6 +200,23 @@ inv-alert-stock-label = Stok
 inv-alert-threshold-label = Batas
 inv-alert-error-load = Gagal memuat peringatan
 inv-alert-error-ack = Gagal menanggapi
+
+# ── Location Picker ──
+loc-picker-label = Lokasi
+loc-picker-trigger-aria = Pilih lokasi inventaris. Saat ini: { $name }
+loc-picker-listbox-aria = Lokasi inventaris
+loc-picker-error-load = Gagal memuat lokasi
+loc-picker-badge-primary = Utama
+loc-picker-badge-neg-stock = Stok neg.
+loc-picker-search-aria = Cari lokasi
+loc-picker-search-placeholder = Cari lokasi…
+loc-picker-no-results = Tidak ada lokasi yang cocok dengan pencarian.
+loc-type-store = Toko
+loc-type-warehouse = Gudang
+loc-type-transit = Transit
+loc-type-damaged = Rusak
+loc-type-virtual = Virtual
+loc-type-unknown = Tidak Diketahui
 
 # ── Table Management ──
 

@@ -24,6 +24,7 @@ import {
   pickExportPath,
   pickImportFile,
 } from '@/api/data';
+import { l10nErrorMessage } from '@/utils/app-error';
 import './DataManagementScreen.css';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -316,7 +317,7 @@ export default function DataManagementScreen() {
       setExportState((prev) => ({
         ...prev,
         step: 'encrypt',
-        error: err instanceof Error ? err.message : l10n.getString('data-mgmt-toast-export-fail'),
+        error: l10nErrorMessage(err, l10n, 'data-mgmt-toast-export-fail'),
       }));
       addToast({ message: l10n.getString('data-mgmt-toast-export-fail'), type: 'error' });
     } finally {
@@ -390,7 +391,7 @@ export default function DataManagementScreen() {
       setImportState((prev) => ({
         ...prev,
         analysing: false,
-        error: err instanceof Error ? err.message : l10n.getString('data-mgmt-toast-import-fail'),
+        error: l10nErrorMessage(err, l10n, 'data-mgmt-toast-import-fail'),
       }));
     }
   }, [addToast, l10n, triggerFlash]);
@@ -441,9 +442,9 @@ export default function DataManagementScreen() {
       setImportState((prev) => ({
         ...prev,
         step: 'preview',
-        error: err instanceof Error ? err.message : l10n.getString('data-mgmt-toast-import-fail'),
+        error: l10nErrorMessage(err, l10n, 'data-mgmt-toast-import-fail'),
       }));
-      addToast({ message: err instanceof Error ? err.message : l10n.getString('data-mgmt-toast-import-fail'), type: 'error' });
+      addToast({ message: l10nErrorMessage(err, l10n, 'data-mgmt-toast-import-fail'), type: 'error' });
     }
   }, [addToast, l10n, triggerFlash]);
 
@@ -507,7 +508,7 @@ export default function DataManagementScreen() {
                     <input
                       id="type-select-all"
                       type="checkbox"
-                      aria-label="Select all / none"
+                      aria-label={l10n.getString('data-mgmt-export-select-all')}
                       checked={exportState.selectedTypes.size === DATA_TYPES.length}
                       onChange={toggleAll}
                     />
@@ -525,7 +526,7 @@ export default function DataManagementScreen() {
                       <input
                         id={`type-${dt.key}`}
                         type="checkbox"
-                        aria-label={dt.label}
+                        aria-label={l10n.getString(`data-mgmt-type-${dt.key}`)}
                         checked={exportState.selectedTypes.has(dt.key)}
                         onChange={() => toggleType(dt.key)}
                       />

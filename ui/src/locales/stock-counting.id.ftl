@@ -44,6 +44,7 @@ sc-hist-title = Riwayat Opname
 sc-hist-empty = Tidak ada opname selesai untuk ditampilkan.
 
 # Error messages
+sc-error-session = Sesi tidak tersedia. Silakan masuk lagi.
 sc-error-load = Gagal memuat stok opname.
 sc-error-add-line = Gagal menambah baris
 sc-error-update-line = Gagal memperbarui baris

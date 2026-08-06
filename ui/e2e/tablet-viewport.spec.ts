@@ -23,9 +23,13 @@ test.describe('Tablet Viewport (1024×1366)', () => {
     await page.goto('/');
     await page.waitForSelector('.staff-login-screen', { timeout: 15_000 });
 
-    // Document body must not overflow the viewport width.
+    // Document body must not overflow the viewport width. Compare against
+    // the actual viewport — this spec runs in BOTH Playwright projects
+    // (desktop 1366px and tablet 1024px), so a hardcoded 1024 would fail
+    // the desktop run even with zero overflow.
     const scrollWidth = await page.evaluate(() => document.body.scrollWidth);
-    expect(scrollWidth).toBeLessThanOrEqual(1024);
+    const viewportWidth = await page.evaluate(() => window.innerWidth);
+    expect(scrollWidth).toBeLessThanOrEqual(viewportWidth);
   });
 
   test('touch targets are at least 44px on login screen', async ({ page }) => {
@@ -39,14 +43,16 @@ test.describe('Tablet Viewport (1024×1366)', () => {
     const inputBox = await usernameInput.boundingBox();
     expect(inputBox).not.toBeNull();
     if (inputBox) {
-      expect(inputBox.height).toBeGreaterThanOrEqual(44);
+      // Math.round: getBoundingClientRect can report 43.99997 for a 44px
+      // target due to sub-pixel rendering — the CSS-px target is what matters.
+      expect(Math.round(inputBox.height)).toBeGreaterThanOrEqual(44);
     }
 
     // Submit button.
     const submitBtn = page.locator('.staff-login-submit-btn');
     const btnBox = await submitBtn.boundingBox();
     if (btnBox) {
-      expect(btnBox.height).toBeGreaterThanOrEqual(44);
+      expect(Math.round(btnBox.height)).toBeGreaterThanOrEqual(44);
     }
   });
 
@@ -68,9 +74,11 @@ test.describe('Tablet Viewport (1024×1366)', () => {
     await page.waitForSelector('.workspace-home', { timeout: 15_000 });
     await expect(page.locator('.workspace-home')).toBeVisible();
 
-    // No layout overflow after login.
+    // No layout overflow after login (viewport-relative — the spec runs in
+    // both the desktop and tablet Playwright projects).
     const scrollWidth = await page.evaluate(() => document.body.scrollWidth);
-    expect(scrollWidth).toBeLessThanOrEqual(1024);
+    const viewportWidth = await page.evaluate(() => window.innerWidth);
+    expect(scrollWidth).toBeLessThanOrEqual(viewportWidth);
 
     // Workspace cards must be visible.
     const cards = page.locator('.workspace-card');

@@ -75,6 +75,7 @@ inv-shift-no-transactions = No transactions recorded.
 
 # Inventory Shift — error toasts + a11y
 inv-shift-error-locations = Failed to load locations
+inv-error-load = Failed to load products
 inv-shift-error-active = Failed to load active shift
 inv-shift-error-start = Failed to start shift
 inv-shift-error-end = Failed to end shift
@@ -122,6 +123,7 @@ inv-log-type-void = Void
 inv-log-type-refund = Refund
 inv-log-type-transfer = Transfer
 inv-log-type-po-receive = PO Receive
+inv-log-type-purchase-order-receive = PO Receive
 inv-log-type-stock-count = Stock Count
 inv-log-type-manual-adjustment = Manual Adjustment
 inv-log-loading-lines = Loading lines...
@@ -176,4 +178,21 @@ inv-alert-stock-label = Stock
 inv-alert-threshold-label = Threshold
 inv-alert-error-load = Failed to load alerts
 inv-alert-error-ack = Failed to acknowledge
+
+# ── Location Picker ──
+loc-picker-label = Location
+loc-picker-trigger-aria = Select inventory location. Current: { $name }
+loc-picker-listbox-aria = Inventory locations
+loc-picker-error-load = Failed to load locations
+loc-picker-badge-primary = Primary
+loc-picker-badge-neg-stock = Neg. stock
+loc-picker-search-aria = Search locations
+loc-picker-search-placeholder = Search locations…
+loc-picker-no-results = No locations match your search.
+loc-type-store = Store
+loc-type-warehouse = Warehouse
+loc-type-transit = Transit
+loc-type-damaged = Damaged
+loc-type-virtual = Virtual
+loc-type-unknown = Unknown
 

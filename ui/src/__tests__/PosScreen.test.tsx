@@ -18,41 +18,12 @@ import settingsFtl from '@/locales/settings.ftl?raw';
 import PosScreen from '@/features/sales/PosScreen';
 import * as productsApi from '@/api/products';
 import * as bundlesApi from '@/api/bundles';
-import type { BarcodeScannedPayload } from '@/api/hardware';
+import { mockedBarcode } from '@/__tests__/test-utils/mocks/barcodeScanner';
 
 // ── Hoisted mock helpers ──────────────────────────────────────────
 // vi.mock is hoisted, so any mutable state must be declared via
 // vi.hoisted() so it can be referenced inside the mock factories.
 
-// Mock useBarcodeScanner to capture the onProductFound callback
-// instead of doing its own lookupByBarcode (which would bypass
-// PosScreen's bundle expansion logic — the hook only calls
-// onProductFound when its own barcode lookup succeeds).
-const mockedBarcode = vi.hoisted(() => {
-  let onProductFound: ((payload: BarcodeScannedPayload) => void) | null = null;
-  let onError: ((error: string) => void) | null = null;
-  return {
-    triggerScan(code: string) {
-      onProductFound?.({ code, symbology: 'test' });
-    },
-    triggerError(error: string) {
-      onError?.(error);
-    },
-    reset() {
-      onProductFound = null;
-      onError = null;
-    },
-    useBarcodeScanner: vi.fn(
-      (opts: {
-        onProductFound: (p: BarcodeScannedPayload) => void;
-        onError?: (error: string) => void;
-      }) => {
-        onProductFound = opts.onProductFound;
-        onError = opts.onError ?? null;
-      },
-    ),
-  };
-});
 
 // Mock hardware functions used by useCustomerDisplay.
 vi.mock('@/api/hardware', async () => {
@@ -65,9 +36,15 @@ vi.mock('@/api/hardware', async () => {
   };
 });
 
-vi.mock('@/features/sales/useBarcodeScanner', () => ({
-  useBarcodeScanner: mockedBarcode.useBarcodeScanner,
-}));
+// Mock useBarcodeScanner to capture the onProductFound callback
+// instead of doing its own lookupByBarcode (which would bypass
+// PosScreen's bundle expansion logic — the hook only calls
+// onProductFound when its own barcode lookup succeeds).
+vi.mock('@/features/sales/useBarcodeScanner', async () => {
+  const { createBarcodeScannerModuleMock } =
+    await import('@/__tests__/test-utils/mocks/barcodeScanner');
+  return createBarcodeScannerModuleMock();
+});
 
 // Shared lookupByBarcode — used by both the unscoped export (for test
 // assertions) and lookupByBarcodeScoped (which the component actually calls).

@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use super::AnalyticsBundle;
 use crate::db::Store;
 use crate::error::CoreError;
+use crate::{Currency, format_minor};
 
 // ── SMTP Configuration ─────────────────────────────────────────────
 
@@ -501,12 +502,15 @@ fn html_escape(s: &str) -> String {
 }
 
 /// Format a minor-unit amount into a human-readable string.
+/// Uses the currency's ISO-4217 minor-unit exponent (e.g. IDR renders
+/// whole Rupiah, USD renders cents) instead of a hardcoded /100.
 fn format_amount(minor: i64, currency: &str) -> String {
-    let major = minor as f64 / 100.0;
+    // Fall back to USD's exponent (2) if the code doesn't parse.
+    let cur = currency.parse::<Currency>().unwrap_or(Currency(*b"USD"));
     if !currency.is_empty() {
-        format!("{:.2} {}", major, currency)
+        format!("{} {}", format_minor(minor, cur), currency)
     } else {
-        format!("{:.2}", major)
+        format_minor(minor, cur)
     }
 }
 

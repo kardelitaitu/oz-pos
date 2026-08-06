@@ -57,6 +57,16 @@ function injectThemeStyles() {
       --color-danger-fg: #ffffff;
       --color-success: #10b981;
       --color-warning: #f59e0b;
+      --color-primary-pos: #1e3a5f;
+      --color-primary-pos-light: #2e578c;
+      --color-primary-pos-dark: #112239;
+      --color-success-pos: #10b981;
+      --color-success-pos-darker: #059669;
+      --color-warning-pos: #d97706;
+      --color-fn-key-pos: #fbbf24;
+      --color-dark-bg-pos: #0d131f;
+      --color-dark-border-pos: #1f2937;
+      --color-bg-pos: #0d0d14;
       --space-1: 0.25rem;
       --space-2: 0.5rem;
       --space-3: 0.75rem;
@@ -78,11 +88,12 @@ function injectThemeStyles() {
 }
 
 /**
- * Core CSS custom properties that every feature uses. These must resolve
- * to a defined value (not undefined) under every theme so that the UI
- * never shows a transparent/black-on-black state.
+ * Theme CSS custom properties that must resolve to a defined value
+ * (not undefined) under every theme so that the UI never shows a
+ * transparent/black-on-black state. Includes both global tokens and
+ * POS-specific tokens surfaced by `RetailPosScreen`.
  */
-const CORE_TOKENS = [
+const THEME_TOKENS = [
   '--color-fg',
   '--color-fg-primary',
   '--color-fg-inverse',
@@ -95,6 +106,9 @@ const CORE_TOKENS = [
   '--color-accent-fg',
   '--color-danger',
   '--color-success',
+  '--color-primary-pos',
+  '--color-success-pos',
+  '--color-warning-pos',
   '--space-2',
   '--space-4',
   '--text-base',
@@ -116,7 +130,7 @@ describe('Theme CSS Token Regression', () => {
   it('all core CSS tokens resolve to a defined value under default theme', () => {
     const html = document.documentElement;
     // With injected styles, getComputedStyle should resolve the tokens.
-    for (const token of CORE_TOKENS) {
+    for (const token of THEME_TOKENS) {
       const value = getComputedStyle(html).getPropertyValue(token).trim();
       expect(value).not.toBe('');
     }
@@ -127,7 +141,7 @@ describe('Theme CSS Token Regression', () => {
     const html = document.documentElement;
     render(<Wrapper><div data-testid="light-root" /></Wrapper>);
     expect(html.getAttribute('data-theme')).toBe('light');
-    for (const token of CORE_TOKENS) {
+    for (const token of THEME_TOKENS) {
       const value = getComputedStyle(html).getPropertyValue(token).trim();
       expect(value).not.toBe('');
     }
@@ -138,7 +152,7 @@ describe('Theme CSS Token Regression', () => {
     const html = document.documentElement;
     render(<Wrapper><div data-testid="dark-root" /></Wrapper>);
     expect(html.getAttribute('data-theme')).toBe('dark');
-    for (const token of CORE_TOKENS) {
+    for (const token of THEME_TOKENS) {
       const value = getComputedStyle(html).getPropertyValue(token).trim();
       expect(value).not.toBe('');
     }

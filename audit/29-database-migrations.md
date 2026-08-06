@@ -1,0 +1,192 @@
+# Database Migrations Audit — July 2026
+
+> **Audit date:** 2026-07-31
+> **Sector:** Database migrations — ordering, idempotency, transaction safety, rollback coverage, index/constraint quality, schema documentation, and fresh-vs-upgrade parity
+> **Status:** ✅ **FULLY REMEDIATED** — all 8 findings DB-01→DB-08 closed in commit `06f0a949`; the fix mechanism is named in each finding's Status line below
+> **Production code changed:** Migration runner (checksums + FK isolation), migration 116, registry parity test, populated upgrade fixtures
+
+> **Remediation date:** 2026-08-03 · all findings closed with tests in `crates/oz-core/src/migrations.rs` and `platform/core/src/database/migrations.rs`
+>
+> **Evidence note:** line references in the Evidence sections reflect the codebase at audit time (2026-07-31); the migration runner and registry were rewritten during remediation, so post-remediation line numbers differ (runner `run()` is at `platform/core/src/database/migrations.rs:50`, `Migration` at `:38`, `ALL` starts at `crates/oz-core/src/migrations.rs:53`)
+
+## Scope
+
+This audit evaluates sector 29 against the universal checklist in `audit/AUDIT_JULY_2026.md`. It covers the migration registry, generic runner, embedded SQL, transaction boundaries, migration ordering, idempotency, rollback behavior, foreign keys, tenant/location scoping, indexes, constraints, fresh-install behavior, upgrade behavior, and migration test coverage.
+
+Inspected areas:
+
+- `crates/oz-core/src/migrations.rs`
+- `crates/oz-core/migrations/*.sql`
+- `platform/core/src/database/migrations.rs`
+- `docs/database-optimization-2026-07-20.md`
+- `docs/ARCHITECTURE.md`
+- Migration-related tests embedded in `crates/oz-core/src/migrations.rs` and `platform/core/src/database/migrations.rs`
+
+## Architecture summary
+
+OZ-POS embeds every core migration with `include_str!` and registers it manually in `crates/oz-core/src/migrations.rs:40-578`. The generic `platform-core` runner creates `schema_migrations`, loads applied IDs, executes each unapplied migration inside a SQLite transaction, records the ID, and commits at `platform/core/src/database/migrations.rs:33-43` and `:113-123`. Core startup then enables WAL, a busy timeout, `synchronous=NORMAL`, and foreign keys after migration execution at `crates/oz-core/src/migrations.rs:587-610`.
+
+The design has useful safety controls: migration IDs are primary keys, application is transactional, fresh databases are tested through the complete registered list, and a small generic rollback helper prevents out-of-order rollback. The schema has substantial foreign-key, check-constraint, partial-index, and location-scoping coverage. However, the registry is manual and ID-only, rollback metadata is external to migrations, upgrade-path testing is thin, and several destructive rebuild migrations depend on SQLite PRAGMA behavior that is not tested against populated legacy data.
+
+## Findings
+
+### DB-01 — Manual migration registry can silently omit SQL files and contradicts ordering documentation
+
+**Evidence:** `crates/oz-core/src/migrations.rs:3-5` says migrations run in lexicographic order, while `ALL` is a hand-maintained compile-time array at `:40-578` and the runner applies that array order at `platform/core/src/database/migrations.rs:33-43`. The registry itself documents that adding a migration requires both a new SQL file and a new array entry at `migrations.rs:9-12`. The same file documents shared numeric prefixes at `:30-39`, including the non-lexicographic placement of `047_purchase_orders.sql` before `046_track_serial.sql` in the array at `:218-230`.
+
+**Impact:** A new SQL file can exist in the repository but never execute if its registry entry is forgotten. A future maintainer following the module-level lexicographic-order claim can also place an entry incorrectly relative to dependencies. The existing uniqueness test validates registered IDs, not parity between the filesystem and the registry.
+
+**Severity:** P2 · schema delivery and maintainability
+
+**Affected files:** `crates/oz-core/src/migrations.rs`, `crates/oz-core/migrations/`, `platform/core/src/database/migrations.rs`, and migration CI/tests.
+
+**Recommendation:** Make the registry the explicit source of truth and correct the stale lexicographic wording, or generate/validate the registry from the SQL directory. Add a test or CI script that compares every migration filename with exactly one registered ID, rejects orphaned SQL files, rejects registry entries without files, and verifies dependency-sensitive order. Keep historical IDs immutable and forbid reuse of gaps.
+
+**Status:** ✅ Remediated (`06f0a949`) — `migration_registry_matches_filesystem` compares every `.sql` file under `migrations/` against exactly one `ALL` entry (and vice versa), rejecting orphans and missing entries; module doc rewritten to state the array order is canonical (not lexicographic).
+
+### DB-02 — Applied migration IDs are tracked without SQL checksums or compatibility metadata
+
+**Evidence:** `platform/core/src/database/migrations.rs:20-26` defines a migration as only an `id` and raw `sql`. `schema_migrations` stores only `id` and `applied_at` at `:82-90`; `load_applied` checks only whether the ID exists at `:92-100`. If an already-applied SQL file changes while retaining its ID, the runner skips it without detecting the definition drift.
+
+**Impact:** A modified historical migration can make fresh databases and upgraded databases produce different schemas while both report the same migration IDs. This is particularly dangerous for data migrations and table rebuilds: operators cannot tell whether an installed database was created by the committed definition or by an older mutation of that file.
+
+**Severity:** P1 · schema reproducibility and upgrade safety
+
+**Affected files:** `platform/core/src/database/migrations.rs`, `crates/oz-core/src/migrations.rs`, `schema_migrations`, release procedures, and migration tests.
+
+**Recommendation:** Record a cryptographic checksum and migration format/version alongside each applied ID. On startup, compare the committed checksum with the stored value and fail closed with an actionable repair message when a historical definition changed. If a compatibility exception is required, make it an explicit migration or a reviewed checksum allowlist—never silently accept changed SQL under the same ID.
+
+**Status:** ✅ Remediated (`06f0a949`) — the runner records a SHA-256 checksum per applied migration in `schema_migrations.checksum`, backfills legacy NULL rows on first run, and **fails closed** with an actionable message when an already-applied definition drifts; `duplicate_migration_id_with_changed_sql_fails_closed` and `applied_migration_records_checksum` cover both sides.
+
+### DB-03 — Rollback support is generic and caller-supplied, but registered migrations have no down SQL
+
+**Evidence:** `platform/core/src/database/migrations.rs:46-80` exposes `rollback(conn, migration_id, down_sql)`, where the caller supplies arbitrary reverse SQL. `Migration` has no `down_sql` field at `:20-26`, and the core registry entries at `crates/oz-core/src/migrations.rs:40-578` contain only `id` and `sql`. The tests prove rollback for synthetic tables, but do not provide rollback definitions for the production schema migrations.
+
+**Impact:** The documented rollback capability is not an operational rollback plan for the real database. An operator cannot safely ask the runner to reverse migration 081, 089, 091, or other rebuild/data migrations without hand-authoring destructive SQL. A guessed down script can lose data, violate foreign keys, or leave the schema inconsistent.
+
+**Severity:** P2 · recovery and operability
+
+**Affected files:** `platform/core/src/database/migrations.rs`, `crates/oz-core/src/migrations.rs`, release/backup procedures, and migration runbooks.
+
+**Recommendation:** Treat production migrations as forward-only unless a reviewed down migration is actually maintained. Document that distinction explicitly. For reversible schema-only changes, add versioned, reviewed down SQL or a repair command; for destructive/data migrations, require a backup-plus-forward-repair procedure and test restore. Never accept ad-hoc rollback SQL as the primary recovery contract.
+
+**Status:** ✅ Remediated (`06f0a949`) — forward-only contract documented in the `migrations.rs` module doc (production migrations are never reversed in the field; destructive/data migrations require backup-plus-forward-repair, never ad-hoc down SQL) and cross-referenced from the runner docs.
+
+### DB-04 — Location/store scoping columns remain nullable and the schema intentionally accepts unscoped domain rows
+
+**Evidence:** `069_data_scoping_columns.sql:4-7` defines NULL as “unscoped / legacy / global shared” and adds nullable `store_id`/`warehouse_id` columns at `:17-28`. The migration creates scoped indexes at `:36-49`, but no foreign keys or non-null enforcement tie those columns to store/location tables. The migration tests explicitly insert products and sales without a `store_id` and assert NULL at `crates/oz-core/src/migrations.rs:906-943`.
+
+**Impact:** The database permits rows that are not attributable to a tenant/store. If any read or write path forgets its application-level scope predicate, an unscoped row can appear across stores or a new row can be created without ownership. The migration is intentionally transitional, so this is not proof of an exploitable cross-tenant read by itself, but it is a material defense-in-depth gap for a multi-store deployment.
+
+**Severity:** P1 · tenant/data isolation
+
+**Affected files:** `069_data_scoping_columns.sql`, related domain tables and queries, `crates/oz-core/src/migrations.rs`, and store/workspace access policy.
+
+**Recommendation:** Define an explicit transition policy: backfill legacy rows to a known store or quarantine them, then make tenant ownership non-null for tables that must be isolated. Add foreign keys where the store catalog is authoritative, composite uniqueness/indexes that include the scope, and integration tests proving a store-scoped query cannot return NULL/other-store rows. If global rows remain supported, represent that state explicitly and test every caller's policy rather than relying on NULL semantics.
+
+**Status:** ✅ Remediated (`06f0a949` + Phase 2 commit) — the intentional NULL = “unscoped / legacy / global” semantics are pinned by dedicated tests (`migration_069_adds_scoping_columns`, `migration_069_scoping_columns_nullable`, `migration_069_scoping_indexes_used_in_query_plan`, `migration_069_creates_scoping_indexes`), and the scoping end-state lands as **migration 117** (`117_scoping_store_id_fk.sql`): it rebuilds products/sales/sale_lines/customers with `store_id REFERENCES store_profiles(id) ON DELETE SET NULL ON UPDATE CASCADE`, quarantines orphaned non-NULL store_ids to NULL during the copy (so an upgrade can never fail on a dangling reference), and preserves NULL as the documented global sentinel — NOT NULL is deliberately not forced because per-store database files are the primary isolation mechanism (docs/decisions/2026-07-10-workspace-type-instance-design.md), so the columns stay soft-scoping for shared/cloud databases. Verified: `migration_117_creates_store_id_foreign_keys` (fresh FK + enforcement), `migration_117_quarantines_orphan_store_ids_on_upgrade` (populated pre-117 DB upgraded with valid/orphan/NULL rows mixed; orphans → NULL, valid survive, `foreign_key_check` = 0, scoping indexes survive). The `warehouse_id` half of 069's evidence is closed by **migration 118** (`118_drop_warehouse_id_superseded.sql`): ADR #18 superseded the speculative multi-warehouse hook — warehouses are `inventory_locations` rows with `type='warehouse'` and 079's `inventory.location_id` FK is the real catalog link; zero Rust code reads or writes `warehouse_id`, so 118 drops the dead columns and their unused `idx_inventory_warehouse_product` index while preserving all inventory/stock-count data. Verified: `migration_118_drops_warehouse_id_columns` (end-state absence + location_id survival), `migration_118_drop_preserves_inventory_and_count_data_on_upgrade` (populated pre-118 upgrade: qty/count/line data preserved, `foreign_key_check` = 0).
+>
+> **Follow-up (2026-08-03, ADR #6 cross-store scoping repair — three phases):** the application layer now proves the soft-scoping contract end-to-end, closing the three gaps noted at the end of the original remediation:
+> - **Phase A — scoped repository APIs** (`bec227d6`): domain tables previously had no scoped API (only the workspace-instance layer did). Added `list_products_for_store`, `list_customers_for_store`, `list_sales_for_store` in `oz-core/src/db/{products,customers,sales}.rs` — each filters `store_id IS NULL OR store_id = ?1` (NULL = documented global catalog) with the exact projection/ordering of the global `list_*` counterparts. Tested in `crates/oz-core/tests/store_scoping_integration.rs`: `list_products_for_store_returns_global_and_own_never_other_store`, `list_customers_for_store_returns_global_and_own_never_other_store`, `list_sales_for_store_returns_global_and_own_never_other_store` — each asserts a store sees exactly global + its own rows and never the other store's, in both directions.
+> - **Phase B — sync/cloud layer carries `store_id`** (`0337446a`): the snapshot pipeline previously dropped store ownership (every pulled row landed NULL/global). `store_id: Option<String>` now flows through **both** import paths — `oz_core::sync_client` `apply_snapshot` (`upsert_products` INSERT/ON CONFLICT `?13`) and `platform_sync::import_snapshot` — and the cloud-server `snapshot_handler` SELECT now serves it. Wire contract stays backward/forward compatible (`#[serde(default)]`; old client on new server ignores the unknown field). Tested: `snapshot_apply_preserves_store_scoping_end_to_end`, `snapshot_with_unknown_store_id_is_rejected_fail_closed` (FK failure rolls the whole apply back — `products` count 0), cloud-server `snapshot_serves_store_id_when_present`, and two platform-sync import tests proving the `store_id` write-through.
+> - **Phase C — real concurrency** (`ae644b9e`): `crates/oz-core/tests/store_scoping_concurrency_integration.rs` audits isolation under concurrent writers on a shared file DB (FK ON): `cross_store_parallel_writers_never_leak_across_scopes` (two threads INSERT store-a/store-b rows simultaneously, both succeed, scoped reads return exactly their own rows, `pragma_foreign_key_check` = 0) and `same_store_racing_writers_serialize_exactly_one_wins` (identical store-a UPDATEs race inside `BEGIN IMMEDIATE` with a deterministic AtomicBool handshake + time-based deadline; exactly one wins, the loser gets SQLITE_BUSY, final price = 150 with no torn state, ownership preserved). Passes 5/5 consecutive runs (~5.7s each) — deterministic, not flaky.
+
+### DB-05 — Migration 081 relies on an ineffective foreign-key PRAGMA during a destructive table rebuild
+
+**Evidence:** The runner opens a transaction before executing each migration at `platform/core/src/database/migrations.rs:113-121`. Migration 081 executes `PRAGMA foreign_keys = OFF` and later `PRAGMA foreign_keys = ON` inside that transaction (`081_stock_transfers_received_partial.sql:60-64`); SQLite does not change the connection-level `foreign_keys` setting while a transaction is active. The migration then drops and renames `stock_transfers` at `:109-111` while `stock_transfer_lines` retains a foreign-key relationship to it. Migration 089 also uses the same PRAGMA pattern for its `stock_summary` rebuild (`089_stock_summary_composite_pk.sql:35-64`), but the inspected schema does not show an equivalent child-table reference for that table. The current core migration tests exercise a fresh database and schema/index assertions, but do not seed populated transfer-line rows and run migration 081 as an upgrade fixture.
+
+**Impact:** For migration 081, enabled foreign keys can make `DROP TABLE stock_transfers` fail or invoke the child table's `ON DELETE CASCADE`, risking loss of `stock_transfer_lines` during a populated upgrade. The SQL comments assume foreign-key checks are disabled, but the runner's transaction boundary can make that assumption false. Migration 089 still deserves a PRAGMA/upgrade test, but it is not evidence of the same child-reference data-loss risk. Fresh migration tests can pass because they do not exercise populated dependent records.
+
+**Severity:** P1 · upgrade data integrity
+
+**Affected files:** `platform/core/src/database/migrations.rs`, `081_stock_transfers_received_partial.sql`, `047_stock_transfers.sql`, related foreign-key tables, and migration upgrade tests.
+
+**Recommendation:** Do not rely on toggling `foreign_keys` inside a transaction. Use a rebuild pattern that preserves dependent tables and foreign-key metadata under the active enforcement mode, or move the controlled prerequisite outside the transaction only with an explicitly verified atomicity plan. Add an upgrade fixture containing populated `stock_transfer_lines`, stock summaries, and representative references; assert row counts, FK targets, `PRAGMA foreign_key_check`, and rollback behavior after each rebuild.
+
+**Status:** ✅ Remediated (`06f0a949`) — the generic runner now disables FK enforcement at the connection level **outside** the transaction around every migration apply and restores the caller's prior setting (the in-transaction `PRAGMA foreign_keys = OFF/ON` inside 081/089 is now a harmless no-op). `foreign_keys_disabled_during_rebuild_migration` and the populated `upgrade_081_rebuild_preserves_populated_stock_transfer_lines` fixture (with `PRAGMA foreign_key_check` = 0) prove child rows survive the DROP + RENAME rebuild.
+
+### DB-06 — Fresh-install and upgrade-path parity is not comprehensively tested
+
+**Evidence:** `crates/oz-core/src/migrations.rs:676-706` tests that the full registered list applies and is idempotent on a fresh in-memory connection. Additional tests inspect selected tables, indexes, location seeds, and migration 100. The generic runner tests at `platform/core/src/database/migrations.rs:151-172` cover synthetic first/second runs. No inspected migration test constructs a representative pre-migration database, applies only the migrations available at that historical point, seeds realistic rows, upgrades through 106, and compares the resulting schema/data invariants with a fresh install.
+
+**Impact:** A migration can work on an empty database while failing on real legacy data, losing dependent rows during a rebuild, or leaving stale indexes/foreign keys. This is the highest-risk blind spot for the many table-rebuild migrations and for data transformations such as 092's delete-and-rebuild of `stock_summary`.
+
+**Severity:** P1 · upgrade correctness
+
+**Affected files:** `crates/oz-core/src/migrations.rs`, `platform/core/src/database/migrations.rs`, `crates/oz-core/migrations/*.sql`, migration integration fixtures, and release upgrade validation.
+
+**Recommendation:** Maintain versioned upgrade fixtures for each destructive/rebuild milestone. Seed realistic rows, apply the remaining migrations, run `PRAGMA foreign_key_check`, compare normalized `sqlite_master` schemas and indexes against a fresh install, and assert business data conservation. Include interrupted/failing migration recovery and backup-restore tests in the release gate.
+
+**Status:** ✅ Remediated (`06f0a949`) — `upgrade_081_rebuild_preserves_populated_stock_transfer_lines` (pre-081 DB seeded with transfers + lines, upgraded through 115, `foreign_key_check` = 0, canonical-location backfill asserted) and `upgrade_092_rebuild_conserves_multi_location_ledger` (pre-092 DB seeded with two-location movements + stale summaries + inventory, upgraded, per-location `SUM(delta)` conservation + over-sold zero-out asserted) close the populated-upgrade blind spot. `fresh_install_and_upgrade_path_produce_identical_schema` continues to compare fresh vs upgrade schema fingerprints.
+
+### DB-07 — Migration 092 performs a destructive aggregate rebuild whose source-of-truth assumptions are not enforced by schema checks
+
+**Evidence:** `092_rebuild_stock_summary_group_by_location.sql:42-70` deletes every row from `stock_summary` and recreates it from `stock_movements`, grouped by `(item_id, location_id)`. The migration also zeroes `inventory.qty` based on an item-level aggregate at `:72-88`. The SQL is transaction-wrapped by the runner, but the schema does not enforce that every valid stock summary is derivable from the movement ledger, nor does the migration test seed a non-trivial ledger and verify conservation across locations.
+
+**Impact:** If stock summary contains an intentional adjustment or if legacy movement rows are incomplete, the migration silently discards the summary state and reconstructs a different balance. The item-level inventory zero-out can also affect all inventory rows for a product when the schema evolves toward multiple locations. Transactionality prevents a half-applied state, but it does not prevent a semantically incorrect rebuild.
+
+**Severity:** P2 · inventory data integrity
+
+**Affected files:** `092_rebuild_stock_summary_group_by_location.sql`, stock movement/summary domain code, `crates/oz-core/src/migrations.rs`, and inventory migration fixtures.
+
+**Recommendation:** Specify the authoritative ledger contract and validate it before rebuilding: compare pre/post totals, reject or quarantine orphaned movement rows, and record a migration audit summary. Seed positive, negative, multi-location, and legacy rows in an upgrade test. Keep the rebuild inside a transaction, but add conservation assertions rather than treating atomicity as correctness.
+
+**Status:** ✅ Remediated (`06f0a949`) — `upgrade_092_rebuild_conserves_multi_location_ledger` seeds positive, negative, and multi-location ledger rows plus stale summaries and asserts the rebuild reproduces the exact per-location `SUM(delta)` totals (conservation), that over-sold products are zeroed in `inventory`, and that `PRAGMA foreign_key_check` stays clean after the delete-and-rebuild.
+
+### DB-08 — Several integrity rules remain application-only despite being described as data invariants
+
+**Evidence:** `083_workspace_inventory_locations.sql` documents that the single-binding/multi-binding XOR is enforced in the application layer and uses a partial unique index only for one primary at `:61-93`. `100_setting_updated.sql` defines a per-terminal version ledger and indexes at `:12-32`, but has no unique constraint on `(key, terminal_id, version)`. The comments describe version allocation as `MAX(version) + 1`, which is vulnerable to duplicate versions if concurrent writers do not serialize the operation in application code. Other configuration columns, such as `enabled` in `087_stock_thresholds_alerts.sql` and `schema_version` in `104_hardware_profiles.sql`, likewise have no domain checks.
+
+**Impact:** A caller bypassing the intended repository path, a concurrent writer, or a future API can create duplicate setting versions, multiple binding modes, or invalid flag/version values. Indexes improve lookup but do not enforce the invariants described by the schema comments.
+
+**Severity:** P2 · constraint quality/concurrency
+
+**Affected files:** `083_workspace_inventory_locations.sql`, `087_stock_thresholds_alerts.sql`, `100_setting_updated.sql`, `104_hardware_profiles.sql`, settings/location repositories, and migration tests.
+
+**Recommendation:** For each invariant, explicitly choose database enforcement or application enforcement and document the reason. Add `UNIQUE(key, terminal_id, version)` (or a stronger event identity) where duplicate versions are invalid, allocate versions in a serialized transaction, and add `CHECK` constraints for boolean/version domains. For cross-table XOR rules, use a carefully tested trigger or enforce and test the repository boundary with concurrent integration tests.
+
+**Status:** ✅ Remediated (`06f0a949`) — migration `116_setting_updated_unique_version.sql` collapses legacy duplicate versions (keeping the newest row per `(key, terminal_id, version)`) and adds `idx_setting_updated_unique_version`, a UNIQUE index that fails closed on concurrent duplicate-version writes; `migration_116_creates_unique_setting_version_index` and `migration_116_dedupes_legacy_duplicate_versions` cover the fresh and upgrade paths. The setting_updated module doc documents the version-allocation contract.
+
+## Positive controls observed
+
+- Migration SQL is embedded at compile time, preventing a deployed binary from depending on a mutable SQL directory.
+- Applied migration IDs are primary keys, so the runner does not apply the same registered ID twice.
+- `apply_one` executes migration SQL and its tracking insert in one transaction at `platform/core/src/database/migrations.rs:113-123`.
+- Core tests cover first-run application, second-run idempotency, registered-ID uniqueness, expected tables, selected indexes, canonical location seeds, and migration 100 schema/idempotency behavior.
+- Generic runner tests cover rollback of the final synthetic migration and reject out-of-order rollback requests.
+- Foreign keys, check constraints, partial unique indexes, and location-specific indexes are used extensively in the newer inventory/KDS schema.
+- Migration 091 uses `PRAGMA defer_foreign_keys = ON` for its multi-table primary-key rename, showing awareness that ordinary FK toggling is insufficient for that operation.
+- Runtime startup configures WAL, busy timeout, synchronous mode, and foreign-key enforcement after migration execution.
+
+## Test and validation results
+
+Post-remediation validation (2026-08-03) — all findings closed with live test runs:
+
+- Migration registry ↔ filesystem parity test: **passed** — every `.sql` file registered exactly once, no orphans, no missing entries
+- Migration checksum drift detection: **passed** — `applied_migration_records_checksum`, `legacy_row_without_checksum_is_backfilled`, `duplicate_migration_id_with_changed_sql_fails_closed`
+- FK isolation around rebuild migrations: **passed** — `foreign_keys_disabled_during_rebuild_migration` (parent DROP + rename with populated child row survives)
+- Populated upgrade fixtures: **passed** — 081 rebuild preserves `stock_transfer_lines` with `PRAGMA foreign_key_check` = 0; 092 rebuild conserves the multi-location ledger and zeroes over-sold inventory
+- Migration 116 unique-version enforcement: **passed** — fresh index + legacy dedupe paths
+- Migration 117 scoping FK end-state (Phase 2): **passed** — FK declared on all four domain tables, invalid store_id rejected, orphaned store_ids quarantined to NULL on a populated upgrade (valid rows preserved, `foreign_key_check` = 0, scoping indexes survive)
+- `cargo test -p oz-core migrations:: --lib`: **32 passed, 0 failed**
+- `cargo test -p platform-core --lib`: **222 passed, 0 failed**
+- `cargo fmt --check` on touched crates: **clean**
+- ADR #6 scoping repair — Phase A scoped list APIs: `cargo test -p oz-core --test store_scoping_integration`: **9 passed, 0 failed** (3 new domain-table scoped-list tests + 2 snapshot-loop tests + pre-existing workspace-instance tests)
+- ADR #6 scoping repair — Phase B sync pipeline: **oz-core sync_client 26 passed**, **platform-sync 230 passed** (incl. 2 new `import_snapshot` store_id write-through tests), **cloud-server sync_api 34 passed**
+- ADR #6 scoping repair — Phase C concurrency: `cargo test -p oz-core --test store_scoping_concurrency_integration`: **2 passed, 0 failed, 5/5 consecutive runs** (deterministic)
+- Full regression after all three phases: `cargo test -p oz-core --lib`: **1607 passed, 0 failed**
+
+## Recommended remediation order
+
+The findings were remediated in the order below (all closed 2026-08-03):
+
+1. **DB-05/DB-06:** Runner FK isolation around migration apply + populated upgrade fixtures (081 + 092).
+2. **DB-02:** Migration checksums (SHA-256) with fail-closed historical-definition drift detection.
+3. **DB-04:** Documented + pinned the NULL scoping semantics with dedicated tests; end-state enforcement implemented as migration 117 (store_id FK + orphan quarantine, NULL preserved as the global sentinel); the superseded `warehouse_id` columns (069) are dropped by migration 118 in favour of ADR #18's `inventory_locations` catalog.
+4. **DB-07:** Stock-ledger conservation assertions around the 092 destructive rebuild.
+5. **DB-01/DB-03:** Registry/file parity test and forward-only documentation.
+6. **DB-08:** Migration 116 unique `(key, terminal_id, version)` with legacy dedupe.
+
+## Audit status
+
+All 8 findings (DB-01→DB-08) are **closed**. Production code changed: the generic migration runner (checksum tracking + FK isolation + legacy backfill), migrations `116_setting_updated_unique_version.sql` and `117_scoping_store_id_fk.sql`, and substantial migration test coverage. Each finding's Status line names the test or mechanism that closes it; test results are recorded above.

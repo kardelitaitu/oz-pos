@@ -9,6 +9,10 @@ import {
   type GiftCardFilter,
 } from '@/api/giftCards';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized, EmptyState } from '@/frontend/shared';
+import { NoGiftCardsIcon } from '@/components/EmptyStateIllustrations';
+import { l10nErrorMessage } from '@/utils/app-error';
+import { formatMoney } from '@/types/domain';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -45,7 +49,7 @@ export default function GiftCardsScreen() {
       const result = await listGiftCards(filter);
       setCards(result);
     } catch {
-      addToast({ message: l10n.getString('gift-cards-error-load') || 'Failed to load gift cards', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'gift-cards-error-load'), type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -62,7 +66,7 @@ export default function GiftCardsScreen() {
       }
       await load();
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : (l10n.getString('gift-cards-error-freeze') || 'Failed to toggle freeze'), type: 'error' });
+      addToast({ message: l10nErrorMessage(err, l10n, 'gift-cards-error-freeze'), type: 'error' });
     }
   }, [load, addToast, l10n]);
 
@@ -79,19 +83,9 @@ export default function GiftCardsScreen() {
       setTopUpAmount('');
       await load();
     } catch (err) {
-      setTopUpError(err instanceof Error ? err.message : (l10n.getString('gift-cards-error-topup') || 'Top-up failed'));
+      setTopUpError(l10nErrorMessage(err, l10n, 'gift-cards-error-topup'));
     }
   }, [topUpAmount, load, l10n]);
-
-  const formatMoney = (minor: number, currency: string): string => {
-    const known: Record<string, number> = { JPY: 0, KRW: 0, VND: 0, IDR: 2 };
-    const exp = known[currency] ?? 2;
-    const val = (minor / 10 ** exp).toLocaleString(undefined, {
-      minimumFractionDigits: exp,
-      maximumFractionDigits: exp,
-    });
-    return `${currency} ${val}`;
-  };
 
   return (
     <div className="gift-cards-page">
@@ -158,11 +152,11 @@ export default function GiftCardsScreen() {
         </div>
       ) : cards.length === 0 ? (
         <Card shadow="sm">
-          <div className="gift-cards-empty">
-            <Localized id="gift-cards-no-cards">
-              <p>No gift cards found</p>
-            </Localized>
-          </div>
+          <EmptyState
+            region="table"
+            icon={<NoGiftCardsIcon />}
+            title={requiredLocalized(l10n, 'gift-cards-no-cards')}
+          />
         </Card>
       ) : (
         <div className="gift-cards-list">
@@ -184,7 +178,7 @@ export default function GiftCardsScreen() {
                     {gc.card.status}
                   </span>
                   <span className="gift-card-balance">
-                    {formatMoney(gc.card.current_balance_minor, gc.card.currency)}
+                    {formatMoney({ minor_units: gc.card.current_balance_minor, currency: gc.card.currency })}
                   </span>
                   <span className={`gift-card-expand ${expandedId === gc.card.id ? 'expanded' : ''}`}>
                     &#9660;
@@ -197,7 +191,7 @@ export default function GiftCardsScreen() {
                   <div className="gift-card-info-grid">
                     <div className="gift-card-info-item">
                       <Localized id="gift-cards-info-initial-balance"><span className="gift-card-info-label">Initial Balance</span></Localized>
-                      <span>{formatMoney(gc.card.initial_balance_minor, gc.card.currency)}</span>
+                      <span>{formatMoney({ minor_units: gc.card.initial_balance_minor, currency: gc.card.currency })}</span>
                     </div>
                     <div className="gift-card-info-item">
                       <Localized id="gift-cards-info-issued"><span className="gift-card-info-label">Issued</span></Localized>
@@ -238,10 +232,10 @@ export default function GiftCardsScreen() {
                         className="gift-card-topup-input"
                         id="gift-card-topup-amount"
                         name="gift-card-topup-amount"
-                        placeholder={l10n.getString('gift-cards-topup-placeholder') || 'Amount (minor units)'}
+                        placeholder={requiredLocalized(l10n, 'gift-cards-topup-placeholder')}
                         value={topUpAmount}
                         onChange={(e) => { setTopUpAmount(e.target.value); setTopUpError(''); }}
-                        aria-label={l10n.getString('gift-cards-topup-aria') || 'Top-up amount'}
+                        aria-label={requiredLocalized(l10n, 'gift-cards-topup-aria')}
                       />
                       <Localized id="gift-cards-confirm-topup">
                         <Button variant="primary" onClick={() => handleTopUp(gc.card.card_number)}>
@@ -280,9 +274,10 @@ export default function GiftCardsScreen() {
                                 </span>
                               </td>
                               <td className={`gift-card-txn-amount ${txn.amount_minor < 0 ? 'negative' : 'positive'}`}>
-                                {txn.amount_minor > 0 ? `+${txn.amount_minor}` : txn.amount_minor}
+                                {txn.amount_minor > 0 ? '+' : ''}
+                                {formatMoney({ minor_units: Math.abs(txn.amount_minor), currency: gc.card.currency })}
                               </td>
-                              <td>{txn.balance_after_minor}</td>
+                              <td>{formatMoney({ minor_units: txn.balance_after_minor, currency: gc.card.currency })}</td>
                               <td className="gift-card-txn-notes">{txn.notes}</td>
                               <td className="gift-card-txn-date">{new Date(txn.created_at).toLocaleDateString()}</td>
                             </tr>

@@ -82,8 +82,7 @@ payment-amount-tendered = Amount Tendered
 payment-tendered-input =
     .placeholder = 0.00
     .aria-label = Amount tendered
-payment-quick-tender-aria =
-    .aria-label = Tender { $amount }
+payment-quick-tender-aria = Tender { $amount }
 payment-tender-exact-aria =
     .aria-label = Tend exact amount
 payment-tender-exact = Exact
@@ -95,6 +94,42 @@ payment-qris-description = Generate a QRIS QR code for the customer to scan with
 payment-qris-btn-aria =
     .aria-label = Generate QRIS QR code
 payment-qris-pay = Pay with QR
+payment-qris-scan = Scan with your payment app
+payment-qris-waiting = Waiting for payment...
+payment-qris-dialog-aria = QRIS QR payment
+payment-qris-close-aria = Close QR payment
+payment-qris-qr-aria = QR code
+payment-qris-waiting-aria = Waiting for payment
+payment-qris-confirmed-aria = Payment confirmed
+payment-qris-confirmed = Payment confirmed!
+payment-qris-amount = Amount
+payment-qris-reference = Reference
+payment-qris-merchant = Merchant
+payment-qris-merchant-name = OZ-POS Store
+
+# Price Override Modal
+price-override-dialog-aria = Price override
+price-override-close-aria = Close
+price-override-title = Price Override
+price-override-current-label = Current price
+price-override-new-label = New price (in minor units)
+price-override-new-aria = Enter new price in minor units
+price-override-cancel = Cancel
+price-override-next = Next
+price-override-back = Back
+price-override-username-label = Enter manager username
+price-override-username-placeholder = Username
+price-override-username-aria = Manager username
+price-override-pin-label = Enter manager PIN
+price-override-pin-aria = PIN entry
+price-override-pin-dots-aria = PIN entry: { $count } of { $max } digits
+price-override-keypad-aria = Numeric keypad
+price-override-clear = Clear
+price-override-backspace-aria = Backspace
+price-override-verifying = Verifying…
+price-override-error-zero = Price must be greater than 0
+price-override-error-max = Price exceeds 10x the current price. Maximum allowed is { $max }.
+price-override-pin-failed = PIN verification failed
 payment-split-title = Split Payments
 payment-split-evenly-aria =
     .aria-label = Split evenly
@@ -123,6 +158,7 @@ payment-customer-name = Customer Name
 payment-customer-name-label = Customer Name
 payment-customer-change = Change
 payment-customer-select = Select Customer
+payment-customer-remove-aria = Remove customer
 payment-loyalty-use-points = Use Points
 payment-loyalty-points-label = Points
 payment-loyalty-discount-label = Discount: -{ $amount }
@@ -137,16 +173,13 @@ payment-toast-currency-failed = Failed to load currency data
 payment-toast-customers-failed = Failed to load customers
 payment-toast-loyalty-failed = Failed to load loyalty account
 payment-toast-points-value-failed = Failed to load points value
-payment-customer-placeholder =
-    .placeholder = e.g. John Doe
-payment-loyalty-points-aria =
-    .aria-label = Points
+payment-customer-placeholder = e.g. John Doe
+payment-loyalty-points-aria = Points
 payment-search-customers-aria = Search customers
 payment-search-customers-placeholder = Search by name, phone, or email...
 
 # ── Stock Shortfall Dialog ──
-shortfall-dialog-aria =
-    .aria-label = Insufficient stock resolution
+shortfall-dialog-aria = Insufficient stock resolution
 shortfall-title = Insufficient Stock
 shortfall-description = Some items don&apos;t have enough stock at the primary location. Choose alternative sources below.
 shortfall-wanted = Wanted
@@ -167,6 +200,7 @@ payment-shortfall-cancelled = Sale cancelled due to insufficient stock.
 # Sales History
 sales-history-title = Sales History
 sales-history-loading = Loading sales…
+sales-history-error-load = Failed to load sales history
 sales-history-empty = No sales recorded yet
 sales-history-empty-filtered = No sales match your filters
 sales-history-count = { $count } sale{ $count ->
@@ -304,6 +338,11 @@ sales-dashboard-hourly-aria = Sales by hour
 sales-dashboard-hourly-bars-aria = Hourly sales bars
 sales-dashboard-category-aria = Category breakdown
 sales-dashboard-heatmap-aria = Hourly sales heatmap
+sales-dashboard-chart-other = Other
+sales-dashboard-revenue-aria = 14-day revenue chart
+sales-dashboard-revenue-summary = 14-day revenue chart: { $total } total across { $days } days
+sales-dashboard-category-summary = Category breakdown: { $count } categories
+sales-dashboard-heatmap-summary = Hourly sales heatmap: { $count } active time slots
 
 # Void Orders
 void-orders-title = Orders
@@ -388,8 +427,7 @@ refund-title = Process Refund
 refund-done-title = Refund Processed
 refund-done-amount = Refunded: { $amount }
 refund-done = Done
-refund-dialog-aria =
-    .aria-label = Process refund
+refund-dialog-aria = Process refund
 refund-close-aria =
     .aria-label = Cancel refund
 refund-sale-id = Sale: { $id }
@@ -398,20 +436,16 @@ refund-sale-date = Date: { $date }
 refund-items-title = Select Items to Refund
 refund-item-aria =
     .aria-label = Refund { $sku }
-refund-qty-decrease-aria =
-    .aria-label = Decrease refund quantity
-refund-qty-increase-aria =
-    .aria-label = Increase refund quantity
+refund-qty-decrease-aria = Decrease refund quantity
+refund-qty-increase-aria = Increase refund quantity
 refund-reason-label = Reason *
 refund-reason-placeholder =
     .placeholder = e.g. Customer changed mind
-refund-reason-aria =
-    .aria-label = Refund reason
+refund-reason-aria = Refund reason
 refund-note-label = Note (internal)
 refund-note-placeholder =
     .placeholder = Optional internal note
-refund-note-aria =
-    .aria-label = Refund note
+refund-note-aria = Refund note
 refund-total-label = Refund Total
 refund-cancel = Cancel
 refund-submit = Process Refund
@@ -431,6 +465,7 @@ modifier-base-price = Base price
 modifier-addons = Add-ons
 modifier-total = Total
 modifier-add-to-cart = Add to Cart
+modifier-dialog-aria = Customise { $productName }
 
 # EOD Report
 eod-title = End-of-Day Report
@@ -584,41 +619,29 @@ pos-shift-short = Short
 # POS shift bar
 pos-shift-close-btn = Close
 pos-shift-open-btn = Open
-pos-shift-close-aria =
-    .aria-label = Close current shift
-pos-shift-open-aria =
-    .aria-label = Open a new shift
-pos-dismiss-error-aria =
-    .aria-label = Dismiss error
+pos-shift-close-aria = Close current shift
+pos-shift-open-aria = Open a new shift
+pos-dismiss-error-aria = Dismiss error
 
 # POS cart
 pos-cart-undo-btn = Undo
-pos-cart-clear-aria =
-    .aria-label = Clear all items from cart
-pos-cart-charge-aria =
-    .aria-label = Charge the customer
+pos-cart-clear-aria = Clear all items from cart
+pos-cart-charge-aria = Charge the customer
 pos-cart-open-bill = Open Bill
-pos-cart-open-bill-aria =
-    .aria-label = Save as open bill
+pos-cart-open-bill-aria = Save as open bill
 pos-cart-open-bills = Open Bills
-pos-cart-open-bills-aria =
-    .aria-label = View open bills
+pos-cart-open-bills-aria = View open bills
 pos-cart-table-label = Table #
-pos-cart-table-placeholder =
-    .placeholder = No.
+pos-cart-table-placeholder = No.
 pos-cart-table-aria = Table number
 pos-cart-options-collapse-aria =
     .aria-label = Collapse options
 pos-cart-options-expand-aria =
     .aria-label = Expand options
-pos-cart-discount-pct-aria =
-    .aria-label = Discount percentage
-pos-cart-discount-label-aria =
-    .aria-label = Discount label
-pos-cart-discount-remove-aria =
-    .aria-label = Remove discount
-pos-cart-discount-cancel-aria =
-    .aria-label = Cancel discount
+pos-cart-discount-pct-aria = Discount percentage
+pos-cart-discount-label-aria = Discount label
+pos-cart-discount-remove-aria = Remove discount
+pos-cart-discount-cancel-aria = Cancel discount
 
 # Cart line items (dynamic)
 pos-cart-line-aria = { $sku }, { $qty } × { $amount }
@@ -627,9 +650,15 @@ pos-cart-line-qty-aria = Quantity: { $qty }
 pos-cart-line-increase-aria = Increase quantity of { $sku }
 pos-cart-line-remove-aria = Remove { $sku } from cart
 pos-cart-line-swipe-remove-aria = Remove { $sku }
+pos-cart-line-override = Override
+pos-cart-line-override-aria = Override price for { $name }
 
 # Cart panel
 pos-cart-panel-aria = Cart
+
+# Cart course firing
+pos-cart-course-fire-aria = Fire { $label } ({ $count } items)
+pos-cart-course-btn--all = Fire All
 
 # Shift modal overlay labels
 pos-close-shift-overlay-aria = Close shift
@@ -644,18 +673,20 @@ pos-open-bills-overlay-aria = Open bills list
 # POS open bill modal
 pos-open-bill-title = Open Bill
 pos-open-bill-desc = Enter the customer name for this open bill.
-pos-open-bill-placeholder =
-    .placeholder = e.g. John Doe
-pos-open-bill-name-aria =
-    .aria-label = Customer name
+pos-open-bill-placeholder = e.g. John Doe
+pos-open-bill-name-aria = Customer name
 pos-open-bill-cancel = Cancel
 pos-open-bill-saving = Saving…
 pos-open-bill-save = Save Open Bill
 pos-open-bills-title = Open Bills
-pos-open-bills-close-aria =
-    .aria-label = Close open bills list
+pos-open-bills-close-aria = Close open bills list
 pos-open-bills-empty = No open bills.
 pos-open-bills-resume = Resume
+
+# ── Retail POS load error / retry ──
+retail-load-error = Failed to load products. Showing demo data.
+retail-load-error-unavailable = Failed to load products. Check the connection and retry.
+retail-load-error-retry-aria = Retry loading products
 
 # ── Retail POS screen ──
 retail-store-name-fallback = TOKO
@@ -666,6 +697,9 @@ retail-search-clear-aria = Clear search
 retail-recent-label = Recent
 retail-no-products = No products
 retail-no-products-match = No products match your search
+retail-no-products-in-category = No products in this category
+retail-products-loading = Loading products…
+retail-store-logo-alt = Store logo
 retail-sku-label = SKU
 retail-sku-placeholder = Scan or type barcode / SKU
 retail-sku-go = GO
@@ -704,6 +738,15 @@ retail-shift-closed-cash-sales = Cash Sales:
 retail-shift-closed-expected-label = Expected:
 retail-shift-closed-difference-label = Difference:
 retail-credit-reminders-title = Credit Reminders
+retail-reminder-dismiss-aria = Dismiss notifications
+retail-reminder-low-stock-aria = View { $count } low-stock products
+retail-reminder-credit-aria = View { $count } credit sales
+retail-reminder-held-cart-aria = View { $count } held carts
+retail-held-cart-reminders =
+    { $count ->
+        [one] { $count } held cart
+       *[other] { $count } held carts
+    }
 retail-credit-no-outstanding = No outstanding credits
 retail-credit-col-customer = Customer
 retail-credit-col-amount = Amount
@@ -722,13 +765,14 @@ retail-discount-rp-tab = Rp
 retail-discount-pct-label = Discount (%)
 retail-discount-rp-label = Discount (Rp)
 retail-customer-search-title = Select Customer
-retail-customer-search-placeholder =
-    .placeholder = Search by name, phone, or email...
+retail-customer-search-placeholder = Search by name, phone, or email...
 retail-customer-search-loading = Loading...
 retail-customer-search-empty = No customers found
 retail-customer-clear = Clear
 retail-qty-total = Total:
+retail-qty-picker-title = Select Quantity
 retail-qty-add = Add
+retail-qty-backspace-aria = Backspace
 retail-shortcuts-title = Keyboard Shortcuts
 retail-shortcut-pay = Pay / Charge
 retail-shortcut-clear = Clear cart (Void)
@@ -740,6 +784,8 @@ retail-shortcut-options = Options
 retail-shortcut-list = This shortcut list
 retail-shortcut-close = Close modal / Options
 retail-shortcut-fullscreen = Toggle Fullscreen
+retail-shortcut-credit = Credit reminders
+retail-shortcut-low-stock = Filter low-stock products
 retail-toast-failed-products = Failed to load products
 retail-toast-failed-categories = Failed to load categories
 retail-toast-failed-settings = Failed to load store settings
@@ -747,6 +793,7 @@ retail-toast-open-shift-first = Open a shift first
 retail-toast-order-held = Order held
 retail-toast-failed-hold = Failed to hold order
 retail-toast-failed-resume = Failed to resume order
+retail-toast-corrupt-cart = Held cart data is corrupted and has been removed
 retail-toast-sale-complete = Sale complete
 retail-toast-credit-settled = Credit settled
 retail-toast-failed-settle = Failed to settle credit
@@ -759,6 +806,11 @@ retail-toast-failed-delete-held = Failed to delete held cart
 retail-toast-failed-cart = Failed to create sale cart
 retail-toast-no-cart = No active sale cart
 retail-override-btn = Override
+retail-cart-course-aria =
+    .aria-label = Course for { $name }
+retail-cart-modifier-aria =
+    .aria-label = Modifiers for { $name }
+retail-cart-modifier-btn = Modifiers
 retail-override-aria = Override price for { $name }
 retail-serial-placeholder = Serial #
 retail-serial-aria = Serial number for { $name }
@@ -768,29 +820,108 @@ retail-fn-bar-aria = Function bar
 retail-page-nav-aria = Product pages
 retail-page-prev-aria = Previous page
 retail-page-next-aria = Next page
-retail-cart-qty-decrease-aria = Decrease quantity
-retail-cart-qty-increase-aria = Increase quantity
-retail-cart-remove-aria = Remove from cart
-retail-toast-insufficient-stock = Insufficient stock
+retail-cart-qty-decrease-aria = Decrease quantity of { $sku }
+retail-cart-qty-increase-aria = Increase quantity of { $sku }
+retail-cart-remove-aria = Remove { $sku } from cart
+retail-toast-insufficient-stock = Insufficient stock for { $name }
 retail-toast-customers-failed = Failed to load customers
+retail-sku-not-found = No product matches SKU "{ $sku }"
+retail-added-to-cart = Added { $name }
+retail-no-low-stock-products = No products below the low-stock threshold
 retail-low-stock-banner =
     { $count ->
         [one] { $count } product low on stock
        *[other] { $count } products low on stock
     }
 retail-held-cart-delete-aria = Delete held cart
+retail-held-cart-resume-aria = Resume cart
+retail-held-cart-delete-title = Delete Held Cart
+retail-held-cart-delete-confirm = Delete "{ $label }"? This cannot be undone.
+retail-held-cart-delete-btn = Delete
 
 
 
 # ── Scale indicator widget ────────────────────────────────────────────────────
 scale-indicator-aria = Scale weight indicator
 scale-idle = Scale
+scale-stable = Stable
+scale-unstable = …
 scale-read-error = Scale error
+scale-weigh-add = Weigh & Add
+scale-weigh-add-aria = Weigh & add { $name }
+scale-weigh-added = Added { $weight }g of { $name }
+scale-target-set = { $name } selected for weighing
+scale-clear-aria = Clear weigh target
+weight-scale-aria = Weight Scale
+weight-scale-stable = Stable
+weight-scale-unstable = Unstable
+weight-scale-error = Scale error
+weight-scale-idle = —
+weight-scale-weigh-aria = Weigh
+weight-scale-weighing = Weighing…
+weight-scale-weigh = Weigh
 
 # ── Retail POS shortcut keys ───────────────────────────────────────────────
 retail-fn-quick-return = Quick Return
+retail-filtered-low-stock = Filtered: { $count } low-stock products
+retail-filter-indicator-aria = Low-stock filter active
+
+# ── Quick Return ──────────────────────────────────────────────────────
+retail-quick-return-title = Quick Return
+retail-quick-return-desc = Scan or enter the receipt barcode to look up a sale for return.
+retail-quick-return-placeholder = Receipt barcode
+retail-quick-return-aria = Receipt barcode input
+retail-quick-return-lookup = Look Up
+retail-quick-return-not-found = Sale not found for this receipt barcode
+retail-quick-return-error = Failed to look up receipt
 retail-header-workspaces-title = Back to workspaces
+retail-resize-handle-aria = Resize cart panel
+
+# ── Retail skip-to-content ────────────────────────────────────────────
+retail-skip-to-main = Skip to main content
 retail-header-workspaces-aria = Back to workspaces
+
+# ── Retail POS table columns ──
+retail-col-sku = SKU / Code
+retail-col-name = Product Name
+retail-col-stock = Stock
+retail-col-price = Price
+retail-col-action = Action
+retail-product-out-of-stock = Out of stock
+retail-product-add-title = Add to Cart
+retail-product-add-aria = Add { $name } to cart
+retail-product-edit-title = Edit Product
+retail-product-edit-aria = Edit { $name }
+retail-product-weigh-aria = Weigh { $name }
+retail-price-volatility-hint = Price changed recently
+retail-edit-modal-close-aria = Close
+
+# ── Edit Product Modal ──
+retail-edit-product-title = Edit Product
+retail-edit-field-sku = SKU / Code
+retail-edit-field-name = Product Name
+retail-edit-field-price = Price (IDR)
+retail-edit-field-stock = Stock Quantity
+retail-edit-field-low-stock = Low Stock Threshold
+retail-edit-field-high-stock = High Stock Threshold
+retail-edit-save = Save Changes
+retail-edit-cancel = Cancel
+retail-edit-btn-aria = Edit product { $name }
+
+# ── Add Category / Add Product Modals ──
+retail-add-category-btn = + Category
+retail-add-category-btn-aria = Add new category
+retail-add-category-btn-title = Add new category
+retail-add-category-title = Add Category
+retail-add-category-field-name = Category Name
+retail-add-category-name-placeholder = e.g. Storage, Peripherals, Accessories
+retail-add-product-btn = + Product
+retail-add-product-btn-aria = Add new product
+retail-add-product-btn-title = Add new product
+retail-add-product-title = Add Product
+retail-add-product-category-label = Category
+retail-add-product-name-placeholder = e.g. Logitech G Pro X Wireless Mouse
+retail-sku-lookup-aria = Look up SKU
 
 # ── Gift Cards ─────────────────────────────────────────────────────
 gift-cards-loading = Loading...

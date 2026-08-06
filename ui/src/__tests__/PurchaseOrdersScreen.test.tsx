@@ -12,6 +12,11 @@ vi.mock('@/api/purchasing', () => ({
   receivePurchaseOrder: vi.fn(),
 }));
 
+// PO totals render via the store default currency (USD fixtures → 110.00).
+vi.mock('@/contexts/CurrencyContext', () => ({
+  useCurrency: () => ({ currency: 'USD', setCurrency: vi.fn(), loading: false }),
+}));
+
 // Mock PurchaseOrderForm child component.
 vi.mock('@/features/purchasing/PurchaseOrderForm', () => ({
   default: ({ onClose, onSaved }: { editingId: string | null; onClose: () => void; onSaved: () => void }) => (

@@ -12,17 +12,17 @@ vi.mock('@/api/loyalty', () => ({
 }));
 
 vi.mock('@/api/customers', () => ({
-  listCustomers: vi.fn(),
+  listCustomersScoped: vi.fn(),
 }));
 
 import LoyaltyManagementScreen from '@/features/loyalty/LoyaltyManagementScreen';
 import { listLoyaltyAccounts, listLoyaltyTiers, updateLoyaltyTier } from '@/api/loyalty';
-import { listCustomers } from '@/api/customers';
+import { listCustomersScoped } from '@/api/customers';
 
 const mockListAccounts = listLoyaltyAccounts as ReturnType<typeof vi.fn>;
 const mockListTiers = listLoyaltyTiers as ReturnType<typeof vi.fn>;
 const mockUpdateTier = updateLoyaltyTier as ReturnType<typeof vi.fn>;
-const mockListCustomers = listCustomers as ReturnType<typeof vi.fn>;
+const mockListCustomers = listCustomersScoped as ReturnType<typeof vi.fn>;
 
 
 
@@ -122,6 +122,43 @@ describe('LoyaltyManagementScreen', () => {
       expect(screen.getByText('150')).toBeInTheDocument();
       expect(screen.getByText('500')).toBeInTheDocument();
     });
+  });
+
+  it('shows a retryable error when the initial load fails', async () => {
+    const user = userEvent.setup();
+    mockListAccounts.mockRejectedValueOnce(new Error('Database unavailable'));
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
+
+    await waitFor(() => {
+      // ERR-05: raw backend text never renders — the localized copy does.
+      expect(screen.getByRole('alert')).toHaveTextContent('Failed to load loyalty data');
+      expect(screen.queryByText('Database unavailable')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    });
+    expect(screen.queryByText('No loyalty accounts yet')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => {
+      expect(mockListAccounts).toHaveBeenCalledTimes(2);
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+    });
+  });
+
+  it('rejects negative tier thresholds before saving', async () => {
+    const user = userEvent.setup();
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
+    await waitFor(() => expect(screen.getByText('Tiers')).toBeInTheDocument());
+    await user.click(screen.getByText('Tiers'));
+    await waitFor(() => expect(screen.getAllByText('Edit').length).toBeGreaterThan(0));
+    await user.click(screen.getAllByText('Edit')[0]!);
+
+    const inputs = document.querySelectorAll('.loyalty-tier-input');
+    await user.clear(inputs[1] as HTMLInputElement);
+    await user.type(inputs[1] as HTMLInputElement, '-1');
+    await user.click(screen.getByText('Save'));
+
+    await waitFor(() => expect(screen.getByText('Please fill in all fields correctly')).toBeInTheDocument());
+    expect(mockUpdateTier).not.toHaveBeenCalled();
   });
 
   it('shows empty state when no accounts', async () => {

@@ -17,6 +17,7 @@ done = Selesai
 loading = Memuat…
 error-occurred = Terjadi kesalahan
 retry = Coba lagi
+dismiss = Tutup
 no-results = Tidak ada hasil
 print = Cetak
 export = Ekspor
@@ -39,6 +40,7 @@ nav-logout = Keluar
 nav-orders = Pesanan
 
 error-boundary-title = Terjadi kesalahan
+error-boundary-retry = Coba Lagi
 
 # Status Bar
 status-bar-connected = Backend terhubung
@@ -54,6 +56,12 @@ staff-login-license-active = Lisensi aktif
 staff-login-license-inactive = Lisensi tidak aktif
 # P1-3: Tooltip for conflict count badge in StatusBar
 statusbar-conflict-count = { $count } konflik sinkronisasi terselesaikan
+# SYNC-12: StatusBar visible labels + ARIA (localized at the render boundary)
+statusbar-app-status-aria = Status aplikasi
+statusbar-version = OZ-POS Enterprise v0.0.24
+statusbar-sync-name = Sinkronisasi
+statusbar-gateway-name = Stripe
+statusbar-license = Lisensi Proprieter
 
 # POS Cart Line Items
 shared-loading = Memuat…
@@ -72,12 +80,9 @@ toast-success = Operasi berhasil
 toast-error = Terjadi kesalahan
 toast-warning = Silakan periksa input Anda
 toast-info = Ini adalah pesan informasional
-toast-dismiss-aria =
-    .aria-label = Tutup notifikasi
-toast-notifications-aria =
-    .aria-label = Notifikasi
-modal-close-aria =
-    .aria-label = Tutup dialog
+toast-dismiss-aria = Tutup notifikasi
+toast-notifications-aria = Notifikasi
+modal-close-aria = Tutup dialog
 
 # Empty state
 empty-state-title = Belum ada apa pun di sini
@@ -89,6 +94,18 @@ error-state-title = Terjadi kesalahan
 error-state-desc = Terjadi kesalahan yang tidak terduga. Silakan coba lagi.
 error-state-retry = Coba Lagi
 
+# AppError user-safe copy (ERR-05/ERR-06 — output normalizer terketik)
+app-error-generic = Terjadi kesalahan. Silakan coba lagi.
+app-error-validation = Periksa kembali informasi yang Anda masukkan, lalu coba lagi.
+app-error-permission = Anda tidak memiliki izin untuk melakukan ini.
+app-error-session = Sesi Anda telah berakhir. Silakan masuk kembali.
+app-error-conflict = Catatan ini diubah oleh orang lain. Segarkan dan coba lagi.
+app-error-not-found = Item yang diminta tidak ditemukan.
+app-error-offline = Anda tampaknya luring. Periksa koneksi Anda dan coba lagi.
+app-error-hardware = Perangkat keras tidak merespons. Periksa perangkat dan coba lagi.
+app-error-subscription = Tindakan ini tidak termasuk dalam paket Anda saat ini.
+app-error-global = Terjadi hal yang tidak terduga. Jika ini terus berlanjut, mulai ulang aplikasi.
+
 # Theme toggle
 theme-toggle-label = Alihkan tema
 theme-toggle-aria =
@@ -99,8 +116,7 @@ theme-toggle-aria =
 
 # Language selector
 language-selector-label = Bahasa
-language-selector-select-aria =
-    .aria-label = Pilih bahasa
+language-selector-select-aria = Pilih bahasa
 locale-en = English
 locale-id = Bahasa Indonesia
 
@@ -134,8 +150,7 @@ update-banner-install-aria =
     .aria-label = Unduh dan pasang pembaruan
 update-banner-installing-aria =
     .aria-label = Memasang pembaruan…
-update-banner-dismiss-aria =
-    .aria-label = Tutup notifikasi pembaruan
+update-banner-dismiss-aria = Tutup notifikasi pembaruan
 update-banner-dismiss = Tutup
 update-banner-backing-up = Mencadangkan…
 update-banner-backing-up-aria =
@@ -198,10 +213,8 @@ nav-section-app = Aplikasi
 nav-sidebar-collapse = Tutup sidebar
 nav-sidebar-expand = Buka sidebar
 nav-switch-workspace = Ganti Ruang Kerja
-nav-main-aria =
-    .aria-label = Navigasi utama
-nav-tablist-aria =
-    .aria-label = Tab navigasi
+nav-main-aria = Navigasi utama
+nav-tablist-aria = Tab navigasi
 
 # Audit Log
 audit-log-title = Log Audit
@@ -209,10 +222,17 @@ audit-log-load-more = Muat Lebih Banyak
 audit-log-error-load = Gagal memuat log audit
 audit-log-mark-reviewed = Tandai Ditinjau
 audit-log-reviewed-at = Ditinjau: { $date }
+audit-log-unreviewed-title =
+    { $count ->
+        [one] { $count } kejadian belum ditinjau sejak tinjauan terakhir
+       *[other] { $count } kejadian belum ditinjau sejak tinjauan terakhir
+    }
 audit-log-user-system = sistem
 audit-log-loading = Memuat…
 audit-log-refresh = Segarkan
 audit-log-retry = Coba Lagi
+# ERR-09: Status yang dapat diakses saat muat ulang sedang berlangsung dengan baris terlihat
+audit-log-refreshing = Menyegarkan…
 audit-log-filter-all = Semua
 audit-log-filter-success = Berhasil
 audit-log-filter-failure = Gagal
@@ -225,14 +245,14 @@ audit-log-col-target = Target
 audit-log-col-user = ID Pengguna
 audit-log-col-outcome = Hasil
 audit-log-col-details = Detail
-audit-log-count = { $count } entri
+audit-log-count-of = { $shown } dari { $total } entri
+audit-log-export = Ekspor CSV
+audit-log-export-error = Ekspor gagal. Silakan coba lagi.
+audit-log-export-progress = Mengekspor log audit…
 audit-log-table-label = Entri log audit
-audit-log-search-placeholder =
-    .placeholder = Cari tindakan, target, atau pengguna…
-audit-log-search-label =
-    .aria-label = Cari log audit
-audit-log-filter-label =
-    .aria-label = Saring berdasarkan hasil
+audit-log-search-placeholder = Cari tindakan, target, atau pengguna…
+audit-log-search-label = Cari log audit
+audit-log-filter-label = Saring berdasarkan hasil
 
 # Audit action labels
 audit-action-sale-void = Batalkan Penjualan
@@ -251,6 +271,14 @@ audit-action-system-backup = Cadangan Dibuat
 audit-action-system-export = Ekspor Data
 audit-action-system-import = Impor Data
 audit-action-system-restore = Pulihkan
+audit-action-audit-review = Audit Ditinjau
+audit-action-sale-create = Penjualan Dibuat
+audit-action-bulk-import = Impor Massal
+audit-action-inventory-sync = Stok Disinkronkan
+audit-action-unknown = Tindakan Tidak Diketahui
+audit-log-outcome-success = Berhasil
+audit-log-outcome-failure = Gagal
+audit-log-outcome-unknown = Tidak Diketahui
 
 # ── Setup Wizard ──
 spinner-label = Memuat…
@@ -258,6 +286,8 @@ spinner-label = Memuat…
 # ── Workspace Home ──
 workspace-home-fullscreen-aria = Alihkan layar penuh
 workspace-home-fullscreen-hint = F11
+fullscreen-enabled = Mode layar penuh aktif
+fullscreen-disabled = Mode layar penuh nonaktif
 workspace-home-user-aria = Masuk sebagai { $name }
 workspace-home-loading = Memuat ruang kerja…
 workspace-home-loading-aria = Memuat ruang kerja
@@ -308,6 +338,8 @@ auth-validation-invalid-phone = Format nomor telepon tidak valid. Masukkan minim
 auth-paste = Tempel
 auth-version = Versi { $version }
 auth-ip-address = Alamat IP : { $ip }
+auth-ip-detecting = Mendeteksi...
+auth-ip-unknown = Tidak diketahui
 auth-copyright = OZ-POS © { $year } Hak Cipta Dilindungi.
 auth-clipboard-error = Kesalahan papan klip: { $message }
 auth-error-title = Kesalahan

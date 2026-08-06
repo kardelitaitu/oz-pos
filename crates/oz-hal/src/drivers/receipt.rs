@@ -29,7 +29,7 @@
 //! └───────────────────────────────────────────────┘
 //! ```
 
-use oz_core::Money;
+use oz_core::{Money, format_minor};
 
 use super::escpos;
 
@@ -71,6 +71,10 @@ pub enum DecimalSeparator {
 impl DecimalSeparator {
     /// Which exponent to use when formatting. `None` means truncate
     /// fractional digits entirely.
+    ///
+    /// Note: the ESC/POS formatter now delegates exponent handling to
+    /// `foundation::format_minor`; this method remains as the
+    /// config-level API for the truncate-vs-keep decision.
     #[must_use]
     pub fn effective_exponent(self, raw: u32) -> Option<usize> {
         match self {
@@ -195,13 +199,24 @@ pub struct SalesReceipt {
 // ── Helpers ──────────────────────────────────────────────
 
 /// Format a `Money` value according to display config.
+///
+/// The decimal math — exponent lookup, major/fraction split, sign and
+/// zero-padding — is delegated to `foundation::format_minor`, which
+/// renders the signed decimal with a `.` separator and the currency's
+/// canonical exponent (e.g. `"15.50"`, `"-0.012"`, or `"4450000"` for
+/// exp-0 IDR). This wrapper only applies the receipt-specific display
+/// config: the currency prefix and the decimal separator style.
 fn format_money(m: &Money, config: &ReceiptConfig) -> String {
-    let raw_exp = m.currency.minor_unit_exponent() as usize;
-    let divisor = 10_i64.pow(raw_exp as u32);
-    let sign = if m.minor_units < 0 { "-" } else { "" };
-    let abs_val = m.minor_units.unsigned_abs();
-    let major = abs_val / divisor as u64;
-    let minor = abs_val % divisor as u64;
+    let raw = format_minor(m.minor_units, m.currency);
+    let (sign, digits) = match raw.strip_prefix('-') {
+        Some(rest) => ("-", rest),
+        None => ("", raw.as_str()),
+    };
+    // exp-0 currencies (IDR/JPY/KRW/…) have no fractional minor unit, so
+    // `digits` may be a bare major part with nothing after the dot.
+    let (major, frac) = digits
+        .split_once('.')
+        .map_or((digits, None), |(maj, fr)| (maj, Some(fr)));
 
     let prefix = if config.show_currency {
         currency_symbol(&m.currency)
@@ -209,16 +224,11 @@ fn format_money(m: &Money, config: &ReceiptConfig) -> String {
         ""
     };
 
-    match config.decimal_separator {
-        DecimalSeparator::None => {
-            format!("{sign}{prefix}{major}")
-        }
-        DecimalSeparator::Comma => {
-            format!("{sign}{prefix}{major},{minor:0width$}", width = raw_exp)
-        }
-        DecimalSeparator::Dot => {
-            format!("{sign}{prefix}{major}.{minor:0width$}", width = raw_exp)
-        }
+    match (config.decimal_separator, frac) {
+        (DecimalSeparator::Comma, Some(fr)) => format!("{sign}{prefix}{major},{fr}"),
+        (DecimalSeparator::Dot, Some(fr)) => format!("{sign}{prefix}{major}.{fr}"),
+        // `None` separator, or an exp-0 currency with nothing after the dot.
+        (_, _) => format!("{sign}{prefix}{major}"),
     }
 }
 
@@ -677,6 +687,78 @@ mod tests {
     }
 
     #[test]
+    fn format_money_negative_sub_major() {
+        // -12 cents: the sign must survive delegation even though the major
+        // part is zero (format_minor renders "-0.12", not "0.12").
+        let cfg = default_config();
+        let m = Money {
+            minor_units: -12,
+            currency: "USD".parse::<Currency>().unwrap(),
+        };
+        assert_eq!(format_money(&m, &cfg), "-0.12");
+
+        let cfg = ReceiptConfig {
+            decimal_separator: DecimalSeparator::None,
+            ..default_config()
+        };
+        assert_eq!(format_money(&m, &cfg), "-0");
+    }
+
+    #[test]
+    fn format_money_idr_has_no_decimal_tail() {
+        // IDR (exp 0) must not acquire a trailing ".0" — the minor unit
+        // IS the Rupiah, so 4_450_000 Rp prints as-is under every separator.
+        let m = Money {
+            minor_units: 4_450_000,
+            currency: "IDR".parse::<Currency>().unwrap(),
+        };
+        assert_eq!(format_money(&m, &default_config()), "4450000");
+        let comma = ReceiptConfig {
+            decimal_separator: DecimalSeparator::Comma,
+            ..default_config()
+        };
+        assert_eq!(format_money(&m, &comma), "4450000");
+        let none = ReceiptConfig {
+            decimal_separator: DecimalSeparator::None,
+            ..default_config()
+        };
+        assert_eq!(format_money(&m, &none), "4450000");
+    }
+
+    #[test]
+    fn format_money_kwd_three_decimals() {
+        // KWD (exp 3): 12 fils → 0.012 — the exponent a naive /100 misses.
+        let m = Money {
+            minor_units: 12,
+            currency: "KWD".parse::<Currency>().unwrap(),
+        };
+        assert_eq!(format_money(&m, &default_config()), "0.012");
+        let comma = ReceiptConfig {
+            decimal_separator: DecimalSeparator::Comma,
+            ..default_config()
+        };
+        assert_eq!(format_money(&m, &comma), "0,012");
+        let none = ReceiptConfig {
+            decimal_separator: DecimalSeparator::None,
+            ..default_config()
+        };
+        assert_eq!(format_money(&m, &none), "0");
+    }
+
+    #[test]
+    fn format_money_currency_prefix_after_sign() {
+        let cfg = ReceiptConfig {
+            show_currency: true,
+            ..default_config()
+        };
+        let m = Money {
+            minor_units: -1550,
+            currency: "USD".parse::<Currency>().unwrap(),
+        };
+        assert_eq!(format_money(&m, &cfg), "-$15.50");
+    }
+
+    #[test]
     fn truncate_short_string() {
         assert_eq!(truncate("Hello", 10), "Hello");
     }
@@ -793,6 +875,70 @@ mod tests {
         assert!(text.contains("20.00"));
         assert!(text.contains("CHANGE:"));
         assert!(text.contains("6.80"));
+    }
+
+    #[test]
+    fn sales_receipt_prints_idr_without_trailing_decimal() {
+        // IDR (exp 0): the Rupiah minor unit IS the whole amount — the
+        // printer byte buffer must show "4450000" with no trailing ".0"
+        // (the pre-delegation formatter emitted "4450000.0" for exp-0
+        // currencies under the default Dot separator).
+        let idr: Currency = "IDR".parse().unwrap();
+        let money = |minor: i64| Money {
+            minor_units: minor,
+            currency: idr,
+        };
+        let r = SalesReceipt {
+            store: StoreInfo {
+                name: "TOKO OZ".into(),
+                address: "Jl. Melati 1 / Jakarta".into(),
+                tax_id: None,
+            },
+            date: "01 Jan 2026".into(),
+            receipt_number: "REC-IDR".into(),
+            table_number: None,
+            items: vec![LineItem {
+                name: "Paket Nasi".into(),
+                quantity: 1,
+                unit_price: money(4_450_000),
+                total_price: money(4_450_000),
+                tax_amount: None,
+            }],
+            subtotal: money(4_450_000),
+            tax: None,
+            total: money(4_450_000),
+            payments: vec![PaymentInfo {
+                method: "CASH".into(),
+                amount: money(4_450_000),
+                change: None,
+            }],
+        };
+
+        let data = format_sales_receipt(&r, &default_config());
+        let text = String::from_utf8_lossy(&data);
+        assert!(
+            text.contains("4450000"),
+            "IDR amount must print raw: {text}"
+        );
+        // The negative assertion scans the WHOLE buffer (not just the TOTAL
+        // line) on purpose: every value here is 4_450_000, so any single
+        // formatted value regressing to a trailing decimal fails the test.
+        assert!(
+            !text.contains("4450000.0") && !text.contains("4450000."),
+            "IDR must not gain a fractional tail under the Dot separator: {text}"
+        );
+
+        // The currency-prefix path must also print without a decimal tail.
+        let cfg = ReceiptConfig {
+            show_currency: true,
+            ..default_config()
+        };
+        let data = format_sales_receipt(&r, &cfg);
+        let text = String::from_utf8_lossy(&data);
+        assert!(
+            text.contains("Rp4450000"),
+            "prefixed IDR amount must print raw: {text}"
+        );
     }
 
     #[test]

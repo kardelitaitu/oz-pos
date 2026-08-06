@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (0 findings) · resolved F1: test counts updated to 214 files / 3230+ tests · resolved F2: ui/src/locales/en-US.ftl -> per-feature .ftl bundles in ui/src/locales (48 files: en + id variants) · resolved F3: ui/src/styles/ -> ui/src/frontend/themes/ (reset.css/tokens.css/components.css/responsive.css) · resolved F4: "29 per-domain files" in api/ -> 34 .ts files · resolved F5: "Vite 5" -> ^6.0.0 in ui/package.json · verified accurate: React 18 + @fluent/react + @tauri-apps/api 2 + Vitest + eslint-plugin-jsx-a11y; api/pos.ts sole invoke() (AGENTS.md rule); formatMoney in types/domain.ts; no hardcoded colors rule -->
+<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (0 findings) · resolved F1: test counts updated to 228 files / 3476 tests · resolved F2: ui/src/locales/en-US.ftl -> per-feature .ftl bundles in ui/src/locales (48 files: en + id variants) · resolved F3: ui/src/styles/ -> ui/src/frontend/themes/ (reset.css/tokens.css/components.css/responsive.css) · resolved F4: "29 per-domain files" in api/ -> 34 .ts files · resolved F5: "Vite 5" -> ^6.0.0 in ui/package.json · verified accurate: React 18 + @fluent/react + @tauri-apps/api 2 + Vitest + eslint-plugin-jsx-a11y; api/pos.ts sole invoke() (AGENTS.md rule); formatMoney in types/domain.ts; no hardcoded colors rule -->
 
 # `ui/` — OZ-POS Frontend
 
@@ -19,10 +19,18 @@ React 18 + TypeScript + Vite 6 + Tauri v2 webview.
 ```bash
 npm install            # one-time
 npm run dev            # vite dev server on http://localhost:1420
+npm run check:all      # chained validation: lint → typecheck → test → i18n → E2E*
 npm run typecheck      # tsc --noEmit
 npm run lint           # eslint .
-npm run test           # vitest run (214 files, 3230+ tests)
+npm run test           # vitest run (228 files, 3476 tests)
 npm run build          # tsc -b && vite build
+npm run e2e            # Full E2E suite: Docker → Vite → Playwright → cleanup
+npm run e2e:headed     # E2E with browser visible
+npm run e2e:api        # API integration tests only
+npm run e2e:ui         # All UI E2E tests (excl. API)
+
+# * E2E requires Docker; check:all skips it gracefully if Docker is unavailable
+#   See e2e/README.md for full E2E documentation
 ```
 
 ## Install script approvals
@@ -97,7 +105,7 @@ ui/src/
 │   └── index.ts         # Bundle loader
 ├── types/
 │   └── domain.ts        # Money, CartId, Sku, LineId, Product, formatMoney
-├── __tests__/           # Per-screen test files (214 files, 3230+ tests)
+├── __tests__/           # Per-screen test files (228 files, 3476 tests)
 ├── App.tsx              # Root: setup guard → auth guard → AppLayout
 └── main.tsx             # Entry: Fluent bundle registration + StrictMode
 ```
@@ -122,7 +130,7 @@ ui/src/
 - Each feature screen has a `__tests__/<Screen>.test.tsx` file
 - IPC is mocked via `vi.hoisted()` → `vi.mock('@tauri-apps/api/core')`
 - Fluent strings are provided inline via `FluentBundle` + `FluentResource`
-- Run: `npm run test` (214 test files, 3230+ tests, ~14s)
+- Run: `npm run test` (228 test files, 3476 tests, ~14s)
 
 ## Conventions
 

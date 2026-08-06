@@ -48,15 +48,15 @@ test.describe('Product Management', () => {
   test('product table contains expected mock products', async ({ page }) => {
     await page.waitForSelector('.product-mgmt', { timeout: 10_000 });
 
-    // First product should be "Caffè Latte" (SKU: LATTE).
+    // First product should be "AMD Ryzen 7 7800X3D" (SKU: CPU-R7-7800X3D).
     const firstSku = page.locator('.product-mgmt-cell-sku').first();
     await expect(firstSku).toBeVisible({ timeout: 5_000 });
-    await expect(firstSku).toHaveText('LATTE');
+    await expect(firstSku).toHaveText('CPU-R7-7800X3D');
 
     // Table should contain product names from the mock.
     const tableText = await page.locator('.product-mgmt-table').textContent();
-    expect(tableText).toContain('Latte');
-    expect(tableText).toContain('Espresso');
+    expect(tableText).toContain('Ryzen 7');
+    expect(tableText).toContain('Core i7');
   });
 
   // ── E2E-18: Open create product modal ─────────────────────

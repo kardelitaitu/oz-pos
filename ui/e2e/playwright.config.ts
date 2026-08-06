@@ -51,6 +51,12 @@ export default defineConfig({
     // avoid failures when the dev environment/browser defaults to
     // another language (e.g. Indonesian).
     locale: 'en-US',
+    // ADR #22 E2E-2: workspace-home animates continuously (bg-shift,
+    // particle float), which makes Playwright's "element is stable"
+    // actionability check time out on the workspace-card click. Emulating
+    // reduced motion disables CSS animations/transitions at the browser
+    // level — the standard fix for animation-induced E2E flakiness.
+    reducedMotion: 'reduce',
     // Collect trace on first failure (screenshots + DOM snapshots).
     trace: 'retain-on-failure',
     // Capture screenshot on failure for debugging.
@@ -58,13 +64,17 @@ export default defineConfig({
   },
 
   // Auto-start the Vite dev server (no more manual second terminal).
-  // In CI, always start fresh; locally, reuse an existing server if running.
+  // Reuse existing server if running (e.g. started by run-e2e.mjs runner or dev workflow).
   webServer: {
     command: 'npm run dev',
     url: 'http://localhost:1420',
-    reuseExistingServer: !process.env['CI'],
+    reuseExistingServer: true,
     timeout: 120_000,
     cwd: '..',
+    // Hide the dev-mode DevToolbar overlay: it floats bottom-right at
+    // tooltip z-index and would otherwise intercept clicks on POS action
+    // buttons (App.tsx reads VITE_DEV_TOOLBAR to disable it).
+    env: { ...process.env, VITE_DEV_TOOLBAR: '0' },
   },
 
   // Configure projects for desktop and tablet viewports.

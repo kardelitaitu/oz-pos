@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo, useRef, Profiler } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   listSales,
@@ -11,7 +11,8 @@ import {
   type RefundDto,
   type LineItemDto,
 } from '@/api/sales';
-import { listStaff, type StaffMemberDto } from '@/api/staff';
+import { listStaffScoped, type StaffMemberDto } from '@/api/staff';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { formatMoney } from '@/types/domain';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -19,10 +20,12 @@ import { Badge } from '@/components/Badge';
 import { Skeleton } from '@/components/Skeleton';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSwipe } from '@/hooks/useSwipe';
+import { l10nErrorMessage } from '@/utils/app-error';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
-import { EmptyState } from '@/frontend/shared';
+import { EmptyState, ErrorState, requiredLocalized } from '@/frontend/shared';
 import { NoSalesIcon, NotFoundIcon } from '@/components/EmptyStateIllustrations';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import RefundModal from './RefundModal';
 import './SalesHistoryScreen.css';
 
@@ -122,6 +125,7 @@ export default function SalesHistoryScreen() {
   const { l10n } = useLocalization();
   const [sales, setSales] = useState<SaleListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [staff, setStaff] = useState<StaffMemberDto[]>([]);
   const [detail, setDetail] = useState<SaleDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -130,6 +134,7 @@ export default function SalesHistoryScreen() {
   const [refunds, setRefunds] = useState<RefundDto[]>([]);
   const [_refundsLoading, setRefundsLoading] = useState(false);
   const { session, isManager } = useAuth();
+  const { sessionToken } = useWorkspace();
 
   // P2-4: Sale detail cache — avoids re-fetching the same sale on modal re-open.
   // Invalidated when a sale is voided or refunded (status-changing events).
@@ -172,19 +177,24 @@ export default function SalesHistoryScreen() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [items, staffList] = await Promise.all([
         listSales(),
-        listStaff().catch(() => [] as StaffMemberDto[]),
+        sessionToken
+          ? listStaffScoped(sessionToken).catch(() => [] as StaffMemberDto[])
+          : Promise.resolve([] as StaffMemberDto[]),
       ]);
       setSales(items);
       setStaff(staffList);
     } catch {
-      // IPC unavailable.
+      // LOAD-02: an initial load failure must not look like an empty
+      // database — surface the error and offer Retry instead.
+      setLoadError(requiredLocalized(l10n, 'sales-history-error-load'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sessionToken, l10n]);
 
   // P7-3: Pull-to-refresh gesture
   const { containerProps: pullRefreshProps, state: pullState, pullDistance } = usePullToRefresh({
@@ -228,7 +238,7 @@ export default function SalesHistoryScreen() {
       setVoidReason('');
       load();
     } catch (err) {
-      setVoidError(err instanceof Error ? err.message : l10n.getString('sales-history-void-error'));
+      setVoidError(l10nErrorMessage(err, l10n, 'sales-history-void-error'));
     } finally {
       setVoiding(false);
     }
@@ -446,14 +456,16 @@ export default function SalesHistoryScreen() {
     a.download = `sales-export-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+    a.remove();
   }, [filteredSales, cashierName, l10n]);
 
+  // ── Focus trap refs ───────────────────────────────
+  const voidPanelRef = useRef<HTMLDivElement>(null);
+  const detailPanelRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(voidPanelRef, voidExit.shouldRender && !voidExit.exiting, voidExit.requestClose);
+  useFocusTrap(detailPanelRef, detailExit.shouldRender && !detailExit.exiting, detailExit.requestClose);
+
   return (
-    <Profiler id="SalesHistoryScreen" onRender={(...args) => {
-      if (typeof args[2] === 'number' && args[2] > 1) {
-        console.debug('[Profiler] SalesHistoryScreen', args[1] === 'mount' ? '⚡mount' : '♻update', `${args[2].toFixed(1)}ms`);
-      }
-    }}>
     <div className="sales-history" {...pullRefreshProps}>
       {/* P7-3: Pull-to-refresh indicator */}
       {pullState !== 'idle' && (
@@ -672,6 +684,17 @@ export default function SalesHistoryScreen() {
             </table>
           </div>
         </div>
+      ) : loadError && sales.length === 0 ? (
+        <Card shadow="sm">
+          <div className="sales-history-empty">
+            <ErrorState
+              title={loadError}
+              headingLevel={2}
+              onRetry={() => { load(); }}
+              retryLabel={requiredLocalized(l10n, 'retry')}
+            />
+          </div>
+        </Card>
       ) : filteredSales.length === 0 ? (
         <Card shadow="sm">
           <div className="sales-history-empty">
@@ -679,15 +702,15 @@ export default function SalesHistoryScreen() {
               <EmptyState
                 icon={<NoSalesIcon />}
                 headingLevel={2}
-                title={l10n.getString('sales-history-empty') || 'No sales recorded yet'}
+                title={requiredLocalized(l10n, 'sales-history-empty')}
               />
             ) : (
               <EmptyState
                 icon={<NotFoundIcon />}
                 headingLevel={2}
-                title={l10n.getString('sales-history-empty-filtered') || 'No sales match your filters'}
+                title={requiredLocalized(l10n, 'sales-history-empty-filtered')}
                 action={{
-                  label: l10n.getString('sales-history-clear-filters') || 'Clear filters',
+                  label: requiredLocalized(l10n, 'sales-history-clear-filters'),
                   onClick: () => { setSearchQuery(''); setStatusFilter('All'); setDateFrom(''); setDateTo(''); setCashierFilter(''); },
                 }}
               />
@@ -843,7 +866,7 @@ export default function SalesHistoryScreen() {
       {voidExit.shouldRender && voidTarget && (
         <Localized id="sales-history-void-overlay-aria" attrs={{ 'aria-label': true }}>
         <div className={`sales-history-overlay${voidExit.exiting ? ' sales-history-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label="Void order">
-          <div className={`sales-history-modal sales-history-void-modal${voidExit.exiting ? ' sales-history-modal--exiting' : ''}`}>
+          <div ref={voidPanelRef} className={`sales-history-modal sales-history-void-modal${voidExit.exiting ? ' sales-history-modal--exiting' : ''}`}>
             <div className="sales-history-modal-header">
               <Localized id="sales-history-void-title">
                 <h2><span>Void Order</span></h2>
@@ -921,7 +944,7 @@ export default function SalesHistoryScreen() {
       {detailExit.shouldRender && detail && (
         <Localized id="sales-history-detail-overlay-aria" attrs={{ 'aria-label': true }}>
         <div className={`sales-history-overlay${detailExit.exiting ? ' sales-history-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label="Sale detail">
-          <div className={`sales-history-modal${detailExit.exiting ? ' sales-history-modal--exiting' : ''}`}>
+          <div ref={detailPanelRef} className={`sales-history-modal${detailExit.exiting ? ' sales-history-modal--exiting' : ''}`}>
             <div className="sales-history-modal-header">
               <Localized id="sales-history-detail-title">
                 <h2>Sale Detail</h2>
@@ -1126,6 +1149,5 @@ export default function SalesHistoryScreen() {
         </Localized>
       )}
     </div>
-    </Profiler>
   );
 }

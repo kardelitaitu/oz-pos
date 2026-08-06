@@ -351,6 +351,7 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::INVENTORY_ADJUST,
             permissions::INVENTORY_TRANSFER,
             permissions::INVENTORY_COUNT,
+            permissions::INVENTORY_LOCATIONS_MANAGE,
             permissions::STAFF_READ,
             permissions::STAFF_CREATE,
             permissions::STAFF_UPDATE,
@@ -372,6 +373,10 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::CUSTOMERS_VIEW,
             permissions::CUSTOMERS_EDIT,
             permissions::CUSTOMERS_DELETE,
+            permissions::LOYALTY_VIEW,
+            permissions::LOYALTY_EARN,
+            permissions::LOYALTY_REDEEM,
+            permissions::LOYALTY_MANAGE,
             permissions::TABLES_ASSIGN,
             permissions::TABLES_MERGE,
             permissions::TABLES_SPLIT,
@@ -405,6 +410,9 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::PAYMENTS_CARD,
             permissions::CUSTOMERS_CREATE,
             permissions::CUSTOMERS_VIEW,
+            permissions::LOYALTY_VIEW,
+            permissions::LOYALTY_EARN,
+            permissions::LOYALTY_REDEEM,
             permissions::DISCOUNTS_APPLY,
             permissions::INVENTORY_VIEW,
             permissions::SHIFTS_OPEN,
@@ -445,6 +453,7 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::INVENTORY_ADJUST,
             permissions::INVENTORY_TRANSFER,
             permissions::INVENTORY_COUNT,
+            permissions::INVENTORY_LOCATIONS_MANAGE,
             permissions::STAFF_READ,
             permissions::STAFF_CREATE,
             permissions::STAFF_UPDATE,
@@ -464,6 +473,10 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::CUSTOMERS_VIEW,
             permissions::CUSTOMERS_EDIT,
             permissions::CUSTOMERS_DELETE,
+            permissions::LOYALTY_VIEW,
+            permissions::LOYALTY_EARN,
+            permissions::LOYALTY_REDEEM,
+            permissions::LOYALTY_MANAGE,
             permissions::TABLES_ASSIGN,
             permissions::TABLES_MERGE,
             permissions::TABLES_SPLIT,
@@ -533,6 +546,31 @@ mod preset_tests {
         assert!(!preset.permissions.contains(&permissions::SALES_VOID));
         assert!(!preset.permissions.contains(&permissions::REPORTS_VIEW));
         assert!(!preset.permissions.contains(&permissions::PRODUCTS_CREATE));
+    }
+
+    #[test]
+    fn location_manage_permission_follows_inventory_roles() {
+        // LOC-06: location CRUD/rebind is a management capability, not a sales
+        // one. Manager and Staff (inventory managers) hold it; cashier must not
+        // be able to create/rename/deactivate or rebind locations.
+        let manager = &ROLE_PRESETS[1];
+        assert!(
+            manager
+                .permissions
+                .contains(&permissions::INVENTORY_LOCATIONS_MANAGE)
+        );
+        let staff = &ROLE_PRESETS[4];
+        assert!(
+            staff
+                .permissions
+                .contains(&permissions::INVENTORY_LOCATIONS_MANAGE)
+        );
+        let cashier = &ROLE_PRESETS[2];
+        assert!(
+            !cashier
+                .permissions
+                .contains(&permissions::INVENTORY_LOCATIONS_MANAGE)
+        );
     }
 
     #[test]
@@ -645,6 +683,8 @@ pub mod permissions {
     pub const INVENTORY_TRANSFER: &str = "inventory:transfer";
     /// Perform a physical inventory count.
     pub const INVENTORY_COUNT: &str = "inventory:count";
+    /// Create, rename, deactivate, or rebind inventory locations.
+    pub const INVENTORY_LOCATIONS_MANAGE: &str = "inventory:locations_manage";
 
     // ── Staff ─────────────────────────────────────────────────────
     /// Create a new staff user.
@@ -705,6 +745,16 @@ pub mod permissions {
     pub const CUSTOMERS_EDIT: &str = "customers:edit";
     /// Delete a customer record.
     pub const CUSTOMERS_DELETE: &str = "customers:delete";
+
+    // ── Loyalty ──────────────────────────────────────────────────
+    /// View loyalty accounts, balances, and tiers.
+    pub const LOYALTY_VIEW: &str = "loyalty:view";
+    /// Earn loyalty points for completed sales.
+    pub const LOYALTY_EARN: &str = "loyalty:earn";
+    /// Redeem loyalty points during checkout.
+    pub const LOYALTY_REDEEM: &str = "loyalty:redeem";
+    /// Manage loyalty tier configuration.
+    pub const LOYALTY_MANAGE: &str = "loyalty:manage";
 
     // ── Tables ────────────────────────────────────────────────────
     /// Assign a table to a customer or server.
@@ -1004,6 +1054,7 @@ mod tests {
             permissions::INVENTORY_ADJUST,
             permissions::INVENTORY_TRANSFER,
             permissions::INVENTORY_COUNT,
+            permissions::INVENTORY_LOCATIONS_MANAGE,
             permissions::STAFF_CREATE,
             permissions::STAFF_READ,
             permissions::STAFF_UPDATE,
@@ -1027,6 +1078,10 @@ mod tests {
             permissions::CUSTOMERS_VIEW,
             permissions::CUSTOMERS_EDIT,
             permissions::CUSTOMERS_DELETE,
+            permissions::LOYALTY_VIEW,
+            permissions::LOYALTY_EARN,
+            permissions::LOYALTY_REDEEM,
+            permissions::LOYALTY_MANAGE,
             permissions::TABLES_ASSIGN,
             permissions::TABLES_MERGE,
             permissions::TABLES_SPLIT,
@@ -1072,6 +1127,7 @@ mod tests {
             permissions::INVENTORY_ADJUST,
             permissions::INVENTORY_TRANSFER,
             permissions::INVENTORY_COUNT,
+            permissions::INVENTORY_LOCATIONS_MANAGE,
             permissions::STAFF_CREATE,
             permissions::STAFF_READ,
             permissions::STAFF_UPDATE,
@@ -1095,6 +1151,10 @@ mod tests {
             permissions::CUSTOMERS_VIEW,
             permissions::CUSTOMERS_EDIT,
             permissions::CUSTOMERS_DELETE,
+            permissions::LOYALTY_VIEW,
+            permissions::LOYALTY_EARN,
+            permissions::LOYALTY_REDEEM,
+            permissions::LOYALTY_MANAGE,
             permissions::TABLES_ASSIGN,
             permissions::TABLES_MERGE,
             permissions::TABLES_SPLIT,

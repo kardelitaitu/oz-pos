@@ -11,7 +11,9 @@ import {
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
-import { SettingsPopup } from '@/frontend/shared';
+import { SettingsPopup, requiredLocalized, EmptyState } from '@/frontend/shared';
+import { NoSuppliersIcon, NotFoundIcon } from '@/components/EmptyStateIllustrations';
+import { l10nErrorMessage } from '@/utils/app-error';
 import './SuppliersScreen.css';
 
 interface FormData {
@@ -147,7 +149,7 @@ export default function SuppliersScreen() {
       closeModal();
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('supplier-save-failed'));
+      setError(l10nErrorMessage(err, l10n, 'supplier-save-failed'));
     } finally {
       setSaving(false);
     }
@@ -222,29 +224,31 @@ export default function SuppliersScreen() {
         </div>
       ) : suppliers.length === 0 ? (
         <Card shadow="sm">
-          <div className="suppliers-empty">
-            <Localized id="suppliers-no-data">
-              <p>No suppliers yet.</p>
-            </Localized>
-            <Localized id="suppliers-add-first">
-              <Button variant="secondary" onClick={openCreate}>Add your first supplier</Button>
-            </Localized>
-          </div>
+          <EmptyState
+            region="table"
+            icon={<NoSuppliersIcon />}
+            title={requiredLocalized(l10n, 'suppliers-no-data')}
+            action={{
+              label: requiredLocalized(l10n, 'suppliers-add-first'),
+              onClick: openCreate,
+            }}
+          />
         </Card>
       ) : filtered.length === 0 ? (
         <Card shadow="sm">
-          <div className="suppliers-empty">
-            <Localized id="suppliers-no-results">
-              <p>No suppliers match your search.</p>
-            </Localized>
-            <Localized id="suppliers-clear-search">
-              <Button variant="ghost" onClick={() => setSearchQuery('')}>Clear search</Button>
-            </Localized>
-          </div>
+          <EmptyState
+            region="table"
+            icon={<NotFoundIcon />}
+            title={requiredLocalized(l10n, 'suppliers-no-results')}
+            action={{
+              label: requiredLocalized(l10n, 'suppliers-clear-search'),
+              onClick: () => setSearchQuery(''),
+            }}
+          />
         </Card>
       ) : (
         <div className="suppliers-table-wrap">
-          <table className="suppliers-table" aria-label={l10n.getString('suppliers-table-aria') || 'Suppliers'}>
+          <table className="suppliers-table" aria-label={requiredLocalized(l10n, 'suppliers-table-aria')}>
             <thead>
               <tr>
                 <Localized id="suppliers-col-code"><th>Code</th></Localized>
@@ -293,7 +297,7 @@ export default function SuppliersScreen() {
         saveDisabled={!form.name.trim() || !form.code.trim()}
         cancelLabel={l10n.getString('suppliers-btn-cancel')}
       >
-        <label className="suppliers-field" htmlFor="supplier-field-code" aria-label={l10n.getString('suppliers-field-code') || 'Code *'}>
+        <label className="suppliers-field" htmlFor="supplier-field-code" aria-label={requiredLocalized(l10n, 'suppliers-field-code')}>
           <Localized id="suppliers-field-code"><span className="suppliers-label">Code *</span></Localized>
           <input
             className="suppliers-input"
@@ -304,7 +308,7 @@ export default function SuppliersScreen() {
             autoComplete="off"
           />
         </label>
-        <label className="suppliers-field" htmlFor="supplier-field-name" aria-label={l10n.getString('suppliers-field-name') || 'Name *'}>
+        <label className="suppliers-field" htmlFor="supplier-field-name" aria-label={requiredLocalized(l10n, 'suppliers-field-name')}>
           <Localized id="suppliers-field-name"><span className="suppliers-label">Name *</span></Localized>
           <input
             className="suppliers-input"
@@ -316,7 +320,7 @@ export default function SuppliersScreen() {
           />
         </label>
         <div className="suppliers-row">
-          <label className="suppliers-field" htmlFor="supplier-field-contact" aria-label={l10n.getString('suppliers-field-contact') || 'Contact Person'}>
+          <label className="suppliers-field" htmlFor="supplier-field-contact" aria-label={requiredLocalized(l10n, 'suppliers-field-contact')}>
             <Localized id="suppliers-field-contact"><span className="suppliers-label">Contact Person</span></Localized>
             <input
               className="suppliers-input"
@@ -327,7 +331,7 @@ export default function SuppliersScreen() {
               autoComplete="off"
             />
           </label>
-          <label className="suppliers-field" htmlFor="supplier-field-phone" aria-label={l10n.getString('suppliers-field-phone') || 'Phone'}>
+          <label className="suppliers-field" htmlFor="supplier-field-phone" aria-label={requiredLocalized(l10n, 'suppliers-field-phone')}>
             <Localized id="suppliers-field-phone"><span className="suppliers-label">Phone</span></Localized>
             <input
               className="suppliers-input"
@@ -339,7 +343,7 @@ export default function SuppliersScreen() {
             />
           </label>
         </div>
-        <label className="suppliers-field" htmlFor="supplier-field-email" aria-label={l10n.getString('suppliers-field-email') || 'Email'}>
+        <label className="suppliers-field" htmlFor="supplier-field-email" aria-label={requiredLocalized(l10n, 'suppliers-field-email')}>
           <Localized id="suppliers-field-email"><span className="suppliers-label">Email</span></Localized>
           <input
             className="suppliers-input"
@@ -350,7 +354,7 @@ export default function SuppliersScreen() {
             autoComplete="off"
           />
         </label>
-        <label className="suppliers-field" htmlFor="supplier-field-address" aria-label={l10n.getString('suppliers-field-address') || 'Address'}>
+        <label className="suppliers-field" htmlFor="supplier-field-address" aria-label={requiredLocalized(l10n, 'suppliers-field-address')}>
           <Localized id="suppliers-field-address"><span className="suppliers-label">Address</span></Localized>
           <input
             className="suppliers-input"
@@ -362,7 +366,7 @@ export default function SuppliersScreen() {
           />
         </label>
         <div className="suppliers-row">
-          <label className="suppliers-field" htmlFor="supplier-field-tax-id" aria-label={l10n.getString('suppliers-field-tax-id') || 'Tax ID'}>
+          <label className="suppliers-field" htmlFor="supplier-field-tax-id" aria-label={requiredLocalized(l10n, 'suppliers-field-tax-id')}>
             <Localized id="suppliers-field-tax-id"><span className="suppliers-label">Tax ID</span></Localized>
             <input
               className="suppliers-input"
@@ -373,7 +377,7 @@ export default function SuppliersScreen() {
               autoComplete="off"
             />
           </label>
-          <label className="suppliers-field" htmlFor="supplier-field-payment-terms" aria-label={l10n.getString('suppliers-field-payment-terms') || 'Payment Terms'}>
+          <label className="suppliers-field" htmlFor="supplier-field-payment-terms" aria-label={requiredLocalized(l10n, 'suppliers-field-payment-terms')}>
             <Localized id="suppliers-field-payment-terms"><span className="suppliers-label">Payment Terms</span></Localized>
             <input
               className="suppliers-input"
@@ -385,7 +389,7 @@ export default function SuppliersScreen() {
             />
           </label>
         </div>
-        <label className="suppliers-field" htmlFor="supplier-field-notes" aria-label={l10n.getString('suppliers-field-notes') || 'Notes'}>
+        <label className="suppliers-field" htmlFor="supplier-field-notes" aria-label={requiredLocalized(l10n, 'suppliers-field-notes')}>
           <Localized id="suppliers-field-notes"><span className="suppliers-label">Notes</span></Localized>
           <textarea
             className="suppliers-input suppliers-textarea"

@@ -16,7 +16,9 @@ export default function StoreSwitcher() {
   const [primary, setPrimary] = useState<StoreProfile | null>(null);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const ref = useRef<HTMLDivElement>(null);
+  const listboxRef = useRef<HTMLUListElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -59,11 +61,75 @@ export default function StoreSwitcher() {
     const handleClickOutside = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setOpen(false);
+        setActiveIndex(-1);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // ── A11Y-05: full listbox keyboard navigation ─────────────────
+  // Mirrors the LOC-04 pattern established in LocationPicker: ArrowUp/Down
+  // move the active descendant (wrapping), Home/End jump to the first/last
+  // option, Enter/Space select the active option, Escape closes and restores
+  // focus to the trigger. Focus moves to the listbox while open so
+  // `aria-activedescendant` is announced by screen readers.
+
+  useEffect(() => {
+    if (!open) return;
+    listboxRef.current?.focus();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || activeIndex < 0 || !listboxRef.current) return;
+    const optionEl = listboxRef.current.querySelector(`[data-index="${activeIndex}"]`);
+    // jsdom lacks scrollIntoView — guard the call so tests don't crash.
+    optionEl?.scrollIntoView?.({ block: 'nearest' });
+  }, [open, activeIndex]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Escape must always work, even with an empty option list.
+      if (e.key === 'Escape') {
+        setOpen(false);
+        setActiveIndex(-1);
+        ref.current?.querySelector<HTMLButtonElement>('.store-switcher-trigger')?.focus();
+        return;
+      }
+      if (stores.length === 0) return;
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault();
+          setActiveIndex((i) => (i + 1) % stores.length);
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          setActiveIndex((i) => (i <= 0 ? stores.length - 1 : i - 1));
+          break;
+        case 'Home':
+          e.preventDefault();
+          setActiveIndex(0);
+          break;
+        case 'End':
+          e.preventDefault();
+          setActiveIndex(stores.length - 1);
+          break;
+        case 'Enter':
+        case ' ': {
+          e.preventDefault();
+          if (activeIndex >= 0 && stores[activeIndex]) {
+            handleSelect(stores[activeIndex]);
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [open, stores, activeIndex, handleSelect]);
 
   if (loading || stores.length <= 1) return null;
 
@@ -74,9 +140,19 @@ export default function StoreSwitcher() {
       <button
         type="button"
         className="store-switcher-trigger"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          const next = !open;
+          if (next) {
+            const currentIdx = stores.findIndex((s) => s.id === primary?.id);
+            setActiveIndex(currentIdx >= 0 ? currentIdx : 0);
+          } else {
+            setActiveIndex(-1);
+          }
+          setOpen(next);
+        }}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-controls="store-switcher-listbox"
         aria-label={l10n.getString('store-switcher-current-aria', { name: currentName })}
       >
         <svg
@@ -111,14 +187,28 @@ export default function StoreSwitcher() {
       </button>
 
       {open && (
-        <ul className="store-switcher-dropdown" role="listbox" aria-label={l10n.getString('store-switcher-list-aria')}>
-          {stores.map((store) => (
+        <ul
+          id="store-switcher-listbox"
+          ref={listboxRef}
+          className="store-switcher-dropdown"
+          role="listbox"
+          tabIndex={-1}
+          aria-label={l10n.getString('store-switcher-list-aria')}
+          aria-activedescendant={
+            activeIndex >= 0 && stores[activeIndex]
+              ? `store-switcher-option-${stores[activeIndex].id}`
+              : undefined
+          }
+        >
+          {stores.map((store, idx) => (
             <li key={store.id} role="none">
               <button
                 type="button"
                 role="option"
+                id={`store-switcher-option-${store.id}`}
+                data-index={idx}
                 aria-selected={store.id === primary?.id}
-                className={`store-switcher-option ${store.id === primary?.id ? 'store-switcher-option--active' : ''}`}
+                className={`store-switcher-option ${store.id === primary?.id ? 'store-switcher-option--active' : ''} ${activeIndex === idx ? 'store-switcher-option--highlighted' : ''}`}
                 onClick={() => handleSelect(store)}
               >
                 <span className="store-switcher-option-name">{store.name}</span>

@@ -34,7 +34,10 @@ findings: Migrated from rlua to mlua 0.9. Native memory limit (10 MiB) now enfor
 //! | `calc_line_tax` | `(sku, qty, unit_price_minor, currency) → {rate_bps, is_inclusive} \| nil` | During tax computation |
 //! | `validate_order` | `(lines_json, total_minor, currency) → string[]` | Before completion |
 
-#![warn(unsafe_code)]
+// RUST-06: deny at crate root — the only unsafe items are the two
+// `unsafe impl Send/Sync` for `LuaRuntime` below, each narrowly scoped
+// with `#[allow(unsafe_code)]` and a `// SAFETY:` rationale.
+#![deny(unsafe_code)]
 #![warn(missing_docs)]
 
 use std::path::Path;
@@ -105,6 +108,7 @@ unsafe impl Sync for LuaRuntime {}
 
 impl Default for LuaRuntime {
     fn default() -> Self {
+        // SAFETY: `Default` must be infallible; `new()` only fails on VM-init programming errors (memory-limit / hook install).
         Self::new().expect("Failed to initialize LuaRuntime")
     }
 }
@@ -194,6 +198,35 @@ impl LuaRuntime {
         Ok(())
     }
 
+    /// Load a Lua script from a string into a caller-provided environment.
+    ///
+    /// Used for per-plugin isolation (PLG-04): each plugin is loaded with its
+    /// own `_ENV` table so plugins cannot overwrite one another's globals. The
+    /// environment should chain `__index` to the sandboxed globals so standard
+    /// libraries still resolve.
+    pub fn load_str_in_env(&self, code: &str, env: &mlua::Table) -> Result<(), LuaError> {
+        let sandbox_code = wrap_sandbox(code);
+        self.lua
+            .load(&sandbox_code)
+            .set_environment(env.clone())
+            .exec()
+            .map_err(|e| LuaError::Script(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Load a Lua script from a file into a caller-provided environment.
+    ///
+    /// See [`load_str_in_env`](LuaRuntime::load_str_in_env) for isolation notes.
+    pub fn load_file_in_env(
+        &self,
+        path: impl AsRef<Path>,
+        env: &mlua::Table,
+    ) -> Result<(), LuaError> {
+        let code = std::fs::read_to_string(path.as_ref())
+            .map_err(|e| LuaError::Load(format!("read {:?}: {e}", path.as_ref())))?;
+        self.load_str_in_env(&code, env)
+    }
+
     /// Access the inner `mlua::Lua` state for advanced operations.
     pub fn inner(&self) -> &mlua::Lua {
         &self.lua
@@ -267,6 +300,26 @@ impl LuaRuntime {
         Ok(parse_discount_result(result))
     }
 
+    /// Call the `apply_discount(lines)` hook defined in a specific environment.
+    ///
+    /// Used by the plugin manager to invoke each plugin's legacy hook within
+    /// its own isolated environment rather than the shared globals (PLG-04).
+    pub fn apply_discount_in_env(
+        &self,
+        env: &mlua::Table,
+        lines: &[CartLineData],
+    ) -> Result<Option<DiscountResult>, LuaError> {
+        let hook: mlua::Function = match env.get("apply_discount") {
+            Ok(f) => f,
+            Err(_) => return Ok(None),
+        };
+        let table = build_lines_table(&self.lua, lines)?;
+        let result: mlua::Value = hook
+            .call(table)
+            .map_err(|e| LuaError::Script(e.to_string()))?;
+        Ok(parse_discount_result(result))
+    }
+
     /// Call the Lua `calc_line_tax(sku, qty, unit_price_minor, currency)` hook.
     pub fn calc_line_tax(
         &self,
@@ -288,6 +341,27 @@ impl LuaRuntime {
         Ok(parse_tax_override(result))
     }
 
+    /// Call the `calc_line_tax` hook defined in a specific environment.
+    ///
+    /// See [`apply_discount_in_env`](LuaRuntime::apply_discount_in_env).
+    pub fn calc_line_tax_in_env(
+        &self,
+        env: &mlua::Table,
+        sku: &str,
+        qty: i64,
+        unit_price_minor: i64,
+        currency: &str,
+    ) -> Result<Option<TaxOverride>, LuaError> {
+        let hook: mlua::Function = match env.get("calc_line_tax") {
+            Ok(f) => f,
+            Err(_) => return Ok(None),
+        };
+        let result: mlua::Value = hook
+            .call((sku, qty, unit_price_minor, currency))
+            .map_err(|e| LuaError::Script(e.to_string()))?;
+        Ok(parse_tax_override(result))
+    }
+
     /// Call the Lua `validate_order(lines, total_minor, currency)` hook.
     pub fn validate_order(
         &self,
@@ -301,6 +375,35 @@ impl LuaRuntime {
                 Ok(f) => f,
                 Err(_) => return Ok(Vec::new()),
             }
+        };
+        let table = build_lines_table(&self.lua, lines)?;
+        let result: mlua::Value = hook
+            .call((table, total_minor, currency))
+            .map_err(|e| LuaError::Script(e.to_string()))?;
+        let mut errors = Vec::new();
+        if let mlua::Value::Table(tbl) = &result {
+            for pair in tbl.clone().pairs() {
+                let (_, val): (mlua::Value, String) =
+                    pair.map_err(|e| LuaError::Script(e.to_string()))?;
+                errors.push(val);
+            }
+        }
+        Ok(errors)
+    }
+
+    /// Call the `validate_order` hook defined in a specific environment.
+    ///
+    /// See [`apply_discount_in_env`](LuaRuntime::apply_discount_in_env).
+    pub fn validate_order_in_env(
+        &self,
+        env: &mlua::Table,
+        lines: &[CartLineData],
+        total_minor: i64,
+        currency: &str,
+    ) -> Result<Vec<String>, LuaError> {
+        let hook: mlua::Function = match env.get("validate_order") {
+            Ok(f) => f,
+            Err(_) => return Ok(Vec::new()),
         };
         let table = build_lines_table(&self.lua, lines)?;
         let result: mlua::Value = hook

@@ -91,7 +91,7 @@ describe('StaffLoginScreen — keyboard and form tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockAuthError.mockReturnValue(null);
-    vi.mocked(checkUsername).mockResolvedValue({ found: true, is_active: true });
+    vi.mocked(checkUsername).mockResolvedValue({ proceed: true });
   });
 
   afterEach(() => {
@@ -157,32 +157,34 @@ describe('StaffLoginScreen — keyboard and form tests', () => {
       expect(btn.querySelector('.staff-login-btn-spinner')).toBeTruthy();
     });
 
-    it('shows deactivated error toast and stays on username step', async () => {
-      vi.mocked(checkUsername).mockResolvedValueOnce({ found: true, is_active: false });
+    it('always advances to PIN even for an inactive account (STAFF-06)', async () => {
+      // The pre-check never reveals activation state — the screen must not
+      // branch on it; account state is only reported by the login endpoint.
+      vi.mocked(checkUsername).mockResolvedValueOnce({ proceed: true });
       renderScreen();
       const input = screen.getByPlaceholderText('Username');
       fireEvent.change(input, { target: { value: 'bob' } });
       fireEvent.click(screen.getByRole('button', { name: /next/i }));
 
       await waitFor(() => {
-        expect(screen.getByText('Account is deactivated')).toBeInTheDocument();
+        expect(document.querySelector('.staff-login-pin-wrap')).toBeTruthy();
       });
-
-      // Should still be on username step
-      expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
+      // No enumeration toast is shown.
+      expect(screen.queryByText('Account is deactivated')).not.toBeInTheDocument();
     });
 
-    it('shows not-found error toast for unknown user', async () => {
-      vi.mocked(checkUsername).mockResolvedValueOnce({ found: false, is_active: false });
+    it('always advances to PIN for an unknown username (STAFF-06)', async () => {
+      // The pre-check never reveals account existence — same uniform path.
+      vi.mocked(checkUsername).mockResolvedValueOnce({ proceed: true });
       renderScreen();
       const input = screen.getByPlaceholderText('Username');
       fireEvent.change(input, { target: { value: 'nonexistent' } });
       fireEvent.click(screen.getByRole('button', { name: /next/i }));
 
       await waitFor(() => {
-        expect(screen.getByText('User not found')).toBeInTheDocument();
+        expect(document.querySelector('.staff-login-pin-wrap')).toBeTruthy();
       });
-      expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
+      expect(screen.queryByText('User not found')).not.toBeInTheDocument();
     });
 
     it('shows connection error toast when checkUsername throws', async () => {

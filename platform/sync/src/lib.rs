@@ -401,11 +401,56 @@ mod tests {
         store.product_id_by_sku(sku).ok().flatten().is_some()
     }
 
+    /// Build a typed snapshot product (RUST-04) with valid defaults.
+    fn product(sku: &str, name: &str, price_minor: i64) -> transport::SnapshotProduct {
+        transport::SnapshotProduct {
+            id: format!("id-{sku}"),
+            sku: sku.to_owned(),
+            name: name.to_owned(),
+            price_minor,
+            currency: "USD".to_owned(),
+            category_id: None,
+            barcode: None,
+            created_at: None,
+            updated_at: None,
+            price_updated_at: None,
+            track_serial: false,
+            store_id: None,
+        }
+    }
+
+    /// Build a typed snapshot tax rate (RUST-04) with valid defaults.
+    fn tax_rate(id: &str, name: &str, rate_bps: i64) -> transport::SnapshotTaxRate {
+        transport::SnapshotTaxRate {
+            id: id.to_owned(),
+            name: name.to_owned(),
+            rate_bps,
+            is_default: false,
+            is_inclusive: false,
+            created_at: None,
+            updated_at: None,
+        }
+    }
+
+    /// Build a typed snapshot user (RUST-04) with valid defaults.
+    fn user(username: &str, display_name: &str, role_id: &str) -> transport::SnapshotUser {
+        transport::SnapshotUser {
+            id: format!("id-{username}"),
+            username: username.to_owned(),
+            display_name: display_name.to_owned(),
+            role_id: role_id.to_owned(),
+            is_active: true,
+            created_at: None,
+            updated_at: None,
+        }
+    }
+
     #[test]
     fn import_snapshot_empty_returns_zero() {
         let conn = oz_core::migrations::fresh_db();
         let store = Store::new(&conn);
         let snapshot = transport::SyncSnapshotResponse {
+            version: 1,
             products: vec![],
             tax_rates: vec![],
             users: vec![],
@@ -419,12 +464,21 @@ mod tests {
         let conn = oz_core::migrations::fresh_db();
         let store = Store::new(&conn);
         let snapshot = transport::SyncSnapshotResponse {
-            products: vec![serde_json::json!({
-                "sku": "COFFEE-001",
-                "name": "Coffee Beans",
-                "price_minor": 15000,
-                "currency": "IDR"
-            })],
+            version: 1,
+            products: vec![transport::SnapshotProduct {
+                id: "p-1".into(),
+                sku: "COFFEE-001".into(),
+                name: "Coffee Beans".into(),
+                price_minor: 15000,
+                currency: "IDR".into(),
+                category_id: None,
+                barcode: None,
+                created_at: None,
+                updated_at: None,
+                price_updated_at: None,
+                track_serial: false,
+                store_id: None,
+            }],
             tax_rates: vec![],
             users: vec![],
         };
@@ -436,34 +490,171 @@ mod tests {
     }
 
     #[test]
-    fn import_snapshot_missing_sku_defaults_to_empty_string() {
+    fn import_snapshot_rejects_blank_sku() {
+        // RUST-04: blank required fields must be rejected BEFORE the
+        // transaction opens (previously they imported with defaults).
         let conn = oz_core::migrations::fresh_db();
         let store = Store::new(&conn);
         let snapshot = transport::SyncSnapshotResponse {
-            products: vec![serde_json::json!({
-                "name": "No SKU Product"
-            })],
+            version: 1,
+            products: vec![transport::SnapshotProduct {
+                id: "p-bad".into(),
+                sku: "  ".into(),
+                name: "No SKU Product".into(),
+                price_minor: 100,
+                currency: "USD".into(),
+                category_id: None,
+                barcode: None,
+                created_at: None,
+                updated_at: None,
+                price_updated_at: None,
+                track_serial: false,
+                store_id: None,
+            }],
             tax_rates: vec![],
             users: vec![],
         };
-        let count = import_snapshot(&store, &snapshot).unwrap();
-        assert_eq!(count, 1, "product without sku should still import");
+        let result = import_snapshot(&store, &snapshot);
+        assert!(
+            result.is_err(),
+            "product with blank sku must be rejected (RUST-04)"
+        );
+        assert!(!verify_product_sku_exists("", &store));
     }
 
     #[test]
-    fn import_snapshot_missing_name_defaults_to_empty_string() {
+    fn import_snapshot_rejects_blank_name() {
         let conn = oz_core::migrations::fresh_db();
         let store = Store::new(&conn);
         let snapshot = transport::SyncSnapshotResponse {
-            products: vec![serde_json::json!({
-                "sku": "NO-NAME"
-            })],
+            version: 1,
+            products: vec![transport::SnapshotProduct {
+                id: "p-bad".into(),
+                sku: "NO-NAME".into(),
+                name: String::new(),
+                price_minor: 100,
+                currency: "USD".into(),
+                category_id: None,
+                barcode: None,
+                created_at: None,
+                updated_at: None,
+                price_updated_at: None,
+                track_serial: false,
+                store_id: None,
+            }],
             tax_rates: vec![],
             users: vec![],
         };
-        let count = import_snapshot(&store, &snapshot).unwrap();
-        assert_eq!(count, 1, "product without name should still import");
-        assert!(store.product_id_by_sku("NO-NAME").unwrap().is_some());
+        let result = import_snapshot(&store, &snapshot);
+        assert!(
+            result.is_err(),
+            "product with blank name must be rejected (RUST-04)"
+        );
+        assert!(!verify_product_sku_exists("NO-NAME", &store));
+    }
+
+    #[test]
+    fn import_snapshot_rejects_negative_price() {
+        let conn = oz_core::migrations::fresh_db();
+        let store = Store::new(&conn);
+        let snapshot = transport::SyncSnapshotResponse {
+            version: 1,
+            products: vec![transport::SnapshotProduct {
+                id: "p-bad".into(),
+                sku: "NEG-PRICE".into(),
+                name: "Negative Price".into(),
+                price_minor: -100,
+                currency: "USD".into(),
+                category_id: None,
+                barcode: None,
+                created_at: None,
+                updated_at: None,
+                price_updated_at: None,
+                track_serial: false,
+                store_id: None,
+            }],
+            tax_rates: vec![],
+            users: vec![],
+        };
+        let result = import_snapshot(&store, &snapshot);
+        assert!(
+            result.is_err(),
+            "product with negative price_minor must be rejected (RUST-04)"
+        );
+    }
+
+    #[test]
+    fn import_snapshot_rejects_blank_tax_rate() {
+        let conn = oz_core::migrations::fresh_db();
+        let store = Store::new(&conn);
+        let snapshot = transport::SyncSnapshotResponse {
+            version: 1,
+            products: vec![],
+            tax_rates: vec![transport::SnapshotTaxRate {
+                id: String::new(),
+                name: "Blank Tax".into(),
+                rate_bps: 1000,
+                is_default: false,
+                is_inclusive: false,
+                created_at: None,
+                updated_at: None,
+            }],
+            users: vec![],
+        };
+        let result = import_snapshot(&store, &snapshot);
+        assert!(
+            result.is_err(),
+            "tax rate with blank id must be rejected (RUST-04)"
+        );
+    }
+
+    #[test]
+    fn import_snapshot_rejects_blank_user_fields() {
+        // RUST-04: users must carry username/display_name/role_id;
+        // previously a missing role_id imported as the empty string
+        // (masking a malformed snapshot).
+        let conn = oz_core::migrations::fresh_db();
+        seed_role(&conn, "role-real");
+        let store = Store::new(&conn);
+        let snapshot = transport::SyncSnapshotResponse {
+            version: 1,
+            products: vec![],
+            tax_rates: vec![],
+            users: vec![transport::SnapshotUser {
+                id: "u-corrupt".into(),
+                username: "corrupted-staff".into(),
+                display_name: "Corrupted Staff".into(),
+                role_id: String::new(),
+                is_active: true,
+                created_at: None,
+                updated_at: None,
+            }],
+        };
+        let result = import_snapshot(&store, &snapshot);
+        assert!(
+            result.is_err(),
+            "user with blank role_id must be rejected (RUST-04)"
+        );
+        let users = store.list_users().unwrap();
+        assert!(!users.iter().any(|u| u.username == "corrupted-staff"));
+    }
+
+    #[test]
+    fn import_snapshot_rejects_newer_schema_version() {
+        let conn = oz_core::migrations::fresh_db();
+        let store = Store::new(&conn);
+        let snapshot = transport::SyncSnapshotResponse {
+            version: 999,
+            products: vec![product("V-TOO-NEW", "Too New", 100)],
+            tax_rates: vec![],
+            users: vec![],
+        };
+        let result = import_snapshot(&store, &snapshot);
+        assert!(
+            result.is_err(),
+            "snapshot with unsupported schema version must be rejected (RUST-04)"
+        );
+        assert!(!verify_product_sku_exists("V-TOO-NEW", &store));
     }
 
     #[test]
@@ -472,22 +663,10 @@ mod tests {
         seed_role(&conn, "role-1");
         let store = Store::new(&conn);
         let snapshot = transport::SyncSnapshotResponse {
-            products: vec![serde_json::json!({
-                "sku": "IDEMPOTENT-1",
-                "name": "Idempotent Product",
-                "price_minor": 5000
-            })],
-            tax_rates: vec![serde_json::json!({
-                "id": "tax-vat-10",
-                "name": "VAT 10%",
-                "rate_bps": 1000
-            })],
-            users: vec![serde_json::json!({
-                "username": "admin",
-                "pin_hash": "hash",
-                "display_name": "Admin",
-                "role_id": "role-1"
-            })],
+            version: 1,
+            products: vec![product("IDEMPOTENT-1", "Idempotent Product", 5000)],
+            tax_rates: vec![tax_rate("tax-vat-10", "VAT 10%", 1000)],
+            users: vec![user("admin", "Admin", "role-1")],
         };
         let first = import_snapshot(&store, &snapshot).unwrap();
         assert_eq!(first, 3, "first import: 3 rows");
@@ -504,22 +683,16 @@ mod tests {
         let conn = oz_core::migrations::fresh_db();
         let store = Store::new(&conn);
         let snapshot_v1 = transport::SyncSnapshotResponse {
-            products: vec![serde_json::json!({
-                "sku": "UPDATABLE",
-                "name": "Old Name",
-                "price_minor": 1000
-            })],
+            version: 1,
+            products: vec![product("UPDATABLE", "Old Name", 1000)],
             tax_rates: vec![],
             users: vec![],
         };
         import_snapshot(&store, &snapshot_v1).unwrap();
 
         let snapshot_v2 = transport::SyncSnapshotResponse {
-            products: vec![serde_json::json!({
-                "sku": "UPDATABLE",
-                "name": "New Name",
-                "price_minor": 2000
-            })],
+            version: 1,
+            products: vec![product("UPDATABLE", "New Name", 2000)],
             tax_rates: vec![],
             users: vec![],
         };
@@ -534,78 +707,81 @@ mod tests {
         seed_role(&conn, "role-admin");
         let store = Store::new(&conn);
         let snapshot_v1 = transport::SyncSnapshotResponse {
+            version: 1,
             products: vec![],
             tax_rates: vec![],
-            users: vec![serde_json::json!({
-                "username": "staff-1",
-                "pin_hash": "old-hash",
-                "display_name": "Old Display",
-                "role_id": "role-admin",
-                "is_active": true
-            })],
+            users: vec![transport::SnapshotUser {
+                id: "u-staff".into(),
+                username: "staff-1".into(),
+                display_name: "Old Display".into(),
+                role_id: "role-admin".into(),
+                is_active: true,
+                created_at: None,
+                updated_at: None,
+            }],
         };
         import_snapshot(&store, &snapshot_v1).unwrap();
 
         let snapshot_v2 = transport::SyncSnapshotResponse {
+            version: 1,
             products: vec![],
             tax_rates: vec![],
-            users: vec![serde_json::json!({
-                "username": "staff-1",
-                "pin_hash": "new-hash",
-                "display_name": "New Display",
-                "role_id": "role-admin",
-                "is_active": false
-            })],
+            users: vec![transport::SnapshotUser {
+                id: "u-staff".into(),
+                username: "staff-1".into(),
+                display_name: "New Display".into(),
+                role_id: "role-admin".into(),
+                is_active: false,
+                created_at: None,
+                updated_at: None,
+            }],
         };
         import_snapshot(&store, &snapshot_v2).unwrap();
 
         let users = store.list_users().unwrap();
         let user = users.into_iter().find(|u| u.username == "staff-1").unwrap();
-        assert_eq!(user.pin_hash, "new-hash");
+        // SYNC-06: pin_hash is NEVER read from the snapshot. The first
+        // import writes the non-verifiable placeholder, and the second
+        // import preserves it (the UPDATE clause omits pin_hash) — even
+        // though the snapshot carried "new-hash", it must not land in DB.
+        assert_eq!(user.pin_hash, "!snapshot-no-credential!");
+        assert_ne!(user.pin_hash, "new-hash");
         assert_eq!(user.display_name, "New Display");
         assert!(!user.is_active);
     }
 
     #[test]
-    fn import_snapshot_corrupted_product_handles_missing_fields() {
+    fn import_snapshot_rejects_corrupted_product() {
+        // RUST-04: a corrupted row (missing required fields) is rejected at
+        // deserialization; a blank name is rejected here before the
+        // transaction opens — never imported with defaults.
         let conn = oz_core::migrations::fresh_db();
         let store = Store::new(&conn);
         let snapshot = transport::SyncSnapshotResponse {
-            products: vec![serde_json::json!({
-                "sku": "CORRUPTED"
-            })],
+            version: 1,
+            products: vec![transport::SnapshotProduct {
+                id: "p-corrupt".into(),
+                sku: "CORRUPTED".into(),
+                name: String::new(),
+                price_minor: 100,
+                currency: "USD".into(),
+                category_id: None,
+                barcode: None,
+                created_at: None,
+                updated_at: None,
+                price_updated_at: None,
+                track_serial: false,
+                store_id: None,
+            }],
             tax_rates: vec![],
             users: vec![],
         };
-        let count = import_snapshot(&store, &snapshot).unwrap();
-        assert_eq!(count, 1, "corrupted product should import with defaults");
-
-        assert!(store.product_id_by_sku("CORRUPTED").unwrap().is_some());
-    }
-
-    #[test]
-    fn import_snapshot_corrupted_user_uses_default_role_id() {
-        // A user without role_id should import using default empty string.
-        // This requires a role with empty string id to avoid FK violation.
-        let conn = oz_core::migrations::fresh_db();
-        seed_role(&conn, "");
-        let store = Store::new(&conn);
-        let snapshot = transport::SyncSnapshotResponse {
-            products: vec![],
-            tax_rates: vec![],
-            users: vec![serde_json::json!({
-                "username": "corrupted-staff"
-            })],
-        };
-        let count = import_snapshot(&store, &snapshot).unwrap();
-        assert_eq!(count, 1, "corrupted user should still import");
-
-        let users = store.list_users().unwrap();
-        let user = users
-            .iter()
-            .find(|u| u.username == "corrupted-staff")
-            .unwrap();
-        assert!(user.is_active, "is_active should default to true");
+        let result = import_snapshot(&store, &snapshot);
+        assert!(
+            result.is_err(),
+            "corrupted product must be rejected, not imported with defaults (RUST-04)"
+        );
+        assert!(!verify_product_sku_exists("CORRUPTED", &store));
     }
 
     #[test]
@@ -613,29 +789,38 @@ mod tests {
         let conn = oz_core::migrations::fresh_db();
         seed_role(&conn, "role-1");
         let store = Store::new(&conn);
+        // RUST-04: unknown/extra fields stay wire-compatible — serde drops
+        // them during deserialization (no deny_unknown_fields), so a server
+        // that adds forward-compatible fields does not break the client.
         let snapshot = transport::SyncSnapshotResponse {
-            products: vec![serde_json::json!({
-                "sku": "EXTRA-FIELDS",
-                "name": "Has Extra",
-                "price_minor": 100,
-                "currency": "USD",
-                "unknown_field": "should be ignored",
-                "another_extra": 42
-            })],
-            tax_rates: vec![serde_json::json!({
-                "id": "tax-extra",
-                "name": "Extra Tax",
-                "rate_bps": 500,
-                "unexpected_flag": true
-            })],
-            users: vec![serde_json::json!({
-                "username": "extra-user",
-                "pin_hash": "hash",
-                "display_name": "Extra User",
-                "role_id": "role-1",
-                "metadata": "{\"key\":\"val\"}"
-            })],
+            version: 1,
+            products: vec![transport::SnapshotProduct {
+                id: "p-extra".into(),
+                sku: "EXTRA-FIELDS".into(),
+                name: "Has Extra".into(),
+                price_minor: 100,
+                currency: "USD".into(),
+                category_id: None,
+                barcode: None,
+                created_at: None,
+                updated_at: None,
+                price_updated_at: None,
+                track_serial: false,
+                store_id: None,
+            }],
+            tax_rates: vec![tax_rate("tax-extra", "Extra Tax", 500)],
+            users: vec![user("extra-user", "Extra User", "role-1")],
         };
+        // Also assert the wire shape tolerates unknown keys at the serde
+        // boundary (unknown fields are ignored, matching the DTO derives).
+        let wire = serde_json::json!({
+            "version": 1,
+            "products": [{"id":"p-extra","sku":"EXTRA-FIELDS","name":"Has Extra","price_minor":100,"currency":"USD","future_field":"kept"}],
+            "tax_rates": [{"id":"tax-extra","name":"Extra Tax","rate_bps":500,"future_flag":true}],
+            "users": [{"id":"u-extra","username":"extra-user","display_name":"Extra User","role_id":"role-1","metadata":"ignored"}]
+        });
+        let _rt: transport::SyncSnapshotResponse =
+            serde_json::from_value(wire).expect("unknown fields are tolerated");
         let count = import_snapshot(&store, &snapshot).unwrap();
         assert_eq!(count, 3, "all 3 entities with extra fields should import");
     }
@@ -647,16 +832,14 @@ mod tests {
         seed_role(&conn, "r2");
         let store = Store::new(&conn);
         let snapshot = transport::SyncSnapshotResponse {
+            version: 1,
             products: vec![
-                serde_json::json!({"sku": "A", "name": "Product A", "price_minor": 100}),
-                serde_json::json!({"sku": "B", "name": "Product B", "price_minor": 200}),
-                serde_json::json!({"sku": "C", "name": "Product C", "price_minor": 300}),
+                product("A", "Product A", 100),
+                product("B", "Product B", 200),
+                product("C", "Product C", 300),
             ],
-            tax_rates: vec![serde_json::json!({"id": "tax-ppn", "name": "PPN", "rate_bps": 1100})],
-            users: vec![
-                serde_json::json!({"username": "user-a", "pin_hash": "a", "display_name": "A", "role_id": "r1"}),
-                serde_json::json!({"username": "user-b", "pin_hash": "b", "display_name": "B", "role_id": "r2"}),
-            ],
+            tax_rates: vec![tax_rate("tax-ppn", "PPN", 1100)],
+            users: vec![user("user-a", "A", "r1"), user("user-b", "B", "r2")],
         };
         let count = import_snapshot(&store, &snapshot).unwrap();
         assert_eq!(count, 6, "3 products + 1 tax rate + 2 users = 6 rows");
@@ -683,7 +866,8 @@ mod tests {
 
         // First import valid product data.
         let valid = transport::SyncSnapshotResponse {
-            products: vec![serde_json::json!({"sku": "VALID", "name": "Valid"})],
+            version: 1,
+            products: vec![product("VALID", "Valid", 100)],
             tax_rates: vec![],
             users: vec![],
         };
@@ -692,14 +876,10 @@ mod tests {
 
         // Now try to import a user with a non-existent role_id (FK violation).
         let invalid = transport::SyncSnapshotResponse {
+            version: 1,
             products: vec![],
             tax_rates: vec![],
-            users: vec![serde_json::json!({
-                "username": "broken-user",
-                "pin_hash": "h",
-                "display_name": "Broken",
-                "role_id": "nonexistent-role"
-            })],
+            users: vec![user("broken-user", "Broken", "nonexistent-role")],
         };
         let result = import_snapshot(&store, &invalid);
         assert!(result.is_err(), "FK violation should cause error");
@@ -723,11 +903,21 @@ mod tests {
         let conn = oz_core::migrations::fresh_db();
         let store = Store::new(&conn);
         let snapshot = transport::SyncSnapshotResponse {
-            products: vec![serde_json::json!({
-                "sku": "NO-BARCODE",
-                "name": "No Barcode",
-                "barcode": null
-            })],
+            version: 1,
+            products: vec![transport::SnapshotProduct {
+                id: "p-nobc".into(),
+                sku: "NO-BARCODE".into(),
+                name: "No Barcode".into(),
+                price_minor: 100,
+                currency: "USD".into(),
+                category_id: None,
+                barcode: None,
+                created_at: None,
+                updated_at: None,
+                price_updated_at: None,
+                track_serial: false,
+                store_id: None,
+            }],
             tax_rates: vec![],
             users: vec![],
         };
@@ -735,6 +925,153 @@ mod tests {
 
         let exists = verify_product_sku_exists("NO-BARCODE", &store);
         assert!(exists, "product with null barcode should be created");
+    }
+
+    #[test]
+    fn import_snapshot_preserves_store_scoping() {
+        // Phase B: the snapshot import must land store-tagged rows scoped.
+        // A product tagged with store-a stays visible only to store-a (plus
+        // the global catalog) — never store-b's — exercising the ?13
+        // store_id write-through in the products upsert.
+        let conn = oz_core::migrations::fresh_db();
+        conn.execute_batch(
+            "INSERT INTO store_profiles (id, name) VALUES \
+             ('store-a', 'Store A'), ('store-b', 'Store B')",
+        )
+        .unwrap();
+        let store = Store::new(&conn);
+        let snapshot = transport::SyncSnapshotResponse {
+            version: 1,
+            products: vec![
+                transport::SnapshotProduct {
+                    id: "p-a".into(),
+                    sku: "SKU-A".into(),
+                    name: "Prod A".into(),
+                    price_minor: 100,
+                    currency: "USD".into(),
+                    category_id: None,
+                    barcode: None,
+                    created_at: None,
+                    updated_at: None,
+                    price_updated_at: None,
+                    track_serial: false,
+                    store_id: Some("store-a".into()),
+                },
+                transport::SnapshotProduct {
+                    id: "p-b".into(),
+                    sku: "SKU-B".into(),
+                    name: "Prod B".into(),
+                    price_minor: 200,
+                    currency: "USD".into(),
+                    category_id: None,
+                    barcode: None,
+                    created_at: None,
+                    updated_at: None,
+                    price_updated_at: None,
+                    track_serial: false,
+                    store_id: Some("store-b".into()),
+                },
+                transport::SnapshotProduct {
+                    id: "p-g".into(),
+                    sku: "SKU-G".into(),
+                    name: "Prod Global".into(),
+                    price_minor: 300,
+                    currency: "USD".into(),
+                    category_id: None,
+                    barcode: None,
+                    created_at: None,
+                    updated_at: None,
+                    price_updated_at: None,
+                    track_serial: false,
+                    store_id: None,
+                },
+            ],
+            tax_rates: vec![],
+            users: vec![],
+        };
+        import_snapshot(&store, &snapshot).unwrap();
+
+        let a = store.list_products_for_store("store-a").unwrap();
+        let mut a_ids: Vec<&str> = a.iter().map(|p| p.product.sku.as_str()).collect();
+        a_ids.sort_unstable();
+        assert_eq!(
+            a_ids,
+            vec!["SKU-A", "SKU-G"],
+            "store-a must see its own imported row plus the global row"
+        );
+
+        let b = store.list_products_for_store("store-b").unwrap();
+        let mut b_ids: Vec<&str> = b.iter().map(|p| p.product.sku.as_str()).collect();
+        b_ids.sort_unstable();
+        assert_eq!(
+            b_ids,
+            vec!["SKU-B", "SKU-G"],
+            "store-b must see its own imported row plus the global row"
+        );
+    }
+
+    #[test]
+    fn import_snapshot_unknown_store_id_fails_closed_and_rolls_back() {
+        // Phase B: a snapshot row tagged with a store the local DB does not
+        // know must fail the FK and roll back the WHOLE import (no partial
+        // products) — the same fail-closed contract as the oz-core path.
+        let conn = oz_core::migrations::fresh_db();
+        conn.execute(
+            "INSERT INTO store_profiles (id, name) VALUES ('store-a', 'Store A')",
+            [],
+        )
+        .unwrap();
+        let store = Store::new(&conn);
+        let snapshot = transport::SyncSnapshotResponse {
+            version: 1,
+            products: vec![
+                transport::SnapshotProduct {
+                    id: "p-ok".into(),
+                    sku: "SKU-OK".into(),
+                    name: "Valid".into(),
+                    price_minor: 100,
+                    currency: "USD".into(),
+                    category_id: None,
+                    barcode: None,
+                    created_at: None,
+                    updated_at: None,
+                    price_updated_at: None,
+                    track_serial: false,
+                    store_id: Some("store-a".into()),
+                },
+                transport::SnapshotProduct {
+                    id: "p-ghost".into(),
+                    sku: "SKU-GHOST".into(),
+                    name: "Ghost".into(),
+                    price_minor: 200,
+                    currency: "USD".into(),
+                    category_id: None,
+                    barcode: None,
+                    created_at: None,
+                    updated_at: None,
+                    price_updated_at: None,
+                    track_serial: false,
+                    store_id: Some("ghost-store".into()),
+                },
+            ],
+            tax_rates: vec![],
+            users: vec![],
+        };
+        let result = import_snapshot(&store, &snapshot);
+        assert!(
+            result.is_err(),
+            "snapshot row for an unknown store must fail the FK"
+        );
+
+        // No partial import — the whole transaction rolled back.
+        let count: i64 = store
+            .conn()
+            .query_row("SELECT COUNT(*) FROM products", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(
+            count, 0,
+            "failed import must leave no products behind (transaction rolled back)"
+        );
     }
 }
 
@@ -800,6 +1137,56 @@ fn import_snapshot(
     store: &Store<'_>,
     snapshot: &transport::SyncSnapshotResponse,
 ) -> SyncResult<usize> {
+    // RUST-04: reject malformed reference data BEFORE opening the import
+    // transaction. The typed DTOs already fail deserialization when required
+    // fields are missing; here we reject blank values and invalid numeric
+    // ranges that serde cannot catch (empty strings deserialize fine).
+    if snapshot.version > transport::SNAPSHOT_SCHEMA_VERSION {
+        return Err(SyncError::Replication(format!(
+            "snapshot schema version {} is newer than supported version {}",
+            snapshot.version,
+            transport::SNAPSHOT_SCHEMA_VERSION
+        )));
+    }
+    for p in &snapshot.products {
+        if p.sku.trim().is_empty() || p.name.trim().is_empty() || p.currency.trim().is_empty() {
+            return Err(SyncError::Replication(format!(
+                "snapshot product has blank required field (sku='{}', name='{}', currency='{}')",
+                p.sku, p.name, p.currency
+            )));
+        }
+        if p.price_minor < 0 {
+            return Err(SyncError::Replication(format!(
+                "snapshot product '{}' has negative price_minor {}",
+                p.sku, p.price_minor
+            )));
+        }
+    }
+    for r in &snapshot.tax_rates {
+        if r.id.trim().is_empty() || r.name.trim().is_empty() {
+            return Err(SyncError::Replication(
+                "snapshot tax rate has blank id or name".to_owned(),
+            ));
+        }
+        if r.rate_bps < 0 {
+            return Err(SyncError::Replication(format!(
+                "snapshot tax rate '{}' has negative rate_bps {}",
+                r.id, r.rate_bps
+            )));
+        }
+    }
+    for u in &snapshot.users {
+        if u.username.trim().is_empty()
+            || u.display_name.trim().is_empty()
+            || u.role_id.trim().is_empty()
+        {
+            return Err(SyncError::Replication(format!(
+                "snapshot user '{}' has blank username/display_name/role_id",
+                u.username
+            )));
+        }
+    }
+
     let conn = store.conn();
     let tx = conn
         .unchecked_transaction()
@@ -814,9 +1201,9 @@ fn import_snapshot(
             .prepare(
                 "INSERT INTO products (id, sku, name, price_minor, currency,
                                        category_id, barcode, created_at, updated_at,
-                                       price_updated_at, track_serial)
+                                       price_updated_at, track_serial, store_id)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7,
-                         COALESCE(?8, ?11), COALESCE(?9, ?11), COALESCE(?10, ?11), ?12)
+                         COALESCE(?8, ?11), COALESCE(?9, ?11), COALESCE(?10, ?11), ?12, ?13)
                  ON CONFLICT(sku) DO UPDATE SET
                      name            = excluded.name,
                      price_minor     = excluded.price_minor,
@@ -825,29 +1212,26 @@ fn import_snapshot(
                      barcode         = excluded.barcode,
                      updated_at      = COALESCE(excluded.updated_at, ?11),
                      price_updated_at = COALESCE(excluded.price_updated_at, ?11),
-                     track_serial    = excluded.track_serial",
+                     track_serial    = excluded.track_serial,
+                     store_id        = excluded.store_id",
             )
             .map_err(|e| SyncError::Replication(format!("prepare products: {e}")))?;
 
         for p in &snapshot.products {
-            let id = p
-                .get("id")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_owned())
-                .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
             stmt.execute(rusqlite::params![
-                id,
-                p["sku"].as_str().unwrap_or(""),
-                p["name"].as_str().unwrap_or(""),
-                p["price_minor"].as_i64().unwrap_or(0),
-                p["currency"].as_str().unwrap_or("USD"),
-                p["category_id"].as_str(),
-                p["barcode"].as_str(),
-                p["created_at"].as_str(),
-                p["updated_at"].as_str(),
-                p["price_updated_at"].as_str(),
+                p.id,
+                p.sku,
+                p.name,
+                p.price_minor,
+                p.currency,
+                p.category_id.as_deref(),
+                p.barcode.as_deref(),
+                p.created_at.as_deref(),
+                p.updated_at.as_deref(),
+                p.price_updated_at.as_deref(),
                 now,
-                p["track_serial"].as_bool().unwrap_or(false) as i64,
+                p.track_serial as i64,
+                p.store_id.as_deref(),
             ])
             .map_err(|e| SyncError::Replication(format!("upsert product: {e}")))?;
             count += 1;
@@ -872,13 +1256,13 @@ fn import_snapshot(
 
         for r in &snapshot.tax_rates {
             stmt.execute(rusqlite::params![
-                r["id"].as_str().unwrap_or(""),
-                r["name"].as_str().unwrap_or(""),
-                r["rate_bps"].as_i64().unwrap_or(0),
-                r["is_default"].as_bool().unwrap_or(false) as i64,
-                r["is_inclusive"].as_bool().unwrap_or(false) as i64,
-                r["created_at"].as_str(),
-                r["updated_at"].as_str(),
+                r.id,
+                r.name,
+                r.rate_bps,
+                r.is_default as i64,
+                r.is_inclusive as i64,
+                r.created_at.as_deref(),
+                r.updated_at.as_deref(),
                 now,
             ])
             .map_err(|e| SyncError::Replication(format!("upsert tax_rate: {e}")))?;
@@ -887,6 +1271,13 @@ fn import_snapshot(
     }
 
     // Upsert users by username.
+    //
+    // SYNC-06: `pin_hash` is deliberately NEVER read from the snapshot —
+    // credential verifier material must not travel over the sync channel.
+    // New rows get a non-verifiable placeholder, and on conflict the
+    // EXISTING local hash is preserved (the UPDATE clause omits pin_hash),
+    // so an import can neither replicate credentials nor lock out an
+    // operator who already has a working PIN.
     {
         let mut stmt = tx
             .prepare(
@@ -894,7 +1285,6 @@ fn import_snapshot(
                                     is_active, created_at, updated_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, COALESCE(?7, ?9), COALESCE(?8, ?9))
                  ON CONFLICT(username) DO UPDATE SET
-                     pin_hash     = excluded.pin_hash,
                      display_name = excluded.display_name,
                      role_id      = excluded.role_id,
                      is_active    = excluded.is_active,
@@ -903,20 +1293,15 @@ fn import_snapshot(
             .map_err(|e| SyncError::Replication(format!("prepare users: {e}")))?;
 
         for u in &snapshot.users {
-            let id = u
-                .get("id")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_owned())
-                .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
             stmt.execute(rusqlite::params![
-                id,
-                u["username"].as_str().unwrap_or(""),
-                u["pin_hash"].as_str().unwrap_or(""),
-                u["display_name"].as_str().unwrap_or(""),
-                u["role_id"].as_str().unwrap_or(""),
-                u["is_active"].as_bool().unwrap_or(true) as i64,
-                u["created_at"].as_str(),
-                u["updated_at"].as_str(),
+                u.id,
+                u.username,
+                oz_core::sync_client::SNAPSHOT_PIN_HASH_PLACEHOLDER,
+                u.display_name,
+                u.role_id,
+                u.is_active as i64,
+                u.created_at.as_deref(),
+                u.updated_at.as_deref(),
                 now,
             ])
             .map_err(|e| SyncError::Replication(format!("upsert user: {e}")))?;
@@ -1006,8 +1391,10 @@ impl SyncEngine {
                             queue.mark_synced(store, &item.id)?;
                         }
                         transport::PushOutcome::Conflict(server_item) => {
-                            let resolved = conflict::resolve_conflict(item, server_item);
-                            queue.apply_resolution(store, &resolved)?;
+                            // SYNC-02: single shared conflict-application
+                            // service — identical ADR #21 strategy whether the
+                            // conflict is processed here or by the daemon.
+                            queue.apply_push_conflict(store, item, server_item)?;
                         }
                         transport::PushOutcome::Rejected { reason } => {
                             queue.mark_failed(store, &item.id, reason)?;

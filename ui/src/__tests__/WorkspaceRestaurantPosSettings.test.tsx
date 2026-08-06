@@ -52,6 +52,7 @@ const stableProfile = {
   terminalId: 'term-1', storeId: 'store-1',
   hardware: {
     printer: { connection: 'auto' as const, devicePath: '', paperSize: '80' as const, testPrintIp: '' },
+    kitchenPrinter: { connection: 'disabled' as const, devicePath: '' },
     scale: { connection: 'none' as const, devicePath: '', baudRate: 9600, zeroOnBoot: false },
     scanner: { mode: 'auto' as const, deviceId: '' },
   },
@@ -81,7 +82,7 @@ vi.mock('@/hooks/useTerminalHardware', () => ({
 }));
 
 vi.mock('@/api/settings', () => ({
-  setReceiptSettings: vi.fn().mockResolvedValue(undefined),
+  setReceiptSettingsScoped: vi.fn().mockResolvedValue(undefined),
   setSettings: vi.fn().mockResolvedValue(undefined),
   getSetting: vi.fn(async (key: string) => {
     if (key === 'restaurant.course_firing') return 'false';

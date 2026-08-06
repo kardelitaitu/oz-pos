@@ -35,11 +35,24 @@ empty-state-cta = Add Product
 
 # Error boundary
 error-boundary-title = Something went wrong
+error-boundary-retry = Try Again
 
 # Error state
 error-state-title = Something went wrong
 error-state-desc = An unexpected error occurred. Please try again.
 error-state-retry = Retry
+
+# AppError user-safe copy (ERR-05/ERR-06 — typed normalizer output)
+app-error-generic = Something went wrong. Please try again.
+app-error-validation = Please check the information you entered and try again.
+app-error-permission = You don't have permission to do this.
+app-error-session = Your session has expired. Please sign in again.
+app-error-conflict = This record was changed by someone else. Refresh and try again.
+app-error-not-found = The requested item could not be found.
+app-error-offline = You appear to be offline. Check your connection and try again.
+app-error-hardware = A hardware device did not respond. Check it and try again.
+app-error-subscription = This action is not included in your current plan.
+app-error-global = Something unexpected happened. If this keeps happening, restart the app.
 
 # Navigation
 nav-inventory = Inventory
@@ -66,10 +79,17 @@ audit-log-load-more = Load More
 audit-log-error-load = Failed to load audit log
 audit-log-mark-reviewed = Mark Reviewed
 audit-log-reviewed-at = Reviewed: { $date }
+audit-log-unreviewed-title =
+    { $count ->
+        [one] { $count } unreviewed event since last review
+       *[other] { $count } unreviewed events since last review
+    }
 audit-log-user-system = system
 audit-log-loading = Loading…
 audit-log-refresh = Refresh
 audit-log-retry = Retry
+# ERR-09: Accessible status while a reload is in flight with rows visible
+audit-log-refreshing = Refreshing…
 audit-log-filter-all = All
 audit-log-filter-success = Success
 audit-log-filter-failure = Failure
@@ -82,10 +102,13 @@ audit-log-col-target = Target
 audit-log-col-user = User ID
 audit-log-col-outcome = Outcome
 audit-log-col-details = Details
-audit-log-count = { $count } entr{ $count ->
+audit-log-count-of = { $shown } of { $total } entr{ $shown ->
   [one] y
   *[other] ies
 }
+audit-log-export = Export CSV
+audit-log-export-error = Export failed. Please try again.
+audit-log-export-progress = Exporting audit log…
 
 # Update Banner
 update-banner-title = Update available
@@ -96,6 +119,7 @@ update-banner-install-aria = Download and install update
 update-banner-installing-aria = Installing update…
 update-banner-dismiss-aria = Dismiss update notification
 update-banner-dismiss = Dismiss
+dismiss = Dismiss
 update-banner-backing-up = Backing up…
 update-banner-backing-up-aria = Backing up database before update
 update-banner-backup-error = Backup failed
@@ -207,6 +231,8 @@ nav-switch-workspace = Switch Workspace
 # Workspace home
 workspace-home-fullscreen-aria = Toggle fullscreen
 workspace-home-fullscreen-hint = F11
+fullscreen-enabled = Fullscreen mode enabled
+fullscreen-disabled = Fullscreen mode disabled
 workspace-home-loading = Loading workspaces…
 workspace-home-loading-aria = Loading workspaces
 workspace-home-sr-error = Connection error
@@ -251,6 +277,12 @@ staff-login-license-active = License active
 staff-login-license-inactive = License inactive
 # P1-3: Tooltip for conflict count badge in StatusBar
 statusbar-conflict-count = { $count } sync conflict(s) resolved
+# SYNC-12: StatusBar visible labels + ARIA (localized at the render boundary)
+statusbar-app-status-aria = Application status
+statusbar-version = OZ-POS Enterprise v0.0.24
+statusbar-sync-name = Sync
+statusbar-gateway-name = Stripe
+statusbar-license = Proprietary License
 
 # Audit Action Labels
 audit-action-sale-void = Void Sale
@@ -269,6 +301,14 @@ audit-action-system-backup = Backup Created
 audit-action-system-restore = Restore
 audit-action-system-export = Data Export
 audit-action-system-import = Data Import
+audit-action-audit-review = Audit Reviewed
+audit-action-sale-create = Sale Created
+audit-action-bulk-import = Bulk Import
+audit-action-inventory-sync = Inventory Synced
+audit-action-unknown = Unknown Action
+audit-log-outcome-success = Success
+audit-log-outcome-failure = Failure
+audit-log-outcome-unknown = Unknown
 audit-log-table-label = Audit log entries
 audit-log-search-placeholder = Search actions, targets, or users…
 audit-log-search-label = Search audit log
@@ -295,6 +335,8 @@ auth-validation-invalid-phone = Invalid phone number format. Enter at least 7 di
 auth-paste = Paste
 auth-version = Version { $version }
 auth-ip-address = IP Address : { $ip }
+auth-ip-detecting = Detecting...
+auth-ip-unknown = Unknown
 auth-copyright = OZ-POS © { $year } All rights reserved.
 auth-clipboard-error = Clipboard error: { $message }
 auth-error-title = Error

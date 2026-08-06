@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { screen, render } from '@testing-library/react';
+import { screen } from '@testing-library/react';
+import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import { KdsTicketCard } from '@/features/kds/components/KdsTicketCard';
 import kdsFtl from '@/locales/kds.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
@@ -7,7 +8,12 @@ import { withFluent } from '@/locales/test-utils';
 import type { KdsOrder } from '@/api/kds';
 
 const mockPlayAlert = vi.fn();
+const mockGetKdsOrderLines = vi.fn().mockResolvedValue([]);
 const mockSlaResult: { level: string; display: string; elapsedSeconds: number } = { level: 'green', display: '0s', elapsedSeconds: 0 };
+
+vi.mock('@/api/kds', () => ({
+  getKdsOrderLinesScoped: (_token: string, _orderId: string) => mockGetKdsOrderLines(),
+}));
 
 vi.mock('@/features/kds/hooks/useTicketSla', () => ({
   useTicketSla: () => mockSlaResult,
@@ -40,13 +46,14 @@ const baseOrder: KdsOrder = {
   ready_at: null,
   served_at: null,
   prep_time_seconds: 0,
-  kitchen_zone: null,
-  notes: '',
+  kitchen_zone: null,    notes: '',
+    table_number: null,
+    priority: false,
 };
 
 function renderCard(order: Partial<KdsOrder> = {}) {
   const merged = { ...baseOrder, ...order };
-  return render(withFluent(<KdsTicketCard order={merged} onAdvance={onAdvance} />, sharedFtl, kdsFtl));
+  return renderWithFluentSync(<KdsTicketCard order={merged} onAdvance={onAdvance} sessionToken="test-token" />, sharedFtl, kdsFtl);
 }
 
 const onAdvance = vi.fn();
@@ -57,9 +64,11 @@ describe('KdsTicketCard', () => {
     expect(screen.getByText('#42')).toBeTruthy();
   });
 
-  it('renders items summary', () => {
+  it('renders items summary', async () => {
     renderCard();
-    expect(screen.getByText('2x Nasi Goreng, 1x Es Teh')).toBeTruthy();
+    await vi.waitFor(() => {
+      expect(screen.getByText('2x Nasi Goreng, 1x Es Teh')).toBeTruthy();
+    });
   });
 
   it('renders item count', () => {
@@ -115,7 +124,7 @@ describe('KdsTicketCard', () => {
     mockSlaResult.level = 'red';
     rerender(
       withFluent(
-        <KdsTicketCard order={{ ...baseOrder, notes: 'trigger' }} onAdvance={onAdvance} />,
+        <KdsTicketCard order={{ ...baseOrder, notes: 'trigger' }} onAdvance={onAdvance} sessionToken="test-token" />,
         sharedFtl, kdsFtl,
       ),
     );

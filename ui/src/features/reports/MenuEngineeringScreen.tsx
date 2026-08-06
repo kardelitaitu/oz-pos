@@ -1,4 +1,6 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useContext, useEffect, useState, useMemo, useCallback } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
+import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   ScatterChart,
@@ -21,6 +23,8 @@ import {
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Spinner } from '@/components/Spinner';
+import { useCurrency } from '@/contexts/CurrencyContext';
+import { minorUnitExponent } from '@/types/domain';
 import './MenuEngineeringScreen.css';
 
 const QUADRANT_META: Record<
@@ -67,12 +71,16 @@ function classifyQuadrant(
   return 'Dog';
 }
 
-function fmtCurrency(minor: number): string {
+function fmtCurrency(minor: number, currency: string): string {
+  // Exponent-driven via the shared minorUnitExponent map (IDR/JPY = 0,
+  // KWD = 3, USD/EUR = 2) — mirrors Currency::minor_unit_exponent.
+  const exp = minorUnitExponent(currency);
   return new Intl.NumberFormat('en', {
     style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-  }).format(minor / 100);
+    currency,
+    minimumFractionDigits: exp,
+    maximumFractionDigits: exp,
+  }).format(minor / 10 ** exp);
 }
 
 function fmtCompact(n: number): string {
@@ -111,6 +119,8 @@ function ScatterDot(props: Record<string, unknown>) {
 /** Menu engineering report — scatter chart of menu items by popularity and profitability with quadrant classification (Star, Plowhorse, Puzzle, Dog). */
 export default function MenuEngineeringScreen() {
   const { l10n } = useLocalization();
+  const { currency } = useCurrency();
+  const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [startDate, setStartDate] = useState(monthAgo());
@@ -122,7 +132,7 @@ export default function MenuEngineeringScreen() {
     setLoading(true);
     setError(null);
 
-    getMenuEngineering(startDate, endDate)
+    getMenuEngineering(startDate, endDate, sessionToken)
       .then((res) => {
         setResult(res);
       })
@@ -132,7 +142,7 @@ export default function MenuEngineeringScreen() {
       .finally(() => {
         setLoading(false);
       });
-  }, [startDate, endDate]);
+  }, [startDate, endDate, sessionToken]);
 
   useEffect(() => {
     fetchData();
@@ -204,21 +214,21 @@ export default function MenuEngineeringScreen() {
         <div className="menu-eng-tooltip">
           <strong className="menu-eng-tooltip-name">{row.name}</strong>
           <div className="menu-eng-tooltip-grid">
-            <span>{l10n.getString('menu-eng-tooltip-volume') || 'Volume'}:</span>
+            <span>{requiredLocalized(l10n, 'menu-eng-tooltip-volume')}:</span>
             <span>{row.total_volume}</span>
-            <span>{l10n.getString('menu-eng-tooltip-revenue') || 'Revenue'}:</span>
-            <span>{fmtCurrency(row.total_revenue_minor)}</span>
-            <span>{l10n.getString('menu-eng-tooltip-margin') || 'Margin'}:</span>
-            <span>{fmtCurrency(row.total_margin_minor)}</span>
-            <span>{l10n.getString('menu-eng-tooltip-price') || 'Price'}:</span>
-            <span>{fmtCurrency(row.unit_price_minor)}</span>
-            <span>{l10n.getString('menu-eng-tooltip-cost') || 'Cost'}:</span>
-            <span>{fmtCurrency(row.unit_cost_minor)}</span>
+            <span>{requiredLocalized(l10n, 'menu-eng-tooltip-revenue')}:</span>
+            <span>{fmtCurrency(row.total_revenue_minor, currency)}</span>
+            <span>{requiredLocalized(l10n, 'menu-eng-tooltip-margin')}:</span>
+            <span>{fmtCurrency(row.total_margin_minor, currency)}</span>
+            <span>{requiredLocalized(l10n, 'menu-eng-tooltip-price')}:</span>
+            <span>{fmtCurrency(row.unit_price_minor, currency)}</span>
+            <span>{requiredLocalized(l10n, 'menu-eng-tooltip-cost')}:</span>
+            <span>{fmtCurrency(row.unit_cost_minor, currency)}</span>
           </div>
         </div>
       );
     },
-    [l10n],
+    [l10n, currency],
   );
 
   // Compute max axis values for scatter plot (avoids Infinity issues).
@@ -244,11 +254,11 @@ export default function MenuEngineeringScreen() {
       `"${r.name}"`,
       r.sku,
       String(r.total_volume),
-      fmtCurrency(r.total_revenue_minor),
-      fmtCurrency(r.total_margin_minor),
-      fmtCurrency(r.margin_per_unit),
-      fmtCurrency(r.unit_price_minor),
-      fmtCurrency(r.unit_cost_minor),
+      fmtCurrency(r.total_revenue_minor, currency),
+      fmtCurrency(r.total_margin_minor, currency),
+      fmtCurrency(r.margin_per_unit, currency),
+      fmtCurrency(r.unit_price_minor, currency),
+      fmtCurrency(r.unit_cost_minor, currency),
       r.quadrant,
       `"${recommendation(r.quadrant)}"`,
     ]);
@@ -278,8 +288,8 @@ export default function MenuEngineeringScreen() {
 
   if (loading) {
     return (
-      <div className="menu-eng" role="region" aria-label={l10n.getString('menu-eng-region-aria') || 'Menu Engineering Report'}>
-        <Spinner aria-label={l10n.getString('menu-eng-loading-aria') || 'Loading menu engineering report'} />
+      <div className="menu-eng" role="region" aria-label={requiredLocalized(l10n, 'menu-eng-region-aria')}>
+        <Spinner aria-label={requiredLocalized(l10n, 'menu-eng-loading-aria')} />
       </div>
     );
   }
@@ -289,7 +299,7 @@ export default function MenuEngineeringScreen() {
   const totalProducts = result?.rows.length ?? 0;
 
   return (
-    <div className="menu-eng" role="region" aria-label={l10n.getString('menu-eng-region-aria') || 'Menu Engineering Report'}>
+    <div className="menu-eng" role="region" aria-label={requiredLocalized(l10n, 'menu-eng-region-aria')}>
       {/* ── Header ────────────────────────────────────── */}
       <div className="menu-eng-header">
         <Localized id="menu-eng-title">
@@ -306,7 +316,7 @@ export default function MenuEngineeringScreen() {
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
             className="menu-eng-input"
-            aria-label={l10n.getString('menu-eng-start-date-aria') || 'Start date'}
+            aria-label={requiredLocalized(l10n, 'menu-eng-start-date-aria')}
           />
 
           <label htmlFor="me-end-date" className="menu-eng-label">
@@ -318,14 +328,14 @@ export default function MenuEngineeringScreen() {
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
             className="menu-eng-input"
-            aria-label={l10n.getString('menu-eng-end-date-aria') || 'End date'}
+            aria-label={requiredLocalized(l10n, 'menu-eng-end-date-aria')}
           />
 
           <Button
             variant="secondary"
             onClick={exportCsv}
             disabled={!result || rowsWithMeta.length === 0}
-            aria-label={l10n.getString('menu-eng-export-csv-aria') || 'Export CSV'}
+            aria-label={requiredLocalized(l10n, 'menu-eng-export-csv-aria')}
           >
             <Localized id="inv-report-export-csv">Export CSV</Localized>
           </Button>
@@ -353,13 +363,13 @@ export default function MenuEngineeringScreen() {
           <span className="menu-eng-kpi-label">
             <Localized id="menu-eng-total-revenue">Total Revenue</Localized>
           </span>
-          <span className="menu-eng-kpi-value">{fmtCurrency(totalRevenue)}</span>
+          <span className="menu-eng-kpi-value">{fmtCurrency(totalRevenue, currency)}</span>
         </Card>
         <Card shadow="sm" className="menu-eng-kpi">
           <span className="menu-eng-kpi-label">
             <Localized id="menu-eng-total-margin">Total Margin</Localized>
           </span>
-          <span className="menu-eng-kpi-value">{fmtCurrency(totalMargin)}</span>
+          <span className="menu-eng-kpi-value">{fmtCurrency(totalMargin, currency)}</span>
         </Card>
         <Card shadow="sm" className="menu-eng-kpi">
           <span className="menu-eng-kpi-label">
@@ -481,7 +491,7 @@ export default function MenuEngineeringScreen() {
                 type="number"
                 tick={{ fontSize: 11 }}
                 label={{
-                  value: l10n.getString('menu-eng-axis-volume') || 'Volume (units sold)',
+                  value: requiredLocalized(l10n, 'menu-eng-axis-volume'),
                   position: 'bottom',
                   offset: -5,
                   style: { fontSize: 12, fill: '#64748b' },
@@ -492,7 +502,7 @@ export default function MenuEngineeringScreen() {
                 tick={{ fontSize: 11 }}
                 tickFormatter={(v: number) => fmtCompact(v)}
                 label={{
-                  value: l10n.getString('menu-eng-axis-margin') || 'Total Margin',
+                  value: requiredLocalized(l10n, 'menu-eng-axis-margin'),
                   angle: -90,
                   position: 'insideLeft',
                   offset: -45,
@@ -533,16 +543,16 @@ export default function MenuEngineeringScreen() {
 
         <div className="menu-eng-chart-legend">
           <span style={{ color: QUADRANT_META.Star.color }}>
-            {l10n.getString('menu-eng-legend-star') || '● Star (high vol, high margin)'}
+            {requiredLocalized(l10n, 'menu-eng-legend-star')}
           </span>
           <span style={{ color: QUADRANT_META.Plowhorse.color }}>
-            {l10n.getString('menu-eng-legend-plowhorse') || '▲ Plowhorse (high vol, low margin)'}
+            {requiredLocalized(l10n, 'menu-eng-legend-plowhorse')}
           </span>
           <span style={{ color: QUADRANT_META.Puzzle.color }}>
-            {l10n.getString('menu-eng-legend-puzzle') || '◆ Puzzle (low vol, high margin)'}
+            {requiredLocalized(l10n, 'menu-eng-legend-puzzle')}
           </span>
           <span style={{ color: QUADRANT_META.Dog.color }}>
-            {l10n.getString('menu-eng-legend-dog') || '▼ Dog (low vol, low margin)'}
+            {requiredLocalized(l10n, 'menu-eng-legend-dog')}
           </span>
         </div>
       </Card>
@@ -560,7 +570,7 @@ export default function MenuEngineeringScreen() {
             </Localized>
           </p>
         ) : (
-          <div className="menu-eng-table" role="table" aria-label={l10n.getString('menu-eng-table-aria') || 'Menu engineering product breakdown'}>
+          <div className="menu-eng-table" role="table" aria-label={requiredLocalized(l10n, 'menu-eng-table-aria')}>
             <div className="menu-eng-table-header" role="row">
               <span role="columnheader">#</span>
               <span role="columnheader">
@@ -608,13 +618,13 @@ export default function MenuEngineeringScreen() {
                 </span>
                 <span role="cell">{row.total_volume}</span>
                 <span role="cell" className="menu-eng-table-mono">
-                  {fmtCurrency(row.total_revenue_minor)}
+                  {fmtCurrency(row.total_revenue_minor, currency)}
                 </span>
                 <span role="cell" className="menu-eng-table-mono">
-                  {fmtCurrency(row.total_margin_minor)}
+                  {fmtCurrency(row.total_margin_minor, currency)}
                 </span>
                 <span role="cell" className="menu-eng-table-mono">
-                  {fmtCurrency(row.margin_per_unit)}
+                  {fmtCurrency(row.margin_per_unit, currency)}
                 </span>
                 <span role="cell">
                   <span

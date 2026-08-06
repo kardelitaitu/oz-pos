@@ -1,20 +1,28 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
-import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import {
   listCustomersScoped,
-  createCustomer,
-  updateCustomer,
-  deleteCustomer,
+  searchCustomersScoped,
+  getCustomerHistoryScoped,
+  createCustomerScoped,
+  updateCustomerScoped,
+  deleteCustomerScoped,
   type CustomerDto,
-  type UpdateCustomerArgs,
-  type CreateCustomerArgs,
+  type CustomerHistory,
+  type CustomerSaleSummary,
+  type UpdateCustomerScopedArgs,
+  type CreateCustomerScopedArgs,
 } from '@/api/customers';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
-import { SettingsPopup } from '@/frontend/shared';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { SettingsPopup, requiredLocalized } from '@/frontend/shared';
+import { useToast } from '@/frontend/shared/Toast';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { formatMoney } from '@/types/domain';
+import { l10nErrorMessage } from '@/utils/app-error';
 import './CustomerManagementScreen.css';
 
 // ── Form state ──────────────────────────────────────────────────────
@@ -33,58 +41,171 @@ const EMPTY_FORM: FormData = {
   notes: '',
 };
 
+/** CUST-09: client-side field validation mirrors the authoritative backend
+ * contract (foundation/src/contact.rs + db/customers.rs): name non-empty,
+ * email exactly one '@' with a dotted domain, phone ≥1 digit. Notes are
+ * length-capped here as a UX guard (backend remains authoritative). */
+const NOTES_MAX_LENGTH = 500;
+
+function validateEmail(email: string): boolean {
+  const trimmed = email.trim();
+  if (!trimmed) return true; // optional field
+  const atCount = trimmed.split('@').length - 1;
+  if (atCount !== 1) return false;
+  const [local, domain] = trimmed.split('@');
+  return (
+    local !== undefined &&
+    domain !== undefined &&
+    local.length > 0 &&
+    domain.length > 0 &&
+    domain.includes('.')
+  );
+}
+
+function validatePhone(phone: string): boolean {
+  const trimmed = phone.trim();
+  if (!trimmed) return true; // optional field
+  return /\d/.test(trimmed);
+}
+
+interface FieldErrors {
+  email?: string;
+  phone?: string;
+  notes?: string;
+}
+
+function validateForm(form: FormData, l10n: { getString: (id: string) => string }): FieldErrors {
+  const errors: FieldErrors = {};
+  if (form.email.trim() && !validateEmail(form.email)) {
+    errors.email = l10n.getString('customer-mgmt-error-email-invalid');
+  }
+  if (form.phone.trim() && !validatePhone(form.phone)) {
+    errors.phone = l10n.getString('customer-mgmt-error-phone-invalid');
+  }
+  if (form.notes.length > NOTES_MAX_LENGTH) {
+    errors.notes = l10n.getString('customer-mgmt-error-notes-too-long');
+  }
+  return errors;
+}
+
 // ── Component ───────────────────────────────────────────────────────
 
 /** Customer management screen — list, search, create, edit, and delete customer records. */
 export default function CustomerManagementScreen() {
   const { l10n } = useLocalization();
-  const { session } = useAuth();
   const { sessionToken: rawToken } = useWorkspace();
   const sessionToken = rawToken || '';
-  const userId = session?.user_id ?? '';
+  const { addToast } = useToast();
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  // CUST-06: server-side search — the renderer only ever holds one bounded
+  // page; the total count drives the "showing X of Y" line and pagination.
+  const [searchTotal, setSearchTotal] = useState<number | null>(null);
+  const [searching, setSearching] = useState(false);
+  const searchSeqRef = useRef(0);
+  // CUST-05: read-only history modal state.
+  const [historyTarget, setHistoryTarget] = useState<CustomerDto | null>(null);
+  const [history, setHistory] = useState<CustomerHistory | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CustomerDto | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // CUST-03: track load failures separately from a genuinely empty customer set.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  // CUST-10: request-sequence guard — a slower response from an earlier
+  // session/refresh must never overwrite newer customer data.
+  const loadSeqRef = useRef(0);
+  const hasLoadedOnceRef = useRef(false);
+  // Keep `load` memoized on [sessionToken] only — locale identity changes
+  // must not re-fire the load effect (mirrors ProductManagementScreen).
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
 
   // ── Load data ──────────────────────────────────────────────────
 
   const load = useCallback(async () => {
-    setLoading(true);
+    const seq = ++loadSeqRef.current;
+    // CUST-10: only the first load shows the skeleton — refreshes
+    // preserve the last known list on screen instead of flashing a skeleton.
+    if (!hasLoadedOnceRef.current) {
+      setLoading(true);
+    }
+    setLoadError(null);
     try {
       const data = await listCustomersScoped(sessionToken);
+      if (seq !== loadSeqRef.current) return;
       setCustomers(data);
-    } catch {
-      // IPC unavailable.
+      hasLoadedOnceRef.current = true;
+    } catch (err) {
+      // CUST-03: a failed load must not be indistinguishable from an empty store.
+      if (seq !== loadSeqRef.current) return;
+      setLoadError(
+        l10nErrorMessage(err, l10nRef.current, 'customer-mgmt-error-load'),
+      );
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) {
+        setLoading(false);
+      }
     }
   }, [sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 
-  // ── Search filter ──────────────────────────────────────────────
+  // ── Search (CUST-06) ───────────────────────────────────────────
 
-  const filteredCustomers = useMemo(() => {
-    if (!searchQuery.trim()) return customers;
-    const q = searchQuery.trim().toLowerCase();
-    return customers.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        (c.email ?? '').toLowerCase().includes(q) ||
-        (c.phone ?? '').toLowerCase().includes(q),
-    );
-  }, [customers, searchQuery]);
+  // Debounced server-side search: queries run in the store DB (LIKE over
+  // name/email/phone) with a bounded page size instead of loading the whole
+  // collection into the renderer and filtering client-side.
+  const runSearch = useCallback(
+    async (query: string) => {
+      const seq = ++searchSeqRef.current;
+      const trimmed = query.trim();
+      if (!trimmed) {
+        setSearchTotal(null);
+        setSearching(false);
+        await load();
+        return;
+      }
+      setSearching(true);
+      try {
+        const page = await searchCustomersScoped(sessionToken, trimmed, 50, 0);
+        if (seq !== searchSeqRef.current) return;
+        setCustomers(page.items);
+        setSearchTotal(page.total);
+      } catch {
+        if (seq !== searchSeqRef.current) return;
+        setLoadError(
+          requiredLocalized(l10nRef.current, 'customer-mgmt-error-load'),
+        );
+        setCustomers([]);
+      } finally {
+        if (seq === searchSeqRef.current) {
+          setSearching(false);
+        }
+      }
+    },
+    [sessionToken, load],
+  );
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      void runSearch(searchQuery);
+    }, 250);
+    return () => window.clearTimeout(handle);
+  }, [searchQuery, runSearch]);
 
   // ── Modal handlers ──────────────────────────────────────────────
 
   const openCreate = useCallback(() => {
     setForm(EMPTY_FORM);
+    setFieldErrors({});
     setEditingId(null);
     setError(null);
     setShowModal(true);
@@ -97,6 +218,7 @@ export default function CustomerManagementScreen() {
       phone: customer.phone ?? '',
       notes: customer.notes,
     });
+    setFieldErrors({});
     setEditingId(customer.id);
     setError(null);
     setShowModal(true);
@@ -104,14 +226,91 @@ export default function CustomerManagementScreen() {
 
   const closeModal = useCallback(() => {
     setShowModal(false);
+    setFieldErrors({});
     setError(null);
   }, []);
+
+  /** CUST-09: clear a field error as soon as the operator edits the field. */
+  const updateField = useCallback((field: keyof FormData, value: string) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+    if (field === 'name') return; // name has no per-field error
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }, []);
+
+  // ── History modal (CUST-05) ────────────────────────────────────
+
+  // CUST-11: remember the opener so focus can be restored on close.
+  const historyTriggerRef = useRef<HTMLElement | null>(null);
+  // CUST-11: the shared focus-trap hook owns initial focus, Tab cycling,
+  // Escape-to-close, and body scroll locking — same modal semantics as
+  // SettingsPopup (the audit's positive control).
+  const historyPanelRef = useRef<HTMLDivElement | null>(null);
+
+  const openHistory = useCallback((customer: CustomerDto) => {
+    historyTriggerRef.current = document.activeElement as HTMLElement | null;
+    setHistoryTarget(customer);
+    setHistory(null);
+    setHistoryError(false);
+    setHistoryLoading(true);
+    void getCustomerHistoryScoped(sessionToken, customer.id)
+      .then((h) => {
+        setHistory(h);
+        setHistoryLoading(false);
+      })
+      .catch(() => {
+        setHistoryError(true);
+        setHistoryLoading(false);
+      });
+  }, [sessionToken]);
+
+  const closeHistory = useCallback(() => {
+    setHistoryTarget(null);
+    setHistory(null);
+    setHistoryError(false);
+    // CUST-11: restore keyboard focus to the opener so the next Tab lands
+    // on the expected row action, not the top of the document.
+    historyTriggerRef.current?.focus();
+    historyTriggerRef.current = null;
+  }, []);
+
+  // CUST-11: shared modal semantics — auto-focus, Tab trap, Escape-close,
+  // body scroll lock — active while the history dialog is open.
+  useFocusTrap(historyPanelRef, historyTarget !== null, closeHistory);
+
+  const retryHistory = useCallback(() => {
+    if (!historyTarget) return;
+    setHistory(null);
+    setHistoryError(false);
+    setHistoryLoading(true);
+    void getCustomerHistoryScoped(sessionToken, historyTarget.id)
+      .then((h) => {
+        setHistory(h);
+        setHistoryLoading(false);
+      })
+      .catch(() => {
+        setHistoryError(true);
+        setHistoryLoading(false);
+      });
+  }, [historyTarget, sessionToken]);
 
   // ── Save / Update ──────────────────────────────────────────────
 
   const handleSave = useCallback(async () => {
+    // CUST-09: validate every field before any IPC round trip — the modal
+    // stays open and the offending field is flagged with aria-invalid.
+    const errs = validateForm(form, l10n);
+    setFieldErrors(errs);
     if (!form.name.trim()) {
       setError(l10n.getString('customer-mgmt-error-name-required'));
+      return;
+    }
+    if (errs.email || errs.phone || errs.notes) {
+      setError(null);
       return;
     }
 
@@ -121,39 +320,62 @@ export default function CustomerManagementScreen() {
       const name = form.name.trim();
 
       if (editingId) {
-        const args: UpdateCustomerArgs = { userId, id: editingId, name };
+        const args: UpdateCustomerScopedArgs = { id: editingId, name };
         if (form.email.trim()) args.email = form.email.trim();
         if (form.phone.trim()) args.phone = form.phone.trim();
         if (form.notes.trim()) args.notes = form.notes.trim();
-        await updateCustomer(args);
+        await updateCustomerScoped(sessionToken, args);
       } else {
-        const args: CreateCustomerArgs = { userId, name };
+        const args: CreateCustomerScopedArgs = { name };
         if (form.email.trim()) args.email = form.email.trim();
         if (form.phone.trim()) args.phone = form.phone.trim();
         if (form.notes.trim()) args.notes = form.notes.trim();
-        await createCustomer(args);
+        await createCustomerScoped(sessionToken, args);
       }
       closeModal();
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('customer-mgmt-error-save-failed'));
+      // CUST-09: keep save failures stable and localized; backend stays authoritative.
+      setError(requiredLocalized(l10n, 'customer-mgmt-error-save-failed'));
+      void err;
     } finally {
       setSaving(false);
     }
-  }, [form, editingId, closeModal, load, userId, l10n]);
+  }, [form, editingId, closeModal, load, sessionToken, l10n]);
 
   // ── Delete ─────────────────────────────────────────────────────
 
-  const confirmDelete = useCallback(async (id: string) => {
-    setDeleting(id);
+  // CUST-02: deletion requires an explicit confirmation dialog; the row
+  // button only arms `deleteTarget` and the destructive IPC call fires from
+  // the dialog's confirm action.
+  const requestDelete = useCallback((customer: CustomerDto) => {
+    setDeleteTarget(customer);
+  }, []);
+
+  const closeDelete = useCallback(() => {
+    if (deleting !== null) return;
+    setDeleteTarget(null);
+  }, [deleting]);
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleteTarget) return;
+    setDeleting(deleteTarget.id);
     try {
-      await deleteCustomer({ userId, id });
+      await deleteCustomerScoped(sessionToken, deleteTarget.id);
       setDeleting(null);
+      setDeleteTarget(null);
       await load();
-    } catch {
+    } catch (err) {
+      // CUST-04: a failed delete must be visible — keep the row, surface a
+      // localized toast, and leave the dialog open so the operator can retry.
       setDeleting(null);
+      addToast({
+        message: requiredLocalized(l10n, 'customer-mgmt-error-delete'),
+        type: 'error',
+      });
+      void err;
     }
-  }, [load, userId]);
+  }, [deleteTarget, load, sessionToken, addToast, l10n]);
 
   // ── Render ─────────────────────────────────────────────────────
 
@@ -232,7 +454,41 @@ export default function CustomerManagementScreen() {
             </table>
           </div>
         </div>
-      ) : customers.length === 0 ? (
+      ) : loadError && customers.length === 0 ? (
+        <Card shadow="sm">
+          <div className="customer-mgmt-empty" role="alert">
+            <Localized id="customer-mgmt-error-load">
+              <p className="customer-mgmt-load-error-title">Failed to load customers</p>
+            </Localized>
+            {loadError && loadError !== requiredLocalized(l10n, 'customer-mgmt-error-load') && (
+              <p className="customer-mgmt-load-error-detail">{loadError}</p>
+            )}
+            <Localized id="customer-mgmt-error-retry">
+              <Button variant="secondary" onClick={() => void load()}>
+                Retry
+              </Button>
+            </Localized>
+          </div>
+        </Card>
+      ) : customers.length === 0 && searchQuery.trim() ? (
+        // CUST-06: an active search that returned an empty page renders the
+        // no-match state (with Clear search) — never the "no customers yet"
+        // onboarding state, which is reserved for a genuinely empty store.
+        <Card shadow="sm">
+          <div className="customer-mgmt-empty">
+            <Localized id="customer-mgmt-search-empty">
+              <p>No customers match your search.</p>
+            </Localized>
+            <Localized id="customer-mgmt-search-clear">
+              <Button variant="ghost" onClick={() => setSearchQuery('')}>
+                Clear search
+              </Button>
+            </Localized>
+          </div>
+        </Card>
+      ) : customers.length === 0 && searchTotal === null ? (
+        // CUST-06: onboarding empty state is reserved for a genuinely empty
+        // store — never shown while a search is active or being cleared.
         <Card shadow="sm">
           <div className="customer-mgmt-empty">
             <div className="customer-mgmt-empty-icon" aria-hidden="true">
@@ -253,21 +509,23 @@ export default function CustomerManagementScreen() {
             </Localized>
           </div>
         </Card>
-      ) : filteredCustomers.length === 0 ? (
-        <Card shadow="sm">
-          <div className="customer-mgmt-empty">
-            <Localized id="customer-mgmt-search-empty">
-              <p>No customers match your search.</p>
-            </Localized>
-            <Localized id="customer-mgmt-search-clear">
-              <Button variant="ghost" onClick={() => setSearchQuery('')}>
-                Clear search
-              </Button>
-            </Localized>
-          </div>
-        </Card>
       ) : (
         <div className="customer-mgmt-table-wrap">
+          {searching && (
+            <p className="customer-mgmt-search-status" role="status">
+              <Localized id="customer-mgmt-search-loading"><span>Searching…</span></Localized>
+            </p>
+          )}
+          {searchTotal !== null && !searching && (
+            <p className="customer-mgmt-search-status" role="status">
+              <Localized
+                id="customer-mgmt-search-results"
+                vars={{ shown: String(customers.length), total: String(searchTotal) }}
+              >
+                <span>Showing {customers.length} of {searchTotal} customers</span>
+              </Localized>
+            </p>
+          )}
           <table className="customer-mgmt-table" aria-label={l10n.getString('customer-mgmt-table-aria')}>
             <thead>
               <tr>
@@ -280,7 +538,7 @@ export default function CustomerManagementScreen() {
                 </Localized>
               </tr>
             </thead>
-            <tbody>{filteredCustomers.map((customer) => (
+            <tbody>{customers.map((customer) => (
                 <tr key={customer.id}>
                   { }
                   <td>
@@ -301,6 +559,16 @@ export default function CustomerManagementScreen() {
                     {customer.notes || '\u2014'}
                   </td>
                   <td className="customer-mgmt-cell-actions">
+                    <Localized id="customer-mgmt-history-aria" attrs={{ 'aria-label': true }} vars={{ name: customer.name }}>
+                      <button
+                        type="button"
+                        className="customer-mgmt-action-btn"
+                        onClick={() => openHistory(customer)}
+                        aria-label={`View history for ${customer.name}`}
+                      >
+                        <Localized id="customer-mgmt-history"><span>History</span></Localized>
+                      </button>
+                    </Localized>
                     <Localized id="customer-mgmt-edit-aria" attrs={{ 'aria-label': true }} vars={{ name: customer.name }}>
                       <button
                         type="button"
@@ -315,8 +583,8 @@ export default function CustomerManagementScreen() {
                       <button
                         type="button"
                         className="customer-mgmt-action-btn customer-mgmt-action-btn--danger"
-                        onClick={() => confirmDelete(customer.id)}
-                        disabled={deleting === customer.id}
+                        onClick={() => requestDelete(customer)}
+                        disabled={deleting !== null}
                         aria-label={`Delete ${customer.name}`}
                       >
                         <Localized id="customer-mgmt-delete"><span>Delete</span></Localized>
@@ -376,11 +644,18 @@ export default function CustomerManagementScreen() {
               type="email"
               id="customer-field-email"
               value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              onChange={(e) => updateField('email', e.target.value)}
               placeholder="jane@example.com"
               autoComplete="off"
+              aria-invalid={fieldErrors.email ? true : undefined}
+              aria-describedby={fieldErrors.email ? 'customer-field-email-error' : undefined}
             />
           </Localized>
+          {fieldErrors.email && (
+            <p id="customer-field-email-error" className="customer-mgmt-field-error" role="alert">
+              {fieldErrors.email}
+            </p>
+          )}
         </div>
 
         <div className="customer-mgmt-field">
@@ -397,11 +672,18 @@ export default function CustomerManagementScreen() {
               type="tel"
               id="customer-field-phone"
               value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              onChange={(e) => updateField('phone', e.target.value)}
               placeholder="+1-555-0100"
               autoComplete="off"
+              aria-invalid={fieldErrors.phone ? true : undefined}
+              aria-describedby={fieldErrors.phone ? 'customer-field-phone-error' : undefined}
             />
           </Localized>
+          {fieldErrors.phone && (
+            <p id="customer-field-phone-error" className="customer-mgmt-field-error" role="alert">
+              {fieldErrors.phone}
+            </p>
+          )}
         </div>
 
         <div className="customer-mgmt-field">
@@ -417,13 +699,163 @@ export default function CustomerManagementScreen() {
               className="customer-mgmt-input customer-mgmt-textarea"
               id="customer-field-notes"
               value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              onChange={(e) => updateField('notes', e.target.value)}
               placeholder="Preferences, special notes…"
               rows={3}
+              maxLength={NOTES_MAX_LENGTH}
+              aria-invalid={fieldErrors.notes ? true : undefined}
+              aria-describedby={fieldErrors.notes ? 'customer-field-notes-error' : undefined}
             />
           </Localized>
+          {fieldErrors.notes && (
+            <p id="customer-field-notes-error" className="customer-mgmt-field-error" role="alert">
+              {fieldErrors.notes}
+            </p>
+          )}
         </div>
       </SettingsPopup>
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onCancel={closeDelete}
+        onConfirm={() => { void confirmDelete(); }}
+        title={requiredLocalized(l10n, 'customer-mgmt-delete-confirm-title')}
+        message={requiredLocalized(l10n, 'customer-mgmt-delete-confirm-message', {
+          name: deleteTarget?.name ?? '',
+        })}
+        variant="danger"
+        loading={deleting !== null}
+        confirmLabel={requiredLocalized(l10n, 'customer-mgmt-delete-confirm-btn')}
+        cancelLabel={requiredLocalized(l10n, 'customer-mgmt-btn-cancel')}
+      />
+
+      {/* CUST-05: read-only customer history — profile, loyalty summary,
+          recent sales. Loaded scoped + permission-gated by the backend. */}
+      {historyTarget && (
+        <div className="customer-mgmt-overlay" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) closeHistory(); }}>
+          <div
+            ref={historyPanelRef}
+            className="customer-mgmt-history"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="customer-mgmt-history-title"
+          >
+            <div className="customer-mgmt-history-header">
+              <div>
+                <h2 id="customer-mgmt-history-title" className="customer-mgmt-history-title">
+                  {requiredLocalized(l10n, 'customer-mgmt-history-title')}
+                </h2>
+                <p className="customer-mgmt-history-subtitle">{historyTarget.name}</p>
+              </div>
+              <button
+                type="button"
+                className="customer-mgmt-action-btn customer-mgmt-history-close"
+                onClick={closeHistory}
+                aria-label={requiredLocalized(l10n, 'customer-mgmt-history-close')}
+              >
+                <span aria-hidden="true">×</span>
+              </button>
+            </div>
+
+            <div className="customer-mgmt-history-body">
+              {historyLoading && (
+                <div className="customer-mgmt-history-state" role="status">
+                  <Localized id="customer-mgmt-history-loading"><p>Loading history…</p></Localized>
+                </div>
+              )}
+              {historyError && (
+                <div className="customer-mgmt-history-state" role="alert">
+                  <Localized id="customer-mgmt-history-error">
+                    <p>Failed to load history</p>
+                  </Localized>
+                  <Button variant="secondary" onClick={() => void retryHistory()}>
+                    {requiredLocalized(l10n, 'customer-mgmt-error-retry')}
+                  </Button>
+                </div>
+              )}
+              {!historyLoading && !historyError && history && (
+                <>
+                  <section className="customer-mgmt-history-section">
+                    <Localized id="customer-mgmt-history-loyalty-title">
+                      <h3 className="customer-mgmt-history-section-title">Loyalty</h3>
+                    </Localized>
+                    {history.loyalty ? (
+                      <dl className="customer-mgmt-history-grid">
+                        <div>
+                          <dt>{requiredLocalized(l10n, 'customer-mgmt-history-points')}</dt>
+                          <dd>{history.loyalty.points.toLocaleString()}</dd>
+                        </div>
+                        <div>
+                          <dt>{requiredLocalized(l10n, 'customer-mgmt-history-lifetime')}</dt>
+                          <dd>{history.loyalty.lifetime_points.toLocaleString()}</dd>
+                        </div>
+                        <div>
+                          <dt>{requiredLocalized(l10n, 'customer-mgmt-history-tier')}</dt>
+                          <dd>{history.loyalty.tier_name ?? requiredLocalized(l10n, 'customer-mgmt-history-no-tier')}</dd>
+                        </div>
+                      </dl>
+                    ) : (
+                      <p className="customer-mgmt-history-empty-note">
+                        {requiredLocalized(l10n, 'customer-mgmt-history-no-tier')}
+                      </p>
+                    )}
+                  </section>
+
+                  <section className="customer-mgmt-history-section">
+                    <Localized id="customer-mgmt-history-sales-title">
+                      <h3 className="customer-mgmt-history-section-title">Recent sales</h3>
+                    </Localized>
+                    {history.sales.length === 0 ? (
+                      <p className="customer-mgmt-history-empty-note">
+                        {requiredLocalized(l10n, 'customer-mgmt-history-no-sales')}
+                      </p>
+                    ) : (
+                      <ul className="customer-mgmt-history-sales">
+                        {history.sales.map((sale) => (
+                          <li key={sale.id} className="customer-mgmt-history-sale">
+                            <div className="customer-mgmt-history-sale-meta">
+                              <span className="customer-mgmt-history-sale-date">{formatDate(sale.created_at)}</span>
+                              <span className="customer-mgmt-history-sale-status">{sale.status}</span>
+                            </div>
+                            <div className="customer-mgmt-history-sale-amount">
+                              {formatSaleTotal(sale)}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+/** CUST-05: format a sale total from minor units + currency code. */
+function formatSaleTotal(sale: CustomerSaleSummary): string {
+  try {
+    return formatMoney(
+      { minor_units: sale.total_minor, currency: sale.currency },
+      'en-US',
+    );
+  } catch {
+    return sale.total_minor.toLocaleString();
+  }
+}
+
+/** CUST-05: short readable date for the sales list. */
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }

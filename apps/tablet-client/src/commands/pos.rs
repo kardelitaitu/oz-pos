@@ -96,6 +96,7 @@ pub async fn set_cart_discount_scoped(
             args.percent
         )));
     }
+    // SAFETY: args.percent is validated 0..=100 above, so the unwrap is safe.
     let percent = Percentage::new(args.percent as u8).unwrap();
 
     let db = state.db.lock().await;
@@ -684,7 +685,11 @@ pub async fn complete_sale(
     let updated = {
         let db = state.db.lock().await;
         let store = Store::new(&db);
-        store.compute_sale_tax(&mut sale, &[])?;
+        store.compute_sale_tax(
+            &mut sale,
+            &[],
+            oz_core::Settings::get_tax_rounding_mode(&db)?,
+        )?;
 
         // Match serial numbers from args to sale lines by SKU.
         if let Some(ref serial_numbers) = args.serial_numbers {
@@ -811,7 +816,11 @@ pub async fn complete_sale_scoped(
     let _res = {
         let db = state.db.lock().await;
         let store = Store::new(&db);
-        store.compute_sale_tax(&mut sale, &[])?;
+        store.compute_sale_tax(
+            &mut sale,
+            &[],
+            oz_core::Settings::get_tax_rounding_mode(&db)?,
+        )?;
 
         if let Some(ref serial_numbers) = args.serial_numbers {
             for sn in serial_numbers {
@@ -885,23 +894,6 @@ pub async fn complete_sale_scoped(
 
 // ── Compute Cart Tax ──────────────────────────────────────────────────
 
-/// Compute the total tax for a live cart (front-end preview).
-#[command]
-pub async fn compute_cart_tax(
-    lines: Vec<oz_core::db::CartLineTaxInput>,
-    currency: String,
-    state: State<'_, AppState>,
-) -> Result<i64, AppError> {
-    let parsed: oz_core::Currency = currency
-        .parse()
-        .map_err(|_| AppError::Invalid(format!("invalid currency code: {currency}")))?;
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let tax = store.compute_cart_tax(&lines, parsed)?;
-    drop(db);
-    Ok(tax.minor_units)
-}
-
 /// Compute tax within the session scope. ADR #7.
 #[command]
 pub async fn compute_cart_tax_scoped(
@@ -921,7 +913,11 @@ pub async fn compute_cart_tax_scoped(
         &session.user_id,
         oz_core::permissions::SALES_PROCESS,
     )?;
-    let tax = store.compute_cart_tax(&lines, parsed)?;
+    let tax = store.compute_cart_tax(
+        &lines,
+        parsed,
+        oz_core::Settings::get_tax_rounding_mode(&db)?,
+    )?;
     drop(db);
     Ok(tax.minor_units)
 }
@@ -1028,7 +1024,11 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
         let db = state.db.lock().await;
         let store = Store::new(&db);
 
-        store.compute_sale_tax(&mut sale, &[])?;
+        store.compute_sale_tax(
+            &mut sale,
+            &[],
+            oz_core::Settings::get_tax_rounding_mode(&db)?,
+        )?;
 
         let splits = if let Some(ref splits) = args.payment_splits {
             splits.clone()

@@ -403,7 +403,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setWorkspaceScreensState([]);
       return;
     }
-    listWorkspaceScreens(activeInstance.type_key)
+    listWorkspaceScreens(activeInstance.type_key, activeInstance.store_id)
       .then((screens) => {
         if (cancelled) return;
         if (screens.length > 0) {
@@ -471,10 +471,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
 
   // Backward-compat: sets the type_key string directly.
-  // Always updates lastWorkspace — even with null — so the active
-  // card visual is cleared when returning to the workspace picker.
+  // lastWorkspace persists even when returning to the workspace picker
+  // (key === null) so the last-used card keeps its active indicator —
+  // matching the interface contract above. It is cleared only on a fresh
+  // login/logout: the reset effect also calls setActiveInstance(null),
+  // which routes through handleSetActiveInstance and clears it.
   const handleSetActive = useCallback((key: string | null) => {
-    setLastWorkspace(key);
+    if (key) setLastWorkspace(key);
     setActiveWorkspace(key);
     // activeInstance syncs via useEffect above
   }, []);

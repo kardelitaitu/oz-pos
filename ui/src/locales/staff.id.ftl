@@ -24,8 +24,6 @@ staff-login-submitting = Memasuki sistem…
 
 # Restaurant Menu
 staff-login-verifying = Memverifikasi…
-staff-login-error-deactivated = Akun dinonaktifkan
-staff-login-error-not-found = Pengguna tidak ditemukan
 staff-login-error-connection = Tidak dapat memverifikasi nama pengguna. Periksa koneksi Anda.
 staff-login-back = ← Kembali
 staff-login-copyright = © 2026 OZ-POS. Seluruh hak cipta dilindungi.
@@ -90,6 +88,18 @@ staff-field-username-aria = Nama Pengguna
 staff-field-name-aria = Nama Tampilan
 staff-field-pin-aria = PIN
 staff-error-generic = { $message }
+staff-error-load = Gagal memuat data staf
+staff-retry = Coba lagi
+
+# ── Workspace Data Unavailable (STAFF-08) ────────────────────────────────
+staff-workspaces-unavailable = Data ruang kerja tidak tersedia
+staff-workspaces-unavailable-hint = Gagal memuat penugasan ruang kerja. Data staf di bawah masih terbaru.
+
+# ── Deactivate Confirmation (STAFF-10) ───────────────────────────────────
+staff-deactivate-confirm-title = Nonaktifkan anggota staf?
+staff-deactivate-confirm-body = Ini akan segera mencabut akses { $name } ke semua toko. Akun dapat diaktifkan kembali nanti. Lanjutkan?
+staff-deactivate-confirm-confirm = Nonaktifkan
+staff-deactivate-confirm-cancel = Batal
 
 # ── Toast Notifications ───────────────────────────────────────────────────
 staff-toast-created = { $name } berhasil dibuat
@@ -101,19 +111,15 @@ staff-toast-restored = { $name } diaktifkan kembali
 staff-login-subtitle = Login Staf
 staff-login-step-username = Masukkan nama pengguna Anda
 staff-login-step-pin = Masukkan PIN Anda
-staff-login-progress-aria =
-    .aria-label = Kemajuan login
+staff-login-progress-aria = Kemajuan login
 staff-login-username-placeholder =
     .placeholder = Nama Pengguna
 staff-login-username-aria =
     .aria-label = Nama Pengguna
 staff-login-next = Lanjut
-staff-login-pin-section-aria =
-    .aria-label = Entri PIN — ketik digit di keyboard atau gunakan papan tombol di layar
-staff-login-pin-aria =
-    .aria-label = Entri PIN: { $length } dari { $max } digit
-staff-login-keypad-aria =
-    .aria-label = Papan tombol numerik
+staff-login-pin-section-aria = Entri PIN — ketik digit di keyboard atau gunakan papan tombol di layar
+staff-login-pin-aria = Entri PIN: { $length } dari { $max } digit
+staff-login-keypad-aria = Papan tombol numerik
 staff-login-clear = Hapus
 staff-login-clear-aria =
     .aria-label = Hapus
@@ -129,10 +135,8 @@ staff-ws-custom = Kustom
 
 # ── Fast User Switching (ADR #6) ──────────────────────────────────────────
 
-staff-login-close-aria =
-    .aria-label = Tutup
-staff-login-next-aria =
-    .aria-label = Lanjut
+staff-login-close-aria = Tutup
+staff-login-next-aria = Lanjut
 
 fastpin-switch-user = Ganti Pengguna
 fastpin-active-user = Aktif: { $name }

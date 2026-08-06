@@ -25,6 +25,11 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: invokeMock,
 }));
 
+// Canvas widgets render money via the store default currency.
+vi.mock('@/contexts/CurrencyContext', () => ({
+  useCurrency: () => ({ currency: 'USD', setCurrency: vi.fn(), loading: false }),
+}));
+
 vi.mock('@/hooks/useFeatures', () => ({
   useFeatures: () => ({
     enabled: new Set(['simple-retail']),
@@ -70,8 +75,11 @@ describe('SalesDashboardScreen', () => {
   it('shows loading state initially', async () => {
     invokeMock.mockImplementation(() => new Promise(() => {}));
     renderWithFluentSync(<SalesDashboardScreen />, salesFtl);
-    // Widgets render skeleton placeholders during loading
-    expect(document.querySelectorAll('.skeleton').length).toBeGreaterThan(0);
+    // PERF-01: widgets are lazy — wait for the chunk to mount, then assert
+    // the widget's own loading skeleton placeholders are visible.
+    await waitFor(() => {
+      expect(document.querySelectorAll('.skeleton').length).toBeGreaterThan(0);
+    });
   });
 
   it('displays hourly data', async () => {

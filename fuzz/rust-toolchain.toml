@@ -1,0 +1,7 @@
+# cargo-fuzz requires nightly-only `-Z` flags (e.g. `-Z sanitizer`), so the
+# fuzz crate is pinned to nightly independently of the root workspace's
+# stable toolchain. CI installs dtolnay/rust-toolchain@nightly for the fuzz job.
+[toolchain]
+channel = "nightly"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

@@ -135,6 +135,7 @@ pub async fn set_cart_discount_scoped(
             args.percent
         )));
     }
+    // SAFETY: args.percent is validated 0..=100 above, so the unwrap is safe.
     let percent = Percentage::new(args.percent as u8).unwrap();
 
     let session = state.resolve_session(&session_token)?;
@@ -746,6 +747,7 @@ pub async fn complete_sale(
                         pd.percent
                     )));
                 }
+                // SAFETY: pd.percent is validated 0..=100 above.
                 let pct = Percentage::new(pd.percent as u8).unwrap();
                 cart.set_discount(pct, Some(pd.target));
             }
@@ -797,7 +799,11 @@ pub async fn complete_sale(
     let updated = {
         let db = state.db.lock().await;
         let store = Store::new(&db);
-        store.compute_sale_tax(&mut sale, &lua_overrides)?;
+        store.compute_sale_tax(
+            &mut sale,
+            &lua_overrides,
+            oz_core::Settings::get_tax_rounding_mode(&db)?,
+        )?;
 
         // Match serial numbers from args to sale lines by SKU.
         if let Some(ref serial_numbers) = args.serial_numbers {
@@ -988,7 +994,11 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
         let store = Store::new(&db);
 
         // Compute tax (same as first command)
-        store.compute_sale_tax(&mut sale, &[])?;
+        store.compute_sale_tax(
+            &mut sale,
+            &[],
+            oz_core::Settings::get_tax_rounding_mode(&db)?,
+        )?;
 
         let splits = if let Some(ref splits) = args.payment_splits {
             splits.clone()
@@ -1149,6 +1159,7 @@ pub async fn complete_sale_scoped(
                         pd.percent
                     )));
                 }
+                // SAFETY: pd.percent is validated 0..=100 above.
                 let pct = Percentage::new(pd.percent as u8).unwrap();
                 cart.set_discount(pct, Some(pd.target));
             }
@@ -1200,7 +1211,11 @@ pub async fn complete_sale_scoped(
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
         let store = Store::new(&db);
-        store.compute_sale_tax(&mut sale, &lua_overrides)?;
+        store.compute_sale_tax(
+            &mut sale,
+            &lua_overrides,
+            oz_core::Settings::get_tax_rounding_mode(&db)?,
+        )?;
 
         if let Some(ref serial_numbers) = args.serial_numbers {
             for sn in serial_numbers {
@@ -1274,25 +1289,6 @@ pub async fn complete_sale_scoped(
 
 // ── Compute Cart Tax ──────────────────────────────────────────────────
 
-/// Compute tax for a live cart from the global database.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `compute_cart_tax_scoped`.
-#[tauri::command]
-pub async fn compute_cart_tax(
-    lines: Vec<oz_core::db::CartLineTaxInput>,
-    currency: String,
-    state: State<'_, AppState>,
-) -> Result<i64, AppError> {
-    let parsed: oz_core::Currency = currency
-        .parse()
-        .map_err(|_| AppError::Invalid(format!("invalid currency code: {currency}")))?;
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let tax = store.compute_cart_tax(&lines, parsed)?;
-    drop(db);
-    Ok(tax.minor_units)
-}
-
 /// Compute cart tax for the store resolved from a session token. ADR #7.
 ///
 /// Requires `SALES_PROCESS` permission.
@@ -1322,7 +1318,11 @@ pub async fn compute_cart_tax_scoped(
         oz_core::permissions::SALES_PROCESS,
     )?;
 
-    let tax = store.compute_cart_tax(&lines, parsed)?;
+    let tax = store.compute_cart_tax(
+        &lines,
+        parsed,
+        oz_core::Settings::get_tax_rounding_mode(&db)?,
+    )?;
     drop(db);
     Ok(tax.minor_units)
 }

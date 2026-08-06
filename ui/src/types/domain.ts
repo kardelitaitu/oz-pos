@@ -33,6 +33,15 @@ export const COURSES: { id: CourseId; label: string; emoji: string }[] = [
   { id: 'drinks', label: 'Drinks', emoji: '🥤' },
 ];
 
+/** A modifier selection for a cart line. Mirrors the backend KdsModifier type. */
+export interface ModifierSelection {
+  groupId: string;
+  groupName: string;
+  modifierId: string;
+  modifierName: string;
+  priceMinor: number;
+}
+
 /** Label for a given course ID. */
 export function courseLabel(courseId: CourseId): string {
   return COURSES.find((c) => c.id === courseId)?.label ?? courseId;
@@ -57,6 +66,8 @@ export interface CartLine {
   readonly courseId?: CourseId;
   /** Coursing status — hold (not yet sent to kitchen) or fired. */
   readonly coursingStatus?: CoursingStatus;
+  /** Optional modifier selections attached to this line. */
+  readonly modifiers?: ModifierSelection[];
 }
 
 /**
@@ -87,11 +98,35 @@ export type AppError =
   | { kind: 'core'; subKind: string; message: string }
   | { kind: 'hardware'; subKind: string; message: string }
   | { kind: 'invalid'; message: string }
+  | { kind: 'permissionDenied'; message: string }
+  | { kind: 'invalidSession'; message?: string }
   | { kind: 'internal'; message: string };
 
-/** Type guard that checks whether an unknown value is an AppError. */
+/**
+ * Type guard that checks whether an unknown value is an AppError.
+ *
+ * Tauri serializes the Rust `AppError` with a `kind` discriminator
+ * (`core`, `hardware`, `invalid`, `permissionDenied`, `invalidSession`,
+ * `internal`). The typed shape is always preferred over string parsing
+ * — see `ui/src/utils/app-error.ts` for the full normalizer.
+ */
 export const isAppError = (e: unknown): e is AppError =>
   typeof e === 'object' && e !== null && 'kind' in e;
+
+/** ISO-4217 minor-unit exponent (decimal places) — IDR/JPY/KRW/VND = 0, KWD = 3, USD/EUR = 2.
+ *  Canonical frontend convention; `formatMoney` and money-input parsing share
+ *  this via `minorUnitExponent`. Aligned with the Rust side: `Currency::minor_unit_exponent`
+ *  (foundation/src/money.rs), the `006_currencies.sql` migration, `oz-cli`
+ *  init-db, and this map all treat IDR as 0 (the Rupiah has no circulating
+ *  minor unit). */
+export const MINOR_UNIT_EXPONENT: Record<string, number> = {
+  IDR: 0, JPY: 0, KRW: 0, VND: 0, CLP: 0, ISK: 0, HUF: 0,
+  KWD: 3, OMR: 3, BHD: 3, JOD: 3, TND: 3,
+};
+
+/** Minor-unit exponent (decimal places) for an ISO-4217 currency code. */
+export const minorUnitExponent = (currency: string): number =>
+  MINOR_UNIT_EXPONENT[currency] ?? 2;
 
 /** Format `Money` for display. Defaults to Indonesian locale (id-ID).
  *  `decimalSep` overrides the per‑store receipt setting (read from
@@ -103,18 +138,14 @@ export const formatMoney = (
 ): string => {
   const sep = decimalSep ?? getDecimalSep();
   const hideDecimals = sep === 'none';
+  const exp = minorUnitExponent(m.currency);
+  const major = m.minor_units / 10 ** exp;
+  const decimals = hideDecimals || exp === 0 ? 0 : exp;
   const fmt = new Intl.NumberFormat(locale, {
     style: 'decimal',
-    minimumFractionDigits: hideDecimals ? 0 : 2,
-    maximumFractionDigits: hideDecimals ? 0 : 2,
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
   });
-  // ISO-4217 minor-unit exponent: USD/EUR/IDR = 2, JPY/KRW = 0, KWD = 3.
-  const known: Record<string, number> = {
-    JPY: 0, KRW: 0, VND: 0, CLP: 0, ISK: 0, HUF: 0,
-    KWD: 3, OMR: 3, BHD: 3, JOD: 3, TND: 3,
-  };
-  const exp = known[m.currency] ?? 2;
-  const major = m.minor_units / 10 ** exp;
   // Known currency → symbol mapping
   const symbols: Record<string, string> = {
     USD: '$', IDR: 'Rp', EUR: '€', GBP: '£', JPY: '¥', KRW: '₩',

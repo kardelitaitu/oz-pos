@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "description": "AUDIT-27 CI-09 — quarantine registry for flaky tests. A test may be quarantined only via this manifest with an owner, issue, reason, date, and expiry. CI fails when an entry is expired, lacks an issue reference, or lacks an owner. Expired entries force re-investigation; permanent exclusions are not allowed — see docs/ci-pipeline.md and CONTRIBUTING.md.",
+  "entry_schema": {
+    "test": "Fully-qualified test name as reported by nextest (e.g. crate::module::test_name).",
+    "owner": "GitHub handle of the person responsible for re-investigating before expiry.",
+    "issue": "GitHub issue URL or #NN tracking the flake (required — CI fails without it).",
+    "reason": "Short root-cause hypothesis (race, shared state, timing, network).",
+    "date": "ISO-8601 quarantine start date (YYYY-MM-DD).",
+    "expiry": "ISO-8601 date after which CI fails until re-investigated (YYYY-MM-DD)."
+  },
+  "entries": []
+}

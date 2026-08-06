@@ -4,9 +4,11 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import { useSettings } from '@/contexts/SettingsContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useTerminalHardware } from '@/hooks/useTerminalHardware';
-import { setReceiptSettings } from '@/api/settings';
+import { setReceiptSettingsScoped } from '@/api/settings';
 import SettingsSelect from '../SettingsSelect';
 import type { WorkspaceCardProps } from './types';
 import { hasChanges } from './helpers';
@@ -24,7 +26,8 @@ export function WorkspaceStorePosSettings({
   variant = 'full-page',
   onSaved,
 }: WorkspaceCardProps) {
-  const { settings } = useSettings();
+  const { settings, markSettingsUpdated } = useSettings();
+  const { sessionToken } = useWorkspace();
   const { l10n } = useLocalization();
   const { addToast } = useToast();
   const hw = useTerminalHardware(terminalId ?? '', settings.store.currency);
@@ -35,17 +38,19 @@ export function WorkspaceStorePosSettings({
   const [showCurrency, setShowCurrency] = useState(false);
   const [showTax, setShowTax] = useState(true);
   const [showTableNumber, setShowTableNumber] = useState(false);
+  const [taxRoundingMode, setTaxRoundingMode] = useState('half_up');
   const [footer, setFooter] = useState('');
   const [saving, setSaving] = useState(false);
+  const [dirtyVersion, setDirtyVersion] = useState(0);
 
   // Original values for dirty tracking — captured after initial load
   const originalsRef = useRef<Record<string, unknown>>({});
   const [originalsLoaded, setOriginalsLoaded] = useState(false);
 
   const dirty = useMemo(() => hasChanges(
-    { paperWidth, showCurrency, showTax, showTableNumber, footer } as Record<string, unknown>,
+    { paperWidth, showCurrency, showTax, showTableNumber, taxRoundingMode, footer } as Record<string, unknown>,
     originalsRef.current,
-  ), [paperWidth, showCurrency, showTax, showTableNumber, footer, originalsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  ), [paperWidth, showCurrency, showTax, showTableNumber, taxRoundingMode, footer, originalsLoaded, dirtyVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Initialise from context ──────────────────────────────────
 
@@ -54,6 +59,7 @@ export function WorkspaceStorePosSettings({
     setShowCurrency(settings.receipt.showCurrency);
     setShowTax(settings.receipt.showTax);
     setShowTableNumber(settings.receipt.showTableNumber);
+    setTaxRoundingMode(settings.receipt.taxRoundingMode ?? 'half_up');
     setFooter(settings.receipt.footer);
     if (!originalsLoaded) {
       originalsRef.current = {
@@ -61,6 +67,7 @@ export function WorkspaceStorePosSettings({
         showCurrency: settings.receipt.showCurrency,
         showTax: settings.receipt.showTax,
         showTableNumber: settings.receipt.showTableNumber,
+        taxRoundingMode: settings.receipt.taxRoundingMode ?? 'half_up',
         footer: settings.receipt.footer,
       };
       setOriginalsLoaded(true);
@@ -76,7 +83,7 @@ export function WorkspaceStorePosSettings({
 
       // Persist receipt settings to the backend (unscoped)
       tasks.push(
-        setReceiptSettings({
+        setReceiptSettingsScoped(sessionToken ?? '', {
           showCurrency,
           decimalSeparator: settings.receipt.decimalSeparator,
           showTax,
@@ -87,7 +94,8 @@ export function WorkspaceStorePosSettings({
           marginBottom: settings.receipt.marginBottom,
           marginLeft: settings.receipt.marginLeft,
           marginRight: settings.receipt.marginRight,
-        }, userId ?? 'default'),
+          taxRoundingMode,
+        }),
       );
 
       // Save terminal hardware to filesystem via IPC
@@ -98,7 +106,11 @@ export function WorkspaceStorePosSettings({
       await Promise.all(tasks);
 
       // Update originals so dirty tracking resets
-      originalsRef.current = { paperWidth, showCurrency, showTax, showTableNumber, footer };
+      originalsRef.current = { paperWidth, showCurrency, showTax, showTableNumber, taxRoundingMode, footer };
+      setDirtyVersion((v) => v + 1);
+
+      // Notify other cards that receipt settings changed
+      markSettingsUpdated(['receipt.paperWidth', 'receipt.showCurrency', 'receipt.showTax', 'receipt.showTableNumber', 'receipt.taxRoundingMode', 'receipt.footer']);
 
       onSaved?.();
     } catch {
@@ -106,7 +118,7 @@ export function WorkspaceStorePosSettings({
     } finally {
       setSaving(false);
     }
-  }, [terminalId, hw, userId, showCurrency, showTax, paperWidth, showTableNumber, footer, settings.receipt, onSaved, addToast, l10n]);
+  }, [terminalId, hw, userId, showCurrency, showTax, paperWidth, showTableNumber, taxRoundingMode, footer, settings.receipt, onSaved, addToast, l10n, markSettingsUpdated, sessionToken]);
 
   // ── Variant classes ──────────────────────────────────────────
 
@@ -180,6 +192,22 @@ export function WorkspaceStorePosSettings({
               <span className="settings-toggle-slider" />
             </span>
           </span>
+        </div>
+
+        {/* Tax rounding mode (TAX-05 residual) */}
+        <div className="settings-field settings-field--horizontal">
+          <label htmlFor="pos-tax-rounding" className="settings-label">
+            <Localized id="workspace-pos-tax-rounding">Tax Rounding</Localized>
+          </label>
+          <SettingsSelect
+            id="pos-tax-rounding"
+            value={taxRoundingMode}
+            onChange={setTaxRoundingMode}
+            options={[
+              { value: 'half_up', label: requiredLocalized(l10n, 'workspace-pos-tax-rounding-halfup') },
+              { value: 'truncate', label: requiredLocalized(l10n, 'workspace-pos-tax-rounding-truncate') },
+            ]}
+          />
         </div>
 
         {/* Show table number */}

@@ -1,5 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useCanvasChart } from '@/hooks/useCanvasChart';
+import { AccessibleChartSummary } from './AccessibleChartSummary';
+import { boundAccessibleItems, boundPieSlices } from '@/utils/chart-policy';
 import './charts.css';
 
 /** A slice in the pie chart. */
@@ -12,12 +14,26 @@ export interface PieSlice {
 
 interface CanvasPieChartProps {
   data: PieSlice[];
+  /** Localized accessible name for the chart (A11Y-04/09). */
+  label: string;
+  /**
+   * Localized text summary of the chart (A11Y-09). Rendered as visually
+   * hidden text so screen-reader users get the category mix in words
+   * (e.g. "{ N } categories, top seller X") rather than only the drawing.
+   */
+  summary?: string;
   /** Inner radius ratio (0 = pie, >0 = donut). Default 0.45. */
   innerRadiusRatio?: number;
   /** Minimum height of the canvas container. */
   minHeight?: string;
   /** Formatter for values shown in tooltip area. */
   formatValue?: (v: number) => string;
+  /**
+   * Localized label for the aggregated "Other" slice (PERF-09). When the
+   * caller passes more slices than `CHART_MAX_SLICES`, the tail merges into
+   * a single slice with this label (falls back to "Other" defensively).
+   */
+  otherLabel?: string;
 }
 
 const DEFAULT_COLORS = [
@@ -31,14 +47,31 @@ const DEFAULT_COLORS = [
  * variables, and DPR-aware rendering.
  */
 export default function CanvasPieChart({
-  data,
+  data: rawData,
+  label,
+  summary,
   innerRadiusRatio = 0.45,
   minHeight = '220px',
   formatValue,
+  otherLabel = 'Other',
 }: CanvasPieChartProps) {
+  // PERF-09: bound the slice count before drawing. The tail (everything past
+  // CHART_MAX_SLICES) aggregates into a single localized "Other" slice so
+  // both the canvas and the accessible list stay within the policy cap even
+  // for very wide category breakdowns.
+  const { slices: topSlices, otherValue } = useMemo(
+    () => boundPieSlices(rawData),
+    [rawData],
+  );
+  const bounded = useMemo<PieSlice[]>(() => {
+    if (otherValue <= 0) return topSlices;
+    return [...topSlices, { name: otherLabel, value: otherValue }];
+  }, [topSlices, otherValue, otherLabel]);
+  const accessible = useMemo(() => boundAccessibleItems(bounded), [bounded]);
+
   const draw = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
-    const total = data.reduce((s, d) => s + d.value, 0);
-    if (total === 0 || data.length === 0) return;
+    const total = bounded.reduce((s, d) => s + d.value, 0);
+    if (total === 0 || bounded.length === 0) return;
 
     const size = Math.min(w, h) - 32;
     const cx = w / 2;
@@ -54,8 +87,8 @@ export default function CanvasPieChart({
     let startAngle = -Math.PI / 2;
 
     // Draw slices
-    for (let i = 0; i < data.length; i++) {
-      const slice = data[i]!;
+    for (let i = 0; i < bounded.length; i++) {
+      const slice = bounded[i]!;
       const sliceAngle = (slice.value / total) * Math.PI * 2;
       const endAngle = startAngle + sliceAngle;
       const color = slice.color ?? DEFAULT_COLORS[i % DEFAULT_COLORS.length]!;
@@ -123,13 +156,22 @@ export default function CanvasPieChart({
     }
   };
 
-  const { canvasRef, redraw } = useCanvasChart(draw, [data, innerRadiusRatio, formatValue]);
+  const { canvasRef, redraw } = useCanvasChart(draw, [bounded, innerRadiusRatio, formatValue]);
 
-  useEffect(() => { redraw(); }, [data, redraw]);
+  useEffect(() => { redraw(); }, [bounded, redraw]);
 
   return (
     <div className="canvas-chart-container" style={{ minHeight, width: '100%' }}>
-      <canvas ref={canvasRef as React.Ref<HTMLCanvasElement>} className="canvas-chart" aria-label="Pie chart" role="img" />
+      <canvas ref={canvasRef as React.Ref<HTMLCanvasElement>} className="canvas-chart" aria-label={label} role="img" />
+      {/* A11Y-09: accessible text summary + per-slice data list (visually
+          hidden) so screen readers get the underlying values. */}
+      <AccessibleChartSummary summary={summary}>
+        {accessible.items.map((d, i) => (
+          <li key={i}>
+            {d.name}: {formatValue ? formatValue(d.value) : String(d.value)}
+          </li>
+        ))}
+      </AccessibleChartSummary>
     </div>
   );
 }

@@ -15,17 +15,23 @@ next: Migrate tax commands into this module | perf: N/A.
 //! ## Current state
 //!
 //! The TaxModule implements the [`Module`] trait and is registered
-//! with the kernel during application startup. The underlying backend
-//! (DB CRUD, Tauri commands) and frontend (React screens, API calls,
-//! Fluent locale) still live in their original locations:
+//! with the kernel during application startup. This crate is the
+//! **contractual layer** for the tax vertical: it owns the canonical
+//! domain types (`TaxRate`, `RoundingMode`), which `oz-core` re-exports
+//! (`crates/oz-core/src/tax_rate.rs`), and the concrete implementation
+//! remains in its original locations:
 //!
 //! - Backend: `crates/oz-core/src/db/tax.rs` + `apps/desktop-client/src/commands/tax.rs`
 //! - Frontend: `ui/src/features/tax/`
 //! - API: `ui/src/api/tax.ts`
 //! - Locale: `ui/src/locales/{en,fr,es,de,zh,ja}/tax.ftl`
 //!
-//! In subsequent phases, these files will be physically moved into
-//! `modules/tax/` as the module system matures.
+//! The boundary between this crate and the implementation layers is
+//! pinned by the cross-layer contract tests in
+//! `modules/tax/tests/boundary_contract.rs` (manifest registration ↔
+//! type identity ↔ DB behaviour parity ↔ serde wire shape), so the
+//! pieces cannot silently drift. A future phase may physically move the
+//! implementation into this crate as the module system matures.
 //!
 //! ## Module manifest
 //!
@@ -44,7 +50,7 @@ pub mod models;
 pub mod repository;
 pub mod service;
 
-pub use models::TaxRate;
+pub use models::{RoundingMode, TaxRate};
 pub use repository::TaxRepository;
 pub use service::TaxService;
 

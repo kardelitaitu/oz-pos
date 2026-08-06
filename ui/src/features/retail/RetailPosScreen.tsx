@@ -1,47 +1,44 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import type { CSSProperties } from 'react';
 import { usePosState } from '@/features/sales/usePosState';
 import { useBarcodeScanner } from '@/features/sales/useBarcodeScanner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/frontend/shared/Toast';
-import { Localized, useLocalization } from '@fluent/react';
+import { requiredLocalized } from '@/frontend/shared';
+import { useLocalization } from '@fluent/react';
+import { plainErrorMessage } from '@/utils/app-error';
+import { isEditableTarget } from '@/utils/isEditableTarget';
+import { isAnyAriaModalOpen } from '@/utils/modal-guard';
+import { isCommandModifier } from '@/utils/keyboard-modifier';
+import { isDemoMode } from '@/utils/demo-mode';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { useSwipe } from '@/hooks/useSwipe';
 import PaymentModal from '@/features/sales/PaymentModal';
-import PriceOverrideModal from '@/features/sales/PriceOverrideModal';
-import { overrideLinePriceScoped, startSaleScoped, getProductTrackSerial, lookupSaleByReceiptBarcodeScoped } from '@/api/sales';
+import ItemModifierModal from '@/features/sales/components/ItemModifierModal';
+import { overrideLinePriceScoped, startSaleScoped, getProductTrackSerialBatch, lookupSaleByReceiptBarcodeScoped } from '@/api/sales';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
-import RefundModal from '@/features/sales/RefundModal';
-import { listProductsScoped, listCategories, lookupProductBySkuScoped, lookupByBarcodeScoped, type ProductDto, type CategoryDto } from '@/api/products';
+import { lookupProductBySkuScoped, lookupByBarcodeScoped, type ProductDto, type CategoryDto } from '@/api/products';
+import { loadCatalog, invalidateCatalog } from '@/utils/catalog-cache';
+import { usePagedList } from '@/hooks/usePagedList';
 import { listCustomers, type CustomerDto } from '@/api/customers';
 import { getActiveShiftScoped, openShiftScoped, closeShiftScoped, type ShiftDto } from '@/api/shifts';
 import { holdCartScoped, listHeldCartsScoped, getHeldCartScoped, deleteHeldCartScoped, type HeldCartRow, type SaleDetail } from '@/api/sales';
 import { getStoreSettingsScoped, listCreditSales, settleCreditScoped, type StoreSettingsDto, type CreditSaleDto } from '@/api/settings';
 import { computeCartTax, type CartLineTaxInput } from '@/api/tax';
-import { formatMoney, type CartId, type LineId, type Money, type Product, type Sku } from '@/types/domain';
+import { recordMark } from '@/utils/perf-metrics';
+import { type CartId, type CartLine, type CourseId, type LineId, type Money, type Product, type Sku } from '@/types/domain';
 import { useSound } from '@/frontend/shared/useSound';
-import ScaleIndicator from './ScaleIndicator';
-import WorkspaceSettingsModal from '@/features/settings/WorkspaceSettingsModal';
-import SalesHistoryScreen from '@/features/sales/SalesHistoryScreen';
-import ProductLookupScreen from '@/features/products/ProductLookupScreen';
-import TableManagementScreen from '@/features/tables/TableManagementScreen';
+import { useOptionalTheme } from '@/frontend/shell/ThemeProvider';
+import RetailFnBar from './RetailFnBar';
+import RetailHeader from './RetailHeader';
+import RetailCartPanel from './RetailCartPanel';
+import { RETAIL_CART_WIDTH_MIN, RETAIL_CART_WIDTH_DEFAULT, RETAIL_CART_WIDTH_MAX_CAP, clampRetailCartWidth } from './RetailCartPanel.constants';
+import RetailProductGrid, { type SortField, type SortOrder } from './RetailProductGrid';
+import { SalesHistoryView, TableManagementView, StockInquiryView } from './RetailSubViews';
+import RetailModals from './RetailModals';
+import RetailReminderPopup from './RetailReminderPopup';
 import './RetailPosScreen.css';
-
-// ── Cart panel width, viewport-aware ──────────────────────────────────
-
-const RETAIL_CART_WIDTH_MIN = 280;
-const RETAIL_CART_WIDTH_DEFAULT = 340;
-const RETAIL_CART_WIDTH_MAX_CAP = 800;
-
-function clampRetailCartWidth(px: number, viewportWidth: number): number {
-  const max = Math.max(
-    RETAIL_CART_WIDTH_MIN,
-    Math.min(viewportWidth * 0.5, RETAIL_CART_WIDTH_MAX_CAP),
-  );
-  return Math.max(RETAIL_CART_WIDTH_MIN, Math.min(Math.round(px), max));
-}
 
 function toProduct(p: ProductDto): Product {
   return {
@@ -57,6 +54,41 @@ function toProduct(p: ProductDto): Product {
     productType: p.product_type as Product['productType'],
   };
 }
+
+// ── Retail sample product fallback (dev/demo builds only — LOAD-03) ──
+// These catalogs may NEVER surface in a production build, even when the
+// live IPC catalog request fails: a cashier could otherwise see and select
+// products that are not in the store. `isDemoMode()` gates them.
+const RETAIL_SAMPLE_PRODUCTS: ProductDto[] = [
+  { sku: 'CPU-R7-7800X3D', name: 'AMD Ryzen 7 7800X3D 8-Core',  category: 'cat-cpu',       price: { minor_units: 6250000, currency: 'IDR' }, barcode: '730143314930', in_stock: true,  stock_qty: 15, product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'CPU-I7-14700K',  name: 'Intel Core i7-14700K 20-Core', category: 'cat-cpu',       price: { minor_units: 6450000, currency: 'IDR' }, barcode: '503203727850', in_stock: true,  stock_qty: 10, product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'CPU-R5-7600',    name: 'AMD Ryzen 5 7600 6-Core',     category: 'cat-cpu',       price: { minor_units: 3150000, currency: 'IDR' }, barcode: '730143314503', in_stock: true,  stock_qty: 25, product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'GPU-RTX4070TS',  name: 'ASUS TUF RTX 4070 Ti Super 16G',category: 'cat-gpu',     price: { minor_units: 14850000, currency: 'IDR' },barcode: '195553554890', in_stock: true,  stock_qty: 8,  product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'GPU-RX7800XT',   name: 'Sapphire PULSE RX 7800 XT 16G',category: 'cat-gpu',     price: { minor_units: 8450000, currency: 'IDR' }, barcode: '489517350567', in_stock: true,  stock_qty: 12, product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'GPU-RTX4060',    name: 'MSI Ventus 2X RTX 4060 8GB',   category: 'cat-gpu',     price: { minor_units: 4750000, currency: 'IDR' }, barcode: '824142323456', in_stock: true,  stock_qty: 20, product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'RAM-D5-32GB-CR', name: 'Corsair Vengeance DDR5 32GB 6K',category: 'cat-ram',     price: { minor_units: 1850000, currency: 'IDR' }, barcode: '840006698765', in_stock: true,  stock_qty: 30, product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'RAM-D5-64GB-GS', name: 'G.Skill Trident Z5 RGB 64GB D5',category: 'cat-ram',     price: { minor_units: 3450000, currency: 'IDR' }, barcode: '848354041234', in_stock: true,  stock_qty: 14, product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'RAM-D4-16GB-KF', name: 'Kingston Fury Beast 16GB DDR4', category: 'cat-ram',     price: { minor_units: 680000,  currency: 'IDR' }, barcode: '740617319800', in_stock: true,  stock_qty: 45, product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'SSD-990PRO-2TB', name: 'Samsung 990 PRO 2TB NVMe SSD',  category: 'cat-storage', price: { minor_units: 2750000, currency: 'IDR' }, barcode: '887276722340', in_stock: true,  stock_qty: 22, product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'SSD-P3P-1TB',    name: 'Crucial P3 Plus 1TB M.2 NVMe',  category: 'cat-storage', price: { minor_units: 1150000, currency: 'IDR' }, barcode: '649528918900', in_stock: true,  stock_qty: 35, product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'HDD-ST-4TB',     name: 'Seagate BarraCuda 4TB 3.5" HDD',category: 'cat-storage', price: { minor_units: 1350000, currency: 'IDR' }, barcode: '763649112340', in_stock: true,  stock_qty: 18, product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'MB-B650-ROG',    name: 'ASUS ROG Strix B650-A Gaming',  category: 'cat-mb',      price: { minor_units: 3650000, currency: 'IDR' }, barcode: '195553948760', in_stock: true,  stock_qty: 9,  product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'MB-Z790-MSI',    name: 'MSI MAG Z790 Tomahawk WiFi',    category: 'cat-mb',      price: { minor_units: 4250000, currency: 'IDR' }, barcode: '824142301230', in_stock: true,  stock_qty: 7,  product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'PSU-RM850X',     name: 'Corsair RM850x 850W Gold Modular',category:'cat-psu',     price: { minor_units: 2150000, currency: 'IDR' }, barcode: '840006601234', in_stock: true,  stock_qty: 16, product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'COOL-PA120',     name: 'Thermalright Peerless Assassin 120',category:'cat-cooling',price:{ minor_units: 580000,  currency: 'IDR' }, barcode: '784562098120', in_stock: true,  stock_qty: 40, product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'COOL-KRAKEN360', name: 'NZXT Kraken Elite 360 RGB AIO', category: 'cat-cooling', price: { minor_units: 4450000, currency: 'IDR' }, barcode: '815671018900', in_stock: true,  stock_qty: 5,  product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+  { sku: 'PASTE-MX6',      name: 'Arctic MX-6 Thermal Paste 4g',  category: 'cat-cooling', price: { minor_units: 125000,  currency: 'IDR' }, barcode: '872767004500', in_stock: true,  stock_qty: 60, product_type: 'retail', tax_rate_ids: [], created_at: '', price_updated_at: '' },
+];
+
+const RETAIL_SAMPLE_CATEGORIES: CategoryDto[] = [
+  { id: 'cat-cpu', name: 'Processors (CPU)', colour: '#e74c3c', icon: 'cpu-1' },
+  { id: 'cat-gpu', name: 'Graphics Cards (GPU)', colour: '#2ecc71', icon: 'gpu-1' },
+  { id: 'cat-ram', name: 'Memory (RAM)', colour: '#9b59b6', icon: 'ram-1' },
+  { id: 'cat-storage', name: 'Storage (SSD/HDD)', colour: '#3498db', icon: 'hdd-1' },
+  { id: 'cat-mb', name: 'Motherboards', colour: '#f39c12', icon: 'mb-1' },
+  { id: 'cat-psu', name: 'Power Supply', colour: '#1abc9c', icon: 'psu-1' },
+  { id: 'cat-cooling', name: 'Cooling & Cases', colour: '#34495e', icon: 'cool-1' },
+];
 
 interface RetailPosScreenProps {
   onNavigate?: (route: string) => void;
@@ -74,12 +106,28 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const sessionToken = rawToken || '';
   const userId = session?.user_id ?? '';
 
+  // ── Screen-reader announcements (declared early — used by add handlers) ──
+  const announceRef = useRef<HTMLDivElement>(null);
+  const announceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const announce = useCallback((msg: string) => {
+    if (announceTimerRef.current) clearTimeout(announceTimerRef.current);
+    if (announceRef.current) {
+      announceRef.current.textContent = msg;
+      announceTimerRef.current = setTimeout(() => {
+        if (announceRef.current) announceRef.current.textContent = '';
+      }, 3000);
+    }
+  }, []);
+
   const {
     lines, total, subtotal, discountPercent, discountLabel, discountAmount,
-    addProduct, removeLine, updateQty, updateLinePrice, setDiscount, resetCart,
+    addProduct, removeLine, updateQty, updateLinePrice, assignCourse, setDiscount, resetCart,
   } = usePosState();
 
   const lineCount = lines.reduce((a, l) => a + l.qty, 0);
+  // Ref for stock-check callbacks to avoid stale closure on rapid sequential adds
+  const linesRef = useRef(lines);
+  linesRef.current = lines;
 
   const { playBeep, playError, playSuccess, setSoundEnabled } = useSound();
 
@@ -119,14 +167,34 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   useEffect(() => {
     const uniqueSkus = [...new Set(lines.map((l) => l.sku))];
-    for (const sku of uniqueSkus) {
-      if (trackSerialMap[sku] === undefined && !pendingTrackFetchRef.current.has(sku)) {
-        pendingTrackFetchRef.current.add(sku);
-        getProductTrackSerial(sku).then((track) => {
-          setTrackSerialMap((prev) => ({ ...prev, [sku]: track }));
-        }).catch(() => { /* serial track lookup is best-effort */ });
-      }
+    // Clean up pending set: remove SKUs no longer in the cart
+    for (const sku of pendingTrackFetchRef.current) {
+      if (!uniqueSkus.includes(sku as Sku)) pendingTrackFetchRef.current.delete(sku);
     }
+    const missing = uniqueSkus.filter(
+      (sku) => trackSerialMap[sku] === undefined && !pendingTrackFetchRef.current.has(sku),
+    );
+    if (missing.length === 0) return;
+    for (const sku of missing) pendingTrackFetchRef.current.add(sku);
+    // PERF-03: fetch every missing flag in ONE IPC round trip instead of
+    // one get_product_track_serial call per SKU (N+1 elimination).
+    getProductTrackSerialBatch(missing as string[])
+      .then((rows) => {
+        setTrackSerialMap((prev) => {
+          const next = { ...prev };
+          for (const row of rows) next[row.sku] = row.track_serial;
+          return next;
+        });
+      })
+      .catch(() => {
+        // best-effort: release the pending guard so a later cart change
+        // re-fetches the batch (a transient IPC failure must not pin these
+        // SKUs to non-tracking for the whole session). Leaving the map
+        // undefined keeps the serial-capture UI hidden, same as false — and
+        // since the map is unchanged, the effect won't re-run here, so the
+        // re-fetch only happens on the next explicit cart mutation.
+        for (const sku of missing) pendingTrackFetchRef.current.delete(sku);
+      });
   }, [lines, trackSerialMap]);
 
   const handleSerialChange = useCallback((lineId: string, serial: string) => {
@@ -152,11 +220,11 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         setShowQuickReturnRefund(true);
         setQuickReturnBarcode('');
       } else {
-        addToast({ message: l10n.getString('retail-quick-return-not-found') || 'Sale not found for this receipt barcode', type: 'error' });
+        addToast({ message: requiredLocalized(l10n, 'retail-quick-return-not-found'), type: 'error' });
         playError();
       }
     } catch {
-      addToast({ message: l10n.getString('retail-quick-return-error') || 'Failed to look up receipt', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'retail-quick-return-error'), type: 'error' });
       playError();
     } finally {
       setQuickReturnLoading(false);
@@ -168,12 +236,17 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     setQuickReturnSale(null);
   }, []);
 
-  const [theme, _setTheme] = useState<'light' | 'dark'>(() => {
-    const saved = localStorage.getItem('retail-theme');
-    if (saved === 'dark' || saved === 'light') return saved;
-    try { return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
-    catch { return 'light'; }
-  });
+  // P0-1 (audit docs/2026-07-28-retail-pos-theming-audit.md): replace the
+  // shadow useState that read a per-component localStorage key and matched
+  // the OS dark-mode preference on mount but never updated afterwards.
+  // useOptionalTheme()?.theme returns Theme | undefined — Theme when
+  // AppProviders' ThemeProvider wraps, undefined for unwrapped renders
+  // (React strips undefined from JSX attributes; CSS falls back to :root
+  // via cascade).
+  // Implicitly also closes the P0-3 storage-key shadow, the P2-6 dead
+  // setter, and the P2-7 missing-useTheme import by deleting the
+  // shadow state entirely.
+  const theme = useOptionalTheme()?.theme;
 
 
   // ── Cart panel resize state ───────────────────────────────────────
@@ -186,6 +259,22 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   });
   const isResizing = useRef(false);
   const retailPosRef = useRef<HTMLDivElement>(null);
+  // PERF-04: hold the latest clamped width + pointer X so mouseup can flush
+  // the final value instead of writing localStorage on every mousemove.
+  const latestClampedRef = useRef(retailCartWidth);
+  const lastClientXRef = useRef(0);
+
+  /** Compute + apply the cart width from the latest pointer position. */
+  const applyWidthFromPointer = useCallback(() => {
+    if (!isResizing.current || !retailPosRef.current) return;
+    const rect = retailPosRef.current.getBoundingClientRect();
+    const clamped = clampRetailCartWidth(
+      rect.right - lastClientXRef.current,
+      window.innerWidth,
+    );
+    latestClampedRef.current = clamped;
+    setRetailCartWidth(clamped);
+  }, []);
 
   const startResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -195,27 +284,44 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   }, []);
 
   useEffect(() => {
+    let rafId: number | null = null;
     const stopResize = () => {
       if (!isResizing.current) return;
+      // Flush any pending frame synchronously while still resizing so a fast
+      // drag-then-release never loses the final pointer position (PERF-04).
+      // Order matters: applyWidthFromPointer() early-returns once isResizing
+      // is cleared, so flush BEFORE resetting the flag.
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+        applyWidthFromPointer();
+      }
       isResizing.current = false;
+      // Persist the final width once, at the end of the drag.
+      localStorage.setItem('retail-cart-width', String(latestClampedRef.current));
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };
     const onMouseMove = (e: MouseEvent) => {
       if (!isResizing.current || !retailPosRef.current) return;
-      const rect = retailPosRef.current.getBoundingClientRect();
-      const clamped = clampRetailCartWidth(rect.right - e.clientX, window.innerWidth);
-      setRetailCartWidth(clamped);
-      localStorage.setItem('retail-cart-width', String(clamped));
+      lastClientXRef.current = e.clientX;
+      // Coalesce mousemove events into ONE state update per animation
+      // frame (PERF-04) instead of setState on every pointer move.
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        applyWidthFromPointer();
+      });
     };
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', stopResize);
     return () => {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', stopResize);
+      if (rafId !== null) cancelAnimationFrame(rafId);
       stopResize();
     };
-  }, []);
+  }, [applyWidthFromPointer]);
 
   useEffect(() => {
     const onResize = () => {
@@ -231,9 +337,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   // ── Undo stack ───────────────────────────────────────────────────
   const MAX_UNDO = 5;
-  const [undoStack, setUndoStack] = useState<{ sku: Sku; name: string; category: string; unit_price: Money }[]>([]);
+  const [undoStack, setUndoStack] = useState<{ sku: Sku; name: string; category: string; unit_price: Money; qty: number }[]>([]);
 
-  const handleRemoveLine = useCallback((id: string, line: { sku: Sku; name: string; category: string; unit_price: Money }) => {
+  const handleRemoveLine = useCallback((id: string, line: { sku: Sku; name: string; category: string; unit_price: Money; qty: number }) => {
     removeLine(id as LineId);
     setUndoStack((prev) => [line, ...prev].slice(0, MAX_UNDO));
   }, [removeLine]);
@@ -241,9 +347,10 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const handleUndoRemove = useCallback(() => {
     if (undoStack.length === 0) return;
     const item = undoStack[0]!;
-    addProduct({ sku: item.sku, name: item.name, category: item.category, productType: 'retail', price: item.unit_price, barcode: null, inStock: true, stockQty: null });
+    addProduct({ sku: item.sku, name: item.name, category: item.category, productType: 'retail', price: item.unit_price, barcode: null, inStock: true, stockQty: null }, item.qty);
+    announce(requiredLocalized(l10nRef.current, 'retail-added-to-cart', { name: item.name }));
     setUndoStack((prev) => prev.slice(1));
-  }, [undoStack, addProduct]);
+  }, [undoStack, addProduct, announce]);
 
   const undoBarExit = useExitAnimation(
     undoStack.length > 0,
@@ -269,22 +376,32 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     if (!pendingProduct) return;
     const qty = Math.max(1, parseInt(qtyInput, 10) || 1);
     if (pendingProduct.stock_qty != null) {
-      const inCart = lines.filter((l) => l.sku === pendingProduct.sku).reduce((s, l) => s + l.qty, 0);
+      const inCart = linesRef.current.filter((l) => l.sku === pendingProduct.sku).reduce((s, l) => s + l.qty, 0);
       if (inCart + qty > pendingProduct.stock_qty) {
-        addToast({ message: l10n.getString('retail-toast-insufficient-stock') || `Insufficient stock for ${pendingProduct.name}`, type: 'warning' });
+        addToast({ message: requiredLocalized(l10n, 'retail-toast-insufficient-stock', { name: pendingProduct.name }), type: 'warning' });
         return;
       }
     }
-    for (let i = 0; i < qty; i++) addProduct(toProduct(pendingProduct));
+    addProduct(toProduct(pendingProduct), qty);
+    announce(requiredLocalized(l10nRef.current, 'retail-added-to-cart', { name: pendingProduct.name }));
     setShowQtyPicker(false);
     setPendingProduct(null);
-  }, [pendingProduct, qtyInput, addProduct, addToast, l10n, lines]);
+  }, [pendingProduct, qtyInput, addProduct, addToast, l10n, announce]);
 
   // ── Keyboard shortcut overlay ────────────────────────────────────
   const [showShortcuts, setShowShortcuts] = useState(false);
 
   // ── Barcode scan flash ───────────────────────────────────────────
   const [scanFlash, setScanFlash] = useState(false);
+  const scanFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clean up the scan-flash and announce timers on unmount
+  useEffect(() => {
+    return () => {
+      if (scanFlashTimerRef.current) clearTimeout(scanFlashTimerRef.current);
+      if (announceTimerRef.current) clearTimeout(announceTimerRef.current);
+    };
+  }, []);
 
   // ── Confirm clear cart ────────────────────────────────────────────
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -294,46 +411,95 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     setShowClearConfirm(true);
   }, [lines.length]);
 
-  const handleConfirmClear = useCallback(() => {
-    setCartId(null);
-    resetCart();
-    setUndoStack([]);
-    setShowClearConfirm(false);
-  }, [resetCart]);
+  // ── Scroll preservation ──────────────────────────────────────
+  const [savedScrollTop, setSavedScrollTop] = useState(0);
 
-  // ── Recent products (last 8) ──────────────────────────────────────
-  const MAX_RECENT = 8;
-  const [recentProducts, setRecentProducts] = useState<ProductDto[]>([]);
-
-  const addToRecent = useCallback((p: ProductDto) => {
-    setRecentProducts((prev) => {
-      const filtered = prev.filter((x) => x.sku !== p.sku);
-      const next = [p, ...filtered].slice(0, MAX_RECENT);
-      return next;
-    });
+  // Save scroll position before swapping to a sub-view; restore after remount.
+  // The real scroll container is .retail-grid (overflow-y: auto); .retail-main
+  // itself is overflow-y: hidden, so read from the grid element. The data-testid
+  // doubles as the scroll-container contract used by the scroll-preservation test
+  // — keep it in sync with RetailProductGrid's grid wrapper (intentional coupling).
+  const getScrollContainer = useCallback(() => {
+    return retailPosRef.current?.querySelector<HTMLElement>('[data-testid="product-grid-scroll"]') ?? null;
   }, []);
+  const saveScroll = useCallback(() => {
+    const el = getScrollContainer();
+    if (el) setSavedScrollTop(el.scrollTop);
+  }, [getScrollContainer]);
+  const goToSubView = useCallback((setter: (v: boolean) => void) => {
+    saveScroll();
+    setter(true);
+  }, [saveScroll]);
 
   // ── Products & Categories ────────────────────────────────────
 
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [filterLowStock, setFilterLowStock] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadProductsAndCategories = useCallback((token: string) => {
+    // Abort any previous in-flight request to prevent race condition
+    if (loadProductsAbortRef.current) {
+      loadProductsAbortRef.current.abort();
+    }
     const controller = new AbortController();
-    listProductsScoped(sessionToken).then(setProducts).catch(() => { if (!controller.signal.aborted) { addToast({ message: l10n.getString('retail-toast-failed-products') || 'Failed to load products', type: 'error' }); playError(); } });
-    listCategories().then((cats) => {
-      if (controller.signal.aborted) return;
-      setCategories(cats);
-      const first = cats[0];
-      if (first) setActiveCategory(first.id);
-    }).catch(() => { if (!controller.signal.aborted) { addToast({ message: l10n.getString('retail-toast-failed-categories') || 'Failed to load categories', type: 'error' }); playError(); } });
+    loadProductsAbortRef.current = controller;
+    setProductsLoading(true);
+    setCategoriesLoading(true);
+    setLoadError(null);
+    // PERF-08: one deduplicated, cached IPC load for the whole catalog
+    // instead of two independent requests on every workspace/session load.
+    loadCatalog(token)
+      .then(({ products: prods, categories: cats }) => {
+        if (controller.signal.aborted) return;
+        setProducts(prods);
+        // LOAD-03: empty category list is a legitimate empty catalog in
+        // production — never substitute demo categories outside dev.
+        setCategories(cats && cats.length > 0 ? cats : (isDemoMode() ? RETAIL_SAMPLE_CATEGORIES : []));
+        // PERF-06: time-to-interactive-POS marker — catalog rendered.
+        recordMark('oz:pos-interactive');
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        // LOAD-03: demo catalog only in dev/demo builds; production keeps
+        // the real (empty) state and shows the unavailable banner + Retry.
+        if (isDemoMode()) {
+          setProducts(RETAIL_SAMPLE_PRODUCTS);
+          setCategories(RETAIL_SAMPLE_CATEGORIES);
+          setLoadError(requiredLocalized(l10nRef.current, 'retail-load-error'));
+        } else {
+          setProducts([]);
+          setCategories([]);
+          setLoadError(requiredLocalized(l10nRef.current, 'retail-load-error-unavailable'));
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setProductsLoading(false);
+          setCategoriesLoading(false);
+        }
+      });
     return () => { controller.abort(); };
-  }, [addToast, l10n, playError, sessionToken]);
+  }, []);
+
+  useEffect(() => loadProductsAndCategories(sessionToken), [sessionToken, loadProductsAndCategories]);
+
+  const handleRetryLoad = useCallback(() => {
+    loadProductsAndCategories(sessionToken);
+  }, [sessionToken, loadProductsAndCategories]);
+
+  // Tracks the latest AbortController so handleRetryLoad and rapid
+  // sessionToken changes abort the previous in-flight fetch,
+  // preventing stale data from overwriting fresh results.
+  const loadProductsAbortRef = useRef<AbortController | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
 
-  const allLabel = l10n.getString('product-lookup-all-categories') || 'All';
+  const allLabel = requiredLocalized(l10n, 'product-lookup-all-categories');
   const catLabels = useMemo(() => {
     const m = new Map<string, string>();
     categories.forEach((c) => {
@@ -345,31 +511,110 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   }, [categories]); // l10n via ref
 
   const lowStockCount = useMemo(
-    () => products.filter((p) => p.stock_qty != null && p.stock_qty > 0 && p.stock_qty <= 5).length,
+    () => products.filter((p) => {
+      if (p.stock_qty == null || p.stock_qty <= 0) return false;
+      const threshold = p.low_stock_threshold ?? 5;
+      return p.stock_qty <= threshold;
+    }).length,
     [products],
   );
 
-  const [productPage, setProductPage] = useState(0);
-  const PAGE_SIZE = 50;
+  const [editingProduct, setEditingProduct] = useState<ProductDto | null>(null);
+  const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
+  const [isAddProductOpen, setIsAddProductOpen] = useState(false);
+
+  const handleEditProduct = useCallback((p: ProductDto) => {
+    setEditingProduct(p);
+  }, []);
+
+  const handleSaveProductEdit = useCallback((updatedProduct: ProductDto) => {
+    setProducts((prev) =>
+      prev.map((p) => (p.sku === updatedProduct.sku ? updatedProduct : p)),
+    );
+    // PERF-08: catalog mutated — next load must refetch.
+    invalidateCatalog(sessionToken);
+    setEditingProduct(null);
+  }, [setProducts, sessionToken]);
+
+  const handleSaveNewCategory = useCallback((newCat: CategoryDto) => {
+    setCategories((prev) => [...prev, newCat]);
+    // PERF-08: catalog mutated — next load must refetch.
+    invalidateCatalog(sessionToken);
+    setActiveCategory(newCat.id);
+  }, [setCategories, sessionToken]);
+
+  const handleSaveNewProduct = useCallback((newProd: ProductDto) => {
+    setProducts((prev) => [newProd, ...prev]);
+    // PERF-08: catalog mutated — next load must refetch.
+    invalidateCatalog(sessionToken);
+  }, [setProducts, sessionToken]);
 
   const filteredProducts = useMemo(() => {
-    let list = products.filter((p) => p.product_type === 'retail' || p.product_type === 'both');
-    if (activeCategory) list = list.filter((p) => p.category === activeCategory);
+    let list = products.filter((p) => p.product_type === 'retail');
+    if (activeCategory) {
+      const activeCatObj = categories.find((c) => c.id === activeCategory);
+      list = list.filter(
+        (p) =>
+          p.category === activeCategory ||
+          (activeCatObj && p.category === activeCatObj.name) ||
+          p.category?.toLowerCase() === activeCategory.toLowerCase(),
+      );
+    }
+    if (filterLowStock) {
+      list = list.filter((p) => {
+        if (p.stock_qty == null || p.stock_qty <= 0) return false;
+        const threshold = p.low_stock_threshold ?? 5;
+        return p.stock_qty <= threshold;
+      });
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       list = list.filter((p) => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q));
     }
     return list;
-  }, [products, activeCategory, searchQuery]);
+  }, [products, activeCategory, searchQuery, categories, filterLowStock]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
-  const pagedProducts = useMemo(
-    () => filteredProducts.slice(productPage * PAGE_SIZE, (productPage + 1) * PAGE_SIZE),
-    [filteredProducts, productPage],
-  );
+  const [sortField, setSortField] = useState<SortField>('sku');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
 
-  // Reset page when filter changes
-  useEffect(() => { setProductPage(0); }, [activeCategory, searchQuery]);
+  const handleSort = useCallback((field: SortField) => {
+    if (sortField === field) {
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  }, [sortField]);
+
+  const sortedProducts = useMemo(() => {
+    const list = [...filteredProducts];
+    list.sort((a, b) => {
+      let comp = 0;
+      if (sortField === 'sku') {
+        comp = a.sku.localeCompare(b.sku);
+      } else if (sortField === 'name') {
+        comp = a.name.localeCompare(b.name);
+      } else if (sortField === 'stock') {
+        const stockA = a.stock_qty ?? 0;
+        const stockB = b.stock_qty ?? 0;
+        comp = stockA - stockB;
+      } else if (sortField === 'price') {
+        comp = a.price.minor_units - b.price.minor_units;
+      }
+      return sortOrder === 'asc' ? comp : -comp;
+    });
+    return list;
+  }, [filteredProducts, sortField, sortOrder]);
+
+  // PERF-07: bounded pagination via the shared list policy — the grid
+  // renders only the active page, never the full catalog.
+  const { page: productPage, total: totalPages, pageItems: pagedProducts, setPage: setProductPage, resetPage } = usePagedList(sortedProducts);
+
+  // Reset page when filter changes (PERF-07: keep the page in range).
+  // Deps use the stable `resetPage` callback — NOT the `usePagedList`
+  // result object, which is a fresh reference every render and would
+  // re-run this effect (and reset the page) on every render.
+  useEffect(() => { resetPage(); }, [activeCategory, searchQuery, filterLowStock, resetPage]);
 
   const catHue = useCallback((catId: string | null) => {
     if (!catId) return 210;
@@ -380,53 +625,58 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   const handleAdd = useCallback((p: ProductDto) => {
     if (p.stock_qty != null) {
-      const inCart = lines.filter((l) => l.sku === p.sku).reduce((s, l) => s + l.qty, 0);
+      const inCart = linesRef.current.filter((l) => l.sku === p.sku).reduce((s, l) => s + l.qty, 0);
       if (inCart + 1 > p.stock_qty) {
-        addToast({ message: l10n.getString('retail-toast-insufficient-stock') || `Insufficient stock for ${p.name}`, type: 'warning' });
+        addToast({ message: requiredLocalized(l10n, 'retail-toast-insufficient-stock', { name: p.name }), type: 'warning' });
         return;
       }
     }
     addProduct(toProduct(p));
-    addToRecent(p);
-  }, [addProduct, addToRecent, addToast, l10n, lines]);
+    announce(requiredLocalized(l10nRef.current, 'retail-added-to-cart', { name: p.name }));
+  }, [addProduct, addToast, l10n, announce]);
 
   const handleWeighAdd = useCallback((sku: Sku, weightGrams: number) => {
     const product = products.find((p) => p.sku === sku);
     if (!product) return;
     const qty = Math.max(1, Math.round(weightGrams));
     if (product.stock_qty != null) {
-      const inCart = lines.filter((l) => l.sku === sku).reduce((s, l) => s + l.qty, 0);
+      const inCart = linesRef.current.filter((l) => l.sku === sku).reduce((s, l) => s + l.qty, 0);
       if (inCart + qty > product.stock_qty) {
-        addToast({ message: l10n.getString('retail-toast-insufficient-stock') || `Insufficient stock for ${product.name}`, type: 'warning' });
+        addToast({ message: requiredLocalized(l10n, 'retail-toast-insufficient-stock', { name: product.name }), type: 'warning' });
         return;
       }
     }
     addProduct(toProduct(product), qty);
-    addToRecent(product);
+    announce(requiredLocalized(l10nRef.current, 'retail-added-to-cart', { name: product.name }));
     setWeighTarget(null);
-    addToast({ message: l10n.getString('scale-weigh-added', { name: product.name, weight: qty }) || `Added ${qty}g of ${product.name}`, type: 'success' });
-  }, [products, lines, addProduct, addToRecent, addToast, l10n]);
+    addToast({ message: requiredLocalized(l10n, 'scale-weigh-added', { name: product.name, weight: qty }), type: 'success' });
+  }, [products, addProduct, addToast, l10n, announce]);
 
   const handleSetWeighTarget = useCallback((p: ProductDto) => {
     if (weighTarget?.sku === p.sku) return;
     setWeighTarget({ sku: p.sku as Sku, name: p.name });
-    addToast({ message: l10n.getString('scale-target-set', { name: p.name }) || `${p.name} selected for weighing`, type: 'info' });
+    addToast({ message: requiredLocalized(l10n, 'scale-target-set', { name: p.name }), type: 'info' });
   }, [weighTarget, addToast, l10n]);
 
   /** Stock-aware cart qty increase — checks stock_qty before incrementing. */
   const handleIncreaseQty = useCallback((line: { sku: string; id: LineId; qty: number }) => {
     const product = products.find((p) => p.sku === line.sku);
     if (product?.stock_qty != null) {
-      const otherLinesQty = lines
+      const otherLinesQty = linesRef.current
         .filter((l) => l.sku === line.sku && l.id !== line.id)
         .reduce((s, l) => s + l.qty, 0);
       if (otherLinesQty + line.qty + 1 > product.stock_qty) {
-        addToast({ message: l10n.getString('retail-toast-insufficient-stock') || `Insufficient stock for ${product.name}`, type: 'warning' });
+        addToast({ message: requiredLocalized(l10n, 'retail-toast-insufficient-stock', { name: product.name }), type: 'warning' });
         return;
       }
     }
     updateQty(line.id, line.qty + 1);
-  }, [products, lines, updateQty, addToast, l10n]);
+  }, [products, updateQty, addToast, l10n]);
+
+  /** Open the modifier editor for a cart line. */
+  const handleEditModifiers = useCallback((line: CartLine) => {
+    setModifierLine(line);
+  }, []);
 
   // ── SKU / Barcode input ──────────────────────────────────────
 
@@ -446,19 +696,20 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       const found = await lookupProductBySkuScoped(sessionToken, val);
       if (found) { handleAdd(found); return; }
     } catch { /* unreachable */ }
-    addToast({ message: l10n.getString('pos-no-barcode-match') || 'Product not found', type: 'warning' });
+    addToast({ message: requiredLocalized(l10n, 'retail-sku-not-found', { sku: val }), type: 'warning' });
   }, [skuInput, handleAdd, addToast, l10n, sessionToken]);
 
   const handleBarcode = useCallback(async (payload: { code: string }) => {
+
     const list = productsRef.current;
     const found = list.find((x) => x.barcode === payload.code);
-    if (found) { handleAdd(found); setScanFlash(true); playBeep(); setTimeout(() => setScanFlash(false), 300); return; }
+    if (found) { handleAdd(found); setScanFlash(true); playBeep(); if (scanFlashTimerRef.current) clearTimeout(scanFlashTimerRef.current); scanFlashTimerRef.current = setTimeout(() => { setScanFlash(false); scanFlashTimerRef.current = null; }, 300); return; }
     try {
       const p = await lookupByBarcodeScoped(sessionToken, payload.code);
-      if (p) { handleAdd(p); setScanFlash(true); playBeep(); setTimeout(() => setScanFlash(false), 300); return; }
+      if (p) { handleAdd(p); setScanFlash(true); playBeep(); if (scanFlashTimerRef.current) clearTimeout(scanFlashTimerRef.current); scanFlashTimerRef.current = setTimeout(() => { setScanFlash(false); scanFlashTimerRef.current = null; }, 300); return; }
     } catch { /* unreachable */ }
     playError();
-    addToast({ message: l10n.getString('pos-no-barcode-match') || 'Product not found', type: 'warning' });
+    addToast({ message: requiredLocalized(l10n, 'pos-no-barcode-match'), type: 'warning' });
   }, [handleAdd, addToast, l10n, playBeep, playError, sessionToken]);
 
   useBarcodeScanner({ onProductFound: handleBarcode });
@@ -468,9 +719,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const [storeSettings, setStoreSettings] = useState<StoreSettingsDto>({ name: '', address: '', taxId: '', currency: 'IDR', branch: '', logo: '' });
   useEffect(() => {
     let mounted = true;
-    getStoreSettingsScoped(sessionToken).then((s) => { if (mounted) setStoreSettings(s); }).catch(() => { if (mounted) addToast({ message: l10n.getString('retail-toast-failed-settings') || 'Failed to load store settings', type: 'error' }); });
+    getStoreSettingsScoped(sessionToken).then((s) => { if (mounted) setStoreSettings(s); }).catch(() => { if (mounted) addToast({ message: requiredLocalized(l10nRef.current, 'retail-toast-failed-settings'), type: 'error' }); });
     return () => { mounted = false; };
-  }, [addToast, l10n, sessionToken]);
+  }, [addToast, sessionToken]);
 
   // ── Shift management ─────────────────────────────────────────
 
@@ -520,7 +771,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       setShowOpenShift(false);
       setOpeningBalance('');
     } catch {
-      addToast({ message: l10n.getString('retail-toast-failed-open-shift') || 'Failed to open shift', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'retail-toast-failed-open-shift'), type: 'error' });
     } finally {
       setOpeningShift(false);
     }
@@ -537,7 +788,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       setClosedShiftSummary(s);
       setActiveShift(null);
     } catch (e) {
-      setCloseShiftError((e instanceof Error ? e.message : String(e)) ?? (l10n.getString('pos-close-shift-failed') || 'Failed to close shift'));
+      setCloseShiftError((e instanceof Error ? e.message : String(e)) ?? (requiredLocalized(l10n, 'pos-close-shift-failed')));
     } finally {
       setClosingShift(false);
     }
@@ -548,9 +799,10 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const [cartTax, setCartTax] = useState<number>(0);
 
   useEffect(() => {
+    const controller = new AbortController();
     if (lines.length === 0 || !subtotal) {
       setCartTax(0);
-      return;
+      return () => { controller.abort(); };
     }
     const currency = subtotal.currency;
     const taxLines: CartLineTaxInput[] = lines.map((l) => ({
@@ -559,8 +811,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       unit_price_minor: l.unit_price.minor_units,
     }));
     computeCartTax(sessionToken, taxLines, currency)
-      .then(setCartTax)
-      .catch(() => setCartTax(0));
+      .then((tax) => { if (!controller.signal.aborted) setCartTax(tax); })
+      .catch(() => { if (!controller.signal.aborted) setCartTax(0); });
+    return () => { controller.abort(); };
   }, [lines, subtotal, sessionToken]);
 
   // ── Discount modal ───────────────────────────────────────────
@@ -582,7 +835,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   const handleApplyDiscountRp = useCallback(() => {
     const rp = parseFloat(discountRpInput);
-    if (Number.isNaN(rp) || rp <= 0 || !subtotal) return;
+    if (Number.isNaN(rp) || rp <= 0 || !subtotal || subtotal.minor_units === 0) return;
     const rpMinor = Math.min(subtotal.minor_units, Math.round(rp * 100));
     const pct = Math.round((rpMinor / subtotal.minor_units) * 100 * 100) / 100;
     setDiscount(pct, '');
@@ -599,6 +852,24 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const [loadingCustomers, setLoadingCustomers] = useState(false);
   const [overrideTarget, setOverrideTarget] = useState<{ id: LineId; name: string; unit_price: Money } | null>(null);
   const [cartId, setCartId] = useState<CartId | null>(null);
+
+  // ── Modifier modal state ──────────────────────────────────────
+  const [modifierLine, setModifierLine] = useState<CartLine | null>(null);
+
+  // Moved below [selectedCustomer, setSelectedCustomer] so it can reset
+  // discount and customer on cart clear (was previously defined before
+  // those states existed, causing a TDZ bug when they were added to deps).
+  const handleConfirmClear = useCallback(() => {
+    setCartId(null);
+    resetCart();
+    setDiscount(0, '');
+    setUndoStack([]);
+    setSerialNumbers({});
+    setSelectedCustomer(null);
+    setModifierLine(null);
+    setShowClearConfirm(false);
+  }, [resetCart, setDiscount, setSelectedCustomer, setModifierLine]);
+
   const ensureCart = useCallback(async (currency: string): Promise<CartId | null> => {
     if (cartId) return cartId;
     try {
@@ -606,7 +877,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       setCartId(newCartId);
       return newCartId;
     } catch {
-      addToast({ message: l10n.getString('retail-toast-failed-cart') || 'Failed to create sale cart', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'retail-toast-failed-cart'), type: 'error' });
       return null;
     }
   }, [cartId, addToast, l10n, sessionToken]);
@@ -615,7 +886,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     if (!overrideTarget) return;
     const cId = cartId;
     if (!cId) {
-      addToast({ message: l10n.getString('retail-toast-no-cart') || 'No active sale cart', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'retail-toast-no-cart'), type: 'error' });
       setOverrideTarget(null);
       return;
     }
@@ -626,7 +897,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         currency: overrideTarget.unit_price.currency,
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Override failed';
+      const msg = plainErrorMessage(err, 'Override failed');
       addToast({ message: msg, type: 'error' });
     } finally {
       setOverrideTarget(null);
@@ -634,14 +905,19 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   }, [overrideTarget, cartId, addToast, l10n, updateLinePrice, sessionToken]);
 
   const allCustomersRef = useRef<CustomerDto[]>([]);
+  const customerSearchQueryRef = useRef(customerSearchQuery);
+  customerSearchQueryRef.current = customerSearchQuery;
 
+  // Fetch customer list when the modal opens; filter locally on keystrokes
   useEffect(() => {
     if (!showCustomerSearch) { setCustomerSearchResults([]); return; }
+    let cancelled = false;
     setLoadingCustomers(true);
     listCustomers()
       .then((customers) => {
+        if (cancelled) return;
         allCustomersRef.current = customers;
-        const q = customerSearchQuery.trim().toLowerCase();
+        const q = customerSearchQueryRef.current.trim().toLowerCase();
         setCustomerSearchResults(
           !q ? customers : customers.filter(
             (c) =>
@@ -651,10 +927,12 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
           ),
         );
       })
-      .catch(() => { addToast({ message: l10nRef.current.getString('retail-toast-customers-failed') || 'Failed to load customers', type: 'error' }); setCustomerSearchResults([]); })
-      .finally(() => setLoadingCustomers(false));
-  }, [showCustomerSearch, customerSearchQuery, addToast]); // l10n via ref
+      .catch(() => { if (cancelled) return; addToast({ message: requiredLocalized(l10nRef.current, 'retail-toast-customers-failed'), type: 'error' }); setCustomerSearchResults([]); })
+      .finally(() => { if (cancelled) return; setLoadingCustomers(false); });
+    return () => { cancelled = true; };
+  }, [showCustomerSearch, addToast]); // l10n via ref — fetch only when modal opens
 
+  // Filter cached customers locally on keystroke — avoids redundant API calls
   useEffect(() => {
     if (!showCustomerSearch) return;
     const customers = allCustomersRef.current;
@@ -668,7 +946,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
           (c.email && c.email.toLowerCase().includes(q)),
       ),
     );
-  }, [showCustomerSearch, customerSearchQuery]);
+  }, [customerSearchQuery, showCustomerSearch]);
 
   // ── Payment modal ────────────────────────────────────────────
 
@@ -684,7 +962,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   });
 
   const handlePay = useCallback(() => {
-    if (!activeShift) { addToast({ message: l10nRef.current.getString('retail-toast-open-shift-first') || 'Open a shift first', type: 'warning' }); return; }
+    if (!activeShift) { addToast({ message: requiredLocalized(l10nRef.current, 'retail-toast-open-shift-first'), type: 'warning' }); return; }
     setShowPayment(true);
   }, [activeShift, addToast]); // l10n via ref
 
@@ -713,9 +991,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
       });
       setHeldCartId(id);
       resetCart();
-      addToast({ message: l10n.getString('retail-toast-order-held') || 'Order held', type: 'success' });
+      addToast({ message: requiredLocalized(l10n, 'retail-toast-order-held'), type: 'success' });
     } catch {
-      addToast({ message: l10n.getString('retail-toast-failed-hold') || 'Failed to hold order', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'retail-toast-failed-hold'), type: 'error' });
     }
   }, [lines, discountPercent, discountLabel, subtotal, resetCart, addToast, l10n, sessionToken]);
 
@@ -723,41 +1001,75 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     try {
       const full = await getHeldCartScoped(sessionToken, cartId);
       if (!full) return;
-      const data = JSON.parse(full.cart_data);
-      for (const l of data.lines) {
-        for (let i = 0; i < (l.qty || 1); i++) {
-          addProduct({ sku: l.sku as Sku, name: l.name, category: l.category ?? '', price: l.unit_price, barcode: null, inStock: true, stockQty: null, productType: 'retail' });
-        }
+      const cleanupCorrupt = async () => {
+        await deleteHeldCartScoped(sessionToken, cartId).catch(() => {});
+        setHeldCartId(null);
+        addToast({ message: requiredLocalized(l10nRef.current, 'retail-toast-corrupt-cart'), type: 'error' });
+      };
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(full.cart_data);
+      } catch {
+        await cleanupCorrupt();
+        return;
       }
-      if (data.discountPercent) setDiscount(data.discountPercent, data.discountLabel ?? '');
+      if (!Array.isArray(data['lines'])) {
+        await cleanupCorrupt();
+        return;
+      }
+      const rawLines = data['lines'] as { sku: string; name: string; category: string; qty: number; unit_price: Money }[];
+      // Validate each line has required fields; skip corrupt ones
+      let hasCorruptLines = false;
+      for (const l of rawLines) {
+        if (!l.sku || !l.unit_price || typeof l.unit_price.minor_units !== 'number') {
+          hasCorruptLines = true;
+          continue;
+        }
+        const qty = Number.isFinite(l.qty) && l.qty > 0 ? Math.round(l.qty) : 1;
+        addProduct({ sku: l.sku as Sku, name: l.name, category: l.category ?? '', price: l.unit_price, barcode: null, inStock: true, stockQty: null, productType: 'retail' }, qty);
+      }
+      if (hasCorruptLines) {
+        addToast({ message: requiredLocalized(l10nRef.current, 'retail-toast-corrupt-cart'), type: 'error' });
+      }
+      if (data['discountPercent']) setDiscount(data['discountPercent'] as number, (data['discountLabel'] as string) ?? '');
       await deleteHeldCartScoped(sessionToken, cartId);
       setHeldCartId(null);
       setShowHeldCartsList(false);
     } catch {
-      addToast({ message: l10n.getString('retail-toast-failed-resume') || 'Failed to resume order', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'retail-toast-failed-resume'), type: 'error' });
     }
   }, [addProduct, setDiscount, addToast, l10n, sessionToken]);
 
   const handleResume = useCallback(async () => {
-    const carts = await listHeldCartsScoped(sessionToken);
-    const held = carts.filter((c) => c.bill_type === 'hold');
-    if (held.length === 0) return;
-    if (held.length === 1) {
-      await handleResumeCart(held[0]!.id);
-      return;
+    try {
+      const carts = await listHeldCartsScoped(sessionToken);
+      const held = carts.filter((c) => c.bill_type === 'hold');
+      if (held.length === 0) return;
+      if (held.length === 1) {
+        await handleResumeCart(held[0]!.id);
+        return;
+      }
+      setHeldCartsList(held);
+      setShowHeldCartsList(true);
+    } catch {
+      addToast({ message: requiredLocalized(l10nRef.current, 'retail-toast-failed-load-held'), type: 'error' });
     }
-    setHeldCartsList(held);
-    setShowHeldCartsList(true);
-  }, [handleResumeCart, sessionToken]);
+  }, [handleResumeCart, addToast, sessionToken]);
+
+  // ── Held cart delete confirm (P1-3) ────────────────────────────
+  const [deleteHeldTarget, setDeleteHeldTarget] = useState<HeldCartRow | null>(null);
+  const retailDeleteHeldExit = useExitAnimation(!!deleteHeldTarget, () => setDeleteHeldTarget(null));
 
   const handleDeleteHeldCart = useCallback(async (cartId: string) => {
     try {
       await deleteHeldCartScoped(sessionToken, cartId);
       setHeldCartsList((prev) => prev.filter((c) => c.id !== cartId));
       if (heldCartId === cartId) setHeldCartId(null);
-      addToast({ type: 'success', message: l10nRef.current.getString('retail-toast-held-cart-deleted') || 'Held cart deleted' });
+      addToast({ type: 'success', message: requiredLocalized(l10nRef.current, 'retail-toast-held-cart-deleted') });
     } catch {
-      addToast({ type: 'error', message: l10nRef.current.getString('retail-toast-failed-delete-held') || 'Failed to delete held cart' });
+      addToast({ type: 'error', message: requiredLocalized(l10nRef.current, 'retail-toast-failed-delete-held') });
+    } finally {
+      setDeleteHeldTarget(null);
     }
   }, [sessionToken, heldCartId, addToast]); // l10n via ref
 
@@ -771,16 +1083,29 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         const held = carts.find((c) => c.bill_type === 'hold');
         if (held) setHeldCartId(held.id);
       })
-      .catch(() => { if (mounted) addToast({ message: l10nRef.current.getString('retail-toast-failed-load-held') || 'Failed to load held carts', type: 'error' }); });
+      .catch(() => { if (mounted) addToast({ message: requiredLocalized(l10nRef.current, 'retail-toast-failed-load-held'), type: 'error' }); });
     return () => { mounted = false; };
   }, [sessionToken, addToast]); // l10n via ref — stable dep chain
 
-  // ── Options / Workspace Settings ──────────────────────────
+  // ── Options / Sub-views ────────────────────────────────
 
-  const [showWorkspaceSettings, setShowWorkspaceSettings] = useState(false);
   const [showSalesHistory, setShowSalesHistory] = useState(false);
   const [showStockInquiry, setShowStockInquiry] = useState(false);
   const [showTables, setShowTables] = useState(false);
+
+  const inSubView = showSalesHistory || showTables || showStockInquiry;
+  // Restore scroll only when returning from a sub-view (element remounts),
+  // not while inside one — the effect keyed on inSubView flips to false on return.
+  useEffect(() => {
+    if (inSubView) return;
+    if (savedScrollTop > 0) {
+      const el = getScrollContainer();
+      if (el) {
+        el.scrollTop = savedScrollTop;
+        setSavedScrollTop(0);
+      }
+    }
+  }, [inSubView, savedScrollTop, getScrollContainer]);
 
   // ── Credit reminders ──────────────────────────────────────────
 
@@ -804,16 +1129,16 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     try {
       await settleCreditScoped(sessionToken, saleId);
       setCreditSales((prev) => prev.filter((c) => c.saleId !== saleId));
-      addToast({ message: l10n.getString('retail-toast-credit-settled') || 'Credit settled', type: 'success' });
+      addToast({ message: requiredLocalized(l10n, 'retail-toast-credit-settled'), type: 'success' });
     } catch {
-      addToast({ message: l10n.getString('retail-toast-failed-settle') || 'Failed to settle credit', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'retail-toast-failed-settle'), type: 'error' });
     } finally {
       setSettlingId(null);
     }
   }, [addToast, l10n, sessionToken]);
 
   // ── Retail modal exit animations ───────────────────────────────
-  const retailCustomerExit = useExitAnimation(showCustomerSearch, () => setShowCustomerSearch(false));
+  const retailCustomerExit = useExitAnimation(showCustomerSearch, () => { setShowCustomerSearch(false); setCustomerSearchQuery(''); });
   const retailQtyExit = useExitAnimation(showQtyPicker && !!pendingProduct, () => { setShowQtyPicker(false); setPendingProduct(null); });
   const retailHeldCartsExit = useExitAnimation(showHeldCartsList, () => setShowHeldCartsList(false));
   const retailShortcutsExit = useExitAnimation(showShortcuts, () => setShowShortcuts(false));
@@ -851,31 +1176,66 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   // ── Keyboard shortcuts ────────────────────────────────────────
 
+  // KEY-04: shared modal-ownership check (modal-guard.ts) so AppShell and the
+  // retail POS agree on when a modal owns the keyboard.
+  const isAnyModalOpen = useCallback(
+    () => isAnyAriaModalOpen(),
+    []);
+
+  const isAnyOverlayOpen = useCallback(() =>
+    showCustomerSearch || showHeldCartsList || showQuickReturn ||
+    showDiscount || showQtyPicker || showShortcuts || showCreditList || showClearConfirm ||
+    showOpenShift || (showCloseShift && !closedShiftSummary) || !!closedShiftSummary ||
+    !!editingProduct || isAddCategoryOpen || isAddProductOpen || !!deleteHeldTarget,
+  [showCustomerSearch, showHeldCartsList, showQuickReturn, showDiscount, showQtyPicker,
+    showShortcuts, showCreditList, showClearConfirm, showOpenShift, showCloseShift,
+    closedShiftSummary, editingProduct, isAddCategoryOpen, isAddProductOpen, deleteHeldTarget]);
+
   useEffect(() => {
-    const isAnyModalOpen = () => document.querySelector('[aria-modal="true"]') !== null;
+
     const handler = (e: KeyboardEvent) => {
       // Guard: block all hotkeys while any aria-modal is open (e.g. WorkspaceSettingsModal)
       if (isAnyModalOpen()) return;
+
+      // Escape: handled per-modal by useFocusTrap (Phase A gave all overlays
+      // aria-modal="true", so isAnyModalOpen() above already returned).
+
       // Guard: block hotkeys while local overlays/dialogs are visible
-      if (showDiscount || showQtyPicker || showShortcuts || showCreditList || showClearConfirm || showOpenShift || showCloseShift) return;
+      if (isAnyOverlayOpen()) return;
+
+      // KEY-03: suppress high-impact hotkeys while the user is typing in an
+      // input/textarea/select/contenteditable (covers shift notes, customer
+      // notes, and the SKU input during manual entry) so a keystroke cannot
+      // accidentally pay, void, discount, hold, or navigate. F5 is exempted as
+      // the hardware-terminal escape hatch: it only focuses the SKU input.
+      const editing = isEditableTarget(e.target);
+      const typing = editing && e.key !== 'F5';
       switch (e.key) {
-        case 'F1': handlePay(); break;
-        case 'F2': if (lines.length > 0) handleRequestClear(); break;
-        case 'F3': if (lines.length > 0) setShowDiscount(true); break;
-        case 'F4': if (heldCartId) handleResume(); else handleHold(); break;
-        case 'F5': skuInputRef.current?.focus(); break;
-        case 'F6': setShowSalesHistory(true); break;
-        case 'F7': setShowCustomerSearch(true); break;
-        case 'F8': setShowStockInquiry(true); break;
-        case 'F9': if (activeShift) setShowCloseShift(true); else setShowOpenShift(true); break;
-        case 'F10': handleOpenSettings(); break;
-        case '?': setShowShortcuts((v) => !v); break;
-        case 'F12': onNavigate?.('kds'); break;
+        case 'F1': if (typing) break; if (e.cancelable) e.preventDefault(); handlePay(); break;
+        case 'F2': if (typing) break; if (e.cancelable) e.preventDefault(); if (lines.length > 0) handleRequestClear(); break;
+        case 'F3': if (typing) break; if (e.cancelable) e.preventDefault(); if (lines.length > 0) setShowDiscount(true); break;
+        case 'F4': if (typing) break; if (e.cancelable) e.preventDefault(); if (heldCartId) handleResume(); else handleHold(); break;
+        case 'F5': if (e.cancelable) e.preventDefault(); skuInputRef.current?.focus(); break;
+        case 'F6': if (typing) break; if (e.cancelable) e.preventDefault(); goToSubView(setShowSalesHistory); break;
+        case 'F7': if (typing) break; if (e.cancelable) e.preventDefault(); setShowCustomerSearch(true); break;
+        case 'F8': if (typing) break; if (e.cancelable) e.preventDefault(); goToSubView(setShowStockInquiry); break;
+        case 'F9': if (typing) break; if (e.cancelable) e.preventDefault(); if (activeShift) setShowCloseShift(true); else setShowOpenShift(true); break;
+        // F10 is handled globally by AppShell.tsx — opens the WorkspaceSettingsModal.
+        // The button-based settings navigation (onOpenSettings) still works via RetailFnBar.
+        case 'F11': if (typing) break; if (e.cancelable) e.preventDefault(); setShowQuickReturn(true); break;
+        case '?': if (typing) break; setShowShortcuts((v) => !v); break;
+        case 'F12': if (typing) break; if (e.cancelable) e.preventDefault(); onNavigate?.('kds'); break;
+        // Ctrl+L / Ctrl+K: full editable-target guard (not just INPUT) —
+        // textarea/select/contenteditable are covered too (KEY-03); Meta
+        // accepted on macOS-like keyboards (KEY-08).
+        case 'l': if (isCommandModifier(e) && !isEditableTarget(document.activeElement)) { e.preventDefault(); setFilterLowStock((prev) => !prev); } break;
+        case 'k': if (isCommandModifier(e) && !isEditableTarget(document.activeElement)) { e.preventDefault(); setShowCreditList(true); } break;
       }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [showPayment, showOpenShift, showCloseShift, showDiscount, showQtyPicker, showShortcuts, showCustomerSearch, showClearConfirm, showCreditList, showSalesHistory, showStockInquiry, showTables, handlePay, lines.length, handleRequestClear, handleHold, handleResume, heldCartId, activeShift, session, addToast, onNavigate, handleOpenSettings]);
+  // handleOpenSettings deliberately excluded — F10 removed (handled by AppShell).
+  }, [isAnyModalOpen, isAnyOverlayOpen, showPayment, showOpenShift, showCloseShift, showDiscount, showQtyPicker, showShortcuts, showCustomerSearch, showClearConfirm, showCreditList, showSalesHistory, showStockInquiry, showTables, showHeldCartsList, showQuickReturn, closedShiftSummary, editingProduct, isAddCategoryOpen, isAddProductOpen, handlePay, lines.length, handleRequestClear, handleHold, handleResume, heldCartId, activeShift, session, addToast, onNavigate, goToSubView]);
 
   // ── Render ───────────────────────────────────────────────────
 
@@ -895,7 +1255,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         {...(isEnabled(FEATURES.SERIAL_TRACKING) ? { serialNumbers } : {})}
         onCustomerChange={(c) => setSelectedCustomer(c)}
         tenderPresets={tenderPresets}
-        onComplete={() => { setShowPayment(false); resetCart(); setSelectedCustomer(null); playSuccess(); addToast({ message: l10n.getString('retail-toast-sale-complete') || 'Sale complete', type: 'success' }); }}
+        onComplete={() => { setShowPayment(false); resetCart(); setSelectedCustomer(null); playSuccess(); addToast({ message: requiredLocalized(l10n, 'retail-toast-sale-complete'), type: 'success' }); }}
         onClose={() => setShowPayment(false)}
       />
     );
@@ -903,1086 +1263,331 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
 
   // ── Sales History screen ────────────────────────────────────
   if (showSalesHistory) {
-    return (
-      <div className="retail-pos" data-theme={theme}>
-        <header className="retail-header" style={{ justifyContent: 'space-between' }}>
-          <div className="retail-header-store">
-            <span className="retail-header-name">{l10n.getString('retail-fn-history') || 'Sales History'}</span>
-          </div>
-          <button
-            className="retail-options-tab retail-options-tab--danger"
-            onClick={() => setShowSalesHistory(false)}
-          >
-            &larr; {l10n.getString('back')}
-          </button>
-        </header>
-        <div style={{ flex: 1, overflow: 'auto' }}>
-          <SalesHistoryScreen />
-        </div>
-      </div>
-    );
+    return <SalesHistoryView theme={theme} onBack={() => setShowSalesHistory(false)} />;
   }
 
   // ── Table Management screen ────────────────────────────────
   if (showTables) {
-    return (
-      <div className="retail-pos" data-theme={theme}>
-        <header className="retail-header" style={{ justifyContent: 'space-between' }}>
-          <div className="retail-header-store">
-            <span className="retail-header-name">{l10n.getString('tables-title') || 'Table Management'}</span>
-          </div>
-          <button
-            className="retail-options-tab retail-options-tab--danger"
-            onClick={() => setShowTables(false)}
-          >
-            &larr; {l10n.getString('back')}
-          </button>
-        </header>
-        <div style={{ flex: 1, overflow: 'auto' }}>
-          <TableManagementScreen />
-        </div>
-      </div>
-    );
+    return <TableManagementView theme={theme} onBack={() => setShowTables(false)} />;
   }
 
   // ── Stock Inquiry screen ────────────────────────────────────
   if (showStockInquiry) {
-    return (
-      <div className="retail-pos" data-theme={theme}>
-        <header className="retail-header" style={{ justifyContent: 'space-between' }}>
-          <div className="retail-header-store">
-            <span className="retail-header-name">{l10n.getString('retail-fn-stok') || 'Stock Inquiry'}</span>
-          </div>
-          <button
-            className="retail-options-tab retail-options-tab--danger"
-            onClick={() => setShowStockInquiry(false)}
-          >
-            &larr; {l10n.getString('back')}
-          </button>
-        </header>
-        <div style={{ flex: 1, overflow: 'auto' }}>
-          <ProductLookupScreen onAddProduct={(p) => handleAdd({
-            sku: p.sku, name: p.name, category: p.category,
-            price: p.price, barcode: p.barcode ?? null,
-            in_stock: p.inStock, stock_qty: p.stockQty ?? null,
-            product_type: p.productType,
-            tax_rate_ids: [], created_at: '', price_updated_at: '',
-          })} />
-        </div>
-      </div>
-    );
+    return <StockInquiryView theme={theme} onBack={() => setShowStockInquiry(false)} onAddProduct={handleAdd} />;
   }
 
   return (
     <>
     <div className="retail-pos" data-theme={theme}>
-      {/* ── Header ──────────────────────────── */}
-      <header className="retail-header">
-        <div className="retail-header-store">
-          {storeSettings.logo && (
-            <img src={`data:image/png;base64,${storeSettings.logo}`} alt="" className="retail-header-logo" style={{ height: 32, marginRight: 8 }} />
-          )}
-          <div>
-            <span className="retail-header-name">{storeSettings.name || l10n.getString('retail-store-name-fallback')}</span>
-            {storeSettings.branch && <span className="retail-header-branch"> &middot; {storeSettings.branch}</span>}
-            <span className="retail-header-address">{storeSettings.address || ''}</span>
-          </div>
-        </div>
-        <div className="retail-header-right">
-          {shiftLoading ? (
-            <span className="retail-shift-badge">{l10n.getString('loading')}</span>
-          ) : activeShift ? (
-            <span className="retail-shift-badge">
-              {l10n.getString('retail-shift-label')} &middot; {formatMoney({ minor_units: activeShift.totalSalesMinor, currency: storeSettings.currency })}
-            </span>
-          ) : (
-            <span className="retail-shift-badge" style={{ opacity: 0.6 }}>{l10n.getString('retail-no-shift')}</span>
-          )}
-          <button
-            type="button"
-            className="retail-header-nav-btn"
-            onClick={goToWorkspacePicker}
-            title={l10n.getString('retail-header-workspaces-title') || 'Back to workspaces'}
-            aria-label={l10n.getString('retail-header-workspaces-aria') || 'Back to workspaces'}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
-              <rect x="2" y="3" width="22" height="14" rx="2" ry="2" />
-              <line x1="8" y1="21" x2="16" y2="21" />
-              <line x1="12" y1="17" x2="12" y2="21" />
-            </svg>
-          </button>
-          <div className="retail-header-cashier">
-            <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
-              <path d="M10 10a4 4 0 100-8 4 4 0 000 8zm-7 8a7 7 0 1114 0H3z" />
-            </svg>
-            <span>{session?.display_name ?? ''}</span>
-          </div>
-          <span className="retail-header-clock">
-            <span className="retail-header-date">{dateStr}</span>
-            <span>{timeStr}</span>
-            {shiftDuration && <span className="retail-header-duration">{shiftDuration}</span>}
-          </span>
-        </div>
-      </header>
+      {/* ── Skip-to-content link ─────────────── */}
+      <a href="#retail-main" className="retail-skip-link">
+        {requiredLocalized(l10n, 'retail-skip-to-main')}
+      </a>
 
-      {/* ── Low-stock banner ──────────────── */}
-      {lowStockCount > 0 && (
-        <div className="retail-low-stock-banner">
-          <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
-            <path d="M10 2a1 1 0 011 1v8a1 1 0 11-2 0V3a1 1 0 011-1zM10 16a1 1 0 100-2 1 1 0 000 2z"/>
-          </svg>
-          <span>{l10n.getString('retail-low-stock-banner', { count: lowStockCount }) || `${lowStockCount} product${lowStockCount > 1 ? 's' : ''} low on stock`}</span>
-        </div>
-      )}
+      {/* ── Header ──────────────────────────── */}
+      <RetailHeader
+        storeSettings={storeSettings}
+        shiftLoading={shiftLoading}
+        activeShift={activeShift}
+        displayName={session?.display_name ?? ''}
+        dateStr={dateStr}
+        timeStr={timeStr}
+        shiftDuration={shiftDuration}
+        onWorkspacePicker={goToWorkspacePicker}
+      />
+
 
       {/* ── Main area ───────────────────────── */}
-      <div className="retail-main" ref={retailPosRef}>
+      <div id="retail-main" className="retail-main" ref={retailPosRef}>
+        {/* Screen-reader announcement (visually hidden) */}
+        <div ref={announceRef} className="retail-sr-only" data-testid="retail-sr-announce" role="status" aria-live="polite" aria-atomic="true" />
         {/* Left: product grid */}
-        <div className="retail-products">
-          <div className="retail-categories">
-            <button
-              className={`retail-cat-btn${!activeCategory ? ' retail-cat-btn--active' : ''}`}
-              onClick={() => setActiveCategory(null)}
-            >
-              {allLabel}
-            </button>
-            {categories.map((cat) => (
-              <button
-                key={cat.id}
-                className={`retail-cat-btn${activeCategory === cat.id ? ' retail-cat-btn--active' : ''}`}
-                onClick={() => setActiveCategory(cat.id)}
-                aria-label={catLabels.get(cat.id) ?? cat.name}
-                aria-pressed={activeCategory === cat.id}
-              >
-                {catLabels.get(cat.id) ?? cat.name}
-              </button>
-            ))}
-          </div>
-
-          {/* ── Search bar ────────────────────── */}
-          <div className="retail-search-bar">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
-              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+        {filterLowStock && (
+          <div className="retail-filter-indicator" role="status" aria-label={requiredLocalized(l10n, 'retail-filter-indicator-aria')}>
+            <svg viewBox="0 0 20 20" fill="currentColor" width="12" height="12" aria-hidden="true">
+              <path fillRule="evenodd" d="M3 3a1 1 0 011 0v12a1 1 0 11-2 0V4a1 1 0 011-1zm7.707 3.293a1 1 0 010 1.414L9.414 9H17a1 1 0 110 2H9.414l1.293 1.293a1 1 0 01-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0z" clipRule="evenodd" />
             </svg>
-            <input
-              className="retail-search-input"
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={l10n.getString('retail-search-placeholder')}
-            />
-            {searchQuery && (
-              <button type="button" className="retail-search-clear" onClick={() => setSearchQuery('')} aria-label={l10n.getString('retail-search-clear-aria')}>
-                &times;
-              </button>
-            )}
+            <span>{requiredLocalized(l10n, 'retail-filtered-low-stock', { count: lowStockCount })}</span>
           </div>
-
-          {isEnabled(FEATURES.USB_SCALE) && (
-            <ScaleIndicator
-              weighTarget={weighTarget}
-              onWeighAdd={handleWeighAdd}
-              onClearWeighTarget={() => setWeighTarget(null)}
-            />
-          )}
-
-          {/* ── Recent products ──────────────── */}
-          {recentProducts.length > 0 && !searchQuery.trim() && !activeCategory && (
-            <div className="retail-recent-strip">
-              <span className="retail-recent-label">{l10n.getString('retail-recent-label')}</span>
-              <div className="retail-recent-items">
-                {recentProducts.map((p) => (
-                  <button
-                    key={p.sku}
-                    className="retail-recent-btn"
-                    onClick={() => handleAdd(p)}
-                  >
-                    <span className="retail-recent-name">{p.name}</span>
-                    <span className="retail-recent-price">{formatMoney(p.price)}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {filteredProducts.length === 0 ? (
-            <div className="retail-grid-empty">
-              {searchQuery.trim() ? (l10n.getString('retail-no-products-match') || 'No products match your search') : (l10n.getString('retail-no-products') || 'No products')}
-            </div>
-          ) : (
-            <div className="retail-grid">
-                {pagedProducts.map((p) => <ProductCard
-                  key={p.sku}
-                  product={p}
-                  catHue={catHue}
-                  formatMoney={formatMoney}
-                  handleAdd={handleAdd}
-                  handleOpenQtyPicker={handleOpenQtyPicker}
-                  scaleEnabled={isEnabled(FEATURES.USB_SCALE)}
-                  onSetWeighTarget={handleSetWeighTarget}
-                />)}
-            </div>
-          )}
-          {totalPages > 1 && (
-            <div className="retail-page-nav" role="navigation" aria-label={l10n.getString('retail-page-nav-aria') || 'Product pages'}>
-              <button type="button" className="retail-page-btn" disabled={productPage === 0} onClick={() => setProductPage((p) => p - 1)} aria-label={l10n.getString('retail-page-prev-aria') || 'Previous page'}>{'<'}</button>
-              <span className="retail-page-info" aria-current="true">{productPage + 1} / {totalPages}</span>
-              <button type="button" className="retail-page-btn" disabled={productPage >= totalPages - 1} onClick={() => setProductPage((p) => p + 1)} aria-label={l10n.getString('retail-page-next-aria') || 'Next page'}>{'>'}</button>
-            </div>
-          )}
-          <div className="retail-sku-bar">
-            <span className="retail-sku-label">{l10n.getString('retail-sku-label')}</span>
-            <input
-              ref={skuInputRef}
-              className="retail-sku-input"
-              type="text"
-              value={skuInput}
-              onChange={(e) => setSkuInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleSkuSubmit(); }}
-              placeholder={l10n.getString('retail-sku-placeholder')}
-            />
+        )}
+        {/* ── Error banner ──────────────── */}
+        {loadError && (
+          <div className="retail-load-error" role="alert">
+            <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            <span className="retail-load-error-text">{loadError}</span>
             <button
-              style={{
-                padding: '4px 12px', background: 'var(--color-primary-pos)', color: 'var(--color-bg-elevated)',
-                border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12,
-              }}
-              onClick={handleSkuSubmit}
+              type="button"
+              className="retail-load-error-retry"
+              onClick={handleRetryLoad}
+              aria-label={requiredLocalized(l10n, 'retail-load-error-retry-aria')}
             >
-              {l10n.getString('retail-sku-go')}
+              {requiredLocalized(l10n, 'retry')}
+            </button>
+            <button
+              type="button"
+              className="retail-load-error-dismiss"
+              onClick={() => setLoadError(null)}
+              aria-label={requiredLocalized(l10n, 'dismiss')}
+            >
+              <svg viewBox="0 0 20 20" fill="currentColor" width="12" height="12" aria-hidden="true">
+                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
             </button>
           </div>
-        </div>
+        )}
+        <RetailProductGrid
+          data={{
+            productsLoading,
+            categoriesLoading,
+            categories,
+            activeCategory,
+            searchQuery,
+            filteredProducts,
+            pagedProducts,
+            totalPages,
+            productPage,
+            sortField,
+            sortOrder,
+            allLabel,
+            catLabels,
+            skuInput,
+            weighTarget,
+            filterLowStock,
+          }}
+          actions={{
+            onSetActiveCategory: setActiveCategory,
+            onSetSearchQuery: setSearchQuery,
+            onSort: handleSort,
+            onSetProductPage: setProductPage,
+            onAddProduct: handleAdd,
+            onEditProduct: handleEditProduct,
+            onOpenQtyPicker: handleOpenQtyPicker,
+            onSetWeighTarget: handleSetWeighTarget,
+            onClearWeighTarget: () => setWeighTarget(null),
+            onAddCategory: () => setIsAddCategoryOpen(true),
+            onAddNewProduct: () => setIsAddProductOpen(true),
+            onSkuInputChange: setSkuInput,
+            onSkuSubmit: handleSkuSubmit,
+            onWeighAdd: handleWeighAdd,
+          }}
+          isScaleEnabled={isEnabled(FEATURES.USB_SCALE)}
+          catHue={catHue}
+          skuInputRef={skuInputRef}
+        />
 
         {/* ── Resize handle ────────────────── */}
-        {/* eslint-disable jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex -- role=separator makes this interactive per ARIA spec */}
-        <div
-          className="retail-resize-handle"
-          onMouseDown={startResize}
-          role="separator"
-          aria-orientation="vertical"
-          aria-valuenow={retailCartWidth}
-          aria-valuemin={RETAIL_CART_WIDTH_MIN}
-          aria-valuemax={clampRetailCartWidth(RETAIL_CART_WIDTH_MAX_CAP, window.innerWidth)}
-          aria-label={l10n.getString('retail-resize-handle-aria') || 'Resize cart panel'}
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === 'ArrowLeft') {
-              setRetailCartWidth((w) => clampRetailCartWidth(w - 20, window.innerWidth));
-              e.preventDefault();
-            } else if (e.key === 'ArrowRight') {
-              setRetailCartWidth((w) => clampRetailCartWidth(w + 20, window.innerWidth));
-              e.preventDefault();
-            }
+        <RetailCartPanel
+          lines={lines}
+          lineCount={lineCount}
+          selectedCustomer={selectedCustomer}
+          totals={{
+            subtotal,
+            total,
+            discountPercent,
+            discountAmount,
+            cartTax,
           }}
+          retailCartWidth={retailCartWidth}
+          serialNumbers={serialNumbers}
+          trackSerialMap={trackSerialMap}
+          overrideTarget={overrideTarget}
+          undoStack={undoStack}
+          undoBarExit={{
+            shouldRender: undoBarExit.shouldRender,
+            exiting: undoBarExit.exiting,
+            requestClose: undoBarExit.requestClose,
+          }}
+          isSerialTracking={isEnabled(FEATURES.SERIAL_TRACKING)}
+          isManager={isManager}
+          activeShift={!!activeShift}
+          heldCartId={heldCartId}
+          cartWidthMin={RETAIL_CART_WIDTH_MIN}
+          cartWidthMaxCap={RETAIL_CART_WIDTH_MAX_CAP}
+          onResizeWidth={setRetailCartWidth}
+          onStartResize={startResize}
+          cartSwipe={cartSwipe as Record<string, unknown>}
+          showCourseSelector={true}
+          lineActions={{
+            onRemoveLine: handleRemoveLine,
+            onIncreaseQty: handleIncreaseQty,
+            onUpdateQty: updateQty,
+            onSerialChange: handleSerialChange,
+            onSetOverrideTarget: setOverrideTarget,
+            onAssignCourse: (lineId, courseId) => { assignCourse(lineId, courseId as CourseId); },
+            onEditModifiers: handleEditModifiers,
+          }}
+          panelActions={{
+            onPay: handlePay,
+            onShowDiscount: () => setShowDiscount(true),
+            onHoldResume: heldCartId ? handleResume : handleHold,
+            onRequestClear: handleRequestClear,
+            onShowCreditList: () => setShowCreditList(true),
+            onLoadCreditSales: loadCreditSales,
+          }}
+          onUndoRemove={handleUndoRemove}
+          onDismissUndo={handleDismissUndo}
+          onEnsureCart={ensureCart}
         />
-        {/* eslint-enable jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex */}
-
-        {/* Right: cart */}
-        <div className="retail-cart" style={{ width: retailCartWidth } as CSSProperties} {...cartSwipe}>
-          <div className="retail-cart-header">
-            <span>{l10n.getString('cart-title')}</span>
-            <span>{l10n.getString('retail-cart-items', { count: lineCount }) || `${lineCount} item${lineCount !== 1 ? 's' : ''}`}</span>
-          </div>
-          {lines.length === 0 ? (
-            <div className="retail-cart-empty">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M6 2 4 6v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6l-2-4H6z" />
-                <path d="M4 6h16" />
-                <path d="M9 10V8a3 3 0 0 1 6 0v2" />
-              </svg>
-              <span>{l10n.getString('pos-cart-empty')}</span>
-            </div>
-          ) : (
-            <>
-              <div className="retail-cart-table">
-                <table className="retail-cart-table-inner">
-                  <thead>
-                    <tr>
-                      <th style={{ width: 40 }}>{l10n.getString('retail-cart-header-col')}</th>
-                      <th>{l10n.getString('retail-cart-header-item')}</th>
-                      <th style={{ width: 56 }}>{l10n.getString('retail-cart-header-qty')}</th>
-                      <th style={{ width: 72 }}>{l10n.getString('retail-cart-header-price')}</th>
-                      <th style={{ width: 80 }}>{l10n.getString('retail-cart-header-subtotal')}</th>
-                      { }
-                      <th style={{ width: 24 }}></th>
-                    </tr>
-                  </thead>
-                  <tbody>{lines.map((line, idx) => (
-                      <tr key={line.id}>
-                        <td className="retail-cart-line-sku">{idx + 1}</td>
-                        <td>
-                          <div style={{ fontWeight: 600, fontSize: 11 }}>{line.name ?? line.sku}</div>
-                          {isEnabled(FEATURES.SERIAL_TRACKING) && trackSerialMap[line.sku] && (
-                            <input
-                              type="text"
-                              className="retail-cart-serial-input"
-                              value={serialNumbers[line.id] ?? ''}
-                              onChange={(e) => handleSerialChange(line.id, e.target.value)}
-                              placeholder={l10n.getString('retail-serial-placeholder') || 'Serial #'}
-                              aria-label={l10n.getString('retail-serial-aria', { name: line.name ?? line.sku }) || `Serial number for ${line.name ?? line.sku}`}
-                              style={{
-                                marginTop: 4, padding: '2px 4px', fontSize: 10,
-                                width: '100%', boxSizing: 'border-box',
-                                border: '1px solid #ccc', borderRadius: 2,
-                              }}
-                            />
-                          )}
-                        </td>
-                        <td>
-                          <span className="retail-cart-line-qty">
-                            <button
-                              className="retail-cart-qty-btn"
-                              onClick={() => updateQty(line.id, Math.max(1, line.qty - 1))}
-                              aria-label={l10n.getString('retail-cart-qty-decrease-aria') || `Decrease quantity of ${line.sku}`}
-                            >
-                              &minus;
-                            </button>
-                            <span className="retail-cart-qty-value">{line.qty}</span>
-                            <button
-                              className="retail-cart-qty-btn"
-                              onClick={() => handleIncreaseQty(line)}
-                              aria-label={l10n.getString('retail-cart-qty-increase-aria') || `Increase quantity of ${line.sku}`}
-                            >
-                              +
-                            </button>
-                          </span>
-                        </td>
-                        <td className="retail-cart-line-unit">
-                          {formatMoney(line.unit_price)}
-                          {isManager && (
-                            <button
-                              type="button"
-                              className="retail-cart-line-override"
-                              onClick={() => {
-                                setOverrideTarget({ id: line.id as LineId, name: line.name ?? line.sku, unit_price: line.unit_price });
-                                ensureCart(line.unit_price.currency);
-                              }}
-                              aria-label={l10n.getString('retail-override-aria', { name: line.name ?? line.sku }) || `Override price for ${line.name ?? line.sku}`}
-                            >
-                              <Localized id="retail-override-btn"><span>Override</span></Localized>
-                            </button>
-                          )}
-                        </td>
-                        <td className="retail-cart-line-subtotal">{formatMoney({ minor_units: line.unit_price.minor_units * line.qty, currency: line.unit_price.currency })}</td>
-                          <td>
-                            <button type="button" className="retail-cart-remove-btn" onClick={() => handleRemoveLine(line.id, { sku: line.sku, name: line.name ?? '', category: line.category ?? '', unit_price: line.unit_price })} aria-label={l10n.getString('retail-cart-remove-aria') || `Remove ${line.sku} from cart`}>
-                              &times;
-                            </button>
-                        </td>
-                      </tr>
-                    ))}
-</tbody>
-                </table>
-              </div>
-
-              {/* ── Undo bar ───────────── */}
-              {undoBarExit.shouldRender && (
-                <div
-                  className={`retail-undo-bar${undoBarExit.exiting ? ' retail-undo-bar--exiting' : ''}`}
-                  role="status"
-                  aria-live="polite"
-                >
-                  <span className="retail-undo-bar-label">{l10n.getString('retail-undo-items-removed', { count: undoStack.length }) || `${undoStack.length} item${undoStack.length > 1 ? 's' : ''} removed`}</span>
-                  <button type="button" className="retail-undo-bar-btn" onClick={handleUndoRemove}>{l10n.getString('pos-cart-undo')}</button>
-                  <button type="button" className="retail-undo-bar-dismiss" onClick={handleDismissUndo} aria-label={l10n.getString('pos-cart-undo-dismiss-aria')}>&times;</button>
-                </div>
-              )}
-
-              <div className="retail-cart-totals">
-                <div className="retail-total-row">
-                  <span>{l10n.getString('pos-cart-subtotal')}</span>
-                  <span>{subtotal ? formatMoney(subtotal) : '—'}</span>
-                </div>
-                {discountPercent > 0 && discountAmount && (
-                  <div className="retail-total-row">
-                    <span>{l10n.getString('retail-total-discount', { percent: discountPercent }) || `Discount ${discountPercent}%`}</span>
-                    <span style={{ color: 'var(--color-danger)' }}>&minus;{formatMoney(discountAmount)}</span>
-                  </div>
-                )}
-                {cartTax > 0 && (
-                  <div className="retail-total-row">
-                    <span>{l10n.getString('retail-total-tax')}</span>
-                    <span>{formatMoney({ minor_units: cartTax, currency: subtotal?.currency ?? 'IDR' })}</span>
-                  </div>
-                )}
-                <div className="retail-total-row retail-total-row--grand" aria-live="polite" aria-atomic="true">
-                  <span>{l10n.getString('cart-total-label')}</span>
-                  <span>{total ? formatMoney(total) : '—'}</span>
-                </div>
-              </div>
-              {selectedCustomer && (
-                <div className="retail-customer-badge">
-                  <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" aria-hidden="true">
-                    <path d="M10 10a4 4 0 100-8 4 4 0 000 8zm-7 8a7 7 0 1114 0H3z" />
-                  </svg>
-                  <span>{selectedCustomer.name}</span>
-                </div>
-              )}
-              <div className="retail-cart-actions">
-                <button
-                  type="button"
-                  className="retail-cart-action-btn retail-cart-action-btn--pay"
-                  data-testid="pay-btn"
-                  onClick={handlePay}
-                  disabled={lines.length === 0 || !activeShift}
-                  aria-label={l10n.getString('sale-pay-button')}
-                >
-                  {l10n.getString('sale-pay-button')}
-                </button>
-                <button
-                  type="button"
-                  className="retail-cart-action-btn retail-cart-action-btn--discount"
-                  onClick={() => setShowDiscount(true)}
-                  disabled={lines.length === 0}
-                  aria-label={l10n.getString('retail-discount-button')}
-                >
-                  {l10n.getString('retail-discount-button')}
-                </button>
-                <button
-                  type="button"
-                  className="retail-cart-action-btn retail-cart-action-btn--hold"
-                  onClick={heldCartId ? handleResume : handleHold}
-                  disabled={!heldCartId && lines.length === 0}
-                  aria-label={heldCartId ? (l10n.getString('retail-resume-button') || 'Resume') : (l10n.getString('pos-cart-hold') || 'Hold')}
-                >
-                  {heldCartId ? (l10n.getString('retail-resume-button') || 'Resume') : (l10n.getString('pos-cart-hold') || 'Hold')}
-                </button>
-                <button
-                  type="button"
-                  className="retail-cart-action-btn retail-cart-action-btn--void"
-                  onClick={handleRequestClear}
-                  disabled={lines.length === 0}
-                  aria-label={l10n.getString('pos-cart-clear')}
-                >
-                  {l10n.getString('pos-cart-clear')}
-                </button>
-              </div>
-              <div style={{ padding: '4px 8px' }}>
-                <button
-                  onClick={() => { setShowCreditList(true); loadCreditSales(); }}
-                  style={{
-                    width: '100%', padding: '6px', fontSize: 11, background: creditSales.length > 0 ? 'var(--color-warning-pos-darker)' : 'var(--color-fg-secondary)',
-                    color: 'var(--color-bg-elevated)', border: 'none', cursor: 'pointer', fontWeight: 700,
-                  }}
-                >
-                  {l10n.getString('retail-credit-reminders', { count: creditSales.length }) || `Credit Reminders (${creditSales.length})`}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
       </div>
 
       {/* ── Function bar (bottom) ──────────── */}
-      <div className="retail-fn-bar" role="toolbar" aria-label={l10n.getString('retail-fn-bar-aria') || 'Function bar'}>
-        <button type="button" className="retail-fn-btn" onClick={handlePay} disabled={lines.length === 0}>
-          <span className="retail-fn-key">F1</span> {l10n.getString('sale-pay-button')}
-        </button>
-        <button type="button" className="retail-fn-btn" onClick={handleRequestClear} disabled={lines.length === 0}>
-          <span className="retail-fn-key">F2</span> {l10n.getString('retail-fn-void')}
-        </button>
-        <button type="button" className="retail-fn-btn" onClick={() => setShowDiscount(true)} disabled={lines.length === 0}>
-          <span className="retail-fn-key">F3</span> {l10n.getString('retail-fn-diskon')}
-        </button>
-        <button type="button" className="retail-fn-btn" onClick={heldCartId ? handleResume : handleHold} disabled={!heldCartId && lines.length === 0}>
-          <span className="retail-fn-key">F4</span> {heldCartId ? (l10n.getString('retail-resume-button') || 'Resume') : (l10n.getString('pos-cart-hold') || 'Hold')}
-        </button>
-        <button type="button" className="retail-fn-btn" onClick={() => skuInputRef.current?.focus()}>
-          <span className="retail-fn-key">F5</span> {l10n.getString('retail-fn-cari')}
-        </button>
-        <button type="button" className="retail-fn-btn" onClick={() => setShowSalesHistory(true)}>
-          <span className="retail-fn-key">F6</span> {l10n.getString('retail-fn-history')}
-        </button>
-        <button type="button" className="retail-fn-btn" onClick={() => setShowCustomerSearch(true)}>
-          <span className="retail-fn-key">F7</span> {l10n.getString('retail-fn-pelanggan')}
-        </button>
-        <button type="button" className="retail-fn-btn" onClick={() => setShowStockInquiry(true)}>
-          <span className="retail-fn-key">F8</span> {l10n.getString('retail-fn-stok')}
-        </button>
-        <button
-          type="button"
-          className="retail-fn-btn"
-          onClick={() => activeShift ? setShowCloseShift(true) : setShowOpenShift(true)}
-        >
-          <span className="retail-fn-key">F9</span> {activeShift ? l10n.getString('pos-shift-close-btn') : l10n.getString('pos-shift-open-btn')} {l10n.getString('retail-fn-shift')}
-        </button>
-        <button type="button" className="retail-fn-btn" onClick={handleOpenSettings}>
-          <span className="retail-fn-key">F10</span> {l10n.getString('retail-fn-options')}
-        </button>
-        {isEnabled(FEATURES.QUICK_RETURN) && (
-          <button type="button" className="retail-fn-btn" onClick={() => setShowQuickReturn(true)}>
-            {l10n.getString('retail-fn-quick-return') || 'Quick Return'}
-          </button>
-        )}
-        <button type="button" className="retail-fn-btn" onClick={() => onNavigate?.('kds')}>
-          <span className="retail-fn-key">F12</span> {l10n.getString('kds-title') || 'KDS'}
-        </button>
-        {isEnabled(FEATURES.TABLE_MANAGEMENT) && (
-          <button type="button" className="retail-fn-btn" onClick={() => setShowTables(true)}>
-            🪑 {l10n.getString('tables-title') || 'Tables'}
-          </button>
-        )}
-      </div>
-
-      {/* ── Open Shift modal ────────────────── */}
-      {retailOpenShiftExit.shouldRender && (
-        <button
-          type="button"
-          className={`retail-shift-overlay${retailOpenShiftExit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
-          aria-label="Close"
-          onClick={() => retailOpenShiftExit.requestClose()}
-        >
-          <div className={`retail-shift-modal${retailOpenShiftExit.exiting ? ' retail-shift-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
-            <h3>{l10n.getString('pos-open-shift-title')}</h3>
-            <label htmlFor="retail-opening">{l10n.getString('retail-open-shift-opening-label')}</label>
-            <input
-              id="retail-opening"
-              type="number"
-              min="0"
-              value={openingBalance}
-              onChange={(e) => setOpeningBalance(e.target.value)}
-            />
-            <div className="retail-shift-modal-actions">
-              <button type="button" onClick={() => retailOpenShiftExit.requestClose()} disabled={openingShift}>{l10n.getString('cancel')}</button>
-              <button type="button" className="retail-shift-confirm-btn" onClick={handleOpenShift} disabled={openingShift}>
-                {openingShift ? l10n.getString('retail-open-shift-opening') : l10n.getString('pos-shift-open-btn')}
-              </button>
-            </div>
-          </div>
-        </button>
-      )}
-
-      {/* ── Close Shift modal ───────────────── */}
-      {retailCloseShiftExit.shouldRender && activeShift && (
-        <button
-          type="button"
-          className={`retail-shift-overlay${retailCloseShiftExit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
-          aria-label="Close"
-          onClick={() => retailCloseShiftExit.requestClose()}
-        >
-          <div className={`retail-shift-modal${retailCloseShiftExit.exiting ? ' retail-shift-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
-            <h3>{l10n.getString('pos-close-shift-title')}</h3>
-            {closeShiftError && <div className="retail-shift-error">{closeShiftError}</div>}
-            <div style={{ fontSize: 12, color: '#555', marginBottom: 10 }}>
-              {l10n.getString('pos-close-shift-opened')}: {new Date(activeShift.openedAt).toLocaleString()}
-            </div>
-            <label htmlFor="retail-closing">{l10n.getString('pos-close-shift-counted-label')}</label>
-            <input
-              id="retail-closing"
-              type="number"
-              min="0"
-              value={closingBalance}
-              onChange={(e) => setClosingBalance(e.target.value)}
-            />
-            <label htmlFor="retail-notes" style={{ marginTop: 8 }}>{l10n.getString('pos-shift-notes')}</label>
-            <textarea
-              id="retail-notes"
-              rows={2}
-              value={shiftNotes}
-              onChange={(e) => setShiftNotes(e.target.value)}
-            />
-            <div className="retail-shift-modal-actions">
-              <button type="button" onClick={() => retailCloseShiftExit.requestClose()} disabled={closingShift}>{l10n.getString('cancel')}</button>
-              <button type="button" className="retail-shift-confirm-btn" onClick={handleCloseShift} disabled={closingShift}>
-                {closingShift ? l10n.getString('loading') : l10n.getString('pos-shift-close-btn')}
-              </button>
-            </div>
-          </div>
-        </button>
-      )}
-
-      {/* ── Closed Shift Summary ────────────── */}
-      {(retailShiftSummaryExit.shouldRender && closedShiftSummary) && (
-        <div className={`retail-shift-overlay${retailShiftSummaryExit.exiting ? ' retail-shift-overlay--exiting' : ''}`}>
-          <div className={`retail-shift-modal${retailShiftSummaryExit.exiting ? ' retail-shift-modal--exiting' : ''}`}>
-            <h3>{l10n.getString('pos-shift-closed-title')}</h3>
-            <div style={{ fontSize: 13, lineHeight: 1.8 }}>
-              <div>{l10n.getString('pos-shift-total-sales')}: {formatMoney({ minor_units: closedShiftSummary.totalSalesMinor, currency: storeSettings.currency })}</div>
-              <div>{l10n.getString('retail-shift-closed-cash-sales')} {formatMoney({ minor_units: closedShiftSummary.totalCashMinor, currency: storeSettings.currency })}</div>
-              <div>{l10n.getString('pos-shift-expected-cash')}: {closedShiftSummary.expectedCashMinor != null ? formatMoney({ minor_units: closedShiftSummary.expectedCashMinor, currency: storeSettings.currency }) : '—'}</div>
-              <div>{l10n.getString('pos-shift-difference')}: {closedShiftSummary.cashDifferenceMinor != null ? formatMoney({ minor_units: closedShiftSummary.cashDifferenceMinor, currency: storeSettings.currency }) : '—'}</div>
-            </div>
-            <div className="retail-shift-modal-actions">
-              <button
-                type="button"
-                className="retail-shift-confirm-btn"
-                onClick={() => retailShiftSummaryExit.requestClose()}
-              >{l10n.getString('pos-shift-summary-done')}</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Credit list overlay ─────────────── */}
-      {retailCreditListExit.shouldRender && (
-        <button
-          type="button"
-          className={`retail-shift-overlay${retailCreditListExit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
-          aria-label="Close"
-          onClick={retailCreditListExit.requestClose}
-        >
-          <div className={`retail-shift-modal${retailCreditListExit.exiting ? ' retail-shift-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '70vh', overflowY: 'auto', width: 480 }}>
-            <h3>{l10n.getString('retail-credit-reminders-title')}</h3>
-            {creditSales.length === 0 ? (
-              <div style={{ padding: 16, textAlign: 'center', color: '#888' }}>{l10n.getString('retail-credit-no-outstanding')}</div>
-            ) : (
-              <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid #ccc' }}>
-                    <th style={{ textAlign: 'left', padding: 4 }}>{l10n.getString('retail-credit-col-customer')}</th>
-                    <th style={{ textAlign: 'right', padding: 4 }}>{l10n.getString('retail-credit-col-amount')}</th>
-                    <th style={{ textAlign: 'center', padding: 4 }}>{l10n.getString('retail-credit-col-date')}</th>
-                    { }
-                    <th style={{ padding: 4 }}></th>
-                  </tr>
-                </thead>
-                <tbody>{creditSales.map((c) => (
-                    <tr key={c.saleId} style={{ borderBottom: '1px solid #eee' }}>
-                      <td style={{ padding: 4 }}>{c.customerName || '—'}</td>
-                      <td style={{ textAlign: 'right', padding: 4 }}>
-                        {formatMoney({ minor_units: c.totalMinor, currency: c.currency })}
-                      </td>
-                      <td style={{ textAlign: 'center', padding: 4, fontSize: 11 }}>
-                        {new Date(c.createdAt).toLocaleDateString()}
-                      </td>
-                      <td style={{ padding: 4 }}>
-                        <button
-                          onClick={() => handleSettleCredit(c.saleId)}
-                          disabled={settlingId === c.saleId}
-                          style={{
-                            padding: '4px 8px', fontSize: 11, background: 'var(--color-success-pos)',
-                            color: 'var(--color-bg-elevated)', border: 'none', cursor: 'pointer',
-                          }}
-                        >
-                          {settlingId === c.saleId ? '…' : l10n.getString('retail-credit-settle')}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-</tbody>
-              </table>
-            )}
-            <div className="retail-shift-modal-actions">
-              <button type="button" className="retail-shift-confirm-btn" onClick={retailCreditListExit.requestClose}>{l10n.getString('close')}</button>
-            </div>
-          </div>
-        </button>
-      )}
-
-      {/* ── Clear confirm modal ────────────── */}
-      {retailClearConfirmExit.shouldRender && (
-        <button
-          type="button"
-          className={`retail-shift-overlay${retailClearConfirmExit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
-          aria-label="Close"
-          onClick={retailClearConfirmExit.requestClose}
-        >
-          <div className={`retail-shift-modal${retailClearConfirmExit.exiting ? ' retail-shift-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
-            <h3>{l10n.getString('retail-clear-cart-title')}</h3>
-            <p style={{ fontSize: 13, margin: '0 0 16px', color: '#555' }}>
-              {l10n.getString('retail-clear-cart-confirm', { count: lineCount }) || `Remove all ${lineCount} item${lineCount !== 1 ? 's' : ''} from the cart?`}
-            </p>
-            <div className="retail-shift-modal-actions">
-              <button type="button" onClick={retailClearConfirmExit.requestClose}>{l10n.getString('cancel')}</button>
-              <button type="button" className="retail-shift-confirm-btn" onClick={handleConfirmClear}>{l10n.getString('retail-clear-cart-clear')}</button>
-            </div>
-          </div>
-        </button>
-      )}
-
-      {/* ── Discount modal ──────────────────── */}
-      {retailDiscountExit.shouldRender && (
-        <button
-          type="button"
-          className={`retail-discount-overlay${retailDiscountExit.exiting ? ' retail-discount-overlay--exiting' : ''}`}
-          aria-label="Close"
-          onClick={() => retailDiscountExit.requestClose()}
-        >
-          <div className={`retail-discount-modal${retailDiscountExit.exiting ? ' retail-discount-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
-            <h3>{l10n.getString('retail-discount-title')}</h3>
-            <div className="retail-discount-tabs">
-              <button
-                className={`retail-discount-tab${discountTab === 'pct' ? ' retail-discount-tab--active' : ''}`}
-                onClick={() => setDiscountTab('pct')}
-              >
-                {l10n.getString('retail-discount-pct-tab')}
-              </button>
-              <button
-                className={`retail-discount-tab${discountTab === 'rp' ? ' retail-discount-tab--active' : ''}`}
-                onClick={() => setDiscountTab('rp')}
-              >
-                {l10n.getString('retail-discount-rp-tab')}
-              </button>
-            </div>
-            {discountTab === 'pct' ? (
-              <>
-                <label htmlFor="discount-pct">{l10n.getString('retail-discount-pct-label')}</label>
-                <input
-                  id="discount-pct"
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={discountInput}
-                  onChange={(e) => setDiscountInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleApplyDiscount(); }}
-                />
-              </>
-            ) : (
-              <>
-                <label htmlFor="discount-rp">{l10n.getString('retail-discount-rp-label')}</label>
-                <input
-                  id="discount-rp"
-                  type="number"
-                  min="0"
-                  value={discountRpInput}
-                  onChange={(e) => setDiscountRpInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleApplyDiscountRp(); }}
-                />
-              </>
-            )}
-            <div className="retail-discount-actions">
-              <button type="button" onClick={() => { retailDiscountExit.requestClose(); setDiscountInput(''); setDiscountRpInput(''); }}>{l10n.getString('cancel')}</button>
-              {discountTab === 'pct' ? (
-                <button type="button" onClick={handleApplyDiscount}>{l10n.getString('pos-cart-apply')}</button>
-              ) : (
-                <button type="button" onClick={handleApplyDiscountRp}>{l10n.getString('pos-cart-apply')}</button>
-              )}
-            </div>
-          </div>
-        </button>
-      )}
-
-      {/* ── Customer search modal ──────────── */}
-      {retailCustomerExit.shouldRender && (
-        <button
-          type="button"
-          className={`retail-customer-overlay${retailCustomerExit.exiting ? ' retail-customer-overlay--exiting' : ''}`}
-          aria-label="Close"
-          onClick={retailCustomerExit.requestClose}
-        >
-          <div className={`retail-customer-modal${retailCustomerExit.exiting ? ' retail-customer-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
-            <h3>{l10n.getString('retail-customer-search-title')}</h3>
-            <input
-              className="retail-customer-search-input"
-              type="text"
-              placeholder={l10n.getString('retail-customer-search-placeholder')}
-              value={customerSearchQuery}
-              onChange={(e) => setCustomerSearchQuery(e.target.value)}
-            />
-            <div className="retail-customer-search-list">
-              {loadingCustomers ? (
-                <div className="retail-customer-search-loading">{l10n.getString('retail-customer-search-loading')}</div>
-              ) : customerSearchResults.length === 0 ? (
-                <div className="retail-customer-search-empty">{l10n.getString('retail-customer-search-empty')}</div>
-              ) : (
-                customerSearchResults.map((c) => (
-                  <button
-                    key={c.id}
-                    className={`retail-customer-search-item${selectedCustomer?.id === c.id ? ' retail-customer-search-item--selected' : ''}`}
-                    onClick={() => {
-                      setSelectedCustomer(c);
-                      setShowCustomerSearch(false);
-                      setCustomerSearchQuery('');
-                    }}
-                  >
-                    <span className="retail-customer-search-item-name">{c.name}</span>
-                    {(c.phone || c.email) && (
-                      <span className="retail-customer-search-item-detail">{c.phone || c.email}</span>
-                    )}
-                  </button>
-                ))
-              )}
-            </div>
-            <div className="retail-customer-modal-actions">
-              {selectedCustomer && (
-                <button
-                  className="retail-customer-clear-btn"
-                  onClick={() => {
-                    setSelectedCustomer(null);
-                    setShowCustomerSearch(false);
-                    setCustomerSearchQuery('');
-                  }}
-                >
-                  {l10n.getString('retail-customer-clear')}
-                </button>
-              )}
-              <button type="button" className="retail-customer-close-btn" onClick={retailCustomerExit.requestClose}>{l10n.getString('close')}</button>
-            </div>
-          </div>
-        </button>
-      )}
-
-      {/* ── Quantity picker modal ──────────── */}
-      {retailQtyExit.shouldRender && pendingProduct && (
-        <button
-          type="button"
-          className={`retail-qty-overlay${retailQtyExit.exiting ? ' retail-qty-overlay--exiting' : ''}`}
-          aria-label="Close"
-          onClick={retailQtyExit.requestClose}
-        >
-          <div className={`retail-qty-modal${retailQtyExit.exiting ? ' retail-qty-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
-            <h3 className="retail-qty-heading">{pendingProduct.name}</h3>
-            <div className="retail-qty-price">{formatMoney(pendingProduct.price)}</div>
-            <div className="retail-qty-controls">
-              <button
-                className="retail-qty-btn"
-                onClick={() => setQtyInput((v) => String(Math.max(1, (parseInt(v, 10) || 1) - 1)))}
-              >
-                &minus;
-              </button>
-              <input
-                className="retail-qty-input"
-                type="number"
-                min={1}
-                value={qtyInput}
-                onChange={(e) => setQtyInput(e.target.value)}
-                onFocus={(e) => e.target.select()}
-              />
-              <button
-                className="retail-qty-btn"
-                onClick={() => setQtyInput((v) => String((parseInt(v, 10) || 1) + 1))}
-              >
-                +
-              </button>
-            </div>
-            <div className="retail-qty-numpad">
-              {[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map((k) => (
-                k === '' ? <span key="spacer" /> : (
-                  <button
-                    key={String(k)}
-                    className="retail-qty-num-btn"
-                    onClick={() => {
-                      if (k === '⌫') setQtyInput((v) => v.length > 1 ? v.slice(0, -1) : '1');
-                      else setQtyInput((v) => String(Math.max(1, parseInt(v + String(k), 10) || 1)));
-                    }}
-                  >
-                    {k}
-                  </button>
-                )
-              ))}
-            </div>
-            <div className="retail-qty-total">
-              {l10n.getString('retail-qty-total')} {formatMoney({
-                minor_units: pendingProduct.price.minor_units * Math.max(1, parseInt(qtyInput, 10) || 1),
-                currency: pendingProduct.price.currency,
-              })}
-            </div>
-            <div className="retail-qty-actions">
-              <button type="button" className="retail-qty-cancel" onClick={retailQtyExit.requestClose}>{l10n.getString('cancel')}</button>
-              <button type="button" className="retail-qty-confirm" onClick={handleConfirmQty}>{l10n.getString('retail-qty-add')}</button>
-            </div>
-          </div>
-        </button>
-      )}
-
-      {/* ── Held carts list modal ──────────── */}
-      {retailHeldCartsExit.shouldRender && (
-        <button
-          type="button"
-          className={`retail-held-carts-overlay${retailHeldCartsExit.exiting ? ' retail-held-carts-overlay--exiting' : ''}`}
-          aria-label="Close"
-          onClick={retailHeldCartsExit.requestClose}
-        >
-          <div className={`retail-held-carts-modal${retailHeldCartsExit.exiting ? ' retail-held-carts-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
-            <h3>{l10n.getString('retail-held-carts-title')}</h3>
-            {heldCartsList.length === 0 ? (
-              <p className="retail-held-carts-empty">{l10n.getString('retail-held-carts-empty')}</p>
-            ) : (
-              <div className="retail-held-carts-list">
-                {heldCartsList.map((c) => (
-                  <div key={c.id} className="retail-held-cart-row">
-                    <button type="button" className="retail-held-cart-info" aria-label="Resume cart" onClick={() => handleResumeCart(c.id)}>
-                      <span className="retail-held-cart-label">{c.label}</span>
-                      <span className="retail-held-cart-meta">
-                        {c.item_count} {l10n.getString('retail-cart-items', { count: c.item_count })} &middot; {formatMoney({ minor_units: c.total_minor, currency: c.currency })}
-                      </span>
-                    </button>
-                    <button type="button" className="retail-held-cart-delete" onClick={() => handleDeleteHeldCart(c.id)} aria-label={l10n.getString('retail-held-cart-delete-aria')}>
-                      &times;
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="retail-held-carts-actions">
-              <button type="button" onClick={retailHeldCartsExit.requestClose}>{l10n.getString('close')}</button>
-            </div>
-          </div>
-        </button>
-      )}
-
-      {/* ── Shortcuts overlay ──────────────── */}
-      {retailShortcutsExit.shouldRender && (
-        <button
-          type="button"
-          className={`retail-shortcuts-overlay${retailShortcutsExit.exiting ? ' retail-shortcuts-overlay--exiting' : ''}`}
-          aria-label="Close"
-          onClick={retailShortcutsExit.requestClose}
-        >
-          <div className={`retail-shortcuts-modal${retailShortcutsExit.exiting ? ' retail-shortcuts-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
-            <h3 className="retail-shortcuts-heading">{l10n.getString('retail-shortcuts-title')}</h3>
-            <div className="retail-shortcuts-grid">
-              <span className="retail-shortcuts-key">F1</span><span>{l10n.getString('retail-shortcut-pay')}</span>
-              <span className="retail-shortcuts-key">F2</span><span>{l10n.getString('retail-shortcut-clear')}</span>
-              <span className="retail-shortcuts-key">F3</span><span>{l10n.getString('retail-shortcut-discount')}</span>
-              <span className="retail-shortcuts-key">F4</span><span>{l10n.getString('retail-shortcut-hold')}</span>
-              <span className="retail-shortcuts-key">F5</span><span>{l10n.getString('retail-shortcut-sku')}</span>
-              <span className="retail-shortcuts-key">F6</span><span>{l10n.getString('retail-fn-history')}</span>
-              <span className="retail-shortcuts-key">F7</span><span>{l10n.getString('retail-fn-pelanggan')}</span>
-              <span className="retail-shortcuts-key">F8</span><span>{l10n.getString('retail-fn-stok')}</span>
-              <span className="retail-shortcuts-key">F9</span><span>{l10n.getString('retail-shortcut-shift')}</span>
-              <span className="retail-shortcuts-key">F10</span><span>{l10n.getString('retail-shortcut-options')}</span>
-              <span className="retail-shortcuts-key">F11</span><span>{l10n.getString('retail-shortcut-fullscreen') || 'Toggle Fullscreen'}</span>
-              <span className="retail-shortcuts-key">?</span><span>{l10n.getString('retail-shortcut-list')}</span>
-              <span className="retail-shortcuts-key">F12</span><span>{l10n.getString('kds-title') || 'KDS'}</span>
-              <span className="retail-shortcuts-key">Esc</span><span>{l10n.getString('retail-shortcut-close')}</span>
-            </div>
-            <button type="button" className="retail-shortcuts-close" onClick={retailShortcutsExit.requestClose}>{l10n.getString('close')}</button>
-          </div>
-        </button>
-      )}
-
-      {/* ── Price Override modal ───────────── */}
-      {overrideTarget && (
-        <PriceOverrideModal
-          open
-          lineDescription={`${overrideTarget.name} — ${formatMoney(overrideTarget.unit_price)}`}
-          currentPrice={overrideTarget.unit_price}
-          onConfirm={handleOverrideConfirm}
-          onClose={() => setOverrideTarget(null)}
-        />
-      )}
-
-      {/* ── Quick Return modal ──────────────── */}
-      {retailQuickReturnExit.shouldRender && (
-        <button
-          type="button"
-          className={`retail-shift-overlay${retailQuickReturnExit.exiting ? ' retail-shift-overlay--exiting' : ''}`}
-          aria-label="Close"
-          onClick={retailQuickReturnExit.requestClose}
-        >
-          <div className={`retail-shift-modal${retailQuickReturnExit.exiting ? ' retail-shift-modal--exiting' : ''}`} role="presentation" onClick={(e) => e.stopPropagation()}>
-            <h3>{l10n.getString('retail-quick-return-title') || 'Quick Return'}</h3>
-            <p style={{ fontSize: 12, color: '#555', marginBottom: 8 }}>
-              {l10n.getString('retail-quick-return-desc') || 'Scan or enter the receipt barcode to look up a sale for return.'}
-            </p>
-            <input
-              type="text"
-              className="retail-sku-input"
-              style={{ width: '100%', boxSizing: 'border-box', marginBottom: 8 }}
-              value={quickReturnBarcode}
-              onChange={(e) => setQuickReturnBarcode(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleQuickReturnSubmit(); }}
-              placeholder={l10n.getString('retail-quick-return-placeholder') || 'Receipt barcode'}
-              aria-label={l10n.getString('retail-quick-return-aria') || 'Receipt barcode input'}
-            />
-            <div className="retail-shift-modal-actions">
-              <button type="button" onClick={retailQuickReturnExit.requestClose} disabled={quickReturnLoading}>
-                {l10n.getString('cancel')}
-              </button>
-              <button type="button" className="retail-shift-confirm-btn" onClick={handleQuickReturnSubmit} disabled={quickReturnLoading || !quickReturnBarcode.trim()}>
-                {quickReturnLoading ? l10n.getString('loading') : (l10n.getString('retail-quick-return-lookup') || 'Look Up')}
-              </button>
-            </div>
-          </div>
-        </button>
-      )}
-
-      {/* ── Quick Return Refund modal ───────── */}
-      {showQuickReturnRefund && quickReturnSale && (
-        <RefundModal
-          open
-          sale={quickReturnSale}
-          onClose={handleQuickReturnRefundDone}
-          onRefunded={handleQuickReturnRefundDone}
-        />
-      )}
-
-      {/* ── Scan flash overlay ─────────────── */}
-      {scanFlash && <div className="retail-scan-flash" />}
-    </div>
-
-    {/* ── Workspace Settings Modal (ADR #22 Phase 5) ── */}
-    {showWorkspaceSettings && (
-      <WorkspaceSettingsModal
-        open={showWorkspaceSettings}
-        onClose={() => setShowWorkspaceSettings(false)}
-        workspaceType="store-pos"
-        presentation="overlay"
+      <RetailFnBar
+        linesLength={lines.length}
+        heldCartId={heldCartId}
+        activeShift={!!activeShift}
+        onPay={handlePay}
+        onRequestClear={() => { if (!isAnyOverlayOpen()) handleRequestClear(); }}
+        onShowDiscount={() => { if (!isAnyOverlayOpen()) setShowDiscount(true); }}
+        onHoldResume={heldCartId ? handleResume : handleHold}
+        onShowSalesHistory={() => goToSubView(setShowSalesHistory)}
+        onShowCustomerSearch={() => { if (!isAnyOverlayOpen()) setShowCustomerSearch(true); }}
+        onShowStockInquiry={() => goToSubView(setShowStockInquiry)}
+        onToggleShift={() => { if (!isAnyOverlayOpen()) { if (activeShift) setShowCloseShift(true); else setShowOpenShift(true); } }}
+        onOpenSettings={handleOpenSettings}
+        onShowQuickReturn={() => { if (!isAnyOverlayOpen()) setShowQuickReturn(true); }}
+        onShowTables={() => goToSubView(setShowTables)}
+        onNavigateKds={() => onNavigate?.('kds')}
+        skuInputRef={skuInputRef}
       />
-    )}
+      <RetailReminderPopup
+        lowStockCount={lowStockCount}
+        creditCount={creditSales.length}
+        heldCartCount={heldCartsList.length}
+        lowStockActive={filterLowStock}
+        onClickLowStock={() => setFilterLowStock((prev) => !prev)}
+        onClickCredit={() => { if (!isAnyOverlayOpen()) setShowCreditList(true); }}
+        onClickHeldCarts={() => { if (!isAnyOverlayOpen()) setShowHeldCartsList(true); }}
+      />
+      <RetailModals
+        shift={{
+          activeShift,
+          openShiftExit: { shouldRender: retailOpenShiftExit.shouldRender, exiting: retailOpenShiftExit.exiting, requestClose: retailOpenShiftExit.requestClose },
+          closeShiftExit: { shouldRender: retailCloseShiftExit.shouldRender, exiting: retailCloseShiftExit.exiting, requestClose: retailCloseShiftExit.requestClose },
+          shiftSummaryExit: { shouldRender: retailShiftSummaryExit.shouldRender, exiting: retailShiftSummaryExit.exiting, requestClose: retailShiftSummaryExit.requestClose },
+          closedShiftSummary,
+          openingBalance,
+          closingBalance,
+          shiftNotes,
+          openingShift,
+          closingShift,
+          closeShiftError,
+          storeSettings: { currency: storeSettings.currency },
+          onOpeningBalanceChange: setOpeningBalance,
+          onClosingBalanceChange: setClosingBalance,
+          onShiftNotesChange: setShiftNotes,
+          onOpenShift: handleOpenShift,
+          onCloseShift: handleCloseShift,
+        }}
+        discount={{
+          exit: { shouldRender: retailDiscountExit.shouldRender, exiting: retailDiscountExit.exiting, requestClose: retailDiscountExit.requestClose },
+          tab: discountTab,
+          input: discountInput,
+          rpInput: discountRpInput,
+          onTabChange: setDiscountTab,
+          onInputChange: setDiscountInput,
+          onRpInputChange: setDiscountRpInput,
+          onApplyPct: handleApplyDiscount,
+          onApplyRp: handleApplyDiscountRp,
+          onCancel: () => { retailDiscountExit.requestClose(); setDiscountInput(''); setDiscountRpInput(''); },
+        }}
+        customer={{
+          exit: { shouldRender: retailCustomerExit.shouldRender, exiting: retailCustomerExit.exiting, requestClose: retailCustomerExit.requestClose },
+          query: customerSearchQuery,
+          results: customerSearchResults,
+          loading: loadingCustomers,
+          selected: selectedCustomer,
+          onQueryChange: setCustomerSearchQuery,
+          onSelect: (c) => { setSelectedCustomer(c); setShowCustomerSearch(false); setCustomerSearchQuery(''); },
+          onClear: () => { setSelectedCustomer(null); setShowCustomerSearch(false); setCustomerSearchQuery(''); },
+          onClose: () => retailCustomerExit.requestClose(),
+        }}
+        qtyPicker={{
+          exit: { shouldRender: retailQtyExit.shouldRender, exiting: retailQtyExit.exiting, requestClose: retailQtyExit.requestClose },
+          product: pendingProduct ? { name: pendingProduct.name, price: pendingProduct.price } : null,
+          input: qtyInput,
+          onInputChange: setQtyInput,
+          onConfirm: handleConfirmQty,
+          onCancel: () => retailQtyExit.requestClose(),
+        }}
+        heldCarts={{
+          exit: { shouldRender: retailHeldCartsExit.shouldRender, exiting: retailHeldCartsExit.exiting, requestClose: retailHeldCartsExit.requestClose },
+          list: heldCartsList,
+          onResume: handleResumeCart,
+          onDelete: (id) => { const row = heldCartsList.find((c) => c.id === id) ?? null; setDeleteHeldTarget(row); },
+          onClose: () => retailHeldCartsExit.requestClose(),
+        }}
+        deleteHeldCartConfirm={{
+          exit: { shouldRender: retailDeleteHeldExit.shouldRender, exiting: retailDeleteHeldExit.exiting, requestClose: retailDeleteHeldExit.requestClose },
+          label: deleteHeldTarget?.label ?? '',
+          onConfirm: () => { if (deleteHeldTarget) handleDeleteHeldCart(deleteHeldTarget.id); },
+          onClose: () => retailDeleteHeldExit.requestClose(),
+        }}
+        credit={{
+          exit: { shouldRender: retailCreditListExit.shouldRender, exiting: retailCreditListExit.exiting, requestClose: retailCreditListExit.requestClose },
+          sales: creditSales,
+          settlingId,
+          onSettle: handleSettleCredit,
+          onClose: () => retailCreditListExit.requestClose(),
+        }}
+        quickReturn={{
+          exit: { shouldRender: retailQuickReturnExit.shouldRender, exiting: retailQuickReturnExit.exiting, requestClose: retailQuickReturnExit.requestClose },
+          barcode: quickReturnBarcode,
+          loading: quickReturnLoading,
+          onBarcodeChange: setQuickReturnBarcode,
+          onSubmit: handleQuickReturnSubmit,
+          onClose: () => retailQuickReturnExit.requestClose(),
+        }}
+        clearConfirm={{
+          exit: { shouldRender: retailClearConfirmExit.shouldRender, exiting: retailClearConfirmExit.exiting, requestClose: retailClearConfirmExit.requestClose },
+          lineCount,
+          onConfirm: handleConfirmClear,
+          onClose: () => retailClearConfirmExit.requestClose(),
+        }}
+        shortcuts={{
+          exit: { shouldRender: retailShortcutsExit.shouldRender, exiting: retailShortcutsExit.exiting, requestClose: retailShortcutsExit.requestClose },
+          onClose: () => retailShortcutsExit.requestClose(),
+        }}
+        override={{
+          target: overrideTarget,
+          onConfirm: handleOverrideConfirm,
+          onClose: () => setOverrideTarget(null),
+        }}
+        editProduct={{
+          product: editingProduct,
+          isOpen: Boolean(editingProduct),
+          onClose: () => setEditingProduct(null),
+          onSave: handleSaveProductEdit,
+        }}
+        addCategory={{
+          isOpen: isAddCategoryOpen,
+          onClose: () => setIsAddCategoryOpen(false),
+          onSave: handleSaveNewCategory,
+        }}
+        addProduct={{
+          categories,
+          isOpen: isAddProductOpen,
+          onClose: () => setIsAddProductOpen(false),
+          onSave: handleSaveNewProduct,
+        }}
+        showQuickReturnRefund={showQuickReturnRefund}
+        quickReturnSale={quickReturnSale}
+        quickReturnRefundDone={handleQuickReturnRefundDone}
+        scanFlash={scanFlash}
+      />
+
+      {/* ── Item modifier modal ──────────── */}
+      <ItemModifierModal
+        open={!!modifierLine}
+        productName={modifierLine?.name ?? modifierLine?.sku ?? ''}
+        basePriceMinor={modifierLine?.unit_price.minor_units ?? 0}
+        currency={modifierLine?.unit_price.currency ?? 'IDR'}
+        groups={[]}
+        onConfirm={() => setModifierLine(null)}
+        onClose={() => setModifierLine(null)}
+      />
+    </div>
   </>
-  );
-}
-
-// ── Product card with single-tap / long-press ─────────────────
-
-const PRICE_VOLATILITY_MS = 24 * 60 * 60 * 1000; // 24 h
-
-function isPriceRecent(p: ProductDto): boolean {
-  if (!p.price_updated_at) return false;
-  const elapsed = Date.now() - new Date(p.price_updated_at).getTime();
-  return elapsed >= 0 && elapsed < PRICE_VOLATILITY_MS;
-}
-
-function ProductCard({ product, catHue, formatMoney, handleAdd, handleOpenQtyPicker, scaleEnabled, onSetWeighTarget }: {
-  product: ProductDto;
-  catHue: (catId: string | null) => number;
-  formatMoney: (m: Money) => string;
-  handleAdd: (p: ProductDto) => void;
-  handleOpenQtyPicker: (p: ProductDto) => void;
-  scaleEnabled: boolean;
-  onSetWeighTarget: (p: ProductDto) => void;
-}) {
-  const isOutOfStock = !product.in_stock || (product.stock_qty != null && product.stock_qty <= 0);
-  const priceRecent = useMemo(() => isPriceRecent(product), [product]);
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isLongPress = useRef(false);
-
-  const handlePointerDown = useCallback(() => {
-    if (isOutOfStock) return;
-    isLongPress.current = false;
-    longPressTimer.current = setTimeout(() => {
-      isLongPress.current = true;
-      handleOpenQtyPicker(product);
-    }, 400);
-  }, [product, isOutOfStock, handleOpenQtyPicker]);
-
-  const handlePointerUp = useCallback(() => {
-    if (longPressTimer.current) clearTimeout(longPressTimer.current);
-    if (!isLongPress.current && !isOutOfStock) handleAdd(product);
-  }, [product, isOutOfStock, handleAdd]);
-
-  const handlePointerLeave = useCallback(() => {
-    if (longPressTimer.current) clearTimeout(longPressTimer.current);
-  }, []);
-
-  return (
-    <button
-      className={`retail-product-btn${isOutOfStock ? ' retail-product-btn--out-of-stock' : ''}`}
-      style={{ '--cat-hue': catHue(product.category) } as React.CSSProperties}
-      onPointerDown={handlePointerDown}
-      onPointerUp={handlePointerUp}
-      onPointerLeave={handlePointerLeave}
-      aria-label={`${product.name} ${formatMoney(product.price)}${isOutOfStock ? ' (out of stock)' : ''}`}
-      aria-disabled={isOutOfStock}
-    >
-      {product.stock_qty != null && product.stock_qty > 0 && (
-        <span className={`retail-product-stock-badge retail-stock-${product.stock_qty <= 5 ? 'low' : product.stock_qty <= 10 ? 'medium' : 'high'}`}>{product.stock_qty}</span>
-      )}
-      {priceRecent && <span className="retail-price-volatility-hint" title="Price changed recently" />}
-      <span className="retail-product-name">{product.name}</span>
-      <span className="retail-product-price">{formatMoney(product.price)}</span>
-      {scaleEnabled && (
-        <button
-          type="button"
-          className="retail-product-weigh-btn"
-          onClick={(e) => { e.stopPropagation(); e.preventDefault(); onSetWeighTarget(product); }}
-          aria-label={`Weigh ${product.name}`}
-        >
-          ⚖
-        </button>
-      )}
-    </button>
   );
 }

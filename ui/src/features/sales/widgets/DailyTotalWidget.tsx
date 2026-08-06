@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { Localized, useLocalization } from '@fluent/react';
 import { exportDailySummaryScoped, type DailySummaryRow } from '@/api/sales';
 import { formatMoney, type Money } from '@/types/domain';
@@ -54,7 +55,7 @@ export default function DailyTotalWidget() {
   }
 
   return (
-    <div className="reporting-widget reporting-widget--daily-total" aria-label={l10n.getString('sales-dashboard-daily-aria') || 'Daily sales summary'}>
+    <div className="reporting-widget reporting-widget--daily-total" aria-label={requiredLocalized(l10n, 'sales-dashboard-daily-aria')}>
       <div className="reporting-widget-header">
         <Localized id="sales-dashboard-daily-total">
           <h3 className="reporting-widget-title">Daily Summary</h3>

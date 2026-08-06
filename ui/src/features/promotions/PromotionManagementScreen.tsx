@@ -1,5 +1,6 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import {
   listPromotions,
   createPromotion,
@@ -11,6 +12,9 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized, EmptyState } from '@/frontend/shared';
+import { NoPromotionsIcon } from '@/components/EmptyStateIllustrations';
+import { l10nErrorMessage } from '@/utils/app-error';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -47,6 +51,8 @@ const emptyForm = (): Promotion => ({
 
 export default function PromotionManagementScreen() {
   const { l10n } = useLocalization();
+  const deleteModalRef = useRef<HTMLDivElement>(null);
+  const promoModalRef = useRef<HTMLDivElement>(null);
   const { session } = useAuth();
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,7 +71,7 @@ export default function PromotionManagementScreen() {
       const items = await listPromotions();
       setPromotions(items);
     } catch {
-      addToast({ message: l10n.getString('promotions-error-load') || 'Failed to load promotions', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'promotions-error-load'), type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -88,6 +94,9 @@ export default function PromotionManagementScreen() {
   }, []);
 
   const modalExit = useExitAnimation(!!modalMode, closeModal);
+
+  useFocusTrap(deleteModalRef, deleteExit.shouldRender && !deleteExit.exiting, deleteExit.requestClose);
+  useFocusTrap(promoModalRef, modalExit.shouldRender && !modalExit.exiting, modalExit.requestClose);
 
   const handleSave = useCallback(async () => {
     if (!form.name.trim()) return;
@@ -115,7 +124,7 @@ export default function PromotionManagementScreen() {
       closeModal();
       await load();
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : l10n.getString('promotions-error-save') || 'Failed to save promotion', type: 'error' });
+      addToast({ message: l10nErrorMessage(err, l10n, 'promotions-error-save'), type: 'error' });
     } finally {
       setSaving(false);
     }
@@ -129,7 +138,7 @@ export default function PromotionManagementScreen() {
       await deletePromotion(session?.user_id ?? '', deleteTarget.id);
       await load();
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : l10n.getString('promotions-error-delete') || 'Failed to delete promotion', type: 'error' });
+      addToast({ message: l10nErrorMessage(err, l10n, 'promotions-error-delete'), type: 'error' });
     } finally {
       setDeleting(null);
     }
@@ -140,7 +149,7 @@ export default function PromotionManagementScreen() {
       await updatePromotion(session?.user_id ?? '', { ...p, active: !p.active });
       await load();
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : l10n.getString('promotions-error-toggle') || 'Failed to toggle promotion', type: 'error' });
+      addToast({ message: l10nErrorMessage(err, l10n, 'promotions-error-toggle'), type: 'error' });
     }
   }, [load, addToast, l10n, session?.user_id]);
 
@@ -190,11 +199,11 @@ export default function PromotionManagementScreen() {
         </div>
       ) : promotions.length === 0 ? (
         <Card shadow="sm">
-          <div className="promo-mgmt-empty">
-            <Localized id="promotions-no-promotions">
-              <p>No promotions yet.</p>
-            </Localized>
-          </div>
+          <EmptyState
+            region="table"
+            icon={<NoPromotionsIcon />}
+            title={requiredLocalized(l10n, 'promotions-no-promotions')}
+          />
         </Card>
       ) : (
         <div className="promo-mgmt-table-wrap">
@@ -249,7 +258,7 @@ export default function PromotionManagementScreen() {
       {/* ── Delete confirmation modal ── */}
       {deleteExit.shouldRender && deleteTarget && (
         <div className={`promo-mgmt-overlay${deleteExit.exiting ? ' promo-mgmt-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('promotions-modal-delete-label')}>
-          <div className={`promo-mgmt-modal${deleteExit.exiting ? ' promo-mgmt-modal--exiting' : ''}`}>
+          <div ref={deleteModalRef} className={`promo-mgmt-modal${deleteExit.exiting ? ' promo-mgmt-modal--exiting' : ''}`}>
             <div className="promo-mgmt-modal-header">
               <Localized id="promotions-delete-confirm-title">
                 <h2 className="promo-mgmt-modal-title">Delete Promotion</h2>
@@ -276,7 +285,7 @@ export default function PromotionManagementScreen() {
       {/* ── Add / Edit modal ── */}
       {modalExit.shouldRender && modalMode && (
         <div className={`promo-mgmt-overlay${modalExit.exiting ? ' promo-mgmt-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString(modalMode === 'add' ? 'promotions-modal-add-label' : 'promotions-modal-edit-label')}>
-          <div className={`promo-mgmt-modal promo-mgmt-modal--wide${modalExit.exiting ? ' promo-mgmt-modal--exiting' : ''}`}>
+          <div ref={promoModalRef} className={`promo-mgmt-modal promo-mgmt-modal--wide${modalExit.exiting ? ' promo-mgmt-modal--exiting' : ''}`}>
             <div className="promo-mgmt-modal-header">
               <Localized id={modalMode === 'add' ? 'promotions-add' : 'promotions-edit'}>
                 <h2 className="promo-mgmt-modal-title">{modalMode === 'add' ? 'Add Promotion' : 'Edit Promotion'}</h2>
@@ -298,7 +307,7 @@ export default function PromotionManagementScreen() {
                   <select id="promo-field-type" value={form.promo_type} onChange={(e) => setForm({ ...form, promo_type: e.target.value })} aria-label={l10n.getString('promotions-field-type')}>
                     {PROMO_TYPES.map((t) => (
                       <option key={t} value={t}>
-                        {l10n.getString(PROMO_TYPE_LABELS[t] ?? 'promotions-percentage') || t}
+                        {requiredLocalized(l10n, PROMO_TYPE_LABELS[t] ?? 'promotions-percentage')}
                       </option>
                     ))}
                   </select>

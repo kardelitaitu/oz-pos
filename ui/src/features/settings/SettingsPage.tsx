@@ -38,6 +38,7 @@ import { deriveAccentPalette, applyAccentPalette } from '@/utils/color';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import { useOptionalTheme, type Theme } from '@/frontend/shell/ThemeProvider';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { useKeyboardAvoidance } from '@/hooks/useKeyboardAvoidance';
@@ -102,7 +103,7 @@ interface SettingsSnapshot {
 
 function useClock(): string {
   const [clock, setClock] = useState(() =>
-    new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
   );
   useEffect(() => {
     let intervalId: ReturnType<typeof setInterval> | undefined;
@@ -114,7 +115,7 @@ function useClock(): string {
     const timeout = setTimeout(() => {
       const tick = () =>
         setClock(
-          new Date().toLocaleTimeString([], {
+          new Date().toLocaleTimeString(undefined, {
             hour: '2-digit',
             minute: '2-digit',
           }),
@@ -326,7 +327,9 @@ function SettingsPageContent() {
         // WebView2 (Windows) and Chromium require returnValue to be set
         // to a non-empty string for the beforeunload dialog to appear.
         // e.preventDefault() alone is insufficient on WebView2.
-        e.returnValue = '';
+        // The string value is never displayed — browsers show their own
+        // generic dialog regardless of the custom string.
+        e.returnValue = 'unsaved';
       }
     }
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -365,6 +368,8 @@ function SettingsPageContent() {
     setSyncApiKey('');
     setSyncApiKeyVisible(false);
     setTokenExpiresAt(null);
+  // All dependencies are stable (state setters + imported functions),
+  // so an empty array is correct — the callback is created once.
   }, []);
 
   // Sync font-smoothing to <html> whenever it changes
@@ -798,7 +803,7 @@ function SettingsPageContent() {
       case 'restaurant-pos':
         return (
           <Suspense fallback={<Skeleton variant="block" width="100%" height="12rem" />}>
-            <WorkspaceRestaurantPosSettings variant="full-page" terminalId={terminalId} userId={userId} />
+            <WorkspaceRestaurantPosSettings variant="full-page" terminalId={terminalId} userId={userId} {...(sessionToken ? { sessionToken } : {})} />
           </Suspense>
         );
 
@@ -812,6 +817,8 @@ function SettingsPageContent() {
       case 'inventory':
         return (
           <Suspense fallback={<Skeleton variant="block" width="100%" height="12rem" />}>
+            {/* TODO: pass locationId from workspace context when available
+                to enable the Deduction Rules card section */}
             <WorkspaceInventorySettings variant="full-page" userId={userId} />
           </Suspense>
         );
@@ -879,7 +886,7 @@ function SettingsPageContent() {
               name="settings-search"
               className="settings-topbar-search-input"
               type="text"
-              placeholder="Search"
+              placeholder={requiredLocalized(l10n, 'settings-search-placeholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               aria-label={l10n.getString('settings-sidebar-search-aria')}
@@ -999,7 +1006,7 @@ function SettingsPageContent() {
             )}
           </div>
           <div className={`settings-section-content${activeSection === 'topology' ? ' settings-section-content--full' : ''}`} key={activeSection}><div key={activeSection}>
-              <Suspense fallback={<div className="section-loading">Loading...</div>}>
+              <Suspense fallback={<Localized id="settings-section-loading"><div className="section-loading">Loading...</div></Localized>}>
                 {renderSection(activeSection)}
               </Suspense>
             </div>

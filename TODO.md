@@ -1,125 +1,91 @@
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: AUDITED (living planning/QA doc — NOT a code-claim audit) · top header is "0.0.19 — Manual QA: Full App Walkthrough" (8/45 pages checked, updated 2026-07-22); this is an active QA checklist, not a claims-about-code document, so it is stamped as current-scope rather than judged ACCURATE/STALE against the codebase · do not auto-fix; re-audit when the walkthrough is completed or the version header changes -->
+# Improvement Opportunities — July 31, 2026
 
-# 0.0.19 — Manual QA: Full App Walkthrough
-
-> **Goal:** Open each page/screen in the running Tauri desktop app, verify it renders correctly, has no console errors, and all interactive elements work. Check off each item as you go.
->
-> **Current state:** 8 / 45 pages checked · Updated 2026-07-22
+> **Legend:** ✅ Complete · 🔷 Phase active · ⏳ Planned
 
 ---
 
-## 🖥️ App Shell & Global
+## ✅ Phase A — E2E Test Infrastructure (Complete)
 
-- [x] **Login flow + status** — StaffLoginScreen: username entry → PIN pad → Auth + Sync connection dots (green/red/yellow) with latency in bottom-right footer ✅
-- [x] **Wrong PIN handling** — 3 failed attempts → rate-limit warning → lockout countdown ✅
-- [x] **Session lock + status** — Idle timeout → lock screen → Auth + Sync connection dots (green/red/yellow) with latency at bottom-right ✅
-- [x] **Session lock** — Re-enter PIN to unlock ✅
-- [ ] **AppShell layout** — Sidebar nav renders with all sections, active page highlighted, responsive collapse on narrow viewport
-- [ ] **Header / StatusBar** — Shows current store name, version number, sync status dot (green/red/yellow), role badge with avatar
-- [ ] **Dark/Light mode** — Theme toggle works, all pages render without visual glitches in both modes
-- [ ] **Language selector** — Switch between EN and ID, all labels update, no Fluent errors in console
-- [ ] **Workspace picker** — If multi-store: workspace selector shows available instances, switching reloads context
-- [ ] **Global error boundary** — Navigate all pages, verify no unhandled crashes (check browser devtools console for errors)
+### Unified E2E Runner (`npm run e2e`)
 
----
+Created a cross-platform Node.js E2E runner at `scripts/run-e2e.mjs`:
+- Starts Docker backend (cloud server + license server + Redis) if available
+- Starts Vite dev server as subprocess, waits for `localhost:1420`
+- Runs Playwright with `--headed`, `--no-docker`, `--api-only`, `--ui-only` flags
+- Cleans up Vite + Docker on exit (SIGINT/SIGTERM handlers)
+- Cross-platform port cleanup: `netstat + taskkill` (Win) or `lsof + kill` (Unix)
 
-## 🏪 Operations
+**npm scripts added (`ui/package.json`):**
+| Command | What it does |
+|---------|-------------|
+| `npm run e2e` | Full suite: Docker → Vite → Playwright → cleanup |
+| `npm run e2e:headed` | Same, with browser visible |
+| `npm run e2e:api` | API integration tests only |
+| `npm run e2e:ui` | All UI tests (excluding API) |
 
-- [ ] **POS Terminal** (`/sales`) — Product grid renders, add item to cart, adjust quantity, remove item, subtotal updates
-- [ ] **Payment modal** — Cash (enter amount, change calculation), Card, QRIS QR code display, sale completes successfully
-- [ ] **Receipt printing** — After sale completes, receipt prints (or shows preview if no printer)
-- [ ] **KDS** (`/kds`) — Kitchen Display: incoming orders appear, status transitions (pending→preparing→ready→served), multi-layout switcher (Focus/Kanban/Metro)
-- [ ] **Kiosk** (`/kiosk`) — Self-service mode: fullscreen, large product grid, no nav, add to cart, checkout, idle timeout returns to attract screen
-- [ ] **Tables** (`/tables`) — Restaurant floor plan: table status colours (available/occupied/reserved), tap to open order, merge/split tables
+### 3 Critical-Path E2E Specs
 
----
-
-## 📦 Products & Inventory
-
-- [ ] **Product Lookup** (`/products`) — Search by name/SKU, barcode scan input, category filter chips, product cards with price/stock
-- [ ] **Product Management** (`/inventory`) — Data table with all products, add/edit/delete, barcode field, stock level per product
-- [ ] **Bundles** (`/bundles`) — Create/edit product bundles, bundle pricing, items listed on receipt
-- [ ] **Categories** (`/categories`) — Colour-coded list, add/delete, colour picker
-- [ ] **Suppliers** (`/suppliers`) — Supplier list, add/edit/delete, contact info fields
-- [ ] **Purchase Orders** (`/purchase-orders`) — Create PO from supplier, add line items, receive/ship, status tracking
-- [ ] **Stock Transfers** (`/stock-transfers`) — Transfer stock between locations, partial receive, audit trail
-- [ ] **Stock Counts** (`/stock-counts`) — Create count sheet, enter quantities, reconcile differences
-- [ ] **Inventory Adjustment** (`/inventory-adjustment`) — Manual stock-in/stock-out with reason, stock alert threshold config
+| Spec | Flow |
+|------|------|
+| `e2e-sale-to-history.spec.ts` | Add product → complete cash payment → verify in Sales History |
+| `e2e-shift-reconciliation.spec.ts` | Open shift → complete sale → close shift → verify summary |
+| `e2e-settings-persist.spec.ts` | Change receipt width / store name → navigate away → verify persisted |
 
 ---
 
-## 💰 Sales & Orders
+## 🔷 Phase B — Next Recommendations (in priority order)
 
-- [ ] **Sales History** (`/sales-history`) — Searchable list, date range filter, status filter chips, tap for detail view
-- [ ] **Sales Dashboard** (`/sales-dashboard`) — Today's revenue card, orders count, top product widget, low-stock alert widget
-- [ ] **EOD Report** (`/eod-report`) — End-of-Day: cash tally, payment breakdown, shift summary, print button
-- [ ] **Orders/Void** (`/orders`) — Order list with search, status filters, detail view, void with reason picker, refund flow
-- [ ] **Hold Order** — Park a sale, resume from held list in POS
-- [ ] **Split Bill** — Divide order across payment methods, even-split, remaining tracker
+### B1 — KDS Critical-Path E2E Test (Phase Active)
 
----
+**Goal:** Full ticket lifecycle E2E — pending → preparing → ready → served, plus layout switching, per-item status, and settings interaction.
 
-## 💵 Finance
+Current `kds.spec.ts` covers basic render + single advance. Missing:
+- Full lifecycle through all 4 statuses
+- Layout switching (Kanban ↔ Focus ↔ Metro)
+- Settings panel interaction (sound, thresholds)
+- Per-item line item status advance (TODO 3e)
+- History panel toggle
 
-- [ ] **Tax Rates** (`/tax-config`) — Rate table, inclusive/exclusive toggle, category tax rates, add/edit/delete
-- [ ] **Exchange Rates** (`/exchange-rates`) — Currency selector, rate display, last-updated timestamp
-- [ ] **Promotions** (`/promotions`) — Promo list, create/edit (BuyXGetY, % off, fixed amount), schedule, enable/disable
+**File:** `ui/e2e/e2e-kds-critical-path.spec.ts`
 
----
+### B2 — KDS E2E: End-to-End POS → KDS Flow
 
-## 👥 Customers
+**Goal:** Complete a sale with kitchen items in Restaurant POS, then verify the ticket appears on the KDS screen.
 
-- [ ] **Customers** (`/customers`) — Searchable table, add/edit (name/email/phone/notes), delete
-- [ ] **Gift Cards** (`/gift-cards`) — Card list, top-up flow, freeze/unfreeze, redeem at checkout
-- [ ] **Loyalty** (`/loyalty`) — Account list, tier badge (Bronze/Silver/Gold/Platinum), point balance, redemption log
+Requires the dev-mock to support cross-workspace order propagation. Currently the sale mock and KDS mock are independent — completing a sale doesn't populate KDS orders.
 
----
+**Steps:**
+1. Add a `pendingKdsOrders` buffer to `dev-mock/tauri-api.ts`
+2. Wire `completeSale` to push a new KDS order into the buffer
+3. Wire `getKdsQueueScoped` to include buffered orders
+4. Write E2E test: Restaurant POS → add product → complete sale → KDS → verify ticket
 
-## ⚙️ Management
+### B3 — E2E CI Workflow for PRs
 
-- [ ] **Staff** (`/staff`) — Staff table with role badges, add/edit modal with PIN hashing, deactivate/restore toggle
-- [ ] **Terminals** (`/terminals`) — Terminal list, per-terminal feature overrides, online/offline status
-- [ ] **Stores** (`/stores`) — Multi-store dashboard (if multi-store enabled): topology view, per-store revenue/orders/stock
-- [ ] **Features** (`/features`) — Feature toggle panel with grouped switches, dependency resolution, toast feedback
-- [ ] **Data Management** (`/data-management`) — Export wizard (select types, date range, password), import wizard (file upload, dry-run preview, progress)
-- [ ] **Audit Log** (`/audit-log`) — Searchable log table, date range filter, event type icons
-- [ ] **Offline Queue** (`/offline-queue`) — Pending/synced/failed items, retry button, sync status
-- [ ] **Shifts** (`/shifts`) — Open shift with opening balance, close shift with cash count, EOD summary
+**Goal:** Add a GitHub Actions workflow that runs the e2e suite on PRs targeting `main`.
 
----
+**Steps:**
+1. Create `.github/workflows/e2e-pr.yml`
+2. Steps: Install Node → Install Playwright browsers → Build Docker image → Start Vite → Run Playwright → Upload traces on failure
+3. Make it non-blocking (informational) initially, then require after proving stable
 
-## 📊 Reports
+### B4 — Test the E2E Runner Itself
 
-- [ ] **Reports Dashboard** (`/dashboard`) — Revenue chart, top products panel, inventory status widget
-- [ ] **Sales Report** (`/reports`) — Bar chart (revenue), pie chart (category), heatmap (hourly), date range toggle, CSV export, print
-- [ ] **Inventory Report** (`/inventory-report`) — Stock table with low-stock highlighting (amber/red), threshold input, CSV export
-- [ ] **Menu Engineering** (`/menu-engineering`) — Volume vs margin scatter plot, quadrant classification (Star/Plowhorse/Puzzle/Dog), product breakdown table
-- [ ] **Custom Report** (`/custom-report`) — NEW: Drag-and-drop column picker, 6 datasets (sales/inventory/customers/staff/tax_rates/shifts), search columns, run report, CSV export
+**Goal:** Write a vitest unit test for `scripts/run-e2e.mjs` that mocks `execSync` and `spawn`, verifying Docker detection, Vite startup, and cleanup logic.
+
+### B5 — `--changed-only` Mode
+
+**Goal:** Add a `--changed-only` flag to `run-e2e.mjs` that skips Docker startup when only UI spec files have changed (detected via `git diff --name-only`).
 
 ---
 
-## ⚡ Settings
+## ✅ Previously Completed
 
-- [ ] **Settings sidebar** — All categories expand/collapse, search filters sections, keyboard navigation (Arrow keys), active section highlighted
-- [ ] **General settings** — Store name, address, tax ID, receipt footer, language selector
-- [ ] **Appearance** — Dark/light toggle, brand colour picker with live preview, logo upload
-- [ ] **Email Reports** — SMTP config (host/port/user/pass/TLS), test email button, schedule config (cadence/recipients/report types)
-- [ ] **Topology Editor** — Node canvas with drag-to-move, wire connectors between nodes, zoom, pan background, simulation mode
-- [ ] **Update banner** — Check for updates, dismissible banner, install action
-
----
-
-## 🧪 Dev Pages
-
-- [ ] **Design System** (`/design`) — Component showcase: buttons, inputs, cards, modals, badges, toasts, skeletons, spinners
-- [ ] **Tooltip Preview** (`/tooltips`) — Tooltip positioning and content examples
-
----
-
-## 🚀 Post-QA Items
-
-- [ ] **Search all pages for console errors** — Open browser devtools console, navigate through all pages, fix any errors/warnings
-- [ ] **Verify no Fluent key errors** — Check for `[@fluent/react] Error: The id "..." did not match` messages (fix missing FTL keys)
-- [ ] **Check loading/empty/error states** — On every screen with lists: verify empty state renders, loading spinner shows during data fetch, error state shows on API failure
-- [ ] **Responsive check (narrow viewport)** — Resize window to <768px: sidebar collapses, layouts stack vertically, touch targets remain ≥44px
-- [ ] **Keyboard navigation** — Tab through interactive elements, verify focus indicators are visible, modal traps focus, Escape closes modals/dropdowns
+See `git log --oneline` for the full commit chain. Key items:
+- ShiftManagementScreen audit + fix (1171 lines)
+- SalesHistoryScreen audit + fix (1131 lines)
+- DataManagementScreen audit + fix (968 lines)
+- TerminalManagementScreen audit + fix (945 lines)
+- AppearanceSection + ReceiptSection test coverage (32 tests)
+- Doc drift audit (ARCHITECTURE.md, RESTRUCTURING.md, api-reference.md)
+- `npm run check:all` unified validation runner

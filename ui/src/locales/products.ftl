@@ -1,35 +1,39 @@
 # ui/src/locales/products.ftl — Product management, lookup, variants
 
 # ── Restaurant Menu ──────────────────────────────────────────────────
-restaurant-menu-search-placeholder =
-    .placeholder = Search Menu
-restaurant-menu-hamburger-aria =
-    .aria-label = Menu
-restaurant-menu-back-aria =
-    .aria-label = Back to workspaces
-restaurant-size-decrease-aria =
-    .aria-label = Decrease size
-restaurant-size-increase-aria =
-    .aria-label = Increase size
-restaurant-font-size-decrease-aria =
-    .aria-label = Decrease font size
-restaurant-font-size-increase-aria =
-    .aria-label = Increase font size
+restaurant-menu-search-placeholder = Search Menu
+restaurant-menu-hamburger-aria = Menu
+restaurant-menu-back-aria = Back to workspaces
+restaurant-size-decrease-aria = Decrease size
+restaurant-size-increase-aria = Increase size
+restaurant-font-size-decrease-aria = Decrease font size
+restaurant-font-size-increase-aria = Increase font size
 restaurant-font-size-label = Font Size
 restaurant-theme-light = Light Mode
 restaurant-theme-dark = Dark Mode
 restaurant-lock-terminal = Lock Terminal
 restaurant-toggle-fullscreen = Toggle Fullscreen
-restaurant-clear-color-aria =
-    .aria-label = Clear color
-restaurant-categories-aria =
-    .aria-label = Menu categories
+restaurant-clear-color-aria = Clear color
+restaurant-categories-aria = Menu categories
 restaurant-menu-loading = Loading menu…
 restaurant-menu-empty = Menu is empty
 restaurant-size-label = Size
 restaurant-sort-label = Sort
 restaurant-card-add = Add
 restaurant-context-color-label = Color
+restaurant-search-aria = Search menu items
+restaurant-search-clear-aria = Clear search
+restaurant-context-pin = Pin to top
+restaurant-context-unpin = Unpin from top
+restaurant-context-available = Mark available
+restaurant-context-unavailable = Mark unavailable
+restaurant-card-pin-title = Pinned to top
+restaurant-sort-manual = Manual
+restaurant-sort-a-z = A–Z
+restaurant-sort-date = By Date
+restaurant-sort-popularity = Popularity
+restaurant-menu-items-aria = Menu items
+restaurant-color-swatch-aria = Color { $color }
 
 # Product Lookup
 product-lookup-title = Products
@@ -46,6 +50,7 @@ product-lookup-barcode-scan = Scan
 product-lookup-scan-btn-aria =
     .aria-label = Submit the entered barcode
 product-lookup-no-results = No products found
+product-lookup-clear-search = Clear search
 product-lookup-loading = Loading products…
 product-lookup-add = Add to cart
 product-lookup-in-stock = In stock
@@ -83,6 +88,15 @@ product-mgmt-deleting =
         [one] Deleting…
        *[other] …
     }
+product-mgmt-delete-confirm-title = Delete product?
+product-mgmt-delete-confirm-message = Delete { $name } ({ $sku })? This cannot be undone.
+product-mgmt-delete-confirm-btn = Delete
+product-mgmt-error-delete = Failed to delete product
+product-mgmt-error-load = Failed to load products
+product-mgmt-error-retry = Retry
+product-mgmt-alert-error = Could not load stock alerts. Showing last known count.
+product-mgmt-alert-error-retry = Reload alerts
+product-mgmt-error-invalid-stock = Stock must be a whole, non-negative number
 product-mgmt-modal-add-title = Add Product
 product-mgmt-modal-edit-title = Edit Product
 product-mgmt-modal-close = Close
@@ -107,8 +121,7 @@ product-mgmt-actions-aria =
 product-mgmt-variants = Variants
 product-mgmt-variants-aria =
     .aria-label = Variants for { $name }
-product-mgmt-modal-aria =
-    .aria-label = { $mode ->
+product-mgmt-modal-aria = { $mode ->
         [add] Add product
        *[edit] Edit product
     }
@@ -203,7 +216,7 @@ categories-add-first = Add your first category
 categories-add = Add Category
 categories-name = Name
 categories-name-placeholder =
-    .placeholder = e.g. Beverages
+    .placeholder = e.g. Bakery, Merchandise
 categories-colour = Colour
 categories-icon = Icon
 categories-id-preview = ID Preview
@@ -212,15 +225,40 @@ categories-create = Create
 categories-save = Save
 categories-delete-confirm = Delete Category
 categories-delete-warning = This will unlink all products in this category.
+categories-delete-unlinked = { $count ->
+    [one] Unlinked 1 product in this category.
+   *[other] Unlinked { $count } products in this category.
+}
+categories-error-create = Failed to create category
+categories-error-update = Failed to update category
+categories-error-delete = Failed to delete category
+categories-error-load = Failed to load categories
+categories-error-retry = Retry
+categories-error-name-required = Category name is required
+categories-error-id-conflict = A category with this ID already exists
+categories-error-colour-invalid = Choose a colour from the palette
 categories-preview = Preview
 categories-name-aria =
     .aria-label = Category Name
-categories-icon-picker-aria =
-    .aria-label = Pick an icon
-categories-colour-picker-aria =
-    .aria-label = Pick a colour
+categories-icon-picker-aria = Pick an icon
+categories-colour-picker-aria = Pick a colour
 categories-icon-food = Food
 categories-icon-snack = Snack
 categories-icon-hot-drink = Hot drink
 categories-icon-cold-drink = Cold drink
 categories-icon-generic = Generic
+category-mgmt-edit-aria = Edit category { $name }
+
+# Product type labels
+product-type-retail = Retail
+product-type-restaurant = Restaurant
+product-type-service = Service
+
+# Stock Alert Panel
+product-mgmt-stock-alert-open = Open stock alerts
+product-mgmt-stock-alert-close = Close stock alerts
+product-mgmt-alert-count =
+    { $count ->
+        [one] Open stock alerts ({ $count } active)
+       *[other] Open stock alerts ({ $count } active)
+    }

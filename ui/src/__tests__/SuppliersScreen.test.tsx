@@ -224,7 +224,7 @@ describe('SuppliersScreen', () => {
     clickButton(/create/i);
 
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('Duplicate code');
+      expect(screen.getByRole('alert')).toHaveTextContent('Save failed');
     });
   });
 

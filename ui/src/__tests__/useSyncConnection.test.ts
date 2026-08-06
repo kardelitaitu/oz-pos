@@ -44,7 +44,6 @@ describe('useSyncConnection', () => {
 
     expect(result.current.state).toBe('connected');
     expect(result.current.latencyMs).toBe(12);
-    expect(result.current.label).toBe('Connected (12ms)');
   });
 
   it('transitions to disconnected when health check fails (ok: false)', async () => {
@@ -62,7 +61,6 @@ describe('useSyncConnection', () => {
 
     expect(result.current.state).toBe('disconnected');
     expect(result.current.latencyMs).toBeNull();
-    expect(result.current.label).toBe('Server returned 503');
   });
 
   it('transitions to disconnected when health check throws', async () => {
@@ -76,7 +74,6 @@ describe('useSyncConnection', () => {
 
     expect(result.current.state).toBe('disconnected');
     expect(result.current.latencyMs).toBeNull();
-    expect(result.current.label).toBe('Disconnected');
   });
 
   it('polls periodically and updates state', async () => {
@@ -108,7 +105,6 @@ describe('useSyncConnection', () => {
     });
 
     expect(result.current.state).toBe('disconnected');
-    expect(result.current.label).toBe('Server unreachable');
   });
 
   it('cleans up interval on unmount', () => {

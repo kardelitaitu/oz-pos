@@ -7,10 +7,12 @@ import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
  * Tests shift management with deterministic assertions. All `if` guards
  * removed — tests hard-fail on regressions.
  *
- * Dev-mock: `get_active_shift` returns `null` initially, so the screen
- * shows "No active shift" with an "Open Shift" button. After opening,
- * `open_shift` returns a mock active shift with status "open". After
- * closing, `close_shift` returns a mock closed shift.
+ * Dev-mock: `get_active_shift` returns a seeded active shift (needed for the
+ * POS Pay button in other specs), so `beforeEach` closes it first to reach
+ * the "No active shift" baseline. After opening, `open_shift` returns a mock
+ * active shift with status "open". After closing, `close_shift` returns a
+ * mock closed shift and appends it to `mockShiftHistory` (seeded with one
+ * closed shift so the history table renders immediately).
  *
  * CSS contract (ShiftManagementScreen.tsx):
  *   .shift-mgmt                   — container
@@ -34,6 +36,41 @@ test.describe('Shift Management', () => {
   test.beforeEach(async ({ page }) => {
     await loginAs(page, 'admin', '9999');
     await selectWorkspace(page, WORKSPACES.ADMIN);
+
+    // The dev-mock seeds an active shift (required by the POS Pay-button
+    // specs), so the screen opens with the active-shift card instead of the
+    // "No active shift" banner these tests expect. Close any seeded shift
+    // first so every test starts from the deterministic baseline. Mirrors
+    // the close-shift block in e2e-shift-reconciliation.spec.ts.
+    await page.evaluate(() => { window.location.hash = '#/shifts'; });
+    await page.waitForTimeout(2_000);
+    await expect(page.locator('.shift-mgmt')).toBeVisible({ timeout: 10_000 });
+
+    const closeShiftBtn = page.locator('button:has-text("Close Shift"), button:has-text("Tutup")').first();
+    if (await closeShiftBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
+      await closeShiftBtn.click();
+      await page.waitForTimeout(500);
+      const closingInput = page.locator('#close-balance');
+      await expect(closingInput).toBeVisible({ timeout: 3_000 });
+      await closingInput.fill('0');
+      await page.waitForTimeout(200);
+      await page.locator(
+        '.shift-mgmt-modal-actions button:has-text("Close Shift"), ' +
+        '.shift-mgmt-modal-actions button:has-text("Tutup")',
+      ).click();
+      await page.waitForTimeout(1_000);
+
+      // Dismiss the "Shift Closed" summary dialog so the Open Shift button
+      // becomes reachable.
+      const doneBtn = page.locator(
+        '.shift-mgmt-overlay .shift-mgmt-modal-actions button:has-text("Done"), ' +
+        '.shift-mgmt-overlay .shift-mgmt-modal-actions button:has-text("Selesai")',
+      );
+      if (await doneBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
+        await doneBtn.click();
+        await page.waitForTimeout(500);
+      }
+    }
   });
 
   // ── Bonus: Shift history table is visible ───────────────────

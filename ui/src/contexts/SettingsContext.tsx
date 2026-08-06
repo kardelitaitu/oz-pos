@@ -67,6 +67,7 @@ const DEFAULT_SETTINGS: SettingsState = {
     marginBottom: 0,
     marginLeft: 0,
     marginRight: 0,
+    taxRoundingMode: 'half_up',
   },
   store: { name: '', address: '', taxId: '', currency: 'IDR', branch: '' },
   sync: { serverUrl: null, hasApiKey: false, enabled: false },

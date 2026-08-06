@@ -34,17 +34,21 @@ pub fn hash_pin(pin: &str) -> Result<String, PlatformError> {
 ///
 /// Returns `true` if the PIN matches the hash, `false` otherwise.
 ///
-/// # Errors
-///
-/// Returns [`PlatformError::Internal`] if the argon2 library fails.
+/// Malformed or unrecognized hashes — including the snapshot-import
+/// placeholder written by sync recovery — fail closed (`Ok(false)`), so an
+/// operator imported without a credential is cleanly rejected at login
+/// rather than surfacing an internal error.
 pub fn verify_pin(pin: &str, hash: &str) -> Result<bool, PlatformError> {
     use argon2::{
         Argon2,
         password_hash::{PasswordHash, PasswordVerifier},
     };
 
-    let parsed = PasswordHash::new(hash)
-        .map_err(|e| PlatformError::Internal(format!("invalid password hash: {e}")))?;
+    // An unparseable hash can never verify a PIN — treat it as a clean
+    // mismatch instead of an internal error.
+    let Ok(parsed) = PasswordHash::new(hash) else {
+        return Ok(false);
+    };
 
     let argon2 = Argon2::default();
     Ok(argon2.verify_password(pin.as_bytes(), &parsed).is_ok())
@@ -98,9 +102,17 @@ mod tests {
     }
 
     #[test]
-    fn verify_invalid_hash_format() {
-        let result = verify_pin("1234", "not-a-valid-hash");
-        assert!(result.is_err());
+    fn verify_invalid_hash_format_fails_closed() {
+        // Malformed hashes must fail closed (Ok(false)), never an internal error.
+        assert!(!verify_pin("1234", "not-a-valid-hash").unwrap());
+    }
+
+    #[test]
+    fn verify_snapshot_placeholder_hash_fails_closed() {
+        // The sync-import placeholder (oz-core SNAPSHOT_PIN_HASH_PLACEHOLDER)
+        // must not verify against any PIN and must not surface an internal error.
+        assert!(!verify_pin("1234", "!snapshot-no-credential!").unwrap());
+        assert!(!verify_pin("", "!snapshot-no-credential!").unwrap());
     }
 
     #[test]

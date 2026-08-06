@@ -27,6 +27,9 @@ const testL10n = {
       'workspace-pos-paper-width': 'Paper Width',
       'workspace-pos-show-currency': 'Show Currency',
       'workspace-pos-show-tax': 'Show Tax',
+      'workspace-pos-tax-rounding': 'Tax Rounding',
+      'workspace-pos-tax-rounding-halfup': 'Round Half Up',
+      'workspace-pos-tax-rounding-truncate': 'Truncate (Legacy)',
       'workspace-pos-show-table': 'Show Table Number',
       'workspace-pos-footer': 'Receipt Footer',
       'workspace-pos-printer-heading': 'Printer',
@@ -46,6 +49,16 @@ const testL10n = {
   getChildren: (str: string) => str,
 };
 
+// ── @/api/settings mock (save-payload assertions) ────────────────
+
+const apiMocks = vi.hoisted(() => ({
+  setReceiptSettingsScoped: vi.fn((_token: string, _args: Record<string, unknown>) => Promise.resolve()),
+}));
+
+vi.mock('@/api/settings', () => ({
+  setReceiptSettingsScoped: apiMocks.setReceiptSettingsScoped,
+}));
+
 // ── Mock state ──────────────────────────────────────────────────────
 
 const mocks = vi.hoisted(() => ({
@@ -54,6 +67,7 @@ const mocks = vi.hoisted(() => ({
     showCurrency: false,
     showTax: true,
     showTableNumber: false,
+    taxRoundingMode: 'half_up',
     footer: '',
   },
   storeSettings: {
@@ -188,6 +202,7 @@ beforeEach(() => {
     showCurrency: false,
     showTax: true,
     showTableNumber: false,
+    taxRoundingMode: 'half_up',
     footer: '',
   });
   Object.assign(mocks.storeSettings, {
@@ -228,6 +243,55 @@ describe('WorkspaceStorePosSettings', () => {
   it('renders footer textarea in full-page variant', () => {
     renderCard({ variant: 'full-page' });
     expect(screen.getByLabelText('Receipt Footer')).toBeInTheDocument();
+  });
+
+  it('renders tax rounding select with initial value', () => {
+    renderCard();
+    const select = screen.getByTestId('pos-tax-rounding') as HTMLSelectElement;
+    expect(select.value).toBe('half_up');
+    // Both options are present
+    expect(select.querySelectorAll('option')).toHaveLength(2);
+  });
+
+  it('changing tax rounding mode enables Save and persists truncate', async () => {
+    renderCard();
+
+    // Wait for originals to load and save to become disabled
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /save/i })).toBeDisabled();
+    });
+
+    // Switch rounding mode to truncate
+    fireEvent.change(screen.getByTestId('pos-tax-rounding'), { target: { value: 'truncate' } });
+
+    await waitFor(() => {
+      const btn = screen.getByRole('button', { name: /save/i });
+      expect(btn).not.toBeDisabled();
+    });
+  });
+
+  it('save sends taxRoundingMode to the backend', async () => {
+    apiMocks.setReceiptSettingsScoped.mockClear();
+    renderCard();
+
+    // Wait for originals to load and save to become disabled
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /save/i })).toBeDisabled();
+    });
+
+    // Switch rounding mode to truncate, then save
+    fireEvent.change(screen.getByTestId('pos-tax-rounding'), { target: { value: 'truncate' } });
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /save/i })).not.toBeDisabled();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => {
+      expect(apiMocks.setReceiptSettingsScoped).toHaveBeenCalledWith(
+        'mock-session-token',
+        expect.objectContaining({ taxRoundingMode: 'truncate' }),
+      );
+    });
   });
 
   // ── Variant: inspector-drawer ────────────────────────────────

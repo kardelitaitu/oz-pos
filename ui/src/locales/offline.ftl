@@ -19,6 +19,8 @@ offline-queue-delete = Delete
 offline-queue-delete-success = Item deleted.
 offline-queue-none = —
 offline-queue-table-aria = Offline queue items
+offline-queue-pull-to-refresh = Pull to refresh
+offline-queue-release-to-refresh = Release to refresh
 offline-queue-status-pending = Pending
 offline-queue-status-synced = Synced
 offline-queue-status-failed = Failed
@@ -28,3 +30,8 @@ offline-queue-delete-error = Failed to delete item
 offline-queue-sync-error = Sync failed
 # P1-3: Shown when sync conflicts were resolved during the last sync cycle
 offline-queue-conflict-count = { $count } item(s) resolved via sync conflict.
+# ERR-07: Non-blocking notice after repeated poll failures
+offline-queue-status-stale = Queue status may be out of date.
+offline-queue-last-refreshed = Last refreshed { $time }
+# ERR-09: Accessible status while a reload is in flight with rows visible
+offline-queue-refreshing = Refreshing…

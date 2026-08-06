@@ -1,12 +1,31 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
-import { Localized } from '@fluent/react';
+import { useContext, useState, useCallback, useEffect, useMemo } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
+import { WorkspaceContext } from '@/contexts/WorkspaceContext';
+import { Localized, useLocalization } from '@fluent/react';
 import { getDailyRevenue } from '@/api/reports';
+import { l10nErrorMessage } from '@/utils/app-error';
 import { Skeleton } from '@/components/Skeleton';
 import CanvasLineChart from '@/components/charts/CanvasLineChart';
 import type { LineChartPoint } from '@/components/charts/CanvasLineChart';
+import { useCurrency } from '@/contexts/CurrencyContext';
+import { minorUnitExponent } from '@/types/domain';
+
+/** Exponent-driven currency formatting for widget KPIs (shared by the canvas widgets). */
+function fmtWidgetMoney(minor: number, currency: string): string {
+  const exp = minorUnitExponent(currency);
+  return new Intl.NumberFormat('en', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: exp,
+    maximumFractionDigits: exp,
+  }).format(minor / 10 ** exp);
+}
 
 /** Canvas 2D revenue line chart widget for the reporting dashboard. */
 export default function RevenueLineChartWidget() {
+  const { l10n } = useLocalization();
+  const { currency } = useCurrency();
+  const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
   const [data, setData] = useState<LineChartPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -21,6 +40,7 @@ export default function RevenueLineChartWidget() {
       const rows = await getDailyRevenue(
         start.toISOString().slice(0, 10),
         end.toISOString().slice(0, 10),
+        sessionToken,
       );
       // Convert to chart points — show MM/DD labels
       const points: LineChartPoint[] = rows.map((r) => ({
@@ -29,11 +49,12 @@ export default function RevenueLineChartWidget() {
       }));
       setData(points);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      // ERR-05: never render raw backend messages — map to user-safe copy.
+      setError(l10nErrorMessage(e, l10n, 'app-error-generic'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sessionToken, l10n]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -67,27 +88,29 @@ export default function RevenueLineChartWidget() {
   }
 
   return (
-    <div className="reporting-widget reporting-widget--revenue" aria-label="14-day revenue chart">
+    <div className="reporting-widget reporting-widget--revenue" aria-label={requiredLocalized(l10n, 'sales-dashboard-revenue-aria')}>
       <div className="reporting-widget-header">
         <Localized id="sales-dashboard-revenue-title">
           <h3 className="reporting-widget-title">Revenue (14d)</h3>
         </Localized>
         <span className="reporting-widget-kpi-value reporting-widget-kpi-value--primary" style={{ fontSize: 'var(--text-base)', marginTop: 'var(--space-1)' }}>
-          {new Intl.NumberFormat('en', {
-            style: 'currency',
-            currency: 'USD',
-            minimumFractionDigits: 2,
-          }).format(totalRevenue / 100)}
+          {fmtWidgetMoney(totalRevenue, currency)}
         </span>
       </div>
       <CanvasLineChart
         data={data}
+        label={requiredLocalized(l10n, 'sales-dashboard-revenue-aria')}
+        summary={requiredLocalized(l10n, 'sales-dashboard-revenue-summary', {
+          total: fmtWidgetMoney(totalRevenue, currency),
+          days: String(data.length),
+        })}
         formatValue={(v) =>
           new Intl.NumberFormat('en', {
             style: 'currency',
-            currency: 'USD',
+            currency,
             minimumFractionDigits: 0,
-          }).format(v / 100)
+            maximumFractionDigits: minorUnitExponent(currency),
+          }).format(v / 10 ** minorUnitExponent(currency))
         }
         minHeight="200px"
       />

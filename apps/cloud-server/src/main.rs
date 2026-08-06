@@ -63,7 +63,7 @@ pub struct CloudServerState {
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // ── tokio-console (RUSTFLAGS="--cfg tokio_unstable" + feature "console") ─
     #[cfg(feature = "console")]
     {
@@ -78,10 +78,12 @@ async fn main() {
     }
 
     // ── Logging ──────────────────────────────────────────────────────
+    // RUST-07: startup failures surface as structured errors instead of
+    // panicking the process (the runtime Debug-prints the returned error).
     if std::env::var("OZ_LOG_FORMAT").as_deref() == Ok("json") {
-        oz_logging::init_json();
+        oz_logging::try_init_json().map_err(|e| format!("logging init_json failed: {e}"))?;
     } else {
-        oz_logging::init();
+        oz_logging::try_init().map_err(|e| format!("logging init failed: {e}"))?;
     }
 
     // ── Config validation (--validate-config skips the server) ───────
@@ -133,8 +135,8 @@ async fn main() {
         let redirect_router = Router::new()
             .fallback(|| async { axum::http::StatusCode::MISDIRECTED_REQUEST })
             .layer(axum::middleware::from_fn(redirect::redirect_middleware));
-        serve(redirect_router).await;
-        return;
+        serve(redirect_router).await?;
+        return Ok(());
     }
 
     // ── Database ─────────────────────────────────────────────────────
@@ -142,7 +144,7 @@ async fn main() {
     // SQLite is the default backend.
     let pool = db::DbPool::from_env()
         .await
-        .expect("failed to initialise database");
+        .map_err(|e| format!("failed to initialise database: {e}"))?;
 
     match &pool {
         db::DbPool::Sqlite(conn) => {
@@ -165,7 +167,7 @@ async fn main() {
             start_rate_limit_cleanup(rate_limiter.clone());
 
             let app = build_router(state, rate_limiter);
-            serve(app).await;
+            serve(app).await?;
         }
         db::DbPool::Postgres(_pg_pool) => {
             info!("running with PostgreSQL backend");
@@ -174,7 +176,7 @@ async fn main() {
             // back to SQLite for the API layer when PostgreSQL is the
             // primary database. The sync transport layer can use PG.
             let conn = db::DbPool::connect_sqlite_in_memory()
-                .expect("failed to create in-memory SQLite for API");
+                .map_err(|e| format!("failed to create in-memory SQLite for API: {e}"))?;
             let state = CloudServerState {
                 db: conn.sqlite_conn(),
                 started_at: Instant::now(),
@@ -188,9 +190,10 @@ async fn main() {
             start_rate_limit_cleanup(rate_limiter.clone());
 
             let app = build_router(state, rate_limiter);
-            serve(app).await;
+            serve(app).await?;
         }
     }
+    Ok(())
 }
 
 /// Start the HTTP server on the configured port with graceful shutdown.
@@ -199,21 +202,23 @@ async fn main() {
 /// 1. Stops accepting new connections
 /// 2. Drains in-flight connections with a 30-second timeout
 /// 3. Logs the shutdown and exits cleanly
-async fn serve(app: Router) {
+async fn serve(app: Router) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let port: u16 = std::env::var("OZ_API_PORT")
         .ok()
         .and_then(|p| p.parse().ok())
         .unwrap_or(3099);
 
+    // RUST-07: a port bind failure (e.g. port already in use) is a recoverable
+    // operational error and now propagates to main instead of panicking.
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}"))
         .await
-        .expect("failed to bind port");
+        .map_err(|e| format!("failed to bind port {port}: {e}"))?;
     info!(port, "OZ-POS cloud server listening");
 
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown::shutdown_signal())
         .await
-        .expect("server exited with error");
+        .map_err(|e| format!("server exited with error: {e}"))?;
 
     // Drain in-flight connections with a grace period.
     // After the shutdown signal, axum stops accepting new connections
@@ -227,6 +232,7 @@ async fn serve(app: Router) {
     );
     tokio::time::sleep(std::time::Duration::from_secs(DRAIN_TIMEOUT_SECS)).await;
     info!("graceful shutdown complete");
+    Ok(())
 }
 
 /// Build the combined router: REST API + sync endpoints.

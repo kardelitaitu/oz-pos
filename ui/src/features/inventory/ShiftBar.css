@@ -124,8 +124,11 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: var(--color-bg-overlay);
-  backdrop-filter: blur(8px);
+  background: var(--color-pos-modal-overlay);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  will-change: backdrop-filter;
+  transform: translateZ(0);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -139,13 +142,13 @@
 }
 
 .shift-summary-modal {
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
+  background: var(--color-pos-modal-bg);
+  border: 1px solid var(--color-pos-modal-border);
   border-radius: var(--radius-2xl);
   width: 90%;
   max-width: 500px;
   padding: var(--space-6);
-  box-shadow: var(--shadow-2xl);
+  box-shadow: var(--color-pos-modal-shadow);
   color: var(--color-fg-primary);
   font-family: var(--font-sans);
   transform: scale(0.98);
@@ -193,4 +196,14 @@
   margin-top: var(--space-4);
   width: 100%;
   justify-content: center;
+}
+
+/* Shift summary transaction type — capitalize without inline styles. */
+.summary-item-type {
+  text-transform: capitalize;
+}
+
+/* Empty summary marker — danger border via tokens instead of inline color. */
+.summary-item-empty {
+  border-left-color: var(--color-danger);
 }

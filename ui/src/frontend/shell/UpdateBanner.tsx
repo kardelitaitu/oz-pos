@@ -4,6 +4,7 @@ import { getVersion } from '@tauri-apps/api/app';
 import type { Update } from '@tauri-apps/plugin-updater';
 import { createBackup } from '@/api/data';
 import { getSetting } from '@/api/settings';
+import { plainErrorMessage } from '@/utils/app-error';
 import './UpdateBanner.css';
 
 // ── Constants ─────────────────────────────────────────────────────
@@ -195,7 +196,7 @@ export default function UpdateBanner() {
       // Installation failed — banner stays visible.
       setInstalling(false);
       setBackingUp(false);
-      setBackupError(err instanceof Error ? err.message : 'Update failed');
+      setBackupError(plainErrorMessage(err, 'Update failed'));
     }
   }, [updateInstance, versionBlocked, currentVersion]);// ── Helpers (module-level, no component state dependency) ─────────
 

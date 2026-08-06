@@ -1,5 +1,6 @@
-import { type ReactNode } from 'react';
+import { type KeyboardEvent, type ReactNode } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { requiredLocalized } from '@/frontend/shared/requiredLocalized';
 import { getNavItems } from '@/platform/ui/menu-registry';
 import './tablet.css';
 
@@ -52,23 +53,70 @@ export default function TabletAppLayout({
     ? allNavItems.filter((item) => workspaceScreens.includes(item.route)).slice(0, 7)
     : allNavItems.slice(0, 7); // max 7 tabs for bottom nav
 
+  // ── A11Y-03/05: WAI-ARIA tabs keyboard pattern ────────────────
+  // The bottom tab bar is a roving-tabindex tablist: only the selected tab is
+  // in the tab order (tabIndex 0), and Left/Right arrows move focus with
+  // automatic activation (navigation), Home/End jump to the first/last tab.
+  // Because these are navigation tabs, focus movement activates the tab.
+  const handleTablistKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home' && e.key !== 'End') {
+      return;
+    }
+    const tabs = Array.from(
+      e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'),
+    );
+    if (tabs.length === 0) return;
+    const currentIdx = tabs.findIndex((t) => t === document.activeElement);
+    if (currentIdx < 0) return;
+    e.preventDefault();
+    let nextIdx = currentIdx;
+    if (e.key === 'ArrowRight') nextIdx = (currentIdx + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') nextIdx = (currentIdx - 1 + tabs.length) % tabs.length;
+    else if (e.key === 'Home') nextIdx = 0;
+    else if (e.key === 'End') nextIdx = tabs.length - 1;
+    const nextItem = navItems[nextIdx];
+    if (!nextItem) return;
+    tabs[nextIdx]?.focus();
+    onNavigate(nextItem.route);
+  };
+
   return (
     <div className="tablet-shell">
       <div className="app-layout">
+        {/* ── A11Y-03: skip-to-content link (first focusable element) ── */}
+        <a href="#tablet-main-content" className="skip-to-content">
+          {requiredLocalized(l10n, 'a11y-skip-to-content')}
+        </a>
         {/* ── Main content area ─────────────────────── */}
-        <main className="app-content" role="main">
+        <main className="app-content" role="main" id="tablet-main-content">
           <div className="app-content-inner" key={route}>
             {children}
           </div>
         </main>
 
         {/* ── Bottom tab bar ────────────────────────── */}
-        <div className="tablet-tab-bar" role="tablist" aria-label={l10n.getString('nav-tablist-aria')}>
+        {/* A11Y-07: the tab bar is navigation — wrap it in a <nav> landmark so
+            its buttons are contained in a landmark (axe `region` rule) and the
+            shell exposes a consistent navigation landmark on both layouts. */}
+        <nav
+          className="tablet-tab-bar-nav"
+          aria-label={l10n.getString('nav-tablist-aria')}
+        >
+        <div
+          className="tablet-tab-bar"
+          role="tablist"
+          aria-label={l10n.getString('nav-tablist-aria')}
+          // Programmatically focusable (roving tabindex lives on the tabs) so
+          // the interactive role passes jsx-a11y's interactive-supports-focus.
+          tabIndex={-1}
+          onKeyDown={handleTablistKeyDown}
+        >
           {navItems.map((item) => (
             <button
               key={item.route}
               type="button"
               role="tab"
+              tabIndex={route === item.route ? 0 : -1}
               className={
                 route === item.route
                   ? 'tablet-tab-item tablet-tab-item--active'
@@ -87,6 +135,7 @@ export default function TabletAppLayout({
             </button>
           ))}
         </div>
+        </nav>
       </div>
     </div>
   );

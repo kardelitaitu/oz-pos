@@ -7,13 +7,30 @@
 //! [`rollback_last`] reverts the most recently applied migration by
 //! running its `down` SQL (if one exists).
 //!
-//! This runner is deliberately dependency-free beyond `rusqlite`.
+//! # Integrity guarantees (audit/29 DB-02 / DB-05)
+//!
+//! * **Migration checksums** — every applied migration records a SHA-256
+//!   checksum of its SQL. [`run`] recomputes the checksum of each
+//!   registered migration and **fails closed** when an already-applied
+//!   definition changed (historical migrations must never be edited in
+//!   place). Rows applied before checksum tracking existed are backfilled
+//!   once on the first run after upgrade.
+//! * **Foreign-key isolation** — [`run`] disables `foreign_keys` at the
+//!   connection level *around* each migration apply and restores the
+//!   caller's previous setting afterwards. SQLite ignores `PRAGMA
+//!   foreign_keys` inside a transaction, so rebuild migrations (081/089)
+//!   that toggle it in their own SQL were silently running with
+//!   enforcement ON — risking cascade data loss on populated child tables.
+//!
 //! Callers provide their own list of migrations (typically compiled
 //! via `include_str!`).
 
+use std::collections::HashMap;
+#[cfg(test)]
 use std::collections::HashSet;
 
 use rusqlite::{Connection, Transaction, params};
+use sha2::{Digest, Sha256};
 
 use crate::error::PlatformError;
 
@@ -32,13 +49,37 @@ pub struct Migration {
 /// Requires `&mut Connection` because [`Connection::transaction`] does.
 pub fn run(conn: &mut Connection, migrations: &[Migration]) -> Result<(), PlatformError> {
     ensure_schema_migrations_table(conn)?;
-    let applied = load_applied(conn)?;
+    let applied = load_applied_with_checksums(conn)?;
     for mig in migrations {
-        if applied.contains(mig.id) {
-            tracing::debug!(migration = mig.id, "already applied; skipping");
-            continue;
+        match applied.get(mig.id) {
+            Some(Some(stored)) => {
+                // DB-02: an applied migration's definition must be byte-for-byte
+                // identical to what was committed. Editing a historical file in
+                // place would silently produce a different schema on fresh
+                // installs vs upgrades.
+                let current = checksum_hex(mig.sql);
+                if *stored != current {
+                    return Err(PlatformError::Internal(format!(
+                        "migration {} definition drift: applied checksum {stored} != current {current}. \
+                         Historical migrations must never be edited in place (audit/29 DB-02). \
+                         Restore the original file, or add a new migration.",
+                        mig.id
+                    )));
+                }
+                tracing::debug!(migration = mig.id, "already applied; checksum verified");
+            }
+            Some(None) => {
+                // Row applied before checksum tracking existed: adopt the
+                // current definition as the baseline (one-time backfill).
+                let current = checksum_hex(mig.sql);
+                conn.execute(
+                    "UPDATE schema_migrations SET checksum = ?1 WHERE id = ?2",
+                    params![current, mig.id],
+                )?;
+                tracing::info!(migration = mig.id, "backfilled legacy checksum");
+            }
+            None => apply_one(conn, mig)?,
         }
-        apply_one(conn, mig)?;
     }
     Ok(())
 }
@@ -68,27 +109,62 @@ pub fn rollback(
     }
 
     tracing::info!(migration = migration_id, "rolling back migration");
-    let tx: Transaction = conn.transaction()?;
-    tx.execute_batch(down_sql)?;
-    tx.execute(
-        "DELETE FROM schema_migrations WHERE id = ?1",
-        params![migration_id],
-    )?;
-    tx.commit()?;
-    tracing::info!(migration = migration_id, "rollback complete");
-    Ok(true)
+    // DB-05: destructive down SQL (DROP TABLE) must not cascade into
+    // dependent rows; same connection-level isolation as apply_one.
+    let fk_was_on = foreign_keys_enabled(conn)?;
+    if fk_was_on {
+        conn.pragma_update(None, "foreign_keys", "OFF")?;
+    }
+    let result = (|| -> Result<bool, PlatformError> {
+        let tx: Transaction = conn.transaction()?;
+        tx.execute_batch(down_sql)?;
+        tx.execute(
+            "DELETE FROM schema_migrations WHERE id = ?1",
+            params![migration_id],
+        )?;
+        tx.commit()?;
+        Ok(true)
+    })();
+    // Restore the caller's FK setting even on failure, but never let a
+    // restore error mask the original migration error (DB-05).
+    if fk_was_on && let Err(restore_err) = conn.pragma_update(None, "foreign_keys", "ON") {
+        tracing::error!(
+            migration = migration_id,
+            error = %restore_err,
+            "failed to restore foreign_keys=ON after rollback"
+        );
+    }
+    if matches!(result, Ok(true)) {
+        tracing::info!(migration = migration_id, "rollback complete");
+    }
+    result
 }
 
 fn ensure_schema_migrations_table(conn: &Connection) -> Result<(), PlatformError> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS schema_migrations (
             id         TEXT PRIMARY KEY,
-            applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            checksum   TEXT
         )",
     )?;
+    // DB-02: databases created before checksum tracking lack the column.
+    // `CREATE TABLE IF NOT EXISTS` won't add it to an existing table, so
+    // migrate the tracking table in place.
+    let has_checksum: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('schema_migrations') WHERE name = 'checksum'",
+        [],
+        |r| r.get(0),
+    )?;
+    if has_checksum == 0 {
+        conn.execute_batch("ALTER TABLE schema_migrations ADD COLUMN checksum TEXT")?;
+    }
     Ok(())
 }
 
+/// Load applied migration IDs (used by tests; `run` uses the checksum
+/// variant [`load_applied_with_checksums`] for drift detection).
+#[cfg(test)]
 fn load_applied(conn: &Connection) -> Result<HashSet<String>, PlatformError> {
     let mut stmt = conn.prepare("SELECT id FROM schema_migrations")?;
     let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
@@ -97,6 +173,25 @@ fn load_applied(conn: &Connection) -> Result<HashSet<String>, PlatformError> {
         set.insert(id?);
     }
     Ok(set)
+}
+
+/// Load applied migration IDs with their stored checksums.
+///
+/// `None` marks a row applied before checksum tracking existed (backfilled
+/// on the next [`run`]).
+fn load_applied_with_checksums(
+    conn: &Connection,
+) -> Result<HashMap<String, Option<String>>, PlatformError> {
+    let mut stmt = conn.prepare("SELECT id, checksum FROM schema_migrations")?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+    })?;
+    let mut map = HashMap::new();
+    for row in rows {
+        let (id, checksum) = row?;
+        map.insert(id, checksum);
+    }
+    Ok(map)
 }
 
 /// Load applied migration IDs in application order (oldest first).
@@ -110,16 +205,49 @@ fn load_applied_ordered(conn: &Connection) -> Result<Vec<String>, PlatformError>
     Ok(ids)
 }
 
+/// SHA-256 hex checksum of a migration's SQL (DB-02).
+fn checksum_hex(sql: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(sql.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+/// Whether the connection currently enforces foreign keys (DB-05).
+fn foreign_keys_enabled(conn: &Connection) -> Result<bool, PlatformError> {
+    let v: i64 = conn.query_row("PRAGMA foreign_keys", [], |r| r.get(0))?;
+    Ok(v == 1)
+}
+
 fn apply_one(conn: &mut Connection, mig: &Migration) -> Result<(), PlatformError> {
     tracing::info!(migration = mig.id, "applying migration");
-    let tx: Transaction = conn.transaction()?;
-    tx.execute_batch(mig.sql)?;
-    tx.execute(
-        "INSERT INTO schema_migrations (id) VALUES (?1)",
-        params![mig.id],
-    )?;
-    tx.commit()?;
-    Ok(())
+    // DB-05: `PRAGMA foreign_keys` is a no-op inside a transaction, so
+    // rebuild migrations (081/089) cannot rely on their own toggles.
+    // Disable enforcement at the connection level *before* the transaction
+    // and restore the caller's prior setting afterwards.
+    let fk_was_on = foreign_keys_enabled(conn)?;
+    if fk_was_on {
+        conn.pragma_update(None, "foreign_keys", "OFF")?;
+    }
+    let result = (|| -> Result<(), PlatformError> {
+        let tx: Transaction = conn.transaction()?;
+        tx.execute_batch(mig.sql)?;
+        tx.execute(
+            "INSERT INTO schema_migrations (id, checksum) VALUES (?1, ?2)",
+            params![mig.id, checksum_hex(mig.sql)],
+        )?;
+        tx.commit()?;
+        Ok(())
+    })();
+    // Restore the caller's FK setting even on failure, but never let a
+    // restore error mask the original migration error (DB-05).
+    if fk_was_on && let Err(restore_err) = conn.pragma_update(None, "foreign_keys", "ON") {
+        tracing::error!(
+            migration = mig.id,
+            error = %restore_err,
+            "failed to restore foreign_keys=ON after migration apply"
+        );
+    }
+    result
 }
 
 #[cfg(test)]
@@ -298,18 +426,34 @@ mod tests {
     // ── Edge case tests ─────────────────────────────────────────────
 
     #[test]
-    fn duplicate_migration_id_does_not_reapply() {
+    fn duplicate_migration_id_with_identical_sql_is_skipped() {
         let mut conn = fresh();
         // Run once.
         run(&mut conn, TEST_MIGRATIONS).unwrap();
-        // Run with a duplicate in the list (same id, different sql).
-        let with_dup = &[Migration {
-            id: "001_test.sql",
-            sql: "CREATE TABLE other_table (id INTEGER PRIMARY KEY)",
-        }];
-        run(&mut conn, with_dup).unwrap();
+        // Run again with the same list — the duplicate ID is skipped and the
+        // checksum verifies (idempotent).
+        run(&mut conn, TEST_MIGRATIONS).unwrap();
+        let applied = load_applied(&conn).unwrap();
+        assert_eq!(applied.len(), 1);
+    }
 
-        // The duplicate should NOT have been applied (idempotent).
+    #[test]
+    fn duplicate_migration_id_with_changed_sql_fails_closed() {
+        let mut conn = fresh();
+        run(&mut conn, TEST_MIGRATIONS).unwrap();
+
+        // Same ID, different SQL → must fail closed (DB-02 drift detection).
+        let drifted = &[Migration {
+            id: "001_test.sql",
+            sql: "CREATE TABLE test_table (id INTEGER PRIMARY KEY, name TEXT)",
+        }];
+        let err = run(&mut conn, drifted).unwrap_err();
+        assert!(
+            err.to_string().contains("checksum"),
+            "expected checksum drift error, got: {err}"
+        );
+
+        // Nothing was applied for the drifted definition.
         let exists_other: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='other_table'",
@@ -317,7 +461,7 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(exists_other, 0, "duplicate ID should not trigger re-apply");
+        assert_eq!(exists_other, 0);
     }
 
     #[test]
@@ -385,10 +529,18 @@ mod tests {
         conn.execute_batch("CREATE TABLE test_table (id INTEGER PRIMARY KEY)")
             .unwrap();
 
-        // Running migrations should be a no-op.
+        // Running migrations should be a no-op (and backfill the checksum).
         run(&mut conn, TEST_MIGRATIONS).unwrap();
         let applied = load_applied(&conn).unwrap();
         assert_eq!(applied.len(), 1);
+        let stored: String = conn
+            .query_row(
+                "SELECT checksum FROM schema_migrations WHERE id = '001_test.sql'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(stored, checksum_hex(TEST_MIGRATIONS[0].sql));
     }
 
     #[test]
@@ -425,5 +577,107 @@ mod tests {
 
         let applied = load_applied(&conn).unwrap();
         assert!(applied.contains("001_test.sql"));
+    }
+
+    // ── DB-02: checksum tracking & drift detection ─────────────────
+
+    #[test]
+    fn applied_migration_records_checksum() {
+        let mut conn = fresh();
+        run(&mut conn, TEST_MIGRATIONS).unwrap();
+        let stored: String = conn
+            .query_row(
+                "SELECT checksum FROM schema_migrations WHERE id = '001_test.sql'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(stored, checksum_hex(TEST_MIGRATIONS[0].sql));
+    }
+
+    #[test]
+    fn legacy_row_without_checksum_is_backfilled() {
+        // Old-shape tracking table (no checksum column) with an applied row
+        // — simulates a database migrated before DB-02 shipped.
+        let mut conn = fresh();
+        conn.execute_batch(
+            "CREATE TABLE schema_migrations (
+                id TEXT PRIMARY KEY,
+                applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            )",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO schema_migrations (id) VALUES ('001_test.sql')",
+            [],
+        )
+        .unwrap();
+        conn.execute_batch("CREATE TABLE test_table (id INTEGER PRIMARY KEY)")
+            .unwrap();
+
+        run(&mut conn, TEST_MIGRATIONS).unwrap();
+
+        let stored: String = conn
+            .query_row(
+                "SELECT checksum FROM schema_migrations WHERE id = '001_test.sql'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            stored,
+            checksum_hex(TEST_MIGRATIONS[0].sql),
+            "legacy row must be backfilled with the current definition checksum"
+        );
+    }
+
+    // ── DB-05: FK isolation around rebuild migrations ──────────────
+
+    #[test]
+    fn foreign_keys_disabled_during_rebuild_migration() {
+        let mut conn = fresh(); // FK enforcement ON
+
+        run(
+            &mut conn,
+            &[Migration {
+                id: "001_parent.sql",
+                sql: "CREATE TABLE parent (id TEXT PRIMARY KEY);
+                      CREATE TABLE child (id TEXT PRIMARY KEY, parent_id TEXT NOT NULL REFERENCES parent(id) ON DELETE CASCADE);",
+            }],
+        )
+        .unwrap();
+        conn.execute("INSERT INTO parent (id) VALUES ('p1')", [])
+            .unwrap();
+        conn.execute("INSERT INTO child (id, parent_id) VALUES ('c1', 'p1')", [])
+            .unwrap();
+
+        // Rebuild migration following the 081/089 pattern (DROP parent, then
+        // rename the replacement into place). With FK enforcement ON at the
+        // connection level, DROP TABLE would cascade-delete the child row.
+        run(
+            &mut conn,
+            &[Migration {
+                id: "002_rebuild.sql",
+                sql: "CREATE TABLE parent_new (id TEXT PRIMARY KEY);
+                      INSERT INTO parent_new SELECT id FROM parent;
+                      DROP TABLE parent;
+                      ALTER TABLE parent_new RENAME TO parent;",
+            }],
+        )
+        .unwrap();
+
+        // Child row must survive the parent rebuild.
+        let children: i64 = conn
+            .query_row("SELECT COUNT(*) FROM child", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(children, 1, "child row must survive parent rebuild");
+
+        // FK enforcement restored, and no violations remain.
+        let fk_violations: i64 = conn
+            .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(fk_violations, 0, "no FK violations after rebuild");
     }
 }

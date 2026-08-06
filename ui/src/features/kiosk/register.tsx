@@ -1,7 +1,8 @@
+import { lazy } from 'react';
 import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
 import { icon } from '@/platform/ui/icon';
-import KioskScreen from './KioskScreen';
+const KioskScreen = lazy(() => import('./KioskScreen'));
 
 export function registerKioskFeature() {
   registerPage({ route: 'kiosk', component: KioskScreen, label: 'Kiosk', feature: 'self-service-kiosk', fullscreen: true });

@@ -49,34 +49,73 @@ export interface RedeemResult {
   discount_minor: number;
 }
 
-/** Get a loyalty account for a customer with tier and transaction details. */
-export const getLoyaltyAccount = (customerId: string): Promise<LoyaltyAccountWithDetails | null> =>
-  loggedInvoke<LoyaltyAccountWithDetails | null>('get_loyalty_account', { customerId });
+/** Get a loyalty account from the store resolved by the active session. */
+export const getLoyaltyAccount = (
+  sessionToken: string,
+  customerId: string,
+): Promise<LoyaltyAccountWithDetails | null> =>
+  loggedInvoke<LoyaltyAccountWithDetails | null>('get_loyalty_account_scoped', {
+    sessionToken,
+    customerId,
+  });
 
-/** List all loyalty accounts with tier and transaction details. */
-export const listLoyaltyAccounts = (): Promise<LoyaltyAccountWithDetails[]> =>
-  loggedInvoke<LoyaltyAccountWithDetails[]>('list_loyalty_accounts');
+/** List loyalty accounts from the store resolved by the active session. */
+export const listLoyaltyAccounts = (
+  sessionToken: string,
+): Promise<LoyaltyAccountWithDetails[]> =>
+  loggedInvoke<LoyaltyAccountWithDetails[]>('list_loyalty_accounts_scoped', {
+    sessionToken,
+  });
 
-/** Earn loyalty points for a customer on a completed sale. */
-export const earnLoyaltyPoints = (customerId: string, saleId: string, totalMinor: number): Promise<LoyaltyTransaction> =>
-  loggedInvoke<LoyaltyTransaction>('earn_loyalty_points', { customerId, saleId, totalMinor });
+/** Earn loyalty points in the store resolved by the active session. */
+export const earnLoyaltyPoints = (
+  sessionToken: string,
+  customerId: string,
+  saleId: string,
+  totalMinor: number,
+): Promise<LoyaltyTransaction> =>
+  loggedInvoke<LoyaltyTransaction>('earn_loyalty_points_scoped', {
+    sessionToken,
+    customerId,
+    saleId,
+    totalMinor,
+  });
 
-/** Redeem loyalty points for a discount on a sale. */
-export const redeemLoyaltyPoints = (customerId: string, points: number, saleId: string): Promise<RedeemResult> =>
-  loggedInvoke<RedeemResult>('redeem_loyalty_points', { customerId, points, saleId });
+/** Redeem loyalty points in the store resolved by the active session. */
+export const redeemLoyaltyPoints = (
+  sessionToken: string,
+  customerId: string,
+  points: number,
+  saleId: string,
+): Promise<RedeemResult> =>
+  loggedInvoke<RedeemResult>('redeem_loyalty_points_scoped', {
+    sessionToken,
+    customerId,
+    points,
+    saleId,
+  });
 
-/** List all loyalty tiers. */
-export const listLoyaltyTiers = (): Promise<LoyaltyTier[]> =>
-  loggedInvoke<LoyaltyTier[]>('list_loyalty_tiers');
+/** List loyalty tiers from the store resolved by the active session. */
+export const listLoyaltyTiers = (sessionToken: string): Promise<LoyaltyTier[]> =>
+  loggedInvoke<LoyaltyTier[]>('list_loyalty_tiers_scoped', { sessionToken });
 
-/** Update an existing loyalty tier. */
-export const updateLoyaltyTier = (tier: LoyaltyTier): Promise<LoyaltyTier> =>
-  loggedInvoke<LoyaltyTier>('update_loyalty_tier', { tier });
+/** Update a loyalty tier in the store resolved by the active session. */
+export const updateLoyaltyTier = (
+  sessionToken: string,
+  tier: LoyaltyTier,
+): Promise<LoyaltyTier> =>
+  loggedInvoke<LoyaltyTier>('update_loyalty_tier_scoped', { sessionToken, tier });
 
-/** Get the monetary value (in minor units) for a given number of loyalty points. */
-export const getPointsValue = (points: number): Promise<number> =>
-  loggedInvoke<number>('get_points_value', { points });
+/** Convert loyalty points into minor currency units in the active store. */
+export const getPointsValue = (sessionToken: string, points: number): Promise<number> =>
+  loggedInvoke<number>('get_points_value_scoped', { sessionToken, points });
 
-/** Get or create a loyalty account for a customer. */
-export const getOrCreateLoyaltyAccount = (customerId: string): Promise<LoyaltyAccount> =>
-  loggedInvoke<LoyaltyAccount>('get_or_create_loyalty_account', { customerId });
+/** Get or create a loyalty account in the store resolved by the active session. */
+export const getOrCreateLoyaltyAccount = (
+  sessionToken: string,
+  customerId: string,
+): Promise<LoyaltyAccount> =>
+  loggedInvoke<LoyaltyAccount>('get_or_create_loyalty_account_scoped', {
+    sessionToken,
+    customerId,
+  });

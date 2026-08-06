@@ -1,9 +1,19 @@
 // Package main is the entry point for the OZ-POS license server.
 // It extends PocketBase with custom Go hooks for license activation,
 // renewal, and status checks with RSA-2048 signing.
+//
+// Windows manifest: the committed rsrc_windows_amd64.syso embeds
+// app.manifest (asInvoker, numeric RT_MANIFEST type 24) into the Windows
+// build so UAC never raises an elevation consent prompt. Regenerate it with:
+//
+//	go generate ./...          (runs: go-winres make --arch amd64)
+//
+// The .syso is committed so `go build` on Windows needs no extra tooling.
+//go:generate go run github.com/tc-hib/go-winres@v0.3.3 make --arch amd64
 package main
 
 import (
+	_ "embed"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -11,6 +21,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -18,6 +29,26 @@ import (
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
 )
+
+// pbSchemaJSON is the PocketBase collections schema embedded at build time.
+// A fresh deployment (empty pb_data volume) boots with only the default
+// system collections; the business collections (license_keys, tenants,
+// subscriptions, tenant_machines) are imported idempotently on first boot
+// from this file so the server never starts "healthy" with activation
+// endpoints failing with "collections not found".
+//
+//go:embed pb_schema.json
+var pbSchemaJSON []byte
+
+// requiredCollections are the business collections the license API depends
+// on. If any is missing at serve time, the embedded pb_schema.json is
+// imported (see ensureCollections).
+var requiredCollections = []string{
+	"license_keys",
+	"tenants",
+	"subscriptions",
+	"tenant_machines",
+}
 
 // privateKey is the RSA-2048 private key loaded from the
 // OZ_LICENSE_PRIVATE_KEY environment variable at startup.
@@ -56,6 +87,13 @@ func main() {
 
 	// ── Register custom license API routes ───────────────────────
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+		// First boot on an empty pb_data volume: import the embedded
+		// collections schema so /activate, /renew, and /status find their
+		// collections instead of a fresh-but-broken deployment.
+		// Idempotent: no-op once all required collections exist.
+		if err := ensureCollections(app); err != nil {
+			return err
+		}
 		// Wire rate-limiter persistence to SQLite (H2 audit). Idempotent
 		// and logs-and-returns on schema/hydrate failure so the server can
 		// still boot in degraded in-memory-only mode if SQLite is unavailable.
@@ -73,14 +111,40 @@ func main() {
 		se.Router.POST("/api/v1/license/status", handleStatus(app))
 		// P8-2: Machine-level revocation is integrated into the /status
 		// endpoint (send revoke:true with machine_id in the request body).
-		// P8-4: Public health endpoint for Docker healthcheck and monitoring.
-		se.Router.GET("/api/health", handleHealth(app))
+		// P8-4: /api/health is now served by PocketBase's built-in endpoint (v0.39.6+).
+		// The custom handler (health.go) is retained for reference but NOT registered
+		// to avoid a route-conflict panic with PocketBase's own /api/health route.
+		// se.Router.GET("/api/health", handleHealth(app))
 		return se.Next()
 	})
 
 	if err := app.Start(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// ensureCollections verifies that every business collection the license API
+// depends on exists, importing the embedded pb_schema.json on first boot
+// when any is missing (idempotent). Without this, a fresh deployment boots
+// "healthy" but every /activate, /renew, and /status call fails with
+// "collections not found" until an operator manually imports the schema.
+//
+// ImportCollectionsByMarshaledJSON runs in a single transaction; deleteMissing
+// is false so existing collections are never dropped.
+func ensureCollections(app core.App) error {
+	for _, name := range requiredCollections {
+		if _, err := app.FindCollectionByNameOrId(name); err == nil {
+			continue // collection already exists
+		}
+		// At least one required collection is missing — import the full
+		// embedded schema (idempotent for the collections that exist).
+		log.Printf("missing required collection %q — importing pb_schema.json", name)
+		if err := app.ImportCollectionsByMarshaledJSON(pbSchemaJSON, false); err != nil {
+			return fmt.Errorf("failed to auto-import pb_schema.json: %w", err)
+		}
+		return nil
+	}
+	return nil
 }
 
 // normalizePEM attempts to repair common formatting issues that occur when

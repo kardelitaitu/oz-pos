@@ -4,6 +4,7 @@ import { getLicenseStatus, checkLicenseStatus, type ServerLicenseStatus } from '
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { useToast } from '@/frontend/shared/Toast';
+import { l10nErrorMessage } from '@/utils/app-error';
 import './LicenseSettings.css';
 
 /** Parsed subscription payload from the license server's signed JSON. */
@@ -163,7 +164,7 @@ export default function LicenseSettings() {
         setPayload(parsed);
       }
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : l10nRef.current.getString('settings-license-load-failed'));
+      setLoadError(l10nErrorMessage(err, l10nRef.current, 'settings-license-load-failed'));
     } finally {
       setLoading(false);
     }
@@ -202,7 +203,7 @@ export default function LicenseSettings() {
       triggerFlash('server-status');
       addToast({ type: 'info', message: l10n.getString('settings-license-server-status-retrieved') });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : l10n.getString('settings-license-server-check-failed');
+      const msg = l10nErrorMessage(err, l10n, 'settings-license-server-check-failed');
       addToast({ type: 'error', message: msg });
     } finally {
       setCheckingServer(false);

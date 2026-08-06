@@ -42,6 +42,32 @@ impl Store<'_> {
 
     /// Insert a new promotion.
     pub fn create_promotion(&self, promo: &Promotion) -> Result<Promotion, CoreError> {
+        if promo.name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "promotion name must not be empty".into(),
+            });
+        }
+        if promo.promo_type.trim().is_empty()
+            || crate::PromotionType::from_str(promo.promo_type.trim()).is_none()
+        {
+            return Err(CoreError::Validation {
+                field: "promo_type",
+                message: "invalid promotion type".into(),
+            });
+        }
+        if promo.value_minor < 0 {
+            return Err(CoreError::Validation {
+                field: "value_minor",
+                message: "value_minor must not be negative".into(),
+            });
+        }
+        if promo.min_order_minor < 0 {
+            return Err(CoreError::Validation {
+                field: "min_order_minor",
+                message: "min_order_minor must not be negative".into(),
+            });
+        }
         self.conn.execute(
             "INSERT INTO promotions (id, name, description, promo_type, value_minor,
                                      min_qty, trigger_sku, reward_sku, reward_qty,
@@ -72,6 +98,12 @@ impl Store<'_> {
 
     /// Update an existing promotion by id.
     pub fn update_promotion(&self, promo: &Promotion) -> Result<Promotion, CoreError> {
+        if promo.name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "promotion name must not be empty".into(),
+            });
+        }
         let rows = self.conn.execute(
             "UPDATE promotions
              SET name = ?1, description = ?2, promo_type = ?3, value_minor = ?4,
@@ -146,6 +178,12 @@ impl Store<'_> {
         &self,
         app: &PromotionApplication,
     ) -> Result<PromotionApplication, CoreError> {
+        if app.discount_minor < 0 {
+            return Err(CoreError::Validation {
+                field: "discount_minor",
+                message: "discount_minor must not be negative".into(),
+            });
+        }
         self.conn.execute(
             "INSERT INTO promotion_applications (id, promotion_id, sale_id, discount_minor, description, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -541,5 +579,86 @@ mod tests {
             .get_promotion_applications_for_sale("no-apps-sale")
             .unwrap();
         assert!(apps.is_empty());
+    }
+
+    // ── Validation tests ────────────────────────────────────────
+
+    #[test]
+    fn create_promotion_empty_name_rejected() {
+        let store = setup();
+        let mut p = test_promo("v1");
+        p.name = "".into();
+        let err = store.create_promotion(&p).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
+    }
+
+    #[test]
+    fn create_promotion_whitespace_name_rejected() {
+        let store = setup();
+        let mut p = test_promo("v2");
+        p.name = "   ".into();
+        let err = store.create_promotion(&p).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
+    }
+
+    #[test]
+    fn create_promotion_empty_type_rejected() {
+        let store = setup();
+        let mut p = test_promo("v3");
+        p.promo_type = "".into();
+        let err = store.create_promotion(&p).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "promo_type"));
+    }
+
+    #[test]
+    fn create_promotion_invalid_type_rejected() {
+        let store = setup();
+        let mut p = test_promo("v4");
+        p.promo_type = "invalid_type".into();
+        let err = store.create_promotion(&p).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "promo_type"));
+    }
+
+    #[test]
+    fn create_promotion_negative_value_rejected() {
+        let store = setup();
+        let mut p = test_promo("v5");
+        p.value_minor = -1;
+        let err = store.create_promotion(&p).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "value_minor"));
+    }
+
+    #[test]
+    fn create_promotion_negative_min_order_rejected() {
+        let store = setup();
+        let mut p = test_promo("v6");
+        p.min_order_minor = -50;
+        let err = store.create_promotion(&p).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "min_order_minor"));
+    }
+
+    #[test]
+    fn update_promotion_empty_name_rejected() {
+        let store = setup();
+        let mut p = test_promo("v7");
+        store.create_promotion(&p).unwrap();
+        p.name = "".into();
+        let err = store.update_promotion(&p).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
+    }
+
+    #[test]
+    fn record_application_negative_discount_rejected() {
+        let store = setup();
+        let app = PromotionApplication {
+            id: "app1".into(),
+            promotion_id: "p1".into(),
+            sale_id: "s1".into(),
+            discount_minor: -100,
+            description: "test".into(),
+            created_at: "2025-01-01T00:00:00.000Z".into(),
+        };
+        let err = store.record_promotion_application(&app).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "discount_minor"));
     }
 }

@@ -2,14 +2,17 @@ import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/Button';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { l10nErrorMessage } from '@/utils/app-error';
 import {
   startInventoryShift,
   endInventoryShift,
   getActiveInventoryShift,
   listInventoryLocations,
-  listInventoryTransactions,
+  listInventoryTransactionsForShift,
   type InventoryShift,
   type InventoryLocation,
   type InventoryTransaction,
@@ -39,8 +42,12 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
   // Summary modal state
   const [showSummary, setShowSummary] = useState(false);
   const [shiftSummaryTxs, setShiftSummaryTxs] = useState<InventoryTransaction[]>([]);
+  const summaryRef = useRef<HTMLDivElement | null>(null);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // A11Y-02: complete dialog semantics for the shift-summary modal.
+  useFocusTrap(summaryRef, showSummary, () => setShowSummary(false));
 
   // Load locations and active shift
   useEffect(() => {
@@ -55,16 +62,16 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
         }
       })
       .catch(() => {
-        addToast({ message: l10nRef.current.getString('inv-shift-error-locations') || 'Failed to load locations', type: 'error' });
+        addToast({ message: requiredLocalized(l10nRef.current, 'inv-shift-error-locations'), type: 'error' });
       });
 
-    getActiveInventoryShift(sessionToken, session.user_id)
+    getActiveInventoryShift(sessionToken)
       .then(shift => {
         setActiveShift(shift);
         onShiftChange?.(shift);
       })
       .catch(() => {
-        addToast({ message: l10nRef.current.getString('inv-shift-error-active') || 'Failed to load active shift', type: 'error' });
+        addToast({ message: requiredLocalized(l10nRef.current, 'inv-shift-error-active'), type: 'error' });
       });
   }, [sessionToken, session?.user_id, onShiftChange, addToast]); // l10n via ref — stable dep chain
 
@@ -78,7 +85,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
         
         const hrs = Math.floor(diff / 3600000);
         const mins = Math.floor((diff % 3600000) / 60000);
-        const secs = Math.floor((diff % 6000) / 1000);
+        const secs = Math.floor((diff % 60000) / 1000);
         
         const pad = (n: number) => n.toString().padStart(2, '0');
         setElapsedText(`${pad(hrs)}:${pad(mins)}:${pad(secs)}`);
@@ -100,12 +107,12 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
     if (!sessionToken || !session?.user_id || !selectedLocationId) return;
 
     try {
-      const shift = await startInventoryShift(sessionToken, session.user_id, selectedLocationId, notes);
+      const shift = await startInventoryShift(sessionToken, selectedLocationId, notes);
       setActiveShift(shift);
       setNotes('');
       if (onShiftChange) onShiftChange(shift);
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : (l10nRef.current.getString('inv-shift-error-start') || 'Failed to start shift'), type: 'error' });
+      addToast({ message: l10nErrorMessage(err, l10nRef.current, 'inv-shift-error-start'), type: 'error' });
     }
   };
 
@@ -113,21 +120,11 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
     if (!sessionToken || !activeShift) return;
 
     try {
-      // Fetch transactions before ending to summarize activity
-      const allTxs = await listInventoryTransactions(sessionToken);
-      const startTime = new Date(activeShift.started_at).getTime();
-      
-      const shiftLocId = activeShift.location_id;
-      const filtered: InventoryTransaction[] = [];
-      for (const tx of allTxs) {
-        const txTime = new Date(tx.created_at).getTime();
-        const uid = session?.user_id;
-        if (uid != null && tx.staff_id === uid &&
-            tx.location_id === shiftLocId &&
-            txTime >= startTime) {
-          filtered.push(tx);
-        }
-      }
+      // Fetch transactions server-side for this shift window.
+      const since = activeShift.started_at;
+      const filtered = await listInventoryTransactionsForShift(
+        sessionToken, activeShift.location_id, since,
+      );
 
       await endInventoryShift(sessionToken, activeShift.id);
       setShiftSummaryTxs(filtered);
@@ -135,7 +132,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
       setActiveShift(null);
       if (onShiftChange) onShiftChange(null);
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : (l10nRef.current.getString('inv-shift-error-end') || 'Failed to end shift'), type: 'error' });
+      addToast({ message: l10nErrorMessage(err, l10nRef.current, 'inv-shift-error-end'), type: 'error' });
     }
   };
 
@@ -143,7 +140,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
 
   return (
     <>
-      <div className="inventory-shift-bar" data-testid="shift-bar" role="region" aria-label={l10n.getString('inv-shift-bar-aria') || 'Shift Info'}>
+      <div className="inventory-shift-bar" data-testid="shift-bar" role="region" aria-label={requiredLocalized(l10n, 'inv-shift-bar-aria')}>
         {activeShift ? (
           <div className="shift-status-active" aria-live="polite">
             <div className="status-indicator" />
@@ -177,7 +174,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
               className="shift-select"
               value={selectedLocationId}
               onChange={e => setSelectedLocationId(e.target.value)}
-              aria-label={l10n.getString('inv-shift-location-aria') || 'Location'}
+              aria-label={requiredLocalized(l10n, 'inv-shift-location-aria')}
             >
               {locations.map(loc => (
                 <option key={loc.id} value={loc.id}>
@@ -193,7 +190,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
                 placeholder="Shift Notes"
-                aria-label={l10n.getString('inv-shift-notes-aria') || 'Notes'}
+                aria-label={requiredLocalized(l10n, 'inv-shift-notes-aria')}
               />
             </Localized>
 
@@ -208,7 +205,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
 
       {showSummary && (
         <div className="shift-summary-overlay">
-          <div className="shift-summary-modal" role="dialog" aria-modal="true">
+          <div className="shift-summary-modal" ref={summaryRef} role="dialog" aria-modal="true">
             <Localized id="inv-shift-summary-title">
               <h3>Shift Summary</h3>
             </Localized>
@@ -220,15 +217,15 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
               {shiftSummaryTxs.length > 0 ? (
                 shiftSummaryTxs.map(tx => (
                   <li key={tx.id} className="summary-item">
-                    <span style={{ textTransform: 'capitalize' }}>
-                      {tx.type.replace('-', ' ')}
+                    <span className="summary-item-type">
+                      {l10n.getString(`inv-log-type-${tx.type}`) ?? tx.type.replace('-', ' ')}
                     </span>
                     <span>{new Date(tx.created_at).toLocaleTimeString()}</span>
                   </li>
                 ))
               ) : (
                 <Localized id="inv-shift-no-transactions">
-                  <li className="summary-item" style={{ borderLeftColor: '#ef4444' }}>
+                  <li className="summary-item summary-item-empty">
                     No transactions recorded.
                   </li>
                 </Localized>

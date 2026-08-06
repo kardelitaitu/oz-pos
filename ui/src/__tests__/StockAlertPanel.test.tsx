@@ -161,7 +161,7 @@ describe('StockAlertPanel', () => {
     render(<StockAlertPanel locationId="loc-1" pollIntervalMs={0} />);
 
     await waitFor(() => {
-      expect(screen.getByText(/network error/i)).toBeInTheDocument();
+      expect(screen.getByText('inv-alert-error-load')).toBeInTheDocument();
     });
   });
 });

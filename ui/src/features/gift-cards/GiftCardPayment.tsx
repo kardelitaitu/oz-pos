@@ -2,6 +2,8 @@ import { useState, useCallback } from 'react';
 import { useLocalization, Localized } from '@fluent/react';
 import { getGiftCardBalance, redeemGiftCard } from '@/api/giftCards';
 import { Button } from '@/components/Button';
+import { l10nErrorMessage } from '@/utils/app-error';
+import { formatMoney } from '@/types/domain';
 
 
 export interface GiftCardPaymentProps {
@@ -59,7 +61,7 @@ export default function GiftCardPayment({
       }
       setCardBalance({ minor: result.balance_minor, currency: result.currency, status: result.status });
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('gift-cards-payment-lookup-failed'));
+      setError(l10nErrorMessage(err, l10n, 'gift-cards-payment-lookup-failed'));
     } finally {
       setLoading(false);
     }
@@ -81,21 +83,11 @@ export default function GiftCardPayment({
       onApplied(amountToRedeem, code);
       onComplete();
     } catch (err) {
-      onError(err instanceof Error ? err.message : l10n.getString('gift-cards-payment-redemption-failed'));
+      onError(l10nErrorMessage(err, l10n, 'gift-cards-payment-redemption-failed'));
     } finally {
       setLoading(false);
     }
   }, [cardInput, cardBalance, totalMinor, saleId, onApplied, onComplete, onError, l10n]);
-
-  const formatMoney = (minor: number, cur: string): string => {
-    const known: Record<string, number> = { JPY: 0, KRW: 0, VND: 0, IDR: 2 };
-    const exp = known[cur] ?? 2;
-    const val = (minor / 10 ** exp).toLocaleString(undefined, {
-      minimumFractionDigits: exp,
-      maximumFractionDigits: exp,
-    });
-    return `${cur} ${val}`;
-  };
 
   return (
     <div className="gift-card-payment">
@@ -103,9 +95,9 @@ export default function GiftCardPayment({
         <Localized id="gift-cards-payment-title">
           <h3 className="gift-card-payment-title">Gift Card</h3>
         </Localized>
-        <Localized id="gift-cards-payment-total-due" vars={{ amount: formatMoney(totalMinor, currency) }}>
+        <Localized id="gift-cards-payment-total-due" vars={{ amount: formatMoney({ minor_units: totalMinor, currency }) }}>
           <p className="gift-card-payment-subtitle">
-            Total due: {formatMoney(totalMinor, currency)}
+            Total due: {formatMoney({ minor_units: totalMinor, currency })}
           </p>
         </Localized>
       </div>
@@ -138,7 +130,7 @@ export default function GiftCardPayment({
               <span>Available Balance</span>
             </Localized>
             <span className="gift-card-payment-balance-amount">
-              {formatMoney(cardBalance.minor, cardBalance.currency)}
+              {formatMoney({ minor_units: cardBalance.minor, currency: cardBalance.currency })}
             </span>
           </div>
           <div className="gift-card-payment-balance-row">
@@ -146,7 +138,7 @@ export default function GiftCardPayment({
               <span>To Apply</span>
             </Localized>
             <span className="gift-card-payment-balance-amount">
-              {formatMoney(Math.min(totalMinor, cardBalance.minor), currency)}
+              {formatMoney({ minor_units: Math.min(totalMinor, cardBalance.minor), currency })}
             </span>
           </div>
         </div>

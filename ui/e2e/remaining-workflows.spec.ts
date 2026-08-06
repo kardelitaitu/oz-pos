@@ -49,7 +49,8 @@ test.describe('Remaining Workflow Screens', () => {
     await expect(page.locator('.bundle-mgmt-title')).toContainText('Bundle');
 
     // Table or empty state must be present (mock returns empty bundles).
-    await expect(page.locator('.bundle-mgmt-table')).toBeVisible({ timeout: 5_000 });
+    // Use first() to avoid strict mode violation from loading skeleton + loaded table.
+    await expect(page.locator('.bundle-mgmt-table').first()).toBeVisible({ timeout: 5_000 });
   });
 
   // ── Void Orders ───────────────────────────────────────────
@@ -60,8 +61,10 @@ test.describe('Remaining Workflow Screens', () => {
     await expect(page.locator('.void-orders')).toBeVisible({ timeout: SCREEN_TIMEOUT });
     await expect(page.locator('.void-orders-title')).toContainText('Order');
 
-    // Status filter chips must be present.
-    await expect(page.locator('.void-orders-filters')).toBeVisible({ timeout: 5_000 });
+    // Status filter chips must be present. Use first() to avoid strict mode
+    // violation — the loading skeleton also renders .void-orders-filters
+    // alongside the loaded container.
+    await expect(page.locator('.void-orders-filters').first()).toBeVisible({ timeout: 5_000 });
 
     // Table or empty state must render (mock returns empty sales).
     await expect(page.locator('.void-orders-table')).toBeVisible({ timeout: 5_000 });

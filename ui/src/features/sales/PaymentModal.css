@@ -5,9 +5,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-bg-overlay);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: var(--color-pos-modal-overlay);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   will-change: backdrop-filter;
   transform: translateZ(0);
 }
@@ -39,9 +39,10 @@
   position: relative;
   width: 26.25rem;
   max-width: 92vw;
-  background: var(--color-bg-elevated);
+  background: var(--color-pos-modal-bg);
+  border: 1px solid var(--color-pos-modal-border);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xl);
+  box-shadow: var(--color-pos-modal-shadow);
   overflow: hidden;
 }
 
@@ -95,8 +96,8 @@
   cursor: pointer;
   color: var(--color-fg-tertiary);
   padding: 0;
-  width: var(--space-8);
-  height: var(--space-8);
+  width: var(--space-11);
+  height: var(--space-11);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -491,6 +492,11 @@
   padding: 0 var(--space-1);
   opacity: 0.6;
   flex-shrink: 0;
+  min-width: var(--space-11);
+  min-height: var(--space-11);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .payment-split-remove:hover:not(:disabled) {

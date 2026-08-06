@@ -59,33 +59,89 @@ export interface CategoryBreakdownRow {
   percentage: number;
 }
 
-/** Get daily revenue aggregates for a date range. */
-export const getDailyRevenue = (startDate: string, endDate: string): Promise<DailyRevenueRow[]> =>
-  loggedInvoke<DailyRevenueRow[]>('get_daily_revenue', { startDate, endDate });
+/** Get daily revenue aggregates for a date range in the active store. */
+export const getDailyRevenue = (
+  startDate: string,
+  endDate: string,
+  sessionToken: string,
+): Promise<DailyRevenueRow[]> =>
+  loggedInvoke<DailyRevenueRow[]>('get_daily_revenue_scoped', {
+    sessionToken: sessionToken ?? '',
+    startDate,
+    endDate,
+  });
 
-/** Get weekly revenue aggregates for a date range. */
-export const getWeeklyRevenue = (startDate: string, endDate: string): Promise<WeeklyRevenueRow[]> =>
-  loggedInvoke<WeeklyRevenueRow[]>('get_weekly_revenue', { startDate, endDate });
+/** Get weekly revenue aggregates for a date range in the active store. */
+export const getWeeklyRevenue = (
+  startDate: string,
+  endDate: string,
+  sessionToken: string,
+): Promise<WeeklyRevenueRow[]> =>
+  loggedInvoke<WeeklyRevenueRow[]>('get_weekly_revenue_scoped', {
+    sessionToken: sessionToken ?? '',
+    startDate,
+    endDate,
+  });
 
-/** Get monthly revenue aggregates for a date range. */
-export const getMonthlyRevenue = (startDate: string, endDate: string): Promise<MonthlyRevenueRow[]> =>
-  loggedInvoke<MonthlyRevenueRow[]>('get_monthly_revenue', { startDate, endDate });
+/** Get monthly revenue aggregates for a date range in the active store. */
+export const getMonthlyRevenue = (
+  startDate: string,
+  endDate: string,
+  sessionToken: string,
+): Promise<MonthlyRevenueRow[]> =>
+  loggedInvoke<MonthlyRevenueRow[]>('get_monthly_revenue_scoped', {
+    sessionToken: sessionToken ?? '',
+    startDate,
+    endDate,
+  });
 
-/** Get top-selling products for a date range, limited to a given count. */
-export const getTopProducts = (startDate: string, endDate: string, limit: number): Promise<TopProductRow[]> =>
-  loggedInvoke<TopProductRow[]>('get_top_products', { startDate, endDate, limit });
+/** Get top-selling products for a date range in the active store. */
+export const getTopProducts = (
+  startDate: string,
+  endDate: string,
+  limit: number,
+  sessionToken: string,
+): Promise<TopProductRow[]> =>
+  loggedInvoke<TopProductRow[]>('get_top_products_scoped', {
+    sessionToken: sessionToken ?? '',
+    startDate,
+    endDate,
+    limit,
+  });
 
-/** Get hourly sales heatmap data for a date range. */
-export const getHourlyHeatmap = (startDate: string, endDate: string): Promise<HourlyHeatmapRow[]> =>
-  loggedInvoke<HourlyHeatmapRow[]>('get_hourly_heatmap', { startDate, endDate });
+/** Get hourly sales heatmap data for a date range in the active store. */
+export const getHourlyHeatmap = (
+  startDate: string,
+  endDate: string,
+  sessionToken: string,
+): Promise<HourlyHeatmapRow[]> =>
+  loggedInvoke<HourlyHeatmapRow[]>('get_hourly_heatmap_scoped', {
+    sessionToken: sessionToken ?? '',
+    startDate,
+    endDate,
+  });
 
-/** Get products with stock levels below a given threshold. */
-export const getLowStockAlerts = (threshold: number): Promise<LowStockAlert[]> =>
-  loggedInvoke<LowStockAlert[]>('get_low_stock_alerts', { threshold });
+/** Get products with stock levels below a given threshold in the active store. */
+export const getLowStockAlerts = (
+  threshold: number,
+  sessionToken: string,
+): Promise<LowStockAlert[]> =>
+  loggedInvoke<LowStockAlert[]>('get_low_stock_alerts_scoped', {
+    sessionToken: sessionToken ?? '',
+    threshold,
+  });
 
-/** Get sales breakdown by product category for a date range. */
-export const getCategoryBreakdown = (startDate: string, endDate: string): Promise<CategoryBreakdownRow[]> =>
-  loggedInvoke<CategoryBreakdownRow[]>('get_category_breakdown', { startDate, endDate });
+/** Get sales breakdown by product category for a date range in the active store. */
+export const getCategoryBreakdown = (
+  startDate: string,
+  endDate: string,
+  sessionToken: string,
+): Promise<CategoryBreakdownRow[]> =>
+  loggedInvoke<CategoryBreakdownRow[]>('get_category_breakdown_scoped', {
+    sessionToken: sessionToken ?? '',
+    startDate,
+    endDate,
+  });
 
 /** A single product row in the menu engineering report. */
 export interface MenuEngineeringRow {
@@ -110,12 +166,14 @@ export interface MenuEngineeringResult {
   median_margin: number;
 }
 
-/** Get menu engineering data (volume and margin) for a date range. */
+/** Get menu engineering data for the active store and date range. */
 export const getMenuEngineering = (
   startDate: string,
   endDate: string,
+  sessionToken: string,
 ): Promise<MenuEngineeringResult> =>
-  loggedInvoke<MenuEngineeringResult>('get_menu_engineering', {
+  loggedInvoke<MenuEngineeringResult>('get_menu_engineering_scoped', {
+    sessionToken: sessionToken ?? '',
     startDate,
     endDate,
   });
@@ -136,8 +194,12 @@ export interface CustomReportResponse {
   rows: string[][];
 }
 
-/** Build a custom report from user-selected columns and filters. */
+/** Build a custom report for the active store. */
 export const buildCustomReport = (
   request: CustomReportRequest,
+  sessionToken: string,
 ): Promise<CustomReportResponse> =>
-  loggedInvoke<CustomReportResponse>('build_custom_report', { request });
+  loggedInvoke<CustomReportResponse>('build_custom_report_scoped', {
+    sessionToken: sessionToken ?? '',
+    request,
+  });

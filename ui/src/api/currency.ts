@@ -48,19 +48,36 @@ export interface ExchangeRateDto {
   id: string;
   from_currency: string;
   to_currency: string;
-  rate: number;
+  /** Fixed-point rate in millionths: `rate_millionths / 1_000_000`. */
+  rate_millionths: number;
   source: string;
   effective_date: string;
   created_at: string;
 }
 
-/** Arguments for creating a new exchange rate. */
+/** Arguments for creating a new exchange rate.
+ *
+ * Field names intentionally match the Rust DTO exactly. The value is
+ * fixed-point millionths rather than a floating-point decimal.
+ */
 export interface CreateExchangeRateArgs {
-  fromCurrency: string;
-  toCurrency: string;
-  rate: number;
+  from_currency: string;
+  to_currency: string;
+  rate_millionths: number;
   source?: string;
-  effectiveDate?: string;
+  effective_date?: string;
+}
+
+/** Convert a validated fixed-point rate to a display/calculation decimal. */
+export function exchangeRateToDecimal(rate: Pick<ExchangeRateDto, 'rate_millionths'>): number {
+  return rate.rate_millionths / 1_000_000;
+}
+
+/** Format a fixed-point rate without exposing trailing binary-float noise. */
+export function formatExchangeRate(rate: Pick<ExchangeRateDto, 'rate_millionths'>): string {
+  const decimal = exchangeRateToDecimal(rate);
+  if (!Number.isFinite(decimal)) return '—';
+  return decimal.toFixed(6).replace(/0+$/, '').replace(/\.$/, '') || '0';
 }
 
 /** List all exchange rates. */

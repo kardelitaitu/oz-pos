@@ -42,7 +42,8 @@ function isAdequate(px: number | null, value: string): boolean {
 
 /* ── Interactive element patterns ────────────────────────────── */
 
-const INTERACTIVE_SELECTOR_RE = /\.(?:btn|button|tab|switch|toggle|close|clickable|action-btn|nav-item|filter-btn|modal-close|line-remove|theme-toggle|card-clickable|action-button|icon-btn)\b/i;
+const INTERACTIVE_SELECTOR_RE =
+  /\.(?:btn|button|tab|switch|toggle|close|clickable|action-btn|nav-item|filter-btn|modal-close|line-remove|theme-toggle|card-clickable|action-button|icon-btn|cat-mgmt-(?:edit|delete|icon)-btn|cat-mgmt-colour-swatch)\b/i;
 
 /** Selectors to skip — known false positives (decorative parts of custom controls). */
 const SKIP_SELECTOR_RE = [

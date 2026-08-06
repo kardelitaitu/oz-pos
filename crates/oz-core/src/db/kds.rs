@@ -3,7 +3,9 @@
 use rusqlite::params;
 
 use crate::error::CoreError;
-use crate::{CreateKdsOrderInput, KdsOrder, KdsStatus};
+use crate::{
+    CreateKdsLineItemInput, CreateKdsOrderInput, KdsLineItem, KdsModifier, KdsOrder, KdsStatus,
+};
 
 use super::Store;
 
@@ -24,11 +26,32 @@ impl Store<'_> {
             prep_time_seconds: row.get("prep_time_seconds")?,
             kitchen_zone: row.get("kitchen_zone")?,
             notes: row.get("notes")?,
+            table_number: row.get("table_number")?,
+            priority: row.get::<_, i64>("priority")? != 0,
         })
     }
 
     /// Create a KDS order from input, auto-incrementing the display number per day.
     pub fn create_kds_order(&self, input: CreateKdsOrderInput) -> Result<KdsOrder, CoreError> {
+        if input.sale_id.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "sale_id",
+                message: "sale_id must not be empty".into(),
+            });
+        }
+        if input.items_summary.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "items_summary",
+                message: "items_summary must not be empty".into(),
+            });
+        }
+        if input.item_count <= 0 {
+            return Err(CoreError::Validation {
+                field: "item_count",
+                message: "item_count must be positive".into(),
+            });
+        }
+
         let id = uuid::Uuid::now_v7().to_string();
         let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
 
@@ -54,8 +77,8 @@ impl Store<'_> {
 
         tx.execute(
             "INSERT INTO kds_orders (id, sale_id, store_id, status, items_summary, item_count,
-                                     display_number, received_at, kitchen_zone, notes)
-             VALUES (?1, ?2, ?3, 'pending', ?4, ?5, ?6, ?7, ?8, ?9)",
+                                     display_number, received_at, kitchen_zone, notes, table_number, priority)
+             VALUES (?1, ?2, ?3, 'pending', ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 id,
                 input.sale_id,
@@ -66,6 +89,8 @@ impl Store<'_> {
                 now,
                 input.kitchen_zone,
                 input.notes,
+                input.table_number,
+                input.priority,
             ],
         )?;
 
@@ -81,7 +106,7 @@ impl Store<'_> {
         let mut sql = String::from(
             "SELECT id, sale_id, store_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
-                    prep_time_seconds, kitchen_zone, notes
+                    prep_time_seconds, kitchen_zone, notes, table_number, priority
              FROM kds_orders",
         );
         let params: Vec<Box<dyn rusqlite::types::ToSql>> = if let Some(s) = status_filter {
@@ -104,7 +129,7 @@ impl Store<'_> {
         let mut stmt = self.conn.prepare(
             "SELECT id, sale_id, store_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
-                    prep_time_seconds, kitchen_zone, notes
+                    prep_time_seconds, kitchen_zone, notes, table_number, priority
              FROM kds_orders WHERE id = ?1",
         )?;
         let result = stmt.query_row(params![id], Self::row_to_kds_order);
@@ -120,7 +145,7 @@ impl Store<'_> {
         let mut stmt = self.conn.prepare(
             "SELECT id, sale_id, store_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
-                    prep_time_seconds, kitchen_zone, notes
+                    prep_time_seconds, kitchen_zone, notes, table_number, priority
              FROM kds_orders WHERE sale_id = ?1",
         )?;
         let result = stmt.query_row(params![sale_id], Self::row_to_kds_order);
@@ -129,6 +154,68 @@ impl Store<'_> {
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(e.into()),
         }
+    }
+
+    /// Update the items (summary + count) on an existing KDS order.
+    ///
+    /// Used when FOH adds items to an order mid-preparation, or when
+    /// kitchen staff correct the items shown on a ticket.
+    ///
+    /// When `input.line_items` is `Some`, the existing kds_line_items
+    /// for this order are deleted and replaced with the new ones, and
+    /// the summary/count are re-derived from the structured data.
+    pub fn update_kds_order_items(
+        &self,
+        input: crate::UpdateKdsOrderItemsInput,
+    ) -> Result<KdsOrder, CoreError> {
+        // ── Resolve final summary/count ────────────────────────────
+        let (final_summary, final_count) = if let Some(ref line_items) = input.line_items {
+            if line_items.is_empty() {
+                return Err(CoreError::Validation {
+                    field: "line_items",
+                    message: "line_items must not be empty when provided".into(),
+                });
+            }
+            Store::derive_kds_summary(line_items)
+        } else {
+            if input.items_summary.trim().is_empty() {
+                return Err(CoreError::Validation {
+                    field: "items_summary",
+                    message: "items_summary must not be empty".into(),
+                });
+            }
+            if input.item_count <= 0 {
+                return Err(CoreError::Validation {
+                    field: "item_count",
+                    message: "item_count must be positive".into(),
+                });
+            }
+            (input.items_summary.clone(), input.item_count)
+        };
+
+        let tx = self.conn.unchecked_transaction()?;
+
+        // ── Replace line items when provided ───────────────────────
+        if let Some(ref line_items) = input.line_items {
+            tx.execute(
+                "DELETE FROM kds_line_items WHERE kds_order_id = ?1",
+                rusqlite::params![input.id],
+            )?;
+            self.create_kds_line_items_in_tx(&tx, &input.id, line_items)?;
+        }
+
+        tx.execute(
+            "UPDATE kds_orders SET items_summary = ?1, item_count = ?2 WHERE id = ?3",
+            rusqlite::params![final_summary, final_count, input.id],
+        )?;
+
+        tx.commit()?;
+
+        self.get_kds_order(&input.id)?
+            .ok_or_else(|| CoreError::NotFound {
+                entity: "kds_order",
+                id: input.id,
+            })
     }
 
     /// Update the status of a KDS order. Automatically sets the corresponding
@@ -180,7 +267,7 @@ impl Store<'_> {
         let mut sql = String::from(
             "SELECT id, sale_id, store_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
-                    prep_time_seconds, kitchen_zone, notes
+                    prep_time_seconds, kitchen_zone, notes, table_number, priority
              FROM kds_orders
              WHERE status IN ('pending', 'preparing', 'ready')",
         );
@@ -260,35 +347,65 @@ impl Store<'_> {
             by_zone.entry(zone).or_default().push(line);
         }
 
+        // Look up the table name assigned to this sale (TODO 1b).
+        let table_number: Option<String> = {
+            let mut stmt = self
+                .conn
+                .prepare("SELECT name FROM tables WHERE active_sale_id = ?1")?;
+            match stmt.query_row(params![sale_id], |row| row.get::<_, String>(0)) {
+                Ok(name) => Some(name),
+                Err(rusqlite::Error::QueryReturnedNoRows) => None,
+                Err(e) => return Err(e.into()),
+            }
+        };
+
         let mut orders = Vec::with_capacity(by_zone.len());
         for (zone, lines) in by_zone {
-            let items_summary = lines
+            // Build structured line items with course + modifier data (TODO 2a).
+            let structured_items: Vec<CreateKdsLineItemInput> = lines
                 .iter()
                 .map(|l| {
-                    let name = self
+                    let display_name = self
                         .product_name_by_sku(&l.sku)
                         .ok()
                         .flatten()
                         .unwrap_or_else(|| l.sku.clone());
-                    if l.qty > 1 {
-                        format!("{name} x{}", l.qty)
-                    } else {
-                        name
+
+                    // Parse modifiers_json from the sale line.
+                    let modifiers: Vec<KdsModifier> = l
+                        .modifiers_json
+                        .as_deref()
+                        .filter(|j| !j.is_empty())
+                        .and_then(|j| serde_json::from_str(j).ok())
+                        .unwrap_or_default();
+
+                    CreateKdsLineItemInput {
+                        sku: l.sku.clone(),
+                        display_name,
+                        qty: l.qty,
+                        course: l.course.clone(),
+                        modifiers,
                     }
                 })
-                .collect::<Vec<_>>()
-                .join(", ");
+                .collect();
 
-            let item_count: i64 = lines.iter().map(|l| l.qty).sum();
+            let (items_summary, item_count) = Store::derive_kds_summary(&structured_items);
 
-            orders.push(self.create_kds_order(CreateKdsOrderInput {
+            let order = self.create_kds_order(CreateKdsOrderInput {
                 sale_id: sale_id.to_owned(),
                 store_id: store_id.map(|s| s.to_owned()),
                 items_summary,
                 item_count,
                 kitchen_zone: zone,
                 notes: String::new(),
-            })?);
+                table_number: table_number.clone(),
+                priority: false,
+            })?;
+
+            // Create the structured line items in the new kds_line_items table.
+            self.create_kds_line_items(&order.id, &structured_items)?;
+
+            orders.push(order);
         }
 
         Ok(orders)
@@ -328,6 +445,214 @@ impl Store<'_> {
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(e.into()),
         }
+    }
+
+    // ── KDS line items (TODO 2a) ────────────────────────────────────
+
+    fn row_to_kds_line_item(row: &rusqlite::Row) -> rusqlite::Result<KdsLineItem> {
+        let modifiers_json: Option<String> = row.get("modifiers_json")?;
+        let modifiers: Vec<KdsModifier> = match modifiers_json {
+            Some(json) if !json.is_empty() => serde_json::from_str(&json).unwrap_or_default(),
+            _ => vec![],
+        };
+        Ok(KdsLineItem {
+            id: row.get("id")?,
+            kds_order_id: row.get("kds_order_id")?,
+            sku: row.get("sku")?,
+            display_name: row.get("display_name")?,
+            qty: row.get("qty")?,
+            course: row.get("course")?,
+            modifiers,
+            line_position: row.get("line_position")?,
+            item_status: row.get("item_status")?,
+            started_at: row.get("started_at")?,
+            ready_at: row.get("ready_at")?,
+            served_at: row.get("served_at")?,
+            created_at: row.get("created_at")?,
+        })
+    }
+
+    /// Create KDS line items for an order.
+    pub fn create_kds_line_items(
+        &self,
+        order_id: &str,
+        items: &[CreateKdsLineItemInput],
+    ) -> Result<Vec<KdsLineItem>, CoreError> {
+        if items.is_empty() {
+            return Ok(vec![]);
+        }
+        let tx = self.conn.unchecked_transaction()?;
+        let result = self.create_kds_line_items_in_tx(&tx, order_id, items)?;
+        tx.commit()?;
+        Ok(result)
+    }
+
+    /// Internal: Insert line items inside an existing transaction.
+    ///
+    /// Used by both `create_kds_line_items` (for initial creation) and
+    /// `update_kds_order_items` (for replacement after deletion).
+    fn create_kds_line_items_in_tx(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
+        order_id: &str,
+        items: &[CreateKdsLineItemInput],
+    ) -> Result<Vec<KdsLineItem>, CoreError> {
+        if items.is_empty() {
+            return Ok(vec![]);
+        }
+        let now = chrono::Utc::now()
+            .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+            .to_string();
+        let mut ids = Vec::with_capacity(items.len());
+
+        for (i, item) in items.iter().enumerate() {
+            let id = uuid::Uuid::now_v7().to_string();
+            let modifiers_json = if item.modifiers.is_empty() {
+                None
+            } else {
+                Some(
+                    serde_json::to_string(&item.modifiers).map_err(|e| CoreError::Validation {
+                        field: "modifiers",
+                        message: format!("serializing modifiers: {e}"),
+                    })?,
+                )
+            };
+            tx.execute(
+                "INSERT INTO kds_line_items
+                    (id, kds_order_id, sku, display_name, qty, course, modifiers_json,
+                     line_position, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                params![
+                    id,
+                    order_id,
+                    item.sku,
+                    item.display_name,
+                    item.qty,
+                    item.course,
+                    modifiers_json,
+                    i as i64,
+                    now,
+                ],
+            )?;
+            ids.push(id);
+        }
+
+        // Read back the inserted items.
+        let placeholders: Vec<String> = (0..ids.len()).map(|_| "?".to_string()).collect();
+        let sql = format!(
+            "SELECT id, kds_order_id, sku, display_name, qty, course, modifiers_json,
+                    line_position, item_status, started_at, ready_at, served_at, created_at
+             FROM kds_line_items WHERE id IN ({})
+             ORDER BY line_position",
+            placeholders.join(",")
+        );
+        let mut stmt = tx.prepare(&sql)?;
+        let params_refs: Vec<&dyn rusqlite::types::ToSql> = ids
+            .iter()
+            .map(|s| s as &dyn rusqlite::types::ToSql)
+            .collect();
+        let rows = stmt.query_map(params_refs.as_slice(), Self::row_to_kds_line_item)?;
+        rows.map(|r| Ok(r?)).collect()
+    }
+
+    /// Get all line items for a KDS order, ordered by course then position.
+    pub fn get_kds_order_lines(&self, order_id: &str) -> Result<Vec<KdsLineItem>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, kds_order_id, sku, display_name, qty, course, modifiers_json,
+                    line_position, item_status, started_at, ready_at, served_at, created_at
+             FROM kds_line_items
+             WHERE kds_order_id = ?1
+             ORDER BY
+                 CASE course
+                     WHEN 'appetizer' THEN 0
+                     WHEN 'main' THEN 1
+                     WHEN 'side' THEN 2
+                     WHEN 'dessert' THEN 3
+                     WHEN 'beverage' THEN 4
+                     ELSE 99
+                 END,
+                 line_position",
+        )?;
+        let rows = stmt.query_map(params![order_id], Self::row_to_kds_line_item)?;
+        rows.map(|r| Ok(r?)).collect()
+    }
+
+    /// Update the status of a single KDS line item. Automatically sets
+    /// the corresponding timestamp (started_at, ready_at, served_at)
+    /// based on the new status.
+    pub fn update_kds_line_item_status(
+        &self,
+        item_id: &str,
+        new_status: &str,
+    ) -> Result<KdsLineItem, CoreError> {
+        if KdsStatus::from_str(new_status).is_none() {
+            return Err(CoreError::Validation {
+                field: "item_status",
+                message: format!("invalid KDS line item status: {new_status}"),
+            });
+        }
+
+        let now = chrono::Utc::now()
+            .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+            .to_string();
+
+        let timestamp_col = match new_status {
+            "preparing" => "started_at",
+            "ready" => "ready_at",
+            "served" => "served_at",
+            _ => "",
+        };
+
+        let rows = if timestamp_col.is_empty() {
+            self.conn.execute(
+                "UPDATE kds_line_items SET item_status = ?1 WHERE id = ?2",
+                params![new_status, item_id],
+            )?
+        } else {
+            let sql = format!(
+                "UPDATE kds_line_items SET item_status = ?1, {timestamp_col} = ?2 WHERE id = ?3"
+            );
+            self.conn.execute(&sql, params![new_status, now, item_id])?
+        };
+
+        if rows == 0 {
+            return Err(CoreError::NotFound {
+                entity: "kds_line_item",
+                id: item_id.to_owned(),
+            });
+        }
+
+        let mut stmt = self.conn.prepare(
+            "SELECT id, kds_order_id, sku, display_name, qty, course, modifiers_json,
+                    line_position, item_status, started_at, ready_at, served_at, created_at
+             FROM kds_line_items WHERE id = ?1",
+        )?;
+        let result = stmt.query_row(params![item_id], Self::row_to_kds_line_item);
+        match result {
+            Ok(item) => Ok(item),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Err(CoreError::NotFound {
+                entity: "kds_line_item",
+                id: item_id.to_owned(),
+            }),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Derive the flat items_summary and item_count from structured line items.
+    pub fn derive_kds_summary(items: &[CreateKdsLineItemInput]) -> (String, i64) {
+        let summary = items
+            .iter()
+            .map(|i| {
+                if i.qty > 1 {
+                    format!("{} x{}", i.display_name, i.qty)
+                } else {
+                    i.display_name.clone()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        let count: i64 = items.iter().map(|i| i.qty).sum();
+        (summary, count)
     }
 }
 
@@ -401,6 +726,8 @@ mod tests {
                 item_count: 3,
                 kitchen_zone: None,
                 notes: "No onions".into(),
+                table_number: None,
+                priority: false,
             })
             .unwrap();
 
@@ -461,6 +788,8 @@ mod tests {
                 item_count: 1,
                 kitchen_zone: None,
                 notes: String::new(),
+                table_number: None,
+                priority: false,
             })
             .unwrap();
 
@@ -504,6 +833,8 @@ mod tests {
                 item_count: 1,
                 kitchen_zone: None,
                 notes: String::new(),
+                table_number: None,
+                priority: false,
             })
             .unwrap();
 
@@ -559,6 +890,8 @@ mod tests {
                 item_count: 1,
                 kitchen_zone: None,
                 notes: String::new(),
+                table_number: None,
+                priority: false,
             })
             .unwrap();
 
@@ -613,6 +946,8 @@ mod tests {
             item_count: 1,
             kitchen_zone: None,
             notes: String::new(),
+            table_number: None,
+            priority: false,
         })
         .unwrap();
 
@@ -623,6 +958,8 @@ mod tests {
             item_count: 2,
             kitchen_zone: None,
             notes: String::new(),
+            table_number: None,
+            priority: false,
         })
         .unwrap();
 
@@ -677,6 +1014,8 @@ mod tests {
                 item_count: 1,
                 kitchen_zone: None,
                 notes: String::new(),
+                table_number: None,
+                priority: false,
             })
             .unwrap();
 
@@ -688,6 +1027,8 @@ mod tests {
                 item_count: 1,
                 kitchen_zone: None,
                 notes: String::new(),
+                table_number: None,
+                priority: false,
             })
             .unwrap();
 
@@ -699,6 +1040,8 @@ mod tests {
                 item_count: 1,
                 kitchen_zone: None,
                 notes: String::new(),
+                table_number: None,
+                priority: false,
             })
             .unwrap();
 
@@ -782,6 +1125,8 @@ mod tests {
                 item_count: 1,
                 kitchen_zone: None,
                 notes: String::new(),
+                table_number: None,
+                priority: false,
             })
             .unwrap();
 
@@ -793,6 +1138,8 @@ mod tests {
                 item_count: 1,
                 kitchen_zone: None,
                 notes: String::new(),
+                table_number: None,
+                priority: false,
             })
             .unwrap();
 
@@ -942,6 +1289,8 @@ mod tests {
                     item_count: 1,
                     kitchen_zone: None,
                     notes: String::new(),
+                    table_number: None,
+                    priority: false,
                 })
                 .unwrap();
             if *st != "pending" {
@@ -991,6 +1340,8 @@ mod tests {
                 item_count: 1,
                 kitchen_zone: Some(zone.to_string()),
                 notes: String::new(),
+                table_number: None,
+                priority: false,
             })
             .unwrap();
         }
@@ -1040,6 +1391,8 @@ mod tests {
                 item_count: 1,
                 kitchen_zone: zone.map(|z| z.to_string()),
                 notes: String::new(),
+                table_number: None,
+                priority: false,
             })
             .unwrap();
         }
@@ -1176,6 +1529,8 @@ mod tests {
                 item_count: 1,
                 kitchen_zone: None,
                 notes: String::new(),
+                table_number: None,
+                priority: false,
             })
             .unwrap();
 
@@ -1210,6 +1565,8 @@ mod tests {
                 item_count: 1,
                 kitchen_zone: None,
                 notes: String::new(),
+                table_number: None,
+                priority: false,
             })
             .unwrap();
 
@@ -1218,5 +1575,215 @@ mod tests {
         // Most recent first.
         assert_eq!(all[0].id, o2.id);
         assert_eq!(all[1].id, o1.id);
+    }
+
+    // ── update_kds_order_items tests ─────────────────────────────────
+
+    #[test]
+    fn update_kds_order_items_updates_summary_and_count() {
+        let conn = fresh();
+        let s = store(&conn);
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let sale_id = uuid::Uuid::now_v7().to_string();
+        let test_sale = Sale {
+            id: sale_id.clone(),
+            status: crate::SaleStatus::Completed,
+            total: price(0),
+            currency: usd(),
+            line_count: 0,
+            payment_method: None,
+            tendered_minor: None,
+            discount_percent: 0,
+            discount_label: None,
+            user_id: None,
+            created_at: now.clone(),
+            updated_at: now,
+            subtotal: price(0),
+            tax_total: price(0),
+            customer_id: None,
+            lines: vec![],
+            version: 1,
+        };
+        s.create_sale(&test_sale).unwrap();
+
+        let order = s
+            .create_kds_order(CreateKdsOrderInput {
+                sale_id,
+                store_id: None,
+                items_summary: "Coffee x2".into(),
+                item_count: 2,
+                kitchen_zone: None,
+                notes: String::new(),
+                table_number: None,
+                priority: false,
+            })
+            .unwrap();
+
+        // Update items.
+        let updated = s
+            .update_kds_order_items(crate::UpdateKdsOrderItemsInput {
+                id: order.id.clone(),
+                items_summary: "Coffee x2, Bagel x1".into(),
+                item_count: 3,
+                line_items: None,
+            })
+            .unwrap();
+
+        assert_eq!(updated.items_summary, "Coffee x2, Bagel x1");
+        assert_eq!(updated.item_count, 3);
+        assert_eq!(updated.status, "pending"); // Other fields unchanged
+    }
+
+    #[test]
+    fn update_kds_order_items_nonexistent_order_fails() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let err = s
+            .update_kds_order_items(crate::UpdateKdsOrderItemsInput {
+                id: "no-such-order".into(),
+                items_summary: "New items".into(),
+                item_count: 1,
+                line_items: None,
+            })
+            .unwrap_err();
+
+        assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "kds_order"));
+    }
+
+    #[test]
+    fn update_kds_order_items_rejects_empty_summary() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let err = s
+            .update_kds_order_items(crate::UpdateKdsOrderItemsInput {
+                id: "any-id".into(),
+                items_summary: "".into(),
+                item_count: 1,
+                line_items: None,
+            })
+            .unwrap_err();
+
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "items_summary"));
+    }
+
+    #[test]
+    fn update_kds_order_items_rejects_zero_count() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let err = s
+            .update_kds_order_items(crate::UpdateKdsOrderItemsInput {
+                id: "any-id".into(),
+                items_summary: "Items".into(),
+                item_count: 0,
+                line_items: None,
+            })
+            .unwrap_err();
+
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "item_count"));
+    }
+
+    // ── KDS order input validation ──────────────────────────────────────
+
+    #[test]
+    fn create_kds_order_rejects_empty_sale_id() {
+        let conn = fresh();
+        let s = store(&conn);
+        let err = s
+            .create_kds_order(CreateKdsOrderInput {
+                sale_id: "".into(),
+                store_id: None,
+                items_summary: "Items".into(),
+                item_count: 1,
+                kitchen_zone: None,
+                notes: String::new(),
+                table_number: None,
+                priority: false,
+            })
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "sale_id",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn create_kds_order_rejects_empty_items_summary() {
+        let conn = fresh();
+        let s = store(&conn);
+        let err = s
+            .create_kds_order(CreateKdsOrderInput {
+                sale_id: "sale-1".into(),
+                store_id: None,
+                items_summary: "".into(),
+                item_count: 1,
+                kitchen_zone: None,
+                notes: String::new(),
+                table_number: None,
+                priority: false,
+            })
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "items_summary",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn create_kds_order_rejects_zero_item_count() {
+        let conn = fresh();
+        let s = store(&conn);
+        let err = s
+            .create_kds_order(CreateKdsOrderInput {
+                sale_id: "sale-1".into(),
+                store_id: None,
+                items_summary: "Items".into(),
+                item_count: 0,
+                kitchen_zone: None,
+                notes: String::new(),
+                table_number: None,
+                priority: false,
+            })
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "item_count",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn create_kds_order_rejects_negative_item_count() {
+        let conn = fresh();
+        let s = store(&conn);
+        let err = s
+            .create_kds_order(CreateKdsOrderInput {
+                sale_id: "sale-1".into(),
+                store_id: None,
+                items_summary: "Items".into(),
+                item_count: -1,
+                kitchen_zone: None,
+                notes: String::new(),
+                table_number: None,
+                priority: false,
+            })
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "item_count",
+                ..
+            }
+        ));
     }
 }

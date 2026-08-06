@@ -381,7 +381,7 @@ describe('StockShortfallDialog', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText('Insufficient stock at all locations'),
+        screen.getByText('Something went wrong. Please try again.'),
       ).toBeInTheDocument();
     });
   });
@@ -398,7 +398,7 @@ describe('StockShortfallDialog', () => {
     await waitFor(() => {
       const alert = screen.getByRole('alert');
       expect(alert).toBeInTheDocument();
-      expect(alert).toHaveTextContent('Network failure');
+      expect(alert).toHaveTextContent('Something went wrong. Please try again.');
     });
   });
 

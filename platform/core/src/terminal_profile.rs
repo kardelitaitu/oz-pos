@@ -72,6 +72,15 @@ pub struct TerminalProfile {
     #[serde(default = "default_scale_zero_on_boot")]
     pub scale_zero_on_boot: bool,
 
+    // ── Kitchen printer ───────────────────────────────────
+    /// Kitchen printer connection type: `"network"`, `"usb"`, `"serial"`, `"disabled"`.
+    #[serde(default = "default_kitchen_printer_connection")]
+    pub kitchen_printer_connection: String,
+
+    /// Kitchen printer device path or IP address.
+    #[serde(default)]
+    pub kitchen_printer_device_path: String,
+
     // ── Local preferences ────────────────────────────────────
     /// Sound volume percentage (0–100, default 80).
     #[serde(default = "default_sound_volume")]
@@ -84,6 +93,12 @@ pub struct TerminalProfile {
     /// Scale auto-zero after each transaction.
     #[serde(default = "default_scale_auto_zero")]
     pub scale_auto_zero: bool,
+
+    // ── Schema version for forward-compatible evolution ──────────
+    /// Schema version of this profile (incremented when fields are
+    /// added, removed, or renamed). Starts at 1.
+    #[serde(default = "default_schema_version")]
+    pub schema_version: u32,
 }
 
 fn default_printer_connection() -> String {
@@ -114,6 +129,14 @@ fn default_sound_volume() -> u32 {
     80
 }
 
+fn default_kitchen_printer_connection() -> String {
+    "disabled".into()
+}
+
+fn default_schema_version() -> u32 {
+    1
+}
+
 fn default_scale_auto_zero() -> bool {
     true
 }
@@ -130,6 +153,9 @@ impl Default for TerminalProfile {
             scale_device_path: String::new(),
             scale_baud_rate: default_scale_baud_rate(),
             scale_zero_on_boot: default_scale_zero_on_boot(),
+            kitchen_printer_connection: default_kitchen_printer_connection(),
+            kitchen_printer_device_path: String::new(),
+            schema_version: default_schema_version(),
             sound_volume: default_sound_volume(),
             dark_mode: false,
             scale_auto_zero: default_scale_auto_zero(),
@@ -254,6 +280,11 @@ mod tests {
         assert_eq!(p.scale_device_path, "");
         assert_eq!(p.scale_baud_rate, 9600);
         assert!(!p.scale_zero_on_boot);
+        // Kitchen printer defaults
+        assert_eq!(p.kitchen_printer_connection, "disabled");
+        assert_eq!(p.kitchen_printer_device_path, "");
+        // Schema version
+        assert_eq!(p.schema_version, 1);
         // Local-prefs defaults
         assert_eq!(p.sound_volume, 80);
         assert!(!p.dark_mode);
@@ -275,6 +306,9 @@ mod tests {
             scale_device_path: "COM3".into(),
             scale_baud_rate: 115200,
             scale_zero_on_boot: true,
+            kitchen_printer_connection: "network".into(),
+            kitchen_printer_device_path: "192.168.1.51".into(),
+            schema_version: 1,
             sound_volume: 60,
             dark_mode: true,
             scale_auto_zero: false,

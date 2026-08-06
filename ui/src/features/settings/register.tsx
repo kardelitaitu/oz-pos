@@ -1,9 +1,10 @@
+import { lazy } from 'react';
 import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
 import { icon } from '@/platform/ui/icon';
-import SettingsPage from './SettingsPage';
-import FeatureToggleScreen from './FeatureToggleScreen';
-import DataManagementScreen from './DataManagementScreen';
+const SettingsPage = lazy(() => import('./SettingsPage'));
+const FeatureToggleScreen = lazy(() => import('./FeatureToggleScreen'));
+const DataManagementScreen = lazy(() => import('./DataManagementScreen'));
 
 export function registerSettingsFeature() {
   registerPage({ route: 'settings', component: SettingsPage, label: 'General', requiredRole: 'manager', fullscreen: true });

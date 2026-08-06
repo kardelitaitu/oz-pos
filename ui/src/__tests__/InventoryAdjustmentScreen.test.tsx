@@ -100,4 +100,34 @@ describe('InventoryAdjustmentScreen', () => {
     expect(screen.getByText(/quantity/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/reason/i)).toBeInTheDocument();
   });
+
+  // ── Durable product-load error (INV-08) ────────────────────────
+
+  it('shows a persistent error with retry when products fail to load', async () => {
+    invokeMock.mockRejectedValue(new Error('list_products failed'));
+    renderWithFluentSync(<ToastProvider><InventoryAdjustmentScreen /></ToastProvider>, inventoryFtl);
+
+    await waitFor(() => {
+      expect(document.querySelector('.inv-adjust-load-error')).toBeInTheDocument();
+    });
+    expect(document.querySelector('.inv-adjust-load-error')!.textContent).toContain('Failed to load products');
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+  });
+
+  it('recovers when Retry succeeds after a failed product load', async () => {
+    invokeMock.mockRejectedValueOnce(new Error('list_products failed'));
+    renderWithFluentSync(<ToastProvider><InventoryAdjustmentScreen /></ToastProvider>, inventoryFtl);
+
+    await waitFor(() => {
+      expect(document.querySelector('.inv-adjust-load-error')).toBeInTheDocument();
+    });
+
+    // The default beforeEach implementation returns SAMPLE_PRODUCTS on retry.
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => {
+      expect(document.querySelector('.inv-adjust-load-error')).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole('searchbox')).toBeInTheDocument();
+  });
 });

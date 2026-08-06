@@ -36,7 +36,7 @@ cd "$(dirname "$0")/.."
 if $DOWN; then
   echo "👋 Tearing down OZ-POS dev environment..."
   if $PG_MODE; then
-    docker compose --profile pg down -v
+    docker compose -f docker-compose.yml -f docker-compose.pg.yml down -v
   else
     docker compose down -v
   fi
@@ -72,7 +72,7 @@ fi
 if $BUILD; then
   echo "🔨 Building Docker images..."
   if $PG_MODE; then
-    docker compose --profile pg build
+    docker compose -f docker-compose.yml -f docker-compose.pg.yml build
   else
     docker compose build
   fi
@@ -81,7 +81,7 @@ fi
 # ── Start services ────────────────────────────────────────────────
 echo "🚀 Starting OZ-POS backend services..."
 if $PG_MODE; then
-  docker compose --profile pg up -d
+  docker compose -f docker-compose.yml -f docker-compose.pg.yml up -d
 else
   docker compose up -d
 fi

@@ -1,6 +1,9 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
+import { l10nErrorMessage } from '@/utils/app-error';
 import {
   listStockCounts,
   listStockAdjustments,
@@ -17,6 +20,7 @@ export default function StockCountHistory() {
   const [counts, setCounts] = useState<StockCountDto[]>([]);
   const [adjustments, setAdjustments] = useState<StockAdjustmentDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedCount, setSelectedCount] = useState<string | null>(null);
   const [selectedLines, setSelectedLines] = useState<StockCountLineDto[]>([]);
 
@@ -24,35 +28,42 @@ export default function StockCountHistory() {
   const l10nRef = useRef(l10n);
   l10nRef.current = l10n;
   const { addToast } = useToast();
+  const { sessionToken: rawSessionToken } = useWorkspace();
+  const sessionToken = rawSessionToken ?? '';
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
+      if (!sessionToken) throw new Error(requiredLocalized(l10nRef.current, 'sc-error-session'));
       const [c, a] = await Promise.all([
-        listStockCounts(),
-        listStockAdjustments(),
+        listStockCounts(sessionToken),
+        listStockAdjustments(sessionToken),
       ]);
       setCounts(c.filter((cnt) => cnt.status === 'completed' || cnt.status === 'cancelled'));
       setAdjustments(a);
-    } catch {
-      addToast({ message: l10nRef.current.getString('sc-error-load-history') || 'Failed to load history', type: 'error' });
+    } catch (err) {
+      const message = l10nErrorMessage(err, l10nRef.current, 'sc-error-load-history');
+      setError(message);
+      addToast({ message, type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [addToast]);
+  }, [addToast, sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 
   const handleSelectCount = useCallback(async (id: string) => {
     setSelectedCount(id);
     try {
-      const lines = await getCountLines(id);
+      if (!sessionToken) throw new Error(requiredLocalized(l10nRef.current, 'sc-error-session'));
+      const lines = await getCountLines(sessionToken, id);
       setSelectedLines(lines);
     } catch {
-      addToast({ message: l10nRef.current.getString('sc-error-load-lines') || 'Failed to load count lines', type: 'error' });
+      addToast({ message: requiredLocalized(l10nRef.current, 'sc-error-load-lines'), type: 'error' });
       setSelectedLines([]);
     }
-  }, [addToast]);
+  }, [addToast, sessionToken]);
 
   const countAdjustments = useMemo(() => {
     if (!selectedCount) return [];
@@ -95,6 +106,24 @@ export default function StockCountHistory() {
               ))}
             </div>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="sc-hist-screen">
+        <div className="sc-hist-header">
+          <h1 className="sc-title">
+            <Localized id="sc-hist-title"><span>Stock Count History</span></Localized>
+          </h1>
+        </div>
+        <div className="sc-load-error" role="alert">
+          <p>{error}</p>
+          <button type="button" className="sc-retry-btn" onClick={load}>
+            <Localized id="retry"><span>Retry</span></Localized>
+          </button>
         </div>
       </div>
     );

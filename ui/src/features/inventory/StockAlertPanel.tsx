@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState, useRef, memo } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import type { StockAlertEvent } from '@/api/inventory';
 import { getActiveStockAlerts, acknowledgeStockAlert } from '@/api/inventory';
+import { l10nErrorMessage } from '@/utils/app-error';
 
 import './StockAlertPanel.css';
 
@@ -47,7 +49,7 @@ export const StockAlertPanel = memo(function StockAlertPanel({
       const data = await getActiveStockAlerts(token, locationId);
       setAlerts(data.slice(0, maxAlerts));
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10nRef.current.getString('inv-alert-error-load') || 'Failed to load alerts');
+      setError(l10nErrorMessage(err, l10nRef.current, 'inv-alert-error-load'));
     } finally {
       setLoading(false);
     }
@@ -74,7 +76,7 @@ export const StockAlertPanel = memo(function StockAlertPanel({
         // Remove from local state immediately for snappy UX
         setAlerts((prev) => prev.filter((a) => a.id !== alertId));
       } catch (err) {
-        setError(err instanceof Error ? err.message : l10nRef.current.getString('inv-alert-error-ack') || 'Failed to acknowledge');
+        setError(l10nErrorMessage(err, l10nRef.current, 'inv-alert-error-ack'));
       } finally {
         setAcknowledging((prev) => {
           const next = new Set(prev);
@@ -96,10 +98,10 @@ export const StockAlertPanel = memo(function StockAlertPanel({
       const now = new Date();
       const diffMs = now.getTime() - d.getTime();
       const diffMin = Math.floor(diffMs / 60000);
-      if (diffMin < 1) return l10n.getString('inv-alert-time-now') || 'Just now';
-      if (diffMin < 60) return l10n.getString('inv-alert-time-min', { min: diffMin }) || `${diffMin}m ago`;
+      if (diffMin < 1) return requiredLocalized(l10n, 'inv-alert-time-now');
+      if (diffMin < 60) return requiredLocalized(l10n, 'inv-alert-time-min', { min: diffMin });
       const diffHrs = Math.floor(diffMin / 60);
-      if (diffHrs < 24) return l10n.getString('inv-alert-time-hr', { hr: diffHrs }) || `${diffHrs}h ago`;
+      if (diffHrs < 24) return requiredLocalized(l10n, 'inv-alert-time-hr', { hr: diffHrs });
       return d.toLocaleDateString();
     } catch {
       return iso;
@@ -110,7 +112,7 @@ export const StockAlertPanel = memo(function StockAlertPanel({
 
   if (loading) {
     return (
-      <div className="stock-alert-panel" role="region" aria-label={l10n.getString('inv-alert-loading-aria') || 'Loading stock alerts'}>
+      <div className="stock-alert-panel" role="region" aria-label={requiredLocalized(l10n, 'inv-alert-loading-aria')}>
         <div className="stock-alert-panel-header">
           <span className="stock-alert-panel-title"><Localized id="inv-alert-title">Stock Alerts</Localized></span>
         </div>
@@ -125,7 +127,7 @@ export const StockAlertPanel = memo(function StockAlertPanel({
 
   if (error && alerts.length === 0) {
     return (
-      <div className="stock-alert-panel" role="region" aria-label={l10n.getString('inv-alert-aria') || 'Stock alerts'}>
+      <div className="stock-alert-panel" role="region" aria-label={requiredLocalized(l10n, 'inv-alert-aria')}>
         <div className="stock-alert-panel-header">
           <span className="stock-alert-panel-title"><Localized id="inv-alert-title">Stock Alerts</Localized></span>
         </div>
@@ -137,7 +139,7 @@ export const StockAlertPanel = memo(function StockAlertPanel({
   }
 
   return (
-    <div className="stock-alert-panel" role="region" aria-label={l10n.getString('inv-alert-panel-aria') || 'Stock alerts panel'}>
+    <div className="stock-alert-panel" role="region" aria-label={requiredLocalized(l10n, 'inv-alert-panel-aria')}>
       {/* Header */}
       <div className="stock-alert-panel-header">
         <span className="stock-alert-panel-title">
@@ -180,10 +182,10 @@ export const StockAlertPanel = memo(function StockAlertPanel({
           <div className="stock-alert-metrics">
             <span className="stock-alert-metric-current">
               <span className={`stock-alert-severity-dot ${isCritical(alert) ? '' : 'stock-alert-severity-dot--warning'}`} />
-              <strong aria-label={l10n.getString('inv-alert-stock-label') || 'Stock'}>{alert.current_qty}</strong>
+              <strong aria-label={requiredLocalized(l10n, 'inv-alert-stock-label')}>{alert.current_qty}</strong>
             </span>
             <span className="stock-alert-metric-threshold">
-              <span aria-label={l10n.getString('inv-alert-threshold-label') || 'Threshold'}>{alert.threshold}</span>
+              <span aria-label={requiredLocalized(l10n, 'inv-alert-threshold-label')}>{alert.threshold}</span>
             </span>
           </div>
 
@@ -198,7 +200,7 @@ export const StockAlertPanel = memo(function StockAlertPanel({
               disabled={acknowledging.has(alert.id)}
               aria-label={l10n.getString('inv-alert-ack-aria', { name: alert.product_name })}
             >
-              {acknowledging.has(alert.id) ? (l10n.getString('inv-alert-acking') || '...') : (l10n.getString('inv-alert-ack') || 'Ack')}
+              {acknowledging.has(alert.id) ? (requiredLocalized(l10n, 'inv-alert-acking')) : (requiredLocalized(l10n, 'inv-alert-ack'))}
             </button>
           </div>
         </div>

@@ -1,44 +1,47 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/Button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
-import { listStockTransfers, getStockTransferLines, cancelStockTransfer, type StockTransfer, type StockTransferLine } from '@/api/stockTransfers';
+import { requiredLocalized } from '@/frontend/shared';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { listInTransitTransfers, cancelStockTransfer, type TransferWithLines } from '@/api/stockTransfers';
+import { l10nErrorMessage } from '@/utils/app-error';
 import './TransitAuditScreen.css';
-
-interface TransferWithLines {
-  transfer: StockTransfer;
-  lines: StockTransferLine[];
-}
 
 const TRANSIT_EXPIRY_HOURS = 24;
 
 export default function TransitAuditScreen() {
   const [transfers, setTransfers] = useState<TransferWithLines[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [reverseConfirmId, setReverseConfirmId] = useState<string | null>(null);
   const { addToast } = useToast();
   const { l10n } = useLocalization();
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken || '';
 
   const loadTransfers = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
-      const allTransfers = await listStockTransfers();
-      const inTransit = allTransfers.filter(t => t.status === 'in_transit');
-      
-      const enriched = await Promise.all(
-        inTransit.map(async (transfer) => {
-          const lines = await getStockTransferLines(transfer.id);
-          return { transfer, lines };
-        })
-      );
+      if (!sessionToken) {
+        throw new Error(requiredLocalized(l10nRef.current, 'inv-transit-error-load'));
+      }
+      // Single batch request — the backend returns in-transit transfers with
+      // their lines in one IPC round-trip (no N+1 line fetches).
+      const enriched = await listInTransitTransfers(sessionToken);
       setTransfers(enriched);
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : (l10n.getString('inv-transit-error-load') || 'Failed to load transit stock'), type: 'error' });
+      const message = l10nErrorMessage(err, l10nRef.current, 'inv-transit-error-load');
+      setLoadError(message);
+      addToast({ message, type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [addToast, l10n]);
+  }, [addToast, sessionToken]);
 
   useEffect(() => {
     loadTransfers();
@@ -51,12 +54,12 @@ export default function TransitAuditScreen() {
   const handleReverseConfirm = async () => {
     if (!reverseConfirmId) return;
     try {
-      await cancelStockTransfer(reverseConfirmId);
+      await cancelStockTransfer(sessionToken, reverseConfirmId);
       setReverseConfirmId(null);
       await loadTransfers();
-      addToast({ message: l10n.getString('inv-transit-reversed-toast') || 'Stock transfer reversed successfully', type: 'success' });
+      addToast({ message: requiredLocalized(l10n, 'inv-transit-reversed-toast'), type: 'success' });
     } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : (l10n.getString('inv-transit-error-reverse') || 'Failed to reverse transfer'), type: 'error' });
+      addToast({ message: l10nErrorMessage(err, l10n, 'inv-transit-error-reverse'), type: 'error' });
     }
   };
 
@@ -88,7 +91,14 @@ export default function TransitAuditScreen() {
         </Localized>
       </div>
 
-      {transfers.length === 0 ? (
+      {loadError ? (
+        <div className="transit-error" role="alert">
+          <p>{loadError}</p>
+          <Button variant="secondary" size="sm" onClick={loadTransfers}>
+            <Localized id="retry"><span>Retry</span></Localized>
+          </Button>
+        </div>
+      ) : transfers.length === 0 ? (
         <div className="transit-empty">
           <Localized id="inv-transit-no-overdue">
             <span>No transfers in transit.</span>
@@ -121,7 +131,7 @@ export default function TransitAuditScreen() {
                     <Localized id="inv-transit-col-sent">
                       <span>Sent At</span>
                     </Localized>
-                    : <strong>{transfer.sent_at ? new Date(transfer.sent_at).toLocaleString() : (l10n.getString('inv-transit-unknown') || 'Unknown')}</strong>
+                    : <strong>{transfer.sent_at ? new Date(transfer.sent_at).toLocaleString() : (requiredLocalized(l10n, 'inv-transit-unknown'))}</strong>
                   </div>
                 </div>
 
@@ -166,10 +176,10 @@ export default function TransitAuditScreen() {
         open={reverseConfirmId !== null}
         onCancel={() => setReverseConfirmId(null)}
         onConfirm={handleReverseConfirm}
-        title={l10n.getString('inv-transit-reverse-title') || 'Reverse Transfer?'}
-        message={l10n.getString('inv-transit-reverse-message') || 'Are you sure you want to reverse this stock transfer? Stock will be returned to the source location. This action cannot be undone.'}
+        title={requiredLocalized(l10n, 'inv-transit-reverse-title')}
+        message={requiredLocalized(l10n, 'inv-transit-reverse-message')}
         variant="danger"
-        confirmLabel={l10n.getString('inv-transit-reverse-confirm') || 'Reverse'}
+        confirmLabel={requiredLocalized(l10n, 'inv-transit-reverse-confirm')}
       />
     </div>
   );

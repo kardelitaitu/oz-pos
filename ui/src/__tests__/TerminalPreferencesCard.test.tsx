@@ -11,6 +11,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { ReactNode, ReactElement } from 'react';
 import { LocalizationProvider } from '@fluent/react';
+import { ToastProvider } from '@/frontend/shared/Toast';
 import { TerminalPreferencesCard } from '@/features/settings/workspace-cards/TerminalPreferencesCard';
 
 // ── Fluent test l10n ───────────────────────────────────────────────
@@ -26,6 +27,7 @@ const testL10n = {
       'workspace-terminal-sound': 'Sound Volume',
       'workspace-terminal-dark-mode': 'Dark Mode',
       'workspace-terminal-scale-zero': 'Auto-Zero Scale on Boot',
+      'terminal-sound-volume-aria': 'Sound volume',
       'save': 'Save',
     };
     return defaults[id] ?? id;
@@ -91,7 +93,9 @@ vi.mock('@/hooks/useTerminalHardware', () => ({
 function Wrapper({ children }: { children: ReactNode }) {
   return (
     <LocalizationProvider l10n={testL10n}>
-      {children}
+      <ToastProvider>
+        {children}
+      </ToastProvider>
     </LocalizationProvider>
   );
 }

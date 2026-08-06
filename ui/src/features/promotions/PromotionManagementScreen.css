@@ -31,11 +31,6 @@
   pointer-events: none;
 }
 
-.promo-mgmt-empty {
-  text-align: center;
-  padding: var(--space-12) var(--space-4);
-  color: var(--color-fg-secondary);
-}
 
 .promo-mgmt-table-wrap {
   overflow-x: auto;
@@ -144,10 +139,11 @@
 .promo-mgmt-overlay {
   position: fixed;
   inset: 0;
-  background: var(--color-bg-overlay);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
+  background: var(--color-pos-modal-overlay);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   will-change: backdrop-filter;
+  transform: translateZ(0);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -208,13 +204,13 @@
 
 .promo-mgmt-modal {
   position: relative;
-  background: var(--color-bg-elevated);
+  background: var(--color-pos-modal-bg);
+  border: 1px solid var(--color-pos-modal-border);
   border-radius: var(--radius-xl);
   padding: var(--space-6);
   min-width: 25rem;
   max-width: 90vw;
-  box-shadow: var(--shadow-xl);
-  border: 1px solid var(--color-border);
+  box-shadow: var(--color-pos-modal-shadow);
 }
 
 .promo-mgmt-modal--wide {

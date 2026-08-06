@@ -1,68 +1,52 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { Localized, useLocalization } from '@fluent/react';
-import { listAuditLog, type AuditEntryDto } from '@/api/audit';
+import {
+  listAuditLogScoped,
+  getAuditReviewStatusScoped,
+  markAuditReviewedScoped,
+  exportAuditLogScoped,
+  type AuditEntryDto,
+} from '@/api/audit';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
+import {
+  ACTION_FLUENT_IDS,
+  ACTION_FALLBACK_ID,
+  OUTCOME_FLUENT_IDS,
+  OUTCOME_FALLBACK_ID,
+  CRITICAL_ACTIONS,
+} from './auditCatalog';
+import { l10nErrorMessage } from '@/utils/app-error';
 import './AuditLogScreen.css';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-const ACTION_FLUENT_IDS: Record<string, string> = {
-  'sale.void': 'audit-action-sale-void',
-  'sale.complete': 'audit-action-sale-complete',
-  'sale.refund': 'audit-action-sale-refund',
-  'login': 'audit-action-login',
-  'login.failed': 'audit-action-login-failed',
-  'user.create': 'audit-action-user-create',
-  'user.update': 'audit-action-user-update',
-  'product.create': 'audit-action-product-create',
-  'product.update': 'audit-action-product-update',
-  'product.delete': 'audit-action-product-delete',
-  'stock.adjust': 'audit-action-stock-adjust',
-  'setting.change': 'audit-action-setting-change',
-  'system.backup': 'audit-action-system-backup',
-  'system.restore': 'audit-action-system-restore',
-  'system.export': 'audit-action-system-export',
-  'system.import': 'audit-action-system-import',
-};
-
-// P12-3: Actions considered critical/security for audit review
-const CRITICAL_ACTIONS = new Set([
-  'login.failed', 'user.create', 'user.update',
-  'setting.change', 'system.backup', 'system.restore',
-  'system.export', 'system.import', 'product.delete',
-]);
-
-const REVIEW_STORAGE_KEY = 'audit-last-reviewed';
-
-function getLastReviewed(): string | null {
-  return localStorage.getItem(REVIEW_STORAGE_KEY);
-}
-
-function setLastReviewed(iso: string) {
-  localStorage.setItem(REVIEW_STORAGE_KEY, iso);
-}
-
-/** Count entries created after a timestamp. */
-function countUnreviewed(entries: AuditEntryDto[], since: string | null): number {
-  if (!since) return entries.length;
-  return entries.filter((e) => e.created_at > since).length;
-}
-
-function outcomeBadgeClass(outcome: string): string {
-  switch (outcome) {
-    case 'success': return 'audit-badge--success';
-    case 'failure': return 'audit-badge--failure';
-    default: return 'audit-badge--info';
+/**
+ * Resolve the active application locale from the Fluent localization
+ * context (AUD-07). `ReactLocalization` exposes its bundles as an
+ * iterable; the first bundle's locale is the negotiated language.
+ */
+function activeLocale(l10n: ReturnType<typeof useLocalization>['l10n']): string {
+  for (const bundle of l10n.bundles) {
+    const locales = bundle.locales;
+    const primary = locales && locales.length > 0 ? locales[0] : undefined;
+    if (primary) return primary;
   }
+  return 'en';
 }
 
-function formatDate(iso: string): string {
+/**
+ * Format an ISO timestamp for display using the application locale
+ * (AUD-07). Falls back to the raw ISO string when the date is invalid.
+ */
+function formatDate(iso: string, locale: string): string {
   try {
     const d = new Date(iso);
-    return d.toLocaleDateString(undefined, {
+    return d.toLocaleDateString(locale, {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -74,6 +58,20 @@ function formatDate(iso: string): string {
   }
 }
 
+function outcomeBadgeClass(outcome: string): string {
+  switch (outcome) {
+    case 'success': return 'audit-badge--success';
+    case 'failure': return 'audit-badge--failure';
+    default: return 'audit-badge--info';
+  }
+}
+
+/** High-water-mark cursor: newest entry a page boundary references. */
+interface Cursor {
+  created_at: string;
+  id: string;
+}
+
 // ── Component ───────────────────────────────────────────────────────
 
 type OutcomeFilter = 'all' | 'success' | 'failure';
@@ -81,96 +79,172 @@ type OutcomeFilter = 'all' | 'success' | 'failure';
 /** Audit log screen — view filtered action history with date range, action type, and outcome filters for compliance monitoring. */
 export default function AuditLogScreen() {
   const { l10n } = useLocalization();
+  const locale = activeLocale(l10n);
   const { isManager } = useAuth();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken || '';
+
   const [entries, setEntries] = useState<AuditEntryDto[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [offset, setOffset] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
+  const [hasMore, setHasMore] = useState(false);
   const limit = 50;
-  const cancelledRef = useRef(false);
+  const loadSeqRef = useRef(0);
+  const cursorRef = useRef<Cursor | null>(null);
 
-  // P12-3: Last reviewed timestamp (tracked via localStorage)
-  const [lastReviewed, setLastReviewedState] = useState<string | null>(getLastReviewed);
+  // Server-side review checkpoint (AUD-04): review time for display and a
+  // server-computed unreviewed count over the FULL table (AUD-02), not just
+  // the loaded page.
+  const [reviewedAt, setReviewedAt] = useState<string | null>(null);
+  const [unreviewedCount, setUnreviewedCount] = useState(0);
+  const [markingReviewed, setMarkingReviewed] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  // Dedicated export-failure notice (AUD-09): the table load error state only
+  // renders when the table is empty, so an export failure with rows present
+  // would otherwise be silent.
+  const [exportError, setExportError] = useState<string | null>(null);
 
-  // Filters
+  // Filters (server-side). Search is debounced to avoid an IPC per keystroke.
+  const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>('all');
 
-  // ── Load ──────────────────────────────────────────────────────────
+  // ── Load (server-filtered + keyset paginated, AUD-01/02/03) ─────
 
-  const load = useCallback(async (newOffset: number, append: boolean = false) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await listAuditLog(limit, newOffset);
-      if (!cancelledRef.current) {
-        if (append) {
-          setEntries((prev) => [...prev, ...data]);
+  const load = useCallback(
+    async (opts: { reset?: boolean } = {}) => {
+      const { reset = false } = opts;
+      if (!sessionToken) return;
+      const seq = ++loadSeqRef.current;
+      setLoading(true);
+      setError(null);
+      try {
+        const page = await listAuditLogScoped(sessionToken, {
+          limit,
+          ...(outcomeFilter !== 'all' ? { outcome: outcomeFilter } : {}),
+          ...(searchQuery ? { query: searchQuery } : {}),
+          ...(!reset && cursorRef.current
+            ? {
+                beforeCreatedAt: cursorRef.current.created_at,
+                beforeId: cursorRef.current.id,
+              }
+            : {}),
+        });
+        if (seq !== loadSeqRef.current) return;
+        if (reset) {
+          setEntries(page.items);
         } else {
-          setEntries(data);
+          // Deduplicate by entry id (AUD-03 defense in depth).
+          setEntries((prev) => {
+            const seen = new Set(prev.map((e) => e.id));
+            return [...prev, ...page.items.filter((e) => !seen.has(e.id))];
+          });
         }
-        setHasMore(data.length >= limit);
-        setOffset(newOffset);
+        setTotal(page.total);
+        setHasMore(page.has_more);
+        const last = page.items[page.items.length - 1];
+        if (last) {
+          cursorRef.current = { created_at: last.created_at, id: last.id };
+        }
+      } catch (err) {
+        if (seq !== loadSeqRef.current) return;
+        setError(l10nErrorMessage(err, l10n, 'audit-log-error-load'));
+      } finally {
+        if (seq === loadSeqRef.current) setLoading(false);
       }
-    } catch (err) {
-      if (!cancelledRef.current) {
-        setError(err instanceof Error ? err.message : l10n.getString('audit-log-error-load') || 'Failed to load audit log');
-      }
-    } finally {
-      if (!cancelledRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [limit, l10n]);
-
-  useEffect(() => {
-    cancelledRef.current = false;
-    load(0);
-    return () => { cancelledRef.current = true; };
-  }, [load]);
-
-  // ── Filtered entries ──────────────────────────────────────────────
-
-  const filteredEntries = useMemo(() => {
-    let items = entries;
-
-    if (outcomeFilter !== 'all') {
-      items = items.filter((e) => e.outcome === outcomeFilter);
-    }
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
-      items = items.filter(
-        (e) =>
-          e.action.toLowerCase().includes(q) ||
-          (ACTION_FLUENT_IDS[e.action] ?? '').toLowerCase().includes(q) ||
-          (e.target_type ?? '').toLowerCase().includes(q) ||
-          (e.target_id ?? '').toLowerCase().includes(q) ||
-          e.user_id.toLowerCase().includes(q),
-      );
-    }
-
-    return items;
-  }, [entries, outcomeFilter, searchQuery]);
-
-  const handleLoadMore = useCallback(() => {
-    load(offset + limit, true);
-  }, [load, offset, limit]);
-
-  // P12-3: Unreviewed count & Mark Reviewed handler
-  const unreviewedCount = useMemo(
-    () => countUnreviewed(entries, lastReviewed),
-    [entries, lastReviewed],
+    },
+    [sessionToken, limit, outcomeFilter, searchQuery, l10n],
   );
 
-  const handleMarkReviewed = useCallback(() => {
-    const now = new Date().toISOString();
-    setLastReviewed(now);
-    setLastReviewedState(now);
-  }, []);
+  // Debounce the free-text search, then reload from the first page.
+  useEffect(() => {
+    const t = window.setTimeout(() => setSearchQuery(searchInput.trim()), 250);
+    return () => window.clearTimeout(t);
+  }, [searchInput]);
+
+  // Initial load + reload whenever a server-side filter changes.
+  useEffect(() => {
+    cursorRef.current = null;
+    void load({ reset: true });
+  }, [load]);
+
+  // ── Review checkpoint (AUD-04) ───────────────────────────────────
+
+  const loadReviewStatus = useCallback(async () => {
+    if (!sessionToken) return;
+    try {
+      const status = await getAuditReviewStatusScoped(sessionToken);
+      setReviewedAt(status.checkpoint?.reviewed_at ?? null);
+      setUnreviewedCount(status.unreviewed_count);
+    } catch {
+      // Server is authoritative; a transient failure keeps the previous state.
+    }
+  }, [sessionToken]);
+
+  useEffect(() => {
+    void loadReviewStatus();
+  }, [loadReviewStatus]);
+
+  const handleMarkReviewed = useCallback(async () => {
+    if (!sessionToken) return;
+    setMarkingReviewed(true);
+    try {
+      // High-water mark = the newest entry the reviewer has seen (page 1 is
+      // newest-first, so entries[0] is the globally newest row).
+      const newest = entries[0];
+      await markAuditReviewedScoped(sessionToken, {
+        reviewedThroughCreatedAt: newest?.created_at ?? new Date().toISOString(),
+        reviewedThroughId: newest?.id ?? '',
+      });
+      await loadReviewStatus();
+      // The audit.review event just landed — refresh the first page.
+      await load({ reset: true });
+    } catch {
+      await loadReviewStatus();
+    } finally {
+      setMarkingReviewed(false);
+    }
+  }, [sessionToken, entries, load, loadReviewStatus]);
+
+  const handleLoadMore = useCallback(() => {
+    void load({ reset: false });
+  }, [load]);
+
+  // ── Export (AUD-09) ────────────────────────────────────────────
+
+  const handleExport = useCallback(async () => {
+    if (!sessionToken || exporting) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      const result = await exportAuditLogScoped(sessionToken, {
+        ...(outcomeFilter !== 'all' ? { outcome: outcomeFilter } : {}),
+        ...(searchQuery ? { query: searchQuery } : {}),
+      });
+      // Hand the CSV artifact to the browser as a download.
+      const blob = new Blob([result.csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `audit-log-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      // Dedicated inline notice — always visible regardless of table state.
+      setExportError(requiredLocalized(l10n, 'audit-log-export-error'));
+    } finally {
+      setExporting(false);
+    }
+  }, [sessionToken, exporting, outcomeFilter, searchQuery, l10n]);
 
   // ── Render ────────────────────────────────────────────────────────
+
+  // With server-side filtering the page only ever holds matching rows, so the
+  // empty-filtered state is distinguishable by whether a filter is active.
+  const filtersActive = outcomeFilter !== 'all' || searchQuery.length > 0;
 
   return (
     <div className="audit-log" data-testid="audit-log-table">
@@ -180,26 +254,40 @@ export default function AuditLogScreen() {
             <h1 className="audit-log-title"><span>Audit Log</span></h1>
           </Localized>
           {unreviewedCount > 0 && (
-            <span className="audit-log-unreviewed-badge" title={`${unreviewedCount} unreviewed events since last review`}>
+            <span className="audit-log-unreviewed-badge" title={l10n.getString('audit-log-unreviewed-title', { count: String(unreviewedCount) }, `${unreviewedCount} unreviewed events since last review`)}>
               {unreviewedCount} new
             </span>
           )}
-          {lastReviewed && (
+          {reviewedAt && (
             <span className="audit-log-reviewed-at">
-              <Localized id="audit-log-reviewed-at" vars={{ date: new Date(lastReviewed).toLocaleDateString() }}><span>Reviewed: {new Date(lastReviewed).toLocaleDateString()}</span></Localized>
+              <time dateTime={reviewedAt} title={reviewedAt}>
+                <Localized id="audit-log-reviewed-at" vars={{ date: formatDate(reviewedAt, locale) }}><span>Reviewed: {formatDate(reviewedAt, locale)}</span></Localized>
+              </time>
             </span>
           )}
         </div>
         <div className="audit-log-header-right">
           {isManager && unreviewedCount > 0 && (
-            <Button variant="secondary" onClick={handleMarkReviewed} size="sm">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true" style={{ marginRight: 4 }}>
+            <Button variant="secondary" onClick={() => void handleMarkReviewed()} loading={markingReviewed} size="sm">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true" className="audit-log-btn-icon">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
               <Localized id="audit-log-mark-reviewed"><span>Mark Reviewed</span></Localized>
             </Button>
           )}
-          <Button variant="secondary" onClick={() => load(0)} loading={loading}>
+          {isManager && (
+            <Button variant="secondary" onClick={() => void handleExport()} loading={exporting}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              <Localized id="audit-log-export">
+                <span>Export CSV</span>
+              </Localized>
+            </Button>
+          )}
+          <Button variant="secondary" onClick={() => void load({ reset: true })} loading={loading}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
               <polyline points="1 4 1 10 7 10" />
               <path d="M3.51 15a9 9 0 102.13-9.36L1 10" />
@@ -210,6 +298,14 @@ export default function AuditLogScreen() {
           </Button>
         </div>
       </div>
+
+      {/* Export failure notice (AUD-09) — independent of the table load error */}
+      {exportError && (
+        <div className="audit-log-export-error" role="alert">
+          <span className="audit-log-export-error-icon" aria-hidden="true">⚠</span>
+          {exportError}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="audit-log-filters">
@@ -224,8 +320,8 @@ export default function AuditLogScreen() {
             id="audit-log-search"
             name="audit-log-search"
             placeholder={l10n.getString('audit-log-search-placeholder')}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             aria-label={l10n.getString('audit-log-search-label')}
           />
         </div>
@@ -292,14 +388,14 @@ export default function AuditLogScreen() {
           <div className="audit-log-error">
             <p>{error}</p>
             <Localized id="audit-log-retry">
-              <Button variant="secondary" onClick={() => load(0)}><span>Retry</span></Button>
+              <Button variant="secondary" onClick={() => void load({ reset: true })}><span>Retry</span></Button>
             </Localized>
           </div>
         </Card>
-      ) : filteredEntries.length === 0 && !loading ? (
+      ) : entries.length === 0 && !loading ? (
         <Card shadow="sm">
           <div className="audit-log-empty">
-            {searchQuery || outcomeFilter !== 'all' ? (
+            {filtersActive ? (
               <Localized id="audit-log-empty-filtered">
                 <span>No audit entries match the current filters.</span>
               </Localized>
@@ -312,10 +408,18 @@ export default function AuditLogScreen() {
         </Card>
       ) : (
         <div className="audit-log-table-wrap" aria-live="polite" aria-relevant="additions text">
+          {/* ERR-09: rows stay visible during a reload — announce the retry intent */}
+          {loading && entries.length > 0 && (
+            <div className="audit-log-refreshing" role="status" aria-live="polite">
+              <Localized id="audit-log-refreshing">
+                <span>Refreshing…</span>
+              </Localized>
+            </div>
+          )}
           <table className="audit-log-table" aria-label={l10n.getString('audit-log-table-label')}>
             <thead>
               <tr>
-                <th style={{ width: '4px', padding: 0 }} />
+                <th className="audit-log-critical-th" />
                 <Localized id="audit-log-col-date"><th><span>Date</span></th></Localized>
                 <Localized id="audit-log-col-action"><th><span>Action</span></th></Localized>
                 <Localized id="audit-log-col-target"><th><span>Target</span></th></Localized>
@@ -324,19 +428,21 @@ export default function AuditLogScreen() {
                 <Localized id="audit-log-col-details"><th><span>Details</span></th></Localized>
               </tr>
             </thead>
-            <tbody>{filteredEntries.map((entry) => {
+            <tbody>{entries.map((entry) => {
                 const isCritical = CRITICAL_ACTIONS.has(entry.action) || entry.outcome === 'failure';
                 return (
                   <tr key={entry.id} className={isCritical ? 'audit-log-row--critical' : ''}>
-                    <td className="audit-log-critical-indicator" style={{ width: '4px', padding: 0 }}>
+                    <td className="audit-log-critical-indicator">
                       {isCritical && <div className="audit-log-critical-bar" />}
                     </td>
-                    <td className="audit-log-cell-date">{formatDate(entry.created_at)}</td>
+                    <td className="audit-log-cell-date">
+                      <time dateTime={entry.created_at} title={entry.created_at}>{formatDate(entry.created_at, locale)}</time>
+                    </td>
                     <td>
-                      <Localized id={ACTION_FLUENT_IDS[entry.action] ?? entry.action}>
+                      <Localized id={ACTION_FLUENT_IDS[entry.action] ?? ACTION_FALLBACK_ID}>
                         <span className="audit-log-action-label"><span>{entry.action}</span></span>
                       </Localized>
-                      <span className="audit-log-action-key">{entry.action}</span>
+                      <span className="audit-log-action-key" title={entry.action}>{entry.action}</span>
                     </td>
                     <td>
                       {entry.target_type ? (
@@ -350,10 +456,12 @@ export default function AuditLogScreen() {
                         <span className="audit-log-target-none">&mdash;</span>
                       )}
                     </td>
-                    <td className="audit-log-cell-mono">{entry.user_id ? entry.user_id.slice(0, 8) : l10n.getString('audit-log-user-system') || 'system'}</td>
+                    <td className="audit-log-cell-mono">{entry.user_id ? entry.user_id.slice(0, 8) : requiredLocalized(l10n, 'audit-log-user-system')}</td>
                     <td>
-                      <span className={`audit-log-badge ${outcomeBadgeClass(entry.outcome)}`}>
-                        {entry.outcome}
+                      <span className={`audit-log-badge ${outcomeBadgeClass(entry.outcome)}`} title={entry.outcome}>
+                        <Localized id={OUTCOME_FLUENT_IDS[entry.outcome] ?? OUTCOME_FALLBACK_ID}>
+                          <span>{entry.outcome}</span>
+                        </Localized>
                       </span>
                     </td>
                     <td className="audit-log-cell-details">
@@ -386,8 +494,8 @@ export default function AuditLogScreen() {
           )}
           <div className="audit-log-footer">
             <span className="audit-log-count">
-              <Localized id="audit-log-count" vars={{ count: filteredEntries.length }}>
-                <span>{filteredEntries.length} entr{filteredEntries.length === 1 ? 'y' : 'ies'}</span>
+              <Localized id="audit-log-count-of" vars={{ shown: entries.length, total }}>
+                <span>{entries.length} of {total} entries</span>
               </Localized>
             </span>
           </div>

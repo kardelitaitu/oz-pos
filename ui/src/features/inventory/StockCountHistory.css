@@ -120,3 +120,21 @@
     transition: all 0.15s;
   }
 }
+
+/* ── Load error + retry states ────────────────────────────────────── */
+.sc-load-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-10) 0;
+  color: var(--color-danger);
+}
+
+.sc-load-error p {
+  margin: 0;
+}
+
+.sc-retry-btn {
+  margin-left: var(--space-2);
+}

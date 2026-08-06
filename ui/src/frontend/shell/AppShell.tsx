@@ -1,42 +1,58 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Localized } from '@fluent/react';
+import { useState, useEffect, useCallback, useRef, lazy } from 'react';
+import { Localized, useLocalization } from '@fluent/react';
+import { requiredLocalized } from '@/frontend/shared';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/frontend/shared/Toast';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useIdleTimer } from '@/hooks/useIdleTimer';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { useFullscreen } from '@/hooks/useFullscreen';
+import { isAnyAriaModalOpen, consumeShortcut } from '@/utils/modal-guard';
+import { isCommandModifier } from '@/utils/keyboard-modifier';
 import AppLayout, { type AppRoute } from './AppLayout';
-import SetupWizard from '@/features/setup/SetupWizard';
-import StaffLoginScreen from '@/features/auth/StaffLoginScreen';
-import WorkspaceHome from '@/features/workspaces/WorkspaceHome';
 import { completeSetup, dismissSetupWizard, getSetupStatus } from '@/api/settings';
 import { useFeatures } from '@/hooks/useFeatures';
 import { useTerminalProfile } from '@/hooks/useTerminalProfile';
 import { getPage, isPageAccessible } from '@/platform/ui/page-registry';
+import { recordMark } from '@/utils/perf-metrics';
 import PermissionDenied from '@/components/PermissionDenied';
+import { LazyBoundary } from '@/components/LazyBoundary';
 import type { WizardState } from '@/features/setup/SetupWizard';
-import RetailPosScreen from '@/features/retail/RetailPosScreen';
-import PosScreen from '@/features/sales/PosScreen';
-import KdsScreen from '@/features/kds/KdsScreen';
+import type { WorkspaceType } from '@/features/settings/WorkspaceSettingsModal';
 import { getLicenseStatus } from '@/api/license';
 import LicenseActivationScreen from '@/features/auth/LicenseActivationScreen';
 import CreatePinScreen from '@/features/auth/CreatePinScreen';
 import SessionLockScreen from '@/features/auth/SessionLockScreen';
 
+// ── PERF-01: workspace/flow screens load on demand ────────────────
+// These screens are only reachable after login, so each is code-split
+// into its own chunk (Suspense boundary: LazyBoundary at render sites).
+const SetupWizard = lazy(() => import('@/features/setup/SetupWizard'));
+const StaffLoginScreen = lazy(() => import('@/features/auth/StaffLoginScreen'));
+const WorkspaceHome = lazy(() => import('@/features/workspaces/WorkspaceHome'));
+const RetailPosScreen = lazy(() => import('@/features/retail/RetailPosScreen'));
+const PosScreen = lazy(() => import('@/features/sales/PosScreen'));
+const KdsScreen = lazy(() => import('@/features/kds/KdsScreen'));
+const WorkspaceSettingsModal = lazy(() => import('@/features/settings/WorkspaceSettingsModal'));
+
 // ── Workspace navigation keyboard shortcuts ───────────────────────
 // Escape: return to workspace picker (only when no modal is open).
-// Ctrl+Shift+Escape: global shortcut to return to workspace picker
-// regardless of modals.
+// Ctrl+Shift+Escape: deliberate EMERGENCY escape — returns to the workspace
+// picker even with a modal open, so a stuck overlay can never trap the
+// operator. It consumes the event so no other Escape listener reacts to the
+// same key (KEY-05); the topmost modal owns plain Escape while it is open.
 function useWorkspaceNavShortcuts(active: string | null, onBack: () => void) {
   useEffect(() => {
     if (!active) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        // Ctrl+Shift+Escape always returns to the picker, bypassing modals.
-        if (e.ctrlKey && e.shiftKey) {
+        // Ctrl+Shift+Escape (or ⌘+Shift+Escape on macOS) always returns to the
+        // picker, bypassing modals.
+        if (isCommandModifier(e) && e.shiftKey) {
+          consumeShortcut(e);
           onBack();
-        } else if (!document.querySelector('[aria-modal="true"]')) {
+        } else if (!isAnyAriaModalOpen()) {
+          consumeShortcut(e);
           onBack();
         }
       }
@@ -51,6 +67,7 @@ function useWorkspaceNavShortcuts(active: string | null, onBack: () => void) {
  * and renders the main AppLayout with registry-based page routing.
  */
 export default function AppShell() {
+  const { l10n } = useLocalization();
   const [loading, setLoading] = useState(true);
   const [hasCompletedSetup, setHasCompletedSetup] = useState(false);
   const [hasActiveLicense, setHasActiveLicense] = useState(false);
@@ -58,7 +75,7 @@ export default function AppShell() {
   const [currentRoute, setCurrentRoute] = useState<AppRoute>('products');
   const { enabled, loaded: featuresLoaded } = useFeatures();
   const { session } = useAuth();
-  const { activeWorkspace, sessionToken } = useWorkspace();
+  const { activeWorkspace, sessionToken, terminalId } = useWorkspace();
   const { goToWorkspacePicker } = useWorkspaceNav();
   const { isKdsKiosk } = useTerminalProfile();
   const { addToast } = useToast();
@@ -70,6 +87,7 @@ export default function AppShell() {
   addToastRef.current = addToast;
 
   const [isLocked, setIsLocked] = useState(false);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
 
   useIdleTimer(() => {
     if (session) {
@@ -107,6 +125,8 @@ export default function AppShell() {
       setHasCompletedSetup(true);
       setHasActiveLicense(true);
       setLoading(false);
+      // PERF-06: time-to-shell marker — app shell became interactive.
+      recordMark('oz:shell-ready');
       return;
     }
 
@@ -155,6 +175,8 @@ export default function AppShell() {
       } finally {
         if (!cancelled) {
           setLoading(false);
+          // PERF-06: time-to-shell marker — app shell became interactive.
+          recordMark('oz:shell-ready');
         }
       }
     })();
@@ -225,15 +247,59 @@ export default function AppShell() {
     setHasActiveLicense(true);
   }, []);
 
+  // ── 4b: F10 opens the WorkspaceSettingsModal across all workspace screens ─
+  useEffect(() => {
+    if (!activeWorkspace) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'F10') {
+        e.preventDefault();
+        // Don't open if a modal is already active (e.g., a nested modal).
+        if (!isAnyAriaModalOpen()) {
+          consumeShortcut(e);
+          setSettingsModalOpen((p) => !p);
+        }
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [activeWorkspace]);
+
+  // Map active workspace to the modal's WorkspaceType.
+  const WORKSPACE_TO_TYPE: Record<string, WorkspaceType> = {
+    'restaurant-pos': 'restaurant-pos',
+    'store-pos': 'store-pos',
+    kds: 'kds',
+    inventory: 'inventory',
+  };
+  const workspaceType: WorkspaceType | null = activeWorkspace ? (WORKSPACE_TO_TYPE[activeWorkspace] ?? null) : null;
+
+  // Shared settings modal extracted once to avoid duplicating JSX across 6+ branches.
+  const settingsModal = settingsModalOpen && workspaceType ? (
+    <LazyBoundary>
+      <WorkspaceSettingsModal
+        open={settingsModalOpen}
+        onClose={() => setSettingsModalOpen(false)}
+        workspaceType={workspaceType}
+        terminalId={terminalId}
+      />
+    </LazyBoundary>
+  ) : null;
+
   // ── F11 toggles fullscreen across all workpaces ───────────────
-  useFullscreen((isFullscreen) => {
-    addToast({
-      type: 'info',
-      message: isFullscreen
-        ? 'Fullscreen mode enabled'
-        : 'Fullscreen mode disabled',
-    });
-  });
+  // KEY-01: the retail POS (store-pos) assigns F11 to Quick Return, so the
+  // global fullscreen binding is disabled there — F11 has exactly one owner
+  // per workspace. (Fullscreen stays reachable via the WorkspaceHome button.)
+  useFullscreen(
+    (isFullscreen) => {
+      addToast({
+        type: 'info',
+        message: isFullscreen
+          ? requiredLocalized(l10n, 'fullscreen-enabled')
+          : requiredLocalized(l10n, 'fullscreen-disabled'),
+      });
+    },
+    { enabled: activeWorkspace !== 'store-pos' },
+  );
 
   // ── Escape key navigates back to workspace picker ────────────
 
@@ -293,31 +359,42 @@ export default function AppShell() {
 
   if (!session) {
     return (
-      <StaffLoginScreen />
+      <LazyBoundary>
+        <StaffLoginScreen />
+      </LazyBoundary>
     );
   }
 
   if (!hasCompletedSetup) {
     return (
-      <SetupWizard onComplete={handleComplete} onSkip={handleSkip} onLaunch={() => setHasCompletedSetup(true)} />
+      <LazyBoundary>
+        <SetupWizard onComplete={handleComplete} onSkip={handleSkip} onLaunch={() => setHasCompletedSetup(true)} />
+      </LazyBoundary>
     );
   }
 
   // ── KDS Kiosk — force KDS route, hide header, no workspace picker ──
   if (isKdsKiosk) {
     return (
-      <div className="workspace-fullscreen">
-        <div className="kds-workspace">
-          <KdsScreen />
+      <>
+        <div className="workspace-fullscreen">
+          <div className="kds-workspace">
+            <LazyBoundary>
+              <KdsScreen />
+            </LazyBoundary>
+          </div>
         </div>
-      </div>
+        {settingsModal}
+      </>
     );
   }
 
   if (!activeWorkspace) {
     return (
       <div className="workspace-home-wrapper">
-        <WorkspaceHome />
+        <LazyBoundary>
+          <WorkspaceHome />
+        </LazyBoundary>
       </div>
     );
   }
@@ -332,28 +409,38 @@ export default function AppShell() {
   if (activeWorkspace === 'restaurant-pos') {
     if (currentRoute === 'kds') {
       return (
-        <div className="workspace-fullscreen">
-          <div className="kds-workspace">
-            <div className="kds-workspace-header">
-              { }
-              <button
-                className="kds-workspace-back"
-                onClick={() => handleNavigate('sales')}
-              >
-                <Localized id="back">
-                  <span>&larr; Back</span>
-                </Localized>
-              </button>
+        <>
+          <div className="workspace-fullscreen">
+            <div className="kds-workspace">
+              <div className="kds-workspace-header">
+                { }
+                <button
+                  className="kds-workspace-back"
+                  onClick={() => handleNavigate('sales')}
+                >
+                  <Localized id="back">
+                    <span>&larr; Back</span>
+                  </Localized>
+                </button>
+              </div>
+              <LazyBoundary>
+                <KdsScreen />
+              </LazyBoundary>
             </div>
-            <KdsScreen />
           </div>
-        </div>
+          {settingsModal}
+        </>
       );
     }
     return (
-      <div className="workspace-fullscreen">
-        <PosScreen onNavigate={handleNavigate} />
-      </div>
+      <>
+        <div className="workspace-fullscreen">
+          <LazyBoundary>
+            <PosScreen onNavigate={handleNavigate} />
+          </LazyBoundary>
+        </div>
+        {settingsModal}
+      </>
     );
   }
 
@@ -362,37 +449,52 @@ export default function AppShell() {
   if (activeWorkspace === 'store-pos') {
     if (currentRoute === 'kds') {
       return (
-        <div className="workspace-fullscreen">
-          <div className="kds-workspace">
-            <div className="kds-workspace-header">
-              { }
-              <button
-                className="kds-workspace-back"
-                onClick={() => handleNavigate('products')}
-              >
-                <Localized id="back">
-                  <span>&larr; Back</span>
-                </Localized>
-              </button>
+        <>
+          <div className="workspace-fullscreen">
+            <div className="kds-workspace">
+              <div className="kds-workspace-header">
+                { }
+                <button
+                  className="kds-workspace-back"
+                  onClick={() => handleNavigate('products')}
+                >
+                  <Localized id="back">
+                    <span>&larr; Back</span>
+                  </Localized>
+                </button>
+              </div>
+              <LazyBoundary>
+                <KdsScreen />
+              </LazyBoundary>
             </div>
-            <KdsScreen />
           </div>
-        </div>
+          {settingsModal}
+        </>
       );
     }
     return (
-      <div className="workspace-fullscreen">
-        <RetailPosScreen onNavigate={handleNavigate} />
-      </div>
+      <>
+        <div className="workspace-fullscreen">
+          <LazyBoundary>
+            <RetailPosScreen onNavigate={handleNavigate} />
+          </LazyBoundary>
+        </div>
+        {settingsModal}
+      </>
     );
   }
 
   // Fullscreen workspace — KDS.
   if (activeWorkspace === 'kds') {
     return (
-      <div className="workspace-fullscreen">
-        <KdsScreen />
-      </div>
+      <>
+        <div className="workspace-fullscreen">
+          <LazyBoundary>
+            <KdsScreen />
+          </LazyBoundary>
+        </div>
+        {settingsModal}
+      </>
     );
   }
 
@@ -404,26 +506,33 @@ export default function AppShell() {
         requiredRole={pageRegistration!.requiredRole!}
       />
     ) : PageComponent ? (
-      <PageComponent />
+      <LazyBoundary>
+        <PageComponent />
+      </LazyBoundary>
     ) : null;
   }
 
   return (
-    <AppLayout
-      route={currentRoute}
-      onNavigate={handleNavigate}
-      sessionToken={sessionToken}
-      {...(featuresLoaded ? { enabledFeatures: enabled, userRole } : { userRole })}
-    >
-      {pageDenied ? (
-        <PermissionDenied
-          action={pageRegistration!.label}
-          requiredRole={pageRegistration!.requiredRole!}
-        />
-      ) : PageComponent ? (
-        <PageComponent />
-      ) : null}
-    </AppLayout>
+    <>
+      <AppLayout
+        route={currentRoute}
+        onNavigate={handleNavigate}
+        sessionToken={sessionToken}
+        {...(featuresLoaded ? { enabledFeatures: enabled, userRole } : { userRole })}
+      >
+        {pageDenied ? (
+          <PermissionDenied
+            action={pageRegistration!.label}
+            requiredRole={pageRegistration!.requiredRole!}
+          />
+        ) : PageComponent ? (
+          <LazyBoundary>
+            <PageComponent />
+          </LazyBoundary>
+        ) : null}
+      </AppLayout>
+      {settingsModal}
+    </>
   );
 }
 

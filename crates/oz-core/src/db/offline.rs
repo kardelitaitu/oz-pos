@@ -29,6 +29,20 @@ pub struct SyncStatusSummary {
     pub conflict_count: i64,
 }
 
+/// Durable pull anchor/cursor for the background sync daemon (SYNC-01).
+///
+/// Persisted in the single-row `sync_pull_state` table so the daemon only
+/// fetches remote updates newer than the last successfully-applied page
+/// (plus the opaque pagination cursor for the next page, P-3).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SyncPullState {
+    /// ISO-8601 anchor timestamp of the last successfully applied page.
+    pub since: Option<String>,
+    /// Opaque pagination cursor for the next page (P-3). `None` when the
+    /// previous page was the final one.
+    pub cursor: Option<String>,
+}
+
 impl Store<'_> {
     /// Enqueue a transaction for later sync (default tenant).
     pub fn enqueue_offline(
@@ -87,6 +101,21 @@ impl Store<'_> {
         priority: SyncPriority,
     ) -> Result<OfflineQueueItem, CoreError> {
         self.enqueue_offline_inner(action, payload, "default", priority)
+    }
+
+    /// Enqueue a transaction scoped to a tenant with a specific priority.
+    ///
+    /// OFF-09: this is the combined tenant + priority entry point so the
+    /// command boundary can preserve both multi-store isolation and the
+    /// P-2 priority tier in a single call.
+    pub fn enqueue_offline_scoped(
+        &self,
+        action: &str,
+        payload: &str,
+        tenant_id: &str,
+        priority: SyncPriority,
+    ) -> Result<OfflineQueueItem, CoreError> {
+        self.enqueue_offline_inner(action, payload, tenant_id, priority)
     }
 
     fn enqueue_offline_inner(
@@ -154,6 +183,31 @@ impl Store<'_> {
         Ok(())
     }
 
+    /// Mark an offline queue item as synced, scoped to a tenant (SYNC-07).
+    ///
+    /// Returns [`CoreError::NotFound`] when the id does not exist **or**
+    /// belongs to a different tenant — a cross-tenant mutation is treated
+    /// exactly like a missing item so the client queue boundary is safe by
+    /// construction even in a multi-tenant process.
+    pub fn mark_offline_synced_for_tenant(
+        &self,
+        id: &str,
+        tenant_id: &str,
+    ) -> Result<(), CoreError> {
+        let affected = self.conn.execute(
+            "UPDATE offline_queue SET status = 'synced', synced_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE id = ?1 AND tenant_id = ?2",
+            params![id, tenant_id],
+        )?;
+        if affected == 0 {
+            return Err(CoreError::NotFound {
+                entity: "offline_queue",
+                id: id.to_owned(),
+            });
+        }
+        Ok(())
+    }
+
     /// Mark an offline queue item as resolved via conflict (P1-3).
     ///
     /// Sets status to 'synced' and records the resolution type in
@@ -182,6 +236,24 @@ impl Store<'_> {
         Ok(())
     }
 
+    /// Mark an offline queue item as failed, scoped to a tenant (SYNC-07).
+    ///
+    /// A cross-tenant id is a no-op (`Ok(())`), matching the unscoped
+    /// variant's lenient semantics but never mutating another tenant's row.
+    pub fn mark_offline_failed_for_tenant(
+        &self,
+        id: &str,
+        tenant_id: &str,
+        error: &str,
+    ) -> Result<(), CoreError> {
+        self.conn.execute(
+            "UPDATE offline_queue SET status = 'failed', last_error = ?1, retry_count = retry_count + 1
+             WHERE id = ?2 AND tenant_id = ?3",
+            params![error, id, tenant_id],
+        )?;
+        Ok(())
+    }
+
     /// Get the count of pending offline items.
     pub fn pending_offline_count(&self) -> Result<i64, CoreError> {
         self.conn
@@ -193,10 +265,36 @@ impl Store<'_> {
             .map_err(Into::into)
     }
 
+    /// Get the count of pending offline items scoped to a tenant (SYNC-07).
+    pub fn pending_offline_count_for_tenant(&self, tenant_id: &str) -> Result<i64, CoreError> {
+        self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM offline_queue WHERE status = 'pending' AND tenant_id = ?1",
+                params![tenant_id],
+                |row| row.get(0),
+            )
+            .map_err(Into::into)
+    }
+
     /// Delete a processed offline queue item.
     pub fn delete_offline_item(&self, id: &str) -> Result<(), CoreError> {
         self.conn
             .execute("DELETE FROM offline_queue WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    /// Delete an offline queue item, scoped to a tenant (SYNC-07).
+    ///
+    /// A cross-tenant id is a no-op — the row (if any) is left untouched.
+    pub fn delete_offline_item_for_tenant(
+        &self,
+        id: &str,
+        tenant_id: &str,
+    ) -> Result<(), CoreError> {
+        self.conn.execute(
+            "DELETE FROM offline_queue WHERE id = ?1 AND tenant_id = ?2",
+            params![id, tenant_id],
+        )?;
         Ok(())
     }
 
@@ -276,6 +374,70 @@ impl Store<'_> {
             oldest_pending_at,
             conflict_count,
         })
+    }
+
+    /// Read the persisted sync pull anchor and cursor (SYNC-01).
+    ///
+    /// Returns the `since` timestamp and `cursor` from the last
+    /// successfully-applied page. Both are `None` on first sync (pull
+    /// everything). A missing row (pre-114 database) defaults to `None`.
+    pub fn get_sync_pull_state(&self) -> Result<SyncPullState, CoreError> {
+        use rusqlite::OptionalExtension;
+        self.conn
+            .query_row(
+                "SELECT since, cursor FROM sync_pull_state WHERE id = 1",
+                [],
+                |row| {
+                    Ok(SyncPullState {
+                        since: row.get(0)?,
+                        cursor: row.get(1)?,
+                    })
+                },
+            )
+            .optional()
+            .map(|row| row.unwrap_or_default())
+            .map_err(Into::into)
+    }
+
+    /// Persist the sync pull anchor and cursor (SYNC-01).
+    ///
+    /// Called only AFTER a page of remote items was applied successfully,
+    /// so a crash mid-pull replays safely — the idempotency ledger then
+    /// skips any already-applied items.
+    pub fn set_sync_pull_state(
+        &self,
+        since: Option<&str>,
+        cursor: Option<&str>,
+    ) -> Result<(), CoreError> {
+        self.conn.execute(
+            "INSERT INTO sync_pull_state (id, since, cursor) VALUES (1, ?1, ?2)
+             ON CONFLICT(id) DO UPDATE SET since = excluded.since, cursor = excluded.cursor",
+            params![since, cursor],
+        )?;
+        Ok(())
+    }
+
+    /// Check whether a remote item has already been applied locally (SYNC-01).
+    pub fn is_remote_item_applied(&self, item_id: &str) -> Result<bool, CoreError> {
+        self.conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sync_applied_items WHERE item_id = ?1)",
+                params![item_id],
+                |row| row.get(0),
+            )
+            .map_err(Into::into)
+    }
+
+    /// Record a remote item as applied locally (SYNC-01 idempotency ledger).
+    ///
+    /// `INSERT OR IGNORE` — re-recording the same id is a no-op, so replay
+    /// of a page never double-counts a mutation.
+    pub fn mark_remote_item_applied(&self, item_id: &str, action: &str) -> Result<(), CoreError> {
+        self.conn.execute(
+            "INSERT OR IGNORE INTO sync_applied_items (item_id, action) VALUES (?1, ?2)",
+            params![item_id, action],
+        )?;
+        Ok(())
     }
 
     fn row_to_offline_queue_item(row: &rusqlite::Row) -> rusqlite::Result<OfflineQueueItem> {
@@ -544,11 +706,203 @@ mod tests {
     }
 
     #[test]
+    fn enqueue_offline_scoped_combines_tenant_and_priority() {
+        // OFF-09: the combined tenant + priority entry point the command
+        // boundary uses must persist both fields on the same row.
+        let conn = fresh();
+        let s = store(&conn);
+        let item = s
+            .enqueue_offline_scoped("complete_sale", "{}", "store-a", SyncPriority::Critical)
+            .unwrap();
+        assert_eq!(item.tenant_id, "store-a");
+        assert_eq!(item.priority, SyncPriority::Critical);
+
+        let loaded = s.list_pending_offline_for_tenant("store-a").unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].priority, SyncPriority::Critical);
+
+        // A different tenant never sees it.
+        let other = s.list_pending_offline_for_tenant("store-b").unwrap();
+        assert!(other.is_empty());
+    }
+
+    #[test]
+    fn pending_batch_orders_critical_before_normal_before_low() {
+        // OFF-09: the retry command sorts the batch by priority so Critical
+        // items always transmit first. Pins the ordering contract on the
+        // raw items returned by the store.
+        let conn = fresh();
+        let s = store(&conn);
+        s.enqueue_offline_scoped("settings.change", "{}", "default", SyncPriority::Low)
+            .unwrap();
+        s.enqueue_offline_scoped("complete_sale", "{}", "default", SyncPriority::Critical)
+            .unwrap();
+        s.enqueue_offline_scoped("product.update", "{}", "default", SyncPriority::Normal)
+            .unwrap();
+
+        let mut batch = s.list_pending_offline().unwrap();
+        batch.sort_by_key(|i| i.priority);
+        assert_eq!(batch.len(), 3);
+        assert_eq!(batch[0].priority, SyncPriority::Critical);
+        assert_eq!(batch[1].priority, SyncPriority::Normal);
+        assert_eq!(batch[2].priority, SyncPriority::Low);
+    }
+
+    #[test]
     fn list_pending_offline_for_tenant_empty() {
         let conn = fresh();
         let s = store(&conn);
         let items = s.list_pending_offline_for_tenant("no-such-tenant").unwrap();
         assert!(items.is_empty());
+    }
+
+    // ── SYNC-07: two-tenant boundary through the client queue ────────
+
+    #[test]
+    fn tenant_scoped_count_isolates_tenants() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        s.enqueue_offline_with_tenant("sale.create", "{}", "tenant-a")
+            .unwrap();
+        s.enqueue_offline_with_tenant("sale.create", "{}", "tenant-a")
+            .unwrap();
+        s.enqueue_offline_with_tenant("product.update", "{}", "tenant-b")
+            .unwrap();
+
+        assert_eq!(s.pending_offline_count_for_tenant("tenant-a").unwrap(), 2);
+        assert_eq!(s.pending_offline_count_for_tenant("tenant-b").unwrap(), 1);
+        assert_eq!(s.pending_offline_count_for_tenant("tenant-c").unwrap(), 0);
+    }
+
+    #[test]
+    fn tenant_scoped_mark_synced_refuses_cross_tenant() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let item = s
+            .enqueue_offline_with_tenant("sale.create", "{}", "tenant-a")
+            .unwrap();
+
+        // Correct tenant: succeeds.
+        s.mark_offline_synced_for_tenant(&item.id, "tenant-a")
+            .unwrap();
+        assert_eq!(s.pending_offline_count().unwrap(), 0);
+
+        // Cross-tenant (re-insert, then attempt from tenant-b): NotFound,
+        // and the row stays untouched (still pending).
+        let item2 = s
+            .enqueue_offline_with_tenant("sale.create", "{}", "tenant-a")
+            .unwrap();
+        let err = s
+            .mark_offline_synced_for_tenant(&item2.id, "tenant-b")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "offline_queue"));
+        assert_eq!(s.pending_offline_count_for_tenant("tenant-a").unwrap(), 1);
+    }
+
+    #[test]
+    fn tenant_scoped_mark_failed_does_not_touch_other_tenant() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let item = s
+            .enqueue_offline_with_tenant("sale.create", "{}", "tenant-a")
+            .unwrap();
+
+        // Cross-tenant mark-failed is a no-op: status stays pending.
+        s.mark_offline_failed_for_tenant(&item.id, "tenant-b", "boom")
+            .unwrap();
+        let all = s.list_all_offline().unwrap();
+        let row = all.into_iter().find(|i| i.id == item.id).unwrap();
+        assert_eq!(row.status, OfflineQueueStatus::Pending);
+        assert_eq!(row.retry_count, 0);
+
+        // Correct tenant: marks failed + increments retry.
+        s.mark_offline_failed_for_tenant(&item.id, "tenant-a", "boom")
+            .unwrap();
+        let all = s.list_all_offline().unwrap();
+        let row = all.into_iter().find(|i| i.id == item.id).unwrap();
+        assert_eq!(row.status, OfflineQueueStatus::Failed);
+        assert_eq!(row.retry_count, 1);
+    }
+
+    #[test]
+    fn tenant_scoped_delete_does_not_touch_other_tenant() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        let item = s
+            .enqueue_offline_with_tenant("sale.create", "{}", "tenant-a")
+            .unwrap();
+
+        // Cross-tenant delete is a no-op: row survives.
+        s.delete_offline_item_for_tenant(&item.id, "tenant-b")
+            .unwrap();
+        assert_eq!(s.pending_offline_count().unwrap(), 1);
+
+        // Correct tenant: row removed.
+        s.delete_offline_item_for_tenant(&item.id, "tenant-a")
+            .unwrap();
+        assert_eq!(s.pending_offline_count().unwrap(), 0);
+    }
+
+    // ── SYNC-01: durable pull anchor + idempotency ledger ────────────
+
+    #[test]
+    fn sync_pull_state_defaults_to_none() {
+        let conn = fresh();
+        let st = store(&conn).get_sync_pull_state().unwrap();
+        assert!(st.since.is_none());
+        assert!(st.cursor.is_none());
+    }
+
+    #[test]
+    fn sync_pull_state_roundtrip() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.set_sync_pull_state(Some("2026-01-01T00:00:00Z"), None)
+            .unwrap();
+        let st = s.get_sync_pull_state().unwrap();
+        assert_eq!(st.since.as_deref(), Some("2026-01-01T00:00:00Z"));
+        assert!(st.cursor.is_none());
+
+        // Single-row guard: overwrite, never insert a second row.
+        s.set_sync_pull_state(
+            Some("2026-02-01T00:00:00Z"),
+            Some("2026-02-01T00:00:00Z|abc"),
+        )
+        .unwrap();
+        let st = s.get_sync_pull_state().unwrap();
+        assert_eq!(st.since.as_deref(), Some("2026-02-01T00:00:00Z"));
+        assert_eq!(st.cursor.as_deref(), Some("2026-02-01T00:00:00Z|abc"));
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM sync_pull_state", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1, "sync_pull_state must stay a single row");
+    }
+
+    #[test]
+    fn sync_applied_items_tracks_ids() {
+        let conn = fresh();
+        let s = store(&conn);
+        assert!(!s.is_remote_item_applied("item-1").unwrap());
+
+        s.mark_remote_item_applied("item-1", "stock.adjusted")
+            .unwrap();
+        assert!(s.is_remote_item_applied("item-1").unwrap());
+
+        // INSERT OR IGNORE — replay is a no-op.
+        s.mark_remote_item_applied("item-1", "stock.adjusted")
+            .unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM sync_applied_items", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(
+            count, 1,
+            "re-applying the same item must not duplicate the ledger row"
+        );
     }
 
     #[test]

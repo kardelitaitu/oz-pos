@@ -239,14 +239,23 @@ fn map_products_to_dtos(
     store: &Store<'_>,
     products: Vec<oz_core::db::ProductWithDetails>,
 ) -> Result<Vec<ProductDto>, AppError> {
+    // PROD-12: batch-load tax assignments in ONE query instead of one
+    // `get_product_tax_rates` call per product (N+1 catalog-load pattern).
+    let skus: Vec<String> = products
+        .iter()
+        .map(|pwd| pwd.product.sku.to_string())
+        .collect();
+    let tax_rates_by_sku = store.get_product_tax_rates_batch(&skus)?;
     let dtos: Vec<ProductDto> = products
         .into_iter()
         .map(|pwd| {
             let cur_str = std::str::from_utf8(&pwd.product.price.currency.0)
                 .unwrap_or("USD")
                 .to_owned();
+            let sku = pwd.product.sku.to_string();
+            let tax_rate_ids = tax_rates_by_sku.get(&sku).cloned().unwrap_or_default();
             ProductDto {
-                sku: pwd.product.sku.to_string(),
+                sku,
                 name: pwd.product.name,
                 category: pwd.category_name,
                 price: MoneyDto {
@@ -259,9 +268,7 @@ fn map_products_to_dtos(
                 created_at: pwd.product.created_at,
                 price_updated_at: pwd.product.price_updated_at,
                 product_type: pwd.product.product_type.as_str().to_owned(),
-                tax_rate_ids: store
-                    .get_product_tax_rates(pwd.product.sku.as_str())
-                    .unwrap_or_default(),
+                tax_rate_ids,
             }
         })
         .collect();
@@ -779,6 +786,70 @@ pub async fn get_product_track_serial_scoped(
     Ok(product.map(|p| p.product.track_serial).unwrap_or(false))
 }
 
+/// A single serial-tracking flag keyed by SKU (batch response row).
+#[derive(Debug, Serialize)]
+pub struct SerialTrackRow {
+    /// Stock-keeping unit.
+    pub sku: String,
+    /// Whether the product is configured for serial tracking.
+    pub track_serial: bool,
+}
+
+/// Check serial-tracking flags for many SKUs in one round trip
+/// (PERF-03: replaces the N+1 `get_product_track_serial` loop).
+///
+/// Unknown SKUs resolve to `track_serial: false` (same behaviour as
+/// the single-SKU command). The response preserves request order.
+#[tauri::command]
+pub async fn get_product_track_serial_batch(
+    skus: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<SerialTrackRow>, AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let rows = run_get_product_track_serial_batch(&store, &skus);
+    drop(db);
+    Ok(rows)
+}
+
+/// Store-scoped batch variant of `get_product_track_serial_batch`. ADR #7.
+#[tauri::command]
+pub async fn get_product_track_serial_batch_scoped(
+    session_token: String,
+    skus: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<SerialTrackRow>, AppError> {
+    let conn = state.resolve_store(&session_token)?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let store = Store::new(&db);
+    let rows = run_get_product_track_serial_batch(&store, &skus);
+    drop(db);
+    Ok(rows)
+}
+
+/// Business logic for the batch serial-tracking lookup (extracted for testing).
+fn run_get_product_track_serial_batch(store: &Store<'_>, skus: &[String]) -> Vec<SerialTrackRow> {
+    skus.iter()
+        .map(|sku| {
+            // get_product returns Result<Option<ProductWithDetails>> —
+            // collapse both error and missing-product into `false` so the
+            // batch never fails for unknown SKUs (matches single-SKU).
+            let track_serial = store
+                .get_product(sku)
+                .ok()
+                .flatten()
+                .map(|p| p.product.track_serial)
+                .unwrap_or(false);
+            SerialTrackRow {
+                sku: sku.clone(),
+                track_serial,
+            }
+        })
+        .collect()
+}
+
 // ── Delete product ──────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
@@ -1102,6 +1173,47 @@ mod tests {
         let json_with_user = r##"{"user_id":"u1","sku":"LATTE","name":"Latte","price_minor":450,"currency":"USD","category_id":null,"barcode":null,"initial_stock":0,"tax_rate_ids":[]}"##;
         let args2: CreateProductScopedArgs = serde_json::from_str(json_with_user).unwrap();
         assert_eq!(args2.sku, "LATTE"); // extra fields ignored by serde
+    }
+
+    #[test]
+    fn get_product_track_serial_batch_maps_known_and_unknown_skus() {
+        let conn = fresh_conn();
+        conn.execute_batch(
+            "INSERT INTO categories (id, name, colour, icon) VALUES
+                ('cat-1', 'Gadgets', '#06b6d4', '');
+             INSERT INTO products (id, sku, name, price_minor, currency, category_id, track_serial, barcode, created_at, updated_at) VALUES
+                ('p1', 'TRACKED', 'Tracked Widget', 100, 'USD', 'cat-1', 1, '4901234567890', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
+                ('p2', 'PLAIN', 'Plain Widget', 200, 'USD', 'cat-1', 0, NULL, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');",
+        )
+        .unwrap();
+
+        let store = Store::new(&conn);
+        let rows = run_get_product_track_serial_batch(
+            &store,
+            &[
+                "TRACKED".to_string(),
+                "PLAIN".to_string(),
+                "MISSING".to_string(),
+            ],
+        );
+
+        assert_eq!(rows.len(), 3);
+        assert!(rows[0].track_serial);
+        assert!(!rows[1].track_serial);
+        // Unknown SKUs resolve to false (matches the single-SKU behaviour).
+        assert!(!rows[2].track_serial);
+        // Response preserves request order.
+        assert_eq!(rows[0].sku, "TRACKED");
+        assert_eq!(rows[1].sku, "PLAIN");
+        assert_eq!(rows[2].sku, "MISSING");
+    }
+
+    #[test]
+    fn get_product_track_serial_batch_empty_input() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+        let rows = run_get_product_track_serial_batch(&store, &[]);
+        assert!(rows.is_empty());
     }
 
     #[test]

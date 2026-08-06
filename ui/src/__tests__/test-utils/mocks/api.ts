@@ -65,6 +65,7 @@ export function createSalesApiMock(overrides: SalesApiOverrides = {}) {
     printSalesReceipt: vi.fn(() => Promise.resolve({ printed: true })),
     onReceiptPrinted: vi.fn(),
     getProductTrackSerial: vi.fn(() => Promise.resolve(false)),
+    getProductTrackSerialBatch: vi.fn((_skus: string[]) => Promise.resolve([])),
     holdCartScoped: vi.fn((_token: string) => Promise.resolve({ id: 'held-1' })),
     listHeldCartsScoped: vi.fn((_token: string) => Promise.resolve([])),
     getHeldCartScoped: vi.fn((_token: string, _id: string) => Promise.resolve(null)),
@@ -113,6 +114,7 @@ export function createSettingsApiMock(overrides: SettingsApiOverrides = {}) {
       showCurrency: true, decimalSeparator: 'dot', showTax: true,
       footer: '', paperWidth: 'standard', showTableNumber: false,
       marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0,
+      taxRoundingMode: 'half_up',
     })),
     setReceiptSettings: vi.fn(),
     setStoreSettings: vi.fn(),
@@ -141,6 +143,7 @@ export function createSettingsApiMock(overrides: SettingsApiOverrides = {}) {
       showCurrency: true, decimalSeparator: 'dot', showTax: true,
       footer: '', paperWidth: 'standard', showTableNumber: false,
       marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0,
+      taxRoundingMode: 'half_up',
     })),
     setReceiptSettingsScoped: vi.fn((_token: string) => Promise.resolve()),
     setStoreSettingsScoped: vi.fn((_token: string) => Promise.resolve()),
@@ -279,6 +282,7 @@ const defaultKdsOrder = {
   received_at: new Date().toISOString(), started_at: null,
   ready_at: null, served_at: null, prep_time_seconds: 0,
   kitchen_zone: null, notes: '',
+    table_number: null,
 };
 
 export function createKdsApiMock(overrides: KdsApiOverrides = {}) {
@@ -382,14 +386,14 @@ const loyaltyAccountWithDetails = {
 
 export function createLoyaltyApiMock(overrides: LoyaltyApiOverrides = {}) {
   return {
-    getLoyaltyAccount: vi.fn((_customerId: string) => Promise.resolve(loyaltyAccountWithDetails)),
-    listLoyaltyAccounts: vi.fn(() => Promise.resolve([loyaltyAccountWithDetails])),
-    earnLoyaltyPoints: vi.fn((_customerId: string, _saleId: string, _totalMinor: number) => Promise.resolve({
+    getLoyaltyAccount: vi.fn((_token: string, _customerId: string) => Promise.resolve(loyaltyAccountWithDetails)),
+    listLoyaltyAccounts: vi.fn((_token: string) => Promise.resolve([loyaltyAccountWithDetails])),
+    earnLoyaltyPoints: vi.fn((_token: string, _customerId: string, _saleId: string, _totalMinor: number) => Promise.resolve({
       id: 'loyaltytx-1', account_id: 'loyalty-1', sale_id: 'sale-1',
       points: 100, txn_type: 'earn', description: 'Points earned',
       created_at: new Date().toISOString(),
     })),
-    redeemLoyaltyPoints: vi.fn((_customerId: string, _points: number, _saleId: string) => Promise.resolve({
+    redeemLoyaltyPoints: vi.fn((_token: string, _customerId: string, _points: number, _saleId: string) => Promise.resolve({
       transaction: {
         id: 'loyaltytx-2', account_id: 'loyalty-1', sale_id: 'sale-1',
         points: -200, txn_type: 'redeem', description: 'Points redeemed',
@@ -397,10 +401,10 @@ export function createLoyaltyApiMock(overrides: LoyaltyApiOverrides = {}) {
       },
       discount_minor: 50000,
     })),
-    listLoyaltyTiers: vi.fn(() => Promise.resolve([loyaltyTier])),
-    updateLoyaltyTier: vi.fn((_tier: Record<string, unknown>) => Promise.resolve(loyaltyTier)),
-    getPointsValue: vi.fn((_points: number) => Promise.resolve(25000)),
-    getOrCreateLoyaltyAccount: vi.fn((_customerId: string) => Promise.resolve(loyaltyAccount)),
+    listLoyaltyTiers: vi.fn((_token: string) => Promise.resolve([loyaltyTier])),
+    updateLoyaltyTier: vi.fn((_token: string, _tier: Record<string, unknown>) => Promise.resolve(loyaltyTier)),
+    getPointsValue: vi.fn((_token: string, _points: number) => Promise.resolve(25000)),
+    getOrCreateLoyaltyAccount: vi.fn((_token: string, _customerId: string) => Promise.resolve(loyaltyAccount)),
     ...overrides,
   };
 }

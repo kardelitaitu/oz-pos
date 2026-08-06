@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { createPortal } from 'react-dom';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { useAuth } from '@/contexts/AuthContext';
@@ -87,6 +88,7 @@ export default function WorkspaceSettingsModal({
 }: WorkspaceSettingsModalProps) {
   const { isManager } = useAuth();
   const workspaceCtx = useWorkspaceOptional();
+  const { l10n } = useLocalization();
   const panelRef = useRef<HTMLDivElement>(null);
 
   // ── Nested modal depth (React state for reactivity) ─────────
@@ -167,7 +169,7 @@ export default function WorkspaceSettingsModal({
               type="button"
               className={styles['close-btn']}
               onClick={() => exit.requestClose()}
-              aria-label="Close settings"
+              aria-label={requiredLocalized(l10n, 'workspace-modal-close-aria')}
             >
               <svg
                 viewBox="0 0 24 24"

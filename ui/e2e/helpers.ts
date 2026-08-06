@@ -26,6 +26,14 @@ export async function loginAs(
   username: string,
   pin: string,
 ): Promise<void> {
+  // Emulate reduced motion explicitly. The config's `use.reducedMotion` is
+  // not applied to the merged per-project context (verified via diag:
+  // matchMedia reports false without this call), so the workspace-card's
+  // infinite descendant animations (icon pulse, active dot pulse, hover
+  // sway) keep Playwright's click actionability check retrying "element is
+  // not stable". This guarantees every spec runs with CSS animations
+  // disabled — the standard fix for animation-induced E2E flakiness.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
 
   // Wait for the login screen using data-testid.
@@ -62,13 +70,35 @@ export async function loginAs(
  *
  * Uses `data-testid="workspace-card"` for selector robustness.
  * Matches by the workspace display name via `.filter({ hasText })`.
+ *
+ * `opts.force` bypasses Playwright's actionability stability check
+ * (workspace cards carry an infinite `ws-bg-shift` animation, which can
+ * keep a default click retrying "element is not stable" on slower
+ * targets). Use it when the test cares about the navigation result, not
+ * card-interaction mechanics (e.g. the perf smoke suite).
  */
 export async function selectWorkspace(
   page: Page,
   typeKey: string,
+  opts?: { force?: boolean },
 ): Promise<void> {
-  // Wait for the workspace picker.
-  await page.getByTestId('workspace-home').waitFor({ timeout: 10_000 });
+  // If already inside a workspace (workspace-home is not visible), navigate
+  // back to the workspace picker first by clicking the "Back to workspaces"
+  // button or pressing Escape.
+  const workspaceHome = page.getByTestId('workspace-home');
+  const isOnPicker = await workspaceHome.isVisible({ timeout: 1_000 }).catch(() => false);
+  if (!isOnPicker) {
+    // Try clicking the "Back to workspaces" button first.
+    const backBtn = page.locator('button[aria-label*="Back to workspaces"], button:has-text("Back to workspaces")').first();
+    const backVisible = await backBtn.isVisible({ timeout: 1_000 }).catch(() => false);
+    if (backVisible) {
+      await backBtn.click();
+    } else {
+      // Press Escape as fallback to return to workspace picker.
+      await page.keyboard.press('Escape');
+    }
+    await workspaceHome.waitFor({ timeout: 10_000 });
+  }
 
   // Map type_key to the display name used in FALLBACK_WORKSPACES.
   const workspaceNames: Record<string, string> = {
@@ -87,7 +117,11 @@ export async function selectWorkspace(
   await expect(card).toBeVisible({ timeout: 5_000 });
 
   // The card is a <button> — click it to activate the workspace.
-  await card.click();
+  if (opts?.force) {
+    await card.click({ force: true });
+  } else {
+    await card.click();
+  }
 
   // Wait for navigation to complete.
   await page.waitForTimeout(2_000);
@@ -104,6 +138,9 @@ export async function selectWorkspace(
 export async function navigateTo(page: Page, route: string): Promise<void> {
   await page.evaluate((hash) => {
     window.location.hash = hash;
+    // Re-assigning the same hash (e.g. navigating to a route twice) fires
+    // no hashchange, so dispatch manually to keep AppShell's route in sync.
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
   }, `#/${route}`);
 }
 

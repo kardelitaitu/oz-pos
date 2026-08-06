@@ -1,5 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { useCanvasChart } from '@/hooks/useCanvasChart';
+import { AccessibleChartSummary } from './AccessibleChartSummary';
+import { boundAccessibleItems } from '@/utils/chart-policy';
 import './charts.css';
 
 /** A single heatmap cell. */
@@ -13,6 +15,14 @@ export interface HeatmapCell {
 
 interface CanvasHeatmapProps {
   data: HeatmapCell[];
+  /** Localized accessible name for the chart (A11Y-04/09). */
+  label: string;
+  /**
+   * Localized text summary of the chart (A11Y-09). Rendered as visually
+   * hidden text so screen-reader users get the traffic pattern in words
+   * (e.g. peak day/hour) rather than only the pixel grid.
+   */
+  summary?: string;
   /** Formatter for cell values in aria-label. */
   formatValue?: (v: number) => string;
   /** Minimum height of the canvas container. */
@@ -31,6 +41,8 @@ const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
  */
 export default function CanvasHeatmap({
   data,
+  label,
+  summary,
   formatValue,
   minHeight = '160px',
   colorLow,
@@ -48,6 +60,23 @@ export default function CanvasHeatmap({
   }, [data]);
 
   const maxVal = useMemo(() => Math.max(...grid.flat(), 1), [grid]);
+
+  // PERF-09: the 7×24 grid already bounds the draw loop; cap the accessible
+  // data list so an arbitrarily large cell payload cannot balloon the DOM.
+  const accessible = useMemo(
+    () =>
+      boundAccessibleItems(
+        data.filter(
+          (c) =>
+            c.value > 0 &&
+            c.dayOfWeek >= 0 &&
+            c.dayOfWeek < 7 &&
+            c.hour >= 0 &&
+            c.hour < 24,
+        ),
+      ),
+    [data],
+  );
 
   const draw = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
     const pad = { top: 8, right: 8, bottom: 8, left: 32 };
@@ -129,7 +158,19 @@ export default function CanvasHeatmap({
 
   return (
     <div className="canvas-chart-container" style={{ minHeight, width: '100%' }}>
-      <canvas ref={canvasRef as React.Ref<HTMLCanvasElement>} className="canvas-chart" aria-label="Hourly heatmap" role="img" />
+      <canvas ref={canvasRef as React.Ref<HTMLCanvasElement>} className="canvas-chart" aria-label={label} role="img" />
+      {/* A11Y-09: accessible text summary + per-cell data list (visually
+          hidden) so screen readers get the underlying values. Only in-range
+          non-zero cells are listed to keep the list meaningful and avoid
+          misleading labels for malformed cells (grid builder guards 0–6/0–23). */}
+      <AccessibleChartSummary summary={summary}>
+        {accessible.items.map((c, i) => (
+            <li key={i}>
+              {DAY_LABELS[c.dayOfWeek] ?? c.dayOfWeek} {c.hour}:00 —{' '}
+              {formatValue ? formatValue(c.value) : String(c.value)}
+            </li>
+          ))}
+      </AccessibleChartSummary>
     </div>
   );
 }

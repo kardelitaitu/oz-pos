@@ -160,8 +160,10 @@ const SCREENS: ScreenEntry[] = [
     name: 'KdsScreen',
     tsx: 'kds/KdsScreen.tsx',
     css: ['kds/KdsScreen.css'],
-    dynamicClassPrefixes: ['kds-column--', 'kds-ticket', 'kds-workspace'],
+    dynamicClassPrefixes: ['kds-column--', 'kds-ticket', 'kds-workspace', 'kds-history-card-status--'],
     externalClasses: ['kds-empty'],
+    // History panel shares the same stylesheet (LOAD-04/LOAD-08 styles).
+    additionalTsx: ['kds/KdsHistoryPanel.tsx'],
   },
 
   // ── Loyalty ───────────────────────────────────────────

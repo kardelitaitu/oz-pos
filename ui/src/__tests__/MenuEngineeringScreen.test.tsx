@@ -30,6 +30,11 @@ vi.mock('@/api/reports', () => ({
   getMenuEngineering: vi.fn(),
 }));
 
+// The screen renders money via the store default currency.
+vi.mock('@/contexts/CurrencyContext', () => ({
+  useCurrency: () => ({ currency: 'USD', setCurrency: vi.fn(), loading: false }),
+}));
+
 const mockResult: MenuEngineeringResult = {
   median_volume: 50,
   median_margin: 2500,
@@ -168,6 +173,7 @@ describe('MenuEngineeringScreen', () => {
       expect(reportsApi.getMenuEngineering).toHaveBeenCalledWith(
         expect.any(String),
         expect.any(String),
+        '',
       );
     });
   });
@@ -381,7 +387,7 @@ describe('MenuEngineeringScreen', () => {
     fireEvent.change(startInput, { target: { value: '2026-06-01' } });
 
     await waitFor(() => {
-      expect(reportsApi.getMenuEngineering).toHaveBeenCalledWith('2026-06-01', expect.any(String));
+      expect(reportsApi.getMenuEngineering).toHaveBeenCalledWith('2026-06-01', expect.any(String), '');
     });
   });
 
@@ -399,7 +405,7 @@ describe('MenuEngineeringScreen', () => {
     fireEvent.change(endInput, { target: { value: '2026-08-15' } });
 
     await waitFor(() => {
-      expect(reportsApi.getMenuEngineering).toHaveBeenCalledWith(expect.any(String), '2026-08-15');
+      expect(reportsApi.getMenuEngineering).toHaveBeenCalledWith(expect.any(String), '2026-08-15', '');
     });
   });
 

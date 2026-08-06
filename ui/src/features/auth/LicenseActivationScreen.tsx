@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import { activateLicense, getMachineId } from '@/api/license';
 import { getVersion, getLocalIp } from '@/api/system';
 import { readText } from '@tauri-apps/plugin-clipboard-manager';
@@ -7,6 +8,8 @@ import ConnectionStatus from '@/components/ConnectionStatus';
 import MachineIdStatus from '@/components/MachineIdStatus';
 import { Localized, useLocalization } from '@fluent/react';
 import ThemeToggle from '@/frontend/shell/ThemeToggle';
+import { l10nErrorMessage } from '@/utils/app-error';
+import { plainErrorMessage } from '@/utils/app-error';
 import './LicenseActivationScreen.css';
 
 // ── Environment / service URLs (extracted for configurability) ─────
@@ -30,8 +33,8 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(initialError ?? null);
-  const [appVersion, setAppVersion] = useState<string>('0.0.23');
-  const [ipAddress, setIpAddress] = useState<string>(l10n.getString('auth-ip-detecting') || 'Detecting...');
+  const [appVersion, setAppVersion] = useState<string>('0.0.24');
+  const [ipAddress, setIpAddress] = useState<string>(requiredLocalized(l10n, 'auth-ip-detecting'));
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; field: 'email' | 'phone' | 'licenseKey' } | null>(null);
   const { addToast } = useToast();
   // Stable ref so the mount effect runs exactly once without depending on
@@ -50,7 +53,7 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
     getLocalIp().then(ip => {
       if (mounted) setIpAddress(ip);
     }).catch(() => {
-      if (mounted) setIpAddress(l10nRef.current.getString('auth-ip-unknown') || 'Unknown');
+      if (mounted) setIpAddress(requiredLocalized(l10nRef.current, 'auth-ip-unknown'));
     });
 
     return () => { mounted = false; };
@@ -102,14 +105,7 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
         setErrorMsg(l10n.getString('auth-activation-failed'));
       }
     } catch (err: unknown) {
-      let message = l10n.getString('auth-activation-error');
-      if (err instanceof Error) {
-        message = err.message;
-      } else if (typeof err === 'string') {
-        message = err;
-      } else if (err && typeof err === 'object' && 'message' in err) {
-        message = String((err as Record<string, unknown>)['message']);
-      }
+      const message = l10nErrorMessage(err, l10n, 'auth-activation-error');
       
       addToast({ 
         type: 'error', 
@@ -142,7 +138,7 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
       }
     } catch (err: unknown) {
       console.error('Failed to read clipboard', err);
-      const errMsg = err instanceof Error ? err.message : String(err);
+      const errMsg = plainErrorMessage(err);
       addToast({ 
         message: `${l10n.getString('auth-error-title')}: ${l10n.getString('auth-clipboard-error', { message: errMsg })}`, 
         type: 'error' 
@@ -299,11 +295,11 @@ export default function LicenseActivationScreen({ initialError, onActivated }: L
 
       <div className="license-server-status-container">
         <ConnectionStatus 
-          label={l10n.getString('staff-login-connection-auth') || 'Auth'} 
+          label={requiredLocalized(l10n, 'staff-login-connection-auth')} 
           url={AUTH_SERVICE_URL} 
         />
         <ConnectionStatus 
-          label={l10n.getString('staff-login-connection-sync') || 'Sync'} 
+          label={requiredLocalized(l10n, 'staff-login-connection-sync')} 
           url="" 
         />
         <MachineIdStatus />

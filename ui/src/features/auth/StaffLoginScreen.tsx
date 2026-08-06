@@ -6,6 +6,7 @@ import { useBrand } from '@/contexts/BrandContext';
 import { useSyncConnection } from '@/hooks/useSyncConnection';
 import { checkLicenseStatus } from '@/api/license';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import { Localized } from '@/frontend/shared/Localized';
 import { useLocalization } from '@fluent/react';
 import { convertFileSrc } from '@tauri-apps/api/core';
@@ -303,15 +304,12 @@ export default function StaffLoginScreen() {
     clearError();
 
     try {
-      const result = await checkUsername({ username: trimmed });
-      if (!result.found) {
-        addToast({ type: 'error', message: l10n.getString('staff-login-error-not-found') });
-        return;
-      }
-      if (!result.is_active) {
-        addToast({ type: 'error', message: l10n.getString('staff-login-error-deactivated') });
-        return;
-      }
+      // STAFF-06: the pre-check returns a uniform { proceed: true } and never
+      // reveals whether the account exists or is active, so we always advance
+      // to the PIN step. Any credential/state problem is reported only by the
+      // login endpoint as a single uniform error — this screen must not branch
+      // on account existence or activation status.
+      await checkUsername({ username: trimmed });
       setStep('pin');
     } catch {
       addToast({ type: 'error', message: l10n.getString('staff-login-error-connection') });
@@ -629,7 +627,7 @@ export default function StaffLoginScreen() {
       {/* ── Footer: version + copyright + sync status ────── */}
       <div className="staff-login-footer">
         <div className="staff-login-footer-left">
-          <span className="staff-login-footer-version">OZ-POS Enterprise v0.0.23</span>
+          <span className="staff-login-footer-version">OZ-POS Enterprise v0.0.24</span>
           <Localized id="staff-login-copyright">
             <span className="staff-login-footer-copyright">&copy; 2026 OZ-POS. All rights reserved.</span>
           </Localized>
@@ -637,15 +635,15 @@ export default function StaffLoginScreen() {
         <div className="staff-login-footer-right">
           <div className="staff-login-connection-group">
             {/* Auth status — via checkLicenseStatus IPC */}
-            <div className="connection-status" title={authOnline === null ? l10n.getString('staff-login-connection-checking') || 'Checking…' : authOnline ? l10n.getString('staff-login-connection-connected') || 'Connected' : l10n.getString('staff-login-connection-disconnected') || 'Disconnected'}>
+            <div className="connection-status" title={authOnline === null ? requiredLocalized(l10n, 'staff-login-connection-checking') : authOnline ? requiredLocalized(l10n, 'staff-login-connection-connected') : requiredLocalized(l10n, 'staff-login-connection-disconnected')}>
               <span className={`status-indicator ${authOnline === null ? 'checking' : authOnline ? 'online' : 'offline'}`} />
-              <span className="connection-label">{l10n.getString('staff-login-connection-auth') || 'Auth'}</span>
+              <span className="connection-label">{requiredLocalized(l10n, 'staff-login-connection-auth')}</span>
               {authOnline && authLatency !== null && <span className="connection-latency">{authLatency}ms</span>}
             </div>
             {/* Sync status — via useSyncConnection IPC */}
-            <div className="connection-status" title={syncStatus.state === 'checking' ? l10n.getString('staff-login-connection-checking') || 'Checking…' : syncStatus.state === 'connected' ? l10n.getString('staff-login-connection-connected') || 'Connected' : l10n.getString('staff-login-connection-disconnected') || 'Disconnected'}>
+            <div className="connection-status" title={syncStatus.state === 'checking' ? requiredLocalized(l10n, 'staff-login-connection-checking') : syncStatus.state === 'connected' ? requiredLocalized(l10n, 'staff-login-connection-connected') : requiredLocalized(l10n, 'staff-login-connection-disconnected')}>
               <span className={`status-indicator ${syncStatus.state === 'checking' ? 'checking' : syncStatus.state === 'connected' ? 'online' : 'offline'}`} />
-              <span className="connection-label">{l10n.getString('staff-login-connection-sync') || 'Sync'}</span>
+              <span className="connection-label">{requiredLocalized(l10n, 'staff-login-connection-sync')}</span>
               {syncStatus.state === 'connected' && syncStatus.latencyMs !== null && <span className="connection-latency">{syncStatus.latencyMs}ms</span>}
             </div>
           </div>

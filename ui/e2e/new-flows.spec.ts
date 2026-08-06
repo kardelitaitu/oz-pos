@@ -76,16 +76,16 @@ test.describe('Workspace Picker', () => {
 
 test.describe('Session Lock', () => {
   test('session lock card renders with time display', async ({ page }) => {
-    // Set a 15-second idle timeout (0.25 min) so login + workspace
-    // load complete before the timer fires.
-    await page.evaluate(() => {
+    // Set a 15-second idle timeout (0.25 min) before login so the
+    // timer fires shortly after landing on the workspace picker.
+    // Use page.addInitScript to set localStorage before the page loads,
+    // avoiding SecurityError (Access is denied for this document) when
+    // the page is served from a data: or file: origin during E2E.
+    await page.addInitScript(() => {
       localStorage.setItem('auto-lock-minutes', '0.25');
     });
 
-    // Reload so useIdleTimer picks up the new timeout on mount.
-    await page.reload();
-
-    // Re-login using the helper (not duplicated logic).
+    // Login using the helper (addInitScript runs before page.goto).
     await loginAs(page, 'owner', '1234');
 
     // Wait for the idle timer to fire — session lock card must appear.
@@ -149,9 +149,10 @@ test.describe('Audit Log', () => {
   });
 
   test('audit log screen renders with header and filters', async ({ page }) => {
-    // Navigate to audit log.
+    // Navigate to audit log. The registered page route is 'audit-log'
+    // (see src/features/audit/register.tsx) — '#/audit' is not a route.
     await page.evaluate(() => {
-      window.location.hash = '#/audit';
+      window.location.hash = '#/audit-log';
     });
 
     // Audit log container must be visible.

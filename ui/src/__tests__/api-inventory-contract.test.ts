@@ -101,12 +101,11 @@ describe('inventory.ts IPC contract', () => {
 
   // ── Inventory shifts ──
 
-  it('startInventoryShift invokes "start_inventory_shift" with sessionToken + userId + locationId + notes', async () => {
+  it('startInventoryShift invokes "start_inventory_shift" with sessionToken + locationId + notes', async () => {
     mockInvoke.mockResolvedValue({ id: 'shift-1', user_id: 'u1', status: 'active' });
-    await startInventoryShift('tok', 'u1', 'loc-1', 'morning count');
+    await startInventoryShift('tok', 'loc-1', 'morning count');
     expect(mockInvoke).toHaveBeenCalledWith('start_inventory_shift', {
       sessionToken: 'tok',
-      userId: 'u1',
       locationId: 'loc-1',
       notes: 'morning count',
     });
@@ -121,12 +120,11 @@ describe('inventory.ts IPC contract', () => {
     });
   });
 
-  it('getActiveInventoryShift invokes "get_active_inventory_shift" with sessionToken + userId', async () => {
+  it('getActiveInventoryShift invokes "get_active_inventory_shift" with sessionToken', async () => {
     mockInvoke.mockResolvedValue(null);
-    await getActiveInventoryShift('tok', 'u1');
+    await getActiveInventoryShift('tok');
     expect(mockInvoke).toHaveBeenCalledWith('get_active_inventory_shift', {
       sessionToken: 'tok',
-      userId: 'u1',
     });
   });
 
@@ -143,12 +141,11 @@ describe('inventory.ts IPC contract', () => {
   it('createInventoryTransaction invokes "create_inventory_transaction" with flat args + lines', async () => {
     mockInvoke.mockResolvedValue('txn-1');
     const lines = [{ sku: 'SKU-1', product_name: 'Widget', qty: 5, delta: 5, barcode_scanned: null }];
-    await createInventoryTransaction('tok', 'receive', 'loc-1', 'u1', 'restock', lines);
+    await createInventoryTransaction('tok', 'receive', 'loc-1', 'restock', lines);
     expect(mockInvoke).toHaveBeenCalledWith('create_inventory_transaction', {
       sessionToken: 'tok',
       typeStr: 'receive',
       locationId: 'loc-1',
-      staffId: 'u1',
       notes: 'restock',
       lines,
     });

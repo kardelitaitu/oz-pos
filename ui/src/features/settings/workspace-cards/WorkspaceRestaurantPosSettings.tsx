@@ -4,9 +4,11 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import { useSettings } from '@/contexts/SettingsContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useTerminalHardware } from '@/hooks/useTerminalHardware';
-import { setReceiptSettings, getSetting, setSettings } from '@/api/settings';
+import { setReceiptSettingsScoped, getSetting, setSettings } from '@/api/settings';
 import SettingsSelect from '../SettingsSelect';
 import type { WorkspaceCardProps } from './types';
 import { hasChanges } from './helpers';
@@ -26,7 +28,8 @@ export function WorkspaceRestaurantPosSettings({
   variant = 'full-page',
   onSaved,
 }: WorkspaceCardProps) {
-  const { settings } = useSettings();
+  const { settings, markSettingsUpdated } = useSettings();
+  const { sessionToken } = useWorkspace();
   const { l10n } = useLocalization();
   const { addToast } = useToast();
   const hw = useTerminalHardware(terminalId ?? '', settings.store.currency);
@@ -37,6 +40,7 @@ export function WorkspaceRestaurantPosSettings({
   const [courseFiring, setCourseFiring] = useState(false);
 
   const [saving, setSaving] = useState(false);
+  const [dirtyVersion, setDirtyVersion] = useState(0);
 
   // Originals for dirty tracking — captured after initial load
   const originalsRef = useRef<Record<string, unknown>>({ tableManagement, courseFiring });
@@ -45,7 +49,7 @@ export function WorkspaceRestaurantPosSettings({
   const dirty = useMemo(() => hasChanges(
     { tableManagement, courseFiring } as Record<string, unknown>,
     originalsRef.current,
-  ), [tableManagement, courseFiring, originalsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  ), [tableManagement, courseFiring, originalsLoaded, dirtyVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Initialise ───────────────────────────────────────────────
 
@@ -80,7 +84,7 @@ export function WorkspaceRestaurantPosSettings({
 
       // Persist table management + course firing to the backend
       tasks.push(
-        setReceiptSettings({
+        setReceiptSettingsScoped(sessionToken ?? '', {
           showCurrency: settings.receipt.showCurrency,
           decimalSeparator: settings.receipt.decimalSeparator,
           showTax: settings.receipt.showTax,
@@ -91,7 +95,7 @@ export function WorkspaceRestaurantPosSettings({
           marginBottom: settings.receipt.marginBottom,
           marginLeft: settings.receipt.marginLeft,
           marginRight: settings.receipt.marginRight,
-        }, userId ?? 'default'),
+        }),
       );
       tasks.push(
         setSettings({ 'restaurant.course_firing': String(courseFiring) }, userId ?? 'default'),
@@ -104,6 +108,10 @@ export function WorkspaceRestaurantPosSettings({
       await Promise.all(tasks);
 
       originalsRef.current = { tableManagement, courseFiring };
+      setDirtyVersion((v) => v + 1);
+
+      // Notify other cards that receipt and restaurant settings changed
+      markSettingsUpdated(['receipt.showTableNumber', 'restaurant.course_firing']);
 
       onSaved?.();
     } catch {
@@ -111,7 +119,7 @@ export function WorkspaceRestaurantPosSettings({
     } finally {
       setSaving(false);
     }
-  }, [terminalId, hw, userId, tableManagement, courseFiring, settings.receipt, onSaved, addToast, l10n]);
+  }, [terminalId, hw, userId, tableManagement, courseFiring, settings.receipt, onSaved, addToast, l10n, markSettingsUpdated, sessionToken]);
 
   const isCompact = variant === 'inspector-drawer';
 
@@ -195,7 +203,7 @@ export function WorkspaceRestaurantPosSettings({
         </div>
       </Card>
 
-      {/* Kitchen printer */}
+      {/* Kitchen printer — separate from receipt printer */}
       {terminalId && (
         <Card
           shadow="sm"
@@ -212,16 +220,17 @@ export function WorkspaceRestaurantPosSettings({
               </label>
               <SettingsSelect
                 id="resto-kp-conn"
-                value={hw.profile?.hardware.printer.connection ?? 'auto'}
-                onChange={(v) => hw.updatePrinter({ connection: v as 'network' | 'usb' | 'serial' | 'auto' })}
+                value={hw.profile?.hardware.kitchenPrinter.connection ?? 'disabled'}
+                onChange={(v) => hw.updateKitchenPrinter({ connection: v as 'network' | 'usb' | 'serial' | 'auto' | 'disabled' })}
                 options={[
-                  { value: 'auto', label: 'Auto' },
+                  { value: 'disabled', label: requiredLocalized(l10n, 'workspace-resto-kp-disabled') },
                   { value: 'network', label: 'Network' },
                   { value: 'usb', label: 'USB' },
+                  { value: 'serial', label: 'Serial' },
                 ]}
               />
             </div>
-            {hw.profile?.hardware.printer.connection === 'network' && (
+            {hw.profile?.hardware.kitchenPrinter.connection === 'network' && (
               <div className="settings-field settings-field--horizontal">
                 <label htmlFor="resto-kp-ip" className="settings-label">
                   <Localized id="workspace-resto-kp-ip">Kitchen Printer IP</Localized>
@@ -230,9 +239,9 @@ export function WorkspaceRestaurantPosSettings({
                   id="resto-kp-ip"
                   type="text"
                   className="settings-input"
-                  value={hw.profile?.hardware.printer.devicePath ?? ''}
+                  value={hw.profile?.hardware.kitchenPrinter.devicePath ?? ''}
                   onChange={(e) => {
-                    hw.updatePrinter({ devicePath: e.target.value });
+                    hw.updateKitchenPrinter({ devicePath: e.target.value });
                   }}
                   placeholder="192.168.1.50"
                 />

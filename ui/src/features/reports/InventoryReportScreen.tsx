@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
+import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import { printSalesReceipt } from '@/api/sales';
 import { getLowStockAlerts, type LowStockAlert } from '@/api/reports';
@@ -10,6 +11,7 @@ import './InventoryReportScreen.css';
 /** Inventory report screen — view and export low-stock alerts with configurable threshold, CSV download, and print support. */
 export default function InventoryReportScreen() {
   const { l10n } = useLocalization();
+  const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<LowStockAlert[]>([]);
@@ -17,11 +19,11 @@ export default function InventoryReportScreen() {
 
   useEffect(() => {
     setLoading(true);
-    getLowStockAlerts(threshold)
+    getLowStockAlerts(threshold, sessionToken)
       .then(setItems)
       .catch((e) => setError(e.message ?? String(e)))
       .finally(() => setLoading(false));
-  }, [threshold]);
+  }, [threshold, sessionToken]);
 
   const exportCsv = () => {
     const headers = [

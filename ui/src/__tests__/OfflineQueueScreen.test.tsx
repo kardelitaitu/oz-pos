@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import offlineFtl from '@/locales/offline.ftl?raw';
@@ -211,10 +211,77 @@ describe('OfflineQueueScreen', () => {
     });
   });
 
+  it('shows a stale notice after repeated poll failures (ERR-07)', async () => {
+    vi.useFakeTimers();
+    try {
+      // Initial list load succeeds (empty queue); the 10s status poll fails.
+      mockListAllOffline.mockResolvedValue([]);
+      mockPendingOfflineCount.mockRejectedValue(new Error('poll fail'));
+      mockOfflineQueueStatusSummary.mockResolvedValue({
+        pendingCount: 0, syncedCount: 0, failedCount: 0, conflictCount: 0,
+        lastSyncedAt: null, oldestPendingAt: null,
+      });
+
+      renderScreen();
+
+      // Flush the initial load + the first poll attempt (fails once).
+      await act(async () => { await Promise.resolve(); });
+      expect(screen.queryByText('Queue status may be out of date.')).toBeNull();
+
+      // Two more 10s cycles → three consecutive failures → stale notice.
+      // Assert synchronously after each advance (waitFor does not advance
+      // fake timers on its own).
+      await act(async () => {
+        vi.advanceTimersByTime(10_000);
+        await Promise.resolve();
+      });
+      expect(screen.queryByText('Queue status may be out of date.')).toBeNull();
+
+      await act(async () => {
+        vi.advanceTimersByTime(10_000);
+        await Promise.resolve();
+      });
+      expect(screen.getByText('Queue status may be out of date.')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps rows visible and announces refreshing during a reload (ERR-09)', async () => {
+    // First load resolves with rows.
+    mockListAllOffline.mockResolvedValueOnce([makeQueueItem()]);
+    mockPendingOfflineCount.mockResolvedValue(1);
+    // The reload (via Sync All → load) stays pending so the `refreshing`
+    // phase is observable.
+    mockListAllOffline.mockImplementationOnce(() => new Promise(() => {}));
+    mockRetryOfflineSync.mockResolvedValue({ syncedCount: 0, failedCount: 0, totalCount: 1 });
+
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('sale.create')).toBeTruthy();
+    });
+
+    // Trigger a reload while rows are on screen.
+    const user = userEvent.setup();
+    await user.click(screen.getByText('Sync All'));
+
+    // Rows stay visible (no skeleton), and an accessible refreshing status
+    // announces the retry intent.
+    await waitFor(() => {
+      expect(screen.getByText('sale.create')).toBeTruthy();
+      const refreshing = document.querySelector('.offline-queue-refreshing');
+      expect(refreshing).toBeTruthy();
+      expect(refreshing?.getAttribute('role')).toBe('status');
+      expect(refreshing?.getAttribute('aria-live')).toBe('polite');
+    });
+    expect(document.querySelector('.offline-queue-loading-skeleton')).toBeNull();
+  });
+
   it('shows sync result after Sync All succeeds', async () => {
     mockListAllOffline.mockResolvedValue([makeQueueItem()]);
     mockPendingOfflineCount.mockResolvedValue(1);
-    mockRetryOfflineSync.mockResolvedValue({ synced: 1, failed: 0 });
+    mockRetryOfflineSync.mockResolvedValue({ syncedCount: 1, failedCount: 0, totalCount: 1 });
 
     renderScreen();
 
@@ -234,5 +301,31 @@ describe('OfflineQueueScreen', () => {
       const syncMessages = screen.getAllByText(/Synced/i);
       expect(syncMessages.some((el) => el.textContent?.includes('items'))).toBe(true);
     });
+  });
+
+  it('renders the exact synced/failed counts from the Rust camelCase DTO (OFF-02)', async () => {
+    // OFF-02: the UI must render the counts exactly as the Rust SyncResult
+    // serializes them (syncedCount/failedCount/totalCount). A mismatched
+    // contract would render undefined counts and mislead the operator.
+    mockListAllOffline.mockResolvedValue([makeQueueItem()]);
+    mockPendingOfflineCount.mockResolvedValue(1);
+    mockRetryOfflineSync.mockResolvedValue({ syncedCount: 3, failedCount: 2, totalCount: 5 });
+
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('Sync All')).not.toBeDisabled();
+    });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByText('Sync All'));
+
+    // The localized message is "Synced { $synced } items, { $failed } failed."
+    await waitFor(() => {
+      const msg = screen.getByText(/Synced 3 items, 2 failed/);
+      expect(msg).toBeTruthy();
+    });
+    // No undefined counts leak into the message.
+    expect(screen.queryByText(/Synced undefined/)).toBeNull();
   });
 });

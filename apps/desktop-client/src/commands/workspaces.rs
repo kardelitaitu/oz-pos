@@ -2,11 +2,12 @@
 //! per-user workspace assignment (admin feature).
 //!
 //! ADR #4 Phase 1: Now returns `WorkspaceDto` with instance-aware fields
-//! and supports instance CRUD. Legacy commands are preserved for
-//! backward compatibility and marked as deprecated.
+//! and supports instance CRUD.
 //!
-//! ADR #7: All active commands have scoped variants using the session token
-//! pattern. Old commands taking raw `user_id` / `store_id` are deprecated.
+//! ADR #7: Session-scoped commands are used for authenticated operations.
+//! Only the pre-session workspace picker retains narrowly scoped discovery
+//! commands; legacy mutation and user-targeted assignment commands are not
+//! registered with Tauri.
 
 use serde::Serialize;
 use tauri::State;
@@ -27,9 +28,9 @@ type HmacSha256 = Hmac<Sha256>;
 
 /// Legacy workspace DTO (pre-ADR #4).
 ///
-/// Kept for backward compatibility with `list_workspace_types` and
-/// `list_all_workspaces` commands. New code should use `WorkspaceDto`
-/// from `oz_core::db::workspaces` instead.
+/// Kept for the session-scoped workspace-type listing command. New code
+/// should use `WorkspaceDto` from `oz_core::db::workspaces` when it needs
+/// instance-aware data.
 #[derive(Debug, Serialize)]
 #[allow(dead_code)]
 pub struct WorkspaceTypeDto {
@@ -400,10 +401,14 @@ pub async fn get_user_workspace_instances_scoped(
 
 // ── Original Commands (deprecated for multi-store — ADR #7) ─────────
 
-/// List workspace instances accessible to the given role and user
-/// within a specific store.
+/// List workspace instances for the pre-session workspace picker.
 ///
-/// **Deprecated for multi-store (ADR #7):** Use `list_workspaces_scoped`.
+/// This narrow bootstrap command runs after username/PIN authentication but
+/// before an opaque session token exists. It accepts the login result's role
+/// and user identifiers only to filter the requested store; all authenticated
+/// mutations must use the session-scoped commands below. The requested store
+/// is opened through `StoreDatabaseManager` so this read cannot accidentally
+/// query the global identity database or another store's connection.
 #[tauri::command]
 pub async fn list_workspaces(
     state: State<'_, AppState>,
@@ -411,126 +416,32 @@ pub async fn list_workspaces(
     user_id: Option<String>,
     store_id: String,
 ) -> Result<Vec<WorkspaceDto>, AppError> {
-    let db = state.db.lock().await;
+    let conn = state
+        .db_manager
+        .open_store(&store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     let rows = store.list_workspaces(&role_id, user_id.as_deref(), &store_id)?;
     drop(db);
     Ok(rows)
 }
 
-/// Get a single workspace instance by ID.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `get_workspace_instance_scoped`.
-#[tauri::command]
-pub async fn get_workspace_instance(
-    state: State<'_, AppState>,
-    instance_id: String,
-    user_id: Option<String>,
-) -> Result<WorkspaceDto, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let dto = store.get_workspace_instance(&instance_id, user_id.as_deref())?;
-    drop(db);
-    Ok(dto)
-}
-
-/// Create a new workspace instance (admin).
-///
-/// **Deprecated for multi-store (ADR #7):** Use `create_workspace_instance_scoped`.
-///
-/// ADR #5 retro-fit (H1 audit gap fix): Now enforces subscription tier
-/// quota before creating. Previously this deprecated command bypassed the
-/// quota system entirely, allowing an attacker to create unlimited
-/// instances regardless of tier by calling it directly.
-#[tauri::command]
-pub async fn create_workspace_instance(
-    state: State<'_, AppState>,
-    req: CreateInstanceRequest,
-    caller_user_id: String,
-) -> Result<WorkspaceDto, AppError> {
-    // ── Subscription enforcement (H1 audit gap fix) ────────
-    // Load subscription from the global DB, validate clock,
-    // verify signature, and enforce quota — same as the scoped
-    // variant. This prevents bypassing tier limits by calling
-    // the deprecated command directly.
-    let sub = {
-        let global_db = state.db.lock().await;
-        TenantSubscription::validate_clock_rollback(&global_db)?;
-        TenantSubscription::load(&global_db, "default")?
-            .ok_or_else(|| AppError::Internal("default tenant subscription not found".into()))?
-    };
-    sub.verify_signature()?;
-
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &caller_user_id, permissions::STAFF_UPDATE)?;
-    let effective = sub.effective_tier();
-    store.enforce_instance_quota(&effective, &req.type_key, &req.store_id)?;
-    let _row = store.create_workspace_instance(
-        &req.id,
-        &req.type_key,
-        &req.store_id,
-        &req.name,
-        req.description.as_deref().unwrap_or(""),
-        req.colour.as_deref(),
-    )?;
-    let dto = store.get_workspace_instance(&req.id, Some(&caller_user_id))?;
-    drop(db);
-    tracing::info!(
-        instance_id = %req.id,
-        type_key = %req.type_key,
-        store_id = %req.store_id,
-        "workspace instance created"
-    );
-    Ok(dto)
-}
-
 // ── Legacy Commands (backward compatible) ────────────────────────────
-
-/// List all workspace types.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `list_workspaces_scoped` instead.
-#[tauri::command]
-pub async fn list_workspace_types(
-    state: State<'_, AppState>,
-) -> Result<Vec<WorkspaceTypeDto>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let rows = store.list_all_workspace_types()?;
-    drop(db);
-    Ok(rows
-        .into_iter()
-        .map(|r| WorkspaceTypeDto {
-            key: r.key,
-            name: r.name,
-            description: r.description,
-            icon: r.icon,
-        })
-        .collect())
-}
 
 /// List ALL workspace types (for admin dropdowns).
 ///
 /// **Deprecated for multi-store (ADR #7):** Use `list_workspaces_scoped` instead.
 #[tauri::command]
 pub async fn list_all_workspaces(
-    state: State<'_, AppState>,
-    user_id: String,
+    _state: State<'_, AppState>,
+    _user_id: String,
 ) -> Result<Vec<WorkspaceTypeDto>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &user_id, permissions::STAFF_READ)?;
-    let rows = store.list_all_workspace_types()?;
-    drop(db);
-    Ok(rows
-        .into_iter()
-        .map(|r| WorkspaceTypeDto {
-            key: r.key,
-            name: r.name,
-            description: r.description,
-            icon: r.icon,
-        })
-        .collect())
+    Err(AppError::PermissionDenied(
+        "legacy unscoped workspace commands are disabled; use list_all_workspaces_scoped".into(),
+    ))
 }
 
 /// List all workspace types resolved from a session token. ADR #7.
@@ -567,19 +478,14 @@ pub async fn list_all_workspaces_scoped(
 /// **Deprecated for multi-store (ADR #7):** Use `set_user_workspace_instances_scoped`.
 #[tauri::command]
 pub async fn set_user_workspaces(
-    state: State<'_, AppState>,
-    user_id: String,
-    workspace_keys: Vec<String>,
-    caller_user_id: String,
+    _state: State<'_, AppState>,
+    _user_id: String,
+    _workspace_keys: Vec<String>,
+    _caller_user_id: String,
 ) -> Result<(), AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &caller_user_id, permissions::STAFF_UPDATE)?;
-    let keys: Vec<&str> = workspace_keys.iter().map(|s| s.as_str()).collect();
-    store.set_user_workspaces_legacy(&user_id, keys)?;
-    drop(db);
-    tracing::info!(user_id = %user_id, count = %workspace_keys.len(), "user workspace assignments updated (legacy)");
-    Ok(())
+    Err(AppError::PermissionDenied(
+        "legacy unscoped workspace commands are disabled; use set_user_workspaces_scoped".into(),
+    ))
 }
 
 /// Replace all workspace assignments for a user (legacy tables), caller from session. ADR #7.
@@ -612,15 +518,12 @@ pub async fn set_user_workspaces_scoped(
 /// **Deprecated for multi-store (ADR #7):** Use `get_user_workspace_instances_scoped`.
 #[tauri::command]
 pub async fn get_user_workspaces(
-    state: State<'_, AppState>,
-    user_id: String,
+    _state: State<'_, AppState>,
+    _user_id: String,
 ) -> Result<Vec<String>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &user_id, permissions::STAFF_READ)?;
-    let keys = store.get_user_workspace_keys_legacy(&user_id)?;
-    drop(db);
-    Ok(keys)
+    Err(AppError::PermissionDenied(
+        "legacy unscoped workspace commands are disabled; use get_user_workspaces_scoped".into(),
+    ))
 }
 
 /// Get workspace keys for a user (legacy table), caller from session. ADR #7.
@@ -645,15 +548,22 @@ pub async fn get_user_workspaces_scoped(
     Ok(keys)
 }
 
-/// List screens (nav items) for a given workspace type.
-///
-/// **Deprecated for multi-store (ADR #7):** Use `list_workspace_screens_scoped`.
+/// List screens (nav items) for a workspace type during boot/workspace
+/// selection. The store ID is explicit so the read is routed to the correct
+/// store database; authenticated callers should prefer the scoped variant.
 #[tauri::command]
 pub async fn list_workspace_screens(
     state: State<'_, AppState>,
     type_key: String,
+    store_id: String,
 ) -> Result<Vec<WorkspaceScreenDto>, AppError> {
-    let db = state.db.lock().await;
+    let conn = state
+        .db_manager
+        .open_store(&store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     let rows = store.list_workspace_type_screens(&type_key)?;
     drop(db);
@@ -666,41 +576,40 @@ pub async fn list_workspace_screens(
         .collect())
 }
 
-/// Replace all instance assignments for a user (old command).
+/// Replace all instance assignments for a user through the session-scoped API.
 ///
-/// **Deprecated for multi-store (ADR #7):** Use `set_user_workspace_instances_scoped`.
-#[tauri::command]
+/// The former unscoped command accepted a forgeable `caller_user_id` and is
+/// intentionally retained only as a non-callable Rust symbol for source
+/// compatibility. It is not registered with Tauri; callers must use
+/// `set_user_workspace_instances_scoped`.
+#[allow(dead_code)]
 pub async fn set_user_workspace_instances(
-    state: State<'_, AppState>,
-    user_id: String,
-    instance_ids: Vec<String>,
-    default_instance_id: Option<String>,
-    caller_user_id: String,
+    _state: State<'_, AppState>,
+    _user_id: String,
+    _instance_ids: Vec<String>,
+    _default_instance_id: Option<String>,
+    _caller_user_id: String,
 ) -> Result<(), AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &caller_user_id, permissions::STAFF_UPDATE)?;
-    let ids: Vec<&str> = instance_ids.iter().map(|s| s.as_str()).collect();
-    store.set_user_workspace_instances(&user_id, ids, default_instance_id.as_deref())?;
-    drop(db);
-    tracing::info!(user_id = %user_id, count = %instance_ids.len(), "user workspace instance assignments updated");
-    Ok(())
+    Err(AppError::PermissionDenied(
+        "legacy unscoped workspace commands are disabled; use set_user_workspace_instances_scoped"
+            .into(),
+    ))
 }
 
-/// Get the explicit instance IDs assigned to a user (old command).
+/// Get instance IDs through the session-scoped API.
 ///
-/// **Deprecated for multi-store (ADR #7):** Use `get_user_workspace_instances_scoped`.
-#[tauri::command]
+/// The former unscoped command is not registered with Tauri because it had no
+/// authenticated caller context. Callers must use
+/// `get_user_workspace_instances_scoped`.
+#[allow(dead_code)]
 pub async fn get_user_workspace_instances(
-    state: State<'_, AppState>,
-    user_id: String,
+    _state: State<'_, AppState>,
+    _user_id: String,
 ) -> Result<Vec<String>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    require_permission_for_user(&store, &user_id, permissions::STAFF_READ)?;
-    let ids = store.get_user_workspace_instance_ids(&user_id)?;
-    drop(db);
-    Ok(ids)
+    Err(AppError::PermissionDenied(
+        "legacy unscoped workspace commands are disabled; use get_user_workspace_instances_scoped"
+            .into(),
+    ))
 }
 
 // ── Boot Resolution (ADR #4 Phase 3) ────────────────────────────────

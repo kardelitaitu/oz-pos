@@ -23,10 +23,16 @@
 }
 
 /* ── Layout ───────────────────────────────────────── */
+/* TAB-02: the tablet entry never loads AppLayout.css, so the base
+ * `.app-layout` rules (display:flex etc.) must be re-declared here for
+ * the shell to be self-contained. `flex-direction: column-reverse` puts
+ * the tab bar at the bottom (thumb-reachable). */
 .tablet-shell .app-layout {
+  display: flex;
   flex-direction: column-reverse;
   height: 100dvh;
   overflow: hidden;
+  background: var(--color-bg);
 }
 
 /* Hide the desktop sidebar */
@@ -190,6 +196,32 @@
   padding: var(--space-3);
   font-size: var(--tablet-font-base);
   border-radius: var(--tablet-radius);
+}
+
+/* ── Skip-to-content link (A11Y-03) — keyboard-only, first focusable ── */
+/* The desktop shell defines .skip-to-content in AppLayout.css, but the tablet
+ * entry never loads that stylesheet, so the class is styled here too. */
+.tablet-shell .skip-to-content {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--text-base);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  z-index: var(--z-tooltip);
+  text-decoration: none;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.tablet-shell .skip-to-content:focus-visible {
+  clip: auto;
+  white-space: normal;
 }
 
 /* ── Safe area handling ───────────────────────────── */

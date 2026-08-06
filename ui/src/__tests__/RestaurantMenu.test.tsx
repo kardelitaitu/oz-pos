@@ -1,11 +1,11 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor, act } from '@testing-library/react';
+import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import userEvent from '@testing-library/user-event';
-import { render } from '@testing-library/react';
-import { withFluent } from '@/locales/test-utils';
 import RestaurantMenu from '@/features/restaurant/RestaurantMenu';
 import type { Product } from '@/types/domain';
 import sharedFtl from '@/locales/shared.ftl?raw';
+import productsFtl from '@/locales/products.ftl?raw';
 
 const mockProducts = [
   {
@@ -108,7 +108,9 @@ afterEach(() => {
 
 function renderMenu(props: { onAddProduct?: (product: Product) => void } = {}) {
   const { onAddProduct } = props;
-  return render(withFluent(<RestaurantMenu onAddProduct={onAddProduct!} />, sharedFtl));
+  // LOAD-05: the loading label resolves via requiredLocalized, so the
+  // products bundle (restaurant-menu-loading) must be present.
+  return renderWithFluentSync(<RestaurantMenu onAddProduct={onAddProduct!} />, sharedFtl, productsFtl);
 }
 
 describe('RestaurantMenu', () => {
@@ -121,7 +123,8 @@ describe('RestaurantMenu', () => {
   it('shows empty state', () => {
     mockUseProducts.mockReturnValue({ products: [], categories: [], categoryMeta: [], loading: false });
     renderMenu();
-    expect(screen.getByText('No items available')).toBeTruthy();
+    // Real bundle value (products.ftl) now that the bundle is loaded.
+    expect(screen.getByText('Menu is empty')).toBeTruthy();
   });
 
   it('renders product cards', () => {
@@ -201,7 +204,7 @@ describe('RestaurantMenu', () => {
   it('shows empty state when no products match filter', () => {
     mockUseProducts.mockReturnValue({ products: [], categories: ['Makanan'], categoryMeta: [], loading: false });
     renderMenu();
-    expect(screen.getByText('No items available')).toBeTruthy();
+    expect(screen.getByText('Menu is empty')).toBeTruthy();
   });
 
   it('hides out-of-stock products when marked unavailable via context menu', async () => {
@@ -215,5 +218,98 @@ describe('RestaurantMenu', () => {
     await waitFor(() => {
       expect(screen.getByText('Mark unavailable')).toBeTruthy();
     });
+  });
+
+  // ── A11Y-06: context menu keyboard operability (WAI-ARIA menu pattern) ──
+
+  it('opens the context menu via Shift+F10 and moves focus to the first menuitem', async () => {
+    renderMenu();
+    const user = userEvent.setup();
+    const card = screen.getByText('Nasi Goreng').closest('button')!;
+
+    card.focus();
+    await user.keyboard('{Shift>}{F10}{/Shift}');
+
+    await waitFor(() => {
+      expect(screen.getByText('Pin to top')).toBeTruthy();
+    });
+    // Keyboard-open must move focus into the menu (first menuitem).
+    expect(document.activeElement?.textContent).toContain('Pin to top');
+  });
+
+  it('opens the context menu via the ContextMenu key', async () => {
+    renderMenu();
+    const user = userEvent.setup();
+    const card = screen.getByText('Nasi Goreng').closest('button')!;
+
+    card.focus();
+    await user.keyboard('{ContextMenu}');
+
+    await waitFor(() => {
+      expect(screen.getByText('Mark unavailable')).toBeTruthy();
+    });
+  });
+
+  it('supports ArrowUp/ArrowDown roving focus between menuitems', async () => {
+    renderMenu();
+    const user = userEvent.setup();
+    const card = screen.getByText('Nasi Goreng').closest('button')!;
+
+    card.focus();
+    await user.keyboard('{Shift>}{F10}{/Shift}');
+    await waitFor(() => {
+      expect(screen.getByText('Pin to top')).toBeTruthy();
+    });
+
+    // First menuitem is focused after open; ArrowDown moves to the second.
+    await user.keyboard('{ArrowDown}');
+    expect(document.activeElement?.textContent).toContain('Mark unavailable');
+
+    // ArrowUp wraps back to the first.
+    await user.keyboard('{ArrowUp}');
+    expect(document.activeElement?.textContent).toContain('Pin to top');
+  });
+
+  it('closes the context menu via Escape and restores focus to the card', async () => {
+    renderMenu();
+    const user = userEvent.setup();
+    const card = screen.getByText('Nasi Goreng').closest('button')!;
+
+    card.focus();
+    await user.keyboard('{Shift>}{F10}{/Shift}');
+    await waitFor(() => {
+      expect(screen.getByText('Pin to top')).toBeTruthy();
+    });
+
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => {
+      expect(screen.queryByText('Pin to top')).toBeNull();
+    });
+    // Focus must return to the triggering card (not the body).
+    expect(document.activeElement).toBe(card);
+  });
+
+  it('closes the pointer-opened context menu via Escape without moving focus into the menu', async () => {
+    renderMenu();
+    const user = userEvent.setup();
+    const card = screen.getByText('Nasi Goreng').closest('button')!;
+    const focusedBefore = document.activeElement;
+
+    await act(async () => {
+      card.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 100, clientY: 200 }));
+    });
+    await waitFor(() => {
+      expect(screen.getByText('Pin to top')).toBeTruthy();
+    });
+
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => {
+      expect(screen.queryByText('Pin to top')).toBeNull();
+    });
+    // Pointer-open must not steal focus into the menu or force-restore it —
+    // the element focused before opening stays focused after Escape.
+    expect(document.activeElement).toBe(focusedBefore);
   });
 });

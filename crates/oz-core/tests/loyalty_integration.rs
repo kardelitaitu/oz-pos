@@ -41,6 +41,17 @@ fn seed_sale(conn: &Connection, id: &str, total_minor: i64) {
     .unwrap();
 }
 
+fn seed_customer_sale(conn: &Connection, id: &str, customer_id: &str, total_minor: i64) {
+    conn.execute(
+        "INSERT INTO sales (id, total_minor, currency, line_count, status, customer_id, created_at, updated_at,
+                            subtotal_minor, tax_total_minor)
+         VALUES (?1, ?2, 'USD', 0, 'completed', ?3,
+                 '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z', ?2, 0)",
+        rusqlite::params![id, total_minor, customer_id],
+    )
+    .unwrap();
+}
+
 // ── Account Creation ──────────────────────────────────────────────────
 
 #[test]
@@ -234,7 +245,10 @@ fn redeem_points_returns_discount_value() {
     let conn = setup();
     seed_customer(&conn, "cust-1", "Alice");
     seed_sale(&conn, "sale-1", 5000);
-    seed_sale(&conn, "sale-2", 0);
+    // The redemption target sale must belong to the customer AND have a
+    // total >= the redemption value (audit/02: redemption cannot exceed the
+    // sale total).
+    seed_customer_sale(&conn, "sale-2", "cust-1", 1000);
 
     store(&conn).earn_points("cust-1", "sale-1", 5000).unwrap();
     // Bronze: 5000 * 10 / 100 * 1.0 = 500 points earned.
@@ -252,7 +266,9 @@ fn redeem_points_returns_discount_value() {
 fn redeem_insufficient_points_fails() {
     let conn = setup();
     seed_customer(&conn, "cust-1", "Alice");
-    seed_sale(&conn, "sale-1", 0);
+    // The sale must belong to the customer and have a total >= 100 so the
+    // insufficient-balance guard is what rejects the redemption (audit/02).
+    seed_customer_sale(&conn, "sale-1", "cust-1", 1000);
 
     store(&conn)
         .get_or_create_loyalty_account("cust-1")
@@ -394,9 +410,9 @@ fn get_points_value_conversion() {
     let conn = setup();
     let s = store(&conn);
 
-    assert_eq!(s.get_points_value(100), 100);
-    assert_eq!(s.get_points_value(500), 500);
-    assert_eq!(s.get_points_value(0), 0);
+    assert_eq!(s.get_points_value(100).unwrap(), 100);
+    assert_eq!(s.get_points_value(500).unwrap(), 500);
+    assert_eq!(s.get_points_value(0).unwrap(), 0);
 }
 
 // ── List All Accounts ────────────────────────────────────────────────

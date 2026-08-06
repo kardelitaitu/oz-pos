@@ -2,7 +2,9 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { readScaleWeight, type WeightReading } from '@/api/hardware';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import { useLocalization } from '@fluent/react';
+import { plainErrorMessage } from '@/utils/app-error';
 import './WeightScaleWidget.css';
 
 /** Props for the WeightScaleWidget — optional callback for when a stable weight is obtained, plus device identifiers. */
@@ -50,7 +52,7 @@ export function WeightScaleWidget({
       if (result) onWeightObtained?.(result);
     } catch (err) {
       if (!mountedRef.current) return;
-      const msg = err instanceof Error ? err.message : 'Scale read failed';
+      const msg = plainErrorMessage(err, 'Scale read failed');
       setError(msg);
       addToast({ message: msg, type: 'error' });
     } finally {
@@ -68,13 +70,13 @@ export function WeightScaleWidget({
     : null;
 
   return (
-    <div className="weight-scale-widget" role="region" aria-label={l10n.getString('weight-scale-aria') || 'Weight Scale'}>
+    <div className="weight-scale-widget" role="region" aria-label={requiredLocalized(l10n, 'weight-scale-aria')}>
       <div className="weight-scale-display">
         {displayWeight ? (
           <>
             <span className="weight-scale-value">{displayWeight}</span>
             {reading?.stable && (
-              <span className="weight-scale-stable" title={l10n.getString('weight-scale-stable') || 'Stable'}>
+              <span className="weight-scale-stable" title={requiredLocalized(l10n, 'weight-scale-stable')}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
                   <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                   <polyline points="22 4 12 14.01 9 11.01" />
@@ -82,7 +84,7 @@ export function WeightScaleWidget({
               </span>
             )}
             {reading && !reading.stable && (
-              <span className="weight-scale-unstable" title={l10n.getString('weight-scale-unstable') || 'Unstable'}>
+              <span className="weight-scale-unstable" title={requiredLocalized(l10n, 'weight-scale-unstable')}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
                   <line x1="12" y1="2" x2="12" y2="6" />
                   <line x1="12" y1="18" x2="12" y2="22" />
@@ -103,11 +105,11 @@ export function WeightScaleWidget({
               <line x1="15" y1="9" x2="9" y2="15" />
               <line x1="9" y1="9" x2="15" y2="15" />
             </svg>
-            {l10n.getString('weight-scale-error') || 'Scale error'}
+            {requiredLocalized(l10n, 'weight-scale-error')}
           </span>
         ) : (
           <span className="weight-scale-idle">
-            {l10n.getString('weight-scale-idle') || '—'}
+            {requiredLocalized(l10n, 'weight-scale-idle')}
           </span>
         )}
       </div>
@@ -116,11 +118,11 @@ export function WeightScaleWidget({
         className="weight-scale-btn"
         onClick={handleWeigh}
         disabled={weighing}
-        aria-label={l10n.getString('weight-scale-weigh-aria') || 'Weigh'}
+        aria-label={requiredLocalized(l10n, 'weight-scale-weigh-aria')}
       >
         {weighing
-          ? (l10n.getString('weight-scale-weighing') || 'Weighing…')
-          : (l10n.getString('weight-scale-weigh') || 'Weigh')}
+          ? (requiredLocalized(l10n, 'weight-scale-weighing'))
+          : (requiredLocalized(l10n, 'weight-scale-weigh'))}
       </button>
     </div>
   );

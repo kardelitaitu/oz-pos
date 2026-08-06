@@ -2,8 +2,6 @@
 
 import { loggedInvoke } from '@/utils/logged-invoke';
 
-// ── DTOs ────────────────────────────────────────────────────────────
-
 /** A physical stock count session. */
 export interface StockCountDto {
   id: string;
@@ -42,13 +40,10 @@ export interface StockAdjustmentDto {
   created_at: string;
 }
 
-// ── Args ────────────────────────────────────────────────────────────
-
-/** Arguments for creating a new stock count. */
+/** Arguments for creating a new stock count. The actor is session-derived. */
 export interface CreateStockCountArgs {
   countType: string;
   notes: string;
-  countedBy?: string | null;
 }
 
 /** Arguments for adding a line to a stock count. */
@@ -66,50 +61,74 @@ export interface UpdateCountLineArgs {
   notes: string;
 }
 
-/** Arguments for completing a stock count and generating adjustments. */
+/** Arguments for completing a stock count. The actor is session-derived. */
 export interface CompleteStockCountArgs {
   countId: string;
-  completedBy?: string | null;
 }
 
-// ── Commands ────────────────────────────────────────────────────────
+/** Create a stock count in the store resolved from the session token. */
+export const createStockCount = (
+  sessionToken: string,
+  args: CreateStockCountArgs,
+): Promise<StockCountDto> =>
+  loggedInvoke<StockCountDto>('create_stock_count_scoped', { sessionToken, args });
 
-/** Create a new stock count session. */
-export const createStockCount = (args: CreateStockCountArgs): Promise<StockCountDto> =>
-  loggedInvoke<StockCountDto>('create_stock_count', { args });
+/** Get a stock count from the store resolved from the session token. */
+export const getStockCount = (
+  sessionToken: string,
+  id: string,
+): Promise<StockCountDto | null> =>
+  loggedInvoke<StockCountDto | null>('get_stock_count_scoped', { sessionToken, id });
 
-/** Get a single stock count by its identifier. */
-export const getStockCount = (id: string): Promise<StockCountDto | null> =>
-  loggedInvoke<StockCountDto | null>('get_stock_count', { id });
+/** List stock counts from the store resolved from the session token. */
+export const listStockCounts = (sessionToken: string): Promise<StockCountDto[]> =>
+  loggedInvoke<StockCountDto[]>('list_stock_counts_scoped', { sessionToken });
 
-/** List all stock counts. */
-export const listStockCounts = (): Promise<StockCountDto[]> =>
-  loggedInvoke<StockCountDto[]>('list_stock_counts');
+/** Get count lines from the store resolved from the session token. */
+export const getCountLines = (
+  sessionToken: string,
+  countId: string,
+): Promise<StockCountLineDto[]> =>
+  loggedInvoke<StockCountLineDto[]>('get_count_lines_scoped', { sessionToken, countId });
 
-/** Get all lines for a given stock count. */
-export const getCountLines = (countId: string): Promise<StockCountLineDto[]> =>
-  loggedInvoke<StockCountLineDto[]>('get_count_lines', { countId });
+/** Add a line to a count in the store resolved from the session token. */
+export const addCountLine = (
+  sessionToken: string,
+  args: AddCountLineArgs,
+): Promise<StockCountLineDto> =>
+  loggedInvoke<StockCountLineDto>('add_count_line_scoped', { sessionToken, args });
 
-/** Add a line to a stock count. */
-export const addCountLine = (args: AddCountLineArgs): Promise<StockCountLineDto> =>
-  loggedInvoke<StockCountLineDto>('add_count_line', { args });
+/** Update a count line in the store resolved from the session token. */
+export const updateCountLine = (
+  sessionToken: string,
+  args: UpdateCountLineArgs,
+): Promise<void> =>
+  loggedInvoke<void>('update_count_line_scoped', { sessionToken, args });
 
-/** Update a stock count line's counted quantity. */
-export const updateCountLine = (args: UpdateCountLineArgs): Promise<void> =>
-  loggedInvoke<void>('update_count_line', { args });
+/** Remove a count line in the store resolved from the session token. */
+export const removeCountLine = (
+  sessionToken: string,
+  args: { lineId: string },
+): Promise<void> =>
+  loggedInvoke<void>('remove_count_line_scoped', { sessionToken, args });
 
-/** Remove a line from a stock count. */
-export const removeCountLine = (args: { lineId: string }): Promise<void> =>
-  loggedInvoke<void>('remove_count_line', { args });
+/** Complete a count in the store resolved from the session token. */
+export const completeStockCount = (
+  sessionToken: string,
+  args: CompleteStockCountArgs,
+): Promise<StockAdjustmentDto[]> =>
+  loggedInvoke<StockAdjustmentDto[]>('complete_stock_count_scoped', { sessionToken, args });
 
-/** Complete a stock count, generating adjustments for any discrepancies. */
-export const completeStockCount = (args: CompleteStockCountArgs): Promise<StockAdjustmentDto[]> =>
-  loggedInvoke<StockAdjustmentDto[]>('complete_stock_count', { args });
+/** Update a count lifecycle status in the store resolved from the session token. */
+export const updateStockCountStatus = (
+  sessionToken: string,
+  id: string,
+  status: string,
+): Promise<void> =>
+  loggedInvoke<void>('update_stock_count_status_scoped', { sessionToken, id, status });
 
-/** Update a stock count's status directly (e.g. cancel). */
-export const updateStockCountStatus = (id: string, status: string): Promise<void> =>
-  loggedInvoke<void>('update_stock_count_status', { id, status });
-
-/** List all stock adjustments. */
-export const listStockAdjustments = (): Promise<StockAdjustmentDto[]> =>
-  loggedInvoke<StockAdjustmentDto[]>('list_stock_adjustments');
+/** List adjustments from the store resolved from the session token. */
+export const listStockAdjustments = (
+  sessionToken: string,
+): Promise<StockAdjustmentDto[]> =>
+  loggedInvoke<StockAdjustmentDto[]>('list_stock_adjustments_scoped', { sessionToken });

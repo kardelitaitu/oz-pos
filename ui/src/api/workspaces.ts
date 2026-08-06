@@ -162,8 +162,9 @@ export async function getUserWorkspaceInstancesScoped(
 // ── Original Commands (deprecated for multi-store — ADR #7) ────────────
 
 /**
- * @deprecated Use listWorkspacesScoped with session token instead (ADR #7).
- * List workspace instances accessible to the given role and user.
+ * @deprecated Required only during pre-session workspace selection. Once a
+ * session exists, use listWorkspacesScoped so the store and permissions are
+ * resolved from the session token.
  */
 export async function listWorkspaces(
   roleId: string,
@@ -178,108 +179,30 @@ export async function listWorkspaces(
 }
 
 /**
- * @deprecated Use getWorkspaceInstanceScoped with session token instead (ADR #7).
- * Get a single workspace instance by ID.
- */
-export async function getWorkspaceInstance(
-  instanceId: string,
-  userId?: string,
-): Promise<WorkspaceDto> {
-  return loggedInvoke<WorkspaceDto>('get_workspace_instance', {
-    instanceId,
-    userId: userId ?? null,
-  });
-}
-
-/**
- * @deprecated Use createWorkspaceInstanceScoped with session token instead (ADR #7).
- * Create a new workspace instance (admin only).
- */
-export async function createWorkspaceInstance(
-  req: CreateInstanceRequest,
-  callerUserId: string,
-): Promise<WorkspaceDto> {
-  return loggedInvoke<WorkspaceDto>('create_workspace_instance', {
-    req,
-    callerUserId,
-  });
-}
-
-/**
- * @deprecated Use listWorkspaceScreensScoped with session token instead (ADR #7).
- * List screens (nav items) for a given workspace type.
+ * List screens during pre-session workspace selection.
+ *
+ * The explicit store ID keeps this bootstrap read on the selected store
+ * database. Authenticated callers should use listWorkspaceScreensScoped.
  */
 export async function listWorkspaceScreens(
   typeKey: string,
+  storeId: string,
 ): Promise<WorkspaceScreenDto[]> {
   return loggedInvoke<WorkspaceScreenDto[]>('list_workspace_screens', {
     typeKey,
+    storeId,
   });
 }
 
 // ── Instance Assignment Commands ────────────────────────────────────────
 
-/**
- * @deprecated Use setUserWorkspaceInstancesScoped with session token instead (ADR #7).
- * Replace all instance assignments for a user.
- */
-export async function setUserWorkspaceInstances(
-  userId: string,
-  instanceIds: string[],
-  callerUserId: string,
-  defaultInstanceId?: string,
-): Promise<void> {
-  return loggedInvoke<void>('set_user_workspace_instances', {
-    userId,
-    instanceIds,
-    defaultInstanceId: defaultInstanceId ?? null,
-    callerUserId,
-  });
-}
-
-/**
- * @deprecated Use getUserWorkspaceInstancesScoped with session token instead (ADR #7).
- * Get explicit instance IDs assigned to a user.
- */
-export async function getUserWorkspaceInstances(
-  userId: string,
-): Promise<string[]> {
-  return loggedInvoke<string[]>('get_user_workspace_instances', { userId });
-}
-
 // ── Legacy Commands (backward compatible, deprecated) ──────────────────
-
-/**
- * @deprecated Use listWorkspacesScoped instead (ADR #7).
- * List all workspace types.
- */
-export async function listAllWorkspaces(
-  userId: string,
-): Promise<WorkspaceTypeDto[]> {
-  return loggedInvoke<WorkspaceTypeDto[]>('list_all_workspaces', { userId });
-}
 
 /** List all workspace types (scoped — ADR #7). */
 export async function listAllWorkspacesScoped(
   sessionToken: string,
 ): Promise<WorkspaceTypeDto[]> {
   return loggedInvoke<WorkspaceTypeDto[]>('list_all_workspaces_scoped', { sessionToken });
-}
-
-/**
- * @deprecated Use setUserWorkspaceInstancesScoped instead (ADR #7).
- * Replace workspace key assignments for a user.
- */
-export async function setUserWorkspaces(
-  userId: string,
-  workspaceKeys: string[],
-  callerUserId: string,
-): Promise<void> {
-  return loggedInvoke<void>('set_user_workspaces', {
-    userId,
-    workspaceKeys,
-    callerUserId,
-  });
 }
 
 /** Replace workspace key assignments (legacy), caller from session. ADR #7. */
@@ -289,14 +212,6 @@ export async function setUserWorkspacesScoped(
   workspaceKeys: string[],
 ): Promise<void> {
   return loggedInvoke<void>('set_user_workspaces_scoped', { sessionToken, userId, workspaceKeys });
-}
-
-/**
- * @deprecated Use getUserWorkspaceInstancesScoped instead (ADR #7).
- * Get workspace keys assigned to a user.
- */
-export async function getUserWorkspaces(userId: string): Promise<string[]> {
-  return loggedInvoke<string[]>('get_user_workspaces', { userId });
 }
 
 /** Get workspace keys for a user (legacy), caller from session. ADR #7. */

@@ -212,7 +212,7 @@ describe('InventoryReportScreen', () => {
     mockGetLowStockAlerts.mockResolvedValue([]);
     renderScreen();
     await waitFor(() => {
-      expect(mockGetLowStockAlerts).toHaveBeenCalledWith(10);
+      expect(mockGetLowStockAlerts).toHaveBeenCalledWith(10, '');
     });
     mockGetLowStockAlerts.mockClear();
 
@@ -220,7 +220,7 @@ describe('InventoryReportScreen', () => {
     fireEvent.change(input, { target: { value: '5' } });
 
     await waitFor(() => {
-      expect(mockGetLowStockAlerts).toHaveBeenCalledWith(5);
+      expect(mockGetLowStockAlerts).toHaveBeenCalledWith(5, '');
     });
   });
 

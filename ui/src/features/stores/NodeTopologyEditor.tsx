@@ -1,8 +1,10 @@
 import { useState, useMemo, useRef, useEffect, useCallback, memo } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Button } from '@/components/Button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import { loadTopology } from '@/api/topology';
 import { useSettings } from '@/contexts/SettingsContext';
 import {
@@ -27,6 +29,7 @@ import {
   CloseIcon,
   LockIcon,
 } from './NodeTopologyIcons';
+import { plainErrorMessage } from '@/utils/app-error';
 import './NodeTopologyEditor.css';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -175,6 +178,7 @@ export default function NodeTopologyEditor({
   onSave,
   workspaceInstances,
 }: NodeTopologyEditorProps) {
+  const { sessionToken } = useWorkspace();
   const { addToast } = useToast();
   const { l10n } = useLocalization();
   const { settings } = useSettings();
@@ -378,7 +382,7 @@ export default function NodeTopologyEditor({
         // rather than silently swallowed.
         if (cancelled) return;
         addToast({
-          message: `${l10n.getString('topology-toast-load-error')}: ${err instanceof Error ? err.message : String(err)}`,
+          message: `${l10n.getString('topology-toast-load-error')}: ${plainErrorMessage(err)}`,
           type: 'error',
         });
       });
@@ -491,6 +495,15 @@ export default function NodeTopologyEditor({
       if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
         e.preventDefault();
         popRedo();
+        return;
+      }
+      // Ctrl+I — jump focus to the first inspector input when a node is selected
+      if ((e.ctrlKey || e.metaKey) && e.key === 'i' && selectedNodeId) {
+        e.preventDefault();
+        const firstInput = document.querySelector('.inspector-content input');
+        if (firstInput instanceof HTMLElement) {
+          firstInput.focus();
+        }
         return;
       }
       if (selectedNodeId && (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
@@ -844,6 +857,7 @@ export default function NodeTopologyEditor({
     const cardProps: WorkspaceCardProps = {
       variant: 'inspector-drawer',
       terminalId: node.id,
+      ...(sessionToken ? { sessionToken } : {}),
     };
 
     switch (typeKey) {
@@ -854,7 +868,7 @@ export default function NodeTopologyEditor({
       default:
         return <WorkspaceStorePosSettings key={node.id} {...cardProps} />;
     }
-  }, []);
+  }, [sessionToken]);
 
   // ── Live telemetry (ADR #22 Phase 2) ─────────────────────────
 
@@ -992,7 +1006,7 @@ export default function NodeTopologyEditor({
                   }
                 } catch (err) {
                   addToast({
-                    message: `${l10n.getString('topology-toast-save-error')}: ${err instanceof Error ? err.message : String(err)}`,
+                    message: `${l10n.getString('topology-toast-save-error')}: ${plainErrorMessage(err)}`,
                     type: 'error',
                   });
                   skipNextLoadRef.current = false;
@@ -1280,6 +1294,7 @@ export default function NodeTopologyEditor({
             </div>
 
             <div className="inspector-content">
+              <ErrorBoundary>
               {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- text is provided by <Localized> child */}
               <label className="inspector-field">
                 <span><Localized id="topology-inspector-node-name">Node Name</Localized></span>
@@ -1340,11 +1355,13 @@ export default function NodeTopologyEditor({
                 <WorkspaceInventorySettings
                   variant="inspector-drawer"
                   locationId={selectedNode.id}
+                  {...(sessionToken ? { sessionToken } : {})}
                 />
               )}
               {selectedNode.type === 'store' && (
                 <StoreInfoCard variant="inspector-drawer" />
               )}
+              </ErrorBoundary>
             </div>
           </div>
         )}

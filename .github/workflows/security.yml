@@ -24,3 +24,79 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo install --locked cargo-deny
       - run: cargo deny check
+
+  # ── Container scan (cloud + license) ────────────────────────────
+  #
+  # DOCKER-03: Trivy on BOTH application images, blocking on
+  # CRITICAL/HIGH with a documented exception mechanism (.trivyignore).
+  # Weekly schedule + manual dispatch complement the per-PR scan in ci.yml.
+  container-scan:
+    name: Trivy container scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build cloud image
+        run: docker build -f Dockerfile.server -t oz-pos-cloud:security .
+      - name: Build license image
+        run: docker build -f apps/license-server/Dockerfile -t oz-pos-license:security apps/license-server
+      # DOCKER-03: `ignorefile` is not a valid trivy-action@v0.36.0 input
+      # (silently dropped → baseline never applied); use `trivyignores`.
+      # Also set `limit-severities-for-sarif: true` so SARIF mode keeps the
+      # CRITICAL/HIGH filter (otherwise the action scans ALL severities).
+      # continue-on-error + the explicit gate keep both SARIFs uploaded even
+      # when findings exist, then fail the job AFTER uploads.
+      - name: Scan cloud image (blocking)
+        uses: aquasecurity/trivy-action@v0.36.0
+        continue-on-error: true
+        with:
+          image-ref: oz-pos-cloud:security
+          format: sarif
+          exit-code: 1
+          severity: CRITICAL,HIGH
+          limit-severities-for-sarif: true
+          trivyignores: .trivyignore
+          output: trivy-cloud.sarif
+      - name: Scan license image (blocking)
+        uses: aquasecurity/trivy-action@v0.36.0
+        continue-on-error: true
+        with:
+          image-ref: oz-pos-license:security
+          format: sarif
+          exit-code: 1
+          severity: CRITICAL,HIGH
+          limit-severities-for-sarif: true
+          trivyignores: .trivyignore
+          output: trivy-license.sarif
+      - name: Upload Trivy SARIF (cloud)
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-cloud.sarif
+          category: trivy-cloud
+      - name: Upload Trivy SARIF (license)
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-license.sarif
+          category: trivy-license
+      - name: Fail if Trivy found CRITICAL/HIGH findings
+        if: always()
+        shell: bash
+        run: |
+          FAILED=0
+          for f in trivy-cloud.sarif trivy-license.sarif; do
+            if [ ! -f "$f" ]; then
+              echo "::error::Missing SARIF file $f — scan produced no report"
+              FAILED=1
+              continue
+            fi
+            count=$(jq '[.runs[]?.results[]?] | length' "$f")
+            if [ "$count" -gt 0 ]; then
+              echo "::error::Trivy found $count CRITICAL/HIGH finding(s) in $f"
+              jq -r '.runs[]?.results[]? | "\(.ruleId): \(.message.text // .message // "")"' "$f" | head -n 30 || true
+              FAILED=1
+            else
+              echo "OK: no CRITICAL/HIGH findings in $f"
+            fi
+          done
+          exit $FAILED

@@ -30,8 +30,18 @@ settings-sidebar-collapse-aria = Tutup bilah sisi pengaturan
 settings-back-aria = Kembali
 settings-sidebar-collapse-all-aria = Tutup semua kategori
 settings-sidebar-search-aria = Cari pengaturan
-settings-sidebar-search-clear-aria =
-    .aria-label = Hapus pencarian
+settings-sidebar-search-clear-aria = Hapus pencarian
+settings-search-placeholder = Cari
+settings-shortcut-btn-aria = Pintasan keyboard
+settings-shortcuts-title = Pintasan keyboard
+settings-sidebar-pinned-group-aria = Bagian yang disematkan
+settings-sidebar-resize-aria = Ubah ukuran bilah sisi
+settings-nav-pin-aria = Sematkan { $name }
+settings-nav-unpin-aria = Lepas sematan { $name }
+settings-nav-pin-title = Sematkan
+settings-nav-unpin-title = Lepas sematan
+settings-sidebar-count-aria = { $count } item
+settings-sidebar-count-title = { $count } item
 settings-sidebar-no-results = Tidak ada bagian yang cocok
 settings-sidebar-clear-results = Hapus pencarian
 settings-theme-toggle-dark-aria = Alihkan ke mode gelap
@@ -207,6 +217,7 @@ ws-preview-name-admin = Admin
 # ── Settings Page (remaining) ──
 settings-page-title = Pengaturan
 settings-loading = Memuat pengaturan…
+settings-section-loading = Memuat…
 settings-load-failed = Gagal memuat pengaturan
 settings-load-partial = Sebagian pengaturan gagal dimuat. Coba lagi.
 settings-section-store = Toko
@@ -503,8 +514,7 @@ data-mgmt-password-show-aria = Tampilkan kata sandi
 data-mgmt-password-hide-aria = Sembunyikan kata sandi
 
 # ── Sales History ──
-category-colour-picker-aria =
-    .aria-label = Pemilih warna
+category-colour-picker-aria = Pemilih warna
 category-colour-swatch-aria =
     .aria-label = Contoh warna
 category-delete-aria =
@@ -840,6 +850,9 @@ workspace-pos-receipt-heading = Pengaturan Struk
 workspace-pos-paper-width = Lebar Kertas
 workspace-pos-show-currency = Tampilkan Mata Uang
 workspace-pos-show-tax = Tampilkan Pajak
+workspace-pos-tax-rounding = Pembulatan Pajak
+workspace-pos-tax-rounding-halfup = Bulatkan Setengah ke Atas
+workspace-pos-tax-rounding-truncate = Potong (Legacy)
 workspace-pos-show-table = Tampilkan Nomor Meja
 workspace-pos-footer = Footer Struk
 workspace-pos-printer-heading = Printer
@@ -857,6 +870,7 @@ workspace-resto-courses-enable = Aktifkan Pengiriman Course
 workspace-resto-courses-hint = Kirim hidangan pembuka, utama, dan penutup ke dapur secara berurutan
 workspace-resto-kitchen-printer-heading = Printer Dapur
 workspace-resto-kp-connection = Koneksi
+workspace-resto-kp-disabled = Nonaktif
 workspace-resto-kp-ip = IP Printer Dapur
 workspace-kds-sla-heading = Eskalasi SLA
 workspace-kds-sound = Suara Pesanan Baru
@@ -897,5 +911,18 @@ settings-nav-inventory = Inventaris
 # ── Workspace Settings Modal (ADR #22 Phase 4) ──
 workspace-modal-title = Pengaturan Workspace
 workspace-modal-admin-settings = Admin Settings ↗
+workspace-modal-close-aria = Tutup pengaturan
 workspace-modal-role-manager = Manajer
 workspace-modal-role-cashier = Kasir
+
+# ── 4f: Workspace card aria-labels ──
+terminal-sound-volume-aria = Volume suara
+workspace-kds-yellow-threshold-aria = Ambang batas eskalasi kuning dalam menit
+workspace-kds-red-threshold-aria = Ambang batas eskalasi merah dalam menit
+
+terminal-feature-group-sales = Penjualan
+terminal-feature-group-payments = Pembayaran
+terminal-feature-group-inventory-products = Inventaris & Produk
+terminal-feature-group-hardware = Perangkat Keras
+terminal-feature-group-staff-security = Staf & Keamanan
+terminal-feature-group-system = Sistem

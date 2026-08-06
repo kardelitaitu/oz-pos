@@ -5,6 +5,49 @@ use crate::error::CoreError;
 
 use super::Store;
 
+/// Floor-plan geometry bounds (TBL-08): positions and sizes are persisted as
+/// percentages of the floor plan, so every value must be finite, within
+/// `0..=100`, and large enough to remain a usable interactive control.
+const GEOMETRY_BOUNDS: (f64, f64) = (0.0, 100.0);
+/// Minimum table width/height as a percentage so a persisted table can never
+/// collapse into an unusably tiny (or zero-sized) control.
+const GEOMETRY_MIN_SIZE: f64 = 2.0;
+
+/// Validate floor-plan geometry for create/update (TBL-08).
+///
+/// Rejects non-finite (`NaN`/`inf`), negative, out-of-bounds, and zero-sized
+/// values at the database boundary so invalid persisted input can never place
+/// tables outside the floor plan or produce overlapping/tiny controls.
+fn validate_table_geometry(table: &Table) -> Result<(), CoreError> {
+    let fields = [
+        ("pos_x", table.pos_x),
+        ("pos_y", table.pos_y),
+        ("width", table.width),
+        ("height", table.height),
+    ];
+    for (field, value) in fields {
+        if !value.is_finite() {
+            return Err(CoreError::Validation {
+                field,
+                message: "must be a finite number".into(),
+            });
+        }
+        if !(GEOMETRY_BOUNDS.0..=GEOMETRY_BOUNDS.1).contains(&value) {
+            return Err(CoreError::Validation {
+                field,
+                message: "must be between 0 and 100".into(),
+            });
+        }
+    }
+    if table.width < GEOMETRY_MIN_SIZE || table.height < GEOMETRY_MIN_SIZE {
+        return Err(CoreError::Validation {
+            field: "width",
+            message: format!("tables must be at least {GEOMETRY_MIN_SIZE}% wide and tall"),
+        });
+    }
+    Ok(())
+}
+
 impl Store<'_> {
     fn row_to_table(row: &rusqlite::Row) -> rusqlite::Result<Table> {
         let active_int: i64 = row.get("active")?;
@@ -58,6 +101,20 @@ impl Store<'_> {
 
     /// Insert a new table; assigns a UUID if `table.id` is empty.
     pub fn create_table(&self, table: &Table) -> Result<Table, CoreError> {
+        if table.name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "table name must not be empty".into(),
+            });
+        }
+        if table.capacity < 0 {
+            return Err(CoreError::Validation {
+                field: "capacity",
+                message: "capacity must not be negative".into(),
+            });
+        }
+        // TBL-08: reject unusable persisted geometry at the boundary.
+        validate_table_geometry(table)?;
         let active_int: i64 = if table.active { 1 } else { 0 };
         let id = if table.id.is_empty() {
             uuid::Uuid::now_v7().to_string()
@@ -84,6 +141,20 @@ impl Store<'_> {
 
     /// Update all fields of an existing table.
     pub fn update_table(&self, table: &Table) -> Result<Table, CoreError> {
+        if table.name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "table name must not be empty".into(),
+            });
+        }
+        if table.capacity < 0 {
+            return Err(CoreError::Validation {
+                field: "capacity",
+                message: "capacity must not be negative".into(),
+            });
+        }
+        // TBL-08: reject unusable persisted geometry at the boundary.
+        validate_table_geometry(table)?;
         let active_int: i64 = if table.active { 1 } else { 0 };
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let rows = self.conn.execute(
@@ -122,7 +193,27 @@ impl Store<'_> {
     }
 
     /// Hard-delete a table by id.
+    ///
+    /// TBL-04: rejects deletion while the table is occupied, reserved, or
+    /// linked to an active sale — removing an operationally-referenced table
+    /// would orphan the `active_sale_id` link that KDS table-number lookup
+    /// relies on and hide a live floor-plan seat. Prefer deactivation
+    /// (`active = false`) for lifecycle management; a free, unlinked table is
+    /// still hard-deletable.
     pub fn delete_table(&self, id: &str) -> Result<(), CoreError> {
+        let current = self.get_table(id)?.ok_or_else(|| CoreError::NotFound {
+            entity: "table",
+            id: id.to_owned(),
+        })?;
+        if current.status == "occupied"
+            || current.status == "reserved"
+            || current.active_sale_id.is_some()
+        {
+            return Err(CoreError::Validation {
+                field: "status",
+                message: "cannot delete a table that is occupied, reserved, or linked to an active sale — deactivate it instead".into(),
+            });
+        }
         let rows = self
             .conn
             .execute("DELETE FROM tables WHERE id = ?1", params![id])?;
@@ -135,8 +226,38 @@ impl Store<'_> {
         Ok(())
     }
 
-    /// Update just the status field (availabe / occupied / reserved / cleaning).
+    /// Update just the status field (available / occupied / reserved / cleaning).
+    ///
+    /// TBL-01 invariant: the `occupied` status is reserved for tables linked
+    /// to an active sale. A caller may only reach `occupied` through
+    /// [`Store::assign_table_order`] (which sets `status` and `active_sale_id`
+    /// together); marking a table occupied without an active sale is rejected
+    /// so the floor plan can never show unassigned occupancy and KDS
+    /// table-number lookup stays consistent.
     pub fn update_table_status(&self, id: &str, status: &str) -> Result<Table, CoreError> {
+        if crate::TableStatus::from_str(status).is_none() {
+            return Err(CoreError::Validation {
+                field: "status",
+                message: "invalid table status".into(),
+            });
+        }
+        if status == "occupied" {
+            match self.get_table(id)? {
+                Some(t) if t.active_sale_id.is_some() => {}
+                Some(_) => {
+                    return Err(CoreError::Validation {
+                        field: "status",
+                        message: "occupied requires an active sale — use assign_table_order".into(),
+                    });
+                }
+                None => {
+                    return Err(CoreError::NotFound {
+                        entity: "table",
+                        id: id.to_owned(),
+                    });
+                }
+            }
+        }
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let rows = self.conn.execute(
             "UPDATE tables SET status = ?1, updated_at = ?2 WHERE id = ?3",
@@ -305,8 +426,177 @@ mod tests {
         let conn = fresh();
         let s = store(&conn);
         s.create_table(&dummy_table("t1")).unwrap();
-        let t = s.update_table_status("t1", "occupied").unwrap();
+        // Plain status transitions (not `occupied`) work without a sale link.
+        let t = s.update_table_status("t1", "cleaning").unwrap();
+        assert_eq!(t.status, "cleaning");
+        let t = s.update_table_status("t1", "available").unwrap();
+        assert_eq!(t.status, "available");
+    }
+
+    // ── TBL-01: occupied requires an active sale ──────────────────
+
+    #[test]
+    fn occupy_without_sale_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.create_table(&dummy_table("t1")).unwrap();
+        let err = s.update_table_status("t1", "occupied").unwrap_err();
+        assert!(
+            matches!(err, CoreError::Validation { field, message } if field == "status" && message.contains("active sale"))
+        );
+        // The status must be untouched after the rejection.
+        let t = s.get_table("t1").unwrap().unwrap();
+        assert_eq!(t.status, "available");
+    }
+
+    #[test]
+    fn occupy_with_active_sale_allowed() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.create_table(&dummy_table("t1")).unwrap();
+        let cart = crate::Cart::new("USD".parse().unwrap());
+        let sale = crate::Sale::from_cart(&cart).unwrap();
+        s.create_sale(&sale).unwrap();
+        let t = s.assign_table_order("t1", &sale.id).unwrap();
         assert_eq!(t.status, "occupied");
+        // Re-asserting occupied on an already-occupied table stays valid.
+        let again = s.update_table_status("t1", "occupied").unwrap();
+        assert_eq!(again.status, "occupied");
+        assert_eq!(again.active_sale_id, Some(sale.id.clone()));
+    }
+
+    #[test]
+    fn occupy_missing_table_returns_not_found() {
+        let conn = fresh();
+        let s = store(&conn);
+        let err = s.update_table_status("nope", "occupied").unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { .. }));
+    }
+
+    // ── TBL-04: delete lifecycle protection ───────────────────────
+
+    #[test]
+    fn delete_occupied_table_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.create_table(&dummy_table("t1")).unwrap();
+        let cart = crate::Cart::new("USD".parse().unwrap());
+        let sale = crate::Sale::from_cart(&cart).unwrap();
+        s.create_sale(&sale).unwrap();
+        s.assign_table_order("t1", &sale.id).unwrap();
+        let err = s.delete_table("t1").unwrap_err();
+        assert!(
+            matches!(err, CoreError::Validation { field, message } if field == "status" && message.contains("deactivate"))
+        );
+        assert!(s.get_table("t1").unwrap().is_some());
+    }
+
+    #[test]
+    fn delete_reserved_table_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.create_table(&dummy_table("t1")).unwrap();
+        s.update_table_status("t1", "reserved").unwrap();
+        let err = s.delete_table("t1").unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "status"));
+    }
+
+    #[test]
+    fn delete_table_with_active_sale_link_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        // Build the state the production way: assign a real sale, then reset
+        // the status to `available` — `update_table_status` changes only the
+        // status and leaves the sale link intact, yielding "not occupied or
+        // reserved, but still linked to an active sale". Constructing this
+        // directly with a fake sale id would trip the FK constraint at insert.
+        s.create_table(&dummy_table("t1")).unwrap();
+        let cart = crate::Cart::new("USD".parse().unwrap());
+        let sale = crate::Sale::from_cart(&cart).unwrap();
+        s.create_sale(&sale).unwrap();
+        s.assign_table_order("t1", &sale.id).unwrap();
+        let linked = s.update_table_status("t1", "available").unwrap();
+        assert_eq!(linked.status, "available");
+        assert_eq!(linked.active_sale_id, Some(sale.id.clone()));
+        let err = s.delete_table("t1").unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "status"));
+    }
+
+    #[test]
+    fn delete_free_table_still_allowed() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.create_table(&dummy_table("t1")).unwrap();
+        s.update_table_status("t1", "cleaning").unwrap();
+        s.delete_table("t1").unwrap();
+        assert!(s.get_table("t1").unwrap().is_none());
+    }
+
+    // ── TBL-08: geometry validation ───────────────────────────────
+
+    #[test]
+    fn create_table_nan_geometry_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        let mut t = dummy_table("t1");
+        t.pos_x = f64::NAN;
+        let err = s.create_table(&t).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "pos_x"));
+    }
+
+    #[test]
+    fn create_table_negative_geometry_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        let mut t = dummy_table("t1");
+        t.pos_y = -5.0;
+        let err = s.create_table(&t).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "pos_y"));
+    }
+
+    #[test]
+    fn create_table_out_of_bounds_geometry_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        let mut t = dummy_table("t1");
+        t.width = 120.0;
+        let err = s.create_table(&t).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "width"));
+    }
+
+    #[test]
+    fn create_table_tiny_geometry_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        let mut t = dummy_table("t1");
+        t.height = 1.0;
+        let err = s.create_table(&t).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "width"));
+    }
+
+    #[test]
+    fn create_table_zero_geometry_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        let mut t = dummy_table("t1");
+        t.width = 0.0;
+        let err = s.create_table(&t).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { .. }));
+    }
+
+    #[test]
+    fn update_table_geometry_validated() {
+        let conn = fresh();
+        let s = store(&conn);
+        let mut t = dummy_table("t1");
+        s.create_table(&t).unwrap();
+        t.width = 150.0;
+        let err = s.update_table(&t).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "width"));
+        t.width = 10.0;
+        t.height = 0.0;
+        let err = s.update_table(&t).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { .. }));
     }
 
     #[test]
@@ -450,5 +740,68 @@ mod tests {
         let sections = s.list_sections().unwrap();
         assert_eq!(sections.len(), 1);
         assert_eq!(sections[0], "Main");
+    }
+
+    // ── Validation tests ────────────────────────────────────────
+
+    #[test]
+    fn create_table_empty_name_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        let mut t = dummy_table("t1");
+        t.name = "".into();
+        let err = s.create_table(&t).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
+    }
+
+    #[test]
+    fn create_table_whitespace_name_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        let mut t = dummy_table("t1");
+        t.name = "   ".into();
+        let err = s.create_table(&t).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
+    }
+
+    #[test]
+    fn create_table_negative_capacity_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        let mut t = dummy_table("t1");
+        t.capacity = -1;
+        let err = s.create_table(&t).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "capacity"));
+    }
+
+    #[test]
+    fn update_table_empty_name_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        let mut t = dummy_table("t1");
+        s.create_table(&t).unwrap();
+        t.name = "".into();
+        let err = s.update_table(&t).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "name"));
+    }
+
+    #[test]
+    fn update_table_negative_capacity_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        let mut t = dummy_table("t1");
+        s.create_table(&t).unwrap();
+        t.capacity = -5;
+        let err = s.update_table(&t).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "capacity"));
+    }
+
+    #[test]
+    fn update_table_status_invalid_rejected() {
+        let conn = fresh();
+        let s = store(&conn);
+        s.create_table(&dummy_table("t1")).unwrap();
+        let err = s.update_table_status("t1", "invalid_status").unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "status"));
     }
 }

@@ -7,8 +7,11 @@ function getMinutes(): number {
   try {
     const v = localStorage.getItem(STORAGE_KEY);
     if (v) {
-      const n = parseInt(v, 10);
-      if (Number.isFinite(n) && n >= 1) return n;
+      // parseFloat (not parseInt) so fractional minutes work — the E2E
+      // suite sets 0.25 for a 15s lock. The settings UI only writes
+      // whole minutes via setAutoLockMinutes (clamped 1–120).
+      const n = parseFloat(v);
+      if (Number.isFinite(n) && n > 0) return n;
     }
   } catch { /* ignore */ }
   return DEFAULT_MINUTES;

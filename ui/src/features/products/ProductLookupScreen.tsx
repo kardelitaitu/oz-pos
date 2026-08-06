@@ -84,7 +84,7 @@ function PackageIcon() {
 export default function ProductLookupScreen({ onAddProduct }: ProductLookupScreenProps) {
   const { l10n } = useLocalization();
   const { addToast } = useToast();
-  const { products, categories, loading, usingFallback } = useProducts();
+  const { products, categories, loading, error, usingFallback, reload } = useProducts();
   const [searchQuery, setSearchQuery] = useState('');
   const [barcodeInput, setBarcodeInput] = useState('');
   const [activeCategory, setActiveCategory] = useState<Category>('All');
@@ -325,14 +325,49 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
             </Localized>
           </span>
         </div>
+      ) : error && !usingFallback ? (
+        /* LOAD-03/LOAD-08: a production load failure must not look like an
+           empty catalog — render a localized unavailable state with Retry. */
+        <div className="product-empty" role="alert">
+          <span className="product-empty-text">
+            {error}
+          </span>
+          <button
+            type="button"
+            className="product-retry-btn"
+            onClick={reload}
+            aria-label={l10n.getString('retry')}
+          >
+            <Localized id="retry">
+              <span />
+            </Localized>
+          </button>
+        </div>
       ) : filtered.length === 0 ? (
-        <div className="product-empty">
+        /* EMPTY-04/05/06: a search/category filter that returns nothing is
+           not the same as an empty catalog — announce the transition and
+           offer a clear/reset action when a filter is active. */
+        <div className="product-empty" role="status">
           <PackageIcon />
           <span className="product-empty-text">
             <Localized id="product-lookup-no-results">
               <span />
             </Localized>
           </span>
+          {(searchQuery.trim() || activeCategory !== 'All') && (
+            <button
+              type="button"
+              className="product-empty-clear-search"
+              onClick={() => {
+                setSearchQuery('');
+                setActiveCategory('All');
+              }}
+            >
+              <Localized id="product-lookup-clear-search">
+                <span />
+              </Localized>
+            </button>
+          )}
         </div>
       ) : (
         <div ref={gridContainerRef} className="product-grid"

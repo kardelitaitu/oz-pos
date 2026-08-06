@@ -7,6 +7,9 @@
     across Rust Cargo config files, Tauri app config files, UI packages, health route tests, and React
     status/footer views, and updates them to the target version.
     It then automatically refreshes the package lockfiles (Cargo.lock and package-lock.json).
+    It also inserts the "## [X.Y.Z] — date" heading into the canonical CHANGELOG.md so the
+    AUDIT-28 release version gate (scripts/check-release-version.mjs) passes when the tag is
+    created.
 
 .PARAMETER TargetVersion
     The new version number to bump the codebase to (e.g., "0.0.6").
@@ -93,6 +96,32 @@ Update-File "ui/src/features/auth/StaffLoginScreen.tsx" "OZ-POS Enterprise v$cur
 Update-File "ui/src/features/auth/__tests__/LicenseActivationScreen.test.tsx" "Version $currentVersion" "Version $TargetVersion"
 Update-File "ui/src/features/design/TooltipPreview.tsx" "OZ-POS v$currentVersion" "OZ-POS v$TargetVersion"
 Update-File "ui/src/frontend/shell/StatusBar.tsx" "OZ-POS Enterprise v$currentVersion" "OZ-POS Enterprise v$TargetVersion"
+
+# 2b. Sync canonical CHANGELOG.md heading (RELEASE-07)
+Write-Host "`nSyncing CHANGELOG.md heading..." -ForegroundColor Cyan
+$changelogPath = "CHANGELOG.md"
+if (Test-Path $changelogPath) {
+    $content = Get-Content -Path $changelogPath -Raw
+    $date = Get-Date -Format "yyyy-MM-dd"
+    $heading = "## [$TargetVersion] — $date"
+    $headingRe = "(?m)^## \[${TargetVersion}\]"
+    if ($content -match $headingRe) {
+        Write-Host "Skipped (heading already present): $changelogPath" -ForegroundColor Yellow
+    } else {
+        # Insert the new heading right after the intro block (before the first "## [").
+        $insertAfter = [regex]::Match($content, "(?m)^## \[")
+        if ($insertAfter.Success) {
+            $block = "$heading`r`n`r`nRelease notes: see docs/releases/CHANGELOG-$TargetVersion.md (reviewed before tagging).`r`n`r`n---`r`n`r`n"
+            $updated = $content.Substring(0, $insertAfter.Index) + $block + $content.Substring($insertAfter.Index)
+            Set-Content -Path $changelogPath -Value $updated -NoNewline
+            Write-Host "Updated: $changelogPath (inserted $heading)"
+        } else {
+            Write-Host "Skipped (no existing '## [' headings to anchor): $changelogPath" -ForegroundColor Yellow
+        }
+    }
+} else {
+    Write-Host "Warning: File not found: $changelogPath" -ForegroundColor Red
+}
 
 # 3. Refresh Lockfiles
 Write-Host "`nUpdating lockfiles..." -ForegroundColor Cyan

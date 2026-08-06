@@ -57,23 +57,31 @@ The fastest way to get the full stack running with no external dependencies:
 bash scripts/generate-license-keys.sh        # Linux/macOS
 powershell -File scripts/generate-license-keys.ps1   # Windows
 
-# 2. Start all services
+# 2. Export required secrets (Compose fails closed if absent — DOCKER-04)
+export OZ_API_SECRET=$(openssl rand -hex 32)
+export OZ_LICENSE_PRIVATE_KEY="$(cat crates/oz-core/oz-license-private.pem)"
+
+# 3. Start all services
 docker compose up -d
 
-# 3. Verify health
+# 4. Verify health
 curl http://localhost:3099/api/v1/health
 curl http://localhost:8080/api/v1/license/status
 
-# 4. Create admin user for license server
+# 5. Create admin user for license server
 docker compose exec license-server \
   /pb/pocketbase superuser upsert admin@example.com password123
 
-# 5. View logs
+# 6. View logs
 docker compose logs -f
 ```
 
 The cloud server starts with SQLite (default) and connects to Redis at
 `redis://redis:6379`. The license server uses embedded PocketBase SQLite.
+
+`OZ_API_SECRET` and `OZ_LICENSE_PRIVATE_KEY` are required by Compose and
+startup fails fast when either is missing, so the stack never boots with
+an empty or well-known authentication secret.
 
 ### Step-by-Step
 
@@ -81,7 +89,11 @@ The cloud server starts with SQLite (default) and connects to Redis at
    server to sign subscription tokens. The script saves the private key
    to `crates/oz-core/oz-license-private.pem`.
 
-2. **Start the stack** — `docker compose up -d` starts `pos-cloud-server`,
+2. **Export secrets** — `OZ_API_SECRET` (JWT signing) and
+   `OZ_LICENSE_PRIVATE_KEY` are required. `docker compose up` fails fast
+   with a clear message if either is unset.
+
+3. **Start the stack** — `docker compose up -d` starts `pos-cloud-server`,
    `license-server`, and `redis` in the default profile. The cloud server
    waits for Redis to be healthy before starting. The license server starts
    immediately (no external dependencies).
@@ -116,9 +128,11 @@ bash scripts/generate-license-keys.sh
 
 # 2. Set required env vars
 export OZ_API_SECRET=$(openssl rand -hex 32)
+export OZ_LICENSE_PRIVATE_KEY="$(cat crates/oz-core/oz-license-private.pem)"
+export PG_PASSWORD=$(openssl rand -hex 32)
 
-# 3. Start with pg profile
-docker compose --profile pg up -d
+# 3. Start with the pg override (PG_PASSWORD is required — DOCKER-04)
+docker compose -f docker-compose.yml -f docker-compose.pg.yml up -d
 
 # 4. Verify all services healthy
 curl http://localhost:3099/api/v1/health
@@ -130,12 +144,122 @@ Environment variables for PostgreSQL:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PG_USER` | `ozpos` | PostgreSQL user |
-| `PG_PASSWORD` | `changeme` | PostgreSQL password |
+| `PG_PASSWORD` | *(required)* | PostgreSQL password — Compose fails fast if unset |
 | `PG_DATABASE` | `ozpos` | PostgreSQL database name |
 | `DATABASE_URL` | *(auto-constructed)* | Full connection string |
 
-When the `pg` profile is active, the cloud server waits for PostgreSQL
-to be healthy before starting (`depends_on: pos-cloud-db: condition: service_healthy`).
+When the `pg` override is merged, the cloud server connects to PostgreSQL
+via the auto-constructed `DATABASE_URL` and waits for it to be healthy
+before starting (`depends_on: pos-cloud-db: condition: service_healthy`).
+
+---
+
+## Production Hardening Profile (DOCKER-07)
+
+For a deployment-grade posture, merge `docker-compose.prod.yml` on top of
+the base stack. It never changes the developer defaults — it is a separate
+profile that only applies when explicitly requested:
+
+```bash
+export OZ_API_SECRET=$(openssl rand -hex 32)
+export OZ_LICENSE_PRIVATE_KEY="$(cat crates/oz-core/oz-license-private.pem)"
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+| Hardening | Base stack | `+ docker-compose.prod.yml` |
+|-----------|-----------|-----------------------------|
+| Root filesystem | writable | **read-only** (+ tmpfs `/tmp`, writable volumes) |
+| Capabilities | default | **drop ALL** except `CHOWN, SETUID, SETGID` |
+| `no-new-privileges` | off | **on** (`security_opt`) |
+| PID namespace | default | **`init: true`** (zombie reaping) |
+| Resource limits | none | **CPU/memory caps** per service |
+| Redis port 6379 on host | published | **internal only** (private network) |
+| PostgreSQL port 5432 on host | published | **internal only** (private network) |
+| Public API ports (3099/8080) | published | published (unchanged) |
+
+`pos-cloud-db` in `docker-compose.pg.yml` carries the same hardening
+directly, so the PostgreSQL path is secure whether or not the prod profile
+is merged.
+
+---
+
+## Reverse Proxy & TLS (Caddy)
+
+OZ-POS services speak **plain HTTP** — they are designed to sit behind a
+reverse proxy that terminates TLS. This is the supported production
+pattern; the stack itself never terminates TLS:
+
+```
+internet ── 443/TLS ──► reverse proxy ──► pos-cloud-server :3099
+                        (Caddy)     └──► license-server   :8080
+```
+
+Any proxy works (nginx, Caddy, Traefik). Caddy is recommended because it
+obtains and renews Let's Encrypt certificates automatically and has no
+runtime dependencies (its healthcheck-style probes are built in).
+
+### 1. Bind the app ports to localhost only
+
+Once the proxy is in front, the app ports no longer need to be reachable
+from the network. Bind them to the loopback interface so the proxy is the
+only thing exposed to the host firewall:
+
+```yaml
+# docker-compose.override.yml — auto-merged when you run plain `docker
+# compose up` (no -f flags). NOTE: `ports` is a multi-value key, so an
+# override APPENDS to the base list unless tagged `!override` — without
+# the tag you would publish both 0.0.0.0:3099 and 127.0.0.1:3099 and the
+# second bind would fail. `!override` REPLACES the base bindings.
+services:
+  pos-cloud-server:
+    ports: !override
+      - "127.0.0.1:3099:3099"
+  license-server:
+    ports: !override
+      - "127.0.0.1:8080:8080"
+```
+
+### 2. Start Caddy
+
+Copy and edit the example config in
+[`gateway/Caddyfile.example`](../../gateway/Caddyfile.example) — replace
+`example.com` with your real domains:
+
+```bash
+sudo cp gateway/Caddyfile.example /etc/caddy/Caddyfile
+sudo systemctl restart caddy        # distro package
+```
+
+Or run Caddy in Docker on the same Compose network (upstreams then resolve
+by service name, as in the example file):
+
+```bash
+docker run -d --name oz-caddy \
+  --network oz-pos_default \
+  -p 80:80 -p 443:443 \
+  -v /etc/caddy/Caddyfile:/etc/caddy/Caddyfile \
+  -v caddy_data:/data \
+  -v caddy_config:/config \
+  caddy:2
+```
+
+> **Host-run Caddy:** if Caddy runs directly on the host instead of inside
+> the Compose network, change the `reverse_proxy` upstreams to
+> `127.0.0.1:3099` and `127.0.0.1:8080`.
+
+### 3. Point clients at the HTTPS base URL
+
+After TLS is live, configure POS terminals to use the `https://` base URL
+of the proxy (`https://api.example.com`) instead of the raw `http://` host
+ports. TLS is transparent to the backend services — they keep speaking
+plain HTTP to the proxy, so no server-side configuration changes are
+needed.
+
+> **Private / non-public deployments:** if the host has no Let's Encrypt
+> reachable DNS name (e.g. a VPN-only install), use `:443` as the site
+> address with `tls internal` in Caddy and distribute Caddy's CA
+> certificate to clients. The `gateway/Caddyfile.example` file documents
+> this in its header comment.
 
 ---
 
@@ -145,8 +269,9 @@ to be healthy before starting (`depends_on: pos-cloud-db: condition: service_hea
 
 | Variable | Default | Service | Description |
 |----------|---------|---------|-------------|
-| `OZ_API_SECRET` | _(empty)_ | pos-cloud-server | JWT signing secret. Generate: `openssl rand -hex 32` |
-| `OZ_LICENSE_PRIVATE_KEY` | _(empty)_ | license-server | PEM-encoded license signing private key |
+| `OZ_API_SECRET` | *(required)* | pos-cloud-server | JWT signing secret. Generate: `openssl rand -hex 32`. Compose fails fast if unset |
+| `OZ_LICENSE_PRIVATE_KEY` | *(required)* | license-server | PEM-encoded license signing private key. Generate with `scripts/generate-license-keys.*`. Compose fails fast if unset |
+| `PG_PASSWORD` | *(required, pg override)* | pos-cloud-db | PostgreSQL password. Required only when `docker-compose.pg.yml` is merged |
 
 ### Optional
 
@@ -159,7 +284,6 @@ to be healthy before starting (`depends_on: pos-cloud-db: condition: service_hea
 | `REDIS_CACHE_TTL` | `300` | pos-cloud-server | Redis cache TTL (seconds) |
 | `DATABASE_URL` | _(empty)_ | pos-cloud-server | PostgreSQL connection string |
 | `PG_USER` | `ozpos` | pos-cloud-db | PostgreSQL user |
-| `PG_PASSWORD` | `changeme` | pos-cloud-db | PostgreSQL password |
 | `PG_DATABASE` | `ozpos` | pos-cloud-db | PostgreSQL database name |
 
 ---
@@ -308,15 +432,56 @@ docker compose exec pos-cloud-server /app/oz-cloud-server --migrate
 | Port 8080 already in use | Another service using the port | Edit `docker-compose.yml` port mapping |
 | Can't access PocketBase admin UI | No superuser created | Run the `superuser upsert` command |
 | Slow product lookups | Redis cache cold | Wait for cache to warm up (first requests are slower) |
-| `docker compose --profile pg up` fails | PG profile depends on `pos-cloud-db` | Ensure `redis` is also running (no profile needed) |
+| `docker compose -f docker-compose.yml -f docker-compose.pg.yml up` fails | `PG_PASSWORD` not set or `pos-cloud-db` unavailable | Export `PG_PASSWORD` (required) and ensure `redis` is healthy |
+| `docker run -e OZ_DB_PATH=/tmp/...` fails inside the container with `unable to open database file: C:/Users/...` | Git Bash rewrote the POSIX path into a Windows path before Docker saw it | Prefix the command with `MSYS_NO_PATHCONV=1` (see [Git Bash on Windows](#git-bash-on-windows-path-mangling-msys_no_pathconv1)) |
+
+---
+
+## Git Bash on Windows: Path Mangling (`MSYS_NO_PATHCONV`)
+
+When running `docker run` from **Git Bash** (MSYS2) on Windows, the shell
+silently rewrites command-line arguments that look like POSIX paths into
+Windows paths before handing them to native programs (like `docker.exe`).
+This corrupts any path that is meant to be interpreted **inside the Linux
+container**:
+
+```bash
+# BROKEN — Git Bash rewrites /tmp/test.db into a Windows path
+$ docker run -e OZ_DB_PATH=/tmp/test.db oz-pos-cloud
+# → failed to initialise database: SQLite error: unable to open database
+#   file: C:/Users/<you>/AppData/Local/Temp/test.db
+```
+
+Git Bash maps `/tmp` to your Windows temp directory, so the container
+receives `C:/Users/<you>/AppData/Local/Temp/test.db` — a relative path
+whose parent directories do not exist inside the Linux filesystem, which
+SQLite reports as `unable to open database file`. The same mangling
+applies to bind mounts (`-v /path:/container/path`) and any other
+path-looking argument.
+
+**Fixes:**
+
+| Approach | Command |
+|----------|---------|
+| Disable conversion for one command | `MSYS_NO_PATHCONV=1 docker run -e OZ_DB_PATH=/tmp/test.db ...` |
+| Double the leading slash (MSYS leaves `//tmp` alone) | `docker run -e OZ_DB_PATH=//tmp/test.db ...` |
+| Use a container-internal path that does not start with `/` | `docker run -e OZ_DB_PATH=data.db ...` (relative to the workdir) |
+| Avoid `docker run` entirely | Use `docker compose` — YAML values are never shell-mangled |
+
+> Note: `docker-compose.yml` values are **not** affected — Compose passes
+> them through directly, so the shipped `OZ_DB_PATH=/data/oz-pos.db`
+> (see the environment table above) works from any shell. The gotcha only
+> bites ad-hoc `docker run` invocations typed into Git Bash. Prefer
+> `MSYS_NO_PATHCONV=1` as the one-shot fix.
 
 ---
 
 ## Security Notes
 
-1. **Change default passwords** — The PostgreSQL default credentials
-   (`ozpos` / `changeme`) are for development only. Set `PG_PASSWORD`
-   in production.
+1. **Set strong secrets** — `PG_PASSWORD` is required (no default) in
+   `docker-compose.pg.yml`; `OZ_API_SECRET` and `OZ_LICENSE_PRIVATE_KEY`
+   are required in the base stack. Compose fails fast when any of them
+   is absent, so a stack never boots with an empty/well-known secret.
 
 2. **Do not expose Redis or PostgreSQL ports externally** — Set
    `ports: ["6379:6379"]` only for local development. In production,
@@ -341,6 +506,7 @@ docker compose exec pos-cloud-server /app/oz-cloud-server --migrate
 
 4. **TLS termination** — These services speak HTTP. Use a reverse proxy
    (nginx, Caddy, Traefik) in front for TLS termination in production.
+   See [Reverse Proxy & TLS (Caddy)](#reverse-proxy--tls-caddy).
 
 5. **License private key** — Treat `oz-license-private.pem` as a
    critical secret. Store it in a password manager or secrets vault.

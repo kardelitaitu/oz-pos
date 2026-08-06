@@ -13,6 +13,23 @@ import { LocalizationProvider } from '@fluent/react';
 import { ToastProvider } from '@/frontend/shared/Toast';
 import { WorkspaceInventorySettings } from '@/features/settings/workspace-cards/WorkspaceInventorySettings';
 
+vi.mock('@/contexts/SettingsContext', () => ({
+  useSettings: () => ({
+    settings: {
+      receipt: { showCurrency: false, decimalSeparator: 'dot', showTax: true, footer: '',
+        paperWidth: 'standard' as const, showTableNumber: false,
+        marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0 },
+      store: { name: '', address: '', taxId: '', currency: 'USD', branch: '' },
+      sync: { serverUrl: null, hasApiKey: false, enabled: false },
+      brand: { colour: '#10b981', storeName: '' },
+      preferences: { cardSize: 0, fontSize: 0, fontSmoothing: 'antialiased' },
+      currencies: [], appVersion: '',
+    },
+    loading: false, error: null, hasPartialError: false,
+    refetch: vi.fn(), lastChangedKeys: [], markSettingsUpdated: vi.fn(),
+  }),
+}));
+
 const testL10n = {
   bundles: [], areBundlesEmpty: () => true,
   parseMarkup: (str: string) => [{ nodeName: '#text', textContent: str } as unknown as Node],

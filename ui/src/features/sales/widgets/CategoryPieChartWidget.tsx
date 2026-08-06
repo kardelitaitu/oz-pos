@@ -1,13 +1,20 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useContext, useState, useCallback, useEffect } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
+import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import { getCategoryBreakdown } from '@/api/reports';
 import { Skeleton } from '@/components/Skeleton';
 import CanvasPieChart from '@/components/charts/CanvasPieChart';
 import type { PieSlice } from '@/components/charts/CanvasPieChart';
+import { l10nErrorMessage } from '@/utils/app-error';
+import { useCurrency } from '@/contexts/CurrencyContext';
+import { minorUnitExponent } from '@/types/domain';
 
 /** Canvas 2D category breakdown donut chart widget for the reporting dashboard. */
 export default function CategoryPieChartWidget() {
   const { l10n } = useLocalization();
+  const { currency } = useCurrency();
+  const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
   const [slices, setSlices] = useState<PieSlice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -22,6 +29,7 @@ export default function CategoryPieChartWidget() {
       const rows = await getCategoryBreakdown(
         start.toISOString().slice(0, 10),
         end.toISOString().slice(0, 10),
+        sessionToken,
       );
       setSlices(
         rows.map((r) => ({
@@ -30,11 +38,12 @@ export default function CategoryPieChartWidget() {
         })),
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      // ERR-05: never render raw backend messages — map to user-safe copy.
+      setError(l10nErrorMessage(e, l10n, 'app-error-generic'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sessionToken, l10n]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -80,7 +89,7 @@ export default function CategoryPieChartWidget() {
   }
 
   return (
-    <div className="reporting-widget reporting-widget--category" aria-label={l10n.getString('sales-dashboard-category-aria') || 'Category breakdown'}>
+    <div className="reporting-widget reporting-widget--category" aria-label={requiredLocalized(l10n, 'sales-dashboard-category-aria')}>
       <div className="reporting-widget-header">
         <Localized id="sales-dashboard-category-title">
           <h3 className="reporting-widget-title">By Category</h3>
@@ -88,12 +97,18 @@ export default function CategoryPieChartWidget() {
       </div>
       <CanvasPieChart
         data={slices}
+        otherLabel={requiredLocalized(l10n, 'sales-dashboard-chart-other')}
+        label={requiredLocalized(l10n, 'sales-dashboard-category-aria')}
+        summary={requiredLocalized(l10n, 'sales-dashboard-category-summary', {
+          count: String(slices.length),
+        })}
         formatValue={(v) =>
           new Intl.NumberFormat('en', {
             style: 'currency',
-            currency: 'USD',
+            currency,
             minimumFractionDigits: 0,
-          }).format(v / 100)
+            maximumFractionDigits: minorUnitExponent(currency),
+          }).format(v / 10 ** minorUnitExponent(currency))
         }
         minHeight="200px"
       />

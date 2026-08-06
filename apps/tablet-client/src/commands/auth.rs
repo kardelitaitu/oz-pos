@@ -22,6 +22,12 @@ pub struct StaffLoginArgs {
     pub username: String,
     /// Plain-text PIN entered by the staff member.
     pub pin: String,
+    /// Optional device/terminal identifier for per-device abuse controls
+    /// (STAFF-07). When absent the backend derives one from the host name
+    /// (`COMPUTERNAME`/`HOSTNAME`) so distributed brute-force from a single
+    /// terminal is still bounded.
+    #[serde(default)]
+    pub device_id: Option<String>,
 }
 
 /// Result of a successful staff login.
@@ -41,13 +47,20 @@ pub struct CheckUsernameArgs {
 /// Result of a username existence check.
 #[derive(Debug, Serialize)]
 pub struct CheckUsernameResult {
-    /// Whether a user with this username was found in the database.
-    pub found: bool,
-    /// Whether the found user account is active (only meaningful when `found` is true).
-    pub is_active: bool,
+    /// Always `true`. The pre-check never reveals whether the account
+    /// exists or is active (STAFF-06); the real state is written to the
+    /// server log only, and the login endpoint reports a uniform failure.
+    pub proceed: bool,
 }
 
-/// Check if a username exists and is active in the system.
+/// Check a username before the PIN step (STAFF-06).
+///
+/// Returns a **uniform** pre-auth response so the command cannot be used as
+/// an account-enumeration oracle: it always answers `proceed: true` for any
+/// syntactically valid username, whether the account exists, is inactive,
+/// or is unknown. The actual found/active state is emitted as a server-side
+/// trace only. Failed login attempts are handled by `staff_login`, which
+/// reports a single uniform error for every bad-credential case.
 #[command]
 pub async fn staff_check_username(
     args: CheckUsernameArgs,
@@ -60,17 +73,21 @@ pub async fn staff_check_username(
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
-
-    match store.get_user_by_username(&username)? {
-        Some(user) => Ok(CheckUsernameResult {
-            found: true,
-            is_active: user.is_active,
-        }),
-        None => Ok(CheckUsernameResult {
-            found: false,
-            is_active: false,
-        }),
+    let user = store.get_user_by_username(&username)?;
+    match &user {
+        Some(u) => tracing::debug!(
+            username = %username,
+            is_active = u.is_active,
+            "staff_check_username: account exists (server-side detail only)"
+        ),
+        None => tracing::debug!(
+            username = %username,
+            "staff_check_username: no such account (server-side detail only)"
+        ),
     }
+    drop(db);
+
+    Ok(CheckUsernameResult { proceed: true })
 }
 
 /// Authenticate a staff member by username and PIN.
@@ -78,15 +95,21 @@ pub async fn staff_check_username(
 /// Looks up the user by username, verifies the PIN against the stored
 /// argon2 hash, and returns a [`LoginSession`] on success.
 ///
-/// Includes PIN brute-force rate limiting: 3 failed attempts per username
-/// within a 60-second sliding window; lockout until the window expires.
+/// Rate limiting (STAFF-07) combines per-account, per-device, and global
+/// abuse controls with exponential backoff instead of a fixed short lock:
+///   - per account: 3 failed attempts in a 60s window
+///   - per device:  10 failed attempts in a 60s window (across usernames)
+///   - global:      30 failed attempts in a 60s window
+/// Backoff doubles per strike (capped at 1h). All rows persist across
+/// app restarts.
 ///
 /// # Errors
 ///
-/// Returns `Invalid` if:
-/// - The username doesn't match any active user
-/// - The PIN doesn't match the stored hash
-/// - The rate-limit lockout is active (includes retry-after info)
+/// Returns `Invalid` for a **uniform** credential failure — unknown user,
+/// deactivated account, and wrong PIN all report the same message so the
+/// endpoint cannot be used to enumerate accounts or probe account state
+/// (STAFF-06/STAFF-07). The rate-limit lockout reports retry-after info
+/// only.
 #[command]
 pub async fn staff_login(
     args: StaffLoginArgs,
@@ -97,46 +120,76 @@ pub async fn staff_login(
         return Err(AppError::Invalid("username must not be empty".into()));
     }
 
+    // STAFF-07: resolve the device id — prefer the caller's, else the host.
+    let device_id = args
+        .device_id
+        .as_deref()
+        .filter(|d| !d.is_empty())
+        .map(str::to_owned)
+        .or_else(|| std::env::var("COMPUTERNAME").ok())
+        .or_else(|| std::env::var("HOSTNAME").ok());
+
     let db = state.db.lock().await;
     let store = Store::new(&db);
 
     // Check rate limiter (persistent — survives app restarts).
     // Records the attempt — on success (PIN correct) we clear the
     // counter; on failure the attempt stays recorded.
-    let remaining = match store.record_login_attempt(&username, 3, 60)? {
-        Err(retry_after) => {
-            return Err(AppError::Invalid(format!(
-                "Too many attempts. Try again in {retry_after}s."
-            )));
-        }
-        Ok(r) => r,
-    };
+    if let Err(retry_after) = store.record_login_attempt_scoped(
+        &username,
+        device_id.as_deref(),
+        oz_core::db::staff::LoginLimits {
+            max_attempts: 3,         // per-account max
+            window_secs: 60,         // window secs
+            device_max_attempts: 10, // per-device max
+            global_max_attempts: 30, // global max
+            max_backoff_secs: 3600,  // max backoff secs
+        },
+    )? {
+        tracing::warn!(
+            username = %username,
+            device_id = device_id.as_deref().unwrap_or("unknown"),
+            retry_after,
+            "staff login rate limit exceeded"
+        );
+        return Err(AppError::Invalid(format!(
+            "Too many attempts. Try again in {retry_after}s."
+        )));
+    }
 
     // Look up user by username.
     let user = store
         .get_user_by_username(&username)?
         .ok_or_else(|| AppError::Invalid("invalid username or PIN".into()))?;
 
-    // Check if user is active.
+    // Uniform failure — do not reveal that the account is deactivated.
     if !user.is_active {
-        return Err(AppError::Invalid("account is deactivated".into()));
+        tracing::debug!(
+            username = %username,
+            "staff login: account inactive (uniform error returned)"
+        );
+        return Err(AppError::Invalid("invalid username or PIN".into()));
     }
 
     // Verify PIN against stored hash.
+    // `verify_pin` fails closed (Ok(false)) on malformed/placeholder hashes;
+    // the Err arm is retained for future argon2 library errors.
     let valid = oz_core::auth::verify_pin(&args.pin, &user.pin_hash)
         .map_err(|e| AppError::Internal(format!("PIN verification failed: {e}")))?;
 
     if !valid {
-        let msg = if remaining == 1 {
-            "Wrong PIN. 1 attempt remaining.".to_string()
-        } else {
-            format!("Wrong PIN. {remaining} attempts remaining.")
-        };
-        return Err(AppError::Invalid(msg));
+        tracing::debug!(
+            username = %username,
+            "staff login: wrong PIN (uniform error returned)"
+        );
+        return Err(AppError::Invalid("invalid username or PIN".into()));
     }
 
-    // PIN correct — clear rate limiter for this user.
+    // PIN correct — clear rate limiter for this user and device.
     store.clear_login_attempts(&username)?;
+    if let Some(dev) = device_id.as_deref().filter(|d| !d.is_empty()) {
+        store.clear_login_attempts_by_device(dev)?;
+    }
 
     // Look up role for the session.
     let role = store
@@ -360,9 +413,18 @@ mod tests {
         let args = StaffLoginArgs {
             username: "admin".into(),
             pin: "9999".into(),
+            device_id: Some("term-1".into()),
         };
         let debug = format!("{:?}", args);
         assert!(debug.contains("admin"));
+    }
+
+    #[test]
+    fn staff_login_args_device_id_defaults_none() {
+        // `device_id` is optional — legacy JSON without it must deserialize.
+        let json = r#"{"username":"cashier1","pin":"1234"}"#;
+        let args: StaffLoginArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.device_id, None);
     }
 
     #[test]

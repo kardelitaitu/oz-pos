@@ -225,3 +225,26 @@
   font-size: var(--text-xs);
   text-align: center;
 }
+
+/* Forced-colors — severity dots + card borders become structural (A11Y-10)
+ * critical = solid fill / solid left border, warning = hollow / dashed. */
+@media (forced-colors: active) {
+  .stock-alert-severity-dot {
+    background: ButtonText;
+    box-sizing: border-box;
+  }
+  .stock-alert-severity-dot--warning {
+    background: ButtonFace;
+    border: 1px solid ButtonText;
+  }
+  .stock-alert-card--critical {
+    border-left: 3px solid ButtonText;
+  }
+  .stock-alert-card--warning {
+    border-left: 3px dashed ButtonText;
+  }
+  .stock-alert-ack-btn:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}

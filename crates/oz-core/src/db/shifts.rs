@@ -9,6 +9,9 @@ use super::Store;
 
 impl Store<'_> {
     /// Open a new shift for a user.
+    ///
+    /// Validates that the user exists and is active, and that there is no
+    /// other open shift for the same user.
     pub fn open_shift(
         &self,
         user_id: &str,
@@ -25,6 +28,43 @@ impl Store<'_> {
             return Err(CoreError::Validation {
                 field: "opening_balance_minor",
                 message: "opening_balance_minor must be ≥ 0".into(),
+            });
+        }
+
+        // Verify the user exists and is active.
+        let active: bool = self
+            .conn
+            .query_row(
+                "SELECT is_active FROM users WHERE id = ?1",
+                params![user_id.trim()],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|v| v != 0)
+            .map_err(|e| match e {
+                rusqlite::Error::QueryReturnedNoRows => CoreError::Validation {
+                    field: "user_id",
+                    message: "user not found".into(),
+                },
+                _ => CoreError::Db(e),
+            })?;
+
+        if !active {
+            return Err(CoreError::Validation {
+                field: "user_id",
+                message: "user account is deactivated".into(),
+            });
+        }
+
+        // Ensure no duplicate open shift for this user.
+        let open_count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM shifts WHERE user_id = ?1 AND status = 'open'",
+            params![user_id.trim()],
+            |row| row.get(0),
+        )?;
+        if open_count > 0 {
+            return Err(CoreError::Validation {
+                field: "user_id",
+                message: "user already has an open shift".into(),
             });
         }
 
@@ -48,6 +88,10 @@ impl Store<'_> {
     /// Calculates `expected_cash_minor` (opening + cash sales) and
     /// `cash_difference_minor` (closing - expected). Updates all aggregated
     /// sales fields from the sales table.
+    ///
+    /// All reads and the final write run inside a single SQLite transaction
+    /// to prevent concurrent close operations from observing inconsistent
+    /// intermediate state.
     pub fn close_shift(
         &self,
         id: &str,
@@ -56,11 +100,32 @@ impl Store<'_> {
     ) -> Result<Shift, CoreError> {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
+        let tx = self.conn.unchecked_transaction()?;
+
         // Verify the shift exists and is open.
-        let shift = self.get_shift(id)?.ok_or_else(|| CoreError::NotFound {
-            entity: "shift",
-            id: id.to_owned(),
-        })?;
+        let shift: Shift = {
+            let mut stmt = tx.prepare(
+                "SELECT id, user_id, terminal_id, opened_at, closed_at,
+                        opening_balance_minor, closing_balance_minor,
+                        expected_cash_minor, cash_difference_minor,
+                        total_sales_minor, total_cash_minor, total_card_minor,
+                        total_other_minor, total_voids_minor, total_refunds_minor,
+                        total_payouts_minor,
+                        notes, status, created_at, updated_at
+                 FROM shifts WHERE id = ?1",
+            )?;
+            let result = stmt.query_row(params![id], Self::row_to_shift);
+            match result {
+                Ok(s) => s,
+                Err(rusqlite::Error::QueryReturnedNoRows) => {
+                    return Err(CoreError::NotFound {
+                        entity: "shift",
+                        id: id.to_owned(),
+                    });
+                }
+                Err(e) => return Err(CoreError::Db(e)),
+            }
+        };
 
         if shift.is_closed() {
             return Err(CoreError::Validation {
@@ -70,7 +135,7 @@ impl Store<'_> {
         }
 
         // Calculate sales totals from the sales table for sales made during this shift.
-        let (total_sales, total_cash, total_card, total_other, total_voids): (i64, i64, i64, i64, i64) = self.conn.query_row(
+        let (total_sales, total_cash, total_card, total_other, total_voids): (i64, i64, i64, i64, i64) = tx.query_row(
             "SELECT
                 COALESCE(SUM(CASE WHEN status = 'completed' THEN total_minor ELSE 0 END), 0),
                 COALESCE(SUM(CASE WHEN status = 'completed' AND payment_method = 'cash' THEN total_minor ELSE 0 END), 0),
@@ -83,7 +148,7 @@ impl Store<'_> {
         )?;
 
         // Calculate total refunds for sales made by this user during the shift.
-        let total_refunds: i64 = self.conn.query_row(
+        let total_refunds: i64 = tx.query_row(
             "SELECT COALESCE(SUM(r.total_minor), 0)
              FROM refunds r
              JOIN sales s ON r.sale_id = s.id
@@ -93,12 +158,16 @@ impl Store<'_> {
         )?;
 
         // Include cash payouts (safe drops) in the expected cash calculation.
-        let total_payouts = self.get_total_payouts_for_shift(id)?;
+        let total_payouts: i64 = tx.query_row(
+            "SELECT COALESCE(SUM(amount_minor), 0) FROM cash_payouts WHERE shift_id = ?1",
+            params![id],
+            |row| row.get(0),
+        )?;
 
         let expected_cash = shift.opening_balance_minor + total_cash - total_payouts;
         let cash_difference = closing_balance_minor - expected_cash;
 
-        self.conn.execute(
+        tx.execute(
             "UPDATE shifts SET
                 closed_at = ?1, closing_balance_minor = ?2, expected_cash_minor = ?3,
                 cash_difference_minor = ?4, total_sales_minor = ?5, total_cash_minor = ?6,
@@ -123,6 +192,8 @@ impl Store<'_> {
                 id,
             ],
         )?;
+
+        tx.commit()?;
 
         self.get_shift(id)?.ok_or_else(|| CoreError::NotFound {
             entity: "shift",
@@ -373,6 +444,56 @@ mod tests {
         ).unwrap();
     }
 
+    fn seed_inactive_user(conn: &Connection) {
+        conn.execute_batch(
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-inact', 'inactive_role', 'Inactive', '[]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
+                ('user-inactive', 'inactive', 'hash', 'Inactive', 'role-inact', 0, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
+        ).unwrap();
+    }
+
+    #[test]
+    fn open_shift_with_inactive_user_rejected() {
+        let conn = fresh();
+        seed_inactive_user(&conn);
+        let s = store(&conn);
+        let err = s.open_shift("user-inactive", None, 100).unwrap_err();
+        assert!(
+            matches!(err, CoreError::Validation { field, .. } if field == "user_id"),
+            "expected Validation error for inactive user, got: {err}"
+        );
+    }
+
+    #[test]
+    fn open_shift_duplicate_rejected() {
+        let conn = fresh();
+        seed_user(&conn);
+        let s = store(&conn);
+
+        s.open_shift("user-1", None, 100).unwrap();
+        let err = s.open_shift("user-1", None, 200).unwrap_err();
+        assert!(
+            matches!(err, CoreError::Validation { field, .. } if field == "user_id"),
+            "expected Validation error for duplicate shift, got: {err}"
+        );
+    }
+
+    #[test]
+    fn open_shift_succeeds_after_previous_closed() {
+        let conn = fresh();
+        seed_user(&conn);
+        let s = store(&conn);
+
+        let shift = s.open_shift("user-1", None, 100).unwrap();
+        s.close_shift(&shift.id, 150, None).unwrap();
+
+        // Should be allowed to open a new shift after the previous one is closed.
+        let shift2 = s.open_shift("user-1", None, 200).unwrap();
+        assert_eq!(shift2.opening_balance_minor, 200);
+        assert!(shift2.is_open());
+    }
+
     #[test]
     fn open_shift_creates_open_shift() {
         let conn = fresh();
@@ -512,6 +633,7 @@ mod tests {
         let s = store(&conn);
 
         let s1 = s.open_shift("user-1", None, 100).unwrap();
+        s.close_shift(&s1.id, 150, None).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(2));
         let s2 = s.open_shift("user-1", None, 200).unwrap();
 
@@ -665,6 +787,32 @@ mod tests {
             0,
             "no payments table entries"
         );
+    }
+
+    #[test]
+    fn close_shift_atomic_within_transaction() {
+        let conn = fresh();
+        seed_user(&conn);
+        let s = store(&conn);
+
+        let shift = s.open_shift("user-1", None, 200).unwrap();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        // Insert a cash sale and a payout.
+        conn.execute_batch(&format!(
+            "INSERT INTO sales (id, user_id, status, total_minor, payment_method, currency, line_count, created_at, updated_at) VALUES
+             ('sale-tx', 'user-1', 'completed', 1000, 'cash', 'USD', 1, '{now}', '{now}');"
+        )).unwrap();
+        s.create_cash_payout(&shift.id, 300, "safe drop").unwrap();
+
+        // Close the shift — should see both the sale and the payout.
+        let closed = s.close_shift(&shift.id, 1000, None).unwrap();
+
+        // expected_cash = opening(200) + cash_sales(1000) - payouts(300) = 900
+        assert_eq!(closed.expected_cash_minor, Some(900));
+        assert_eq!(closed.cash_difference_minor, Some(100)); // 1000 - 900
+        assert_eq!(closed.total_cash_minor, 1000);
+        assert_eq!(closed.total_payouts_minor, 300);
     }
 
     #[test]

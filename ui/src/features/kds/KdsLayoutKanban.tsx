@@ -40,7 +40,7 @@ function useCountAnim(count: number): AnimDir {
   return anim;
 }
 
-export function KdsLayoutKanban({ orders, onAdvance, showOrderId, showTableNumber }: KdsLayoutProps) {
+export function KdsLayoutKanban({ orders, onAdvance, showOrderId, showTableNumber, selectedOrderId, onSaveItems, sessionToken, onAdvanceItem, onAddItems, newOrderIds }: KdsLayoutProps) {
   const grouped = (status: ColumnStatus) =>
     orders.filter((o) => o.status === status);
 
@@ -68,15 +68,28 @@ export function KdsLayoutKanban({ orders, onAdvance, showOrderId, showTableNumbe
             </h2>
             <div className="kds-tickets">
               {count === 0 ? (
-                <p className="kds-empty"><Localized id="kds-no-orders">No orders yet</Localized></p>
+                /* EMPTY-04: a column can be empty while the rest of the board
+                   is busy — use status-scoped copy when orders exist elsewhere. */
+                <p className="kds-empty" role="status">
+                  {orders.length === 0 ? (
+                    <Localized id="kds-no-orders">No orders yet</Localized>
+                  ) : (
+                    <Localized id="kds-no-orders-filtered">No orders in this status</Localized>
+                  )}
+                </p>
               ) : (
-                grouped(status).map((order) => (
-                  <KdsTicketCard
+                grouped(status).map((order) => (                    <KdsTicketCard
                     key={order.id}
                     order={order}
                     onAdvance={onAdvance}
                     showOrderId={showOrderId}
                     showTableNumber={showTableNumber}
+                    selected={selectedOrderId === order.id}
+                    sessionToken={sessionToken}
+                    isNew={newOrderIds.has(order.id)}
+                    {...(onSaveItems ? { onSaveItems } : {})}
+                    {...(onAdvanceItem ? { onAdvanceItem } : {})}
+                    {...(onAddItems ? { onAddItems } : {})}
                   />
                 ))
               )}

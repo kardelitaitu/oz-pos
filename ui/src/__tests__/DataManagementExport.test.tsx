@@ -29,17 +29,28 @@ vi.mock('@/frontend/shared/Toast', () => ({
   useToast: () => ({ addToast: mockAddToast }),
 }));
 
-vi.mock('@fluent/react', () => ({
-  useLocalization: () => ({
-    l10n: {
-      getString: (id: string, args?: Record<string, unknown>) => {
-        if (args) return `${id} ${JSON.stringify(args)}`;
-        return id;
+vi.mock('@fluent/react', () => {
+  const mockStrings: Record<string, string> = {
+    'data-mgmt-export-select-all': 'Select all / none',
+    'data-mgmt-type-products': 'Products',
+    'data-mgmt-type-categories': 'Categories',
+    'data-mgmt-type-sales': 'Sales',
+    'data-mgmt-type-customers': 'Customers',
+    'data-mgmt-type-users': 'Users',
+    'data-mgmt-type-settings': 'Settings',
+  };
+  return {
+    useLocalization: () => ({
+      l10n: {
+        getString: (id: string, args?: Record<string, unknown>) => {
+          if (args) return `${id} ${JSON.stringify(args)}`;
+          return mockStrings[id] ?? id;
+        },
       },
-    },
-  }),
-  Localized: ({ children }: { id: string; children: React.ReactNode }) => <>{children}</>,
-}));
+    }),
+    Localized: ({ children }: { id: string; children: React.ReactNode }) => <>{children}</>,
+  };
+});
 
 vi.mock('@/components/Card', () => ({
   Card: ({ children, shadow }: { children: React.ReactNode; shadow?: string }) => (
@@ -354,7 +365,7 @@ describe('DataManagement — Export', () => {
     await waitFor(() => {
       expect(screen.getByText('Set encryption password')).toBeInTheDocument();
       expect(screen.getByRole('alert')).toBeInTheDocument();
-      expect(screen.getByText('Disk full')).toBeInTheDocument();
+      expect(screen.getByText('data-mgmt-toast-export-fail')).toBeInTheDocument();
     });
   });
 

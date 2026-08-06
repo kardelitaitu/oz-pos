@@ -1,18 +1,21 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, type CSSProperties } from 'react';
+import { contrastFg } from '@/utils/color';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   listCategoriesScoped,
-  createCategory,
-  updateCategory,
-  deleteCategory,
+  createCategoryScoped,
+  updateCategoryScoped,
+  deleteCategoryScoped,
   type CategoryDto,
 } from '@/api/products';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
-import { SettingsPopup } from '@/frontend/shared';
+import { SettingsPopup, requiredLocalized, EmptyState } from '@/frontend/shared';
+import { NoCategoriesIcon } from '@/components/EmptyStateIllustrations';
 import { useToast } from '@/frontend/shared/Toast';
+import { l10nErrorMessage } from '@/utils/app-error';
 import './CategoryManagementScreen.css';
 
 // ── Predefined colour palette for the colour picker ──────────────────
@@ -156,10 +159,27 @@ function randomIcon(): string {
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function colourToId(name: string): string {
-  return `cat-${name
+  const slug = name
     .toLowerCase()
+    .normalize('NFKD')
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')}`;
+    .replace(/^-|-$/g, '');
+  // CAT-04: fully non-ASCII names (e.g. カフェ) collapse to an empty slug,
+  // which would produce the degenerate ID `cat-`. Fall back to a stable hash
+  // suffix derived from the name so the ID is never empty.
+  if (!slug) {
+    let hash = 0;
+    for (let i = 0; i < name.length; i += 1) {
+      hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+    }
+    return `cat-${hash.toString(36)}`;
+  }
+  return `cat-${slug}`;
+}
+
+/** Inline custom properties for dynamic-colour elements (CAT-07). */
+function catColourVars(colour: string): CSSProperties {
+  return { '--cat-bg': colour, '--cat-fg': contrastFg(colour) } as CSSProperties;
 }
 
 // ── Component ────────────────────────────────────────────────────────
@@ -172,6 +192,22 @@ export default function CategoryManagementScreen() {
   const sessionToken = rawToken || '';
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [loading, setLoading] = useState(true);
+  // CAT-03: track load failures separately from a genuinely empty category set.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  // CAT-08: request-sequence guard — a slower response from an earlier
+  // session/refresh must never overwrite newer category data.
+  const loadSeqRef = useRef(0);
+  const hasLoadedOnceRef = useRef(false);
+  // Keep `load` memoized on [sessionToken] only — locale identity changes
+  // must not re-fire the load effect (mirrors ProductManagementScreen).
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
+
+  // CAT-08: a session switch is a new generation — the next load shows the
+  // skeleton instead of the previous store's categories.
+  useEffect(() => {
+    hasLoadedOnceRef.current = false;
+  }, [sessionToken]);
 
   // ── Create modal state ──────────────────────────────────────────
   const [showModal, setShowModal] = useState(false);
@@ -180,6 +216,9 @@ export default function CategoryManagementScreen() {
   const [newIcon, setNewIcon] = useState(randomIcon());
   const [saving, setSaving] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  // CAT-09: track that the operator has typed into the name field so the
+  // empty-name message explains why Save stays disabled (instead of silence).
+  const [nameTouched, setNameTouched] = useState(false);
 
   // ── Edit modal state ────────────────────────────────────────────
   const [editTarget, setEditTarget] = useState<CategoryDto | null>(null);
@@ -188,6 +227,7 @@ export default function CategoryManagementScreen() {
   const [editIcon, setEditIcon] = useState('');
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [editNameTouched, setEditNameTouched] = useState(false);
 
   // ── Delete modal state ──────────────────────────────────────────
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
@@ -198,14 +238,28 @@ export default function CategoryManagementScreen() {
   const closeDelete = useCallback(() => setDeleteTarget(null), []);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    const seq = ++loadSeqRef.current;
+    // CAT-08/PROD-04: only the first load shows the skeleton — refreshes
+    // preserve the last known list on screen instead of flashing a skeleton.
+    if (!hasLoadedOnceRef.current) {
+      setLoading(true);
+    }
+    setLoadError(null);
     try {
       const cats = await listCategoriesScoped(sessionToken);
+      if (seq !== loadSeqRef.current) return;
       setCategories(cats);
-    } catch {
-      // IPC unavailable
+      hasLoadedOnceRef.current = true;
+    } catch (err) {
+      // CAT-03: a failed load must not be indistinguishable from an empty store.
+      if (seq !== loadSeqRef.current) return;
+      setLoadError(
+        l10nErrorMessage(err, l10nRef.current, 'categories-error-load'),
+      );
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) {
+        setLoading(false);
+      }
     }
   }, [sessionToken]);
 
@@ -218,27 +272,50 @@ export default function CategoryManagementScreen() {
     setNewColour(randomColour());
     setNewIcon(randomIcon());
     setCreateError(null);
+    setNameTouched(false);
     setShowModal(true);
   }, []);
 
+  // CAT-09: client-side field-level validation — mirrors the backend's
+  // authoritative rules (non-empty name, unique ID, valid colour) so the
+  // operator sees a localized reason instead of a disabled Save or raw text.
+  const validateCreate = useCallback((): string | null => {
+    const trimmed = newName.trim();
+    if (!trimmed) return requiredLocalized(l10n, 'categories-error-name-required');
+    const id = colourToId(trimmed);
+    if (categories.some((c) => c.id === id)) {
+      return requiredLocalized(l10n, 'categories-error-id-conflict');
+    }
+    if (!COLOURS.includes(newColour)) {
+      return requiredLocalized(l10n, 'categories-error-colour-invalid');
+    }
+    return null;
+  }, [newName, newColour, categories, l10n]);
+
   const handleCreate = useCallback(async () => {
     const trimmed = newName.trim();
-    if (!trimmed) return;
+    const fieldError = validateCreate();
+    if (fieldError) {
+      setCreateError(fieldError);
+      return;
+    }
 
     setSaving(true);
     setCreateError(null);
 
     try {
       const id = colourToId(trimmed);
-      await createCategory({ id, name: trimmed, colour: newColour, icon: newIcon });
+      await createCategoryScoped(sessionToken, { id, name: trimmed, colour: newColour, icon: newIcon });
       setShowModal(false);
       await load();
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : 'Failed to create category');
+      // CAT-09: surface a stable, localized message rather than raw IPC text.
+      setCreateError(requiredLocalized(l10n, 'categories-error-create'));
+      void err;
     } finally {
       setSaving(false);
     }
-  }, [newName, newColour, newIcon, load]);
+  }, [newName, newColour, newIcon, load, sessionToken, l10n, validateCreate]);
 
   // ── Edit handlers ────────────────────────────────────────────────
 
@@ -248,26 +325,36 @@ export default function CategoryManagementScreen() {
     setEditColour(cat.colour);
     setEditIcon(cat.icon);
     setEditError(null);
+    setEditNameTouched(false);
   }, []);
 
   const handleEdit = useCallback(async () => {
     if (!editTarget) return;
     const trimmed = editName.trim();
-    if (!trimmed) return;
+    // CAT-09: the name must stay non-empty and the colour valid.
+    if (!trimmed) {
+      setEditError(requiredLocalized(l10n, 'categories-error-name-required'));
+      return;
+    }
+    if (!COLOURS.includes(editColour)) {
+      setEditError(requiredLocalized(l10n, 'categories-error-colour-invalid'));
+      return;
+    }
 
     setEditSaving(true);
     setEditError(null);
 
     try {
-      await updateCategory({ id: editTarget.id, name: trimmed, colour: editColour, icon: editIcon });
+      await updateCategoryScoped(sessionToken, { id: editTarget.id, name: trimmed, colour: editColour, icon: editIcon });
       setEditTarget(null);
       await load();
     } catch (err) {
-      setEditError(err instanceof Error ? err.message : 'Failed to update category');
+      setEditError(requiredLocalized(l10n, 'categories-error-update'));
+      void err;
     } finally {
       setEditSaving(false);
     }
-  }, [editTarget, editName, editColour, editIcon, load]);
+  }, [editTarget, editName, editColour, editIcon, load, sessionToken, l10n]);
 
   // ── Delete handlers ──────────────────────────────────────────────
 
@@ -276,14 +363,25 @@ export default function CategoryManagementScreen() {
     setDeleting(deleteTarget.id);
     setDeleteTarget(null);
     try {
-      await deleteCategory(deleteTarget.id);
+      // CAT-02: the backend unlinks products transactionally and reports how
+      // many were affected — surface that to the operator.
+      const result = await deleteCategoryScoped(sessionToken, deleteTarget.id);
+      if (result.affected_products > 0) {
+        addToast({
+          message: requiredLocalized(l10n, 'categories-delete-unlinked', { count: String(result.affected_products) }),
+          type: 'success',
+        });
+      }
       await load();
-    } catch {
-      addToast({ message: l10n.getString('category-delete-failed'), type: 'error' });
+    } catch (err) {
+      addToast({
+        message: l10nErrorMessage(err, l10n, 'categories-error-delete'),
+        type: 'error',
+      });
     } finally {
       setDeleting(null);
     }
-  }, [deleteTarget, load, addToast, l10n]);
+  }, [deleteTarget, load, addToast, l10n, sessionToken]);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
@@ -335,19 +433,34 @@ export default function CategoryManagementScreen() {
             ))}
           </div>
         </div>
-      ) : categories.length === 0 ? (
+      ) : loadError && categories.length === 0 ? (
         <Card shadow="sm">
-          <div className="cat-mgmt-empty">
-            <Localized id="categories-no-categories">
-              <p>No categories yet</p>
+          <div className="cat-mgmt-empty" role="alert">
+            <Localized id="categories-error-load">
+              <p className="cat-mgmt-load-error-title">Failed to load categories</p>
             </Localized>
-            <Localized id="categories-empty-desc">
-              <p className="cat-mgmt-empty-desc">Categories group your products.</p>
-            </Localized>
-            <Localized id="categories-add-first">
-              <Button variant="secondary" onClick={openCreate}>Add your first category</Button>
+            {loadError && loadError !== requiredLocalized(l10n, 'categories-error-load') && (
+              <p className="cat-mgmt-load-error-detail">{loadError}</p>
+            )}
+            <Localized id="categories-error-retry">
+              <Button variant="secondary" onClick={() => void load()}>
+                Retry
+              </Button>
             </Localized>
           </div>
+        </Card>
+      ) : categories.length === 0 ? (
+        <Card shadow="sm">
+          <EmptyState
+            region="table"
+            icon={<NoCategoriesIcon />}
+            title={requiredLocalized(l10n, 'categories-no-categories')}
+            description={requiredLocalized(l10n, 'categories-empty-desc')}
+            action={{
+              label: requiredLocalized(l10n, 'categories-add-first'),
+              onClick: openCreate,
+            }}
+          />
         </Card>
       ) : (
         <div className="cat-mgmt-grid">
@@ -357,7 +470,7 @@ export default function CategoryManagementScreen() {
                 {/* Icon badge — coloured circle with icon SVG */}
                 <div
                   className="cat-mgmt-icon-badge"
-                  style={{ background: cat.colour }}
+                  style={catColourVars(cat.colour)}
                   aria-hidden="true"
                 >
                   {cat.icon ? (
@@ -376,7 +489,7 @@ export default function CategoryManagementScreen() {
                   type="button"
                   className="cat-mgmt-edit-btn"
                   onClick={() => openEdit(cat)}
-                  aria-label={`Edit category ${cat.name}`}
+                  aria-label={l10n.getString('category-mgmt-edit-aria', { name: cat.name }, `Edit category ${cat.name}`)}
                 >
                   ✎
                 </button>
@@ -387,7 +500,6 @@ export default function CategoryManagementScreen() {
                     className="cat-mgmt-delete-btn"
                     onClick={() => setDeleteTarget({ id: cat.id, name: cat.name })}
                     disabled={deleting === cat.id}
-                    aria-label={`Delete category ${cat.name}`}
                   >
                     &times;
                   </button>
@@ -439,20 +551,25 @@ export default function CategoryManagementScreen() {
             </Localized>
           </label>
           <Localized id="categories-name-placeholder" attrs={{ placeholder: true }}>
-            <Localized id="categories-name-aria" attrs={{ 'aria-label': true }}>
-              <input
-                className="cat-mgmt-input"
-                type="text"
-                id="cat-new-name"
-                name="cat-new-name"
-                placeholder="e.g. Bakery, Merchandise"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                ref={inputRef}
-                aria-label="Category Name"
-              />
-            </Localized>
+            <input
+              className="cat-mgmt-input"
+              type="text"
+              id="cat-new-name"
+              name="cat-new-name"
+              value={newName}
+              onChange={(e) => {
+                setNewName(e.target.value);
+                if (e.target.value.trim()) setNameTouched(true);
+              }}
+              ref={inputRef}
+              aria-label={requiredLocalized(l10n, 'categories-name-aria')}
+            />
           </Localized>
+          {nameTouched && !newName.trim() && (
+            <span className="cat-mgmt-field-error" role="alert">
+              {requiredLocalized(l10n, 'categories-error-name-required')}
+            </span>
+          )}
           <span className="cat-mgmt-hint">
             <Localized id="categories-id-preview">
               <span>Category ID will be:</span>
@@ -485,7 +602,7 @@ export default function CategoryManagementScreen() {
                     ? 'cat-mgmt-icon-btn cat-mgmt-icon-btn--selected'
                     : 'cat-mgmt-icon-btn'
                 }
-                style={newIcon === opt.id ? { background: newColour, color: '#fff' } : undefined}
+                style={newIcon === opt.id ? catColourVars(newColour) : undefined}
                 onClick={() => setNewIcon(opt.id)}
               >
                 <CategoryIconSvg icon={opt.id} size={20} />
@@ -499,7 +616,7 @@ export default function CategoryManagementScreen() {
           <Localized id="categories-colour">
             <span className="cat-mgmt-label">Colour</span>
           </Localized>
-          <div className="cat-mgmt-colour-picker" role="radiogroup" aria-label={l10n.getString('category-colour-picker-aria')}>
+          <div className="cat-mgmt-colour-picker" role="radiogroup" aria-label={l10n.getString('categories-colour-picker-aria')}>
               {COLOURS.map((colour) => (
                 <Localized key={colour} id="category-colour-swatch-aria" attrs={{ 'aria-label': true }} vars={{ colour }}>
                   <button
@@ -511,9 +628,8 @@ export default function CategoryManagementScreen() {
                         ? 'cat-mgmt-colour-swatch cat-mgmt-colour-swatch--selected'
                         : 'cat-mgmt-colour-swatch'
                     }
-                    style={{ background: colour }}
+                    style={{ '--cat-bg': colour } as CSSProperties}
                     onClick={() => setNewColour(colour)}
-                    aria-label={`Select colour ${colour}`}
                   />
                 </Localized>
               ))}
@@ -527,10 +643,7 @@ export default function CategoryManagementScreen() {
           </Localized>
           <span
             className="cat-mgmt-preview-chip"
-            style={{
-              background: newColour,
-              color: '#fff',
-            }}
+            style={catColourVars(newColour)}
           >
             <CategoryIconSvg icon={newIcon} size={14} />
             {newName.trim() || <Localized id="category-name-fallback"><span>Category Name</span></Localized>}
@@ -563,10 +676,18 @@ export default function CategoryManagementScreen() {
             id="cat-edit-name"
             name="cat-edit-name"
             value={editName}
-            onChange={(e) => setEditName(e.target.value)}
+            onChange={(e) => {
+              setEditName(e.target.value);
+              if (e.target.value.trim()) setEditNameTouched(true);
+            }}
             ref={editInputRef}
-            aria-label={l10n.getString('categories-name-aria')}
+            aria-label={requiredLocalized(l10n, 'categories-name-aria')}
           />
+          {editNameTouched && !editName.trim() && (
+            <span className="cat-mgmt-field-error" role="alert">
+              {requiredLocalized(l10n, 'categories-error-name-required')}
+            </span>
+          )}
         </div>
 
         {/* Icon picker */}
@@ -593,7 +714,7 @@ export default function CategoryManagementScreen() {
                     ? 'cat-mgmt-icon-btn cat-mgmt-icon-btn--selected'
                     : 'cat-mgmt-icon-btn'
                 }
-                style={editIcon === opt.id ? { background: editColour, color: '#fff' } : undefined}
+                style={editIcon === opt.id ? catColourVars(editColour) : undefined}
                 onClick={() => setEditIcon(opt.id)}
               >
                 <CategoryIconSvg icon={opt.id} size={20} />
@@ -611,18 +732,17 @@ export default function CategoryManagementScreen() {
             {COLOURS.map((colour) => (
               <Localized key={colour} id="category-colour-swatch-aria" attrs={{ 'aria-label': true }} vars={{ colour }}>
                 <button
-                  type="button"
-                  role="radio"
-                  aria-checked={editColour === colour}
-                  className={
-                    editColour === colour
-                      ? 'cat-mgmt-colour-swatch cat-mgmt-colour-swatch--selected'
-                      : 'cat-mgmt-colour-swatch'
-                  }
-                  style={{ background: colour }}
-                  onClick={() => setEditColour(colour)}
-                  aria-label={`Select colour ${colour}`}
-                />
+                    type="button"
+                    role="radio"
+                    aria-checked={editColour === colour}
+                    className={
+                      editColour === colour
+                        ? 'cat-mgmt-colour-swatch cat-mgmt-colour-swatch--selected'
+                        : 'cat-mgmt-colour-swatch'
+                    }
+                    style={{ '--cat-bg': colour } as CSSProperties}
+                    onClick={() => setEditColour(colour)}
+                  />
               </Localized>
             ))}
           </div>
@@ -635,7 +755,7 @@ export default function CategoryManagementScreen() {
           </Localized>
           <span
             className="cat-mgmt-preview-chip"
-            style={{ background: editColour, color: '#fff' }}
+            style={catColourVars(editColour)}
           >
             <CategoryIconSvg icon={editIcon} size={14} />
             {editName.trim() || editTarget?.name || ''}

@@ -1,0 +1,144 @@
+# ADR #33: Panic Policy & Production unwrap/expect Enforcement
+
+**Status:** Implemented (2026-08-03)
+**Date:** 2026-08-03
+**Author:** Architecture Team & OZ-POS Contributors
+**Tags:** reliability, panic, unwrap, expect, error-handling, RUST-07, enforcement
+
+---
+
+## Context
+
+RUST-07 (audit/25-rust-backend.md) found that panic-oriented APIs remained in
+production startup/API paths: `oz_api::serve()` unwrapped DB open, pragma/WAL
+setup, migration application, port binding, and the server loop, and numerous
+`unwrap`/`expect` calls lived in production modules outside test contexts. A
+bad path, unavailable port, migration failure, or malformed runtime value could
+terminate an unattended desktop/cloud process without a structured error or
+actionable recovery, obscuring the original failure from callers.
+
+The remediation closed the startup boundary first (`oz_api::serve()` returns
+`Result`, commit `d82b133d`) and then swept the remaining recoverable panics
+into `Result`/fallback paths and introduced a workspace panic-inventory gate
+(commit `6f7307b3`). This ADR records the policy that remediation established:
+when a panic is an acceptable, documented invariant and when it is a defect that
+must be a `Result`.
+
+---
+
+## Decision
+
+Panic is a **fallback of last resort reserved for proven-impossible states**.
+Every production `unwrap`/`expect` that is not a documented invariant is a
+defect. The line between the two categories is defined below and enforced by
+`scripts/scan-unwrap-panic.py` as an inventory gate wired into
+`scripts/check.sh`.
+
+### When a panic is acceptable
+
+A panic is acceptable **only** when all three hold: the failure is provably
+impossible at runtime, the reason is documented in a `// SAFETY:`/`// INVARIANT:`
+comment on the same or immediately preceding line, and a reviewer can verify the
+invariant. Concretely:
+
+- **Compile-time constants & static initialization.** Static, immutable
+  registration that cannot fail once compiled — e.g. static Prometheus metric
+  registration (`oz-reporting`/`oz-cloud-server` `metrics.rs`) and the
+  `OnceLock`-cached SQL-validation regexes in `oz-plugin/db.rs` (compiled from
+  `const` pattern literals). Because the literals are compile-time constants,
+  a malformed edit fails the new `sql_validation_regexes_compile` test under CI
+  — never a live process. This collapsed 10 per-regex `.expect("invalid … regex")`
+  sites into one unreachable helper.
+- **Validated input.** An `unwrap`/`expect` on a value already validated by the
+  same function is acceptable when the validation immediately precedes the
+  unwrap and the `// SAFETY:` comment says so — e.g. `Percentage::new` calls on
+  already-validated percentages in desktop/tablet `pos.rs`.
+- **Poisoned locks.** A `Mutex`/`RwLock` poisoned only by an in-process panic in
+  the same mock/driver (test doubles) may `expect` — the lock's poisoned state
+  is itself the failure signal, and the data behind it is irrelevant in a mock.
+  This is the one production-facing exception: **real** production lock poison
+  must recover via `PoisonError::into_inner()` rather than panic
+  (see the platform-startup rate-sync DB lock, converted in `6f7307b3`).
+- **Convenience wrappers & setup that cannot fail by construction.**
+  `LuaRuntime::default()`, `SyncTransport::new()` (a convenience wrapper over
+  the fallible `try_new`), `oz-logging::init()` documented-panic wrappers, and
+  in-memory `fresh_db()` ops are acceptable — each documents why the setup path
+  is unconditional.
+
+Test code is exempt by definition: `#[cfg(test)]`, `mod tests`, `#[test]`,
+`*/tests/`, benches, and `test_helpers.rs` are excluded from the inventory.
+
+### When it must be `Result`
+
+Any failure whose possibility depends on runtime state — environment, I/O,
+user input, network, filesystem, or lock state across threads — must propagate
+as `Result`, with context attached via `thiserror`/`anyhow` at the application
+edge. The RUST-07 residual converted 16 such sites:
+
+- **Startup/command boundaries return `Result`:** `oz-api::serve()` and
+  `oz-cloud-server` `main`/`serve` return
+  `Result<(), Box<dyn Error + Send + Sync>>` for logging init, DB init,
+  in-memory SQLite, port bind, and server-loop failures.
+- **String decoding:** `oz-cli` import-path currency decoding
+  (`currency_to_utf8`) returns `anyhow` errors instead of `from_utf8().unwrap()`.
+- **Post-commit lookups:** `oz-core` gift-card lookups use
+  `ok_or_else(NotFound)` instead of `?.unwrap()`.
+- **Optional/fallible infrastructure:** `shutdown_signal()` logs and falls back
+  to `pending()` when signal-handler installation fails; the sync pagination
+  cursor uses `last().map(...)` instead of `last().unwrap()`.
+- **Lock poison in production:** platform-startup rate-sync DB locks recover
+  via `unwrap_or_else(|e| e.into_inner())` rather than panicking on poison.
+
+Rule of thumb: **if a human, a file, the network, or another thread can make it
+fail, it is `Result`. If only a programming error can make it fail, it is a
+documented invariant panic — or better, a test.**
+
+### How `scripts/scan-unwrap-panic.py` enforces it
+
+The script is a **grep-precise inventory** — it makes the policy auditable
+rather than pretending textual analysis can prove invariants. It is
+fail-closed only through the explicit `--fail-on-recoverable` gate: the
+scanner never asserts that a tagged site is truly unreachable; it requires
+the reviewer's `// SAFETY:` / `// INVARIANT:` comment to be present and
+verifiable.
+
+- **Scope:** scans `crates/`, `apps/`, `platform/`, `modules/` for `*.rs`.
+- **Exclusions (test/dev contexts):** skips `*/tests/` dirs, `#[cfg(test)]`
+  blocks, `mod tests`/`mod test` blocks, `#[test]`-annotated functions,
+  `/benches/` harnesses, and `test_helpers.rs`.
+- **Invariant tagging:** a `# SAFETY:`/`// INVARIANT:` (or `cannot fail` /
+  `must not fail` / `impossible`) comment on the same or immediately preceding
+  line marks a finding as `[INVARIANT]` — the documented-acceptable set.
+- **Output:** `--json` emits `total`, `invariant_annotated`, `recoverable`, and
+  per-file counts; plain mode prints every finding with its `[INVARIANT]` tag.
+  `--fail-on-recoverable` prints a single summary line on success and the
+  failing findings on failure (exit 1).
+- **Gate (fail-closed):** `scripts/scan-unwrap-panic.py --fail-on-recoverable`
+  exits 1 when any finding lacks a documented invariant comment; wired into
+  both `scripts/check.sh` and the CI `rust-panic-inventory` job. The rule is
+  now enforced mechanically: **the recoverable set (non-INVARIANT) must stay
+  at zero**. Current production inventory: **98/98 documented invariants**, verified
+  live on 2026-08-03 — down from 123 before remediation; the recoverable set
+  is provably zero. New `unwrap`/`expect` in production code fails the gate
+  unless it carries a verifiable invariant comment.
+
+---
+
+## Status
+
+Implemented. Startup and command boundaries return `Result` (`d82b133d`); 16
+recoverable panics converted to `Result`/fallback and the panic-inventory gate
+added (`6f7307b3`); the residual production panic inventory is 98/98
+documented invariants (from 123 before remediation; the recoverable set is
+provably zero, verified live 2026-08-03). RUST-07 is closed as fully
+remediated in audit/25-rust-backend.md.
+
+**2026-08-03 — upgraded to a hard gate.** The gate is now fail-closed in both
+`scripts/check.sh` and CI (`rust-panic-inventory` job in
+`.github/workflows/ci.yml`): `scripts/scan-unwrap-panic.py --fail-on-recoverable`
+exits 1 when any finding lacks a documented invariant comment, so the
+recoverable-set-at-zero rule is enforced mechanically, not by review.
+
+Remaining ideas (deferred, not planned): a diff-scoped variant that scans only
+files touched by a PR (`git diff --name-only`) for faster feedback, and a
+tracked baseline JSON to chart inventory history over time.

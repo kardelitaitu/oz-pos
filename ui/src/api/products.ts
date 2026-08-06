@@ -17,6 +17,8 @@ export interface ProductDto {
   created_at: string;
   price_updated_at: string;
   product_type: string;
+  low_stock_threshold?: number | null;
+  high_stock_threshold?: number | null;
 }
 
 /** Arguments for creating a new product. */
@@ -256,10 +258,25 @@ export const listCategoriesScoped = (sessionToken: string): Promise<CategoryDto[
 export const createCategory = (args: CreateCategoryArgs): Promise<{ id: string }> =>
   loggedInvoke('create_category', { args });
 
+/** Create a new product category in the store resolved from a session token. ADR #7 (CAT-01). */
+export const createCategoryScoped = (sessionToken: string, args: CreateCategoryArgs): Promise<{ id: string }> =>
+  loggedInvoke('create_category_scoped', { sessionToken, args });
+
 /** Update an existing product category. */
 export const updateCategory = (args: UpdateCategoryArgs): Promise<{ id: string }> =>
   loggedInvoke('update_category', { args });
 
+/** Update an existing product category in the store resolved from a session token. ADR #7 (CAT-01). */
+export const updateCategoryScoped = (sessionToken: string, args: UpdateCategoryArgs): Promise<{ id: string }> =>
+  loggedInvoke('update_category_scoped', { sessionToken, args });
+
 /** Delete a product category by its identifier. */
 export const deleteCategory = (id: string): Promise<void> =>
   loggedInvoke('delete_category', { args: { id } });
+
+/**
+ * Delete a product category in the store resolved from a session token (CAT-01).
+ * Returns the number of products unlinked from the category (CAT-02).
+ */
+export const deleteCategoryScoped = (sessionToken: string, id: string): Promise<{ affected_products: number }> =>
+  loggedInvoke('delete_category_scoped', { sessionToken, args: { id } });

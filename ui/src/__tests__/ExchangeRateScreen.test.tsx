@@ -6,6 +6,7 @@ import { ToastProvider } from '@/frontend/shared/Toast';
 import currencyFtl from '@/locales/currency.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 import ExchangeRateScreen from '@/features/currency/ExchangeRateScreen';
+import { minorUnitExponent } from '@/types/domain';
 
 // ── Mocks ────────────────────────────────────────────────────────────
 
@@ -19,6 +20,8 @@ vi.mock('@/api/currency', () => ({
   listCurrencies: (...args: unknown[]) => mockListCurrencies(...args),
   createExchangeRate: (...args: unknown[]) => mockCreateExchangeRate(...args),
   deleteExchangeRate: (...args: unknown[]) => mockDeleteExchangeRate(...args),
+  formatExchangeRate: (rate: { rate_millionths: number }) =>
+    (rate.rate_millionths / 1_000_000).toString(),
 }));
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -28,7 +31,7 @@ function makeRate(overrides: Record<string, unknown> = {}) {
     id: 'rate-1',
     from_currency: 'USD',
     to_currency: 'IDR',
-    rate: 16000,
+    rate_millionths: 16_000_000_000,
     source: 'manual',
     effective_date: '2025-07-07',
     created_at: '2025-07-07T00:00:00.000Z',
@@ -37,7 +40,10 @@ function makeRate(overrides: Record<string, unknown> = {}) {
 }
 
 function makeCurrency(code: string, name: string) {
-  return { code, name, minor_exponent: 2, symbol: code };
+  // Derive the exponent from the canonical MINOR_UNIT_EXPONENT map so the
+  // fixture stays aligned with the Rust `Currency::minor_unit_exponent`
+  // (e.g. IDR = 0, KWD = 3) instead of hardcoding 2 for every code.
+  return { code, name, minor_exponent: minorUnitExponent(code), symbol: code };
 }
 
 function renderScreen() {
@@ -107,8 +113,8 @@ describe('ExchangeRateScreen', () => {
 
   it('renders a table with rate rows', async () => {
     mockListExchangeRates.mockResolvedValue([
-      makeRate({ id: 'r1', from_currency: 'USD', to_currency: 'IDR', rate: 16000 }),
-      makeRate({ id: 'r2', from_currency: 'EUR', to_currency: 'IDR', rate: 17000 }),
+      makeRate({ id: 'r1', from_currency: 'USD', to_currency: 'IDR', rate_millionths: 16_000_000_000 }),
+      makeRate({ id: 'r2', from_currency: 'EUR', to_currency: 'IDR', rate_millionths: 17_000_000_000 }),
     ]);
     mockListCurrencies.mockResolvedValue([]);
     renderScreen();
@@ -228,7 +234,12 @@ describe('ExchangeRateScreen', () => {
     await user.click(screen.getByText('Save'));
 
     await waitFor(() => {
-      expect(mockCreateExchangeRate).toHaveBeenCalled();
+      expect(mockCreateExchangeRate).toHaveBeenCalledWith({
+        from_currency: 'USD',
+        to_currency: 'IDR',
+        rate_millionths: 16_000_000_000,
+        effective_date: expect.any(String),
+      });
     });
   });
 

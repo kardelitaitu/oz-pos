@@ -16,16 +16,21 @@
  * ```
  */
 
-import type { ComponentType } from 'react';
+import type { ComponentType, LazyExoticComponent } from 'react';
 
 // ── Types ──────────────────────────────────────────────────────────
+
+/** A widget component may be plain or `lazy()`-loaded (PERF-01). */
+export type WidgetComponent =
+  | ComponentType
+  | LazyExoticComponent<ComponentType>;
 
 /** A dashboard widget registered with the widget system. */
 export interface WidgetRegistration {
   /** Unique widget identifier. */
   id: string;
-  /** The React component to render. */
-  component: ComponentType;
+  /** The React component to render (may be lazy). */
+  component: WidgetComponent;
   /** Display title for the widget card. */
   title: string;
   /** Optional feature key that must be enabled for this widget to appear. */

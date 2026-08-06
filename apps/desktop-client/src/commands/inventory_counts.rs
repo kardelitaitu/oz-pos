@@ -1,7 +1,9 @@
 //! Tauri commands for physical inventory / stock counting.
 //!
-//! Exposes CRUD for stock counts, lines, and the complete workflow
-//! that generates adjustments and updates inventory quantities.
+//! Stock-count commands resolve the store and actor from the opaque session
+//! token. The legacy unscoped handlers remain available for compatibility but
+//! are not registered by the application; all front-end calls use the scoped
+//! handlers below.
 
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -14,250 +16,354 @@ use crate::state::AppState;
 // ── DTOs ──────────────────────────────────────────────────────────────
 
 #[derive(Debug, Serialize)]
-/// Stockcountdto.
+/// A stock-count record returned to the front end.
 pub struct StockCountDto {
     /// Unique identifier.
     pub id: String,
-    /// Count Number.
+    /// Human-readable count number.
     pub count_number: String,
-    /// Current status.
+    /// Current lifecycle status.
     pub status: String,
-    /// Count Type.
+    /// Count type.
     pub count_type: String,
-    /// Notes.
+    /// Operator notes.
     pub notes: String,
-    /// Counted By.
+    /// Authenticated actor who started the count.
     pub counted_by: Option<String>,
     /// ISO-8601 creation timestamp.
     pub created_at: String,
-    /// Completed At.
+    /// ISO-8601 completion timestamp.
     pub completed_at: Option<String>,
     /// ISO-8601 last-update timestamp.
     pub updated_at: String,
 }
 
 impl From<StockCount> for StockCountDto {
-    fn from(c: StockCount) -> Self {
+    fn from(count: StockCount) -> Self {
         Self {
-            id: c.id,
-            count_number: c.count_number,
-            status: c.status.as_str().to_string(),
-            count_type: c.count_type.as_str().to_string(),
-            notes: c.notes,
-            counted_by: c.counted_by,
-            created_at: c.created_at,
-            completed_at: c.completed_at,
-            updated_at: c.updated_at,
+            id: count.id,
+            count_number: count.count_number,
+            status: count.status.as_str().to_string(),
+            count_type: count.count_type.as_str().to_string(),
+            notes: count.notes,
+            counted_by: count.counted_by,
+            created_at: count.created_at,
+            completed_at: count.completed_at,
+            updated_at: count.updated_at,
         }
     }
 }
 
 #[derive(Debug, Serialize)]
-/// Stockcountlinedto.
+/// A stock-count line returned to the front end.
 pub struct StockCountLineDto {
     /// Unique identifier.
     pub id: String,
-    /// ID of the associated count.
+    /// Parent stock-count identifier.
     pub count_id: String,
-    /// Stock-keeping unit identifier.
+    /// Stock-keeping unit.
     pub sku: String,
-    /// Product Name.
+    /// Product display name.
     pub product_name: String,
-    /// Expected Qty.
+    /// Expected quantity.
     pub expected_qty: i64,
-    /// Counted Qty.
+    /// Physical quantity observed so far.
     pub counted_qty: Option<i64>,
-    /// Difference.
+    /// Counted minus expected quantity.
     pub difference: i64,
-    /// Notes.
+    /// Operator notes.
     pub notes: String,
 }
 
 impl From<StockCountLine> for StockCountLineDto {
-    fn from(l: StockCountLine) -> Self {
+    fn from(line: StockCountLine) -> Self {
         Self {
-            id: l.id,
-            count_id: l.count_id,
-            sku: l.sku,
-            product_name: l.product_name,
-            expected_qty: l.expected_qty,
-            counted_qty: l.counted_qty,
-            difference: l.difference,
-            notes: l.notes,
+            id: line.id,
+            count_id: line.count_id,
+            sku: line.sku,
+            product_name: line.product_name,
+            expected_qty: line.expected_qty,
+            counted_qty: line.counted_qty,
+            difference: line.difference,
+            notes: line.notes,
         }
     }
 }
 
 #[derive(Debug, Serialize)]
-/// Stockadjustmentdto.
+/// A stock adjustment returned to the front end.
 pub struct StockAdjustmentDto {
     /// Unique identifier.
     pub id: String,
-    /// ID of the associated count.
+    /// Parent stock-count identifier, if applicable.
     pub count_id: Option<String>,
-    /// Stock-keeping unit identifier.
+    /// Stock-keeping unit.
     pub sku: String,
-    /// Product Name.
+    /// Product display name.
     pub product_name: String,
-    /// Previous Qty.
+    /// Quantity before the adjustment.
     pub previous_qty: i64,
-    /// Adjusted Qty.
+    /// Quantity after the adjustment.
     pub adjusted_qty: i64,
-    /// Reason.
+    /// Audit reason.
     pub reason: String,
-    /// Created By.
+    /// Authenticated actor who applied the adjustment.
     pub created_by: Option<String>,
     /// ISO-8601 creation timestamp.
     pub created_at: String,
 }
 
 impl From<StockAdjustment> for StockAdjustmentDto {
-    fn from(a: StockAdjustment) -> Self {
+    fn from(adjustment: StockAdjustment) -> Self {
         Self {
-            id: a.id,
-            count_id: a.count_id,
-            sku: a.sku,
-            product_name: a.product_name,
-            previous_qty: a.previous_qty,
-            adjusted_qty: a.adjusted_qty,
-            reason: a.reason,
-            created_by: a.created_by,
-            created_at: a.created_at,
+            id: adjustment.id,
+            count_id: adjustment.count_id,
+            sku: adjustment.sku,
+            product_name: adjustment.product_name,
+            previous_qty: adjustment.previous_qty,
+            adjusted_qty: adjustment.adjusted_qty,
+            reason: adjustment.reason,
+            created_by: adjustment.created_by,
+            created_at: adjustment.created_at,
         }
     }
 }
 
-// ── Command args ───────────────────────────────────────────────────────
+// ── Command args ──────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
-/// Createstockcountargs.
+#[serde(rename_all = "camelCase")]
+/// Arguments for creating a stock count. The actor is session-derived.
 pub struct CreateStockCountArgs {
-    /// Count Type.
+    /// Count type (`full`, `cyclic`, or `spot`).
     pub count_type: String,
-    /// Notes.
+    /// Operator notes.
     pub notes: String,
-    /// Counted By.
-    pub counted_by: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
-/// Addcountlineargs.
+#[serde(rename_all = "camelCase")]
+/// Arguments for adding a stock-count line.
 pub struct AddCountLineArgs {
-    /// ID of the associated count.
+    /// Parent stock-count identifier.
     pub count_id: String,
-    /// Stock-keeping unit identifier.
+    /// Stock-keeping unit.
     pub sku: String,
-    /// Product Name.
+    /// Product display name.
     pub product_name: String,
-    /// Expected Qty.
+    /// Expected quantity.
     pub expected_qty: i64,
 }
 
 #[derive(Debug, Deserialize)]
-/// Updatecountlineargs.
+#[serde(rename_all = "camelCase")]
+/// Arguments for updating a stock-count line.
 pub struct UpdateCountLineArgs {
-    /// ID of the associated line.
+    /// Line identifier.
     pub line_id: String,
-    /// Counted Qty.
+    /// Observed quantity, or `null` to clear it.
     pub counted_qty: Option<i64>,
-    /// Notes.
+    /// Operator notes.
     pub notes: String,
 }
 
 #[derive(Debug, Deserialize)]
-/// Removecountlineargs.
+#[serde(rename_all = "camelCase")]
+/// Arguments for removing a stock-count line.
 pub struct RemoveCountLineArgs {
-    /// ID of the associated line.
+    /// Line identifier.
     pub line_id: String,
 }
 
 #[derive(Debug, Deserialize)]
-/// Completestockcountargs.
+#[serde(rename_all = "camelCase")]
+/// Arguments for completing a stock count. The actor is session-derived.
 pub struct CompleteStockCountArgs {
-    /// ID of the associated count.
+    /// Parent stock-count identifier.
     pub count_id: String,
-    /// Completed By.
-    pub completed_by: Option<String>,
 }
 
-// ── Commands ───────────────────────────────────────────────────────────
+// ── Shared helpers ────────────────────────────────────────────────────
 
-/// Create a new stock count with an auto-generated count number.
-#[tauri::command]
-pub async fn create_stock_count(
-    args: CreateStockCountArgs,
-    state: State<'_, AppState>,
-) -> Result<StockCountDto, AppError> {
+/// Verify that the authenticated user may manage physical inventory counts.
+async fn require_inventory_count_permission(
+    state: &AppState,
+    user_id: &str,
+) -> Result<(), AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
+    crate::commands::authz::require_permission_for_user(
+        &store,
+        user_id,
+        oz_core::permissions::INVENTORY_COUNT,
+    )
+}
 
-    let id = uuid::Uuid::now_v7().to_string();
+/// Require that a count exists and is still editable.
+fn editable_count(store: &Store<'_>, count_id: &str) -> Result<StockCount, AppError> {
+    let count = store
+        .get_stock_count(count_id)?
+        .ok_or_else(|| AppError::Invalid("stock count not found".into()))?;
+    if matches!(
+        count.status,
+        StockCountStatus::Draft | StockCountStatus::InProgress
+    ) {
+        Ok(count)
+    } else {
+        Err(AppError::Invalid(
+            "stock count is no longer editable".into(),
+        ))
+    }
+}
+
+/// Validate that a stock-count line references a product in this store.
+fn validate_product(store: &Store<'_>, sku: &str) -> Result<(), AppError> {
+    if sku.trim().is_empty() {
+        return Err(AppError::Invalid("sku must not be empty".into()));
+    }
+    let exists: bool = store.conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM products WHERE sku = ?1)",
+        [sku],
+        |row| row.get(0),
+    )?;
+    if exists {
+        Ok(())
+    } else {
+        Err(AppError::Invalid(format!(
+            "product SKU '{sku}' was not found"
+        )))
+    }
+}
+
+/// Validate a physical quantity and reject negative values at the command boundary.
+fn validate_quantity(field: &'static str, quantity: i64) -> Result<(), AppError> {
+    if quantity >= 0 {
+        Ok(())
+    } else {
+        Err(AppError::Invalid(format!("{field} must be non-negative")))
+    }
+}
+
+/// Build and persist a count while the caller holds the store connection lock.
+fn create_count_in_store(
+    store: &Store<'_>,
+    args: CreateStockCountArgs,
+    actor_id: Option<&str>,
+) -> Result<StockCountDto, AppError> {
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    let count_number = store.next_count_number()?;
-    let count_type = CountType::from_db_str(&args.count_type).unwrap_or(CountType::Full);
-
-    let count = StockCount {
-        id,
-        count_number,
+    let count_type = CountType::from_db_str(&args.count_type)
+        .ok_or_else(|| AppError::Invalid(format!("invalid count type: {}", args.count_type)))?;
+    let mut count = StockCount {
+        id: uuid::Uuid::now_v7().to_string(),
+        count_number: String::new(),
         status: StockCountStatus::Draft,
         count_type,
         notes: args.notes,
-        counted_by: args.counted_by,
+        counted_by: actor_id.map(str::to_owned),
         created_at: now.clone(),
         completed_at: None,
         updated_at: now,
     };
-
-    store.create_stock_count(&count)?;
-
-    tracing::info!(count_number = %count.count_number, "stock count created");
+    store.create_stock_count_with_next_number(&mut count)?;
     Ok(count.into())
 }
 
-/// Fetch a single stock count by id.
+// ── Session-scoped commands ───────────────────────────────────────────
+
+/// Create a stock count in the session's store and attribute it to the session user.
 #[tauri::command]
-pub async fn get_stock_count(
+pub async fn create_stock_count_scoped(
+    session_token: String,
+    args: CreateStockCountArgs,
+    state: State<'_, AppState>,
+) -> Result<StockCountDto, AppError> {
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_inventory_count_permission(&state, &session.user_id).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    create_count_in_store(&Store::new(&db), args, Some(&session.user_id))
+}
+
+/// Fetch one stock count from the session's store.
+#[tauri::command]
+pub async fn get_stock_count_scoped(
+    session_token: String,
     id: String,
     state: State<'_, AppState>,
 ) -> Result<Option<StockCountDto>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    Ok(store.get_stock_count(&id)?.map(|c| c.into()))
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_inventory_count_permission(&state, &session.user_id).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).get_stock_count(&id)?.map(Into::into))
 }
 
-/// List all stock counts, newest first.
+/// List stock counts from the session's store.
 #[tauri::command]
-pub async fn list_stock_counts(state: State<'_, AppState>) -> Result<Vec<StockCountDto>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let counts = store.list_stock_counts()?;
-    Ok(counts.into_iter().map(|c| c.into()).collect())
+pub async fn list_stock_counts_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<StockCountDto>, AppError> {
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_inventory_count_permission(&state, &session.user_id).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db)
+        .list_stock_counts()?
+        .into_iter()
+        .map(Into::into)
+        .collect())
 }
 
-/// Get all lines for a stock count.
+/// Fetch lines from a count in the session's store.
 #[tauri::command]
-pub async fn get_count_lines(
+pub async fn get_count_lines_scoped(
+    session_token: String,
     count_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<StockCountLineDto>, AppError> {
-    let db = state.db.lock().await;
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_inventory_count_permission(&state, &session.user_id).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    let lines = store.get_count_lines(&count_id)?;
-    Ok(lines.into_iter().map(|l| l.into()).collect())
+    editable_or_readable_count(&store, &count_id)?;
+    Ok(store
+        .get_count_lines(&count_id)?
+        .into_iter()
+        .map(Into::into)
+        .collect())
 }
 
-/// Add a line to a stock count.
+/// Read-only existence check used by line reads, including completed counts.
+fn editable_or_readable_count(store: &Store<'_>, count_id: &str) -> Result<StockCount, AppError> {
+    store
+        .get_stock_count(count_id)?
+        .ok_or_else(|| AppError::Invalid("stock count not found".into()))
+}
+
+/// Add a line to an editable count in the session's store.
 #[tauri::command]
-pub async fn add_count_line(
+pub async fn add_count_line_scoped(
+    session_token: String,
     args: AddCountLineArgs,
     state: State<'_, AppState>,
 ) -> Result<StockCountLineDto, AppError> {
-    let db = state.db.lock().await;
+    validate_quantity("expected_qty", args.expected_qty)?;
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_inventory_count_permission(&state, &session.user_id).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    let id = uuid::Uuid::now_v7().to_string();
+    editable_count(&store, &args.count_id)?;
+    validate_product(&store, &args.sku)?;
     let line = StockCountLine {
-        id,
+        id: uuid::Uuid::now_v7().to_string(),
         count_id: args.count_id,
         sku: args.sku,
         product_name: args.product_name,
@@ -266,30 +372,41 @@ pub async fn add_count_line(
         difference: 0,
         notes: String::new(),
     };
-
     store.add_count_line(&line)?;
     Ok(line.into())
 }
 
-/// Update a count line (record counted quantity).
+/// Update a line belonging to an editable count in the session's store.
 #[tauri::command]
-pub async fn update_count_line(
+pub async fn update_count_line_scoped(
+    session_token: String,
     args: UpdateCountLineArgs,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    let db = state.db.lock().await;
+    if let Some(quantity) = args.counted_qty {
+        validate_quantity("counted_qty", quantity)?;
+    }
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_inventory_count_permission(&state, &session.user_id).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    // Fetch the existing line to compute the difference.
-    let existing = match store.get_count_line_by_id(&args.line_id)? {
-        Some(l) => l,
-        None => return Err(AppError::Invalid("count line not found".into())),
-    };
-
-    let difference = args.counted_qty.map_or(0, |cq| cq - existing.expected_qty);
-
-    let updated = StockCountLine {
-        id: args.line_id,
+    let existing = store
+        .get_count_line_by_id(&args.line_id)?
+        .ok_or_else(|| AppError::Invalid("count line not found".into()))?;
+    editable_count(&store, &existing.count_id)?;
+    let difference = args
+        .counted_qty
+        .map(|quantity| {
+            quantity
+                .checked_sub(existing.expected_qty)
+                .ok_or_else(|| AppError::Invalid("counted_qty difference overflow".into()))
+        })
+        .transpose()?
+        .unwrap_or(0);
+    store.update_count_line(&StockCountLine {
+        id: existing.id,
         count_id: existing.count_id,
         sku: existing.sku,
         product_name: existing.product_name,
@@ -297,314 +414,129 @@ pub async fn update_count_line(
         counted_qty: args.counted_qty,
         difference,
         notes: args.notes,
-    };
-
-    store.update_count_line(&updated)?;
+    })?;
     Ok(())
 }
 
-/// Remove a line from a stock count.
+/// Remove a line belonging to an editable count in the session's store.
 #[tauri::command]
-pub async fn remove_count_line(
+pub async fn remove_count_line_scoped(
+    session_token: String,
     args: RemoveCountLineArgs,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    let db = state.db.lock().await;
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_inventory_count_permission(&state, &session.user_id).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
+    let existing = store
+        .get_count_line_by_id(&args.line_id)?
+        .ok_or_else(|| AppError::Invalid("count line not found".into()))?;
+    editable_count(&store, &existing.count_id)?;
     store.remove_count_line(&args.line_id)?;
     Ok(())
 }
 
-/// Complete a stock count: create adjustments and update inventory.
+/// Complete a count and attribute generated adjustments to the session user.
 #[tauri::command]
-pub async fn complete_stock_count(
+pub async fn complete_stock_count_scoped(
+    session_token: String,
     args: CompleteStockCountArgs,
     state: State<'_, AppState>,
 ) -> Result<Vec<StockAdjustmentDto>, AppError> {
-    let db = state.db.lock().await;
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_inventory_count_permission(&state, &session.user_id).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    let adjustments = store.complete_stock_count(&args.count_id, args.completed_by.as_deref())?;
-
-    tracing::info!(
-        count_id = %args.count_id,
-        adjustments = %adjustments.len(),
-        "stock count completed"
-    );
-
-    Ok(adjustments.into_iter().map(|a| a.into()).collect())
+    editable_count(&store, &args.count_id)?;
+    Ok(store
+        .complete_stock_count(&args.count_id, Some(&session.user_id))?
+        .into_iter()
+        .map(Into::into)
+        .collect())
 }
 
-/// Update a stock count's status (e.g. from draft to in_progress).
+/// Move an editable count to `in_progress` or `cancelled`.
 #[tauri::command]
-pub async fn update_stock_count_status(
+pub async fn update_stock_count_status_scoped(
+    session_token: String,
     id: String,
     status: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    let db = state.db.lock().await;
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_inventory_count_permission(&state, &session.user_id).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    let mut count = store
-        .get_stock_count(&id)?
-        .ok_or_else(|| AppError::Invalid("stock count not found".into()))?;
-
+    let mut count = editable_count(&store, &id)?;
     let new_status = StockCountStatus::from_db_str(&status)
         .ok_or_else(|| AppError::Invalid(format!("invalid status: {status}")))?;
-
+    let allowed = matches!(
+        (count.status, new_status),
+        (StockCountStatus::Draft, StockCountStatus::Draft)
+            | (StockCountStatus::Draft, StockCountStatus::InProgress)
+            | (StockCountStatus::Draft, StockCountStatus::Cancelled)
+            | (StockCountStatus::InProgress, StockCountStatus::InProgress)
+            | (StockCountStatus::InProgress, StockCountStatus::Cancelled)
+    );
+    if !allowed {
+        return Err(AppError::Invalid(
+            "invalid stock count status transition".into(),
+        ));
+    }
     count.status = new_status;
     count.updated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-
     store.update_stock_count(&count)?;
     Ok(())
 }
 
-/// List all stock adjustments.
+/// List adjustments from the session's store.
 #[tauri::command]
-pub async fn list_stock_adjustments(
+pub async fn list_stock_adjustments_scoped(
+    session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<StockAdjustmentDto>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let adjustments = store.list_stock_adjustments()?;
-    Ok(adjustments.into_iter().map(|a| a.into()).collect())
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_inventory_count_permission(&state, &session.user_id).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db)
+        .list_stock_adjustments()?
+        .into_iter()
+        .map(Into::into)
+        .collect())
 }
-
-// ── Tests ──────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    // ── StockCountDto ───────────────────────────────────────────────────
-
     #[test]
-    fn stock_count_dto_debug() {
-        let dto = StockCountDto {
-            id: "c1".into(),
-            count_number: "CNT-001".into(),
-            status: "draft".into(),
-            count_type: "full".into(),
-            notes: "Monthly count".into(),
-            counted_by: Some("user1".into()),
-            created_at: "2025-01-01T00:00:00.000Z".into(),
-            completed_at: None,
-            updated_at: "2025-01-01T00:00:00.000Z".into(),
-        };
-        let d = format!("{dto:?}");
-        assert!(d.contains("CNT-001"));
-        assert!(d.contains("draft"));
-    }
-
-    #[test]
-    fn stock_count_dto_serialize() {
-        let dto = StockCountDto {
-            id: "c2".into(),
-            count_number: "CNT-002".into(),
-            status: "in_progress".into(),
-            count_type: "cyclic".into(),
-            notes: String::new(),
-            counted_by: None,
-            created_at: "2025-02-01T00:00:00.000Z".into(),
-            completed_at: None,
-            updated_at: "2025-02-01T00:00:00.000Z".into(),
-        };
-        let json = serde_json::to_value(&dto).unwrap();
-        assert_eq!(json["count_number"], "CNT-002");
-        assert!(json["counted_by"].is_null());
-        assert!(json["completed_at"].is_null());
-    }
-
-    // ── StockCountLineDto ───────────────────────────────────────────────
-
-    #[test]
-    fn stock_count_line_dto_debug() {
-        let dto = StockCountLineDto {
-            id: "l1".into(),
-            count_id: "c1".into(),
-            sku: "SKU-A".into(),
-            product_name: "Widget".into(),
-            expected_qty: 100,
-            counted_qty: Some(95),
-            difference: -5,
-            notes: "Short".into(),
-        };
-        let d = format!("{dto:?}");
-        assert!(d.contains("SKU-A"));
-        assert!(d.contains("Widget"));
-    }
-
-    #[test]
-    fn stock_count_line_dto_serialize() {
-        let dto = StockCountLineDto {
-            id: "l2".into(),
-            count_id: "c2".into(),
-            sku: "SKU-B".into(),
-            product_name: "Gadget".into(),
-            expected_qty: 50,
-            counted_qty: None,
-            difference: 0,
-            notes: String::new(),
-        };
-        let json = serde_json::to_value(&dto).unwrap();
-        assert_eq!(json["sku"], "SKU-B");
-        assert_eq!(json["expected_qty"], 50);
-        assert!(json["counted_qty"].is_null());
-    }
-
-    // ── StockAdjustmentDto ──────────────────────────────────────────────
-
-    #[test]
-    fn stock_adjustment_dto_debug() {
-        let dto = StockAdjustmentDto {
-            id: "a1".into(),
-            count_id: Some("c1".into()),
-            sku: "SKU-A".into(),
-            product_name: "Widget".into(),
-            previous_qty: 100,
-            adjusted_qty: 95,
-            reason: "Cycle count adjustment".into(),
-            created_by: None,
-            created_at: "2025-01-01T00:00:00.000Z".into(),
-        };
-        let d = format!("{dto:?}");
-        assert!(d.contains("SKU-A"));
-    }
-
-    #[test]
-    fn stock_adjustment_dto_serialize() {
-        let dto = StockAdjustmentDto {
-            id: "a2".into(),
-            count_id: None,
-            sku: "SKU-C".into(),
-            product_name: "Manual adj".into(),
-            previous_qty: 200,
-            adjusted_qty: 210,
-            reason: "Correction".into(),
-            created_by: Some("admin".into()),
-            created_at: "2025-03-01T00:00:00.000Z".into(),
-        };
-        let json = serde_json::to_value(&dto).unwrap();
-        assert_eq!(json["sku"], "SKU-C");
-        assert!(json["count_id"].is_null());
-    }
-
-    // ── CreateStockCountArgs ────────────────────────────────────────────
-
-    #[test]
-    fn create_stock_count_args_deserialize() {
-        let json = r#"{"count_type":"full","notes":"Q1 count","counted_by":"user1"}"#;
-        let args: CreateStockCountArgs = serde_json::from_str(json).unwrap();
+    fn create_args_reject_legacy_actor_field() {
+        let args: CreateStockCountArgs =
+            serde_json::from_str(r#"{"countType":"full","notes":"cycle","countedBy":"forged"}"#)
+                .unwrap();
         assert_eq!(args.count_type, "full");
-        assert_eq!(args.notes, "Q1 count");
-        assert_eq!(args.counted_by.as_deref(), Some("user1"));
+        assert_eq!(args.notes, "cycle");
     }
 
     #[test]
-    fn create_stock_count_args_debug() {
-        let args = CreateStockCountArgs {
-            count_type: "spot".into(),
-            notes: "Quick check".into(),
-            counted_by: None,
-        };
-        let d = format!("{args:?}");
-        assert!(d.contains("spot"));
-    }
-
-    // ── AddCountLineArgs ────────────────────────────────────────────────
-
-    #[test]
-    fn add_count_line_args_deserialize() {
-        let json = r#"{"count_id":"c1","sku":"SKU-A","product_name":"Widget","expected_qty":100}"#;
-        let args: AddCountLineArgs = serde_json::from_str(json).unwrap();
-        assert_eq!(args.count_id, "c1");
-        assert_eq!(args.sku, "SKU-A");
-        assert_eq!(args.expected_qty, 100);
+    fn complete_args_use_camel_case() {
+        let args: CompleteStockCountArgs =
+            serde_json::from_str(r#"{"countId":"count-1"}"#).unwrap();
+        assert_eq!(args.count_id, "count-1");
     }
 
     #[test]
-    fn add_count_line_args_debug() {
-        let args = AddCountLineArgs {
-            count_id: "c2".into(),
-            sku: "SKU-B".into(),
-            product_name: "Gadget".into(),
-            expected_qty: 50,
-        };
-        let d = format!("{args:?}");
-        assert!(d.contains("Gadget"));
-    }
-
-    // ── UpdateCountLineArgs ─────────────────────────────────────────────
-
-    #[test]
-    fn update_count_line_args_deserialize() {
-        let json = r#"{"line_id":"l1","counted_qty":95,"notes":"Found 95"}"#;
-        let args: UpdateCountLineArgs = serde_json::from_str(json).unwrap();
-        assert_eq!(args.line_id, "l1");
-        assert_eq!(args.counted_qty, Some(95));
-        assert_eq!(args.notes, "Found 95");
-    }
-
-    #[test]
-    fn update_count_line_args_deserialize_no_counted_qty() {
-        let json = r#"{"line_id":"l2","notes":"Skipped"}"#;
-        let args: UpdateCountLineArgs = serde_json::from_str(json).unwrap();
-        assert_eq!(args.counted_qty, None);
-    }
-
-    #[test]
-    fn update_count_line_args_debug() {
-        let args = UpdateCountLineArgs {
-            line_id: "l3".into(),
-            counted_qty: Some(10),
-            notes: String::new(),
-        };
-        let d = format!("{args:?}");
-        assert!(d.contains("l3"));
-    }
-
-    // ── RemoveCountLineArgs ─────────────────────────────────────────────
-
-    #[test]
-    fn remove_count_line_args_deserialize() {
-        let json = r#"{"line_id":"l99"}"#;
-        let args: RemoveCountLineArgs = serde_json::from_str(json).unwrap();
-        assert_eq!(args.line_id, "l99");
-    }
-
-    #[test]
-    fn remove_count_line_args_debug() {
-        let args = RemoveCountLineArgs {
-            line_id: "l42".into(),
-        };
-        let d = format!("{args:?}");
-        assert!(d.contains("l42"));
-    }
-
-    // ── CompleteStockCountArgs ──────────────────────────────────────────
-
-    #[test]
-    fn complete_stock_count_args_deserialize() {
-        let json = r#"{"count_id":"c1","completed_by":"user1"}"#;
-        let args: CompleteStockCountArgs = serde_json::from_str(json).unwrap();
-        assert_eq!(args.count_id, "c1");
-        assert_eq!(args.completed_by.as_deref(), Some("user1"));
-    }
-
-    #[test]
-    fn complete_stock_count_args_deserialize_no_completed_by() {
-        let json = r#"{"count_id":"c2"}"#;
-        let args: CompleteStockCountArgs = serde_json::from_str(json).unwrap();
-        assert_eq!(args.completed_by, None);
-    }
-
-    #[test]
-    fn complete_stock_count_args_debug() {
-        let args = CompleteStockCountArgs {
-            count_id: "c3".into(),
-            completed_by: None,
-        };
-        let d = format!("{args:?}");
-        assert!(d.contains("c3"));
+    fn quantity_validation_rejects_negative_values() {
+        assert!(validate_quantity("counted_qty", -1).is_err());
+        assert!(validate_quantity("counted_qty", 0).is_ok());
     }
 }

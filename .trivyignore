@@ -1,0 +1,47 @@
+# ── Trivy ignorefile — documented vulnerability exceptions ────────────
+#
+# The CI container scans (`.github/workflows/ci.yml`, `security.yml`,
+# `release.yml`) run Trivy with `--exit-code 1` for CRITICAL and HIGH
+# severities. Any finding listed here is a *reviewed and accepted*
+# exception and must include a justification.
+#
+# Format: <VULNERABILITY-ID> <optional comment>
+#
+# To refresh the accepted set:
+#   1. Re-scan the image locally:
+#        docker build -f Dockerfile.server -t oz-pos-cloud:scan .
+#        docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+#          aquasec/trivy:0.61.0 image oz-pos-cloud:scan
+#   2. Add every accepted CRITICAL/HIGH to this file with a reason
+#      (e.g. "no fix available", "not exploitable in this runtime").
+#   3. Open a PR so the exception is reviewable before it lands on main.
+#
+# ── Reviewed baseline (2026-08-03) ─────────────────────────────────
+#
+# The cloud runtime (`debian:bookworm-slim` 12.15) carries 15 Debian OS
+# package CVEs with NO fix available in the bookworm repos at scan time
+# (Trivy status `affected`/`fix_deferred`; `apt-get upgrade` verified to
+# not clear them — a derived image with `apt-get upgrade` still reports
+# the same set). They are all in runtime OS packages (perl-base,
+# ncurses, mount/bsdutils, gzip, libacl1, zlib) that the Rust binary does
+# not exercise, and the app layer itself scans clean (0 findings).
+#
+# These are accepted as the reviewed baseline so the CI scan can be
+# BLOCKING for any NEW CRITICAL/HIGH finding. Re-review this list during
+# the next base-image refresh (see DOCKER-02) — once Debian backports a
+# fix, remove the entry and rebuild.
+CVE-2023-45853 # zlib1g — no bookworm fix at scan time
+CVE-2025-69720 # ncurses-base/bin, libtinfo6 — fix_deferred
+CVE-2026-13221 # perl-base — no bookworm fix at scan time
+CVE-2026-41992 # gzip — fix_deferred
+CVE-2026-42496 # perl-base (Archive::Tar) — fix_deferred
+CVE-2026-42497 # perl-base (Archive::Tar) — fix_deferred
+CVE-2026-48962 # perl-base — no bookworm fix at scan time
+CVE-2026-53615 # mount/bsdutils/libblkid/libmount/libsmartcols/libuuid — affected
+CVE-2026-54369 # libacl1 — fix_deferred
+CVE-2026-57432 # perl-base — affected
+CVE-2026-57433 # perl-base (Storable) — affected
+CVE-2026-58471 # perl-base — affected
+CVE-2026-58472 # perl-base — affected
+CVE-2026-8376  # perl-base — heap overflow on 32-bit builds (runtime is amd64/arm64)
+CVE-2026-9538  # perl-base — no bookworm fix at scan time

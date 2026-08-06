@@ -8,6 +8,8 @@ import { loggedInvoke } from '@/utils/logged-invoke';
 export interface StaffLoginArgs {
   username: string;
   pin: string;
+  /** Optional device/terminal id for per-device abuse controls (STAFF-07). */
+  device_id?: string;
 }
 
 /** A login session with user and role info. */
@@ -28,10 +30,14 @@ export interface CheckUsernameArgs {
   username: string;
 }
 
-/** Result of a username existence check. */
+/**
+ * Result of the uniform username pre-check (STAFF-06).
+ *
+ * Always `{ proceed: true }` — the pre-check never reveals whether an
+ * account exists or is active, so it cannot be used to enumerate staff.
+ */
 export interface CheckUsernameResult {
-  found: boolean;
-  is_active: boolean;
+  proceed: boolean;
 }
 
 /** Check if a username exists and is active before proceeding to PIN. */
@@ -85,42 +91,56 @@ export interface RoleDto {
   description: string;
 }
 
-/** Arguments for creating a new staff member. */
-export interface CreateStaffArgs {
+// ── Session-scoped Staff Management (ADR #7 · audit/06 STAFF-01) ───
+//
+// These are the secure replacements. The caller identity is resolved from
+// the session token on the backend — the args carry NO caller_user_id.
+
+/** Arguments for creating a staff member via a session-scoped command. */
+export interface CreateStaffScopedArgs {
   username: string;
   pin: string;
   display_name: string;
   role_id: string;
-  /** User ID of the caller (from LoginSession). Used for permission check. */
-  caller_user_id: string;
 }
 
-/** Arguments for updating an existing staff member. */
-export interface UpdateStaffArgs {
+/** Arguments for updating a staff member via a session-scoped command. */
+export interface UpdateStaffScopedArgs {
   id: string;
   username: string;
   display_name: string;
   role_id: string;
   is_active: boolean;
-  /** User ID of the caller (from LoginSession). Used for permission check. */
-  caller_user_id: string;
+  /** STAFF-03: optional new PIN; hashed server-side. Omit to keep current. */
+  pin?: string;
+  /**
+   * STAFF-05: workspace key assignment applied atomically with the profile
+   * update (single IPC call). Omit to leave workspace assignments untouched.
+   */
+  workspace_keys?: string[];
 }
 
-/** List all staff members. */
-export const listStaff = (): Promise<StaffMemberDto[]> =>
-  loggedInvoke<StaffMemberDto[]>('list_staff');
+/** List all staff members (caller resolved from session token). */
+export const listStaffScoped = (sessionToken: string): Promise<StaffMemberDto[]> =>
+  loggedInvoke<StaffMemberDto[]>('list_staff_scoped', { sessionToken });
 
-/** List all roles. */
-export const listRoles = (): Promise<RoleDto[]> =>
-  loggedInvoke<RoleDto[]>('list_roles');
+/** List all roles (caller resolved from session token). */
+export const listRolesScoped = (sessionToken: string): Promise<RoleDto[]> =>
+  loggedInvoke<RoleDto[]>('list_roles_scoped', { sessionToken });
 
-/** Create a new staff member. */
-export const createStaff = (args: CreateStaffArgs): Promise<StaffMemberDto> =>
-  loggedInvoke<StaffMemberDto>('create_staff', { args });
+/** Create a new staff member (caller resolved from session token). */
+export const createStaffScoped = (
+  sessionToken: string,
+  args: CreateStaffScopedArgs,
+): Promise<StaffMemberDto> =>
+  loggedInvoke<StaffMemberDto>('create_staff_scoped', { sessionToken, args });
 
-/** Update an existing staff member. */
-export const updateStaff = (args: UpdateStaffArgs): Promise<StaffMemberDto> =>
-  loggedInvoke<StaffMemberDto>('update_staff', { args });
+/** Update an existing staff member (caller resolved from session token). */
+export const updateStaffScoped = (
+  sessionToken: string,
+  args: UpdateStaffScopedArgs,
+): Promise<StaffMemberDto> =>
+  loggedInvoke<StaffMemberDto>('update_staff_scoped', { sessionToken, args });
 
 // ── Session Token (ADR #4 / ADR #7) ───────────────────────────────
 

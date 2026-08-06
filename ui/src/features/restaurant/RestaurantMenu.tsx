@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { requiredLocalized, LoadingStatus } from '@/frontend/shared';
 import { Localized } from '@/components/Localized';
 import { type Product } from '@/types/domain';
 import { useLocalization } from '@fluent/react';
@@ -301,6 +302,13 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
     }).catch(() => { /* offline — keep localStorage values */ });
   }, [userId, sessionToken]);
 
+  // Sync pinned/colors/unavailable to localStorage whenever state changes.
+  // Extracted from setState updaters to avoid side effects in pure functions
+  // (React 18 strict mode calls updaters twice, causing duplicate writes).
+  useEffect(() => { savePinned(pinned, userId); }, [pinned, userId]);
+  useEffect(() => { saveColors(colors, userId); }, [colors, userId]);
+  useEffect(() => { saveUnavailable(unavailable, userId); }, [unavailable, userId]);
+
   // ── Context menu state ──────────────────────────────
   const [contextMenu, setContextMenu] = useState<{
     sku: string;
@@ -309,19 +317,59 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
     isPinned: boolean;
     isUnavailable: boolean;
     currentColor: string | undefined;
+    fromKeyboard: boolean;
   } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  // A11Y-06: the card that opened the menu (for focus restoration) and whether
+  // it was opened via keyboard (Shift+F10 / ContextMenu key) — only the
+  // keyboard path should move focus into the menu and restore it on close.
+  const contextTriggerRef = useRef<HTMLElement | null>(null);
+  const contextFromKeyboardRef = useRef(false);
 
-  // Close context menu on click outside or Escape
+  // A11Y-06: close the menu and, when it was opened from the keyboard, return
+  // focus to the triggering card (WAI-ARIA menu pattern).
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(null);
+    if (contextFromKeyboardRef.current) contextTriggerRef.current?.focus();
+    contextTriggerRef.current = null;
+    contextFromKeyboardRef.current = false;
+  }, []);
+
+  // A11Y-06: keyboard-opened menus move focus to the first menuitem so the
+  // menu is immediately operable without an extra Tab.
+  useEffect(() => {
+    if (!contextMenu?.fromKeyboard) return;
+    menuRef.current?.querySelector<HTMLElement>('button[role="menuitem"]')?.focus();
+  }, [contextMenu]);
+
+  // A11Y-06: ArrowUp / ArrowDown roving focus between menuitems (wraps).
+  // When no menuitem currently has focus (idx === -1), ArrowDown lands on the
+  // first item and ArrowUp wraps to the last — robust for any item count.
+  const handleContextMenuKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    const items = Array.from(
+      e.currentTarget.querySelectorAll<HTMLElement>('button[role="menuitem"]'),
+    );
+    if (items.length === 0) return;
+    const idx = items.indexOf(document.activeElement as HTMLElement);
+    e.preventDefault();
+    if (e.key === 'ArrowDown') {
+      items[idx === -1 ? 0 : (idx + 1) % items.length]?.focus();
+    } else {
+      items[idx === -1 ? items.length - 1 : (idx - 1 + items.length) % items.length]?.focus();
+    }
+  }, []);
+
+  // Close context menu on click outside or Escape (Escape restores focus).
   useEffect(() => {
     if (!contextMenu) return;
     const handler = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setContextMenu(null);
+        closeContextMenu();
       }
     };
     const keyHandler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setContextMenu(null);
+      if (e.key === 'Escape') closeContextMenu();
     };
     document.addEventListener('mousedown', handler);
     document.addEventListener('keydown', keyHandler);
@@ -329,7 +377,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
       document.removeEventListener('mousedown', handler);
       document.removeEventListener('keydown', keyHandler);
     };
-  }, [contextMenu]);
+  }, [contextMenu, closeContextMenu]);
 
   // Listen for global Ctrl+F → focus search input
   useEffect(() => {
@@ -367,9 +415,11 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  const handleContextMenu = useCallback((sku: string, e: React.MouseEvent) => {
+  const handleContextMenu = useCallback((sku: string, e: React.MouseEvent, trigger?: HTMLElement, fromKeyboard = false) => {
     e.preventDefault();
-    setContextMenu({ sku, x: e.clientX, y: e.clientY, isPinned: pinned.has(sku), isUnavailable: unavailable.has(sku), currentColor: colors[sku] });
+    contextTriggerRef.current = trigger ?? null;
+    contextFromKeyboardRef.current = fromKeyboard;
+    setContextMenu({ sku, x: e.clientX, y: e.clientY, isPinned: pinned.has(sku), isUnavailable: unavailable.has(sku), currentColor: colors[sku], fromKeyboard });
   }, [pinned, colors, unavailable]);
 
   const togglePin = useCallback((sku: string) => {
@@ -377,41 +427,38 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
       const next = new Set(prev);
       if (next.has(sku)) next.delete(sku);
       else next.add(sku);
-      savePinned(next, userId);
       return next;
     });
-    setContextMenu(null);
-  }, [userId]);
+    closeContextMenu();
+  }, [closeContextMenu]);
 
   const toggleUnavailable = useCallback((sku: string) => {
     setUnavailable((prev) => {
       const next = new Set(prev);
       if (next.has(sku)) next.delete(sku);
       else next.add(sku);
-      saveUnavailable(next, userId);
       return next;
     });
-    setContextMenu(null);
-  }, [userId]);
+    closeContextMenu();
+  }, [closeContextMenu]);
 
   const setColor = useCallback((sku: string, color: string) => {
     setColors((prev) => {
-      const next = color === prev[sku] ? { ...prev } : { ...prev, [sku]: color };
-      saveColors(next, userId);
-      return next;
+      if (color === prev[sku]) return prev;
+      return { ...prev, [sku]: color };
     });
-    setContextMenu(null);
-  }, [userId]);
+    closeContextMenu();
+  }, [closeContextMenu]);
 
   const clearColor = useCallback((sku: string) => {
     setColors((prev) => {
+      if (!(sku in prev)) return prev;
       const next = { ...prev };
       delete next[sku];
-      saveColors(next, userId);
       return next;
     });
-    setContextMenu(null);
-  }, [userId]);
+    closeContextMenu();
+  }, [closeContextMenu]);
 
   const categoryOptions = useMemo<Category[]>(
     () => ['All', ...categories],
@@ -425,7 +472,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
   }, [categoryMeta]);
 
   const filtered = useMemo(() => {
-    let result = products.filter((p) => p.productType === 'restaurant' || p.productType === 'both');
+    let result = products.filter((p) => p.productType === 'restaurant');
     if (activeCategory !== 'All') result = result.filter((p) => p.category === activeCategory);
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
@@ -645,13 +692,11 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
 
       {/* ── Product grid ───────────────────────────── */}
       {loading ? (
-        <div className="restaurant-empty">
-          <span className="restaurant-empty-text">
-            <Localized id="restaurant-menu-loading">
-              <span>Loading menu…</span>
-            </Localized>
-          </span>
-        </div>
+        // LOAD-05: localized status announcement for the loading region.
+        <LoadingStatus
+          className="restaurant-empty"
+          label={requiredLocalized(l10n, 'restaurant-menu-loading')}
+        />
       ) : filtered.length === 0 ? (
         <div className="restaurant-empty">
           <span className="restaurant-empty-text">
@@ -661,7 +706,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
           </span>
         </div>
       ) : (
-        <div className="restaurant-grid" role="list" aria-label="Menu items">
+        <div className="restaurant-grid" role="list" aria-label={requiredLocalized(l10n, 'restaurant-menu-items-aria')}>
           {filtered.map((product, i) => (
             <RestaurantCard
               key={product.sku}
@@ -682,8 +727,13 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
         <div
           ref={menuRef}
           className="restaurant-context-menu"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
+          style={{
+            left: Math.max(4, Math.min(contextMenu.x, window.innerWidth - 180)),
+            top: Math.max(4, Math.min(contextMenu.y, window.innerHeight - 280)),
+          }}
           role="menu"
+          tabIndex={-1}
+          onKeyDown={handleContextMenuKeyDown}
         >
           <button
             type="button"
@@ -717,7 +767,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
                 className={`restaurant-context-swatch${contextMenu.currentColor === c ? ' restaurant-context-swatch--active' : ''}`}
                 style={{ background: c }}
                 onClick={() => setColor(contextMenu.sku, c)}
-                aria-label={c}
+                aria-label={l10n.getString('restaurant-color-swatch-aria', { color: c }, c)}
               />
             ))}
             {contextMenu.currentColor && (
@@ -744,7 +794,7 @@ interface RestaurantCardProps {
   pinned: boolean;
   color: string | undefined;
   onAdd: ((product: Product) => void) | undefined;
-  onContextMenu: (sku: string, e: React.MouseEvent) => void;
+  onContextMenu: (sku: string, e: React.MouseEvent, trigger: HTMLElement, fromKeyboard: boolean) => void;
   added?: boolean;
   index?: number;
 }
@@ -757,7 +807,24 @@ function RestaurantCard({ product, pinned, color, onAdd, onContextMenu, added, i
 
   const handleContext = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
-    onContextMenu(product.sku, e);
+    onContextMenu(product.sku, e, e.currentTarget as HTMLElement, false);
+  }, [product.sku, onContextMenu]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+      e.preventDefault();
+      const rect = e.currentTarget.getBoundingClientRect();
+      onContextMenu(
+        product.sku,
+        {
+          preventDefault: () => {},
+          clientX: rect.right,
+          clientY: rect.top,
+        } as unknown as React.MouseEvent,
+        e.currentTarget,
+        true,
+      );
+    }
   }, [product.sku, onContextMenu]);
 
   let cardClass = 'restaurant-card';
@@ -772,11 +839,12 @@ function RestaurantCard({ product, pinned, color, onAdd, onContextMenu, added, i
       tabIndex={product.inStock ? 0 : -1}
       onClick={handleClick}
       onContextMenu={handleContext}
+      onKeyDown={handleKeyDown}
       style={{ '--btn-color': color ?? 'var(--color-accent)', animationDelay: `${(index ?? 0) * 35}ms` } as React.CSSProperties}
     >
       <div className="restaurant-card-body">
         {pinned && (
-          <span className="restaurant-card-pin-badge" title={l10n.getString('restaurant-card-pin-title')}>
+          <span className="restaurant-card-pin-badge" title={requiredLocalized(l10n, 'restaurant-card-pin-title')}>
             <PinIcon />
           </span>
         )}

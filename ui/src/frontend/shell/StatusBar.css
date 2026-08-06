@@ -100,6 +100,14 @@
   white-space: nowrap;
 }
 
+/* ── Conflict count icon (SYNC-12: token-based, no inline color) ── */
+
+.statusbar-conflict-icon {
+  color: var(--color-warning);
+  margin-right: var(--space-1);
+  line-height: 1;
+}
+
 /* ── Gateway pill ─────────────────────────────────── */
 
 .statusbar-gateway {
@@ -177,4 +185,42 @@
 .app-statusbar .theme-toggle svg {
   width: 14px;
   height: 14px;
+}
+
+/* ── Forced-colors (Windows high-contrast) — structural status dots (A11Y-10) ──
+ *
+ * The connection dots are normally communicated by colour + glow alone.
+ * Under forced-colors, background-color and box-shadow are stripped, so we
+ * give each state a distinct shape that survives the palette swap:
+ *   • online    → solid filled circle (ButtonText)
+ *   • offline   → hollow circle with solid border
+ *   • checking  → hollow circle with dashed border + no pulse animation
+ * Adjacent text labels (version / sync name / gateway name) provide the
+ * text redundancy required by WCAG 1.4.1. Focus rings switch to the
+ * system Highlight colour so keyboard focus stays visible.
+ */
+@media (forced-colors: active) {
+  .statusbar-dot {
+    box-shadow: none;
+    box-sizing: border-box;
+  }
+  .statusbar-dot--online {
+    background: ButtonText;
+  }
+  .statusbar-dot--offline {
+    background: ButtonFace;
+    border: 1px solid ButtonText;
+  }
+  .statusbar-dot--checking {
+    background: ButtonFace;
+    border: 1px dashed ButtonText;
+    animation: none;
+  }
+  .statusbar-conflict-icon {
+    color: ButtonText;
+  }
+  .statusbar-btn:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
+  }
 }

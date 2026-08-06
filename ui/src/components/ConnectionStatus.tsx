@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import './ConnectionStatus.css';
 
 interface ConnectionStatusProps {
@@ -21,59 +21,72 @@ export default function ConnectionStatus({
 }: ConnectionStatusProps) {
   const [latency, setLatency] = useState<number | null>(null);
   const [status, setStatus] = useState<'checking' | 'online' | 'offline'>('checking');
+  // ERR-08: active controller + check generation refs so a new check aborts
+  // and supersedes an in-flight one, and only the latest generation schedules
+  // the next timeout. A slower earlier response can no longer update the
+  // indicator after a newer check has begun.
+  const controllerRef = useRef<AbortController | null>(null);
+  const genRef = useRef(0);
 
   useEffect(() => {
     let mounted = true;
-    
-    const checkConnection = async () => {
+
+    // ERR-08: run the check with a per-request AbortController + generation.
+    // The generation is bumped before every check so only the latest one may
+    // write state or schedule the next timeout; any previous in-flight fetch
+    // is aborted via the ref-held controller.
+    const checkConnection = async (
+      gen: number,
+      controller: AbortController,
+    ): Promise<boolean> => {
       if (!url) {
-        if (mounted) {
+        if (mounted && gen === genRef.current) {
           setStatus('offline');
           setLatency(null);
         }
         return false;
       }
-      
+
       const start = performance.now();
       try {
         // Ping the health endpoint (add /api/health if it's a PocketBase URL, otherwise just ping the root)
         const pingUrl = url.endsWith('/') ? url + 'api/health' : url + '/api/health';
-        
+
         // Use a short timeout so it doesn't hang forever
-        const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
-        
         const res = await fetch(pingUrl, { signal: controller.signal, method: 'GET' });
         clearTimeout(timeoutId);
-        
-        if (res.ok && mounted) {
+
+        // Only the latest generation may update the indicator.
+        if (!mounted || gen !== genRef.current) return false;
+
+        if (res.ok) {
           const end = performance.now();
           setLatency(Math.round(end - start));
           setStatus('online');
           return true;
-        } else if (mounted) {
-          setStatus('offline');
-          setLatency(null);
-          return false;
         }
+        setStatus('offline');
+        setLatency(null);
+        return false;
       } catch {
-        if (mounted) {
+        // Aborted/superseded requests must not clobber a newer check's state.
+        if (mounted && gen === genRef.current) {
           setStatus('offline');
           setLatency(null);
         }
         return false;
       }
-      return false;
     };
-    
-    let timeoutId: ReturnType<typeof setTimeout>;
+
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     let currentBackoff = 2000; // Start backoff at 2s
 
     const scheduleNextCheck = (isSuccess: boolean) => {
       if (!mounted) return;
-      
+
       let nextDelay = 0;
-      
+
       if (isSuccess) {
         // If successful, reset backoff and use the standard jittered interval
         currentBackoff = 2000;
@@ -86,34 +99,46 @@ export default function ConnectionStatus({
       }
 
       timeoutId = setTimeout(() => {
-        runCheck();
+        void runCheck();
       }, nextDelay);
     };
 
     const runCheck = async () => {
+      // Supersede any in-flight check before starting a new one (ERR-08).
+      const gen = ++genRef.current;
+      controllerRef.current?.abort();
+      const controller = new AbortController();
+      controllerRef.current = controller;
+
       // Don't bother pinging if OS says we are physically offline
       if (!navigator.onLine) {
-        if (mounted) {
+        if (mounted && gen === genRef.current) {
           setStatus('offline');
           setLatency(null);
         }
         scheduleNextCheck(false);
         return;
       }
-      
-      const success = await checkConnection();
-      scheduleNextCheck(success);
+
+      const success = await checkConnection(gen, controller);
+      // Only the latest generation schedules the next timeout (ERR-08).
+      if (gen === genRef.current) {
+        scheduleNextCheck(success);
+      }
     };
 
     // Listen for OS network changes for instant reaction
     const handleOnline = () => {
-      clearTimeout(timeoutId);
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
       currentBackoff = 1000; // Fast ping when connection restores
-      runCheck();
+      void runCheck();
     };
-    
+
     const handleOffline = () => {
-      clearTimeout(timeoutId);
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+      // Supersede any in-flight check so it cannot flip us back online.
+      genRef.current += 1;
+      controllerRef.current?.abort();
       if (mounted) {
         setStatus('offline');
         setLatency(null);
@@ -124,11 +149,14 @@ export default function ConnectionStatus({
     window.addEventListener('offline', handleOffline);
 
     // Initial check
-    runCheck();
-    
+    void runCheck();
+
     return () => {
       mounted = false;
-      clearTimeout(timeoutId);
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+      genRef.current += 1;
+      controllerRef.current?.abort();
+      controllerRef.current = null;
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };

@@ -1,4 +1,6 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useContext, useEffect, useState, useCallback, useMemo } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
+import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   BarChart,
@@ -30,6 +32,7 @@ import {
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
+import { minorUnitExponent } from '@/types/domain';
 import './SalesReportScreen.css';
 
 const PIE_COLORS = [
@@ -49,11 +52,16 @@ const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 type RevenueRow = DailyRevenueRow | WeeklyRevenueRow | MonthlyRevenueRow;
 
 function fmtCurrency(minor: number, currency: string): string {
+  // Exponent-driven: IDR/JPY = 0 decimals, KWD = 3, USD/EUR = 2 — the
+  // shared minorUnitExponent map is the single source of truth (mirrors
+  // the Rust Currency::minor_unit_exponent). No hardcoded /100 math.
+  const exp = minorUnitExponent(currency);
   return new Intl.NumberFormat('en', {
     style: 'currency',
     currency,
-    minimumFractionDigits: 2,
-  }).format(minor / 100);
+    minimumFractionDigits: exp,
+    maximumFractionDigits: exp,
+  }).format(minor / 10 ** exp);
 }
 
 function today(): string {
@@ -69,6 +77,7 @@ function monthAgo(): string {
 /** Sales report screen — daily/weekly/monthly revenue charts, top products, hourly heatmap, and category breakdown with CSV export. */
 export default function SalesReportScreen() {
   const { l10n } = useLocalization();
+  const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<ViewMode>('daily');
@@ -98,21 +107,21 @@ export default function SalesReportScreen() {
     let revenuePromise: Promise<RevenueRow[]>;
     switch (view) {
       case 'daily':
-        revenuePromise = getDailyRevenue(startDate, endDate);
+        revenuePromise = getDailyRevenue(startDate, endDate, sessionToken);
         break;
       case 'weekly':
-        revenuePromise = getWeeklyRevenue(startDate, endDate);
+        revenuePromise = getWeeklyRevenue(startDate, endDate, sessionToken);
         break;
       case 'monthly':
-        revenuePromise = getMonthlyRevenue(startDate, endDate);
+        revenuePromise = getMonthlyRevenue(startDate, endDate, sessionToken);
         break;
     }
 
     Promise.all([
       revenuePromise,
-      getTopProducts(startDate, endDate, 10),
-      getHourlyHeatmap(startDate, endDate),
-      getCategoryBreakdown(startDate, endDate),
+      getTopProducts(startDate, endDate, 10, sessionToken),
+      getHourlyHeatmap(startDate, endDate, sessionToken),
+      getCategoryBreakdown(startDate, endDate, sessionToken),
     ])
       .then(([rev, top, heat, cat]) => {
         setRevenueData(rev);
@@ -126,7 +135,7 @@ export default function SalesReportScreen() {
       .finally(() => {
         setLoading(false);
       });
-  }, [view, startDate, endDate]);
+  }, [view, startDate, endDate, sessionToken]);
 
   // P9-3: Fetch previous period data when comparison is enabled
   const calcPrevRange = useCallback(() => {
@@ -152,13 +161,13 @@ export default function SalesReportScreen() {
     let revenuePromise: Promise<RevenueRow[]>;
     switch (view) {
       case 'daily':
-        revenuePromise = getDailyRevenue(prevStart, prevEnd);
+        revenuePromise = getDailyRevenue(prevStart, prevEnd, sessionToken);
         break;
       case 'weekly':
-        revenuePromise = getWeeklyRevenue(prevStart, prevEnd);
+        revenuePromise = getWeeklyRevenue(prevStart, prevEnd, sessionToken);
         break;
       case 'monthly':
-        revenuePromise = getMonthlyRevenue(prevStart, prevEnd);
+        revenuePromise = getMonthlyRevenue(prevStart, prevEnd, sessionToken);
         break;
     }
 
@@ -166,7 +175,7 @@ export default function SalesReportScreen() {
       .then(setPrevRevenueData)
       .catch(() => { /* period comparison is best-effort; silently clear on failure */ setPrevRevenueData([]); })
 
-  }, [comparePeriod, view, calcPrevRange]);
+  }, [comparePeriod, view, calcPrevRange, sessionToken]);
 
   useEffect(() => {
     fetchData();
@@ -197,7 +206,7 @@ export default function SalesReportScreen() {
       const period = 'date' in r ? r.date : 'week_start' in r ? r.week_start : r.month;
       return [
         period,
-        (r.total_minor / 100).toFixed(2),
+        (r.total_minor / 10 ** minorUnitExponent(r.currency)).toFixed(minorUnitExponent(r.currency)),
         r.currency,
         r.sale_count,
       ].join(',');
@@ -319,7 +328,7 @@ export default function SalesReportScreen() {
     : null;
 
   return (
-    <div className="sales-report" role="region" aria-label={l10n.getString('sales-report-region-aria') || 'Sales Report'}>
+    <div className="sales-report" role="region" aria-label={requiredLocalized(l10n, 'sales-report-region-aria')}>
       <div className="sales-report-header">
         <Localized id="sales-report-title">
           <h1 className="sales-report-title">Sales Report</h1>
@@ -335,7 +344,7 @@ export default function SalesReportScreen() {
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
             className="sales-report-input"
-            aria-label={l10n.getString('sales-report-start-aria') || 'Start date'}
+            aria-label={requiredLocalized(l10n, 'sales-report-start-aria')}
           />
 
           <label htmlFor="end-date" className="sales-report-label">
@@ -347,13 +356,13 @@ export default function SalesReportScreen() {
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
             className="sales-report-input"
-            aria-label={l10n.getString('sales-report-end-aria') || 'End date'}
+            aria-label={requiredLocalized(l10n, 'sales-report-end-aria')}
           />
 
           <div
             className="sales-report-view-toggle"
             role="radiogroup"
-            aria-label={l10n.getString('sales-report-view-aria') || 'View mode'}
+            aria-label={requiredLocalized(l10n, 'sales-report-view-aria')}
           >
             {(['daily', 'weekly', 'monthly'] as ViewMode[]).map((mode) => (
               <button
@@ -374,7 +383,7 @@ export default function SalesReportScreen() {
           <Button
             variant={comparePeriod ? 'primary' : 'secondary'}
             onClick={() => setComparePeriod((p) => !p)}
-            aria-label={comparePeriod ? (l10n.getString('sales-report-compare-off-aria') || 'Disable period comparison') : (l10n.getString('sales-report-compare-on-aria') || 'Compare to previous period')}
+            aria-label={comparePeriod ? (requiredLocalized(l10n, 'sales-report-compare-off-aria')) : (requiredLocalized(l10n, 'sales-report-compare-on-aria'))}
             aria-pressed={comparePeriod}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true" style={{ marginRight: 'var(--space-1)' }}>
@@ -387,14 +396,14 @@ export default function SalesReportScreen() {
           <Button
             variant="secondary"
             onClick={printReport}
-            aria-label={l10n.getString('sales-report-print-aria') || 'Print report'}
+            aria-label={requiredLocalized(l10n, 'sales-report-print-aria')}
           >
             <Localized id="print">Print</Localized>
           </Button>
           <Button
             variant="secondary"
             onClick={exportCsv}
-            aria-label={l10n.getString('sales-report-export-aria') || 'Export CSV'}
+            aria-label={requiredLocalized(l10n, 'sales-report-export-aria')}
           >
             <Localized id="sales-report-export-csv">Export CSV</Localized>
           </Button>
@@ -553,7 +562,7 @@ export default function SalesReportScreen() {
           <div
             className="sales-report-heatmap"
             role="grid"
-            aria-label={l10n.getString('sales-report-heatmap-aria') || 'Hourly heatmap'}
+            aria-label={requiredLocalized(l10n, 'sales-report-heatmap-aria')}
           >
             <div className="sales-report-heatmap-header">
               <div className="sales-report-heatmap-corner" />

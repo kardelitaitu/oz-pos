@@ -1090,9 +1090,9 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-epoch"
-version = "0.9.18"
+version = "0.9.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b82ac4a3c2ca9c3460964f020e1402edd5753411d7737aa39c3714ad1b5420e"
+checksum = "2d6914041f254d6e9176c01941b21115dcfb7089e55135a35411081bd106ef3f"
 dependencies = [
  "crossbeam-utils",
 ]
@@ -1534,6 +1534,20 @@ checksum = "e079f19b08ca6239f47f8ba8509c11cf3ea30095831f7fed61441475edd8c449"
 
 [[package]]
 name = "embed-resource"
+version = "2.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d506610004cfc74a6f5ee7e8c632b355de5eca1f03ee5e5e0ec11b77d4eb3d61"
+dependencies = [
+ "cc",
+ "memchr",
+ "rustc_version",
+ "toml 0.8.2",
+ "vswhom",
+ "winreg 0.52.0",
+]
+
+[[package]]
+name = "embed-resource"
 version = "3.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c31a88c8d26de40ed18fe748c547845aa39de1db3afd958f8cb91579f3644bcb"
@@ -1543,7 +1557,7 @@ dependencies = [
  "rustc_version",
  "toml 1.1.2+spec-1.1.0",
  "vswhom",
- "winreg",
+ "winreg 0.55.0",
 ]
 
 [[package]]
@@ -1787,7 +1801,7 @@ dependencies = [
 
 [[package]]
 name = "foundation"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "anyhow",
  "regex",
@@ -3349,7 +3363,7 @@ dependencies = [
 
 [[package]]
 name = "modules-crm"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3365,7 +3379,7 @@ dependencies = [
 
 [[package]]
 name = "modules-currency"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "foundation",
  "oz-core",
@@ -3381,7 +3395,7 @@ dependencies = [
 
 [[package]]
 name = "modules-inventory"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3397,7 +3411,7 @@ dependencies = [
 
 [[package]]
 name = "modules-loyalty"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3413,7 +3427,7 @@ dependencies = [
 
 [[package]]
 name = "modules-reporting"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3429,7 +3443,7 @@ dependencies = [
 
 [[package]]
 name = "modules-sales"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3444,7 +3458,7 @@ dependencies = [
 
 [[package]]
 name = "modules-settings"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3460,7 +3474,7 @@ dependencies = [
 
 [[package]]
 name = "modules-staff"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3477,7 +3491,7 @@ dependencies = [
 
 [[package]]
 name = "modules-tax"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3493,7 +3507,7 @@ dependencies = [
 
 [[package]]
 name = "modules-terminal"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4018,7 +4032,7 @@ dependencies = [
 
 [[package]]
 name = "oz-api"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "axum 0.8.9",
  "chrono",
@@ -4038,12 +4052,13 @@ dependencies = [
 
 [[package]]
 name = "oz-cli"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "anyhow",
  "chrono",
  "clap",
  "csv",
+ "embed-resource 2.5.2",
  "foundation",
  "oz-core",
  "oz-hal",
@@ -4062,12 +4077,13 @@ dependencies = [
 
 [[package]]
 name = "oz-cloud-server"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "axum 0.8.9",
  "chrono",
  "console-subscriber",
  "deadpool-postgres",
+ "embed-resource 2.5.2",
  "hex",
  "hmac 0.12.1",
  "http-body-util",
@@ -4093,7 +4109,7 @@ dependencies = [
 
 [[package]]
 name = "oz-core"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "aead",
  "aes-gcm",
@@ -4134,7 +4150,7 @@ dependencies = [
 
 [[package]]
 name = "oz-hal"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "async-trait",
  "oz-core",
@@ -4148,7 +4164,7 @@ dependencies = [
 
 [[package]]
 name = "oz-logging"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "chrono",
  "filetime",
@@ -4163,7 +4179,7 @@ dependencies = [
 
 [[package]]
 name = "oz-lua"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "mlua",
  "oz-core",
@@ -4176,7 +4192,7 @@ dependencies = [
 
 [[package]]
 name = "oz-notification"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "async-trait",
  "foundation",
@@ -4196,7 +4212,7 @@ dependencies = [
 
 [[package]]
 name = "oz-payment"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -4217,7 +4233,7 @@ dependencies = [
 
 [[package]]
 name = "oz-plugin"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "chrono",
  "mlua",
@@ -4225,6 +4241,7 @@ dependencies = [
  "oz-lua",
  "regex",
  "rusqlite",
+ "semver",
  "serde",
  "serde_json",
  "tempfile",
@@ -4237,7 +4254,7 @@ dependencies = [
 
 [[package]]
 name = "oz-pos-app"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4286,7 +4303,7 @@ dependencies = [
 
 [[package]]
 name = "oz-pos-tablet"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4303,6 +4320,8 @@ dependencies = [
  "oz-core",
  "oz-hal",
  "oz-logging",
+ "oz-reporting",
+ "platform-core",
  "platform-kernel",
  "platform-startup",
  "rusqlite",
@@ -4313,6 +4332,7 @@ dependencies = [
  "tauri-plugin-clipboard-manager",
  "tauri-plugin-updater",
  "tauri-plugin-window-state",
+ "tempfile",
  "thiserror 1.0.69",
  "tokio",
  "tracing",
@@ -4321,7 +4341,7 @@ dependencies = [
 
 [[package]]
 name = "oz-reporting"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "chrono",
  "oz-core",
@@ -4334,7 +4354,7 @@ dependencies = [
 
 [[package]]
 name = "oz-security"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "chrono",
  "hex",
@@ -4568,13 +4588,15 @@ checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 
 [[package]]
 name = "platform-core"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "argon2",
  "chrono",
+ "hex",
  "rusqlite",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tempfile",
  "thiserror 1.0.69",
  "tracing",
@@ -4582,7 +4604,7 @@ dependencies = [
 
 [[package]]
 name = "platform-kernel"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "anyhow",
  "foundation",
@@ -4595,7 +4617,7 @@ dependencies = [
 
 [[package]]
 name = "platform-startup"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4626,7 +4648,7 @@ dependencies = [
 
 [[package]]
 name = "platform-sync"
-version = "0.0.23"
+version = "0.0.24"
 dependencies = [
  "axum 0.8.9",
  "chrono",
@@ -4647,9 +4669,9 @@ dependencies = [
 
 [[package]]
 name = "plist"
-version = "1.9.0"
+version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "092791278e026273c1b65bbdcfbba3a300f2994c896bd01ab01da613c29c46f1"
+checksum = "7da1d65da6dd5d1e44199ac0f58712d241c0f439f80adea8924d832384087f85"
 dependencies = [
  "base64 0.22.1",
  "indexmap 2.14.0",
@@ -4866,22 +4888,21 @@ dependencies = [
 
 [[package]]
 name = "procfs"
-version = "0.16.0"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "731e0d9356b0c25f16f33b5be79b1c57b562f141ebfcdb0ad8ac2c13a24293b4"
+checksum = "cc5b72d8145275d844d4b5f6d4e1eef00c8cd889edb6035c21675d1bb1f45c9f"
 dependencies = [
  "bitflags 2.13.0",
  "hex",
- "lazy_static",
  "procfs-core",
  "rustix 0.38.44",
 ]
 
 [[package]]
 name = "procfs-core"
-version = "0.16.0"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d3554923a69f4ce04c4a754260c338f505ce22642d3830e049a399fc2059a29"
+checksum = "239df02d8349b06fc07398a3a1697b06418223b1c7725085e801e7c0fc6a12ec"
 dependencies = [
  "bitflags 2.13.0",
  "hex",
@@ -4889,9 +4910,9 @@ dependencies = [
 
 [[package]]
 name = "prometheus"
-version = "0.13.4"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d33c28a30771f7f96db69893f78b857f7450d7e0237e9c8fc6427a81bae7ed1"
+checksum = "3ca5326d8d0b950a9acd87e6a3f94745394f62e4dae1b1ee22b2bc0c394af43a"
 dependencies = [
  "cfg-if",
  "fnv",
@@ -4901,7 +4922,7 @@ dependencies = [
  "parking_lot",
  "procfs",
  "protobuf",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -4957,9 +4978,23 @@ dependencies = [
 
 [[package]]
 name = "protobuf"
-version = "2.28.0"
+version = "3.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "106dd99e98437432fed6519dedecfade6a06a73bb7b2a1e019fdd2bee5778d94"
+checksum = "d65a1d4ddae7d8b5de68153b48f6aa3bba8cb002b243dbdbc55a5afbc98f99f4"
+dependencies = [
+ "once_cell",
+ "protobuf-support",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "protobuf-support"
+version = "3.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e36c2f31e0a47f9280fb347ef5e461ffcd2c52dd520d8e216b52f93b0b0d7d6"
+dependencies = [
+ "thiserror 1.0.69",
+]
 
 [[package]]
 name = "pxfm"
@@ -4981,9 +5016,9 @@ checksum = "a993555f31e5a609f617c12db6250dedcac1b0a85076912c436e6fc9b2c8e6a3"
 
 [[package]]
 name = "quick-xml"
-version = "0.39.4"
+version = "0.41.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cdcc8dd4e2f670d309a5f0e83fe36dfdc05af317008fea29144da1a2ac858e5e"
+checksum = "e660451e55124f798a69a5af3f49ccfbefbd41910eefd25caf2393e1f3473ec1"
 dependencies = [
  "memchr",
 ]
@@ -6657,7 +6692,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cc65d45c68858bfe420dd29e834b5d15dbecf8a07a8a16cf4d532c7b1f69d4b6"
 dependencies = [
  "dunce",
- "embed-resource",
+ "embed-resource 3.0.9",
  "toml 1.1.2+spec-1.1.0",
 ]
 
@@ -7658,9 +7693,9 @@ dependencies = [
 
 [[package]]
 name = "wayland-scanner"
-version = "0.31.10"
+version = "0.31.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c324a910fd86ebdc364a3e61ec1f11737d3b1d6c273c0239ee8ff4bc0d24b4a"
+checksum = "338e30461b3a2b67d70eb30a6d89f8e0c93a833e07d2ae89085cd070c4a00ac0"
 dependencies = [
  "proc-macro2",
  "quick-xml",
@@ -8359,6 +8394,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0592e1c9d151f854e6fd382574c3a0855250e1d9b2f99d9281c6e6391af352f1"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "winreg"
+version = "0.52.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a277a57398d4bfa075df44f501a17cfdf8542d224f0d36095a2adc7aee4ef0a5"
+dependencies = [
+ "cfg-if",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

@@ -101,7 +101,7 @@
 
 .kds-column--pending .kds-column-count {
   background: var(--kds-pending);
-  color: var(--kds-bg);
+  color: var(--color-fg-inverse);
 }
 
 .kds-column--preparing .kds-column-count {

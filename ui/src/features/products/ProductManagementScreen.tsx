@@ -1,18 +1,20 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import {
   listProductsScoped,
   createProductScoped,
   updateProductScoped,
   deleteProductScoped,
-  listCategories,
+  listCategoriesScoped,
   type ProductDto,
   type CategoryDto,
 } from '@/api/products';
-import { listTaxRates, type TaxRateDto } from '@/api/tax';
+import { listTaxRatesScoped, type TaxRateDto } from '@/api/tax';
 import { listCurrenciesScoped, type CurrencyDto } from '@/api/currency';
 import { formatMoney, type Product, type Sku } from '@/types/domain';
+import { l10nErrorMessage } from '@/utils/app-error';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -21,7 +23,8 @@ import { StockAlertPanel } from '@/features/inventory/StockAlertPanel';
 import { getActiveStockAlerts } from '@/api/inventory';
 import LocationPicker from '@/features/inventory/LocationPicker';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
-import { EmptyState } from '@/frontend/shared';
+import { EmptyState, requiredLocalized } from '@/frontend/shared';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { NoProductsIcon } from '@/components/EmptyStateIllustrations';
 import './ProductManagementScreen.css';
 
@@ -37,17 +40,19 @@ interface FormData {
   taxRateIds: string[];
 }
 
-const EMPTY_FORM: FormData = {
-  sku: '',
-  name: '',
-  priceMinor: '',
-  currency: 'USD',
-  categoryId: '',
-  barcode: '',
-  initialStock: '0',
-  productType: 'retail',
-  taxRateIds: [],
-};
+function emptyForm(workspaceType: string): FormData {
+  return {
+    sku: '',
+    name: '',
+    priceMinor: '',
+    currency: 'USD',
+    categoryId: '',
+    barcode: '',
+    initialStock: '0',
+    productType: workspaceType === 'restaurant-pos' ? 'restaurant' : 'retail',
+    taxRateIds: [],
+  };
+}
 
 function dtoToProduct(dto: ProductDto): Product {
   return {
@@ -65,7 +70,7 @@ function dtoToProduct(dto: ProductDto): Product {
 
 /** Product management screen — full CRUD for products, including SKU, pricing, barcode, tax rates, and variant management. */
 export default function ProductManagementScreen() {
-  const { sessionToken: rawToken } = useWorkspace();
+  const { sessionToken: rawToken, activeWorkspace } = useWorkspace();
   const sessionToken = rawToken || '';
   const [products, setProducts] = useState<Product[]>([]);
   const [productDtos, setProductDtos] = useState<ProductDto[]>([]);
@@ -73,14 +78,17 @@ export default function ProductManagementScreen() {
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [currencies, setCurrencies] = useState<CurrencyDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [editingSku, setEditingSku] = useState<string | null>(null);
 
   const modalExit = useExitAnimation(showModal, () => setShowModal(false));
-  const [form, setForm] = useState<FormData>(EMPTY_FORM);
+  const [form, setForm] = useState<FormData>(() => emptyForm(activeWorkspace ?? ''));
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteConfirmSku, setDeleteConfirmSku] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [variantProductSku, setVariantProductSku] = useState<string | null>(null);
   const [variantProductName, setVariantProductName] = useState<string>('');
 
@@ -88,6 +96,7 @@ export default function ProductManagementScreen() {
   const [selectedLocationId, setSelectedLocationId] = useState('default');
   const [selectedLocationName, setSelectedLocationName] = useState('Location');
   const [alertCount, setAlertCount] = useState(0);
+  const [alertError, setAlertError] = useState(false);
 
   const handleLocationChange = useCallback((locationId: string, locationName: string) => {
     setSelectedLocationId(locationId);
@@ -95,50 +104,103 @@ export default function ProductManagementScreen() {
   }, []);
 
   // ── Poll active stock alerts for the bell badge count ──────
-  useEffect(() => {
+  // PROD-10: a failed poll is now visible (alertError) instead of being
+  // silently ignored, and the drawer offers an explicit retry. The seq guard
+  // (same pattern as `load`) ensures a slow poll for an old location/session
+  // can never overwrite a newer one.
+  const pollSeqRef = useRef(0);
+  const fetchAlerts = useCallback(async () => {
     const token = sessionToken ?? '';
     if (!token) return;
-
-    const fetchAlerts = async () => {
-      try {
-        const alerts = await getActiveStockAlerts(token, selectedLocationId);
-        setAlertCount(alerts.length);
-      } catch {
-        // Silently ignore — badge just won't show count.
-      }
-    };
-
-    fetchAlerts();
-    const interval = setInterval(fetchAlerts, 30_000);
-    return () => clearInterval(interval);
+    const seq = ++pollSeqRef.current;
+    try {
+      const alerts = await getActiveStockAlerts(token, selectedLocationId);
+      if (seq !== pollSeqRef.current) return;
+      setAlertCount(alerts.length);
+      setAlertError(false);
+    } catch {
+      if (seq !== pollSeqRef.current) return;
+      setAlertError(true);
+    }
   }, [sessionToken, selectedLocationId]);
 
-  const { l10n } = useLocalization();
+  useEffect(() => {
+    void fetchAlerts();
+    const interval = setInterval(() => { void fetchAlerts(); }, 30_000);
+    return () => clearInterval(interval);
+  }, [fetchAlerts]);
 
+  const { l10n } = useLocalization();
+  // PROD-04: keep l10n in a ref so `load` is not recreated (and the product
+  // list re-fetched) on every locale change — same convention as useProducts.
+  const l10nRef = useRef(l10n);
+  l10nRef.current = l10n;
+  const productModalRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(productModalRef, showModal && modalExit.shouldRender && !modalExit.exiting, modalExit.requestClose);
+  // PROD-08: the stock-alert drawer is a focus-trapped dialog — Escape and
+  // the close button both dismiss it, and focus returns to the bell toggle.
+  // The trap is gated on `!showModal` so the drawer and the product modal are
+  // mutually exclusive (two simultaneous traps would fight over Tab and
+  // body-scroll lock).
+  const alertDrawerRef = useRef<HTMLDivElement>(null);
+  const alertToggleRef = useRef<HTMLButtonElement>(null);
+  const closeAlertDrawer = useCallback(() => {
+    setShowAlertPanel(false);
+    alertToggleRef.current?.focus();
+  }, []);
+  useFocusTrap(alertDrawerRef, showAlertPanel && !showModal, closeAlertDrawer);
+
+  // PROD-11: request-sequence guard so a slower earlier load can never
+  // overwrite a newer result (session switch or mutation refresh).
+  const loadSeqRef = useRef(0);
+  const hasLoadedOnceRef = useRef(false);
+  // A workspace/session switch is a fresh catalog — reset the skeleton gate
+  // so the new store's first load shows loading instead of the old store's
+  // rows while it resolves.
+  useEffect(() => {
+    hasLoadedOnceRef.current = false;
+  }, [sessionToken]);
   const load = useCallback(async () => {
-    setLoading(true);
+    const seq = ++loadSeqRef.current;
+    // Only the first load shows the skeleton — refreshes preserve the last
+    // known catalog on screen (PROD-04) instead of flashing a skeleton over
+    // rows the operator may be looking at.
+    if (!hasLoadedOnceRef.current) {
+      setLoading(true);
+    }
+    setLoadError(null);
     try {
-      const [dtos, rates, cats, currencyList] = await Promise.all([listProductsScoped(sessionToken), listTaxRates(), listCategories(), listCurrenciesScoped(sessionToken)]);
+      // TAX-01: tax rates and categories are read from the session store,
+      // not the global DB — per-product tax assignment must resolve the same
+      // store the products came from.
+      const [dtos, rates, cats, currencyList] = await Promise.all([listProductsScoped(sessionToken), listTaxRatesScoped(sessionToken), listCategoriesScoped(sessionToken), listCurrenciesScoped(sessionToken)]);
+      if (seq !== loadSeqRef.current) return;
       setProductDtos(dtos);
       setProducts(dtos.map(dtoToProduct));
       setTaxRates(rates);
       setCategories(cats);
       setCurrencies(currencyList);
-    } catch {
-      // IPC unavailable.
+      hasLoadedOnceRef.current = true;
+    } catch (err) {
+      // PROD-04: distinguish a failed load from a genuinely empty catalog.
+      if (seq !== loadSeqRef.current) return;
+      setLoadError(l10nErrorMessage(err, l10nRef.current, 'product-mgmt-error-load'));
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) {
+        setLoading(false);
+      }
     }
   }, [sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 
   const openCreate = useCallback(() => {
-    setForm(EMPTY_FORM);
+    setForm(emptyForm(activeWorkspace ?? ''));
     setEditingSku(null);
     setSaveError(null);
+    setShowAlertPanel(false);
     setShowModal(true);
-  }, []);
+  }, [activeWorkspace]);
 
   const openEdit = useCallback((p: Product) => {
     const dto = productDtos.find((d) => d.sku === p.sku);
@@ -155,6 +217,7 @@ export default function ProductManagementScreen() {
     });
     setEditingSku(p.sku);
     setSaveError(null);
+    setShowAlertPanel(false);
     setShowModal(true);
   }, [productDtos]);
 
@@ -162,9 +225,33 @@ export default function ProductManagementScreen() {
     setSaving(true);
     setSaveError(null);
     try {
-      const priceMinor = parseInt(form.priceMinor, 10);
-      if (Number.isNaN(priceMinor) || priceMinor < 0) {
-        setSaveError(l10n.getString('product-mgmt-error-invalid-price'));
+      // PROD-05: reject anything that is not a complete non-negative integer.
+      // `parseInt('4.50')` silently truncates to 4 — that must not reach the
+      // backend as a 100×-smaller price.
+      const priceRaw = form.priceMinor.trim();
+      const priceMinor = Number(priceRaw);
+      const priceIsValid =
+        priceRaw !== '' &&
+        /^\d+$/.test(priceRaw) &&
+        Number.isSafeInteger(priceMinor) &&
+        priceMinor >= 0;
+      if (!priceIsValid) {
+        setSaveError(requiredLocalized(l10nRef.current, 'product-mgmt-error-invalid-price'));
+        return;
+      }
+
+      // PROD-06: initial stock must be a complete non-negative integer too.
+      // HTML `min` is not a submit-time guarantee; blank/`1abc`/`-1` are all
+      // rejected rather than silently transformed, and safe-integer bounds
+      // keep huge digit strings from overflowing the backend i64.
+      const initialStockRaw = form.initialStock.trim();
+      const initialStock = Number(initialStockRaw);
+      const initialStockValid =
+        initialStockRaw !== '' &&
+        /^\d+$/.test(initialStockRaw) &&
+        Number.isSafeInteger(initialStock);
+      if (!editingSku && !initialStockValid) {
+        setSaveError(requiredLocalized(l10nRef.current, 'product-mgmt-error-invalid-stock'));
         return;
       }
 
@@ -187,7 +274,7 @@ export default function ProductManagementScreen() {
           currency: form.currency,
           categoryId: form.categoryId || undefined,
           barcode: form.barcode || undefined,
-          initialStock: parseInt(form.initialStock, 10) || 0,
+          initialStock,
           productType: form.productType,
           taxRateIds: form.taxRateIds,
         });
@@ -196,25 +283,40 @@ export default function ProductManagementScreen() {
       await load();
     } catch (err) {
       setSaveError(
-        err instanceof Error
-          ? err.message
-          : l10n.getString('product-mgmt-error-save')
+        l10nErrorMessage(err, l10n, 'product-mgmt-error-save')
       );
     } finally {
       setSaving(false);
     }
   }, [form, editingSku, load, sessionToken, l10n]);
 
-  const confirmDelete = useCallback(async (sku: string) => {
-    setDeleting(sku);
+  // PROD-02: deletion goes through a confirmation dialog first.
+  const requestDelete = useCallback((sku: string) => {
+    setDeleteError(null);
+    setDeleteConfirmSku(sku);
+  }, []);
+
+  const cancelDelete = useCallback(() => {
+    setDeleteConfirmSku(null);
+    setDeleteError(null);
+  }, []);
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleteConfirmSku) return;
+    setDeleting(deleteConfirmSku);
+    setDeleteError(null);
     try {
-      await deleteProductScoped(sessionToken, sku);
-      setDeleting(null);
+      await deleteProductScoped(sessionToken, deleteConfirmSku);
+      setDeleteConfirmSku(null);
       await load();
-    } catch {
+    } catch (err) {
+      // PROD-03: surface the failure instead of swallowing it.
+      setDeleteConfirmSku(null);
+      setDeleteError(l10nErrorMessage(err, l10nRef.current, 'product-mgmt-error-delete'));
+    } finally {
       setDeleting(null);
     }
-  }, [load, sessionToken]);
+  }, [deleteConfirmSku, load, sessionToken]);
 
   return (
     <div className="product-mgmt">
@@ -229,10 +331,12 @@ export default function ProductManagementScreen() {
             label={selectedLocationName}
           />
           <button
+            ref={alertToggleRef}
             type="button"
             className="product-mgmt-alert-toggle"
             onClick={() => setShowAlertPanel((prev) => !prev)}
-            aria-label={showAlertPanel ? 'Close stock alerts' : `Open stock alerts${alertCount > 0 ? ` (${alertCount} active)` : ''}`}
+            aria-label={showAlertPanel ? requiredLocalized(l10n, 'product-mgmt-stock-alert-close') : (alertCount > 0 ? requiredLocalized(l10n, 'product-mgmt-alert-count', { count: String(alertCount) }) : requiredLocalized(l10n, 'product-mgmt-stock-alert-open'))}
+            aria-expanded={showAlertPanel}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
@@ -285,13 +389,26 @@ export default function ProductManagementScreen() {
             </table>
           </div>
         </div>
+      ) : loadError && products.length === 0 ? (
+        <Card shadow="sm">
+          <div className="product-mgmt-empty" role="alert">
+            <EmptyState
+              icon={<NoProductsIcon />}
+              title={requiredLocalized(l10n, 'product-mgmt-error-load')}
+              action={{ label: requiredLocalized(l10n, 'product-mgmt-error-retry'), onClick: () => { void load(); } }}
+            />
+            {loadError && loadError !== requiredLocalized(l10n, 'product-mgmt-error-load') && (
+              <p className="product-mgmt-load-error-detail">{loadError}</p>
+            )}
+          </div>
+        </Card>
       ) : products.length === 0 ? (
         <Card shadow="sm">
           <div className="product-mgmt-empty">
             <EmptyState
               icon={<NoProductsIcon />}
-              title={l10n.getString('product-mgmt-empty') || 'No products yet.'}
-              action={{ label: l10n.getString('product-mgmt-empty-cta') || 'Add your first product', onClick: openCreate }}
+              title={requiredLocalized(l10n, 'product-mgmt-empty')}
+              action={{ label: requiredLocalized(l10n, 'product-mgmt-empty-cta'), onClick: openCreate }}
             />
           </div>
         </Card>
@@ -326,7 +443,7 @@ export default function ProductManagementScreen() {
                   </td>
                   <td>
                     {p.stockQty != null && p.stockQty < 10 ? (
-                      <span className="product-mgmt-stock-low" style={{ color: 'var(--color-danger)', fontWeight: 600 }}>
+                      <span className="product-mgmt-stock-low">
                         {p.stockQty}
                       </span>
                     ) : p.stockQty != null ? (
@@ -342,46 +459,40 @@ export default function ProductManagementScreen() {
                     )}
                   </td>
                   <td className="product-mgmt-cell-actions">
-                    <Localized id="product-mgmt-variants-aria" attrs={{ 'aria-label': true }} vars={{ name: p.name }}>
-                      <button
-                        type="button"
-                        className="product-mgmt-action-btn"
-                        onClick={() => {
-                          setVariantProductSku(p.sku);
-                          setVariantProductName(p.name);
-                        }}
-                        aria-label={`Variants for ${p.name}`}
-                      >
-                        <Localized id="product-mgmt-variants">
-                          <span>Variants</span>
-                        </Localized>
-                      </button>
-                    </Localized>
-                    <Localized id="product-mgmt-edit-aria" attrs={{ 'aria-label': true }} vars={{ name: p.name }}>
-                      <button
-                        type="button"
-                        className="product-mgmt-action-btn"
-                        onClick={() => openEdit(p)}
-                        aria-label={`Edit ${p.name}`}
-                      >
-                        <Localized id="product-mgmt-edit">
-                          <span>Edit</span>
-                        </Localized>
-                      </button>
-                    </Localized>
-                    <Localized id="product-mgmt-delete-aria" attrs={{ 'aria-label': true }} vars={{ name: p.name }}>
-                      <button
-                        type="button"
-                        className="product-mgmt-action-btn product-mgmt-action-btn--danger"
-                        onClick={() => confirmDelete(p.sku)}
-                        disabled={deleting === p.sku}
-                        aria-label={`Delete ${p.name}`}
-                      >
-                        <Localized id="product-mgmt-delete">
-                          <span>Delete</span>
-                        </Localized>
-                      </button>
-                    </Localized>
+                    <button
+                      type="button"
+                      className="product-mgmt-action-btn"
+                      onClick={() => {
+                        setVariantProductSku(p.sku);
+                        setVariantProductName(p.name);
+                      }}
+                      aria-label={requiredLocalized(l10n, 'product-mgmt-variants-aria', { name: p.name })}
+                    >
+                      <Localized id="product-mgmt-variants">
+                        <span>Variants</span>
+                      </Localized>
+                    </button>
+                    <button
+                      type="button"
+                      className="product-mgmt-action-btn"
+                      onClick={() => openEdit(p)}
+                      aria-label={requiredLocalized(l10n, 'product-mgmt-edit-aria', { name: p.name })}
+                    >
+                      <Localized id="product-mgmt-edit">
+                        <span>Edit</span>
+                      </Localized>
+                    </button>
+                    <button
+                      type="button"
+                      className="product-mgmt-action-btn product-mgmt-action-btn--danger"
+                      onClick={() => requestDelete(p.sku)}
+                      disabled={deleting === p.sku}
+                      aria-label={requiredLocalized(l10n, 'product-mgmt-delete-aria', { name: p.name })}
+                    >
+                      <Localized id="product-mgmt-delete">
+                        <span>Delete</span>
+                      </Localized>
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -390,9 +501,15 @@ export default function ProductManagementScreen() {
         </div>
       )}
 
+      {deleteError && (
+        <div className="product-mgmt-delete-error" role="alert">
+          {deleteError}
+        </div>
+      )}
+
       {modalExit.shouldRender && showModal && (
         <div className={`product-mgmt-overlay${modalExit.exiting ? ' product-mgmt-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('product-mgmt-modal-aria', { mode: editingSku ? 'edit' : 'add' })}>
-          <div className={`product-mgmt-modal${modalExit.exiting ? ' product-mgmt-modal--exiting' : ''}`}>
+          <div ref={productModalRef} className={`product-mgmt-modal${modalExit.exiting ? ' product-mgmt-modal--exiting' : ''}`}>
             <div className="product-mgmt-modal-header">
               <Localized id={editingSku ? 'product-mgmt-modal-edit-title' : 'product-mgmt-modal-add-title'}>
                 <h2>{editingSku ? 'Edit Product' : 'Add Product'}</h2>
@@ -448,6 +565,8 @@ export default function ProductManagementScreen() {
                       type="number"
                       id="product-field-price"
                       min="0"
+                      step="1"
+                      inputMode="numeric"
                       value={form.priceMinor}
                       onChange={(e) => setForm({ ...form, priceMinor: e.target.value })}
                       placeholder="450"
@@ -516,10 +635,9 @@ export default function ProductManagementScreen() {
                   value={form.productType}
                   onChange={(e) => setForm({ ...form, productType: e.target.value })}
                 >
-                  <option value="retail">Retail</option>
-                  <option value="restaurant">Restaurant</option>
-                  <option value="both">Both</option>
-                  <option value="service">Service</option>
+                  <option value="retail">{requiredLocalized(l10n, 'product-type-retail')}</option>
+                  <option value="restaurant">{requiredLocalized(l10n, 'product-type-restaurant')}</option>
+                  <option value="service">{requiredLocalized(l10n, 'product-type-service')}</option>
                 </select>
               </label>
 
@@ -528,11 +646,11 @@ export default function ProductManagementScreen() {
                   <Localized id="product-mgmt-field-tax-rates">
                     <legend className="product-mgmt-label">Tax Rates</legend>
                   </Localized>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', marginTop: 'var(--space-1)' }}>
+                  <div className="product-mgmt-tax-rate-list">
                     {taxRates.map((tr) => (
                       <label
                         key={tr.id}
-                        style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', cursor: 'pointer', fontSize: 'var(--text-sm)' }}
+                        className="product-mgmt-tax-rate-option"
                       >
                         <input
                           type="checkbox"
@@ -562,6 +680,8 @@ export default function ProductManagementScreen() {
                       type="number"
                       id="product-field-stock"
                       min="0"
+                      step="1"
+                      inputMode="numeric"
                       value={form.initialStock}
                       onChange={(e) => setForm({ ...form, initialStock: e.target.value })}
                       placeholder="0"
@@ -597,16 +717,22 @@ export default function ProductManagementScreen() {
 
       {/* ── Stock Alert Panel (right-side drawer) ──────────── */}
       {showAlertPanel && (
-        <div className="product-mgmt-alert-drawer">
+        <div
+          ref={alertDrawerRef}
+          className="product-mgmt-alert-drawer"
+          role="dialog"
+          aria-modal="true"
+          aria-label={requiredLocalized(l10n, 'product-mgmt-alerts-title')}
+        >
           <div className="product-mgmt-alert-drawer-header">
             <Localized id="product-mgmt-alerts-title">
               <span className="product-mgmt-alert-drawer-title">Stock Alerts</span>
             </Localized>
-            { }
             <button
               type="button"
               className="product-mgmt-alert-drawer-close"
-              onClick={() => setShowAlertPanel(false)}
+              onClick={closeAlertDrawer}
+              aria-label={requiredLocalized(l10n, 'product-mgmt-alert-close')}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
                 <line x1="18" y1="6" x2="6" y2="18" />
@@ -617,6 +743,18 @@ export default function ProductManagementScreen() {
               </Localized>
             </button>
           </div>
+          {alertError && (
+            <div className="product-mgmt-alert-error" role="alert">
+              <span>{requiredLocalized(l10n, 'product-mgmt-alert-error')}</span>
+              <button
+                type="button"
+                className="product-mgmt-alert-error-retry"
+                onClick={() => { void fetchAlerts(); }}
+              >
+                {requiredLocalized(l10n, 'product-mgmt-alert-error-retry')}
+              </button>
+            </div>
+          )}
           <StockAlertPanel
             locationId={selectedLocationId}
             pollIntervalMs={30_000}
@@ -632,6 +770,22 @@ export default function ProductManagementScreen() {
           onClose={() => setVariantProductSku(null)}
         />
       )}
+
+      <ConfirmDialog
+        open={deleteConfirmSku !== null}
+        onCancel={cancelDelete}
+        onConfirm={() => { void confirmDelete(); }}
+        title={requiredLocalized(l10n, 'product-mgmt-delete-confirm-title')}
+        message={requiredLocalized(l10n, 'product-mgmt-delete-confirm-message', {
+          name: products.find((p) => p.sku === deleteConfirmSku)?.name ?? '',
+          sku: deleteConfirmSku ?? '',
+        })}
+        variant="danger"
+        // Loading is scoped to the SKU being deleted so a second delete
+        // remains confirmable while an earlier one is still in flight.
+        loading={deleting !== null && deleting === deleteConfirmSku}
+        confirmLabel={requiredLocalized(l10n, 'product-mgmt-delete-confirm-btn')}
+      />
     </div>
   );
 }

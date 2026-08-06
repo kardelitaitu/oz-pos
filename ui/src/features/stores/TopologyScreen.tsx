@@ -12,7 +12,9 @@ import {
 } from '@/api/topology';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import { checkLicenseStatus } from '@/api/license';
+import { plainErrorMessage } from '@/utils/app-error';
 import NodeTopologyEditor, {
   type TopologyNodeData,
   type TopologyWireData,
@@ -274,7 +276,7 @@ export default function TopologyScreen() {
         return idMap;
       } catch (err) {
         addToast({
-          message: `${l10n.getString('topology-toast-save-error')}: ${err instanceof Error ? err.message : String(err)}`,
+          message: `${l10n.getString('topology-toast-save-error')}: ${plainErrorMessage(err)}`,
           type: 'error',
         });
         return {};
@@ -286,7 +288,7 @@ export default function TopologyScreen() {
   return (
     <div
       className="settings-topology-container"
-      aria-label={l10n.getString('settings-nav-topology') || 'Topology'}
+      aria-label={requiredLocalized(l10n, 'settings-nav-topology')}
     >
       <NodeTopologyEditor
         currentTier={licenseTier as 'free' | 'one_time' | 'standard' | 'pro' | 'enterprise'}

@@ -33,6 +33,8 @@ pub mod hardware;
 pub mod health;
 /// Sales-history commands.
 pub mod history;
+/// Inventory-count commands.
+pub mod inventory_counts;
 /// KDS commands.
 pub mod kds;
 /// Loyalty / rewards commands.
@@ -61,6 +63,8 @@ pub mod settings;
 pub mod setup;
 /// Staff / employee commands.
 pub mod staff;
+/// Stock transfer commands.
+pub mod stock_transfers;
 /// Sync commands.
 pub mod sync;
 /// Table management commands.

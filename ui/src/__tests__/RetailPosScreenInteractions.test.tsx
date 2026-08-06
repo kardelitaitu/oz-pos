@@ -10,108 +10,33 @@ import { act } from 'react';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/__tests__/test-utils/render';
+import { createUsePosStateMock } from '@/__tests__/test-utils/mocks/usePosState';
+import { mockedBarcode } from '@/__tests__/test-utils/mocks/barcodeScanner';
 import salesFtl from '@/locales/sales.ftl?raw';
 import productsFtl from '@/locales/products.ftl?raw';
 import tablesFtl from '@/locales/tables.ftl?raw';
 import RetailPosScreen from '@/features/retail/RetailPosScreen';
 import type { LineId, Sku } from '@/types/domain';
 
-// ── Hoisted mock helpers ──────────────────────────────────────────
-
-const mockedBarcode = vi.hoisted(() => {
-  let onProductFound: ((payload: { code: string; symbology: string }) => void) | null = null;
-  return {
-    triggerScan(code: string) {
-      onProductFound?.({ code, symbology: 'test' });
-    },
-    reset() {
-      onProductFound = null;
-    },
-    useBarcodeScanner: vi.fn(
-      (opts: { onProductFound: (p: { code: string; symbology: string }) => void }) => {
-        onProductFound = opts.onProductFound;
-      },
-    ),
-  };
-});
-
 // ── Mock modules ──────────────────────────────────────────────────
 
-vi.mock('@/features/sales/usePosState', () => ({
-  usePosState: vi.fn(() => ({
-    lines: [],
-    total: null,
-    subtotal: null,
-    discountPercent: 0,
-    discountLabel: '',
-    discountAmount: null,
-    tipPercent: 0,
-    tipAmount: null,
-    serviceChargeEnabled: false,
-    serviceChargePercent: 0,
-    serviceChargeAmount: null,
-    addProduct: vi.fn(),
-    removeLine: vi.fn(),
-    updateQty: vi.fn(),
-    setDiscount: vi.fn(),
-    updateLinePrice: vi.fn(),
-    setTipPercent: vi.fn(),
-    setServiceCharge: vi.fn(),
-    resetCart: vi.fn(),
-    setLines: vi.fn(),
-    assignCourse: vi.fn(),
-    fireCourse: vi.fn(),
-    fireAllCourses: vi.fn(),
-  })),
-}));
+vi.mock('@/features/sales/usePosState', async () => {
+  const { createUsePosStateMock } =
+    await import('@/__tests__/test-utils/mocks/usePosState');
+  return { usePosState: vi.fn(() => createUsePosStateMock()) };
+});
 
-vi.mock('@/features/sales/useBarcodeScanner', () => ({
-  useBarcodeScanner: mockedBarcode.useBarcodeScanner,
-}));
+vi.mock('@/features/sales/useBarcodeScanner', async () => {
+  const { createBarcodeScannerModuleMock } =
+    await import('@/__tests__/test-utils/mocks/barcodeScanner');
+  return createBarcodeScannerModuleMock();
+});
 
-const mockProducts = [
-  { sku: 'SKU-001', name: 'Indomie Goreng', category: 'cat-food', price: { minor_units: 3500, currency: 'IDR' }, barcode: '8991002100110', in_stock: true, stock_qty: 100, tax_rate_ids: [], created_at: '',
-    price_updated_at: '', product_type: 'retail' },
-  { sku: 'SKU-002', name: 'Teh Botol Sosro', category: 'cat-drink', price: { minor_units: 5000, currency: 'IDR' }, barcode: '8991002100220', in_stock: true, stock_qty: 50, tax_rate_ids: [], created_at: '',
-    price_updated_at: '', product_type: 'retail' },
-  { sku: 'SKU-003', name: 'Nasi Goreng Spesial', category: 'cat-food', price: { minor_units: 15000, currency: 'IDR' }, barcode: null, in_stock: true, stock_qty: 20, tax_rate_ids: [], created_at: '',
-    price_updated_at: '', product_type: 'retail' },
-  { sku: 'SKU-004', name: 'Aqua 600ml', category: 'cat-drink', price: { minor_units: 3000, currency: 'IDR' }, barcode: '8991002100330', in_stock: true, stock_qty: 3, tax_rate_ids: [], created_at: '',
-    price_updated_at: '', product_type: 'retail' },
-];
-const mockCategories = [
-  { id: 'cat-food', name: 'Makanan', colour: '#e74c3c' },
-  { id: 'cat-drink', name: 'Minuman', colour: '#3498db' },
-];
-
-vi.mock('@/api/products', () => ({
-  listProducts: vi.fn(() => Promise.resolve(mockProducts)),
-  listProductsScoped: vi.fn((_token: string) => Promise.resolve(mockProducts)),
-  listCategories: vi.fn(() => Promise.resolve(mockCategories)),
-  listCategoriesScoped: vi.fn((_token: string) => Promise.resolve(mockCategories)),
-  lookupProductBySku: vi.fn(() => Promise.resolve(null)),
-  lookupProductBySkuScoped: vi.fn((_token: string, _sku: string) => Promise.resolve(null)),
-  lookupByBarcode: vi.fn(() => Promise.resolve(null)),
-  lookupByBarcodeScoped: vi.fn((_token: string, _code: string) => Promise.resolve(null)),
-  createProduct: vi.fn(),
-  createProductScoped: vi.fn(),
-  updateProduct: vi.fn(),
-  updateProductScoped: vi.fn(),
-  deleteProduct: vi.fn(),
-  deleteProductScoped: vi.fn(),
-  adjustStock: vi.fn(),
-  adjustStockScoped: vi.fn(),
-  listProductVariants: vi.fn(() => Promise.resolve([])),
-  getProductVariant: vi.fn(() => Promise.resolve(null)),
-  createProductVariant: vi.fn(),
-  updateProductVariant: vi.fn(),
-  deleteProductVariant: vi.fn(),
-  createCategory: vi.fn(),
-  updateCategory: vi.fn(),
-  deleteCategory: vi.fn(),
-  getProductTrackSerial: vi.fn(() => Promise.resolve(false)),
-  getProductTrackSerialScoped: vi.fn(() => Promise.resolve(false)),
-}));
+vi.mock('@/api/products', async () => {
+  const { createRetailProductsApiMock } =
+    await import('@/__tests__/test-utils/mocks/retailPos');
+  return createRetailProductsApiMock();
+});
 
 vi.mock('@/api/shifts', async () => {
   const { createShiftsApiMock } = await import('@/__tests__/test-utils/mocks/api');
@@ -139,34 +64,35 @@ vi.mock('@/api/sales', async () => {
   return createSalesApiMock();
 });
 
-vi.mock('@/api/kds', () => ({
-  createKdsOrderFromSale: vi.fn((_userId: string, _saleId: string) => Promise.resolve()),
-}));
+vi.mock('@/api/kds', async () => {
+  const { createRetailKdsApiMock } = await import('@/__tests__/test-utils/mocks/retailPos');
+  return createRetailKdsApiMock();
+});
 
-vi.mock('@/features/tables/TableManagementScreen', () => ({
-  default: () => <div data-testid="table-management-screen">Table Management Floor Plan</div>,
-}));
+vi.mock('@/features/tables/TableManagementScreen', async () => {
+  const { createTableManagementScreenStub } = await import('@/__tests__/test-utils/mocks/retailPos');
+  return createTableManagementScreenStub();
+});
 
-vi.mock('@/features/sales/SalesHistoryScreen', () => ({
-  default: () => <div data-testid="sales-history-screen">Sales History</div>,
-}));
+vi.mock('@/features/sales/SalesHistoryScreen', async () => {
+  const { createSalesHistoryScreenStub } = await import('@/__tests__/test-utils/mocks/retailPos');
+  return createSalesHistoryScreenStub();
+});
 
-vi.mock('@/features/products/ProductLookupScreen', () => ({
-  default: () => <div data-testid="stock-inquiry-screen">Stock Inquiry</div>,
-}));
+vi.mock('@/features/products/ProductLookupScreen', async () => {
+  const { createProductLookupScreenStub } = await import('@/__tests__/test-utils/mocks/retailPos');
+  return createProductLookupScreenStub();
+});
 
-vi.mock('@/api/currency', () => ({
-  listCurrencies: vi.fn(() => Promise.resolve([])),
-  listExchangeRates: vi.fn(() => Promise.resolve([])),
-  getDefaultCurrency: vi.fn(() => Promise.resolve({ code: 'IDR', name: 'Indonesian Rupiah', symbol: 'Rp', decimalPlaces: 2, isDefault: true })),
-}));
+vi.mock('@/api/currency', async () => {
+  const { createRetailCurrencyApiMock } = await import('@/__tests__/test-utils/mocks/retailPos');
+  return createRetailCurrencyApiMock();
+});
 
-vi.mock('@/api/customers', () => ({
-  listCustomers: vi.fn(() => Promise.resolve([])),
-  createCustomer: vi.fn(),
-  updateCustomer: vi.fn(),
-  deleteCustomer: vi.fn(),
-}));
+vi.mock('@/api/customers', async () => {
+  const { createRetailCustomersApiMock } = await import('@/__tests__/test-utils/mocks/retailPos');
+  return createRetailCustomersApiMock();
+});
 
 vi.mock('@/contexts/AuthContext', async () => {
   const { createAuthContextMock } = await import('@/__tests__/test-utils/mocks/contexts');
@@ -187,37 +113,17 @@ const catFtl = `
 
 // ── Tests ─────────────────────────────────────────────────────────
 
+let mockAddProduct: ReturnType<typeof vi.fn>;
+
 describe('RetailPosScreen — interactions', () => {
   beforeEach(async () => {
     mockedBarcode.reset();
+    mockAddProduct = vi.fn();
     const sp = await import('@/features/sales/usePosState');
     vi.mocked(sp.usePosState).mockReset();
-    vi.mocked(sp.usePosState).mockImplementation(() => ({
-      lines: [],
-      total: null,
-      subtotal: null,
-      discountPercent: 0,
-      discountLabel: '',
-      discountAmount: null,
-      tipPercent: 0,
-      tipAmount: null,
-      serviceChargeEnabled: false,
-      serviceChargePercent: 0,
-      serviceChargeAmount: null,
-      addProduct: vi.fn(),
-      removeLine: vi.fn(),
-      updateQty: vi.fn(),
-      setDiscount: vi.fn(),
-      updateLinePrice: vi.fn(),
-      setTipPercent: vi.fn(),
-      setServiceCharge: vi.fn(),
-      resetCart: vi.fn(),
-      setLines: vi.fn(),
-      assignCourse: vi.fn(),
-      fireCourse: vi.fn(),
-      fireAllCourses: vi.fn(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any));
+    vi.mocked(sp.usePosState).mockReturnValue(
+      createUsePosStateMock({ addProduct: mockAddProduct }),
+    );
   });
 
   // ── Long-press quantity picker ────────────────────────────────
@@ -225,13 +131,13 @@ describe('RetailPosScreen — interactions', () => {
 
   it('opens quantity picker on long-press of a product button', async () => {
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
-    const productBtns = await screen.findAllByRole('button', { name: /indomie goreng/i });
-    const productBtn = productBtns[0]!;
+    await waitFor(() => expect(screen.getByText('Indomie Goreng')).toBeInTheDocument());
+    const productBtn = screen.getByText('Indomie Goreng').closest('button')!;
     fireEvent.pointerDown(productBtn);
     await act(async () => { await new Promise(r => setTimeout(r, 500)); });
     fireEvent.pointerUp(productBtn);
-    await waitFor(() => expect(screen.getByRole('button', { name: /add/i })).toBeInTheDocument());
-    expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Add')).toBeInTheDocument());
+    expect(screen.getByText('Cancel')).toBeInTheDocument();
     expect(screen.getByDisplayValue('1')).toBeInTheDocument();
   });
 
@@ -250,19 +156,6 @@ describe('RetailPosScreen — interactions', () => {
   });
 
   it('calls addProduct when confirming quantity via long-press', async () => {
-    const { usePosState } = await import('@/features/sales/usePosState');
-    const addProduct = vi.fn();
-    vi.mocked(usePosState).mockReturnValue({
-      lines: [], total: null, subtotal: null,
-      discountPercent: 0, discountLabel: '', discountAmount: null,
-      tipPercent: 0, tipAmount: null,
-      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
-      addProduct, removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
-      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
-      resetCart: vi.fn(), setLines: vi.fn(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     await waitFor(() => expect(screen.getByText('Indomie Goreng')).toBeInTheDocument());
     const productBtn = screen.getByText('Indomie Goreng').closest('button')!;
@@ -271,77 +164,62 @@ describe('RetailPosScreen — interactions', () => {
     fireEvent.pointerUp(productBtn);
     await waitFor(() => expect(screen.getByText('Add')).toBeInTheDocument());
     await userEvent.click(screen.getByText('Add'));
-    expect(addProduct).toHaveBeenCalledTimes(1);
-    expect(addProduct).toHaveBeenCalledWith(expect.objectContaining({ sku: 'SKU-001', name: 'Indomie Goreng' }));
+    expect(mockAddProduct).toHaveBeenCalledTimes(1);
+    expect(mockAddProduct).toHaveBeenCalledWith(expect.objectContaining({ sku: 'SKU-001' }), 1);
   });
 
   it('adds product on single tap of a product button', async () => {
-    const { usePosState } = await import('@/features/sales/usePosState');
-    const addProduct = vi.fn();
-    vi.mocked(usePosState).mockReturnValue({
-      lines: [], total: null, subtotal: null,
-      discountPercent: 0, discountLabel: '', discountAmount: null,
-      tipPercent: 0, tipAmount: null,
-      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
-      addProduct, removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
-      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
-      resetCart: vi.fn(), setLines: vi.fn(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     await waitFor(() => expect(screen.getByText('Indomie Goreng')).toBeInTheDocument());
     const productBtn = screen.getByText('Indomie Goreng').closest('button')!;
     fireEvent.pointerDown(productBtn);
     fireEvent.pointerUp(productBtn);
-    await waitFor(() => expect(addProduct).toHaveBeenCalledTimes(1));
-    expect(addProduct).toHaveBeenCalledWith(expect.objectContaining({ sku: 'SKU-001', name: 'Indomie Goreng' }));
+    await waitFor(() => expect(mockAddProduct).toHaveBeenCalledTimes(1));
+    expect(mockAddProduct).toHaveBeenCalledWith(expect.objectContaining({ sku: 'SKU-001' }));
+  });
+
+  // ── P1-1: screen-reader announcement ─────────────────────────
+
+  it('announces the added product via the screen-reader live region', async () => {
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await waitFor(() => expect(screen.getByText('Indomie Goreng')).toBeInTheDocument());
+
+    // The visually-hidden live region is always mounted inside #retail-main
+    const announceRegion = screen.getByTestId('retail-sr-announce');
+    expect(announceRegion).toBeInTheDocument();
+    expect(announceRegion).toHaveAttribute('role', 'status');
+    expect(announceRegion).toHaveAttribute('aria-live', 'polite');
+    // Empty before any add
+    expect(announceRegion.textContent).toBe('');
+
+    // Single tap → handleAdd → announce('Added Indomie Goreng')
+    const productBtn = screen.getByText('Indomie Goreng').closest('button')!;
+    fireEvent.pointerDown(productBtn);
+    fireEvent.pointerUp(productBtn);
+
+    await waitFor(() => {
+      expect(announceRegion.textContent).toMatch(/Added Indomie Goreng/);
+    });
   });
 
   // ── SKU / Barcode input ──────────────────────────────────────
 
   it('adds product when SKU is submitted via Enter', async () => {
-    const posState = await import('@/features/sales/usePosState');
-    const addProduct = vi.fn();
-    vi.mocked(posState.usePosState).mockReturnValue({
-      lines: [], total: null, subtotal: null,
-      discountPercent: 0, discountLabel: '', discountAmount: null,
-      tipPercent: 0, tipAmount: null,
-      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
-      addProduct, removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
-      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
-      resetCart: vi.fn(), setLines: vi.fn(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     const skuInputs = await screen.findAllByPlaceholderText(/Scan or type barcode/);
     const skuInput = skuInputs[0]!;
     await userEvent.type(skuInput, 'SKU-001{Enter}');
-    expect(addProduct).toHaveBeenCalledTimes(1);
-    expect(addProduct).toHaveBeenCalledWith(expect.objectContaining({ sku: 'SKU-001', name: 'Indomie Goreng' }));
+    expect(mockAddProduct).toHaveBeenCalledTimes(1);
+    expect(mockAddProduct).toHaveBeenCalledWith(expect.objectContaining({ sku: 'SKU-001', name: 'Indomie Goreng' }));
   });
 
   it('adds product when SKU is submitted via GO button', async () => {
-    const posState = await import('@/features/sales/usePosState');
-    const addProduct = vi.fn();
-    vi.mocked(posState.usePosState).mockReturnValue({
-      lines: [], total: null, subtotal: null,
-      discountPercent: 0, discountLabel: '', discountAmount: null,
-      tipPercent: 0, tipAmount: null,
-      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
-      addProduct, removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
-      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
-      resetCart: vi.fn(), setLines: vi.fn(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     const skuInputs = await screen.findAllByPlaceholderText(/Scan or type barcode/);
     const skuInput = skuInputs[0]!;
     await userEvent.type(skuInput, 'SKU-001');
     await userEvent.click(screen.getByText('GO'));
-    expect(addProduct).toHaveBeenCalledTimes(1);
+    expect(mockAddProduct).toHaveBeenCalledTimes(1);
   });
 
   it('shows warning toast when SKU is not found', async () => {
@@ -351,7 +229,8 @@ describe('RetailPosScreen — interactions', () => {
     await userEvent.type(skuInput, 'INVALID-SKU{Enter}');
     await waitFor(() => {
       const toast = screen.getByRole('alert');
-      expect(toast.textContent).toMatch(/No product.*matches this barcode/);
+      // P1-7: SKU lookups use a distinct message (not the barcode one)
+      expect(toast.textContent).toMatch(/No product matches SKU "INVALID-SKU"/);
     });
   });
 
@@ -373,23 +252,10 @@ describe('RetailPosScreen — interactions', () => {
   // ── Barcode scanning ─────────────────────────────────────────
 
   it('adds product when barcode is scanned matching local product', async () => {
-    const posState = await import('@/features/sales/usePosState');
-    const addProduct = vi.fn();
-    vi.mocked(posState.usePosState).mockReturnValue({
-      lines: [], total: null, subtotal: null,
-      discountPercent: 0, discountLabel: '', discountAmount: null,
-      tipPercent: 0, tipAmount: null,
-      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
-      addProduct, removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
-      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
-      resetCart: vi.fn(), setLines: vi.fn(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     await waitFor(() => expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled());
     act(() => { mockedBarcode.triggerScan('8991002100110'); });
-    await waitFor(() => expect(addProduct).toHaveBeenCalledWith(expect.objectContaining({ sku: 'SKU-001', name: 'Indomie Goreng' })));
+    await waitFor(() => expect(mockAddProduct).toHaveBeenCalledWith(expect.objectContaining({ sku: 'SKU-001', name: 'Indomie Goreng' })));
   });
 
   it('calls lookupByBarcode when scanned code not in local products', async () => {
@@ -422,20 +288,11 @@ describe('RetailPosScreen — interactions', () => {
 
   it('shows warning when Pay is pressed without an active shift', async () => {
     const posState = await import('@/features/sales/usePosState');
-    vi.mocked(posState.usePosState).mockReturnValue({
+    vi.mocked(posState.usePosState).mockReturnValue(createUsePosStateMock({
       lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as Sku, name: 'Indomie Goreng', category: '', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
       total: { minor_units: 3500, currency: 'IDR' },
       subtotal: { minor_units: 3500, currency: 'IDR' },
-      discountPercent: 0, discountLabel: '', discountAmount: null,
-      tipPercent: 0, tipAmount: null,
-      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
-      addProduct: vi.fn(), removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
-      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
-      resetCart: vi.fn(), setLines: vi.fn(),
-      assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
+    }));
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     const payBtns = await screen.findAllByRole('button', { name: /F1.*Pay/i });
     await userEvent.click(payBtns[0]!);
@@ -449,20 +306,11 @@ describe('RetailPosScreen — interactions', () => {
 
   it('opens discount modal', async () => {
     const posState = await import('@/features/sales/usePosState');
-    vi.mocked(posState.usePosState).mockReturnValue({
+    vi.mocked(posState.usePosState).mockReturnValue(createUsePosStateMock({
       lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as Sku, name: 'Indomie Goreng', category: '', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
       total: { minor_units: 3500, currency: 'IDR' },
       subtotal: { minor_units: 3500, currency: 'IDR' },
-      discountPercent: 0, discountLabel: '', discountAmount: null,
-      tipPercent: 0, tipAmount: null,
-      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
-      addProduct: vi.fn(), removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
-      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
-      resetCart: vi.fn(), setLines: vi.fn(),
-      assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
+    }));
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     const diskonBtn = await screen.findByRole('button', { name: /^diskon$/i });
     await userEvent.click(diskonBtn);
@@ -472,23 +320,17 @@ describe('RetailPosScreen — interactions', () => {
   it('applies discount from the discount modal', async () => {
     const posState = await import('@/features/sales/usePosState');
     const setDiscount = vi.fn();
-    vi.mocked(posState.usePosState).mockReturnValue({
+    vi.mocked(posState.usePosState).mockReturnValue(createUsePosStateMock({
       lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as Sku, name: 'Indomie Goreng', category: '', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
       total: { minor_units: 3500, currency: 'IDR' },
       subtotal: { minor_units: 3500, currency: 'IDR' },
-      discountPercent: 0, discountLabel: '', discountAmount: null,
-      tipPercent: 0, tipAmount: null,
-      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
-      addProduct: vi.fn(), removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount, resetCart: vi.fn(),
-      updateLinePrice: vi.fn(), setTipPercent: vi.fn(), setServiceCharge: vi.fn(), setLines: vi.fn(),
-      assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
+      setDiscount,
+    }));
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     const diskonBtn = await screen.findByRole('button', { name: /^diskon$/i });
     await userEvent.click(diskonBtn);
-    const discountInput = screen.getByLabelText(/Discount/);
+    // Use getByRole to avoid ambiguity with the dialog's aria-label="Discount"
+    const discountInput = screen.getByRole('spinbutton', { name: /discount/i });
     await userEvent.type(discountInput, '10');
     await userEvent.click(screen.getByRole('button', { name: /apply/i }));
     expect(setDiscount).toHaveBeenCalledWith(10, '');
@@ -498,20 +340,11 @@ describe('RetailPosScreen — interactions', () => {
 
   it('shows clear confirmation when Void/Clear is clicked with items', async () => {
     const posState = await import('@/features/sales/usePosState');
-    vi.mocked(posState.usePosState).mockReturnValue({
+    vi.mocked(posState.usePosState).mockReturnValue(createUsePosStateMock({
       lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as Sku, name: 'Indomie Goreng', category: '', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
       total: { minor_units: 3500, currency: 'IDR' },
       subtotal: { minor_units: 3500, currency: 'IDR' },
-      discountPercent: 0, discountLabel: '', discountAmount: null,
-      tipPercent: 0, tipAmount: null,
-      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
-      addProduct: vi.fn(), removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
-      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
-      resetCart: vi.fn(), setLines: vi.fn(),
-      assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
+    }));
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     const clearBtn = await screen.findByRole('button', { name: /^clear$/i });
     await userEvent.click(clearBtn);
@@ -528,20 +361,11 @@ describe('RetailPosScreen — interactions', () => {
 
   it('keeps Pay button disabled when cart has items but no shift', async () => {
     const posState = await import('@/features/sales/usePosState');
-    vi.mocked(posState.usePosState).mockReturnValue({
+    vi.mocked(posState.usePosState).mockReturnValue(createUsePosStateMock({
       lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as Sku, name: 'Indomie Goreng', category: '', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
       total: { minor_units: 3500, currency: 'IDR' },
       subtotal: { minor_units: 3500, currency: 'IDR' },
-      discountPercent: 0, discountLabel: '', discountAmount: null,
-      tipPercent: 0, tipAmount: null,
-      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
-      addProduct: vi.fn(), removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
-      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
-      resetCart: vi.fn(), setLines: vi.fn(),
-      assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
+    }));
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     const payBtns = await screen.findAllByRole('button', { name: /pay/i });
     expect(payBtns[0]).toBeDisabled();
@@ -552,20 +376,12 @@ describe('RetailPosScreen — interactions', () => {
   it('calls removeLine when cart remove button is clicked', async () => {
     const posState = await import('@/features/sales/usePosState');
     const removeLine = vi.fn();
-    vi.mocked(posState.usePosState).mockReturnValue({
+    vi.mocked(posState.usePosState).mockReturnValue(createUsePosStateMock({
       lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as Sku, name: 'Indomie Goreng', category: 'cat-food', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
       total: { minor_units: 3500, currency: 'IDR' },
       subtotal: { minor_units: 3500, currency: 'IDR' },
-      discountPercent: 0, discountLabel: '', discountAmount: null,
-      tipPercent: 0, tipAmount: null,
-      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
-      addProduct: vi.fn(), removeLine, updateQty: vi.fn(),
-      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
-      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
-      resetCart: vi.fn(), setLines: vi.fn(),
-      assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
+      removeLine,
+    }));
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     await waitFor(() => {
       // Product name appears in both the product grid AND the cart panel.
@@ -582,23 +398,15 @@ describe('RetailPosScreen — interactions', () => {
   it('removes multiple line items individually from cart panel', async () => {
     const posState = await import('@/features/sales/usePosState');
     const removeLine = vi.fn();
-    vi.mocked(posState.usePosState).mockReturnValue({
+    vi.mocked(posState.usePosState).mockReturnValue(createUsePosStateMock({
       lines: [
         { id: 'line-1' as LineId, sku: 'SKU-001' as Sku, name: 'Indomie Goreng', category: 'cat-food', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } },
         { id: 'line-2' as LineId, sku: 'SKU-002' as Sku, name: 'Teh Botol Sosro', category: 'cat-drink', qty: 2, unit_price: { minor_units: 5000, currency: 'IDR' } },
       ],
       total: { minor_units: 13500, currency: 'IDR' },
       subtotal: { minor_units: 13500, currency: 'IDR' },
-      discountPercent: 0, discountLabel: '', discountAmount: null,
-      tipPercent: 0, tipAmount: null,
-      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
-      addProduct: vi.fn(), removeLine, updateQty: vi.fn(),
-      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
-      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
-      resetCart: vi.fn(), setLines: vi.fn(),
-      assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
+      removeLine,
+    }));
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     await waitFor(() => {
       const names = screen.getAllByText('Indomie Goreng');
@@ -619,19 +427,6 @@ describe('RetailPosScreen — interactions', () => {
   // ── Keyboard shortcut: F5 → SKU focus ────────────────────────
 
   it('focuses SKU input when F5 is pressed', async () => {
-    const posState = await import('@/features/sales/usePosState');
-    vi.mocked(posState.usePosState).mockReturnValue({
-      lines: [], total: null, subtotal: null,
-      discountPercent: 0, discountLabel: '', discountAmount: null,
-      tipPercent: 0, tipAmount: null,
-      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
-      addProduct: vi.fn(), removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
-      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
-      resetCart: vi.fn(), setLines: vi.fn(),
-      assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     const skuInputs = await screen.findAllByPlaceholderText(/Scan or type barcode/);
     const skuInput = skuInputs[0];
@@ -688,27 +483,123 @@ describe('RetailPosScreen — interactions', () => {
     expect(screen.getByText('Stock Inquiry')).toBeInTheDocument();
   });
 
+  // ── P1-7: distinct SKU vs barcode failure messages ───────────
+
+  it('shows the distinct barcode-not-found message when a scan fails', async () => {
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await waitFor(() => expect(mockedBarcode.useBarcodeScanner).toHaveBeenCalled());
+    act(() => { mockedBarcode.triggerScan('UNKNOWN-CODE'); });
+    await waitFor(() => {
+      const toast = screen.getByRole('alert');
+      // P1-7: barcode failures keep the barcode message (distinct from retail-sku-not-found)
+      expect(toast.textContent).toMatch(/No product or bundle matches this barcode/);
+    });
+  });
+
+  // ── P1-3: held cart delete confirmation ──────────────────────
+
+  it('requires confirmation before deleting a held cart', async () => {
+    const salesApi = await import('@/api/sales');
+    const heldCarts = [
+      { id: 'held-1', label: 'Hold #100', item_count: 2, total_minor: 8500, currency: 'IDR', created_at: '2026-01-01T00:00:00Z', bill_type: 'hold', customer_name: null },
+      { id: 'held-2', label: 'Hold #200', item_count: 1, total_minor: 3500, currency: 'IDR', created_at: '2026-01-01T00:00:00Z', bill_type: 'hold', customer_name: null },
+    ];
+    vi.mocked(salesApi.listHeldCartsScoped).mockResolvedValue(heldCarts);
+
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await waitFor(() => expect(screen.getByText('Indomie Goreng')).toBeInTheDocument());
+
+    // F4 with a held cart id → handleResume opens the held carts list
+    await userEvent.keyboard('{F4}');
+    await waitFor(() => expect(screen.getByRole('heading', { name: /held carts/i })).toBeInTheDocument());
+
+    // Click the delete button on the first row → confirm dialog appears, no immediate delete
+    const deleteBtns = screen.getAllByTestId('held-cart-delete');
+    expect(deleteBtns.length).toBeGreaterThanOrEqual(1);
+    await userEvent.click(deleteBtns[0]!);
+    await waitFor(() => expect(screen.getByRole('heading', { name: /delete held cart/i })).toBeInTheDocument());
+    expect(salesApi.deleteHeldCartScoped).not.toHaveBeenCalled();
+
+    // Confirm → deleteHeldCartScoped called with the cart id
+    const confirmBtn = screen.getByTestId('held-cart-delete-confirm');
+    expect(confirmBtn).toBeInTheDocument();
+    await userEvent.click(confirmBtn);
+    await waitFor(() => expect(salesApi.deleteHeldCartScoped).toHaveBeenCalledWith(expect.any(String), 'held-1'));
+
+    // Reset the persistent mock so held carts don't leak into later tests
+    // (both the mount effect and handleResume call listHeldCartsScoped).
+    vi.mocked(salesApi.listHeldCartsScoped).mockResolvedValue([]);
+  });
+
+  // ── P1-4: scroll position preservation ───────────────────────
+
+  it('restores product grid scroll position after returning from a sub-view', async () => {
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await waitFor(() => expect(screen.getByText('Indomie Goreng')).toBeInTheDocument());
+
+    // The scroll container is the product grid — set a non-zero scrollTop
+    const grid = screen.getByTestId('product-grid-scroll');
+    expect(grid).toBeInTheDocument();
+    grid.scrollTop = 120;
+
+    // F6 → Sales History sub-view (goToSubView saves scroll position)
+    await userEvent.keyboard('{F6}');
+    await waitFor(() => expect(screen.getByTestId('sales-history-screen')).toBeInTheDocument());
+
+    // Back → main view remounts and the restore effect reapplies scrollTop
+    await userEvent.click(screen.getByRole('button', { name: /back/i }));
+    await waitFor(() => expect(screen.queryByTestId('sales-history-screen')).not.toBeInTheDocument());
+    const restoredGrid = screen.getByTestId('product-grid-scroll');
+    expect(restoredGrid).toBeInTheDocument();
+    await waitFor(() => expect(restoredGrid.scrollTop).toBe(120));
+  });
+
   it('resets cart when clear is confirmed', async () => {
     const posState = await import('@/features/sales/usePosState');
     const resetCart = vi.fn();
-    vi.mocked(posState.usePosState).mockReturnValue({
+    vi.mocked(posState.usePosState).mockReturnValue(createUsePosStateMock({
       lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as Sku, name: 'Indomie Goreng', category: 'cat-food', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
       total: { minor_units: 3500, currency: 'IDR' },
       subtotal: { minor_units: 3500, currency: 'IDR' },
-      discountPercent: 0, discountLabel: '', discountAmount: null,
-      tipPercent: 0, tipAmount: null,
-      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
-      addProduct: vi.fn(), removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount: vi.fn(), resetCart,
-      updateLinePrice: vi.fn(), setTipPercent: vi.fn(), setServiceCharge: vi.fn(), setLines: vi.fn(),
-      assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
+      resetCart,
+    }));
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     const clearBtn = await screen.findByRole('button', { name: /^clear$/i });
     await userEvent.click(clearBtn);
     const confirmBtns = screen.getAllByRole('button', { name: /^clear$/i });
     await userEvent.click(confirmBtns[1]!);
     expect(resetCart).toHaveBeenCalledTimes(1);
+  });
+
+  // ── PERF-04: rAF-throttled cart resize ───────────────────────────
+
+  it('flushes the final cart width to localStorage on mouseup even when the rAF frame never runs', async () => {
+    // Simulate a fast drag where the rAF callback is skipped (stubbed to no-op):
+    // the ONLY path that applies the final pointer position is the synchronous
+    // flush in stopResize. Regression guard for the flush-ordering bug where
+    // isResizing was cleared before the flush made it early-return.
+    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 0);
+    const cafSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+    localStorage.removeItem('retail-cart-width');
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+
+    // Give the root a deterministic right edge so the width math is exact:
+    // right(800) - clientX(400) = 400, within [280, min(1024*0.5, 800)].
+    const main = document.getElementById('retail-main');
+    expect(main).not.toBeNull();
+    const rectSpy = vi.spyOn(main!, 'getBoundingClientRect').mockReturnValue({ right: 800 } as DOMRect);
+
+    const handle = document.querySelector('.retail-resize-handle');
+    expect(handle).not.toBeNull();
+    fireEvent.mouseDown(handle!);
+    fireEvent.mouseMove(window, { clientX: 400 });
+    fireEvent.mouseUp(window);
+
+    expect(localStorage.getItem('retail-cart-width')).toBe('400');
+    expect(handle!.getAttribute('aria-valuenow')).toBe('400');
+
+    rafSpy.mockRestore();
+    cafSpy.mockRestore();
+    rectSpy.mockRestore();
   });
 });

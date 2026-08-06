@@ -165,7 +165,7 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [x] Design tokens applied consistently — no hardcoded hex colours in components
 - [x] `cargo test` passes across all crates (5,221+ tests, 0 failed)
 - [x] `cargo clippy -- -D warnings` passes with zero warnings
-- [x] 5,221+ unit tests across the `oz-*` crate ecosystem, plus 3,230+ UI tests across 214 test files
+- [x] 5,221+ unit tests across the `oz-*` crate ecosystem, plus 3,476 UI tests across 228 test files
 - [x] Data Management UI wired to real IPC (backup, export/import .ozpkg)
 - [x] `oz-cli import-ozpkg` writes data to DB (products, categories, sales, customers, users, settings)
 - [x] StaffLoginScreen supports hardware keyboard PIN entry (digits, Backspace, Enter, Escape)

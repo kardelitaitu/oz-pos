@@ -107,7 +107,7 @@ describe('useTerminalProfile', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(result.current.error).toBe('Network error');
+    expect(result.current.error).toBe('Failed to load terminal profile');
     expect(result.current.profile).toBeNull();
     expect(result.current.isKdsKiosk).toBe(false);
   });
@@ -123,7 +123,7 @@ describe('useTerminalProfile', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(result.current.error).toBe('Profile load failed');
+    expect(result.current.error).toBe('Failed to load terminal profile');
     expect(result.current.profile).toBeNull();
   });
 

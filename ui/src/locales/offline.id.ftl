@@ -17,6 +17,8 @@ offline-queue-delete = Hapus
 offline-queue-delete-success = Item dihapus.
 offline-queue-none = —
 offline-queue-table-aria = Item antrean luring
+offline-queue-pull-to-refresh = Tarik untuk menyegarkan
+offline-queue-release-to-refresh = Lepas untuk menyegarkan
 offline-queue-status-pending = Tertunda
 offline-queue-status-synced = Tersinkron
 offline-queue-status-failed = Gagal
@@ -26,5 +28,10 @@ offline-queue-delete-error = Gagal menghapus item
 offline-queue-sync-error = Sinkronisasi gagal
 # P1-3: Shown when sync conflicts were resolved during the last sync cycle
 offline-queue-conflict-count = { $count } item diselesaikan melalui konflik sinkron.
+# ERR-07: Non-blocking notice after repeated poll failures
+offline-queue-status-stale = Status antrean mungkin tidak terbarui.
+offline-queue-last-refreshed = Terakhir diperbarui { $time }
+# ERR-09: Status yang dapat diakses saat muat ulang sedang berlangsung dengan baris terlihat
+offline-queue-refreshing = Menyegarkan…
 
 # ── Terminal Management ──

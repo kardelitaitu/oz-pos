@@ -57,7 +57,7 @@ impl<'a> SalesRepository<'a> {
         };
 
         let mut line_stmt = self.conn.prepare(
-            "SELECT id, sale_id, sku, qty, unit_minor, line_minor, line_position, tax_amount_minor, tax_rate_id, serial_number
+            "SELECT id, sale_id, sku, qty, unit_minor, line_minor, line_position, tax_amount_minor, tax_rate_id, tax_breakdown_json, serial_number, course, modifiers_json
              FROM sale_lines WHERE sale_id = ?1 ORDER BY line_position ASC",
         )?;
 
@@ -85,7 +85,10 @@ impl<'a> SalesRepository<'a> {
                     currency,
                 },
                 tax_rate_id: r.get(8)?,
-                serial_number: r.get(9)?,
+                tax_breakdown_json: r.get(9)?,
+                serial_number: r.get(10)?,
+                course: r.get(11)?,
+                modifiers_json: r.get(12)?,
             })
         })?;
 
@@ -145,8 +148,8 @@ impl<'a> SalesRepository<'a> {
 
         for line in &sale.lines {
             tx.execute(
-                "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, line_position, tax_amount_minor, tax_rate_id, serial_number)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, line_position, tax_amount_minor, tax_rate_id, tax_breakdown_json, serial_number, course, modifiers_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
                 params![
                     line.id,
                     line.sale_id,
@@ -157,7 +160,10 @@ impl<'a> SalesRepository<'a> {
                     line.line_position,
                     line.tax_amount.minor_units,
                     line.tax_rate_id,
+                    line.tax_breakdown_json,
                     line.serial_number,
+                    line.course,
+                    line.modifiers_json,
                 ],
             )?;
         }

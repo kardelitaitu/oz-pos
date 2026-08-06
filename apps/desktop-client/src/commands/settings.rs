@@ -45,6 +45,13 @@ pub struct ReceiptSettingsDto {
     pub margin_left: i64,
     /// Right margin (mm).
     pub margin_right: i64,
+    /// Tax rounding mode: `"half_up"` or `"truncate"`. Default `"half_up"`.
+    #[serde(default = "default_tax_rounding_mode")]
+    pub tax_rounding_mode: String,
+}
+
+fn default_tax_rounding_mode() -> String {
+    "half_up".to_string()
 }
 
 // ── Get receipt settings ──────────────────────────────────
@@ -88,6 +95,9 @@ fn run_get_receipt_settings(conn: &rusqlite::Connection) -> Result<ReceiptSettin
         margin_bottom: Settings::get_receipt_margin_bottom(conn)?,
         margin_left: Settings::get_receipt_margin_left(conn)?,
         margin_right: Settings::get_receipt_margin_right(conn)?,
+        tax_rounding_mode: Settings::get_tax_rounding_mode(conn)?
+            .wire_name()
+            .to_string(),
     })
 }
 
@@ -143,6 +153,7 @@ fn run_set_receipt_settings(
     Settings::set_receipt_margin_bottom(&tx, args.margin_bottom)?;
     Settings::set_receipt_margin_left(&tx, args.margin_left)?;
     Settings::set_receipt_margin_right(&tx, args.margin_right)?;
+    Settings::set_tax_rounding_mode_str(&tx, &args.tax_rounding_mode)?;
 
     tx.commit()?;
 
@@ -481,6 +492,18 @@ pub struct HardwareSettingsDto {
     /// Dark mode enabled.
     #[serde(default)]
     pub dark_mode: bool,
+    /// Kitchen printer connection type.
+    #[serde(default = "default_kitchen_printer_connection")]
+    pub kitchen_printer_connection: String,
+
+    /// Kitchen printer device path or IP.
+    #[serde(default)]
+    pub kitchen_printer_device_path: String,
+
+    /// Schema version of the hardware profile (for forward-compatible evolution).
+    #[serde(default = "default_hw_schema_version")]
+    pub schema_version: i64,
+
     /// Scale auto-zero after each transaction.
     #[serde(default = "default_scale_auto_zero")]
     pub scale_auto_zero: bool,
@@ -491,6 +514,12 @@ fn default_scale_connection() -> String {
 }
 fn default_scale_baud_rate() -> i64 {
     9600
+}
+fn default_kitchen_printer_connection() -> String {
+    "disabled".into()
+}
+fn default_hw_schema_version() -> i64 {
+    1
 }
 fn default_sound_volume() -> i64 {
     80
@@ -511,6 +540,9 @@ impl From<TerminalProfile> for HardwareSettingsDto {
             scale_device_path: p.scale_device_path,
             scale_baud_rate: p.scale_baud_rate as i64,
             scale_zero_on_boot: p.scale_zero_on_boot,
+            kitchen_printer_connection: p.kitchen_printer_connection,
+            kitchen_printer_device_path: p.kitchen_printer_device_path,
+            schema_version: p.schema_version as i64,
             sound_volume: p.sound_volume as i64,
             dark_mode: p.dark_mode,
             scale_auto_zero: p.scale_auto_zero,
@@ -530,6 +562,9 @@ impl From<HardwareSettingsDto> for TerminalProfile {
             scale_device_path: dto.scale_device_path,
             scale_baud_rate: dto.scale_baud_rate as u32,
             scale_zero_on_boot: dto.scale_zero_on_boot,
+            kitchen_printer_connection: dto.kitchen_printer_connection,
+            kitchen_printer_device_path: dto.kitchen_printer_device_path,
+            schema_version: dto.schema_version as u32,
             sound_volume: dto.sound_volume as u32,
             dark_mode: dto.dark_mode,
             scale_auto_zero: dto.scale_auto_zero,
@@ -546,11 +581,14 @@ fn app_data_dir(state: &AppState) -> Result<std::path::PathBuf, AppError> {
 }
 
 #[tauri::command]
-/// Get hardware settings for the current terminal from `terminal_profiles/<id>.json`.
+/// Get hardware settings for the current terminal from the DB.
 ///
-/// On first access after upgrading from a version that stored hardware
-/// settings in SQLite, the old values are migrated to JSON automatically.
-/// Returns defaults only when neither JSON nor SQLite has saved values.
+/// Read order:
+/// 1. DB (`hardware_profiles` table) — canonical store (TODO 4e)
+/// 2. JSON file (`terminal_profiles/<id>.json`) — fallback
+/// 3. Old SQLite settings — legacy fallback
+///
+/// Returns defaults only when none of the above have saved values.
 pub async fn get_hardware_settings(
     state: State<'_, AppState>,
 ) -> Result<HardwareSettingsDto, AppError> {
@@ -560,15 +598,52 @@ pub async fn get_hardware_settings(
         .await
         .clone()
         .unwrap_or_else(|| "unknown".to_string());
+
+    // 1. Try DB first (canonical store).
+    {
+        let conn = state.db.lock().await;
+        let profile_json: Option<String> = conn
+            .query_row(
+                "SELECT profile_json FROM hardware_profiles WHERE terminal_id = ?1",
+                rusqlite::params![&terminal_id],
+                |row| row.get(0),
+            )
+            .ok();
+        if let Some(json) = profile_json {
+            if let Ok(profile) = serde_json::from_str::<TerminalProfile>(&json) {
+                return Ok(HardwareSettingsDto::from(profile));
+            }
+            tracing::warn!(
+                terminal_id = %terminal_id,
+                "failed to parse hardware profile JSON from DB — falling back to file"
+            );
+        }
+    } // conn dropped
+
     let base_dir = app_data_dir(&state)?;
     let path = TerminalProfile::profile_path(&base_dir, &terminal_id);
 
-    // Fast path: JSON file already exists (post-migration or fresh install).
+    // 2. Try JSON file as fallback.
     if let Some(profile) = TerminalProfile::load(&path)? {
+        // Sync the JSON profile into the DB for future fast reads.
+        let json = serde_json::to_string(&profile)
+            .map_err(|e| AppError::Internal(format!("serializing profile: {e}")))?;
+        let conn = state.db.lock().await;
+        if let Err(e) = conn.execute(
+            "INSERT OR REPLACE INTO hardware_profiles (terminal_id, profile_json, schema_version, updated_at)
+             VALUES (?1, ?2, ?3, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+            rusqlite::params![&terminal_id, &json, profile.schema_version],
+        ) {
+            tracing::warn!(
+                terminal_id = %terminal_id,
+                error = %e,
+                "failed to sync JSON profile to DB — will retry next read"
+            );
+        }
         return Ok(HardwareSettingsDto::from(profile));
     }
 
-    // Migration path: no JSON file yet → read from SQLite, write to JSON.
+    // 3. Fallback: read from old SQLite settings (pre-ADR #22).
     let conn = state.db.lock().await;
     let profile = TerminalProfile {
         printer_connection: Settings::get_printer_connection(&conn)?,
@@ -579,21 +654,29 @@ pub async fn get_hardware_settings(
         ..Default::default()
     };
 
-    // Persist to JSON so future reads take the fast path.
+    // Persist to both JSON (for backward compat readers) and DB (canonical).
+    let json = serde_json::to_string(&profile)
+        .map_err(|e| AppError::Internal(format!("serializing profile: {e}")))?;
     if let Err(e) = profile.save(&path) {
         tracing::warn!(
             terminal_id = %terminal_id,
             error = %e,
-            "failed to migrate hardware settings to JSON — will retry next read"
+            "failed to save migrated hardware settings to JSON — will retry"
         );
-        // Don't clean SQLite keys if the JSON save failed — the
-        // next read will retry the migration.
-        return Ok(HardwareSettingsDto::from(profile));
+    }
+    if let Err(e) = conn.execute(
+        "INSERT OR REPLACE INTO hardware_profiles (terminal_id, profile_json, schema_version, updated_at)
+         VALUES (?1, ?2, ?3, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+        rusqlite::params![&terminal_id, &json, profile.schema_version],
+    ) {
+        tracing::warn!(
+            terminal_id = %terminal_id,
+            error = %e,
+            "failed to save migrated hardware settings to DB — will retry next read"
+        );
     }
 
-    // Migration succeeded — delete the old SQLite keys so they don't
-    // linger as orphans in the settings table.
-    // Keys match the constants in platform_core::settings (PRINTER_CONNECTION, …).
+    // Clean up old SQLite keys after successful migration.
     let hw_keys = [
         "printer.connection",
         "printer.device_path",
@@ -616,7 +699,7 @@ pub async fn get_hardware_settings(
 
 /// **Deprecated — use `set_hardware_settings_scoped` (ADR #7).**
 ///
-/// Now writes to `terminal_profiles/<id>.json` instead of SQLite (ADR #22).
+/// Writes to both DB (canonical) and JSON file (fallback).
 #[tauri::command]
 pub async fn set_hardware_settings(
     args: HardwareSettingsDto,
@@ -637,17 +720,41 @@ pub async fn set_hardware_settings(
         require_permission_for_user(&store, &user_id, permissions::SETTINGS_EDIT)?;
     }
 
+    let profile = TerminalProfile::from(args);
+    let json = serde_json::to_string(&profile)
+        .map_err(|e| AppError::Internal(format!("serializing profile: {e}")))?;
+
+    // Write to DB (canonical store).
+    {
+        let conn = state.db.lock().await;
+        conn.execute(
+            "INSERT OR REPLACE INTO hardware_profiles (terminal_id, profile_json, schema_version, updated_at)
+             VALUES (?1, ?2, ?3, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+            rusqlite::params![&terminal_id, &json, profile.schema_version],
+        )?;
+    }
+
+    // Write to JSON file (backward compat fallback).
     let base_dir = app_data_dir(&state)?;
     let path = TerminalProfile::profile_path(&base_dir, &terminal_id);
-    let profile = TerminalProfile::from(args);
-    profile.save(&path)?;
+    if let Err(e) = profile.save(&path) {
+        tracing::warn!(
+            terminal_id = %terminal_id,
+            error = %e,
+            "failed to save hardware settings to JSON — DB write succeeded"
+        );
+    }
+
     Ok(())
 }
 
 /// Set hardware settings resolved from a session token. ADR #7.
 ///
-/// Hardware settings are now per-terminal, stored in
-/// `terminal_profiles/<terminal_id>.json` (ADR #22).
+/// Writes to both DB (canonical) and JSON file (fallback).
+///
+/// The `hardware_profiles` table lives in the global DB (not per-store)
+/// since terminal hardware configuration is global across all stores.
+/// Permission checking uses the store-scoped DB from the session.
 #[tauri::command]
 pub async fn set_hardware_settings_scoped(
     session_token: String,
@@ -677,10 +784,32 @@ pub async fn set_hardware_settings_scoped(
         require_permission_for_user(&store, &session.user_id, permissions::SETTINGS_EDIT)?;
     }
 
+    let profile = TerminalProfile::from(args);
+    let json = serde_json::to_string(&profile)
+        .map_err(|e| AppError::Internal(format!("serializing profile: {e}")))?;
+
+    // Write to DB (canonical store).
+    // We use the global DB since hardware_profiles is a global table.
+    {
+        let conn = state.db.lock().await;
+        conn.execute(
+            "INSERT OR REPLACE INTO hardware_profiles (terminal_id, profile_json, schema_version, updated_at)
+             VALUES (?1, ?2, ?3, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+            rusqlite::params![&terminal_id, &json, profile.schema_version],
+        )?;
+    }
+
+    // Write to JSON file (backward compat fallback).
     let base_dir = app_data_dir(&state)?;
     let path = TerminalProfile::profile_path(&base_dir, &terminal_id);
-    let profile = TerminalProfile::from(args);
-    profile.save(&path)?;
+    if let Err(e) = profile.save(&path) {
+        tracing::warn!(
+            terminal_id = %terminal_id,
+            error = %e,
+            "failed to save hardware settings to JSON — DB write succeeded"
+        );
+    }
+
     Ok(())
 }
 
@@ -1025,6 +1154,7 @@ mod tests {
         assert_eq!(result.margin_bottom, 0);
         assert_eq!(result.margin_left, 0);
         assert_eq!(result.margin_right, 0);
+        assert_eq!(result.tax_rounding_mode, "half_up");
     }
 
     #[test]
@@ -1041,6 +1171,7 @@ mod tests {
             margin_bottom: 3,
             margin_left: 2,
             margin_right: 2,
+            tax_rounding_mode: "truncate".into(),
         };
 
         run_set_receipt_settings(&conn, &dto).unwrap();
@@ -1056,6 +1187,7 @@ mod tests {
         assert_eq!(result.margin_bottom, 3);
         assert_eq!(result.margin_left, 2);
         assert_eq!(result.margin_right, 2);
+        assert_eq!(result.tax_rounding_mode, "truncate");
     }
 
     #[test]
@@ -1111,6 +1243,7 @@ mod tests {
                 margin_bottom: 0,
                 margin_left: 0,
                 margin_right: 0,
+                tax_rounding_mode: "half_up".into(),
             },
         )
         .unwrap();
@@ -1128,6 +1261,7 @@ mod tests {
                 margin_bottom: 5,
                 margin_left: 0,
                 margin_right: 0,
+                tax_rounding_mode: "half_up".into(),
             },
         )
         .unwrap();
@@ -1201,6 +1335,7 @@ mod tests {
             margin_bottom: 0,
             margin_left: 0,
             margin_right: 0,
+            tax_rounding_mode: "half_up".into(),
         };
         let d = format!("{dto:?}");
         assert!(d.contains("Thanks"));
@@ -1276,6 +1411,9 @@ mod tests {
             scale_device_path: "COM3".into(),
             scale_baud_rate: 115200,
             scale_zero_on_boot: true,
+            kitchen_printer_connection: "network".into(),
+            kitchen_printer_device_path: "192.168.1.51".into(),
+            schema_version: 1,
             sound_volume: 60,
             dark_mode: true,
             scale_auto_zero: false,
@@ -1379,6 +1517,7 @@ mod tests {
             margin_bottom: 3,
             margin_left: 2,
             margin_right: 1,
+            tax_rounding_mode: "half_up".into(),
         };
         let json = serde_json::to_value(&dto).unwrap();
         let back: ReceiptSettingsDto = serde_json::from_value(json).unwrap();
@@ -1433,6 +1572,9 @@ mod tests {
             scale_device_path: "/dev/hidraw0".into(),
             scale_baud_rate: 9600,
             scale_zero_on_boot: false,
+            kitchen_printer_connection: "network".into(),
+            kitchen_printer_device_path: "10.0.0.50".into(),
+            schema_version: 1,
             sound_volume: 80,
             dark_mode: false,
             scale_auto_zero: true,

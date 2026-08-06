@@ -1,0 +1,43 @@
+# ── Pinned-image digest drift gate (DOCKER-02 follow-up) ───────────
+#
+# The production/CI-critical base images are pinned to immutable
+# multi-arch index digests (refreshed 2026-08-03). Pinning is only sound
+# if pins are refreshed deliberately — this scheduled job re-resolves
+# every pinned `tag@sha256:` reference and fails (→ GitHub alert + issue)
+# when an upstream tag has moved to a different digest, so drift is
+# surfaced instead of silently rotting.
+#
+# On drift, the job exits 1 (scheduled-run failure alerts maintainers)
+# and opens an issue with the exact references to refresh.
+
+name: Docker Digest Drift
+
+on:
+  schedule:
+    # Weekly Monday 05:00 UTC.
+    - cron: "0 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    name: Verify pinned image digests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run digest drift check
+        id: drift
+        run: bash scripts/verify-docker-digests.sh
+      - name: Open drift issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --title "Pinned Docker image digests have drifted (DOCKER-02)" \
+            --body "The weekly digest-drift gate failed: at least one pinned image:tag@sha256 reference now resolves to a different upstream digest. Run \`bash scripts/verify-docker-digests.sh\` locally for the exact references, then refresh the pins deliberately per the DOCKER-02 policy (see .trivyignore and the Dockerfile comments)." \
+            --repo "${{ github.repository }}" \
+            || echo "::warning::Could not open drift issue (token scope?)"

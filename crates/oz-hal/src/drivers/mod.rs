@@ -12,6 +12,8 @@ pub mod bt_scanner;
 pub mod drawer;
 /// ESC/POS command builder for receipt printers.
 pub mod escpos;
+/// KDS kitchen chit formatter.
+pub mod kds_chit;
 /// Programmable mock implementations for all HAL traits.
 pub mod mock;
 /// Generic receipt printer abstraction.

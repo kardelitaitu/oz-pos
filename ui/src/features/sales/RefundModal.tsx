@@ -1,12 +1,14 @@
 import { useState, useCallback, useRef } from 'react';
 import { useLocalization } from '@fluent/react';
 import { Localized } from '@/frontend/shared/Localized';
+import { requiredLocalized } from '@/frontend/shared';
 import { processRefund, type SaleDetail } from '@/api/sales';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatMoney, type Money } from '@/types/domain';
 import { Button } from '@/components/Button';
 import { useExitAnimation } from '@/hooks/useExitAnimation';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { l10nErrorMessage } from '@/utils/app-error';
 import './RefundModal.css';
 
 interface RefundModalProps {
@@ -28,7 +30,7 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
   const [error, setError] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  const toggleLine = useCallback((lineId: string, _sku: string, maxQty: number) => {
+  const toggleLine = useCallback((lineId: string, maxQty: number) => {
     setSelectedLines((prev) => {
       const current = prev[lineId] ?? 0;
       if (current > 0) {
@@ -86,7 +88,7 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
       });
       setResult(res);
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('refund-error', null, 'Refund failed'));
+      setError(l10nErrorMessage(err, l10n, 'refund-error'));
     } finally {
       setProcessing(false);
     }
@@ -125,11 +127,15 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
   // codebase for dialog overlays (PaymentModal, ShiftManagementScreen,
   // every *ManagementScreen modal) so it's the safer choice here.
   return (
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <div
       className={`refund-overlay${exit.exiting ? ' refund-overlay--exiting' : ''}`}
       role="dialog"
       aria-modal="true"
       aria-label={l10n.getString('refund-dialog-aria')}
+      onClick={(e) => { if (e.target === e.currentTarget) exit.requestClose(); }}
+      onKeyDown={(e) => { if (e.key === 'Escape') exit.requestClose(); }}
+      tabIndex={-1}
     >
       <div
         className={`refund-modal${exit.exiting ? ' refund-modal--exiting' : ''}`}
@@ -198,7 +204,7 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
                           <input
                             type="checkbox"
                             checked={selectedQty > 0}
-                            onChange={() => toggleLine(line.id, line.sku, line.qty ?? 1)}
+                            onChange={() => toggleLine(line.id, line.qty ?? 1)}
                             aria-label={`Refund ${line.sku}`}
                           />
                         </Localized>
@@ -250,7 +256,7 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
                     className="refund-input"
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
-                    placeholder={l10n.getString('refund-reason-placeholder')}
+                    placeholder={requiredLocalized(l10n, 'refund-reason-placeholder')}
                     aria-label={l10n.getString('refund-reason-aria')}
                   />
                 </Localized>
@@ -265,7 +271,7 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
                     className="refund-input"
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
-                    placeholder={l10n.getString('refund-note-placeholder')}
+                    placeholder={requiredLocalized(l10n, 'refund-note-placeholder')}
                     aria-label={l10n.getString('refund-note-aria')}
                   />
                 </Localized>

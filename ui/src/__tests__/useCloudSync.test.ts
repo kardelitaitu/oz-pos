@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   syncPull: vi.fn(),
   pendingSyncCount: vi.fn(),
   updateSyncSettings: vi.fn(),
+  testSyncConnection: vi.fn(),
   invoke: vi.fn(),
 }));
 
@@ -44,6 +45,7 @@ vi.mock('@/api/offline', () => ({
   syncPull: () => mocks.syncPull(),
   pendingSyncCount: () => mocks.pendingSyncCount(),
   updateSyncSettings: (args: unknown) => mocks.updateSyncSettings(args),
+  testSyncConnection: (url?: string) => mocks.testSyncConnection(url),
 }));
 
 // ── Test helpers ──────────────────────────────────────────────────
@@ -83,6 +85,7 @@ beforeEach(() => {
   });
   mocks.pendingSyncCount.mockResolvedValue(0);
   mocks.updateSyncSettings.mockResolvedValue(undefined);
+  mocks.testSyncConnection.mockResolvedValue({ ok: true, status: 'Connected', latencyMs: 12 });
   mocks.invoke.mockImplementation(async (cmd: string) => {
     if (cmd === 'get_setting') return null;
     if (cmd === 'set_setting') return null;
@@ -381,7 +384,77 @@ describe('useCloudSync', () => {
     });
   });
 
-  // 5. Auto-sync setInterval — fire / cleanup / clamp / in-flight ─
+  // 5. testConnection — real connectivity probe (SYNC-08) ───────
+  describe('testConnection', () => {
+    it('calls testSyncConnection with the in-progress URL (not a latency simulation)', async () => {
+      const { result } = await renderHookInAct(() => useCloudSync(makeDeps()));
+
+      act(() => {
+        result.current.setServerURL('https://sync.example.com');
+      });
+
+      await act(async () => {
+        await result.current.testConnection();
+      });
+
+      expect(mocks.testSyncConnection).toHaveBeenCalledWith('https://sync.example.com');
+      expect(result.current.status).toBe('online');
+    });
+
+    it('passes undefined when serverURL is empty so the backend falls back to saved settings', async () => {
+      const { result } = await renderHookInAct(() => useCloudSync(makeDeps()));
+
+      await act(async () => {
+        await result.current.testConnection();
+      });
+
+      expect(mocks.testSyncConnection).toHaveBeenCalledWith(undefined);
+    });
+
+    it('reports offline + server status when the probe says unreachable', async () => {
+      mocks.testSyncConnection.mockResolvedValue({
+        ok: false,
+        status: 'Connection refused',
+        latencyMs: null,
+      });
+      const addToast = vi.fn();
+      const { result } = await renderHookInAct(() => useCloudSync(makeDeps({ addToast })));
+
+      act(() => {
+        result.current.setServerURL('https://sync.example.com');
+      });
+
+      await act(async () => {
+        await result.current.testConnection();
+      });
+
+      expect(result.current.status).toBe('offline');
+      // The server-provided status surfaces in the toast rather than a
+      // generic fallback, so operators see the actual failure reason.
+      expect(capturedToasts(addToast)).toContainEqual({
+        message: 'Connection refused',
+        type: 'error',
+      });
+    });
+
+    it('exception path: offline status + fallback error toast', async () => {
+      mocks.testSyncConnection.mockRejectedValue(new Error('IPC timeout'));
+      const addToast = vi.fn();
+      const { result } = await renderHookInAct(() => useCloudSync(makeDeps({ addToast })));
+
+      await act(async () => {
+        await result.current.testConnection();
+      });
+
+      expect(result.current.status).toBe('offline');
+      expect(capturedToasts(addToast)).toContainEqual({
+        message: 'Could not reach server',
+        type: 'error',
+      });
+    });
+  });
+
+  // 6. Auto-sync setInterval — fire / cleanup / clamp / in-flight ─
   describe('auto-sync setInterval', () => {
     it('does not start the interval when enabled is false', async () => {
       vi.useFakeTimers();

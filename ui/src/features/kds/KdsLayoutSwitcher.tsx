@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { createPortal } from 'react-dom';
 import { Localized, useLocalization } from '@fluent/react';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import type { KdsLayout } from '@/features/kds/hooks/useKdsPreferences';
 import './KdsLayoutSwitcher.css';
 
@@ -70,11 +72,12 @@ export function KdsLayoutSwitcher({
 
   const close = useCallback(() => setOpen(false), []);
 
+  // A11Y-02: complete dialog semantics via the shared trap — initial focus,
+  // Tab containment, Escape, scroll lock, and focus restoration.
+  useFocusTrap(popoverRef, open, close);
+
   useEffect(() => {
     if (!open) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-    };
     const handleClickOutside = (e: MouseEvent) => {
       if (
         popoverRef.current &&
@@ -85,10 +88,8 @@ export function KdsLayoutSwitcher({
         close();
       }
     };
-    document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [open, close]);
@@ -101,7 +102,7 @@ export function KdsLayoutSwitcher({
         ref={btnRef}
         className="kds-layout-btn"
         onClick={() => setOpen((p) => !p)}
-        aria-label={l10n.getString('kds-layout-options-aria') || 'Layout options'}
+        aria-label={requiredLocalized(l10n, 'kds-layout-options-aria')}
         aria-expanded={open}
       >
         {currentIcon && <LayoutIcon layout={currentIcon} />}
@@ -111,7 +112,8 @@ export function KdsLayoutSwitcher({
           ref={popoverRef}
           className="kds-layout-popover"
           role="dialog"
-          aria-label={l10n.getString('kds-layout-popover-aria') || 'KDS layout and display options'}
+          aria-modal="true"
+          aria-label={requiredLocalized(l10n, 'kds-layout-popover-aria')}
         >
           <p className="kds-layout-popover-section-title"><Localized id="kds-layout-label">Layout</Localized></p>
           <div className="kds-layout-options">
@@ -129,7 +131,7 @@ export function KdsLayoutSwitcher({
             ))}
           </div>
           <p className="kds-layout-popover-section-title"><Localized id="kds-layout-display-label">Display</Localized></p>
-          <label className="kds-layout-toggle" aria-label={l10n.getString('kds-layout-order-id') || 'Order ID'}>
+          <label className="kds-layout-toggle" aria-label={requiredLocalized(l10n, 'kds-layout-order-id')}>
             <input
               type="checkbox"
               role="switch"
@@ -138,7 +140,7 @@ export function KdsLayoutSwitcher({
             />
             <span className="kds-layout-toggle-label"><Localized id="kds-layout-order-id">Order ID</Localized></span>
           </label>
-          <label className="kds-layout-toggle" aria-label={l10n.getString('kds-layout-table-number') || 'Table Number'}>
+          <label className="kds-layout-toggle" aria-label={requiredLocalized(l10n, 'kds-layout-table-number')}>
             <input
               type="checkbox"
               role="switch"

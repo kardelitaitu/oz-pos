@@ -12,7 +12,65 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/pocketbase/pocketbase/tests"
 )
+
+// ── Tests: First-boot collection auto-provisioning ───────────────
+//
+// ensureCollections imports the embedded pb_schema.json on a fresh
+// deployment (empty pb_data) so the license API never starts "healthy"
+// with /activate, /renew, and /status failing on missing collections.
+
+func TestEnsureCollections_ImportsOnFreshApp(t *testing.T) {
+	app, err := tests.NewTestApp()
+	if err != nil {
+		t.Fatalf("failed to create test app: %v", err)
+	}
+	defer app.Cleanup()
+
+	// Precondition: a fresh PocketBase app has only the default system
+	// collections — none of the license business collections.
+	for _, name := range requiredCollections {
+		if _, err := app.FindCollectionByNameOrId(name); err == nil {
+			t.Fatalf("precondition failed: %q should not exist on a fresh app", name)
+		}
+	}
+
+	if err := ensureCollections(app); err != nil {
+		t.Fatalf("ensureCollections should import the schema on first boot: %v", err)
+	}
+
+	for _, name := range requiredCollections {
+		if _, err := app.FindCollectionByNameOrId(name); err != nil {
+			t.Errorf("expected %q collection to be auto-created, got: %v", name, err)
+		}
+	}
+}
+
+func TestEnsureCollections_IsIdempotent(t *testing.T) {
+	app, err := tests.NewTestApp()
+	if err != nil {
+		t.Fatalf("failed to create test app: %v", err)
+	}
+	defer app.Cleanup()
+
+	// First import creates the collections.
+	if err := ensureCollections(app); err != nil {
+		t.Fatalf("first ensureCollections failed: %v", err)
+	}
+
+	// Second call must be a no-op (no error, no duplicate collections).
+	if err := ensureCollections(app); err != nil {
+		t.Fatalf("second ensureCollections should be a no-op: %v", err)
+	}
+
+	for _, name := range requiredCollections {
+		if _, err := app.FindCollectionByNameOrId(name); err != nil {
+			t.Errorf("expected %q to still exist after second call: %v", name, err)
+		}
+	}
+}
 
 // ── Tests: Rate Limiting ──────────────────────────────────────────
 

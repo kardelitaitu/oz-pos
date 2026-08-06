@@ -6,7 +6,11 @@
 .modifier-overlay {
   position: fixed;
   inset: 0;
-  background: var(--color-bg-overlay);
+  background: var(--color-pos-modal-overlay);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  will-change: backdrop-filter;
+  transform: translateZ(0);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -24,10 +28,10 @@
 .modifier-modal {
   width: min(32.5rem, 100%);
   max-height: min(85vh, 45rem);
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
+  background: var(--color-pos-modal-bg);
+  border: 1px solid var(--color-pos-modal-border);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--color-pos-modal-shadow);
   display: flex;
   flex-direction: column;
   animation: modifier-overlay-in var(--duration-200) var(--ease-out),

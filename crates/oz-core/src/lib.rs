@@ -159,7 +159,7 @@ pub fn default_version() -> i64 {
     1
 }
 
-pub use audit::AuditEntry;
+pub use audit::{AuditEntry, AuditReviewCheckpoint};
 #[cfg(feature = "cache-redis")]
 pub use cache::redis_cache::RedisCache;
 pub use cache::{Cache, NoopCache, create_cache};
@@ -191,14 +191,17 @@ pub use inventory_transaction::{
     InventoryTransaction, InventoryTransactionId, InventoryTransactionLine,
     InventoryTransactionType,
 };
-pub use kds::{CreateKdsOrderInput, KdsOrder, KdsStatus};
+pub use kds::{
+    CreateKdsLineItemInput, CreateKdsOrderInput, KdsLineItem, KdsModifier, KdsOrder, KdsStatus,
+    UpdateKdsOrderItemsInput,
+};
 pub use location_resolver::{
     get_default_location_id, resolve_all_locations, resolve_location_chain_for_sku,
     resolve_primary_location,
 };
 pub use loyalty::{LoyaltyAccount, LoyaltyAccountWithDetails, LoyaltyTier, LoyaltyTransaction};
-pub use money::{Currency, Money};
-pub use offline::{OfflineQueueItem, OfflineQueueStatus};
+pub use money::{Currency, Money, format_minor};
+pub use offline::{OfflineQueueItem, OfflineQueueStatus, SyncPriority};
 pub use payment::{Payment, PaymentSplitArg};
 pub use platform_core::rbac::{AuthorizationError, has_permission, permissions};
 pub use product::{Product, ProductType};

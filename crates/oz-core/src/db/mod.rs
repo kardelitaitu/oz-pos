@@ -8,6 +8,36 @@
 //!
 //! Domain methods are organised into sub-modules, each one implementing
 //! `impl Store<'_>` for a logical domain (products, sales, customers, etc.).
+//!
+//! # Repository transaction contract (RUST-08)
+//!
+//! The facade deliberately uses [`rusqlite::Connection::unchecked_transaction`]
+//! rather than the checked `Connection::transaction` because [`Store`] borrows
+//! `&Connection` (checked transactions require `&mut Connection`, which would
+//! force callers to hold a mutable borrow of the shared pool for the whole
+//! write). The contract for every method in this module is:
+//!
+//! 1. **Standalone atomic commands own their transaction.** Any method that
+//!    must write multiple rows atomically opens its own
+//!    `unchecked_transaction()` and commits it before returning. Callers rely
+//!    on this: a single `Store::method(...)` call is always all-or-nothing.
+//! 2. **Composable methods never nest.** A method that calls another `Store`
+//!    method which itself opens a transaction MUST NOT wrap that call in an
+//!    outer transaction — SQLite rejects nested transactions, and the inner
+//!    `unchecked_transaction()` would fail with "cannot start a transaction
+//!    within a transaction". See `db/settings.rs` workspace tests which
+//!    pin this boundary. If true cross-method atomicity is required, implement
+//!    a dedicated method that performs all writes inside one transaction.
+//! 3. **Read-only methods never open a transaction.** Queries run directly on
+//!    the connection; a reader must never hold a write lock.
+//! 4. **Error paths roll back.** Every `unchecked_transaction()` result is
+//!    mapped with `?`/`map_err` so a failure drops the transaction (rollback)
+//!    instead of committing a partial write.
+//!
+//! Adding a new database method that opens a transaction internally is a
+//! review point: confirm it is standalone-atomic (not composable), confirm it
+//! cannot be invoked from inside another transaction, and document any
+//! deliberate exception here.
 
 use rusqlite::Connection;
 
@@ -151,19 +181,51 @@ impl<'a> Store<'a> {
 // ── Backup / Export ────────────────────────────────────────────────────
 
 impl Store<'_> {
-    /// Run `VACUUM INTO` to create a clean, optimized copy of the database.
-    fn vacuum_into(&self, output_path: &str) -> Result<(), rusqlite::Error> {
-        let escaped = output_path.replace('\'', "''");
-        let sql = format!("VACUUM INTO '{escaped}'");
-        self.conn.execute_batch(&sql)
+    /// Remove an existing destination file so an online backup can
+    /// (re)create it.
+    ///
+    /// RUST-03: only a missing destination is acceptable — permission
+    /// failures, directory targets, and other filesystem errors are
+    /// propagated so the caller surfaces the real cause instead of an
+    /// indirect backup error.
+    fn remove_destination_for_backup(output_path: &str) -> Result<(), CoreError> {
+        match std::fs::remove_file(output_path) {
+            Ok(()) => Ok(()),
+            // A missing destination is the normal fresh-backup case.
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(CoreError::Internal(format!(
+                "cannot prepare backup destination '{output_path}': {e}"
+            ))),
+        }
     }
 
     /// Create a snapshot of the database to a file at `output_path`.
     ///
-    /// Uses SQLite's online backup API so the source connection can
-    /// remain in use during the copy.
+    /// RUST-02: uses rusqlite's online backup API (the SQLite Backup API),
+    /// so the source connection can remain in use during the copy and the
+    /// destination path is handled as a filesystem path by the API rather
+    /// than being interpolated into a `VACUUM INTO` SQL statement.
     pub fn backup(&self, output_path: &str) -> Result<(), CoreError> {
-        self.vacuum_into(output_path)?;
+        Self::remove_destination_for_backup(output_path)?;
+
+        let mut dst = rusqlite::Connection::open(output_path).map_err(|e| {
+            CoreError::Internal(format!(
+                "failed to open backup destination '{output_path}': {e}"
+            ))
+        })?;
+        // rusqlite 0.31: `Backup::new` takes the two distinct connections;
+        // `run_to_completion` copies the whole source database in 5-page
+        // chunks with a 250 ms pause between chunks.
+        let backup = rusqlite::backup::Backup::new(self.conn, &mut dst).map_err(|e| {
+            CoreError::Internal(format!(
+                "failed to start online backup to '{output_path}': {e}"
+            ))
+        })?;
+        backup
+            .run_to_completion(5, std::time::Duration::from_millis(250), None)
+            .map_err(|e| {
+                CoreError::Internal(format!("online backup to '{output_path}' failed: {e}"))
+            })?;
         Ok(())
     }
 
@@ -213,15 +275,16 @@ impl Store<'_> {
     ///
     /// # Errors
     ///
-    /// Returns `CoreError` if the VACUUM fails (e.g., the database is too
-    /// corrupt to read, or the output path is not writable).
+    /// Returns `CoreError` if the backup fails (e.g., the database is too
+    /// corrupt to read, the output path is not writable, or an existing
+    /// destination could not be removed — RUST-03).
     pub fn repair_to(&self, output_path: &str) -> Result<(), CoreError> {
-        // VACUUM INTO refuses to overwrite an existing file on some platforms
-        // (Windows). Remove the target first so the repair always succeeds.
-        let _ = std::fs::remove_file(output_path);
-        self.vacuum_into(output_path).map_err(|e| {
+        // RUST-03: propagate filesystem failures when preparing the target
+        // (permission denied, directory target) instead of swallowing them.
+        Self::remove_destination_for_backup(output_path)?;
+        self.backup(output_path).map_err(|e| {
             CoreError::Internal(format!(
-                "database repair failed — VACUUM INTO '{output_path}': {e}"
+                "database repair failed — backup to '{output_path}': {e}"
             ))
         })
     }

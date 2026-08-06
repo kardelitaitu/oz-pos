@@ -7,10 +7,13 @@
 import { useCallback, useState, useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import { useAuth } from '@/contexts/AuthContext';
 import { Localized } from '@/components/Localized';
 import { useLocalization } from '@fluent/react';
 import ProductLookupScreen from '@/features/products/ProductLookupScreen';
+import { plainErrorMessage } from '@/utils/app-error';
+import { l10nErrorMessage } from '@/utils/app-error';
 import RestaurantMenu from '@/features/restaurant/RestaurantMenu';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
@@ -216,6 +219,7 @@ function CartLineItem({
         ref={(el) => registerRef?.(line.id, el)}
         tabIndex={0}
         data-line-id={line.id}
+        data-testid="cart-panel-line-item"
         role="group"
         aria-label={l10n.getString('pos-cart-line-aria', { sku: String(line.sku), qty: String(line.qty), amount: formatMoney(line.unit_price) })}
       >
@@ -239,9 +243,9 @@ function CartLineItem({
               type="button"
               className="pos-cart-line-override"
               onClick={() => onOverride(line)}
-              aria-label={`Override price for ${line.name ?? line.sku}`}
+              aria-label={l10n.getString('pos-cart-line-override-aria', { name: line.name ?? line.sku }, 'Override price')}
             >
-              Override
+              <Localized id="pos-cart-line-override">Override</Localized>
             </button>
           )}
         </div>
@@ -583,7 +587,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
       }
       // ADR-19 §5.1: reject add_line when cart exists but has no deduction location
       if (cartId && !deductionLocationIdRef.current) {
-        addToast({ message: l10nRef.current.getString('pos-cart-unbound-error') || 'Cart has no deduction location — cannot add items', type: 'error' });
+        addToast({ message: requiredLocalized(l10nRef.current, 'pos-cart-unbound-error'), type: 'error' });
         return;
       }
       addProduct(product, qty);
@@ -866,7 +870,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
         currency: overrideTarget.unit_price.currency,
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Override failed';
+      const msg = plainErrorMessage(err, 'Override failed');
       addToast({ message: msg, type: 'error' });
     } finally {
       setOverrideTarget(null);
@@ -964,7 +968,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   useEffect(() => {
     getReceiptSettingsScoped(sessionToken)
       .then((s) => setShowTableNumberSetting(s.showTableNumber))
-      .catch(() => addToast({ message: l10nRef.current.getString('pos-toast-receipt-settings-failed') || 'Failed to load receipt settings', type: 'error' }));
+      .catch(() => addToast({ message: requiredLocalized(l10nRef.current, 'pos-toast-receipt-settings-failed'), type: 'error' }));
   }, [addToast, sessionToken]); // l10n via ref — stable dep chain
 
   const handleCloseShiftClick = useCallback(() => {
@@ -992,7 +996,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
       setClosedShiftSummary(closed);
       setActiveShift(null); // no longer active
     } catch (err) {
-      const msg = err instanceof Error ? err.message : l10nRef.current.getString('pos-close-shift-failed');
+      const msg = l10nErrorMessage(err, l10nRef.current, 'pos-close-shift-failed');
       setCloseShiftError(msg);
     } finally {
       setClosingShift(false);
@@ -1297,8 +1301,8 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                 type="button"
                 className="pos-cart-lock-btn"
                 onClick={() => setShowTables(true)}
-                aria-label={l10n.getString('tables-title') || 'Tables'}
-                title={l10n.getString('tables-title') || 'Table Management'}
+                aria-label={requiredLocalized(l10n, 'tables-title')}
+                title={requiredLocalized(l10n, 'tables-title')}
                 style={{ marginRight: 4 }}
               >
                 🪑
@@ -1309,8 +1313,8 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
               type="button"
               className="pos-cart-lock-btn"
               onClick={() => setShowSalesHistory(true)}
-              aria-label={l10n.getString('retail-fn-history') || 'Sales History'}
-              title={l10n.getString('retail-fn-history') || 'Sales History'}
+              aria-label={requiredLocalized(l10n, 'retail-fn-history')}
+              title={requiredLocalized(l10n, 'retail-fn-history')}
               style={{ marginRight: 4 }}
             >
               📋
@@ -1320,8 +1324,8 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
               type="button"
               className="pos-cart-lock-btn"
               onClick={() => setShowStockInquiry(true)}
-              aria-label={l10n.getString('retail-fn-stok') || 'Stock Inquiry'}
-              title={l10n.getString('retail-fn-stok') || 'Stock Inquiry'}
+              aria-label={requiredLocalized(l10n, 'retail-fn-stok')}
+              title={requiredLocalized(l10n, 'retail-fn-stok')}
               style={{ marginRight: 4 }}
             >
               📦
@@ -1331,8 +1335,8 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
               type="button"
               className="pos-cart-lock-btn"
               onClick={() => onNavigate?.('kds')}
-              aria-label={l10n.getString('kds-title') || 'KDS'}
-              title={l10n.getString('kds-title') || 'KDS'}
+              aria-label={requiredLocalized(l10n, 'kds-title')}
+              title={requiredLocalized(l10n, 'kds-title')}
               style={{ marginRight: 4 }}
             >
               👨‍🍳
@@ -1342,8 +1346,8 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
               type="button"
               className="pos-cart-lock-btn"
               onClick={handleOpenSettings}
-              aria-label={l10n.getString('settings-page-title') || 'Settings'}
-              title={l10n.getString('settings-page-title') || 'Settings'}
+              aria-label={requiredLocalized(l10n, 'settings-page-title')}
+              title={requiredLocalized(l10n, 'settings-page-title')}
               style={{ marginRight: 4 }}
             >
               ⚙️
@@ -1416,7 +1420,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                   className="pos-cart-course-btn"
                   onClick={() => fireCourse(course.id)}
                   data-testid={`fire-course-${course.id}`}
-                  aria-label={`Fire ${course.label} (${holdCount} items)`}
+                  aria-label={l10n.getString('pos-cart-course-fire-aria', { label: course.label, count: String(holdCount) }, `Fire ${course.label} (${holdCount} items)`)}
                 >
                   <span className="pos-cart-course-emoji" aria-hidden="true">{course.emoji}</span>
                   <span className="pos-cart-course-label">{course.label}</span>
@@ -1431,7 +1435,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                 onClick={fireAllCourses}
                 data-testid="fire-all-courses"
               >
-                <span className="pos-cart-course-label">Fire All</span>
+                <Localized id="pos-cart-course-btn--all"><span className="pos-cart-course-label">Fire All</span></Localized>
               </button>
             )}
           </div>

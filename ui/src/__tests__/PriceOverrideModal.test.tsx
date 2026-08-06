@@ -8,6 +8,8 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { withFluent } from '@/locales/test-utils';
+import salesFtl from '@/locales/sales.ftl?raw';
 import type { PriceOverrideModalProps } from '@/features/sales/PriceOverrideModal';
 
 vi.mock('@/api/staff', () => ({
@@ -28,7 +30,7 @@ const defaultProps: PriceOverrideModalProps = {
 };
 
 function renderModal(props: Partial<PriceOverrideModalProps> = {}) {
-  return render(<PriceOverrideModal {...defaultProps} {...props} />);
+  return render(withFluent(<PriceOverrideModal {...defaultProps} {...props} />, salesFtl));
 }
 
 // ── Navigation helpers (fireEvent ~1ms vs userEvent ~60ms) ────────
@@ -139,7 +141,7 @@ describe('PriceOverrideModal', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeInTheDocument();
-      expect(screen.getByText('Invalid PIN')).toBeInTheDocument();
+      expect(screen.getByText('PIN verification failed')).toBeInTheDocument();
     });
   });
 
@@ -159,7 +161,7 @@ describe('PriceOverrideModal', () => {
     typePin('12');
     expect(document.querySelectorAll('.price-override-pin-dot--filled').length).toBe(2);
 
-    fireEvent.click(screen.getByText('\u232B')); // ⌫ Unicode
+    fireEvent.click(screen.getByRole('button', { name: /backspace/i }));
     expect(document.querySelectorAll('.price-override-pin-dot--filled').length).toBe(1);
   });
 

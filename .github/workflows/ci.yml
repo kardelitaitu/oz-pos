@@ -33,6 +33,31 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo fmt --all -- --check
 
+  # ── Rust: Panic-inventory gate (RUST-07 / ADR #33) — fail-closed ────
+  # Fails when any production unwrap()/expect() lacks a documented
+  # invariant comment (// SAFETY: / // INVARIANT: on the same or preceding
+  # line). Pure python — no toolchain deps, so it stays fast.
+  rust-panic-inventory:
+    name: Rust Panic Inventory
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan production unwrap/expect inventory
+        run: python3 scripts/scan-unwrap-panic.py --fail-on-recoverable
+
+  # ── Rust: Hardcoded money-format gate — fail-closed ─────────────────
+  # Fails when production .rs code hardcodes `/ 100` division or `{}.{:02}`
+  # format strings instead of foundation::format_minor() (a regression
+  # would silently mis-render IDR/JPY/KWD amounts that have 0/3-decimal
+  # minor units). Pure python — no toolchain deps, so it stays fast.
+  rust-money-format:
+    name: Rust Money Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify no hardcoded exp-2 money formatting
+        run: python3 scripts/verify-no-hardcoded-money-format.py
+
   # ── Rust: Clippy (needs system deps for compilation, all-features) ─
   rust-clippy:
     name: Rust Clippy
@@ -114,13 +139,106 @@ jobs:
               done
               ;;
             apps)
+              # AUDIT-27 CI-01: failures must propagate — no `|| true` swallow.
               for pkg in oz-cloud-server oz-pos-app oz-pos-tablet; do
-                cargo nextest run -p "$pkg" --profile ci 2>/dev/null || true
+                cargo nextest run -p "$pkg" --profile ci || exit 1
               done
               ;;
           esac
       - name: sccache stats
         run: sccache --show-stats
+
+  # ── Rust: Sync slow-tests integration suite (audit/09 SYNC residual) ─
+  #
+  # The 19 HTTP push/pull/conflict/retry/tenant integration tests are
+  # gated behind `--features slow-tests` and are NOT covered by the PR
+  # fast track. This dedicated job runs them on every main-branch push so
+  # the full sync scenario suite is an explicit release gate, and uploads
+  # the nextest JUnit report for visibility.
+  sync-slow-tests:
+    name: Sync Integration (slow-tests)
+    runs-on: ubuntu-latest
+    # Runs on every main push (release gate for the slow HTTP sync suite).
+    # On PRs it only runs when sync-relevant code changed (platform/sync +
+    # its deps) — the suite's multi-second integration tests would
+    # otherwise burn ~3 min on every PR commit for no signal. Mirrors the
+    # security-pr fail-closed gate pattern: a missing/unresolvable base
+    # SHA runs the suite rather than silently skipping.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for the PR diff against base
+      - name: Check for sync-relevant changes
+        id: gate
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          BASE="${{ github.event.pull_request.base.sha }}"
+          if [ -z "$BASE" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::No base SHA — running sync slow-tests (fail-closed)"
+            exit 0
+          fi
+          git fetch --no-tags --depth=1 origin "$BASE" >/dev/null 2>&1 || true
+          if ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::Base SHA $BASE not fetchable — running sync slow-tests (fail-closed)"
+            exit 0
+          fi
+          # git diff rc: 0 = no differences, 1 = differences, >1 = error.
+          # A failed diff must run the suite (fail-closed), never skip it.
+          git diff --name-only "$BASE"...HEAD > /tmp/oz-changed.txt 2>/dev/null
+          RC=$?
+          if [ "$RC" -gt 1 ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::git diff failed (rc=$RC) — running sync slow-tests (fail-closed)"
+            exit 0
+          fi
+          CHANGED=$(grep -E '^(platform/sync/|crates/oz-core/|foundation/|Cargo\.toml$|Cargo\.lock$)' /tmp/oz-changed.txt || true)
+          if [ -n "$CHANGED" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "Sync-relevant files changed:"
+            echo "$CHANGED"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No sync-relevant changes — slow-tests skipped."
+          fi
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.gate.outputs.run == 'true'
+      - uses: Swatinem/rust-cache@v2
+        if: steps.gate.outputs.run == 'true'
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install system dependencies
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
+            libdbus-1-dev libudev-dev pkg-config
+      - uses: mozilla/sccache-action@v0.0.10
+        if: steps.gate.outputs.run == 'true'
+      - name: Install cargo-nextest
+        if: steps.gate.outputs.run == 'true'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: Run platform-sync integration suite (slow-tests feature)
+        if: steps.gate.outputs.run == 'true'
+        run: cargo nextest run -p platform-sync --features slow-tests --profile ci
+      - name: sccache stats
+        if: steps.gate.outputs.run == 'true'
+        run: sccache --show-stats
+      - name: Upload JUnit report
+        if: always() && steps.gate.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sync-slow-tests-junit
+          path: target/nextest/ci/junit.xml
+          retention-days: 7
 
   # ── Rust: Test Full (all features, main-branch + manual only) ─────
   rust-test-full:
@@ -152,6 +270,41 @@ jobs:
           tool: cargo-nextest
       - name: Run workspace tests (nextest, all features)
         run: cargo nextest run --workspace --all-features --exclude oz-pos-app --exclude oz-pos-tablet --profile ci
+      - name: sccache stats
+        run: sccache --show-stats
+
+  # ── Rust: App crate tests (dedicated — AUDIT-27 CI-01) ───────────
+  #
+  # The two Tauri app crates are excluded from rust-test-full, nightly,
+  # and release test jobs because their desktop/mobile build targets need
+  # the webkit/gtk system libraries. This dedicated job runs their unit
+  # tests on ubuntu (where the system deps ARE installed) so the app
+  # command surfaces are never silently untested. The old `2>/dev/null
+  # || true` in rust-test-fast's apps shard was removed: failures now
+  # fail fast in BOTH the PR fast track and this push/job run.
+  rust-test-apps:
+    name: Rust Test Apps
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
+            libdbus-1-dev libudev-dev pkg-config
+      - uses: mozilla/sccache-action@v0.0.10
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: Run app crate tests (nextest, default features)
+        run: cargo nextest run -p oz-cloud-server -p oz-pos-app -p oz-pos-tablet --profile ci
       - name: sccache stats
         run: sccache --show-stats
 
@@ -203,10 +356,15 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ui/node_modules/.cache/vitest
-          key: vitest-cache-${{ runner.os }}-${{ hashFiles('ui/package-lock.json') }}
+          # AUDIT-27 CI-05: shard-scoped save key — concurrent shard
+          # writes no longer contend on one mutable cache entry.
+          key: vitest-cache-${{ runner.os }}-${{ matrix.shard }}-${{ hashFiles('ui/package-lock.json') }}
           restore-keys: vitest-cache-${{ runner.os }}-
       - run: cd ui && npm ci --no-audit --no-fund --ignore-scripts
       - name: Run vitest (shard ${{ matrix.shard }}/${{ matrix.totalShards }})
+        # AUDIT-27 CI-04: explicit pipefail shell — a failing test before
+        # `tee` must fail the step, not be masked by a successful tee.
+        shell: bash --noprofile --norc -eo pipefail {0}
         run: (cd ui && npm run test -- --reporter=verbose --shard=${{ matrix.shard }}/${{ matrix.totalShards }} --pool=forks 2>&1) | tee ui/vitest-output.log
 
       # Hard-fail on any act() or flushSync warnings. Components
@@ -238,12 +396,18 @@ jobs:
       - name: A11y regression tests
         if: always() && matrix.shard == 1
         continue-on-error: true
+        shell: bash --noprofile --norc -eo pipefail {0}
         run: (cd ui && npm run test:a11y 2>&1) | tee ui/a11y-output.log
 
   # ── Lighthouse a11y audit ─────────────────────────────────────────
+  #
+  # AUDIT-27 CI-08: documented as advisory (docs/ci-pipeline.md and
+  # scripts/gates.json) — a sub-90 score must not block merges. The
+  # continue-on-error is enforced by scripts/verify-ci-docs-drift.py.
   lighthouse:
     name: Lighthouse a11y audit
     runs-on: ubuntu-latest
+    continue-on-error: true
     timeout-minutes: 10
     needs: [ui-typecheck, ui-lint]
     steps:
@@ -258,15 +422,27 @@ jobs:
       - name: Run Lighthouse CI
         run: npx -p @lhci/cli@0.14.x -- lhci autorun
 
-  # ── Docker build + Trivy vulnerability scan ────────────────────
+  # ── Docker build + blocking vulnerability scan (both images) ───
+  #
+  # DOCKER-03/08: both application images (cloud + license) are built,
+  # size-checked, and Trivy-scanned as BLOCKING gates (exit-code 1 on
+  # CRITICAL/HIGH). Documented exceptions live in `.trivyignore`. A
+  # Compose smoke test then boots the full E2E stack to verify both
+  # services start, pass healthchecks, and answer their health endpoints.
   docker:
-    name: Docker (cloud-server build + scan)
+    name: Docker (build + scan + smoke)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build Docker image
+      # DOCKER-09: fail fast (no image build) if the Dockerfile cache stage
+      # drifts from the Cargo workspace members.
+      - name: Verify Dockerfile cache stage matches Cargo workspace
+        run: python scripts/verify-dockerfile-workspace.py
+      - name: Build cloud-server image
         run: docker build -f Dockerfile.server -t oz-pos-cloud:ci .
-      - name: Verify binary size (< 50 MB)
+      - name: Build license-server image
+        run: docker build -f apps/license-server/Dockerfile -t oz-pos-license:ci apps/license-server
+      - name: Verify cloud binary size (< 50 MB)
         run: |
           SIZE=$(docker run --rm --entrypoint stat oz-pos-cloud:ci --format=%s /app/oz-cloud-server)
           MAX=$((50 * 1024 * 1024))
@@ -276,22 +452,95 @@ jobs:
             exit 1
           fi
           echo "Binary size check passed"
-      - name: Trivy vulnerability scan (non-blocking)
+      # DOCKER-03/08: `ignorefile` is NOT a valid trivy-action@v0.36.0
+      # input — it was silently dropped, so the documented .trivyignore
+      # baseline was never applied and the 15 accepted Debian CVEs failed
+      # the gate. The supported input is `trivyignores`. The action ALSO
+      # unsets TRIVY_SEVERITY in SARIF mode unless `limit-severities-for-
+      # sarif: true`, so the "blocking CRITICAL/HIGH" gate was actually
+      # scanning ALL severities (76 LOW + 62 MEDIUM on cloud). Both are
+      # fixed below. continue-on-error guarantees BOTH SARIF files are
+      # emitted even when findings exist; the explicit gate step after the
+      # uploads fails the job, so diagnostics always reach the log first.
+      - name: Trivy vulnerability scan (cloud, blocking)
+        uses: aquasecurity/trivy-action@v0.36.0
         continue-on-error: true
-        uses: aquasecurity/trivy-action@master
         with:
           image-ref: oz-pos-cloud:ci
-          format: table
-          exit-code: 0
+          format: sarif
+          exit-code: 1
           severity: CRITICAL,HIGH
-          output: trivy-results.txt
-      - name: Upload Trivy results
-        if: always()
-        uses: actions/upload-artifact@v4
+          limit-severities-for-sarif: true
+          trivyignores: .trivyignore
+          output: trivy-cloud.sarif
+      - name: Trivy vulnerability scan (license, blocking)
+        uses: aquasecurity/trivy-action@v0.36.0
+        continue-on-error: true
         with:
-          name: trivy-scan
-          path: trivy-results.txt
-          retention-days: 7
+          image-ref: oz-pos-license:ci
+          format: sarif
+          exit-code: 1
+          severity: CRITICAL,HIGH
+          limit-severities-for-sarif: true
+          trivyignores: .trivyignore
+          output: trivy-license.sarif
+      - name: Upload Trivy SARIF (cloud)
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-cloud.sarif
+          category: trivy-cloud
+      - name: Upload Trivy SARIF (license)
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-license.sarif
+          category: trivy-license
+      # DOCKER-03/08: fail the job ONLY after both SARIF files exist and
+      # the uploads above have run — a CRITICAL/HIGH finding must never
+      # hide the diagnostics. A missing SARIF (scan crashed before
+      # writing) is also a hard failure. jq is preinstalled on ubuntu-
+      # latest.
+      - name: Fail if Trivy found CRITICAL/HIGH findings
+        if: always()
+        shell: bash
+        run: |
+          FAILED=0
+          for f in trivy-cloud.sarif trivy-license.sarif; do
+            if [ ! -f "$f" ]; then
+              echo "::error::Missing SARIF file $f — scan produced no report"
+              FAILED=1
+              continue
+            fi
+            count=$(jq '[.runs[]?.results[]?] | length' "$f")
+            if [ "$count" -gt 0 ]; then
+              echo "::error::Trivy found $count CRITICAL/HIGH finding(s) in $f"
+              jq -r '.runs[]?.results[]? | "\(.ruleId): \(.message.text // .message // "")"' "$f" | head -n 30 || true
+              FAILED=1
+            else
+              echo "OK: no CRITICAL/HIGH findings in $f"
+            fi
+          done
+          exit $FAILED
+      # DOCKER-08: Compose smoke — verify BOTH services together on the
+      # images built above, using the E2E stack (no rebuild needed).
+      - name: Compose smoke test (cloud + license + redis)
+        env:
+          OZ_API_SECRET: ci-test-secret
+        run: |
+          docker tag oz-pos-cloud:ci e2e-cloud-server:latest
+          docker tag oz-pos-license:ci e2e-license-server:latest
+          # Throwaway RSA-2048 PKCS#8 key (escaped newlines, like run-e2e.mjs).
+          KEY=$(openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 2>/dev/null | awk '{printf "%s\\n", $0}')
+          export OZ_LICENSE_PRIVATE_KEY="$KEY"
+          docker compose -f docker-compose.e2e.yml up -d --wait --pull=missing
+          echo "── health checks ──"
+          curl -sf http://localhost:3099/api/v1/health && echo " (cloud OK)"
+          curl -sf http://localhost:8080/api/health && echo " (license OK)"
+          echo "── non-root verification (cloud; license lands in DOCKER-01) ──"
+          docker compose -f docker-compose.e2e.yml exec -T e2e-cloud-server id -u | grep -v '^0$' && echo " (cloud non-root OK)"
+          docker compose -f docker-compose.e2e.yml down -v
+        shell: bash
 
   # ── Coverage gate (non-blocking, informational) ─────────────────
   coverage:
@@ -330,11 +579,15 @@ jobs:
           path: lcov.info
           retention-days: 7
 
-  # ── Dependency audit (non-blocking, informational) ───────────────
+  # ── Dependency audit (required on main push, advisory on PR) ─────
+  # AUDIT-27 CI-03/CI-10: high/critical dependency findings block main
+  # pushes (release gate) and are advisory on PRs until a reviewed
+  # baseline is published. The `|| true` swallows were removed so
+  # findings are always recorded in the job log.
   audit:
     name: Dependency Audit
     runs-on: ubuntu-latest
-    continue-on-error: true
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -343,42 +596,250 @@ jobs:
         with:
           tool: cargo-audit
       - name: Run cargo audit
-        run: cargo audit || true
+        run: cargo audit
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
       - name: Run npm audit
-        run: cd ui && npm audit --audit-level=high || true
+        run: cd ui && npm audit --audit-level=high
+
+  # ── PR security baseline (AUDIT-27 CI-10) ────────────────────────
+  #
+  # Lightweight, fail-closed dependency/container audit for PRs that
+  # change manifests. Runs only when Cargo.toml/lock, package files, or
+  # container definitions changed — so PRs touching only library code
+  # don't pay the audit cost, while security-relevant changes are gated
+  # before merge (the weekly security.yml stays for the full tree).
+  security-pr:
+    name: Security (PR baseline)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check for changed dependency/container manifests
+        id: deps
+        run: |
+          # AUDIT-27 CI-10: fail CLOSED — if the base ref cannot be
+          # resolved or the diff fails, treat the PR as having changed
+          # manifests and run the audits. Never silently skip.
+          BASE="${{ github.event.pull_request.base.sha }}"
+          if [ -z "$BASE" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::No base SHA available — running baseline audits (fail-closed)"
+            exit 0
+          fi
+          # Ensure the base commit exists locally (checkout may not fetch it).
+          git fetch --no-tags --depth=1 origin "$BASE" >/dev/null 2>&1 || true
+          if ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::Base SHA $BASE not fetchable — running baseline audits (fail-closed)"
+            exit 0
+          fi
+          CHANGED=$(git diff --name-only "$BASE"...HEAD 2>/dev/null | grep -E '^(Cargo\.toml$|Cargo\.lock$|ui/package\.json$|ui/package-lock\.json$|Dockerfile\.server$|apps/license-server/Dockerfile$|docker-compose\.(e2e|prod)\.yml$)' || true)
+          if [ -n "$CHANGED" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Dependency/container manifests changed:"
+            echo "$CHANGED"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No dependency/container manifests changed — baseline audit skipped."
+          fi
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.deps.outputs.changed == 'true'
+      - name: Install cargo-audit
+        if: steps.deps.outputs.changed == 'true'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - name: Run cargo audit (blocking)
+        if: steps.deps.outputs.changed == 'true'
+        run: cargo audit
+      - uses: actions/setup-node@v4
+        if: steps.deps.outputs.changed == 'true'
+        with:
+          node-version: '24'
+      - name: Run npm audit (blocking)
+        if: steps.deps.outputs.changed == 'true'
+        run: cd ui && npm audit --audit-level=high
 
   # ── Fuzz tests (non-blocking, informational) ─────────────────────
   fuzz:
     name: Fuzz
     runs-on: ubuntu-latest
     continue-on-error: true
-    timeout-minutes: 10
-    if: github.event_name == 'push'
+    timeout-minutes: 30
+    # Advisory (crash artifacts uploaded). Runs on every main push; on PRs
+    # only when fuzz-relevant code changed (fuzz targets + the crates they
+    # import: foundation, oz-core, oz-lua, oz-plugin). The cold dep build
+    # (codegen-units=1 + ASAN/sancov, no sccache — see env below) can take
+    # 15-25 min, so the 30-min cap is the outer bound; cached runs finish
+    # in ~8 min. Gating PRs on paths keeps the signal without taxing every
+    # PR commit. Mirrors the security-pr fail-closed gate pattern.
+    env:
+      # rustup toolchain resolution: the fuzz build runs from the repo
+      # root, whose rust-toolchain.toml pins STABLE — but cargo-fuzz
+      # requires nightly (-Z sanitizer flags). RUSTUP_TOOLCHAIN pins
+      # nightly job-wide so rustup resolves it regardless of the toolchain
+      # file (fuzz/rust-toolchain.toml alone is not enough: rustup resolves
+      # from the CWD, which is the repo root during `cargo fuzz run`).
+      RUSTUP_TOOLCHAIN: nightly
+      # The ubuntu runner image globally sets RUSTC_WRAPPER=sccache for
+      # every job. That wrapper breaks cargo-fuzz's `--target` build: its
+      # rustc version probe (`sccache .../toolchains/nightly-.../bin/rustc
+      # -vV`) execs the resolved toolchain path directly and dies with
+      # "No such file or directory". Override it to empty so cargo invokes
+      # rustc through rustup normally (as every other job does).
+      RUSTC_WRAPPER: ''
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@nightly
-      - uses: Swatinem/rust-cache@v2
         with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Install cargo-fuzz
-        run: cargo install cargo-fuzz
-      - name: Fuzz targets (60s each)
+          fetch-depth: 0  # Needed for the PR diff against base
+      - name: Check for fuzz-relevant changes
+        id: gate
         run: |
-          for target in sku_parse money_parse cart_deser; do
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          BASE="${{ github.event.pull_request.base.sha }}"
+          if [ -z "$BASE" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::No base SHA — running fuzz (fail-closed)"
+            exit 0
+          fi
+          git fetch --no-tags --depth=1 origin "$BASE" >/dev/null 2>&1 || true
+          if ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::Base SHA $BASE not fetchable — running fuzz (fail-closed)"
+            exit 0
+          fi
+          # git diff rc: 0 = no differences, 1 = differences, >1 = error.
+          # A failed diff must run the fuzz suite (fail-closed), never skip it.
+          git diff --name-only "$BASE"...HEAD > /tmp/oz-changed.txt 2>/dev/null
+          RC=$?
+          if [ "$RC" -gt 1 ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::git diff failed (rc=$RC) — running fuzz (fail-closed)"
+            exit 0
+          fi
+          CHANGED=$(grep -E '^(fuzz/|foundation/|crates/oz-core/|crates/oz-lua/|crates/oz-plugin/|Cargo\.toml$|Cargo\.lock$)' /tmp/oz-changed.txt || true)
+          if [ -n "$CHANGED" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "Fuzz-relevant files changed:"
+            echo "$CHANGED"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No fuzz-relevant changes — fuzz skipped."
+          fi
+      - uses: dtolnay/rust-toolchain@nightly
+        if: steps.gate.outputs.run == 'true'
+      # The fuzz crate is a STANDALONE workspace, so default workspace
+      # discovery misses its target dir; `workspaces: fuzz` caches
+      # fuzz/target/ — and cargo-fuzz compiles everything there, including
+      # the path deps (foundation, oz-core, oz-lua, oz-plugin). Save on
+      # every push (main + release branches) so PR runs — same Cargo.lock
+      # — restore a warm build; PR runs only restore, never save.
+      - uses: Swatinem/rust-cache@v2
+        if: steps.gate.outputs.run == 'true'
+        with:
+          workspaces: fuzz
+          save-if: ${{ github.event_name != 'pull_request' }}
+      - name: Install cargo-fuzz
+        if: steps.gate.outputs.run == 'true'
+        run: cargo install cargo-fuzz
+      # Build fuzz targets in three feature tiers to isolate C-dep linking:
+      #
+      # Tier 1 (no features): sku_parse, money_parse, lua_sandbox
+      #   Pure Rust + foundation + oz-lua only; NO bundled SQLite.
+      #   These binaries are the ones that were crashing (exit 77) because
+      #   oz-plugin's bundled SQLite conflicted with libFuzzer's signal-handler
+      #   setup when the fuzz crate became a standalone workspace.
+      #
+      # Tier 2 (oz-core-fuzz): cart_deser
+      #   Adds oz-core (bundled SQLite via rusqlite). Separate from Tier 1 to
+      #   keep SQL-free targets isolated.
+      #
+      # Tier 3 (oz-plugin-fuzz): ozpkg_parse, manifest_parse
+      #   Adds oz-plugin (implies oz-core-fuzz). Needed for PLG-01/06/08 tests.
+      - name: Build fuzz targets (tier 1 — no C deps)
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          for target in sku_parse money_parse lua_sandbox; do
+            cargo fuzz build "$target"
+          done
+      - name: Build fuzz targets (tier 2 — oz-core-fuzz)
+        if: steps.gate.outputs.run == 'true'
+        run: cargo fuzz build --features oz-core-fuzz cart_deser
+      - name: Build fuzz targets (tier 3 — oz-plugin-fuzz)
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          for target in ozpkg_parse manifest_parse; do
+            cargo fuzz build --features oz-plugin-fuzz "$target"
+          done
+      - name: Fuzz tier-1 targets (60s each, no C deps)
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          for target in sku_parse money_parse; do
             echo "::group::Fuzzing $target"
-            timeout 65 cargo fuzz run "$target" -- -max_total_time=60 || true
+            # AUDIT-27 CI-03: no `|| true` — fuzz failures surface to the
+            # advisory job and trigger the crash-artifact upload below.
+            # The target bins are already built above; `cargo fuzz run` only
+            # does a seconds-long incremental rebuild, so the 65s cap now
+            # bounds the 60s fuzz run itself.
+            timeout 65 cargo fuzz run "$target" -- -max_total_time=60
+            echo "::endgroup::"
+          done
+      - name: Fuzz tier-2 targets (60s each, oz-core-fuzz)
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          echo "::group::Fuzzing cart_deser"
+          timeout 65 cargo fuzz run --features oz-core-fuzz cart_deser -- -max_total_time=60
+          echo "::endgroup::"
+      - name: Fuzz tier-3 targets (60s each, oz-plugin-fuzz)
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          for target in ozpkg_parse manifest_parse; do
+            echo "::group::Fuzzing $target"
+            timeout 65 cargo fuzz run --features oz-plugin-fuzz "$target" -- -max_total_time=60
             echo "::endgroup::"
           done
       - name: Upload crash artifacts
-        if: failure()
+        if: failure() && steps.gate.outputs.run == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: fuzz-crashes-ci
           path: fuzz/artifacts/
           retention-days: 30
+
+  # ── Flaky-test quarantine registry (AUDIT-27 CI-09) ──────────────
+  #
+  # Gates scripts/flaky-quarantine.json: fails when an entry is expired,
+  # lacks an issue reference, or lacks an owner. This closes the loop so
+  # quarantined tests have an enforced lifecycle (see docs/ci-pipeline.md).
+  flaky-quarantine:
+    name: Flaky Quarantine Registry
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify quarantine manifest
+        run: python3 scripts/verify-flaky-quarantine.py
+
+  # ── Windows config drift (AUDIT-28) ──────────────────────────────
+  #
+  # Rejects future Windows release config drift: fails when a
+  # tauri.conf.json sets NSIS installMode to perMachine (a perMachine
+  # installer requires elevation and reintroduces the UAC prompt) or any
+  # source app.manifest drops the asInvoker execution level. The PE scan
+  # of actually-built Windows exes runs in release.yml's Windows job.
+  windows-config:
+    name: Windows Config Drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify NSIS installMode + asInvoker manifests
+        run: python3 scripts/verify-windows-config.py
 
   # ── Skill drift tests ────────────────────────────────────────────
   skill-drift-tests:
@@ -392,6 +853,21 @@ jobs:
         run: bash .agents/skills/skill-drift-guard/scripts/detect.sh
       - name: Bats test suite
         run: bash .agents/skills/skill-drift-guard/scripts/run-tests.sh
+
+  # ── CI docs drift (AUDIT-27 CI-08) ──────────────────────────────
+  #
+  # Gates docs/ci-pipeline.md against the live workflows + local
+  # runners: fails when a documented job no longer exists in
+  # .github/workflows/*.yml, when a documented workflow file is
+  # missing, or when the check.sh / check:all gate vocabulary drifts.
+  # Pure python — no toolchain deps, so it stays fast.
+  ci-docs-drift:
+    name: CI Docs Drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify docs/ci-pipeline.md matches workflows + local runners
+        run: python3 scripts/verify-ci-docs-drift.py
 
   # ── E2E: Pre-build Docker image (main only, GHCR push) ───────────
   e2e-docker-image:
@@ -477,11 +953,21 @@ jobs:
       - name: Start Docker E2E backend & Vite dev server (parallel)
         env:
           OZ_API_SECRET: ci-test-secret
+          # The dev-mode DevToolbar overlay floats bottom-right at tooltip
+          # z-index and would sit on top of the retail cart action buttons,
+          # intercepting pointer events (see sale.spec.ts discount click).
+          # run-e2e.mjs sets this too — but Playwright's webServer.env only
+          # applies when IT starts the server; with reuseExistingServer:true
+          # it reuses THIS manually-started Vite, so the flag must be set
+          # here as well (App.tsx reads VITE_DEV_TOOLBAR to disable it).
+          VITE_DEV_TOOLBAR: '0'
         run: |
-          # Pre-pull Redis to mitigate transient Docker Hub/rate-limit timeouts
+          # DOCKER-06: pre-pull the PINNED Redis digest (immutable, matches
+          # docker-compose.e2e.yml) to mitigate registry rate-limit timeouts.
+          REDIS_DIGEST="public.ecr.aws/docker/library/redis:7-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2"
           for i in 1 2 3; do
-            echo "Pulling public.ecr.aws/docker/library/redis:7-alpine (attempt $i/3)..."
-            docker pull public.ecr.aws/docker/library/redis:7-alpine && break
+            echo "Pulling $REDIS_DIGEST (attempt $i/3)..."
+            docker pull "$REDIS_DIGEST" && break
             echo "Redis pull failed (attempt $i/3), retrying..."
             sleep 15
           done
@@ -516,6 +1002,7 @@ jobs:
           done
       # P28-3: Playwright sharding — each shard runs 1/3 of spec files
       - name: Run E2E tests (shard ${{ matrix.shard }}/${{ matrix.totalShards }})
+        shell: bash --noprofile --norc -eo pipefail {0}
         run: |
           cd ui && npx playwright test --config e2e/playwright.config.ts --project=desktop --shard=${{ matrix.shard }}/${{ matrix.totalShards }} 2>&1 | tee e2e-output.log
       - name: Upload E2E test results

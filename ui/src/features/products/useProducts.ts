@@ -1,6 +1,8 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useLocalization } from '@fluent/react';
 import { listProducts, listCategories, type ProductDto, type CategoryDto } from '@/api/products';
+import { l10nErrorMessage } from '@/utils/app-error';
+import { isDemoMode } from '@/utils/demo-mode';
 import { type Product, type Sku } from '@/types/domain';
 
 // ── Sample product fallback ─────────────────────────────────────────
@@ -62,7 +64,7 @@ function dtoToProduct(dto: ProductDto, uncategorisedLabel: string): Product {
 // ── Hook ─────────────────────────────────────────────────────────────
 
 export interface UseProductsResult {
-  /** The list of products (from IPC or sample fallback). */
+  /** The list of products (from IPC or dev-only sample fallback). */
   products: Product[];
   /** Unique category names derived from the product list. */
   categories: string[];
@@ -70,21 +72,27 @@ export interface UseProductsResult {
   categoryMeta: CategoryDto[];
   /** Whether products are still loading (IPC call in flight). */
   loading: boolean;
-  /** Error message if the IPC call failed (excludes IPC-unavailable). */
+  /** Error message if the IPC call failed. */
   error: string | null;
-  /** Whether we're using the sample data fallback. */
+  /** Whether we're using the sample data fallback (dev/demo mode only). */
   usingFallback: boolean;
+  /** Re-run the load (used by the production Retry action). */
+  reload: () => void;
 }
 
 /**
  * Fetch products from the Rust backend via IPC on mount.
  *
- * Falls back to hardcoded sample data when IPC is unavailable
- * (e.g. running outside Tauri during development).
+ * Falls back to hardcoded sample data ONLY when running a dev/demo build
+ * (`isDemoMode()`) — e.g. the browser preview outside Tauri. In a
+ * production build a failed IPC request must never masquerade as live
+ * inventory: the hook surfaces a localized `error` and an empty list, and
+ * the caller renders an unavailable state with a `reload()` Retry action
+ * (LOAD-03).
  *
  * @example
  * ```tsx
- * const { products, categories, loading, usingFallback } = useProducts();
+ * const { products, categories, loading, error, reload } = useProducts();
  * ```
  */
 export function useProducts(): UseProductsResult {
@@ -100,6 +108,13 @@ export function useProducts(): UseProductsResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [usingFallback, setUsingFallback] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const reload = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    setReloadKey((k) => k + 1);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -113,19 +128,28 @@ export function useProducts(): UseProductsResult {
           const uncategorisedLabel = l10nRef.current.getString('product-lookup-uncategorised');
           setProducts(dtos.map(dto => dtoToProduct(dto, uncategorisedLabel)));
           setUsingFallback(false);
-        } else {
-          // Empty DB from backend — use samples as a development fallback.
+        } else if (isDemoMode()) {
+          // Empty DB in dev/demo — sample catalog for preview purposes.
           setProducts(SAMPLE_PRODUCTS);
           setCategoryMeta(SAMPLE_CATEGORY_META);
           setUsingFallback(true);
+        } else {
+          // Empty DB in production is a legitimate empty catalog.
+          setProducts([]);
+          setUsingFallback(false);
         }
       } catch (err) {
-        // IPC unavailable — fall back to sample data
+        // IPC unavailable — fall back to sample data only in dev/demo.
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : l10nRef.current.getString('product-lookup-error-load'));
-        setProducts(SAMPLE_PRODUCTS);
-        setCategoryMeta(SAMPLE_CATEGORY_META);
-        setUsingFallback(true);
+        setError(l10nErrorMessage(err, l10nRef.current, 'product-lookup-error-load'));
+        if (isDemoMode()) {
+          setProducts(SAMPLE_PRODUCTS);
+          setCategoryMeta(SAMPLE_CATEGORY_META);
+          setUsingFallback(true);
+        } else {
+          setProducts([]);
+          setUsingFallback(false);
+        }
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -137,7 +161,7 @@ export function useProducts(): UseProductsResult {
       cancelled = true;
     };
    
-  }, []);
+  }, [reloadKey]);
 
   // Derive categories from products (memoized).
   const categories = useMemo(() => {
@@ -153,5 +177,6 @@ export function useProducts(): UseProductsResult {
     loading,
     error,
     usingFallback,
+    reload,
   };
 }

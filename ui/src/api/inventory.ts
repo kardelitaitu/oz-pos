@@ -113,17 +113,16 @@ export const getWorkspaceInventoryLocations = (
 
 export const startInventoryShift = (
   sessionToken: string,
-  userId: string,
   locationId: string,
   notes: string
 ): Promise<InventoryShift> =>
-  loggedInvoke<InventoryShift>('start_inventory_shift', { sessionToken, userId, locationId, notes });
+  loggedInvoke<InventoryShift>('start_inventory_shift', { sessionToken, locationId, notes });
 
 export const endInventoryShift = (sessionToken: string, shiftId: string): Promise<void> =>
   loggedInvoke<void>('end_inventory_shift', { sessionToken, shiftId });
 
-export const getActiveInventoryShift = (sessionToken: string, userId: string): Promise<InventoryShift | null> =>
-  loggedInvoke<InventoryShift | null>('get_active_inventory_shift', { sessionToken, userId });
+export const getActiveInventoryShift = (sessionToken: string): Promise<InventoryShift | null> =>
+  loggedInvoke<InventoryShift | null>('get_active_inventory_shift', { sessionToken });
 
 export const listInventoryShifts = (sessionToken: string): Promise<InventoryShift[]> =>
   loggedInvoke<InventoryShift[]>('list_inventory_shifts', { sessionToken });
@@ -134,14 +133,21 @@ export const createInventoryTransaction = (
   sessionToken: string,
   typeStr: string,
   locationId: string,
-  staffId: string,
   notes: string,
   lines: InventoryTransactionLineInput[]
 ): Promise<string> =>
-  loggedInvoke<string>('create_inventory_transaction', { sessionToken, typeStr, locationId, staffId, notes, lines });
+  loggedInvoke<string>('create_inventory_transaction', { sessionToken, typeStr, locationId, notes, lines });
 
 export const listInventoryTransactions = (sessionToken: string): Promise<InventoryTransaction[]> =>
   loggedInvoke<InventoryTransaction[]>('list_inventory_transactions', { sessionToken });
+
+/** List inventory transactions for a specific shift (staff + location + time window). */
+export const listInventoryTransactionsForShift = (
+  sessionToken: string,
+  locationId: string,
+  since: string,
+): Promise<InventoryTransaction[]> =>
+  loggedInvoke<InventoryTransaction[]>('list_inventory_transactions_for_shift', { sessionToken, locationId, since });
 
 export const getInventoryTransaction = (
   sessionToken: string,

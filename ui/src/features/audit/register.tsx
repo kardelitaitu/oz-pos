@@ -1,7 +1,8 @@
+import { lazy } from 'react';
 import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
 import { icon } from '@/platform/ui/icon';
-import AuditLogScreen from './AuditLogScreen';
+const AuditLogScreen = lazy(() => import('./AuditLogScreen'));
 
 export function registerAuditFeature() {
   registerPage({ route: 'audit-log', component: AuditLogScreen, label: 'Audit Log', requiredRole: 'manager' });

@@ -36,7 +36,9 @@ use tracing_subscriber::EnvFilter;
 /// Returns `Err` (instead of panicking) if the global subscriber has
 /// already been set. All other behaviour is identical to [`init`].
 pub fn try_init() -> Result<(), LoggingError> {
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter = EnvFilter::try_from_default_env()
+        .inspect_err(|_| eprintln!("[oz-logging] RUST_LOG parse failed, falling back to info"))
+        .unwrap_or_else(|_| EnvFilter::new("info"));
 
     tracing_subscriber::fmt()
         .with_env_filter(filter)
@@ -51,7 +53,9 @@ pub fn try_init() -> Result<(), LoggingError> {
 /// Returns `Err` (instead of panicking) if the global subscriber has
 /// already been set. All other behaviour is identical to [`init_json`].
 pub fn try_init_json() -> Result<(), LoggingError> {
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter = EnvFilter::try_from_default_env()
+        .inspect_err(|_| eprintln!("[oz-logging] RUST_LOG parse failed, falling back to info"))
+        .unwrap_or_else(|_| EnvFilter::new("info"));
 
     tracing_subscriber::fmt()
         .with_env_filter(filter)
@@ -76,12 +80,8 @@ pub fn try_init_json() -> Result<(), LoggingError> {
 ///
 /// Panics if the global subscriber has already been set.
 pub fn init() {
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_target(false)
-        .init();
+    // SAFETY: documented-panic wrapper — callers who need a `Result` use `try_init`.
+    try_init().expect("logging init failed");
 }
 
 /// Initialise log output as newline-delimited JSON records (stdout).
@@ -97,16 +97,8 @@ pub fn init() {
 ///
 /// Panics if the global subscriber has already been set.
 pub fn init_json() {
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .json()
-        .with_target(false)
-        .flatten_event(false)
-        .with_current_span(false)
-        .with_span_list(false)
-        .init();
+    // SAFETY: documented-panic wrapper — callers who need a `Result` use `try_init_json`.
+    try_init_json().expect("logging init_json failed");
 }
 
 /// Remove log files in `dir` that start with `file_prefix` and whose
@@ -150,7 +142,26 @@ fn cleanup_old_log_files(dir: &str, file_prefix: &str, retention_days: u32) {
 /// oz_logging::init_with_file("logs", "oz-pos", 30);
 /// ```
 pub fn init_with_file(log_dir: &str, file_prefix: &str, retention_days: u32) {
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    try_init_with_file(log_dir, file_prefix, retention_days)
+        // SAFETY: documented-panic wrapper — callers who need a `Result` use `try_init_with_file`.
+        .expect("logging init_with_file failed");
+}
+
+/// Non-panicking variant of [`init_with_file`].
+///
+/// Returns `Err` (instead of panicking) if the global subscriber has
+/// already been set. All other behaviour is identical to
+/// [`init_with_file`]. The retention-cleanup thread is spawned as
+/// best-effort (detached) — if the process exits before cleanup
+/// completes, old log files persist until the next run.
+pub fn try_init_with_file(
+    log_dir: &str,
+    file_prefix: &str,
+    retention_days: u32,
+) -> Result<(), LoggingError> {
+    let filter = EnvFilter::try_from_default_env()
+        .inspect_err(|_| eprintln!("[oz-logging] RUST_LOG parse failed, falling back to info"))
+        .unwrap_or_else(|_| EnvFilter::new("info"));
 
     let file_appender = tracing_appender::rolling::hourly(log_dir, file_prefix);
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
@@ -159,14 +170,19 @@ pub fn init_with_file(log_dir: &str, file_prefix: &str, retention_days: u32) {
         .with_env_filter(filter)
         .with_target(false)
         .with_writer(non_blocking)
-        .init();
+        .try_init()
+        .map_err(|e| LoggingError::InitFailed(format!("{e}")))?;
 
-    // Spawn a background task for log retention cleanup.
+    // Spawn a best-effort background task for log retention cleanup.
+    // The thread is detached — if the process exits before cleanup
+    // finishes, old log files simply persist until the next run.
     let dir = log_dir.to_owned();
     let prefix = file_prefix.to_owned();
     std::thread::spawn(move || {
         cleanup_old_log_files(&dir, &prefix, retention_days);
     });
+
+    Ok(())
 }
 
 /// Initialise JSON log output to both stdout and a rolling file writer.
@@ -177,7 +193,26 @@ pub fn init_with_file(log_dir: &str, file_prefix: &str, retention_days: u32) {
 ///
 /// Panics if the global subscriber has already been set.
 pub fn init_json_with_file(log_dir: &str, file_prefix: &str, retention_days: u32) {
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    try_init_json_with_file(log_dir, file_prefix, retention_days)
+        // SAFETY: documented-panic wrapper — callers who need a `Result` use `try_init_json_with_file`.
+        .expect("logging init_json_with_file failed");
+}
+
+/// Non-panicking variant of [`init_json_with_file`].
+///
+/// Returns `Err` (instead of panicking) if the global subscriber has
+/// already been set. All other behaviour is identical to
+/// [`init_json_with_file`]. The retention-cleanup thread is spawned as
+/// best-effort (detached) — if the process exits before cleanup
+/// completes, old log files persist until the next run.
+pub fn try_init_json_with_file(
+    log_dir: &str,
+    file_prefix: &str,
+    retention_days: u32,
+) -> Result<(), LoggingError> {
+    let filter = EnvFilter::try_from_default_env()
+        .inspect_err(|_| eprintln!("[oz-logging] RUST_LOG parse failed, falling back to info"))
+        .unwrap_or_else(|_| EnvFilter::new("info"));
 
     let file_appender = tracing_appender::rolling::hourly(log_dir, file_prefix);
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
@@ -190,14 +225,19 @@ pub fn init_json_with_file(log_dir: &str, file_prefix: &str, retention_days: u32
         .with_current_span(false)
         .with_span_list(false)
         .with_writer(non_blocking)
-        .init();
+        .try_init()
+        .map_err(|e| LoggingError::InitFailed(format!("{e}")))?;
 
-    // Spawn a background task for log retention cleanup.
+    // Spawn a best-effort background task for log retention cleanup.
+    // The thread is detached — if the process exits before cleanup
+    // finishes, old log files simply persist until the next run.
     let dir = log_dir.to_owned();
     let prefix = file_prefix.to_owned();
     std::thread::spawn(move || {
         cleanup_old_log_files(&dir, &prefix, retention_days);
     });
+
+    Ok(())
 }
 
 #[cfg(test)]

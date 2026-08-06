@@ -128,4 +128,95 @@ describe('TabletAppLayout', () => {
     const salesTab = tabs.find((t) => t.textContent?.includes('Sales'));
     expect(salesTab?.getAttribute('aria-selected')).toBe('false');
   });
+
+  // ── A11Y-03: skip-to-content link ─────────────────────────────
+
+  it('renders a skip-to-content link as the first focusable element', () => {
+    renderLayout();
+    const skipLink = document.querySelector<HTMLAnchorElement>('.skip-to-content');
+    expect(skipLink).toBeTruthy();
+    expect(skipLink?.getAttribute('href')).toBe('#tablet-main-content');
+  });
+
+  it('targets the main content area via #tablet-main-content', () => {
+    renderLayout();
+    const main = document.getElementById('tablet-main-content');
+    expect(main).toBeTruthy();
+    expect(main?.getAttribute('role')).toBe('main');
+  });
+
+  it('is the first focusable element in the shell', () => {
+    renderLayout();
+    const skipLink = document.querySelector<HTMLAnchorElement>('.skip-to-content');
+    const tablist = screen.getByRole('tablist');
+    // The skip link must precede the tab bar in DOM order so Tab reaches it first.
+    const position = skipLink
+      ? skipLink.compareDocumentPosition(tablist)
+      : 0;
+    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  // ── A11Y-05: tablist roving tabindex + arrow-key navigation ──
+
+  it('keeps only the active tab in the tab order (roving tabindex)', () => {
+    renderLayout({ route: 'products' });
+    const tabs = screen.getAllByRole('tab');
+    const productsIdx = tabs.findIndex((t) => t.textContent?.includes('Products'));
+    expect(productsIdx).toBeGreaterThanOrEqual(0);
+    tabs.forEach((tab, idx) => {
+      expect(tab.getAttribute('tabindex')).toBe(idx === productsIdx ? '0' : '-1');
+    });
+  });
+
+  it('navigates tabs with the Right arrow key and activates', async () => {
+    const onNavigate = vi.fn();
+    const user = userEvent.setup();
+    renderLayout({ route: 'sales', onNavigate });
+
+    const salesTab = screen.getByText('Sales').closest('button')!;
+    salesTab.focus();
+    await user.keyboard('{ArrowRight}');
+
+    // Automatic activation: focus moved to the next tab AND navigation fired.
+    expect(onNavigate).toHaveBeenCalledWith('products');
+    expect(screen.getByText('Products').closest('button')).toHaveFocus();
+  });
+
+  it('wraps around when pressing the Left arrow on the first tab', async () => {
+    const onNavigate = vi.fn();
+    const user = userEvent.setup();
+    renderLayout({ route: 'sales', onNavigate });
+
+    const salesTab = screen.getByText('Sales').closest('button')!;
+    salesTab.focus();
+    await user.keyboard('{ArrowLeft}');
+
+    expect(onNavigate).toHaveBeenCalledWith('inventory');
+  });
+
+  it('jumps to the first tab with Home and the last with End', async () => {
+    const onNavigate = vi.fn();
+    const user = userEvent.setup();
+    renderLayout({ route: 'products', onNavigate });
+
+    const productsTab = screen.getByText('Products').closest('button')!;
+    productsTab.focus();
+    await user.keyboard('{End}');
+    expect(onNavigate).toHaveBeenLastCalledWith('inventory');
+
+    await user.keyboard('{Home}');
+    expect(onNavigate).toHaveBeenLastCalledWith('sales');
+  });
+
+  it('ignores non-navigation keys on the tablist', async () => {
+    const onNavigate = vi.fn();
+    const user = userEvent.setup();
+    renderLayout({ route: 'sales', onNavigate });
+
+    const salesTab = screen.getByText('Sales').closest('button')!;
+    salesTab.focus();
+    await user.keyboard('a');
+
+    expect(onNavigate).not.toHaveBeenCalled();
+  });
 });

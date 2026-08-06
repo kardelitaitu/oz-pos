@@ -1,8 +1,21 @@
 //! Migration definitions for OZ-POS.
 //!
 //! Migrations are `.sql` files under `crates/oz-core/migrations/`. They are
-//! embedded at compile time via [`include_str!`] and run in lexicographic
-//! order on first startup by the generic runner in `platform-core`.
+//! embedded at compile time via [`include_str!`] and run in the
+//! compile-time array order of [`ALL`] on first startup by the generic
+//! runner in `platform-core`. The array order is canonical — not
+//! lexicographic filename order — and is enforced by
+//! [`migration_prefixes_are_monotonic_after_legacy_block`] and the
+//! registry↔filesystem parity test [`migration_registry_matches_filesystem`].
+//!
+//! # Forward-only contract
+//!
+//! Production migrations are **forward-only**. They must be written so that
+//! re-running them is a no-op (the runner tracks applied IDs), and they are
+//! never reversed in the field: destructive/data migrations require a
+//! backup-plus-forward-repair procedure, never ad-hoc down SQL (DB-03).
+//! The generic [`platform_core::database::rollback`] helper exists for
+//! synthetic/test tables only — the core registry carries no down SQL.
 
 use platform_core::database::Migration;
 
@@ -10,6 +23,33 @@ use platform_core::database::Migration;
 ///
 /// The list is exhaustive at compile time; adding a new migration means
 /// adding a new entry here AND a new file in `crates/oz-core/migrations/`.
+///
+/// # Numbering gaps
+///
+/// The following migration numbers are intentionally absent — they held
+/// migrations that were removed, renumbered, or merged during development:
+///
+/// - 026 — removed (absorbed into 025_store_profiles rework)
+/// - 034 — removed (merged into 035_workspaces)
+/// - 044 — removed (redundant with 043_price_updated_at)
+/// - 056–059 — reserved for workspace-instance lifecycle (ultimately landed as 060)
+/// - 062 — removed (merged into 063_stock_movements)
+/// - 088 — removed (merged into 089_stock_summary_composite_pk)
+///
+/// The runner uses a tracking table (`schema_migrations`), not sequential
+/// numbering, so gaps are safe. Do not re-use a gap number — always append
+/// the next available integer.
+///
+/// # Shared-prefix convention (legacy)
+///
+/// Migrations 046 and 047 each have multiple files sharing the same numeric
+/// prefix (`046_gift_cards`, `046_suppliers`, `046_stock_counts`,
+/// `046_track_serial` and `047_purchase_orders`, `047_stock_transfers`,
+/// `047_receipt_barcodes`). This is a legacy pattern from early development
+/// when domain-adjacent migrations were batched under one number. New
+/// migrations MUST use a unique sequential prefix. The runner processes
+/// migrations in compile-time array order, so the shared prefixes have no
+/// functional impact.
 pub const ALL: &[Migration] = &[
     Migration {
         id: "001_sales.sql",
@@ -519,6 +559,140 @@ pub const ALL: &[Migration] = &[
         id: "100_setting_updated.sql",
         sql: include_str!("../migrations/100_setting_updated.sql"),
     },
+    // 101: adds table_number column to kds_orders so KDS ticket cards
+    // can display the assigned table number without the `as unknown` hack.
+    Migration {
+        id: "101_kds_table_number.sql",
+        sql: include_str!("../migrations/101_kds_table_number.sql"),
+    },
+    // ── 103: KDS priority/rush flag ──────────────────────────────
+    Migration {
+        id: "103_kds_priority.sql",
+        sql: include_str!("../migrations/103_kds_priority.sql"),
+    },
+    // ── 104: Hardware profiles DB store (TODO 4e) ────────────────
+    // Stores per-terminal hardware config in the DB with schema versioning.
+    // The JSON files in terminal_profiles/ remain as fallback/cache.
+    Migration {
+        id: "104_hardware_profiles.sql",
+        sql: include_str!("../migrations/104_hardware_profiles.sql"),
+    },
+    // ── 105: KDS line items (TODO 2a) ────────────────────────────
+    // Structured per-item data for kitchen tickets — replaces the flat
+    // items_summary string with course, modifier, and per-item status.
+    Migration {
+        id: "105_kds_line_items.sql",
+        sql: include_str!("../migrations/105_kds_line_items.sql"),
+    },
+    // ── 106: Sale lines course + modifier enrichment (TODO 2a) ───
+    // Adds course and modifiers_json columns so the POS → KDS pipeline
+    // carries structured item data instead of a flat summary string.
+    Migration {
+        id: "106_sale_lines_course_modifier.sql",
+        sql: include_str!("../migrations/106_sale_lines_course_modifier.sql"),
+    },
+    // ── 107: Loyalty integrity constraints and tier validation ─────
+    // Prevents duplicate earn/redeem projections for one account and sale,
+    // and rejects invalid tier configuration at the database boundary.
+    Migration {
+        id: "107_loyalty_integrity.sql",
+        sql: include_str!("../migrations/107_loyalty_integrity.sql"),
+    },
+    // ── 108: Tax single-default invariant (TAX-02) ─────────────────
+    // Normalises any legacy multiple-default rows and adds a partial
+    // UNIQUE index so SQLite rejects a second is_default = 1 row,
+    // closing the concurrency/failure window in default switching.
+    Migration {
+        id: "108_tax_single_default.sql",
+        sql: include_str!("../migrations/108_tax_single_default.sql"),
+    },
+    // ── 109: Tax soft-delete flag (TAX-03) ─────────────────────────
+    // Adds is_active so archiving a rate preserves historical
+    // sale-line linkage instead of hard-deleting; archiving a rate
+    // still referenced by historical sales is blocked at the app layer.
+    Migration {
+        id: "109_tax_soft_delete.sql",
+        sql: include_str!("../migrations/109_tax_soft_delete.sql"),
+    },
+    // ── 110: Per-line tax breakdown (TAX-02 auditability) ─────────
+    // Persists the full per-rate breakdown on each sale line so
+    // receipts/audit trails can reconstruct multi-rate taxation even
+    // after a rate is archived or renamed (today only the first rate
+    // id survives on `tax_rate_id`).
+    Migration {
+        id: "110_sale_line_tax_breakdown.sql",
+        sql: include_str!("../migrations/110_sale_line_tax_breakdown.sql"),
+    },
+    // ── 111: Device-scoped login abuse controls (audit/06 STAFF-07) ─
+    // Adds device_id to login_attempts so the rate limiter can combine
+    // per-account throttling with per-device and global limits, using
+    // exponential backoff instead of a fixed short lock.
+    Migration {
+        id: "111_login_attempts_device.sql",
+        sql: include_str!("../migrations/111_login_attempts_device.sql"),
+    },
+    // ── 112: Store-local transfer actor FK removal (audit/07 INV-03) ─
+    // Transfer actor IDs are derived from the global session identity.
+    // Remove the obsolete local users foreign keys so a store database
+    // never needs fake authentication rows for a legitimate actor.
+    Migration {
+        id: "112_stock_transfer_actor_ids.sql",
+        sql: include_str!("../migrations/112_stock_transfer_actor_ids.sql"),
+    },
+    // ── 113: Store-local stock-count actor FK removal (audit/07 INV-03) ─
+    // Count and adjustment actor IDs are derived from the global session
+    // identity. Remove obsolete local users foreign keys while preserving
+    // existing count data and adding non-negative quantity constraints.
+    Migration {
+        id: "113_stock_count_actor_ids.sql",
+        sql: include_str!("../migrations/113_stock_count_actor_ids.sql"),
+    },
+    // ── 114: Durable sync pull anchor + idempotency ledger (audit/09 SYNC-01) ─
+    // sync_pull_state persists the daemon's pull anchor/cursor so remote
+    // updates are only fetched since the last applied page; sync_applied_items
+    // is a receipt ledger so a replayed remote item is never applied twice
+    // (previously every daemon cycle pulled the whole queue and re-applied
+    // stock/sale mutations, silently corrupting inventory).
+    Migration {
+        id: "114_sync_pull_state.sql",
+        sql: include_str!("../migrations/114_sync_pull_state.sql"),
+    },
+    Migration {
+        id: "115_audit_review_checkpoints.sql",
+        sql: include_str!("../migrations/115_audit_review_checkpoints.sql"),
+    },
+    // ── DB-08: unique (key, terminal_id, version) (audit/29) ──────
+    // setting_updated's version allocation is MAX(version)+1 in app code;
+    // two concurrent writers could insert the same version. 116 collapses
+    // legacy duplicates and adds a UNIQUE index so the database rejects
+    // duplicate versions (fail closed) instead of corrupting the delta
+    // ledger.
+    Migration {
+        id: "116_setting_updated_unique_version.sql",
+        sql: include_str!("../migrations/116_setting_updated_unique_version.sql"),
+    },
+    // ── DB-04 end-state: store_id FK on ADR #4 domain tables (audit/29) ─
+    // 069 added nullable store_id to products/sales/sale_lines/customers
+    // without any database-level link to the store catalog. 117 rebuilds
+    // those four tables with `store_id REFERENCES store_profiles(id)` and
+    // quarantines orphaned store_ids to NULL (the documented global
+    // sentinel). NULL remains valid — per-store DB files are the primary
+    // isolation mechanism, so forcing NOT NULL would break that model.
+    Migration {
+        id: "117_scoping_store_id_fk.sql",
+        sql: include_str!("../migrations/117_scoping_store_id_fk.sql"),
+    },
+    // ── warehouse_id supersession cleanup ────────────────────────
+    // 069 added nullable warehouse_id to inventory/stock_counts as a
+    // speculative multi-warehouse hook. ADR #18 superseded it: warehouses
+    // are inventory_locations rows with type='warehouse' and 079's
+    // inventory.location_id FK is the real catalog link. Zero code reads
+    // or writes warehouse_id, so 118 drops the dead columns + their
+    // unused index (docs: 118_drop_warehouse_id_superseded.sql).
+    Migration {
+        id: "118_drop_warehouse_id_superseded.sql",
+        sql: include_str!("../migrations/118_drop_warehouse_id_superseded.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.
@@ -534,6 +708,12 @@ pub fn run(conn: &mut rusqlite::Connection) -> Result<(), crate::CoreError> {
     // connections contend for the write lock (default is 0 = immediate fail).
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "busy_timeout", "5000")?;
+    // synchronous=NORMAL is safe in WAL mode (the WAL itself provides
+    // durability) and yields 2–3× faster writes than the default FULL.
+    // For a local POS database, only a power loss or hard shutdown
+    // (without fsync) loses the most recent transaction, which the
+    // offline queue recovers from.
+    conn.pragma_update(None, "synchronous", "NORMAL")?;
     // Enable foreign key enforcement. SQLite defaults to OFF — the setting
     // is per-connection, so we must set it on every connection open.
     conn.pragma_update(None, "foreign_keys", "ON")?;
@@ -566,7 +746,8 @@ pub fn fresh_db() -> rusqlite::Connection {
                 buf.push_str(
                     "CREATE TABLE IF NOT EXISTS schema_migrations (\n\
                      id         TEXT PRIMARY KEY,\n\
-                     applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))\n\
+                     applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),\n\
+                     checksum   TEXT\n\
                      );\n",
                 );
                 for mig in ALL {
@@ -582,18 +763,18 @@ pub fn fresh_db() -> rusqlite::Connection {
             })
         }
 
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
-        conn.execute_batch(cached_sql()).unwrap();
+        let conn = rusqlite::Connection::open_in_memory().unwrap(); // SAFETY: in-memory test DB open cannot fail; failure is a harness programming error (see fresh_db # Panics)
+        conn.execute_batch(cached_sql()).unwrap(); // SAFETY: SQL is compile-time embedded from `ALL`; syntax errors fail the test suite, not a live process
         Mutex::new(conn)
     });
 
-    let mut fresh = rusqlite::Connection::open_in_memory().unwrap();
+    let mut fresh = rusqlite::Connection::open_in_memory().unwrap(); // SAFETY: in-memory test DB open cannot fail (fresh_db # Panics)
     {
-        let snapshot = SNAPSHOT.lock().unwrap();
-        let backup = rusqlite::backup::Backup::new(&snapshot, &mut fresh).unwrap();
+        let snapshot = SNAPSHOT.lock().unwrap(); // SAFETY: lock is only poisoned if the snapshot init closure panicked, which is a test harness bug
+        let backup = rusqlite::backup::Backup::new(&snapshot, &mut fresh).unwrap(); // SAFETY: both connections are valid in-memory SQLite handles; Backup::new cannot fail
         backup
             .run_to_completion(100, std::time::Duration::from_millis(0), None)
-            .unwrap();
+            .unwrap(); // SAFETY: page copy between two in-memory DBs cannot fail at runtime
     } // drop Backup (releases &mut fresh borrow), then drop MutexGuard
     fresh
 }
@@ -682,6 +863,179 @@ mod tests {
     }
 
     #[test]
+    fn migration_registry_matches_filesystem() {
+        // DB-01: the registry is the source of truth. Every `.sql` file under
+        // crates/oz-core/migrations/ must have EXACTLY ONE registry entry,
+        // and every registry entry must resolve to a real file. A new SQL
+        // file that is never registered (or a registered entry whose file
+        // was deleted) silently changes what fresh installs vs upgrades
+        // produce, so this must fail at test time.
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+        let mut files: Vec<String> = std::fs::read_dir(&dir)
+            .expect("migrations directory must exist")
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.ends_with(".sql"))
+            .collect();
+        files.sort();
+
+        let mut registered: Vec<&str> = ALL.iter().map(|m| m.id).collect();
+        registered.sort_unstable();
+
+        // Every file on disk must be registered exactly once.
+        let mut seen_files: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        for file in &files {
+            assert!(
+                ALL.iter().any(|m| m.id == file),
+                "DB-01: migration file {file} exists on disk but has NO registry entry in ALL — add it or the runner will skip it"
+            );
+            assert!(
+                seen_files.insert(file),
+                "DB-01: migration file {file} is registered more than once"
+            );
+        }
+
+        // Every registry entry must have a real file on disk.
+        for id in &registered {
+            assert!(
+                files.iter().any(|f| f == id),
+                "DB-01: registry entry {id} has no matching file in migrations/ — remove the entry or restore the file"
+            );
+        }
+
+        assert_eq!(
+            files.len(),
+            registered.len(),
+            "DB-01: registry/file parity broken — {} files vs {} registered entries",
+            files.len(),
+            registered.len()
+        );
+    }
+
+    /// Extract the numeric prefix from a migration id (`"046_gift_cards.sql"` → `046`).
+    fn numeric_prefix(id: &str) -> u32 {
+        let stem = id.split('.').next().unwrap_or(id);
+        stem.split('_').next().unwrap_or("").parse().unwrap_or(0)
+    }
+
+    #[test]
+    fn migration_prefixes_are_unique_after_legacy_shared_block() {
+        // RUST-09: migrations 046 and 047 each intentionally share numeric
+        // prefixes (documented legacy batching). New migrations MUST use a
+        // unique sequential prefix — a duplicate prefix on any migration
+        // after 047 is a registry error that can mask ordering mistakes.
+        let mut seen: std::collections::HashSet<u32> = std::collections::HashSet::new();
+        let mut in_legacy_block = true;
+        for mig in ALL {
+            let prefix = numeric_prefix(mig.id);
+            if prefix > 47 {
+                in_legacy_block = false;
+            }
+            if !in_legacy_block {
+                assert!(
+                    seen.insert(prefix),
+                    "duplicate migration prefix {prefix:03} on {} (unique prefixes required after 047)",
+                    mig.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn migration_prefixes_are_monotonic_after_legacy_block() {
+        // RUST-09: the runner applies migrations in compile-time array order,
+        // so that order is canonical. After the legacy 046/047 block the
+        // numeric prefixes must be strictly increasing — a fresh install and
+        // an upgrade must converge on the same schema regardless of entry
+        // insertion point.
+        let mut prev: Option<u32> = None;
+        let mut past_legacy = false;
+        for mig in ALL {
+            let prefix = numeric_prefix(mig.id);
+            if prefix > 47 {
+                past_legacy = true;
+            }
+            if past_legacy {
+                if let Some(p) = prev {
+                    assert!(
+                        prefix > p,
+                        "migration {} has prefix {prefix:03} which is not greater than previous {p:03} — array order is canonical (RUST-09)",
+                        mig.id
+                    );
+                }
+                prev = Some(prefix);
+            }
+        }
+    }
+
+    #[test]
+    fn fresh_install_and_upgrade_path_produce_identical_schema() {
+        // RUST-09/RUST-10: applying all migrations to an empty DB (fresh
+        // install) must yield the same schema as applying a prefix of the
+        // registry and then upgrading through the remainder (an upgrade from
+        // an older release). Compare the full table/column/index surface.
+        fn schema_fingerprint(
+            conn: &rusqlite::Connection,
+        ) -> std::collections::BTreeMap<String, Vec<String>> {
+            let mut tables: std::collections::BTreeMap<String, Vec<String>> =
+                std::collections::BTreeMap::new();
+            let mut stmt = conn
+                .prepare(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+                )
+                .unwrap();
+            let names: Vec<String> = stmt
+                .query_map([], |r| r.get::<_, String>(0))
+                .unwrap()
+                .map(|r| r.unwrap())
+                .collect();
+            drop(stmt);
+            for name in names {
+                let mut cols: Vec<String> = Vec::new();
+                let mut cstmt = conn
+                    .prepare(&format!("PRAGMA table_info(\"{name}\")"))
+                    .unwrap();
+                let rows = cstmt
+                    .query_map([], |r| {
+                        Ok((
+                            r.get::<_, String>(1)?,
+                            r.get::<_, String>(2)?,
+                            r.get::<_, i64>(3)?,
+                            r.get::<_, Option<String>>(4)?,
+                            r.get::<_, i64>(5)?,
+                        ))
+                    })
+                    .unwrap()
+                    .collect::<Result<Vec<_>, _>>()
+                    .unwrap();
+                for (cid, ctype, notnull, dflt, pk) in rows {
+                    cols.push(format!("{cid}|{ctype}|{notnull}|{dflt:?}|{pk}"));
+                }
+                tables.insert(name, cols);
+            }
+            tables
+        }
+
+        // Fresh install: run every migration in one pass.
+        let mut fresh_conn = fresh();
+        run(&mut fresh_conn).unwrap();
+        let fresh_schema = schema_fingerprint(&fresh_conn);
+
+        // Upgrade path: apply the first 80 (a plausible older release), then
+        // the remainder through the same registry runner.
+        let split = 80usize.min(ALL.len());
+        let mut upgrade_conn = fresh();
+        platform_core::database::run(&mut upgrade_conn, &ALL[..split]).unwrap();
+        platform_core::database::run(&mut upgrade_conn, &ALL[split..]).unwrap();
+        let upgrade_schema = schema_fingerprint(&upgrade_conn);
+
+        assert_eq!(
+            fresh_schema, upgrade_schema,
+            "fresh install and upgrade path diverged — schema drift (RUST-09/RUST-10)"
+        );
+    }
+
+    #[test]
     fn migrations_create_expected_tables() {
         let mut conn = fresh();
         run(&mut conn).unwrap();
@@ -760,6 +1114,9 @@ mod tests {
             // 094 adds deduction_location_id + location_override_at to active_carts (no new table).
             // ── ADR #22 Phase 0d (migration 100) ──
             "setting_updated",
+            // ── audit/09 SYNC-01 (migration 114) ──
+            "sync_pull_state",
+            "sync_applied_items",
         ];
 
         for table in &expected_tables {
@@ -798,7 +1155,13 @@ mod tests {
             assert_eq!(count, 1, "{table} missing store_id column");
         }
 
-        // warehouse_id columns exist on inventory and stock_counts.
+        // warehouse_id columns are GONE from the end-state schema. 069
+        // added them to inventory and stock_counts as a speculative
+        // multi-warehouse hook, but migration 118 dropped them as
+        // superseded by ADR #18: warehouses are inventory_locations rows
+        // with type='warehouse' and 079's inventory.location_id FK is the
+        // real catalog link. Asserting absence here pins the cleanup so a
+        // future migration cannot silently resurrect the dead column.
         for table in &["inventory", "stock_counts"] {
             let count: i64 = conn
                 .query_row(
@@ -809,7 +1172,10 @@ mod tests {
                     |r| r.get(0),
                 )
                 .unwrap();
-            assert_eq!(count, 1, "{table} missing warehouse_id column");
+            assert_eq!(
+                count, 0,
+                "{table} must not have warehouse_id after migration 118"
+            );
         }
     }
 
@@ -818,11 +1184,14 @@ mod tests {
         let mut conn = fresh();
         run(&mut conn).unwrap();
 
+        // idx_inventory_warehouse_product is deliberately NOT listed:
+        // migration 118 dropped it together with the superseded
+        // warehouse_id column (the index existed only for a predicate no
+        // query ever issued — see 118_drop_warehouse_id_superseded.sql).
         let expected_indexes = [
             "idx_sales_store_status",
             "idx_sale_lines_store_sale",
             "idx_products_store_category",
-            "idx_inventory_warehouse_product",
             "idx_customers_store",
         ];
 
@@ -1124,6 +1493,101 @@ mod tests {
         }
     }
 
+    // ── TAX-02 (migration 108): single-default invariant ────────────
+
+    #[test]
+    fn migration_108_creates_single_default_index() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        let index_sql: String = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master \
+                  WHERE type='index' AND name='idx_tax_rates_single_default'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("missing partial UNIQUE index from migration 108");
+
+        assert!(
+            index_sql.contains("UNIQUE") && index_sql.contains("WHERE is_default = 1"),
+            "single-default index must be partial + unique, got: {index_sql}"
+        );
+    }
+
+    #[test]
+    fn migration_108_rejects_second_default() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        // Seed one default rate, then a raw second default must be rejected
+        // by the partial UNIQUE index (TAX-02 database invariant).
+        conn.execute(
+            "INSERT INTO tax_rates (id, name, rate_bps, is_default, is_inclusive, created_at, updated_at)
+             VALUES ('tax-a', 'A', 1000, 1, 0, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+
+        let second = conn.execute(
+            "INSERT INTO tax_rates (id, name, rate_bps, is_default, is_inclusive, created_at, updated_at)
+             VALUES ('tax-b', 'B', 1000, 1, 0, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        );
+        assert!(
+            second.is_err(),
+            "expected the partial UNIQUE index to reject a second default rate"
+        );
+    }
+
+    #[test]
+    fn migration_108_normalises_legacy_multiple_defaults() {
+        // Apply migrations UP TO (but not including) 108 so the partial
+        // UNIQUE index does not yet exist — otherwise the second default
+        // insert below would be rejected by the index before the
+        // normalisation UPDATE ever runs.
+        let mut conn = fresh();
+        let idx_108 = ALL
+            .iter()
+            .position(|m| m.id == "108_tax_single_default.sql")
+            .expect("migration 108 registered");
+        platform_core::database::run(&mut conn, &ALL[..idx_108]).unwrap();
+
+        // Simulate a pre-108 DB that already has two defaults (the bug
+        // TAX-02 fixed). The UPDATE normalisation must keep the OLDEST
+        // and clear the other when migration 108 applies.
+        conn.execute(
+            "INSERT INTO tax_rates (id, name, rate_bps, is_default, is_inclusive, created_at, updated_at)
+             VALUES ('tax-old', 'Old', 1000, 1, 0, '2026-07-01T00:00:00.000Z', '2026-07-01T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO tax_rates (id, name, rate_bps, is_default, is_inclusive, created_at, updated_at)
+             VALUES ('tax-new', 'New', 1000, 1, 0, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+
+        // Apply migration 108 — normalisation + index creation.
+        platform_core::database::run(&mut conn, &ALL[idx_108..]).unwrap();
+
+        let defaults: Vec<String> = {
+            let mut stmt = conn
+                .prepare("SELECT name FROM tax_rates WHERE is_default = 1")
+                .unwrap();
+            stmt.query_map([], |row| row.get(0))
+                .unwrap()
+                .map(|r| r.unwrap())
+                .collect()
+        };
+        assert_eq!(
+            defaults,
+            vec!["Old"],
+            "legacy multiple-default data must be normalised to the oldest default"
+        );
+    }
+
     /// Verify the `setting_updated` table survives a migration re-run
     /// (idempotent — uses `CREATE TABLE IF NOT EXISTS`).
     #[test]
@@ -1153,5 +1617,1284 @@ mod tests {
             count, 1,
             "existing delta row should survive migration re-run"
         );
+    }
+
+    // ── TAX-03 (migration 109): tax soft-delete flag ─────────────
+
+    #[test]
+    fn migration_109_adds_is_active_column_to_tax_rates() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        let col: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('tax_rates') WHERE name = 'is_active'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(col, 1, "tax_rates must have is_active column");
+
+        let notnull: i64 = conn
+            .query_row(
+                "SELECT \"notnull\" FROM pragma_table_info('tax_rates') WHERE name = 'is_active'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(notnull, 1, "is_active must be NOT NULL");
+    }
+
+    #[test]
+    fn migration_109_existing_rates_default_to_active() {
+        // Rows inserted before 109 (and any future insert that omits the
+        // column) must default to is_active = 1.
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        conn.execute(
+            "INSERT INTO tax_rates (id, name, rate_bps, is_default, is_inclusive, created_at, updated_at)
+             VALUES ('tax-109-a', 'A', 1000, 1, 0, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+
+        let active: i64 = conn
+            .query_row(
+                "SELECT is_active FROM tax_rates WHERE id = 'tax-109-a'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(active, 1, "pre-109 rows must default to active");
+
+        // The partial unique index from 108 still works with 109 applied.
+        let second = conn.execute(
+            "INSERT INTO tax_rates (id, name, rate_bps, is_default, is_inclusive, created_at, updated_at)
+             VALUES ('tax-109-b', 'B', 1000, 1, 0, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        );
+        assert!(second.is_err(), "single-default index must still reject");
+    }
+
+    // ── DB-06: populated upgrade fixture (migration 081 rebuild) ───
+
+    #[test]
+    fn upgrade_081_rebuild_preserves_populated_stock_transfer_lines() {
+        // A pre-081 database with real stock_transfers + stock_transfer_lines.
+        // Migration 081 DROPs and recreates stock_transfers while
+        // stock_transfer_lines FK-references it ON DELETE CASCADE — without
+        // the runner's FK isolation (DB-05) the rebuild would cascade-delete
+        // the lines or fail outright.
+        let idx081 = ALL
+            .iter()
+            .position(|m| m.id == "081_stock_transfers_received_partial.sql")
+            .unwrap();
+        let mut conn = fresh();
+        platform_core::database::run(&mut conn, &ALL[..idx081]).unwrap();
+
+        // Seed a role + user (stock_transfers.created_by FK) and one
+        // transfer with a line (stock_transfer_lines.transfer_id FK).
+        conn.execute_batch(
+            "INSERT INTO roles (id, name) VALUES ('role-owner', 'Owner');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active)
+                 VALUES ('user-1', 'owner', 'hash', 'Owner', 'role-owner', 1);
+             INSERT INTO stock_transfers (id, transfer_number, status,
+                 source_location, destination_location, created_by)
+                 VALUES ('tf-1', 'TR-0001', 'in_transit', 'Store A', 'Store B', 'user-1');
+             INSERT INTO stock_transfer_lines (id, transfer_id, sku, product_name, qty)
+                 VALUES ('stl-1', 'tf-1', 'SKU-1', 'Widget', 5);",
+        )
+        .unwrap();
+
+        // Upgrade through 081 (and everything after).
+        platform_core::database::run(&mut conn, &ALL[idx081..]).unwrap();
+
+        // The line survived the rebuild and still points at the transfer.
+        let lines: i64 = conn
+            .query_row("SELECT COUNT(*) FROM stock_transfer_lines", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(lines, 1, "stock_transfer_lines must survive migration 081");
+        let transfer_id: String = conn
+            .query_row(
+                "SELECT transfer_id FROM stock_transfer_lines WHERE id = 'stl-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(transfer_id, "tf-1");
+
+        // Rebuild backfilled the new FK columns to the canonical location.
+        let src_loc: String = conn
+            .query_row(
+                "SELECT source_location_id FROM stock_transfers WHERE id = 'tf-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(src_loc, "01926b3a-0000-7000-8000-000000000001");
+
+        // The extended status CHECK now accepts received_partial.
+        conn.execute(
+            "INSERT INTO stock_transfers (id, transfer_number, status, created_by)
+             VALUES ('tf-2', 'TR-0002', 'received_partial', 'user-1')",
+            [],
+        )
+        .unwrap();
+
+        // No orphaned FKs anywhere in the upgraded schema.
+        let violations: i64 = conn
+            .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            violations, 0,
+            "foreign_key_check must be clean after 081 upgrade"
+        );
+    }
+
+    // ── DB-07: 092 rebuild conserves the multi-location ledger ─────
+
+    #[test]
+    fn upgrade_092_rebuild_conserves_multi_location_ledger() {
+        // A pre-092 database with a two-location stock_movements ledger.
+        // Migration 092 DELETEs stock_summary and rebuilds it from the
+        // ledger grouped by (item_id, location_id), then zeroes inventory
+        // for over-sold products. Assert conservation + zero-out.
+        let idx092 = ALL
+            .iter()
+            .position(|m| m.id == "092_rebuild_stock_summary_group_by_location.sql")
+            .unwrap();
+        let mut conn = fresh();
+        platform_core::database::run(&mut conn, &ALL[..idx092]).unwrap();
+
+        // Seed products, a second location, movements across both locations
+        // (positive + negative deltas), stale summary rows, and inventory.
+        conn.execute_batch(
+            "INSERT INTO products (id, sku, name, price_minor, currency)
+                 VALUES ('p1', 'SKU-1', 'Product 1', 100, 'USD'),
+                        ('p2', 'SKU-2', 'Product 2', 100, 'USD');
+             INSERT INTO inventory_locations (id, name, type)
+                 VALUES ('loc-wh', 'Warehouse', 'warehouse');
+             INSERT INTO stock_movements (id, item_id, delta, reason, location_id) VALUES
+                 ('m1', 'p1',   7, 'restock', '01926b3a-0000-7000-8000-000000000001'),
+                 ('m2', 'p1',  -2, 'sale',    '01926b3a-0000-7000-8000-000000000001'),
+                 ('m3', 'p1',   3, 'restock', 'loc-wh'),
+                 ('m4', 'p2',  -4, 'sale',    '01926b3a-0000-7000-8000-000000000001');
+             INSERT INTO stock_summary (item_id, location_id, qty, updated_at) VALUES
+                 ('p1', '01926b3a-0000-7000-8000-000000000001', 99, '2026-01-01T00:00:00.000Z'),
+                 ('p1', 'loc-wh', 99, '2026-01-01T00:00:00.000Z'),
+                 ('p2', '01926b3a-0000-7000-8000-000000000001', 99, '2026-01-01T00:00:00.000Z');
+             INSERT INTO inventory (product_id, qty) VALUES ('p1', 8), ('p2', 5);",
+        )
+        .unwrap();
+
+        // Upgrade through 092 (and everything after).
+        platform_core::database::run(&mut conn, &ALL[idx092..]).unwrap();
+
+        // stock_summary rebuilt = SUM(delta) per (item_id, location_id).
+        let summary: Vec<(String, String, i64)> = {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT item_id, location_id, qty FROM stock_summary ORDER BY location_id, item_id",
+                )
+                .unwrap();
+            stmt.query_map([], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, i64>(2)?,
+                ))
+            })
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect()
+        };
+        assert_eq!(
+            summary,
+            vec![
+                (
+                    "p1".to_string(),
+                    "01926b3a-0000-7000-8000-000000000001".to_string(),
+                    5
+                ),
+                (
+                    "p2".to_string(),
+                    "01926b3a-0000-7000-8000-000000000001".to_string(),
+                    -4
+                ),
+                ("p1".to_string(), "loc-wh".to_string(), 3),
+            ]
+        );
+
+        // Inventory zeroed only for the over-sold product (net <= 0).
+        let p2_qty: i64 = conn
+            .query_row(
+                "SELECT qty FROM inventory WHERE product_id = 'p2'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(p2_qty, 0, "over-sold product must have inventory zeroed");
+        let p1_qty: i64 = conn
+            .query_row(
+                "SELECT qty FROM inventory WHERE product_id = 'p1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(p1_qty, 8, "in-stock product inventory must be preserved");
+
+        // No orphaned FKs after the rebuild.
+        let violations: i64 = conn
+            .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            violations, 0,
+            "foreign_key_check must be clean after 092 upgrade"
+        );
+    }
+
+    // ── DB-08: unique (key, terminal_id, version) on setting_updated ─
+
+    #[test]
+    fn migration_116_creates_unique_setting_version_index() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        let idx: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_setting_updated_unique_version'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(idx, 1, "migration 116 must create the unique version index");
+
+        // Duplicate (key, terminal_id, version) must be rejected.
+        conn.execute(
+            "INSERT INTO setting_updated (key, value, terminal_id, version) VALUES ('k', 'v1', 't1', 1)",
+            [],
+        )
+        .unwrap();
+        let dup = conn.execute(
+            "INSERT INTO setting_updated (key, value, terminal_id, version) VALUES ('k', 'v2', 't1', 1)",
+            [],
+        );
+        assert!(
+            dup.is_err(),
+            "duplicate (key, terminal_id, version) must fail"
+        );
+    }
+
+    #[test]
+    fn migration_116_dedupes_legacy_duplicate_versions() {
+        // Upgrade path: a pre-116 database that already carries duplicate
+        // (key, terminal_id, version) rows (the MAX(version)+1 race).
+        let idx116 = ALL
+            .iter()
+            .position(|m| m.id == "116_setting_updated_unique_version.sql")
+            .unwrap();
+        let mut conn = fresh();
+        platform_core::database::run(&mut conn, &ALL[..idx116]).unwrap();
+
+        conn.execute(
+            "INSERT INTO setting_updated (key, value, terminal_id, version) VALUES ('k', 'old', 't1', 1)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO setting_updated (key, value, terminal_id, version) VALUES ('k', 'new', 't1', 1)",
+            [],
+        )
+        .unwrap();
+
+        // Apply 116: duplicate collapsed, keeping the newest row (max id).
+        platform_core::database::run(&mut conn, &ALL[idx116..]).unwrap();
+
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM setting_updated WHERE key = 'k' AND terminal_id = 't1' AND version = 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            count, 1,
+            "legacy duplicate versions must be collapsed to one row"
+        );
+
+        let value: String = conn
+            .query_row(
+                "SELECT value FROM setting_updated WHERE key = 'k' AND terminal_id = 't1' AND version = 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(value, "new", "the most recently written row must survive");
+    }
+
+    // ── DB-04 end-state (migration 117): store_id FK on domain tables ─
+
+    /// Assert a `store_id` → `store_profiles` FK is declared on `table`.
+    fn assert_store_id_fk(conn: &rusqlite::Connection, table: &str) {
+        let mut stmt = conn
+            .prepare(&format!("PRAGMA foreign_key_list(\"{table}\")"))
+            .unwrap();
+        let fks: Vec<(String, String)> = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(2)?, row.get::<_, String>(3)?))
+            })
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        assert!(
+            fks.iter()
+                .any(|(t, from)| t == "store_profiles" && from == "store_id"),
+            "{table} must declare store_id REFERENCES store_profiles(id), got FKs: {fks:?}"
+        );
+    }
+
+    #[test]
+    fn migration_117_creates_store_id_foreign_keys() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        // The rebuild must carry the FK on all four ADR #4 domain tables.
+        for table in &["products", "sales", "sale_lines", "customers"] {
+            assert_store_id_fk(&conn, table);
+        }
+
+        // NULL remains the valid global sentinel (per-store DB isolation).
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type)
+             VALUES ('p-null', 'SKU-NULL', 'Global', 100, 'USD', 'retail')",
+            [],
+        )
+        .unwrap();
+
+        // A store_id that does not exist in store_profiles must be rejected.
+        let orphan = conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type, store_id)
+             VALUES ('p-orphan', 'SKU-ORPHAN', 'Orphan', 100, 'USD', 'retail', 'ghost-store')",
+            [],
+        );
+        assert!(
+            orphan.is_err(),
+            "store_id referencing a missing store_profile must fail the FK"
+        );
+
+        // A store_id that exists (migration 025 seeds 'default') must pass.
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type, store_id)
+             VALUES ('p-scoped', 'SKU-SCOPED', 'Scoped', 100, 'USD', 'retail', 'default')",
+            [],
+        )
+        .unwrap();
+
+        // Re-running migrations stays idempotent after the rebuild.
+        run(&mut conn).unwrap();
+    }
+
+    #[test]
+    fn migration_117_quarantines_orphan_store_ids_on_upgrade() {
+        // Upgrade fixture: a pre-117 database that already carries domain
+        // rows with store_id values that do not exist in store_profiles
+        // (legacy orphans — the exact data the audit flagged). The rebuild
+        // must quarantine them to NULL (the documented global sentinel)
+        // rather than failing the upgrade or dropping the rows.
+        let idx117 = ALL
+            .iter()
+            .position(|m| m.id == "117_scoping_store_id_fk.sql")
+            .unwrap();
+        let mut conn = fresh();
+        platform_core::database::run(&mut conn, &ALL[..idx117]).unwrap();
+
+        // Seed rows across all four tables with a mix of valid ('default',
+        // seeded by migration 025) and orphaned store_ids, plus a NULL.
+        conn.execute_batch(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type, store_id)
+                 VALUES ('p-ok', 'SKU-OK', 'Kept', 100, 'USD', 'retail', 'default'),
+                        ('p-orphan', 'SKU-ORPHAN', 'Orphaned', 100, 'USD', 'retail', 'ghost-store'),
+                        ('p-null', 'SKU-NULL', 'Global', 100, 'USD', 'retail', NULL);
+             INSERT INTO customers (id, name, store_id) VALUES ('c-orphan', 'Orphan Cust', 'ghost-store');
+             INSERT INTO sales (id, total_minor, currency, line_count, status, store_id)
+                 VALUES ('s-orphan', 100, 'USD', 1, 'completed', 'ghost-store');
+             INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position, store_id)
+                 VALUES ('sl-orphan', 's-orphan', 'SKU-X', 1, 100, 100, 'USD', 1, 'ghost-store');",
+        )
+        .unwrap();
+
+        // Apply 117 (and everything after).
+        platform_core::database::run(&mut conn, &ALL[idx117..]).unwrap();
+
+        // Orphaned store_ids quarantined to NULL; valid + NULL preserved.
+        let orphan_sid: Option<String> = conn
+            .query_row(
+                "SELECT store_id FROM products WHERE id = 'p-orphan'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            orphan_sid.is_none(),
+            "orphaned store_id must be quarantined to NULL"
+        );
+
+        let ok_sid: Option<String> = conn
+            .query_row("SELECT store_id FROM products WHERE id = 'p-ok'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            ok_sid.as_deref(),
+            Some("default"),
+            "valid store_id must survive"
+        );
+
+        let null_sid: Option<String> = conn
+            .query_row(
+                "SELECT store_id FROM products WHERE id = 'p-null'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(null_sid.is_none(), "NULL global sentinel must survive");
+
+        // Rows survived the rebuild (not dropped), FK is clean.
+        let cust_sid: Option<String> = conn
+            .query_row(
+                "SELECT store_id FROM customers WHERE id = 'c-orphan'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(cust_sid.is_none(), "customer orphan store_id quarantined");
+        let sale_sid: Option<String> = conn
+            .query_row(
+                "SELECT store_id FROM sales WHERE id = 's-orphan'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(sale_sid.is_none(), "sale orphan store_id quarantined");
+        let line_sid: Option<String> = conn
+            .query_row(
+                "SELECT store_id FROM sale_lines WHERE id = 'sl-orphan'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(line_sid.is_none(), "sale_line orphan store_id quarantined");
+
+        // All four rows still exist, FK enforcement is clean, and the
+        // scoping indexes survived the rebuild.
+        for (table, id) in [
+            ("products", "p-orphan"),
+            ("customers", "c-orphan"),
+            ("sales", "s-orphan"),
+            ("sale_lines", "sl-orphan"),
+        ] {
+            let n: i64 = conn
+                .query_row(
+                    &format!("SELECT COUNT(*) FROM {table} WHERE id = ?1"),
+                    rusqlite::params![id],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(n, 1, "{table} row {id} must survive the 117 rebuild");
+        }
+        let fk_check: i64 = conn
+            .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(fk_check, 0, "foreign_key_check must be clean after 117");
+        for index in [
+            "idx_sales_store_status",
+            "idx_sale_lines_store_sale",
+            "idx_products_store_category",
+            "idx_customers_store",
+        ] {
+            let n: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name=?1",
+                    rusqlite::params![index],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(n, 1, "scoping index {index} must survive the 117 rebuild");
+        }
+    }
+
+    // ── warehouse_id supersession cleanup (migration 118) ──────────
+
+    #[test]
+    fn migration_118_drops_warehouse_id_columns() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        // The dead column is gone from both tables in the end-state schema.
+        for table in &["inventory", "stock_counts"] {
+            let count: i64 = conn
+                .query_row(
+                    &format!(
+                        "SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = 'warehouse_id'"
+                    ),
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(
+                count, 0,
+                "{table} must not have warehouse_id after migration 118"
+            );
+        }
+
+        // The index that existed only for the dead column is gone too.
+        let idx: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_inventory_warehouse_product'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(idx, 0, "idx_inventory_warehouse_product must be dropped");
+
+        // The real location link from migration 079 survives untouched:
+        // the location_id FK column and its query index both remain.
+        let loc_col: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('inventory') WHERE name = 'location_id'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            loc_col, 1,
+            "inventory.location_id must survive migration 118"
+        );
+        let loc_idx: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_inventory_location_product'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            loc_idx, 1,
+            "idx_inventory_location_product must survive migration 118"
+        );
+    }
+
+    #[test]
+    fn migration_118_drop_preserves_inventory_and_count_data_on_upgrade() {
+        // Upgrade fixture: a pre-118 database that already carries
+        // inventory rows and stock counts whose warehouse_id values were
+        // set (the speculative hook never had a writer, but rows may carry
+        // them from tests or hand-imports). The DROP COLUMN must remove the
+        // column while preserving every other column's data — a rebuild
+        // bug here would silently lose qty/count data on upgrade.
+        let idx118 = ALL
+            .iter()
+            .position(|m| m.id == "118_drop_warehouse_id_superseded.sql")
+            .unwrap();
+        let mut conn = fresh();
+        platform_core::database::run(&mut conn, &ALL[..idx118]).unwrap();
+
+        // Seed a product (needed for the inventory FK), an inventory row
+        // with a non-NULL warehouse_id, and a stock count with one line.
+        conn.execute_batch(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type)
+                 VALUES ('p-118', 'SKU-118', 'Counted', 100, 'USD', 'retail');
+             INSERT INTO inventory (product_id, qty, warehouse_id)
+                 VALUES ('p-118', 42, 'wh-1');
+             INSERT INTO stock_counts (id, count_number, status, count_type, warehouse_id)
+                 VALUES ('sc-118', 'CN-118', 'draft', 'full', 'wh-1');
+             INSERT INTO stock_count_lines (id, count_id, sku, product_name, expected_qty)
+                 VALUES ('scl-118', 'sc-118', 'SKU-118', 'Counted', 42);",
+        )
+        .unwrap();
+
+        // Apply 118 (and everything after).
+        platform_core::database::run(&mut conn, &ALL[idx118..]).unwrap();
+
+        // The dead column is gone, but the data it sat beside survived.
+        let inv_qty: i64 = conn
+            .query_row(
+                "SELECT qty FROM inventory WHERE product_id = 'p-118'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(inv_qty, 42, "inventory qty must survive the 118 drop");
+
+        let count_status: String = conn
+            .query_row(
+                "SELECT status FROM stock_counts WHERE id = 'sc-118'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            count_status, "draft",
+            "stock count row must survive the 118 drop"
+        );
+
+        let line_expected: i64 = conn
+            .query_row(
+                "SELECT expected_qty FROM stock_count_lines WHERE id = 'scl-118'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            line_expected, 42,
+            "stock count line must survive the 118 drop"
+        );
+
+        // FK integrity is clean and the runner stays idempotent.
+        let fk_check: i64 = conn
+            .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(fk_check, 0, "foreign_key_check must be clean after 118");
+        run(&mut conn).unwrap();
+    }
+
+    // ── Cross-store query audit (migration 117 end-state) ──────────
+
+    /// Run `SELECT id FROM {table} WHERE store_id = ?1` — the canonical
+    /// store-scoped query shape — and return the matching row ids.
+    fn scoped_row_ids(conn: &rusqlite::Connection, table: &str, store: &str) -> Vec<String> {
+        let mut stmt = conn
+            .prepare(&format!(
+                "SELECT id FROM {table} WHERE store_id = ?1 ORDER BY id"
+            ))
+            .unwrap();
+        stmt.query_map(rusqlite::params![store], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect()
+    }
+
+    /// Run `SELECT id FROM {table} WHERE store_id IS NULL` — the explicit
+    /// global-scope predicate that is the ONLY way NULL-sentinel rows are
+    /// reachable — and return the matching row ids.
+    fn global_row_ids(conn: &rusqlite::Connection, table: &str) -> Vec<String> {
+        let mut stmt = conn
+            .prepare(&format!(
+                "SELECT id FROM {table} WHERE store_id IS NULL ORDER BY id"
+            ))
+            .unwrap();
+        stmt.query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect()
+    }
+
+    /// Seed the shared cross-store audit fixture: two store profiles
+    /// (migration 025 already seeds 'default') plus rows owned by
+    /// store-a, store-b, and the NULL global sentinel on every ADR #4
+    /// scoped table. Used by both the SELECT and UPDATE audit tests so
+    /// the fixtures cannot drift apart. `payment_method`/`course` are
+    /// seeded for the UPDATE test's mutable-column sweep but are inert
+    /// for the SELECT test.
+    fn seed_cross_store_fixture(conn: &rusqlite::Connection) {
+        conn.execute_batch(
+            "INSERT INTO store_profiles (id, name)
+                 VALUES ('store-a', 'Store A'), ('store-b', 'Store B');
+             INSERT INTO products (id, sku, name, price_minor, currency, product_type, store_id)
+                 VALUES ('p-a', 'SKU-A', 'A', 100, 'USD', 'retail', 'store-a'),
+                        ('p-b', 'SKU-B', 'B', 100, 'USD', 'retail', 'store-b'),
+                        ('p-null', 'SKU-N', 'Global', 100, 'USD', 'retail', NULL);
+             INSERT INTO customers (id, name, store_id)
+                 VALUES ('c-a', 'Cust A', 'store-a'),
+                        ('c-b', 'Cust B', 'store-b'),
+                        ('c-null', 'Cust Global', NULL);
+             INSERT INTO sales (id, total_minor, currency, line_count, status, payment_method, store_id)
+                 VALUES ('s-a', 100, 'USD', 1, 'completed', 'cash', 'store-a'),
+                        ('s-b', 100, 'USD', 1, 'completed', 'cash', 'store-b'),
+                        ('s-null', 100, 'USD', 1, 'completed', 'cash', NULL);
+             INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position, course, store_id)
+                 VALUES ('sl-a', 's-a', 'SKU-A', 1, 100, 100, 'USD', 1, 'starter', 'store-a'),
+                        ('sl-b', 's-b', 'SKU-B', 1, 100, 100, 'USD', 1, 'starter', 'store-b'),
+                        ('sl-null', 's-null', 'SKU-N', 1, 100, 100, 'USD', 1, 'starter', NULL);",
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn store_scoped_query_never_returns_null_or_other_store_rows() {
+        // DB-04 query-level audit. Migration 117's FK guarantees a non-NULL
+        // store_id always references a real store_profile, but the audit
+        // also pins the QUERY contract: `WHERE store_id = 'x'` must return
+        // exactly store x's rows — never the NULL global-sentinel rows
+        // (migration 069's "unscoped / legacy / global shared" state) and
+        // never another store's rows. A scoped caller that forgets nothing
+        // gets clean isolation at the predicate level too.
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        // Seed the shared cross-store fixture (store-a / store-b / NULL
+        // rows on all four ADR #4 scoped tables).
+        seed_cross_store_fixture(&conn);
+
+        // The audit: a store-a scoped query returns EXACTLY the store-a
+        // row on every table — no NULL sentinel, no store-b leakage.
+        for (table, expected) in [
+            ("products", vec!["p-a"]),
+            ("customers", vec!["c-a"]),
+            ("sales", vec!["s-a"]),
+            ("sale_lines", vec!["sl-a"]),
+        ] {
+            let ids = scoped_row_ids(&conn, table, "store-a");
+            assert_eq!(
+                ids, expected,
+                "{table} store-a scoped query must return only store-a rows, got: {ids:?}"
+            );
+        }
+
+        // Mirror for store-b — isolation must hold in both directions.
+        for (table, expected) in [
+            ("products", vec!["p-b"]),
+            ("customers", vec!["c-b"]),
+            ("sales", vec!["s-b"]),
+            ("sale_lines", vec!["sl-b"]),
+        ] {
+            let ids = scoped_row_ids(&conn, table, "store-b");
+            assert_eq!(
+                ids, expected,
+                "{table} store-b scoped query must return only store-b rows, got: {ids:?}"
+            );
+        }
+
+        // NULL-sentinel rows are reachable ONLY through the explicit
+        // global predicate (store_id IS NULL), never through a scoped
+        // query — that is the contract that keeps unscoped rows from
+        // leaking into a single store's view.
+        for (table, expected) in [
+            ("products", vec!["p-null"]),
+            ("customers", vec!["c-null"]),
+            ("sales", vec!["s-null"]),
+            ("sale_lines", vec!["sl-null"]),
+        ] {
+            let ids = global_row_ids(&conn, table);
+            assert_eq!(
+                ids, expected,
+                "{table} global-sentinel query must return only NULL rows, got: {ids:?}"
+            );
+        }
+
+        // FK ownership integrity (migration 117): a store_id with no
+        // matching store_profiles row is rejected at the database layer,
+        // so a scoped query can never be pointed at a phantom store.
+        let ghost = conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type, store_id)
+             VALUES ('p-ghost', 'SKU-GHOST', 'Ghost', 100, 'USD', 'retail', 'ghost-store')",
+            [],
+        );
+        assert!(
+            ghost.is_err(),
+            "store_id referencing a missing store_profile must fail the 117 FK"
+        );
+
+        // Re-running migrations stays idempotent (module convention).
+        run(&mut conn).unwrap();
+    }
+
+    #[test]
+    fn store_deletion_reverts_scoped_rows_to_null_sentinel() {
+        // ON DELETE SET NULL contract (migration 117): deleting a store
+        // profile must neither block on historical domain rows (RESTRICT)
+        // nor destroy them (CASCADE) — their store_id reverts to the NULL
+        // global sentinel. The rows stay globally visible and a scoped
+        // query for the deleted store returns nothing.
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+        conn.execute(
+            "INSERT INTO store_profiles (id, name) VALUES ('store-a', 'Store A')",
+            [],
+        )
+        .unwrap();
+        conn.execute_batch(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type, store_id)
+                 VALUES ('p-a', 'SKU-A', 'A', 100, 'USD', 'retail', 'store-a'),
+                        ('p-null', 'SKU-N', 'Global', 100, 'USD', 'retail', NULL);
+             INSERT INTO sales (id, total_minor, currency, line_count, status, store_id)
+                 VALUES ('s-a', 100, 'USD', 1, 'completed', 'store-a');",
+        )
+        .unwrap();
+
+        conn.execute("DELETE FROM store_profiles WHERE id = 'store-a'", [])
+            .unwrap();
+
+        // Scoped query for the deleted store returns nothing…
+        assert_eq!(
+            scoped_row_ids(&conn, "products", "store-a"),
+            Vec::<String>::new(),
+            "scoped query for a deleted store must return no rows"
+        );
+        // …but the rows themselves survived, reverted to the NULL sentinel.
+        let sid: Option<String> = conn
+            .query_row("SELECT store_id FROM products WHERE id = 'p-a'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert!(
+            sid.is_none(),
+            "store-a product must revert to NULL sentinel"
+        );
+        let sale_sid: Option<String> = conn
+            .query_row("SELECT store_id FROM sales WHERE id = 's-a'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert!(
+            sale_sid.is_none(),
+            "store-a sale must revert to NULL sentinel"
+        );
+        // The NULL sentinel row is untouched and the FK surface is clean.
+        assert_eq!(
+            global_row_ids(&conn, "products"),
+            vec!["p-a", "p-null"],
+            "reverted row must join the global scope"
+        );
+        let fk_check: i64 = conn
+            .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(fk_check, 0, "no FK violations after SET NULL reversion");
+
+        // Re-running migrations stays idempotent (module convention).
+        run(&mut conn).unwrap();
+    }
+
+    #[test]
+    fn store_scoped_update_never_mutates_other_store_or_null_rows() {
+        // DB-04 UPDATE-path audit. Migration 117's FK guards writes as
+        // well as reads: a store-scoped UPDATE (`WHERE store_id = 'x'`)
+        // must touch exactly store x's rows, and SQLite's three-valued
+        // logic (`NULL = 'x'` is never TRUE) structurally excludes the
+        // NULL-sentinel rows — so unscoped/global data is write-protected
+        // from scoped writers exactly as it is from scoped readers.
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        // Seed the shared cross-store fixture (store-a / store-b / NULL
+        // rows on all four ADR #4 scoped tables).
+        seed_cross_store_fixture(&conn);
+
+        // Sweep all four tables: a store-a scoped UPDATE must affect
+        // exactly one row (the store-a row) and leave the store-b row and
+        // the NULL-sentinel row byte-identical.
+        for (table, mutcol, a_id, b_id, null_id, _a_old, b_old, null_old, new_val) in [
+            (
+                "products",
+                "name",
+                "p-a",
+                "p-b",
+                "p-null",
+                "A",
+                "B",
+                "Global",
+                "Renamed-A",
+            ),
+            (
+                "customers",
+                "name",
+                "c-a",
+                "c-b",
+                "c-null",
+                "Cust A",
+                "Cust B",
+                "Cust Global",
+                "Renamed-A",
+            ),
+            (
+                "sales",
+                "payment_method",
+                "s-a",
+                "s-b",
+                "s-null",
+                "cash",
+                "cash",
+                "cash",
+                "card",
+            ),
+            (
+                "sale_lines",
+                "course",
+                "sl-a",
+                "sl-b",
+                "sl-null",
+                "starter",
+                "starter",
+                "starter",
+                "main",
+            ),
+        ] {
+            let affected = conn
+                .execute(
+                    &format!("UPDATE {table} SET {mutcol} = ?1 WHERE store_id = 'store-a'"),
+                    rusqlite::params![new_val],
+                )
+                .unwrap();
+            assert_eq!(
+                affected, 1,
+                "{table} store-a scoped UPDATE must affect exactly the store-a row"
+            );
+            let cell = |id: &str| -> String {
+                conn.query_row(
+                    &format!("SELECT {mutcol} FROM {table} WHERE id = ?1"),
+                    rusqlite::params![id],
+                    |r| r.get(0),
+                )
+                .unwrap()
+            };
+            assert_eq!(cell(a_id), new_val, "{table} store-a row must be updated");
+            assert_eq!(
+                cell(b_id),
+                b_old,
+                "{table} store-b row must be untouched by a store-a scoped UPDATE"
+            );
+            assert_eq!(
+                cell(null_id),
+                null_old,
+                "{table} NULL-sentinel row must be untouched by a store-a scoped UPDATE"
+            );
+        }
+
+        // The FK guards UPDATE writes too: reassigning a row to a store
+        // that does not exist is rejected, while reverting to NULL (the
+        // documented global sentinel) stays legal.
+        let ghost = conn.execute(
+            "UPDATE products SET store_id = 'ghost-store' WHERE id = 'p-a'",
+            [],
+        );
+        assert!(
+            ghost.is_err(),
+            "reassigning a row to a missing store_profile must fail the 117 FK"
+        );
+        conn.execute("UPDATE products SET store_id = NULL WHERE id = 'p-a'", [])
+            .unwrap();
+        let sid: Option<String> = conn
+            .query_row("SELECT store_id FROM products WHERE id = 'p-a'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert!(
+            sid.is_none(),
+            "reverting a row to the NULL sentinel is legal"
+        );
+
+        // Re-running migrations stays idempotent (module convention).
+        run(&mut conn).unwrap();
+    }
+
+    #[test]
+    fn store_scoped_upsert_never_hijacks_other_store_or_null_rows() {
+        // DB-04 upsert-path audit. An `INSERT ... ON CONFLICT(id) DO
+        // UPDATE` is the standard idempotent write (cart/offline/sync all
+        // use it), but without a scope guard it would silently mutate a
+        // row owned by ANOTHER store on conflict — the row is matched by
+        // primary key, not by ownership. This test pins the guarded form:
+        // `DO UPDATE ... WHERE {table}.store_id = 'store-a'` turns a
+        // cross-store conflict into a no-op (affected = 0) instead of a
+        // hijack. The NULL-sentinel row is protected the same way, and a
+        // fresh insert still lands in the writer's own store.
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        seed_cross_store_fixture(&conn);
+
+        // 1. A store-a scoped upsert that CONFLICTS with a store-b row must
+        //    NOT overwrite it — the WHERE guard evaluates false and the
+        //    statement becomes a no-op, leaving store-b's row intact.
+        let hijack = conn
+            .execute(
+                "INSERT INTO products (id, sku, name, price_minor, currency, product_type, store_id)
+                 VALUES ('p-b', 'SKU-B', 'Hijacked', 100, 'USD', 'retail', 'store-a')
+                 ON CONFLICT(id) DO UPDATE SET name = excluded.name
+                 WHERE products.store_id = 'store-a'",
+                [],
+            )
+            .unwrap();
+        assert_eq!(
+            hijack, 0,
+            "scoped upsert conflicting with a store-b row must be a no-op, not a hijack"
+        );
+        let name_b: String = conn
+            .query_row("SELECT name FROM products WHERE id = 'p-b'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            name_b, "B",
+            "store-b row must be untouched by a store-a scoped upsert"
+        );
+        let sid_b: String = conn
+            .query_row("SELECT store_id FROM products WHERE id = 'p-b'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            sid_b, "store-b",
+            "store-b row must keep its ownership after a conflicting scoped upsert"
+        );
+
+        // 2. Same guard protects the NULL-sentinel row from a scoped upsert.
+        let null_hijack = conn
+            .execute(
+                "INSERT INTO products (id, sku, name, price_minor, currency, product_type, store_id)
+                 VALUES ('p-null', 'SKU-N', 'Hijacked', 100, 'USD', 'retail', 'store-a')
+                 ON CONFLICT(id) DO UPDATE SET name = excluded.name
+                 WHERE products.store_id = 'store-a'",
+                [],
+            )
+            .unwrap();
+        assert_eq!(
+            null_hijack, 0,
+            "scoped upsert conflicting with the NULL-sentinel row must be a no-op"
+        );
+        let name_null: String = conn
+            .query_row("SELECT name FROM products WHERE id = 'p-null'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            name_null, "Global",
+            "NULL-sentinel row must be untouched by a store-a scoped upsert"
+        );
+        let sid_null: Option<String> = conn
+            .query_row(
+                "SELECT store_id FROM products WHERE id = 'p-null'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            sid_null.is_none(),
+            "NULL-sentinel row must keep store_id NULL"
+        );
+
+        // 3. A store-a scoped upsert that conflicts with the writer's OWN
+        //    store-a row DOES update it — the guard is satisfied and the
+        //    legitimate idempotent-write path still works.
+        let mine = conn
+            .execute(
+                "INSERT INTO products (id, sku, name, price_minor, currency, product_type, store_id)
+                 VALUES ('p-a', 'SKU-A', 'Updated-A', 100, 'USD', 'retail', 'store-a')
+                 ON CONFLICT(id) DO UPDATE SET name = excluded.name
+                 WHERE products.store_id = 'store-a'",
+                [],
+            )
+            .unwrap();
+        assert_eq!(
+            mine, 1,
+            "scoped upsert on the writer's own store-a row must update it"
+        );
+        let name_a: String = conn
+            .query_row("SELECT name FROM products WHERE id = 'p-a'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            name_a, "Updated-A",
+            "store-a row must receive its own scoped upsert"
+        );
+
+        // 4. A store-a scoped upsert that is a fresh insert (no conflict)
+        //    creates the new row owned by store-a.
+        let fresh = conn
+            .execute(
+                "INSERT INTO products (id, sku, name, price_minor, currency, product_type, store_id)
+                 VALUES ('p-new', 'SKU-NEW', 'New A', 100, 'USD', 'retail', 'store-a')
+                 ON CONFLICT(id) DO UPDATE SET name = excluded.name
+                 WHERE products.store_id = 'store-a'",
+                [],
+            )
+            .unwrap();
+        assert_eq!(
+            fresh, 1,
+            "fresh scoped upsert must insert the new store-a row"
+        );
+        let new_sid: String = conn
+            .query_row(
+                "SELECT store_id FROM products WHERE id = 'p-new'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            new_sid, "store-a",
+            "fresh upsert row must be owned by store-a"
+        );
+
+        // 5. The 117 FK still guards the upsert insert path: a scoped
+        //    upsert cannot create a row owned by a non-existent store.
+        let ghost = conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, product_type, store_id)
+             VALUES ('p-ghost', 'SKU-GHOST', 'Ghost', 100, 'USD', 'retail', 'ghost-store')
+             ON CONFLICT(id) DO UPDATE SET name = excluded.name
+             WHERE products.store_id = 'store-a'",
+            [],
+        );
+        assert!(
+            ghost.is_err(),
+            "upsert referencing a missing store_profile must fail the 117 FK"
+        );
+
+        // Re-running migrations stays idempotent (module convention).
+        run(&mut conn).unwrap();
+    }
+
+    #[test]
+    fn cross_store_transaction_mixed_writes_stay_scoped_and_atomic() {
+        // DB-04 transaction audit. Multi-statement transactions are the
+        // real write path (products.rs / sales.rs use
+        // `unchecked_transaction()` everywhere), so the audit must prove:
+        //
+        //   (a) a committed transaction that mixes store-a, store-b, and
+        //       explicit-global writes keeps every write inside its own
+        //       ownership class — a store-a scoped statement can never
+        //       mutate store-b rows or the NULL sentinel even when both
+        //       run in the same transaction, and the NULL row is reachable
+        //       only through the explicit `store_id IS NULL` predicate;
+        //   (b) atomicity: if any statement fails, the whole transaction
+        //       rolls back — a NULL-sentinel row (or any row) is never
+        //       left half-mutated by a partially-applied transaction.
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        seed_cross_store_fixture(&conn);
+
+        // ── (a) Committed mixed transaction stays in-scope ────────────
+        conn.execute("BEGIN", []).unwrap();
+        let a = conn
+            .execute(
+                "UPDATE products SET name = 'Tx-A' WHERE store_id = 'store-a'",
+                [],
+            )
+            .unwrap();
+        assert_eq!(
+            a, 1,
+            "store-a scoped UPDATE inside tx must affect exactly 1 row"
+        );
+        let b = conn
+            .execute(
+                "UPDATE products SET name = 'Tx-B' WHERE store_id = 'store-b'",
+                [],
+            )
+            .unwrap();
+        assert_eq!(
+            b, 1,
+            "store-b scoped UPDATE inside tx must affect exactly 1 row"
+        );
+        // Explicit global write — the ONLY way the NULL sentinel is
+        // reachable, and a deliberate opt-in rather than a scoped leak.
+        let g = conn
+            .execute(
+                "UPDATE products SET name = 'Tx-Global' WHERE store_id IS NULL",
+                [],
+            )
+            .unwrap();
+        assert_eq!(
+            g, 1,
+            "explicit global UPDATE must affect exactly the NULL-sentinel row"
+        );
+        conn.execute("COMMIT", []).unwrap();
+
+        // Post-commit: every row holds exactly its own write.
+        let name_a: String = conn
+            .query_row("SELECT name FROM products WHERE id = 'p-a'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(name_a, "Tx-A", "store-a row must receive its own tx write");
+        let name_b: String = conn
+            .query_row("SELECT name FROM products WHERE id = 'p-b'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(name_b, "Tx-B", "store-b row must receive its own tx write");
+        let name_null: String = conn
+            .query_row("SELECT name FROM products WHERE id = 'p-null'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            name_null, "Tx-Global",
+            "NULL-sentinel row must receive only the explicit global write"
+        );
+
+        // ── (b) Failed transaction rolls back atomically ──────────────
+        // A statement that violates the 117 FK fails mid-transaction;
+        // ROLLBACK must restore EVERY prior write, so no row — including
+        // the NULL sentinel — is left half-mutated.
+        conn.execute("BEGIN", []).unwrap();
+        conn.execute(
+            "UPDATE products SET name = 'ShouldRollBack-A' WHERE store_id = 'store-a'",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE products SET name = 'ShouldRollBack-Null' WHERE store_id IS NULL",
+            [],
+        )
+        .unwrap();
+        let fail = conn.execute(
+            "UPDATE products SET store_id = 'ghost-store' WHERE id = 'p-a'",
+            [],
+        );
+        assert!(
+            fail.is_err(),
+            "FK-violating statement must fail inside the transaction"
+        );
+        conn.execute("ROLLBACK", []).unwrap();
+
+        // After rollback the DB is byte-identical to the pre-(b) state:
+        // the store-a row and the NULL-sentinel row both revert to their
+        // committed (a) values, and the FK surface is clean.
+        let rb_a: String = conn
+            .query_row("SELECT name FROM products WHERE id = 'p-a'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            rb_a, "Tx-A",
+            "store-a write must be rolled back — no half-mutated state"
+        );
+        let rb_null: String = conn
+            .query_row("SELECT name FROM products WHERE id = 'p-null'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            rb_null, "Tx-Global",
+            "NULL-sentinel write must be rolled back — never left half-mutated"
+        );
+        let rb_b: String = conn
+            .query_row("SELECT name FROM products WHERE id = 'p-b'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(rb_b, "Tx-B", "store-b write must survive untouched");
+        let fk_check: i64 = conn
+            .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(fk_check, 0, "no FK violations after rollback");
+
+        // Re-running migrations stays idempotent (module convention).
+        run(&mut conn).unwrap();
     }
 }

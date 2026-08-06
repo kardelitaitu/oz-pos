@@ -1,48 +1,10 @@
-import type { ReactNode } from 'react';
-import { useLocalization } from '@fluent/react';
-import { Button } from '@/components/Button';
+// ui/src/frontend/shared/ErrorState.tsx
+//
+// ERR-03 consolidation: this is a compatibility re-export of the canonical
+// `@/components/ErrorState` implementation. The project must have exactly one
+// ErrorState source of truth so accessibility/retry fixes reach every
+// consumer. Do not reimplement the component here — see
+// src/__tests__/errorPrimitivesImportPolicy.test.ts.
 
-export interface ErrorStateProps {
-  /** Optional icon/illustration displayed above the title. */
-  icon?: ReactNode;
-  /** Heading text. */
-  title: string;
-  /** Detailed error message. */
-  message?: string;
-  /** Called when the user clicks the retry button. */
-  onRetry?: () => void;
-  /** Label for the retry button. @default 'Retry' */
-  retryLabel?: string;
-  /** Additional content. */
-  children?: ReactNode;
-}
-
-export function ErrorState({
-  icon,
-  title,
-  message,
-  onRetry,
-  retryLabel,
-  children,
-}: ErrorStateProps) {
-  const { l10n } = useLocalization();
-  return (
-    <div className="error-state" role="alert">
-      {icon && (
-        <div className="error-state__icon" aria-hidden="true">
-          {icon}
-        </div>
-      )}
-      <h3 className="error-state__title">{title}</h3>
-      {message && <p className="error-state__message">{message}</p>}
-      {onRetry && (
-        <div className="error-state__action">
-          <Button variant="primary" onClick={onRetry}>
-            {retryLabel ?? l10n.getString('error-state-retry')}
-          </Button>
-        </div>
-      )}
-      {children}
-    </div>
-  );
-}
+export { ErrorState } from '@/components/ErrorState';
+export type { ErrorStateProps } from '@/components/ErrorState';

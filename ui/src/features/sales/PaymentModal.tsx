@@ -1,20 +1,22 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import { Localized, useLocalization } from '@fluent/react';
 import { Skeleton } from '@/components/Skeleton';
 import { startSale, startSaleScoped, addLine, addLineScoped, completeSale, completeSaleScoped, printSalesReceipt, getSale, setCartDiscount, setCartDiscountScoped, holdCart, finalizeSale, voidPendingSale, type SetCartDiscountArgs, type SetCartDiscountScopedArgs, type CompleteSaleScopedArgs, type PaymentSplitArg, type SerialNumberArg, type PartialStockResult } from '@/api/sales';
 import { createKdsOrderFromSale, createKdsOrderFromSaleScoped } from '@/api/kds';
 import { Button } from '@/components/Button';
-import { formatMoney, type Money, type CartLine } from '@/types/domain';
+import { formatMoney, minorUnitExponent, type Money, type CartLine } from '@/types/domain';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
 import {
   listCurrencies,
   listExchangeRates,
   getDefaultCurrency,
+  exchangeRateToDecimal,
   type CurrencyDto,
   type ExchangeRateDto,
 } from '@/api/currency';
-import { listCustomers, type CustomerDto } from '@/api/customers';
+import { listCustomersScoped, type CustomerDto } from '@/api/customers';
 import { getLoyaltyAccount, redeemLoyaltyPoints, getPointsValue, type LoyaltyAccountWithDetails } from '@/api/loyalty';
 import QrisQrDisplay from '@/components/QrisQrDisplay';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
@@ -24,6 +26,7 @@ import { animDuration } from '@/utils/animation';
 import StockShortfallDialog from '@/features/sales/StockShortfallDialog';
 import ReceiptPreview from '@/features/sales/ReceiptPreview';
 import type { PrintSalesReceiptArgs } from '@/api/sales';
+import { plainErrorMessage } from '@/utils/app-error';
 import './PaymentModal.css';
 
 type PaymentMethod = 'cash' | 'card' | 'qris' | 'other' | 'open_bill' | 'credit';
@@ -98,6 +101,21 @@ export default function PaymentModal({
     },
     [onCustomerChange],
   );
+  // The reset effect below must run ONLY when the modal opens (or the charge
+  // currency changes) — NOT on every parent re-render. Consumers pass
+  // onCustomerChange as an inline arrow, so notifyCustomerChange's identity
+  // changes with every parent render; depending on it directly would re-run
+  // the effect and wipe user input (e.g. the tendered amount) mid-payment.
+  // Route through a ref so the effect body always calls the latest callback
+  // while the effect itself stays stable (same pattern as l10nRef above).
+  const notifyCustomerChangeRef = useRef(notifyCustomerChange);
+  notifyCustomerChangeRef.current = notifyCustomerChange;
+  // Same identity-churn protection for the auto-dismiss timer: consumers
+  // pass onComplete/onClose as inline arrows, and parents that re-render
+  // frequently (e.g. the retail POS 1-second clock) would otherwise keep
+  // re-arming the dismiss timer via the effect dependency below.
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
   const [customerSearchResults, setCustomerSearchResults] = useState<CustomerDto[]>([]);
   const [loadingCustomers, setLoadingCustomers] = useState(false);
@@ -105,6 +123,7 @@ export default function PaymentModal({
   const [leaving, setLeaving] = useState(false);
   const leaveCb = useRef<(() => void) | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const customerSearchPanelRef = useRef<HTMLDivElement>(null);
 
   const MS_200 = animDuration(200);
 
@@ -128,7 +147,9 @@ export default function PaymentModal({
     ];
     const isTerminal = terminalPatterns.some((p) => lower.includes(p));
     return {
-      message: errMsg,
+      // The classification above reads the raw text on purpose; the message
+      // surfaced to the user goes through the shared safe mapper (ERR-05).
+      message: plainErrorMessage(err, errMsg),
       retryable: isRetryable && !isTerminal,
     };
   }, []);
@@ -198,14 +219,16 @@ export default function PaymentModal({
     const rate = exchangeRates.find(
       (r) => r.from_currency === total.currency && r.to_currency === selectedCurrency,
     );
-    if (rate) return rate;
+    if (rate) {
+      return { ...rate, rate: exchangeRateToDecimal(rate) };
+    }
     const inverse = exchangeRates.find(
       (r) => r.from_currency === selectedCurrency && r.to_currency === total.currency,
     );
     if (inverse) {
       return {
         ...inverse,
-        rate: 1 / inverse.rate,
+        rate: 1 / exchangeRateToDecimal(inverse),
         from_currency: total.currency,
         to_currency: selectedCurrency,
       };
@@ -228,27 +251,38 @@ export default function PaymentModal({
       setShortfallResult(null);
       setReceiptArgs(null);
       setSelectedCurrency(total.currency);
-      notifyCustomerChange(null);
       setCustomerSearchQuery('');
       setCustomerSearchResults([]);
       setSplits([
         { id: 1, method: 'cash', otherLabel: '', amountMinor: '' },
         { id: 2, method: 'card', otherLabel: '', amountMinor: '' },
       ]);
+      notifyCustomerChangeRef.current(null);
     }
-  }, [open, total.currency, notifyCustomerChange]);
+    // onCustomerChange is intentionally omitted: it is routed through
+    // notifyCustomerChangeRef, so depending on it here would re-run this
+    // reset (and wipe the tendered amount) on every parent re-render.
+  }, [open, total.currency]);
 
   useEffect(() => {
     if (!showCustomerSearch) return;
+    if (!sessionToken) {
+      // Customer data is store-scoped. Never fall back to the legacy global
+      // command when this modal is rendered outside an authenticated scope.
+      allCustomersRef.current = [];
+      setCustomerSearchResults([]);
+      setLoadingCustomers(false);
+      return;
+    }
     setLoadingCustomers(true);
-    listCustomers()
+    listCustomersScoped(sessionToken)
       .then((customers) => {
         allCustomersRef.current = customers;
         setCustomerSearchResults(customers);
       })
-      .catch(() => { addToast({ message: l10nRef.current.getString('payment-toast-customers-failed') || 'Failed to load customers', type: 'error' }); setCustomerSearchResults([]); })
+      .catch(() => { addToast({ message: requiredLocalized(l10nRef.current, 'payment-toast-customers-failed'), type: 'error' }); setCustomerSearchResults([]); })
       .finally(() => setLoadingCustomers(false));
-  }, [showCustomerSearch, addToast]); // l10n via ref — stable dep chain
+  }, [showCustomerSearch, sessionToken, addToast]); // l10n via ref — stable dep chain
 
   useEffect(() => {
     if (!showCustomerSearch) return;
@@ -272,7 +306,11 @@ export default function PaymentModal({
 
   useEffect(() => {
     if (selectedCustomer) {
-      getLoyaltyAccount(selectedCustomer.id)
+      if (!sessionToken) {
+        setLoyaltyAccount(null);
+        return;
+      }
+      getLoyaltyAccount(sessionToken, selectedCustomer.id)
         .then((account) => {
           setLoyaltyAccount(account);
           if (account && account.account.points > 0) {
@@ -280,23 +318,27 @@ export default function PaymentModal({
             setLoyaltyDiscount(0n);
           }
         })
-        .catch(() => { addToast({ message: l10nRef.current.getString('payment-toast-loyalty-failed') || 'Failed to load loyalty account', type: 'error' }); setLoyaltyAccount(null); });
+        .catch(() => { addToast({ message: requiredLocalized(l10nRef.current, 'payment-toast-loyalty-failed'), type: 'error' }); setLoyaltyAccount(null); });
     } else {
       setLoyaltyAccount(null);
       setRedeemPoints(false);
       setLoyaltyDiscount(0n);
     }
-  }, [selectedCustomer, addToast]); // l10n via ref — stable dep chain
+  }, [selectedCustomer, sessionToken, addToast]); // l10n via ref — stable dep chain
 
   useEffect(() => {
     if (loyaltyAccount?.account && loyaltyAccount.account.points > 0) {
-      getPointsValue(loyaltyAccount.account.points)
+      if (!sessionToken) {
+        setPointsWorthMinor(null);
+        return;
+      }
+      getPointsValue(sessionToken, loyaltyAccount.account.points)
         .then(setPointsWorthMinor)
-        .catch(() => { addToast({ message: l10nRef.current.getString('payment-toast-points-value-failed') || 'Failed to load points value', type: 'error' }); setPointsWorthMinor(null); });
+        .catch(() => { addToast({ message: requiredLocalized(l10nRef.current, 'payment-toast-points-value-failed'), type: 'error' }); setPointsWorthMinor(null); });
     } else {
       setPointsWorthMinor(null);
     }
-  }, [loyaltyAccount, addToast]); // l10n via ref — stable dep chain
+  }, [loyaltyAccount, sessionToken, addToast]); // l10n via ref — stable dep chain
 
   useEffect(() => {
     if (!redeemPoints || pointsToRedeem <= 0) {
@@ -304,7 +346,8 @@ export default function PaymentModal({
       return;
     }
     let cancelled = false;
-    getPointsValue(pointsToRedeem)
+    if (!sessionToken) return;
+    getPointsValue(sessionToken, pointsToRedeem)
       .then((val) => {
         if (!cancelled) {
           const discount = BigInt(val);
@@ -313,7 +356,7 @@ export default function PaymentModal({
       })
       .catch(() => { /* points value calc is best-effort */ });
     return () => { cancelled = true; };
-  }, [pointsToRedeem, redeemPoints, totalMinor]);
+  }, [pointsToRedeem, redeemPoints, totalMinor, sessionToken]);
 
   const effectiveTotal = useMemo(() => {
     const base = totalMinor;
@@ -329,11 +372,7 @@ export default function PaymentModal({
   const tenderedMinor = useMemo(() => {
     const num = parseFloat(tendered);
     if (Number.isNaN(num) || num < 0) return 0n;
-    const known: Record<string, number> = {
-      JPY: 0, KRW: 0, VND: 0, CLP: 0, ISK: 0, HUF: 0,
-      KWD: 3, OMR: 3, BHD: 3, JOD: 3, TND: 3,
-    };
-    const exp = known[total.currency] ?? 2;
+    const exp = minorUnitExponent(total.currency);
     return BigInt(Math.round(num * 10 ** exp));
   }, [tendered, total.currency]);
 
@@ -492,11 +531,14 @@ export default function PaymentModal({
       if (loyaltyAccount && redeemPoints && loyaltyDiscount > 0n) {
         try {
           if (selectedCustomer?.id) {
-            await redeemLoyaltyPoints(
-              selectedCustomer.id,
-              Number(loyaltyDiscount),
-              saleResult.saleId,
-            );
+            if (sessionToken) {
+              await redeemLoyaltyPoints(
+                sessionToken,
+                selectedCustomer.id,
+                Number(loyaltyDiscount),
+                saleResult.saleId,
+              );
+            }
           }
         } catch {
           // non-blocking
@@ -505,7 +547,7 @@ export default function PaymentModal({
 
       setDone(true);
     } catch (err) {
-      addToast({ message: `QR payment failed: ${err instanceof Error ? err.message : String(err)}`, type: 'error' });
+      addToast({ message: `QR payment failed: ${plainErrorMessage(err)}`, type: 'error' });
       const classified = classifyError(err);
       setPaymentError(classified);
     } finally {
@@ -526,11 +568,7 @@ export default function PaymentModal({
   const parseSplitMinor = useCallback((val: string): bigint => {
     const num = parseFloat(val);
     if (Number.isNaN(num) || num < 0) return 0n;
-    const known: Record<string, number> = {
-      JPY: 0, KRW: 0, VND: 0, CLP: 0, ISK: 0, HUF: 0,
-      KWD: 3, OMR: 3, BHD: 3, JOD: 3, TND: 3,
-    };
-    const exp = known[total.currency] ?? 2;
+    const exp = minorUnitExponent(total.currency);
     return BigInt(Math.round(num * 10 ** exp));
   }, [total.currency]);
 
@@ -573,24 +611,21 @@ export default function PaymentModal({
   const autoSplitEvenly = useCallback(() => {
     const count = splits.length;
     if (count === 0) return;
-    const each = Number(totalMinor) / count;
-    const known: Record<string, number> = {
-      JPY: 0, KRW: 0, VND: 0, CLP: 0, ISK: 0, HUF: 0,
-      KWD: 3, OMR: 3, BHD: 3, JOD: 3, TND: 3,
-    };
-    const exp = known[total.currency] ?? 2;
-    const eachFormatted = (each / 10 ** exp).toFixed(exp);
-    const remainderCents = Number(totalMinor % BigInt(count));
+    const exp = minorUnitExponent(total.currency);
+    // Integer floor division in minor units: every row gets baseMinor, and the
+    // exact remainder lands on the last row — avoids float `toFixed` rounding
+    // that used to over-split non-divisible totals (e.g. 4,450,001 by 2 became
+    // 2,225,001 + 2,225,002 = 4,450,003).
+    const baseMinor = Number(totalMinor / BigInt(count));
+    const remainderMinor = Number(totalMinor % BigInt(count));
+    const fmt = (minor: number) => (minor / 10 ** exp).toFixed(exp);
     setSplits((prev) =>
-      prev.map((s, i) => {
-        const val = exp === 0 ? parseFloat(eachFormatted).toFixed(0) : eachFormatted;
-        return {
-          ...s,
-          amountMinor: i === prev.length - 1
-            ? (parseFloat(val) + remainderCents / 10 ** exp).toFixed(exp)
-            : val,
-        };
-      }),
+      prev.map((s, i) => ({
+        ...s,
+        amountMinor: i === prev.length - 1
+          ? fmt(baseMinor + remainderMinor)
+          : fmt(baseMinor),
+      })),
     );
   }, [splits.length, totalMinor, total.currency]);
 
@@ -668,11 +703,7 @@ export default function PaymentModal({
       let paymentSplits: PaymentSplitArg[] | undefined;
 
       if (splitMode) {
-        const known: Record<string, number> = {
-          JPY: 0, KRW: 0, VND: 0, CLP: 0, ISK: 0, HUF: 0,
-          KWD: 3, OMR: 3, BHD: 3, JOD: 3, TND: 3,
-        };
-        const exp = known[total.currency] ?? 2;
+        const exp = minorUnitExponent(total.currency);
         paymentSplits = splits.map((s) => ({
           method: s.method === 'other' ? s.otherLabel.trim() || 'OTHER' : s.method.toUpperCase(),
           amountMinor: Math.round(parseFloat(s.amountMinor || '0') * 10 ** exp),
@@ -798,11 +829,14 @@ export default function PaymentModal({
       if (loyaltyAccount && redeemPoints && loyaltyDiscount > 0n) {
         try {
           if (selectedCustomer?.id) {
-            await redeemLoyaltyPoints(
-              selectedCustomer.id,
-              Number(loyaltyDiscount),
-              saleResult.saleId,
-            );
+            if (sessionToken) {
+              await redeemLoyaltyPoints(
+                sessionToken,
+                selectedCustomer.id,
+                Number(loyaltyDiscount),
+                saleResult.saleId,
+              );
+            }
           }
         } catch {
           // Loyalty redemption failure is non-blocking
@@ -832,10 +866,10 @@ export default function PaymentModal({
   useEffect(() => {
     if (!done) return;
     const timer = setTimeout(() => {
-      animateLeave(onComplete);
+      animateLeave(onCompleteRef.current);
     }, changeDue ? 3000 : 1500);
     return () => clearTimeout(timer);
-  }, [done, changeDue, onComplete, animateLeave]);
+  }, [done, changeDue, animateLeave]); // onComplete via ref — stable deps
 
   // Auto-dismiss after leave animation completes
   useEffect(() => {
@@ -848,6 +882,9 @@ export default function PaymentModal({
   useFocusTrap(panelRef, open && !leaving && !processing && !done, () => {
     if (!showCustomerSearch && !showQr) animateLeave(onClose);
   });
+
+  // ── Focus trap for nested customer search modal ────────────
+  useFocusTrap(customerSearchPanelRef, showCustomerSearch, () => setShowCustomerSearch(false));
 
   // Parse PartialStockResult from Tauri error messages
   const tryParsePartialStockResult = (msg: string): PartialStockResult | null => {
@@ -869,11 +906,7 @@ export default function PaymentModal({
   // Reconstruct payment splits from the current split state (for shortfall retry)
   const paymentSplitsFromState = useCallback((): PaymentSplitArg[] | undefined => {
     if (!splitMode) return undefined;
-    const known: Record<string, number> = {
-      JPY: 0, KRW: 0, VND: 0, CLP: 0, ISK: 0, HUF: 0,
-      KWD: 3, OMR: 3, BHD: 3, JOD: 3, TND: 3,
-    };
-    const exp = known[total.currency] ?? 2;
+    const exp = minorUnitExponent(total.currency);
     return splits.map((s) => ({
       method: s.method === 'other' ? s.otherLabel.trim() || 'OTHER' : s.method.toUpperCase(),
       amountMinor: Math.round(parseFloat(s.amountMinor || '0') * 10 ** exp),
@@ -931,14 +964,14 @@ export default function PaymentModal({
           }}
           onCancel={() => {
             setShortfallResult(null);
-            addToast({ message: l10n.getString('payment-shortfall-cancelled') || 'Sale cancelled due to insufficient stock.', type: 'info' });
+            addToast({ message: requiredLocalized(l10n, 'payment-shortfall-cancelled'), type: 'info' });
             animateLeave(onClose);
           }}
         />
       )}
 
       {!shortfallResult && (
-      <div className={`payment-modal ${modalStateClass}`} ref={(el) => {
+      <div className={`payment-modal ${modalStateClass}`} data-testid="payment-modal" ref={(el) => {
         // Combine panelRef (focus trap) with keyboardAvoidRef (scroll-into-view)
         (panelRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
         (keyboardAvoidRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
@@ -1106,7 +1139,7 @@ export default function PaymentModal({
                   </Localized>
                   <div className="payment-method-options">
                     {(['cash', 'card', 'qris', 'credit'] as const).map((m) => (
-                      <label key={m} className="payment-method-label">
+                      <label key={m} className="payment-method-label" data-testid="quick-pay-button">
                         <input
                           type="radio"
                           name="payment-method"
@@ -1115,7 +1148,7 @@ export default function PaymentModal({
                           onChange={() => setMethod(m)}
                         />
                         <span className="payment-method-name">
-                          {m === 'cash' ? l10n.getString('payment-method-cash') : m === 'card' ? l10n.getString('payment-method-card') : m === 'qris' ? l10n.getString('payment-method-qris') : l10n.getString('payment-method-credit') || 'Credit'}
+                          {m === 'cash' ? l10n.getString('payment-method-cash') : m === 'card' ? l10n.getString('payment-method-card') : m === 'qris' ? l10n.getString('payment-method-qris') : requiredLocalized(l10n, 'payment-method-credit')}
                         </span>
                       </label>
                     ))}
@@ -1200,15 +1233,19 @@ export default function PaymentModal({
 
                     <div className="payment-quick-cash">
                       {(tenderPresets ?? [5000, 10000, 20000, 50000, 100000]).map((amount) => {
-                        const totalNum = Number(total.minor_units) / 100;
-                        const quickVal = Math.ceil(totalNum / amount) * amount;
+                        // Presets are major-unit denominations (Rp 5.000 / $5).
+                        // Use the currency's minor-unit exponent so the quick
+                        // buttons stay consistent with tenderedMinor's parse.
+                        const exp = minorUnitExponent(total.currency);
+                        const totalMajor = Number(total.minor_units) / 10 ** exp;
+                        const quickVal = Math.ceil(totalMajor / amount) * amount;
                         return (
                           <button
                             key={amount}
                             type="button"
                             className="payment-quick-btn"
-                            aria-label={l10n.getString('payment-quick-tender-aria', { amount: quickVal.toFixed(2) }, 'Tender')}
-                            onClick={() => setTendered(quickVal.toFixed(2))}
+                            aria-label={l10n.getString('payment-quick-tender-aria', { amount: quickVal.toFixed(exp) }, 'Tender')}
+                            onClick={() => setTendered(quickVal.toFixed(exp))}
                           >
                             {total.currency} {quickVal.toLocaleString('id-ID')}
                           </button>
@@ -1218,7 +1255,10 @@ export default function PaymentModal({
                         type="button"
                         className="payment-quick-btn"
                         aria-label={l10n.getString('payment-tender-exact-aria', null, 'Tend exact amount')}
-                        onClick={() => setTendered((Number(total.minor_units) / 100).toFixed(2))}
+                        onClick={() => {
+                          const exp = minorUnitExponent(total.currency);
+                          setTendered((Number(total.minor_units) / 10 ** exp).toFixed(exp));
+                        }}
                       >
                         <Localized id="payment-tender-exact">
                           <span>Exact</span>
@@ -1431,7 +1471,7 @@ export default function PaymentModal({
               <div className="payment-loyalty-section">
                 <div className="payment-loyalty-balance">
                   <span className="payment-loyalty-label">
-                    {l10n.getString('payment-loyalty-points-label') || 'Points'}: {loyaltyAccount.account.points}
+                    {requiredLocalized(l10n, 'payment-loyalty-points-label')}: {loyaltyAccount.account.points}
                   </span>
                   <span className="payment-loyalty-value">
                     {pointsWorthMinor !== null
@@ -1523,23 +1563,21 @@ export default function PaymentModal({
             )}
 
             {showCustomerSearch && (
-               
+              <>
+              {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
               <div
                 className="payment-customer-search-overlay"
-                onClick={() => setShowCustomerSearch(false)}
+                role="dialog"
+                onClick={(e) => { if (e.target === e.currentTarget) setShowCustomerSearch(false); }}
                 onKeyDown={(e) => { if (e.key === 'Escape') setShowCustomerSearch(false); }}
-                role="button"
                 tabIndex={-1}
-                aria-label={l10n.getString('modal-close-aria') || 'Close customer search'}
               >
-                {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- onClick stops propagation to backdrop, Escape provides keyboard dismissal */}
                 <div
+                  ref={customerSearchPanelRef}
                   className="payment-customer-search-modal"
                   role="dialog"
                   aria-modal="true"
-                  tabIndex={-1}
-                  onClick={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => { if (e.key === 'Escape') setShowCustomerSearch(false); }}
+                  aria-label={l10n.getString('payment-customer-search-heading', null, 'Select Customer')}
                 >
                   <Localized id="payment-customer-search-heading">
                     <h3 className="payment-customer-search-heading">Select Customer</h3>
@@ -1597,7 +1635,7 @@ export default function PaymentModal({
                   </Localized>
                 </div>
               </div>
-            )}
+            </>)}
 
             <div className="payment-actions">
               <Localized id="payment-cancel">
@@ -1610,6 +1648,7 @@ export default function PaymentModal({
                 loading={processing}
                 disabled={!canComplete}
                 onClick={complete}
+                data-testid="settle-button"
               >
                 {method === 'open_bill' ? (
                   <Localized id="payment-open-bill">

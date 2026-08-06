@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
-import { SettingsPopup, useToast } from '@/frontend/shared';
+import { SettingsPopup, useToast, requiredLocalized, EmptyState } from '@/frontend/shared';
+import { NoTerminalsIcon } from '@/components/EmptyStateIllustrations';
 import {
   listTerminals,
   registerTerminal,
@@ -23,13 +24,15 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
+import { l10nErrorMessage } from '@/utils/app-error';
 import './TerminalManagementScreen.css';
 
 // ── Feature groups for the override toggle UI ─────────────────────
 
-const FEATURE_GROUPS: { label: string; keys: string[] }[] = [
+const FEATURE_GROUPS: { label: string; i18nKey: string; keys: string[] }[] = [
   {
     label: 'Sales',
+    i18nKey: 'terminal-feature-group-sales',
     keys: [
       FEATURES.SIMPLE_RETAIL,
       FEATURES.RESTAURANT,
@@ -44,6 +47,7 @@ const FEATURE_GROUPS: { label: string; keys: string[] }[] = [
   },
   {
     label: 'Payments',
+    i18nKey: 'terminal-feature-group-payments',
     keys: [
       FEATURES.CASH_PAYMENT,
       FEATURES.CARD_PAYMENT,
@@ -52,6 +56,7 @@ const FEATURE_GROUPS: { label: string; keys: string[] }[] = [
   },
   {
     label: 'Inventory & Products',
+    i18nKey: 'terminal-feature-group-inventory-products',
     keys: [
       FEATURES.INVENTORY_TRACKING,
       FEATURES.PRODUCT_VARIANTS,
@@ -61,6 +66,7 @@ const FEATURE_GROUPS: { label: string; keys: string[] }[] = [
   },
   {
     label: 'Hardware',
+    i18nKey: 'terminal-feature-group-hardware',
     keys: [
       FEATURES.RECEIPT_PRINTING,
       FEATURES.CASH_DRAWER,
@@ -70,6 +76,7 @@ const FEATURE_GROUPS: { label: string; keys: string[] }[] = [
   },
   {
     label: 'Staff & Security',
+    i18nKey: 'terminal-feature-group-staff-security',
     keys: [
       FEATURES.STAFF_LOGIN,
       FEATURES.STAFF_ROLES,
@@ -79,6 +86,7 @@ const FEATURE_GROUPS: { label: string; keys: string[] }[] = [
   },
   {
     label: 'System',
+    i18nKey: 'terminal-feature-group-system',
     keys: [
       FEATURES.CLOUD_SYNC,
       FEATURES.MULTI_STORE,
@@ -419,7 +427,7 @@ export default function TerminalManagementScreen() {
       closeModal();
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('terminal-error-save'));
+      setError(l10nErrorMessage(err, l10n, 'terminal-error-save'));
     } finally {
       setSaving(false);
     }
@@ -503,24 +511,15 @@ export default function TerminalManagementScreen() {
         </Card>
       ) : terminals.length === 0 ? (
         <Card shadow="sm">
-          <div className="terminal-mgmt-empty">
-            <div className="terminal-mgmt-empty-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="48" height="48">
-                <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                <line x1="8" y1="21" x2="16" y2="21" />
-                <line x1="12" y1="17" x2="12" y2="21" />
-                <path d="M7 7l3 3-3 3" />
-              </svg>
-            </div>
-            <Localized id="terminal-management-empty">
-              <p>No terminals registered yet. Register the first terminal to get started.</p>
-            </Localized>
-            <Localized id="terminal-register">
-              <Button variant="secondary" onClick={openCreate}>
-                Register Terminal
-              </Button>
-            </Localized>
-          </div>
+          <EmptyState
+            region="table"
+            icon={<NoTerminalsIcon />}
+            title={requiredLocalized(l10n, 'terminal-management-empty')}
+            action={{
+              label: requiredLocalized(l10n, 'terminal-register'),
+              onClick: openCreate,
+            }}
+          />
         </Card>
       ) : (
         <div className="terminal-mgmt-table-wrap">
@@ -726,11 +725,11 @@ export default function TerminalManagementScreen() {
                     <div key={group.label} className="terminal-mgmt-feature-group">
                       <div className="terminal-mgmt-feature-group-header">
                         <span className="terminal-mgmt-feature-group-label">
-                          {group.label}
+                          {l10n.getString(group.i18nKey)}
                         </span>
                         {groupOverrides.length > 0 && (
                           <span className="terminal-mgmt-feature-group-count">
-                            {l10n.getString('terminal-overrides-count', { count: groupOverrides.length }) || `${groupOverrides.length} override${groupOverrides.length !== 1 ? 's' : ''}`}
+                            {requiredLocalized(l10n, 'terminal-overrides-count', { count: groupOverrides.length })}
                           </span>
                         )}
                       </div>
@@ -846,7 +845,7 @@ export default function TerminalManagementScreen() {
                       {binding.boundInstanceId && (<> &middot; <Localized id="terminal-binding-instance-conjunction">instance:</Localized> <strong>{binding.boundInstanceId}</strong></>)}
                     </p>
                     <p className={binding.signatureValid ? 'terminal-mgmt-status-active' : 'terminal-mgmt-status-inactive'}>
-                      <Localized id="terminal-binding-signature">Signature:</Localized> {binding.signatureValid ? l10n.getString('terminal-binding-valid') || 'Valid' : l10n.getString('terminal-binding-invalid') || 'Invalid / Tampered'}
+                      <Localized id="terminal-binding-signature">Signature:</Localized> {binding.signatureValid ? requiredLocalized(l10n, 'terminal-binding-valid') : requiredLocalized(l10n, 'terminal-binding-invalid')}
                     </p>
                   </div>
                 )}
@@ -859,9 +858,9 @@ export default function TerminalManagementScreen() {
                       value={selectedStoreId}
                       onChange={(e) => setSelectedStoreId(e.target.value)}
                     >
-                      <option value="">{l10n.getString('terminal-binding-select-store') || '-- Select store --'}</option>
+                      <option value="">{requiredLocalized(l10n, 'terminal-binding-select-store')}</option>
                       {bindingStores.map((s) => (
-                        <option key={s.id} value={s.id}>{s.name}{s.is_primary ? ` ${l10n.getString('terminal-binding-primary') || '(Primary)'}` : ''}</option>
+                        <option key={s.id} value={s.id}>{s.name}{s.is_primary ? ` ${requiredLocalized(l10n, 'terminal-binding-primary')}` : ''}</option>
                       ))}
                     </select>
                   </label>
@@ -874,7 +873,7 @@ export default function TerminalManagementScreen() {
                       onChange={(e) => setSelectedInstanceId(e.target.value)}
                       disabled={!selectedStoreId}
                     >
-                      <option value="">{l10n.getString('terminal-binding-select-instance') || '-- Select instance --'}</option>
+                      <option value="">{requiredLocalized(l10n, 'terminal-binding-select-instance')}</option>
                       {bindingInstances.map((i) => (
                         <option key={i.instance_id} value={i.instance_id}>{i.name} ({i.type_key})</option>
                       ))}
@@ -889,7 +888,7 @@ export default function TerminalManagementScreen() {
                     disabled={!selectedStoreId || !selectedInstanceId}
                     onClick={handleBind}
                   >
-                    {binding?.bounded ? l10n.getString('terminal-binding-update') || 'Update Binding' : l10n.getString('terminal-binding-bind') || 'Bind Terminal'}
+                    {binding?.bounded ? requiredLocalized(l10n, 'terminal-binding-update') : requiredLocalized(l10n, 'terminal-binding-bind')}
                   </Button>
                   {binding?.bounded && (
                     <Button

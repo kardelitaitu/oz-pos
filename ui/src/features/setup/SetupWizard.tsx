@@ -3,6 +3,7 @@ import { useState, useCallback } from 'react';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Localized } from '@/frontend/shared/Localized';
+import { requiredLocalized } from '@/frontend/shared';
 import { useLocalization } from '@fluent/react';
 import { detectDefaultCurrency } from '@/utils/currency';
 import LiveSetupPreview from './components/LiveSetupPreview';
@@ -369,7 +370,7 @@ export default function SetupWizard({ onComplete, onSkip, onLaunch }: SetupWizar
   const stepIndicator = (
     <nav className="setup-progress" aria-label={l10n.getString('setup-progress-aria')}>
         {STEPS.map((label, i) => {
-          const stepLabel = l10n.getString(`setup-step-${STEP_IDS[i]}`) || label;
+          const stepLabel = requiredLocalized(l10n, `setup-step-${STEP_IDS[i]}`);
           return (
             <span key={label} className="setup-step-group">
               <span
@@ -381,7 +382,7 @@ export default function SetupWizard({ onComplete, onSkip, onLaunch }: SetupWizar
                       : 'setup-step-dot setup-step-dot--pending'
                 }
                 aria-current={i === step ? 'step' : undefined}
-                aria-label={l10n.getString('setup-step-aria', { number: i + 1, label: stepLabel }) || `Step ${i + 1}: ${label}`}
+                aria-label={requiredLocalized(l10n, 'setup-step-aria', { number: i + 1, label: stepLabel })}
               >
                 {i < step || (completed && i === TOTAL_STEPS - 1) ? '✓' : i + 1}
               </span>
@@ -423,7 +424,7 @@ export default function SetupWizard({ onComplete, onSkip, onLaunch }: SetupWizar
             <Localized id="setup-complete-title">
               <h1 className="setup-complete-title">All Set!</h1>
             </Localized>
-            <Localized id="setup-complete-desc" vars={{ preset: l10n.getString(`setup-preset-${preset ?? 'custom'}`) || PRESET_NAMES[preset ?? 'custom'] }}>
+            <Localized id="setup-complete-desc" vars={{ preset: requiredLocalized(l10n, `setup-preset-${preset ?? 'custom'}`) }}>
               <p className="setup-complete-desc">
                 {PRESET_NAMES[preset ?? 'custom']} &mdash; ready to go.
               </p>
@@ -611,7 +612,7 @@ function StepFeatures({
   onToggle: (key: string) => void;
 }) {
   const { l10n } = useLocalization();
-  const localizedTitle = l10n.getString(`setup-features-section-${sectionId}`) || title;
+  const localizedTitle = requiredLocalized(l10n, `setup-features-section-${sectionId}`);
 
   return (
     <>
@@ -627,7 +628,11 @@ function StepFeatures({
       <div className="setup-features" role="group" aria-label={l10n.getString('setup-features-group-aria', { title: localizedTitle })}>
           {features.map((f) => {
             const isOn = !!enabled[f.key];
-            const label = l10n.getString(`setup-feature-${f.key}-label`) || l10n.getString(`setup-feature-${f.key}`) || f.label;
+            // Prefer the -label key; fall back to the plain key via
+            // requiredLocalized. A bare requiredLocalized('-label') would
+            // render raw message ids for the ~15 features whose -label key
+            // is missing from the id bundle (id has only 12 of 27).
+            const label = l10n.getString(`setup-feature-${f.key}-label`) ?? requiredLocalized(l10n, `setup-feature-${f.key}`);
             return (
               <label
                 key={f.key}
@@ -698,7 +703,7 @@ function StepReview({
         <Card padding="md" shadow="sm">
           <p className="setup-preset-summary">
             {l10n.getString('setup-review-preset', {
-              name: preset ? l10n.getString(`setup-preset-${preset}`) || PRESET_NAMES[preset] : l10n.getString('setup-review-none') || 'None',
+              name: preset ? requiredLocalized(l10n, `setup-preset-${preset}`) : requiredLocalized(l10n, 'setup-review-none'),
             })}
           </p>
         </Card>

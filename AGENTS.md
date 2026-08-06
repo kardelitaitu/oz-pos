@@ -26,30 +26,10 @@ For comprehensive local validation that mirrors the entire CI matrix (not just t
 
 ## Codebase Knowledge Graph (graphify)
 
-The project has a pre-built knowledge graph at `graphify-out/graph.json`
-(13,719 nodes, 34,187 edges) covering the entire codebase — Rust crates,
-React/TypeScript UI, documentation, i18n, and CI configs. Use it to navigate
-unfamiliar code without reading every file.
-
-| Command | What it does | Best for |
-|---------|-------------|----------|
-| `graphify query "<question>"` | BFS traversal — finds relevant nodes and edges | Understanding architecture, finding dependencies |
-| `graphify query "<question>" --dfs` | Depth-first traversal — follows a chain | Tracing a specific call path or dependency chain |
-| `graphify path "A" "B"` | Shortest path between two concepts | Checking if two modules are connected |
-| `graphify explain "<node>"` | Everything connected to a node | Learning what a type/trait/hook touches |
-
-### Agent workflow
-
-- **At session start:** run `graphify --watch .` in the background to auto-rebuild
-the graph on file saves (AST-only, no LLM cost, deterministic).
-- **When stuck on unfamiliar code:** use `graphify query`/`path`/`explain` to
-navigate the graph instead of reading every file manually.
-- **On commit:** the post-commit hook (already installed) auto-rebuilds the graph
-so it stays in sync across sessions.
-
-The graph is persisted in `graphify-out/` (gitignored). Doc changes (`.md`, `.ftl`)
-require a manual `graphify --update .` to re-extract, but are not needed for
-day-to-day coding.
+`graphify` is **local-only** developer tooling for navigating unfamiliar code
+via a knowledge graph (`graphify-out/graph.json`). It is not part of this
+repository: its generated output and hooks are gitignored, and no graphify
+instructions ship here. Run `graphify --help` on a local machine to use it.
 
 ## Running UI CLI Tools on Windows (tsc / eslint)
 
@@ -65,22 +45,32 @@ starts fresh.
 
 | Task | Command (run from `ui/`) |
 |------|--------------------------|
+| All UI gates (chained) | `npm run check:all` |
 | Type-check | `npm run typecheck` |
 | Lint | `npm run lint` |
 | Lint + auto-fix | `npm run lint:fix` |
 | Build (type-check + bundle) | `npm run build` |
 | Tests | `npm run test` |
+| E2E suite (Docker → Vite → Playwright → cleanup) | `npm run e2e` |
+| E2E with browser visible | `npm run e2e:headed` |
+| E2E API tests only | `npm run e2e:api` |
+| E2E UI tests only | `npm run e2e:ui` |
 
 ```powershell
 # Always run from the ui/ directory
 cd "ui"
-npm run typecheck
-npm run lint
+npm run check:all   # full validation: lint → typecheck → test → i18n → E2E
 ```
 
 > **Rule:** Agents must use `npm run <script>` (not bare `tsc`/`eslint`) unless the
 > PATH prefix pattern above is applied first. Never assume `tsc` or `eslint` are
 > globally available on this machine.
+>
+> The `check:all` runner (`scripts/check-ui.mjs`) detects Docker availability
+> and, when Docker is up, provisions the full E2E environment via `npm run e2e`
+> (Docker backend + Vite + Playwright + cleanup — AUDIT-27 CI-07). It skips the
+> E2E gate gracefully when Docker is not running. For the E2E lifecycle alone,
+> use `npm run e2e`.
 
 ### If node_modules is missing
 
@@ -95,13 +85,13 @@ npm ci --no-audit --no-fund
 
 - Follow the POS software framework conventions.
 - Ensure all code follows the project's coding standards.
-- **Version is locked at the current release (`0.0.21`).** Never change the version number
+- **Version is locked at the current release (`0.0.24`).** Never change the version number
   (in `Cargo.toml`, `tauri.conf.json`, `package.json`, `CHANGELOG.md`,
   or anywhere else) unless the user explicitly asks you to bump it.
 
 ### Rust Standards
-- Format all Rust code with `rustfmt` before committing.
-- Run `cargo clippy -- -D warnings` and resolve all warnings.
+- **Development Iteration:** Use `cargo check` (or `cargo check -p <crate>`) for quick compilation validation and run specific target tests (e.g. `cargo test -p <crate> <test_name>`) during active development. **Agents must NOT run `cargo clippy` or full workspace tests (`cargo test --workspace`) during routine iteration unless specifically requested by the user or executing final pre-push verification.**
+- **Pre-Push Verification:** Run `cargo fmt --all`, `cargo clippy --all-targets --all-features -- -D warnings` (resolving all warnings), and full workspace tests prior to pushing code or completing final verification.
 - Every public function, struct, and trait must have a doc comment (`///`).
 - Prefer `thiserror` for error types and `anyhow` for application-level error propagation.
 - Store all monetary values as integer minor units (`i64`) using the `Money` struct; never use `f32`/`f64` for currency.

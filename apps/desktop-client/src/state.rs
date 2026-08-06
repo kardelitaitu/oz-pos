@@ -39,7 +39,7 @@ findings: unsafe env::set_var removed; terminal_id typed field added; Drop bound
 //! `std::sync::Mutex`, document why in the field's doc comment.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -387,6 +387,36 @@ impl AppState {
         Err(AppError::InvalidSession)
     }
 
+    /// Remove every session bound to `user_id` except the token in
+    /// `keep_token` (STAFF-03 PIN rotation).
+    ///
+    /// The caller's own session is preserved — they authenticated moments
+    /// ago and the UI follows up with a reload using the same token — while
+    /// stale terminal sessions issued under the old PIN are invalidated.
+    pub fn invalidate_user_sessions_except(&self, user_id: &str, keep_token: &str) -> usize {
+        let mut store = match self.session_store.write() {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!("session store lock poisoned during invalidation: {e}");
+                return 0;
+            }
+        };
+        let before = store.len();
+        store.retain(|token, ctx| {
+            ctx.user_id != user_id || (!keep_token.is_empty() && token == keep_token)
+        });
+        let removed = before - store.len();
+        if removed > 0 {
+            tracing::info!(
+                user_id = %user_id,
+                removed = %removed,
+                keep_token = %keep_token,
+                "sessions invalidated after PIN rotation"
+            );
+        }
+        removed
+    }
+
     /// Remove all expired sessions from the store in a single sweep.
     ///
     /// Called periodically by the background session-cleanup daemon
@@ -492,24 +522,34 @@ fn start_plugin_watcher(
             tokio::time::sleep(Duration::from_secs(1)).await;
             if reload_flag.swap(false, Ordering::SeqCst) {
                 tracing::info!("plugin change detected, hot-reloading…");
-                let mut guard = plugins.lock().await;
-                match PluginManager::new(&plugins_dir) {
-                    Ok(pm) => {
-                        *guard = Some(pm);
-                        tracing::info!("plugins hot-reloaded successfully");
-                    }
-                    Err(e) => {
-                        tracing::error!(
-                            error = %e,
-                            "failed to hot-reload plugins, keeping old runtime"
-                        );
-                    }
-                }
+                reload_plugins(&plugins, &plugins_dir).await;
             }
         }
     });
 
     (Some(watcher), Some(handle))
+}
+
+/// Rebuild the plugin manager from `plugins_dir`, replacing the shared
+/// handle only on success.
+///
+/// Last-known-good rollback (PLG-07): if the reload fails (invalid manifest,
+/// unsafe script path, etc.) the previous runtime is kept untouched so a
+/// broken edit can never take the plugin subsystem down.
+async fn reload_plugins(plugins: &Arc<Mutex<Option<PluginManager>>>, plugins_dir: &Path) {
+    let mut guard = plugins.lock().await;
+    match PluginManager::new(plugins_dir) {
+        Ok(pm) => {
+            *guard = Some(pm);
+            tracing::info!("plugins hot-reloaded successfully");
+        }
+        Err(e) => {
+            tracing::error!(
+                error = %e,
+                "failed to hot-reload plugins, keeping old runtime"
+            );
+        }
+    }
 }
 
 fn resolve_db_path(app: &AppHandle) -> Result<PathBuf, AppError> {
@@ -594,6 +634,26 @@ impl AppState {
             terminal_id: Arc::new(Mutex::new(None)),
         }
     }
+
+    /// Construct a test state with a caller-provided global database connection.
+    ///
+    /// This keeps authorization tests independent from the production app
+    /// bootstrap while preserving the same global-identity lookup path.
+    pub fn for_test_with_conn(conn: Connection) -> Self {
+        let mut state = Self::for_test();
+        state.db = Arc::new(Mutex::new(conn));
+        state
+    }
+
+    /// Construct a test state with an isolated store database directory.
+    ///
+    /// The production state owns this manager, so injecting it here lets
+    /// scope tests prove that a session cannot observe another store's file.
+    pub fn for_test_with_db_manager(db_manager: StoreDatabaseManager) -> Self {
+        let mut state = Self::for_test();
+        state.db_manager = db_manager;
+        state
+    }
 }
 
 #[cfg(test)]
@@ -636,6 +696,81 @@ mod tests {
         let state = AppState::for_test();
         let result = state.resolve_session("");
         assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
+
+    #[test]
+    fn resolve_session_rejects_and_removes_expired_token() {
+        let state = AppState::for_test();
+        let expired = SessionContext::new(
+            "u-expired".into(),
+            "r1".into(),
+            "t1".into(),
+            "store-expired".into(),
+            "i1".into(),
+            "pos".into(),
+            Some(1),
+            0,
+        );
+        state
+            .session_store
+            .write()
+            .unwrap()
+            .insert("expired-token".into(), expired);
+
+        assert!(matches!(
+            state.resolve_session("expired-token"),
+            Err(AppError::InvalidSession)
+        ));
+        assert!(
+            !state
+                .session_store
+                .read()
+                .unwrap()
+                .contains_key("expired-token")
+        );
+    }
+
+    #[test]
+    fn resolve_scope_isolates_store_databases() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager =
+            StoreDatabaseManager::new(temp_dir.path().to_path_buf(), oz_core::migrations::ALL);
+        let state = AppState::for_test_with_db_manager(manager);
+        for (token, store_id) in [("token-a", "store-a"), ("token-b", "store-b")] {
+            state.session_store.write().unwrap().insert(
+                token.into(),
+                SessionContext::new(
+                    "user-1".into(),
+                    "role-owner".into(),
+                    "terminal-1".into(),
+                    store_id.into(),
+                    "instance-1".into(),
+                    "pos".into(),
+                    None,
+                    0,
+                ),
+            );
+        }
+
+        let (_, store_a) = state.resolve_scope("token-a").unwrap();
+        let conn_a = store_a.lock().unwrap();
+        conn_a
+            .execute_batch(
+                "CREATE TABLE scope_probe (value TEXT NOT NULL); INSERT INTO scope_probe VALUES ('A');",
+            )
+            .unwrap();
+        drop(conn_a);
+
+        let (_, store_b) = state.resolve_scope("token-b").unwrap();
+        let conn_b = store_b.lock().unwrap();
+        let table_count: i64 = conn_b
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'scope_probe'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(table_count, 0, "store B must not see store A data");
     }
 
     #[test]
@@ -709,5 +844,84 @@ mod tests {
         assert!(state.app.is_none());
         assert!(state.plugin_watcher.is_none());
         assert!(state.plugin_hot_reload_task.is_none());
+    }
+
+    // ── PLG-11: hot-reload last-known-good rollback ────────────────────
+
+    /// Write a minimal valid plugin directory for integration tests.
+    fn write_plugin_dir(root: &Path, script: &str) {
+        let plugin_dir = root.join("test-plugin");
+        std::fs::create_dir_all(&plugin_dir).unwrap();
+        std::fs::write(
+            plugin_dir.join("plugin.toml"),
+            r#"[plugin]
+name = "test-plugin"
+version = "1.0.0"
+
+[capabilities]
+scripts = ["main.lua"]
+
+[permissions]
+required_permissions = ["cart:read", "cart:write"]
+"#,
+        )
+        .unwrap();
+        std::fs::write(plugin_dir.join("main.lua"), script).unwrap();
+    }
+
+    #[tokio::test]
+    async fn reload_plugins_keeps_old_runtime_on_failed_reload() {
+        // A valid plugin that queues a discount at load time.
+        let tmp = tempfile::tempdir().unwrap();
+        write_plugin_dir(tmp.path(), "oz.apply_discount(\"cart\", 10)\n");
+
+        let plugins: Arc<Mutex<Option<PluginManager>>> =
+            Arc::new(Mutex::new(Some(PluginManager::new(tmp.path()).unwrap())));
+
+        // Corrupt the manifest: the reload must fail and KEEP the old runtime.
+        std::fs::write(
+            tmp.path().join("test-plugin/plugin.toml"),
+            "[plugin]\nname = \"broken",
+        )
+        .unwrap();
+        reload_plugins(&plugins, tmp.path()).await;
+
+        let guard = plugins.lock().await;
+        assert!(
+            guard.is_some(),
+            "failed reload must keep the last-known-good runtime"
+        );
+        // The old runtime is still live: its plugin's discount (queued at
+        // initial load) is still drainable.
+        let d = guard.as_ref().unwrap().drain_pending_discounts();
+        assert_eq!(d.len(), 1, "old runtime must stay live after failed reload");
+    }
+
+    #[tokio::test]
+    async fn reload_plugins_replaces_runtime_on_success() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_plugin_dir(tmp.path(), "oz.apply_discount(\"cart\", 10)\n");
+
+        let plugins: Arc<Mutex<Option<PluginManager>>> =
+            Arc::new(Mutex::new(Some(PluginManager::new(tmp.path()).unwrap())));
+
+        // Change the script so a fresh runtime queues a different discount.
+        std::fs::write(
+            tmp.path().join("test-plugin/main.lua"),
+            "oz.apply_discount(\"cart\", 20)\n",
+        )
+        .unwrap();
+        reload_plugins(&plugins, tmp.path()).await;
+
+        let guard = plugins.lock().await;
+        let mgr = guard
+            .as_ref()
+            .expect("successful reload must set a runtime");
+        let d = mgr.drain_pending_discounts();
+        assert_eq!(d.len(), 1);
+        assert_eq!(
+            d[0].percent, 20,
+            "successful reload must pick up the change"
+        );
     }
 }

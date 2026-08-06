@@ -107,5 +107,18 @@ export function useSound() {
     } catch { /* ignore */ }
   }, []);
 
-  return { playBeep, playError, playSuccess, playAlert, setSoundEnabled: setEnabled };
+  const speak = useCallback((text: string) => {
+    if (!enabledRef.current || typeof window === 'undefined' || !window.speechSynthesis) return;
+    try {
+      // Cancel any ongoing speech to avoid overlapping announcements.
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.9;
+      utterance.pitch = 1.1;
+      utterance.volume = 0.8;
+      window.speechSynthesis.speak(utterance);
+    } catch { /* ignore */ }
+  }, []);
+
+  return { playBeep, playError, playSuccess, playAlert, speak, setSoundEnabled: setEnabled };
 }

@@ -1,7 +1,8 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { formatMoney } from '@/types/domain';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { requiredLocalized } from '@/frontend/shared';
 import './ItemModifierModal.css';
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -82,6 +83,8 @@ export default function ItemModifierModal({
   onConfirm,
   onClose,
 }: ItemModifierModalProps) {
+  const { l10n } = useLocalization();
+
   // ── State: selected modifiers by group ──────────────────────────
   // Key: groupId, Value: set of modifierIds selected in that group.
   const [selected, setSelected] = useState<Record<string, Set<string>>>(() => {
@@ -195,7 +198,7 @@ export default function ItemModifierModal({
         className="modifier-modal"
         role="dialog"
         aria-modal="true"
-        aria-label={`Customise ${productName}`}
+        aria-label={requiredLocalized(l10n, 'modifier-dialog-aria', { productName })}
         ref={panelRef}
       >
         {/* ── Header ─────────────────────────────────────── */}
@@ -205,7 +208,7 @@ export default function ItemModifierModal({
             type="button"
             className="modifier-close-btn"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={requiredLocalized(l10n, 'close')}
           >
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
               <line x1="18" y1="6" x2="6" y2="18" />

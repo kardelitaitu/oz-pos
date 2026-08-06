@@ -3,6 +3,32 @@ import { loggedInvoke } from '@/utils/logged-invoke';
 /** Status of a Kitchen Display System order. */
 export type KdsStatus = 'pending' | 'preparing' | 'ready' | 'served' | 'cancelled';
 
+/** A modifier choice attached to a line item. */
+export interface KdsModifier {
+  name: string;
+  choice: string;
+  price_minor: number;
+}
+
+/** A single line item on a KDS order ticket. */
+export interface KdsLineItem {
+  id: string;
+  kds_order_id: string;
+  sku: string;
+  display_name: string;
+  qty: number;
+  /** Course assignment: "appetizer", "main", "dessert", "beverage", or null. */
+  course: string | null;
+  /** Modifier choices. */
+  modifiers: KdsModifier[];
+  line_position: number;
+  item_status: string;
+  started_at: string | null;
+  ready_at: string | null;
+  served_at: string | null;
+  created_at: string;
+}
+
 /** A Kitchen Display System order. */
 export interface KdsOrder {
   id: string;
@@ -21,6 +47,10 @@ export interface KdsOrder {
   /** Kitchen zone this order is assigned to (e.g., "front", "back"). */
   kitchen_zone: string | null;
   notes: string;
+  /** Table number assigned to this order (e.g., "T5"), or null for takeaway. */
+  table_number: string | null;
+  /** Priority/rush flag: when true the ticket visually escalates above normal SLA. */
+  priority: boolean;
 }
 
 /** List KDS orders, optionally filtered by status. */
@@ -62,3 +92,45 @@ export const getKdsOrder = (userId: string, id: string): Promise<KdsOrder | null
 /** Get a KDS order by id (scoped — ADR #7). */
 export const getKdsOrderScoped = (sessionToken: string, id: string): Promise<KdsOrder | null> =>
   loggedInvoke<KdsOrder | null>('get_kds_order_scoped', { sessionToken, id });
+
+/** Input for creating a KDS line item (mirrors Rust CreateKdsLineItemInput). */
+export interface CreateKdsLineItemInput {
+  sku: string;
+  display_name: string;
+  qty: number;
+  course: string | null;
+  modifiers: KdsModifier[];
+}
+
+/** Input for updating items on an existing KDS order. */
+export interface UpdateKdsOrderItemsInput {
+  id: string;
+  items_summary: string;
+  item_count: number;
+  /** Structured line items to replace kds_line_items. When provided, summary/count are re-derived. */
+  line_items?: CreateKdsLineItemInput[] | null;
+}
+
+/** Update the items (summary + count) on an existing KDS order. */
+export const updateKdsOrderItems = (userId: string, args: UpdateKdsOrderItemsInput): Promise<KdsOrder> =>
+  loggedInvoke<KdsOrder>('update_kds_order_items', { userId, args });
+
+/** Update KDS order items (scoped — ADR #7). */
+export const updateKdsOrderItemsScoped = (sessionToken: string, args: UpdateKdsOrderItemsInput): Promise<KdsOrder> =>
+  loggedInvoke<KdsOrder>('update_kds_order_items_scoped', { sessionToken, args });
+
+/** Print a kitchen chit for a KDS order (scoped — ADR #7). */
+export const printKdsChitScoped = (sessionToken: string, orderId: string): Promise<boolean> =>
+  loggedInvoke<boolean>('print_kds_chit_scoped', { sessionToken, orderId });
+
+/** Get all line items for a KDS order (scoped — ADR #7). */
+export const getKdsOrderLinesScoped = (sessionToken: string, orderId: string): Promise<KdsLineItem[]> =>
+  loggedInvoke<KdsLineItem[]>('get_kds_order_lines_scoped', { sessionToken, orderId });
+
+/** Update the status of a single KDS line item (scoped — ADR #7). */
+export const updateKdsLineItemStatusScoped = (
+  sessionToken: string,
+  itemId: string,
+  status: KdsStatus,
+): Promise<KdsLineItem> =>
+  loggedInvoke<KdsLineItem>('update_kds_line_item_status_scoped', { sessionToken, itemId, status });

@@ -17,6 +17,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useState } from 'react';
 import { act } from 'react';
 import { render, fireEvent, screen } from '@testing-library/react';
+import { withFluent } from '@/locales/test-utils';
+import salesFtl from '@/locales/sales.ftl?raw';
 import QrisQrDisplay from '@/components/QrisQrDisplay';
 
 import {
@@ -86,13 +88,13 @@ describe('QrisQrDisplay exit-animation polish', () => {
 
   it('does not render when isOpen=false', () => {
     const hostRef = makeHostRef();
-    render(<HostModal hostRef={hostRef} initialOpen={false} />);
+    render(withFluent(<HostModal hostRef={hostRef} initialOpen={false} />, salesFtl));
     expect(document.querySelector('.qris-overlay')).toBeNull();
   });
 
   it('renders overlay + container with NO exit class when open', () => {
     const hostRef = makeHostRef();
-    render(<HostModal hostRef={hostRef} />);
+    render(withFluent(<HostModal hostRef={hostRef} />, salesFtl));
     const overlay = document.querySelector('.qris-overlay');
     const container = document.querySelector('.qris-container');
     expect(overlay).toBeTruthy();
@@ -103,7 +105,7 @@ describe('QrisQrDisplay exit-animation polish', () => {
 
   it('× button applies BOTH --exiting classes (layered exit) then fades', () => {
     const hostRef = makeHostRef();
-    render(<HostModal hostRef={hostRef} />);
+    render(withFluent(<HostModal hostRef={hostRef} />, salesFtl));
 
     fireEvent.click(document.querySelector('.qris-close') as HTMLElement);
 
@@ -121,7 +123,7 @@ describe('QrisQrDisplay exit-animation polish', () => {
 
   it('disables the × button during the fade (no double-click race)', () => {
     const hostRef = makeHostRef();
-    render(<HostModal hostRef={hostRef} />);
+    render(withFluent(<HostModal hostRef={hostRef} />, salesFtl));
     fireEvent.click(document.querySelector('.qris-close') as HTMLElement);
 
     const btn = document.querySelector<HTMLButtonElement>('.qris-close');
@@ -130,7 +132,7 @@ describe('QrisQrDisplay exit-animation polish', () => {
 
   it('× click mid-fade is idempotent (no double-timer)', () => {
     const hostRef = makeHostRef();
-    render(<HostModal hostRef={hostRef} />);
+    render(withFluent(<HostModal hostRef={hostRef} />, salesFtl));
     fireEvent.click(document.querySelector('.qris-close') as HTMLElement);
     fireEvent.click(document.querySelector<HTMLButtonElement>('.qris-close')!);
 
@@ -143,7 +145,7 @@ describe('QrisQrDisplay exit-animation polish', () => {
     // isOpen=false directly (no requestClose), so the surface just
     // unmounts. No fade expected.
     const hostRef = makeHostRef();
-    render(<HostModal hostRef={hostRef} />);
+    render(withFluent(<HostModal hostRef={hostRef} />, salesFtl));
     expect(document.querySelector('.qris-overlay')).toBeTruthy();
 
     act(() => { hostRef.setOpen(false); });
@@ -161,7 +163,7 @@ describe('QrisQrDisplay — QR rendering & payment flow', () => {
 
   it('renders 21×21 QR grid (441 cells)', () => {
     const hostRef = makeHostRef();
-    render(<HostModal hostRef={hostRef} />);
+    render(withFluent(<HostModal hostRef={hostRef} />, salesFtl));
     const cells = document.querySelectorAll('.qris-qr-cell');
     expect(cells.length).toBe(441);
     // Some cells should be filled (deterministic from reference hash)
@@ -172,9 +174,10 @@ describe('QrisQrDisplay — QR rendering & payment flow', () => {
 
   it('displays amount and reference correctly', () => {
     const hostRef = makeHostRef();
-    render(<HostModal hostRef={hostRef} />);
-    // 25000 / 100 = 250.00 IDR
-    expect(screen.getByText('250.00 IDR')).toBeInTheDocument();
+    render(withFluent(<HostModal hostRef={hostRef} />, salesFtl));
+    // 25000 IDR minor = Rp 25.000 → exp-0 exponent renders 25000 IDR,
+    // never the old hardcoded /100 '250.00 IDR'.
+    expect(screen.getByText('25000 IDR')).toBeInTheDocument();
     expect(screen.getByText('REF-1234')).toBeInTheDocument();
     expect(screen.getByText('OZ-POS Store')).toBeInTheDocument();
     expect(screen.getByText('QRIS')).toBeInTheDocument();
@@ -183,7 +186,7 @@ describe('QrisQrDisplay — QR rendering & payment flow', () => {
 
   it('shows spinner and waiting status initially', () => {
     const hostRef = makeHostRef();
-    render(<HostModal hostRef={hostRef} />);
+    render(withFluent(<HostModal hostRef={hostRef} />, salesFtl));
     const status = document.querySelector('.qris-status');
     expect(status).toBeTruthy();
     expect(status).toHaveAttribute('role', 'status');
@@ -194,7 +197,7 @@ describe('QrisQrDisplay — QR rendering & payment flow', () => {
 
   it('transitions to confirmed status after polling completes', () => {
     const hostRef = makeHostRef();
-    render(<HostModal hostRef={hostRef} />);
+    render(withFluent(<HostModal hostRef={hostRef} />, salesFtl));
 
     // Initial: waiting
     expect(screen.getByText('Waiting for payment...')).toBeInTheDocument();
@@ -214,10 +217,13 @@ describe('QrisQrDisplay — QR rendering & payment flow', () => {
     const onPaymentConfirmed = vi.fn();
     const hostRef = makeHostRef();
     render(
-      <HostModal
-        hostRef={hostRef}
-        onPaymentConfirmed={onPaymentConfirmed}
-      />,
+      withFluent(
+        <HostModal
+          hostRef={hostRef}
+          onPaymentConfirmed={onPaymentConfirmed}
+        />,
+        salesFtl,
+      ),
     );
 
     // Advance polls to trigger confirmation
@@ -241,7 +247,7 @@ describe('QrisQrDisplay — QR rendering & payment flow', () => {
 
   it('resets poll state when isOpen changes', () => {
     const hostRef = makeHostRef();
-    render(<HostModal hostRef={hostRef} />);
+    render(withFluent(<HostModal hostRef={hostRef} />, salesFtl));
 
     // Advance partially through polls
     act(() => {

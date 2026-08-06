@@ -10,35 +10,39 @@ products-category = Kategori
 products-stock = Stok
 products-no-products = Belum ada produk
 
-restaurant-menu-search-placeholder =
-    .placeholder = Cari Menu
-restaurant-menu-hamburger-aria =
-    .aria-label = Menu
-restaurant-menu-back-aria =
-    .aria-label = Kembali ke ruang kerja
-restaurant-size-decrease-aria =
-    .aria-label = Perkecil ukuran
-restaurant-size-increase-aria =
-    .aria-label = Perbesar ukuran
-restaurant-font-size-decrease-aria =
-    .aria-label = Perkecil ukuran huruf
-restaurant-font-size-increase-aria =
-    .aria-label = Perbesar ukuran huruf
+restaurant-menu-search-placeholder = Cari Menu
+restaurant-menu-hamburger-aria = Menu
+restaurant-menu-back-aria = Kembali ke ruang kerja
+restaurant-size-decrease-aria = Perkecil ukuran
+restaurant-size-increase-aria = Perbesar ukuran
+restaurant-font-size-decrease-aria = Perkecil ukuran huruf
+restaurant-font-size-increase-aria = Perbesar ukuran huruf
 restaurant-font-size-label = Ukuran Huruf
 restaurant-theme-light = Mode Terang
 restaurant-theme-dark = Mode Gelap
 restaurant-lock-terminal = Kunci Terminal
 restaurant-toggle-fullscreen = Alihkan Layar Penuh
-restaurant-clear-color-aria =
-    .aria-label = Hapus warna
-restaurant-categories-aria =
-    .aria-label = Kategori menu
+restaurant-clear-color-aria = Hapus warna
+restaurant-categories-aria = Kategori menu
 restaurant-menu-loading = Memuat menu…
 restaurant-menu-empty = Menu kosong
 restaurant-size-label = Ukuran
 restaurant-sort-label = Urutkan
 restaurant-card-add = Tambah
 restaurant-context-color-label = Warna
+restaurant-search-aria = Cari item menu
+restaurant-search-clear-aria = Hapus pencarian
+restaurant-context-pin = Sematkan ke atas
+restaurant-context-unpin = Lepas sematan
+restaurant-context-available = Tandai tersedia
+restaurant-context-unavailable = Tandai tidak tersedia
+restaurant-card-pin-title = Disematkan ke atas
+restaurant-sort-manual = Manual
+restaurant-sort-a-z = A–Z
+restaurant-sort-date = Berdasarkan Tanggal
+restaurant-sort-popularity = Popularitas
+restaurant-menu-items-aria = Item menu
+restaurant-color-swatch-aria = Warna { $color }
 
 # Error Boundary
 product-lookup-title = Produk
@@ -55,6 +59,7 @@ product-lookup-barcode-scan = Pindai
 product-lookup-scan-btn-aria =
     .aria-label = Kirim barcode yang dimasukkan
 product-lookup-no-results = Tidak ada produk ditemukan
+product-lookup-clear-search = Hapus pencarian
 product-lookup-loading = Memuat produk…
 product-lookup-add = Tambah ke Keranjang
 product-lookup-in-stock = Tersedia
@@ -92,6 +97,15 @@ product-mgmt-deleting =
         [one] Menghapus…
        *[other] …
     }
+product-mgmt-delete-confirm-title = Hapus produk?
+product-mgmt-delete-confirm-message = Hapus { $name } ({ $sku })? Tindakan ini tidak dapat dibatalkan.
+product-mgmt-delete-confirm-btn = Hapus
+product-mgmt-error-delete = Gagal menghapus produk
+product-mgmt-error-load = Gagal memuat produk
+product-mgmt-error-retry = Coba lagi
+product-mgmt-alert-error = Tidak dapat memuat peringatan stok. Menampilkan jumlah terakhir.
+product-mgmt-alert-error-retry = Muat ulang peringatan
+product-mgmt-error-invalid-stock = Stok harus berupa bilangan bulat non-negatif
 product-mgmt-modal-add-title = Tambah Produk
 product-mgmt-modal-edit-title = Ubah Produk
 product-mgmt-modal-close = Tutup
@@ -116,8 +130,7 @@ product-mgmt-actions-aria =
 product-mgmt-variants = Varian
 product-mgmt-variants-aria =
     .aria-label = Varian untuk { $name }
-product-mgmt-modal-aria =
-    .aria-label = { $mode ->
+product-mgmt-modal-aria = { $mode ->
         [add] Tambah produk
        *[edit] Ubah produk
     }
@@ -212,7 +225,7 @@ categories-add-first = Tambah kategori pertama
 categories-add = Tambah Kategori
 categories-name = Nama
 categories-name-placeholder =
-    .placeholder = mis. Minuman
+    .placeholder = mis. Toko Roti, Barang
 categories-colour = Warna
 categories-icon = Ikon
 categories-icon-aria =
@@ -223,17 +236,42 @@ categories-create = Buat
 categories-save = Simpan
 categories-delete-confirm = Hapus Kategori
 categories-delete-warning = Ini akan memutuskan tautan semua produk dalam kategori ini.
+categories-delete-unlinked = { $count ->
+    [one] 1 produk terlepas taut di kategori ini.
+   *[other] { $count } produk terlepas taut di kategori ini.
+}
+categories-error-create = Gagal membuat kategori
+categories-error-update = Gagal memperbarui kategori
+categories-error-delete = Gagal menghapus kategori
+categories-error-load = Gagal memuat kategori
+categories-error-retry = Coba lagi
+categories-error-name-required = Nama kategori wajib diisi
+categories-error-id-conflict = Kategori dengan ID ini sudah ada
+categories-error-colour-invalid = Pilih warna dari palet
 categories-preview = Pratinjau
 categories-name-aria =
     .aria-label = Nama Kategori
-categories-icon-picker-aria =
-    .aria-label = Pilih ikon
-categories-colour-picker-aria =
-    .aria-label = Pilih warna
+categories-icon-picker-aria = Pilih ikon
+categories-colour-picker-aria = Pilih warna
 categories-icon-food = Makanan
 categories-icon-snack = Camilan
 categories-icon-hot-drink = Minuman panas
 categories-icon-cold-drink = Minuman dingin
 categories-icon-generic = Generik
+category-mgmt-edit-aria = Edit kategori { $name }
+
+# Product type labels
+product-type-retail = Ritel
+product-type-restaurant = Restoran
+product-type-service = Layanan
+
+# Stock Alert Panel
+product-mgmt-stock-alert-open = Buka peringatan stok
+product-mgmt-stock-alert-close = Tutup peringatan stok
+product-mgmt-alert-count =
+    { $count ->
+        [one] Buka peringatan stok ({ $count } aktif)
+       *[other] Buka peringatan stok ({ $count } aktif)
+    }
 
 # ── Customer Management (remaining) ──

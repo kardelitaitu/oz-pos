@@ -4,11 +4,64 @@ use rusqlite::params;
 
 use crate::error::CoreError;
 use crate::loyalty::{LoyaltyAccount, LoyaltyAccountWithDetails, LoyaltyTier, LoyaltyTransaction};
+use crate::{Currency, format_minor};
 
 use super::Store;
 
+/// Parse a stored currency code for `format_minor`, falling back to USD
+/// (exp 2) if the code is somehow malformed — transaction descriptions
+/// must never fail to render. Mirrors `export::email_report::format_amount`.
+fn parse_currency(code: &str) -> Currency {
+    code.parse::<Currency>().unwrap_or(Currency(*b"USD"))
+}
+
 /// Fixed conversion: 100 points = 100 minor units ($1.00).
 const POINTS_TO_MINOR_RATIO: i64 = 1;
+
+fn validate_tier_config(
+    name: &str,
+    min_points: i64,
+    points_per_unit: i64,
+    earn_multiplier: f64,
+    colour: &str,
+) -> Result<(), CoreError> {
+    if name.trim().is_empty() {
+        return Err(CoreError::Validation {
+            field: "name",
+            message: "tier name must not be empty".into(),
+        });
+    }
+    if min_points < 0 {
+        return Err(CoreError::Validation {
+            field: "min_points",
+            message: "tier threshold must not be negative".into(),
+        });
+    }
+    if points_per_unit <= 0 {
+        return Err(CoreError::Validation {
+            field: "points_per_unit",
+            message: "points per unit must be positive".into(),
+        });
+    }
+    if !earn_multiplier.is_finite() || earn_multiplier <= 0.0 {
+        return Err(CoreError::Validation {
+            field: "earn_multiplier",
+            message: "earn multiplier must be finite and positive".into(),
+        });
+    }
+    let valid_colour = colour.len() == 7
+        && colour.starts_with('#')
+        && colour[1..]
+            .chars()
+            .all(|character| character.is_ascii_hexdigit());
+    if !valid_colour {
+        return Err(CoreError::Validation {
+            field: "colour",
+            message: "colour must be a # followed by six hexadecimal digits".into(),
+        });
+    }
+    Ok(())
+}
 
 impl Store<'_> {
     /// Get or create a loyalty account for a customer.
@@ -35,30 +88,51 @@ impl Store<'_> {
             });
         }
 
-        // Try to get existing account.
-        if let Some(account) = self.get_loyalty_account_raw(customer_id)? {
-            return Ok(account);
-        }
-
-        // Create new account with Bronze tier.
+        // INSERT OR IGNORE makes creation atomic with respect to the
+        // UNIQUE(customer_id) constraint. A concurrent caller may win the
+        // insert; both callers then read the same canonical account below.
         let id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-
         self.conn.execute(
-            "INSERT INTO loyalty_accounts (id, customer_id, tier_id, updated_at, created_at)
+            "INSERT OR IGNORE INTO loyalty_accounts (id, customer_id, tier_id, updated_at, created_at)
              VALUES (?1, ?2, 'tier-bronze', ?3, ?4)",
             params![id, customer_id, now, now],
         )?;
 
-        Ok(LoyaltyAccount {
-            id,
-            customer_id: customer_id.to_owned(),
-            points: 0,
-            lifetime_points: 0,
-            tier_id: Some("tier-bronze".into()),
-            updated_at: now.clone(),
-            created_at: now,
+        self.get_loyalty_account_raw(customer_id)?.ok_or_else(|| {
+            CoreError::Internal(format!(
+                "loyalty account insert was ignored but account {customer_id} was not found"
+            ))
         })
+    }
+
+    fn get_loyalty_transaction_for_sale(
+        &self,
+        account_id: &str,
+        sale_id: &str,
+        txn_type: &str,
+    ) -> Result<Option<LoyaltyTransaction>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, account_id, sale_id, points, txn_type, description, created_at
+             FROM loyalty_transactions
+             WHERE account_id = ?1 AND sale_id = ?2 AND txn_type = ?3
+             LIMIT 1",
+        )?;
+        match stmt.query_row(params![account_id, sale_id, txn_type], |row| {
+            Ok(LoyaltyTransaction {
+                id: row.get("id")?,
+                account_id: row.get("account_id")?,
+                sale_id: row.get("sale_id")?,
+                points: row.get("points")?,
+                txn_type: row.get("txn_type")?,
+                description: row.get("description")?,
+                created_at: row.get("created_at")?,
+            })
+        }) {
+            Ok(transaction) => Ok(Some(transaction)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(error) => Err(error.into()),
+        }
     }
 
     fn get_loyalty_account_raw(
@@ -230,6 +304,14 @@ impl Store<'_> {
     ) -> Result<LoyaltyTransaction, CoreError> {
         let account = self.get_or_create_loyalty_account(customer_id)?;
 
+        // SaleCompleted can be delivered more than once during retries or
+        // recovery. Return the original ledger row instead of awarding again.
+        if let Some(existing) =
+            self.get_loyalty_transaction_for_sale(&account.id, sale_id, "earn")?
+        {
+            return Ok(existing);
+        }
+
         // Get tier multiplier.
         let tier = account
             .tier_id
@@ -264,8 +346,9 @@ impl Store<'_> {
 
         let tx = self.conn.unchecked_transaction()?;
 
-        // Insert transaction.
-        tx.execute(
+        // Insert transaction. The unique projection index is the final
+        // concurrency guard; a losing replay returns the winning row.
+        if let Err(error) = tx.execute(
             "INSERT INTO loyalty_transactions (id, account_id, sale_id, points, txn_type, description, created_at)
              VALUES (?1, ?2, ?3, ?4, 'earn', ?5, ?6)",
             params![
@@ -276,7 +359,21 @@ impl Store<'_> {
                 format!("Earned {} points from purchase", points),
                 now,
             ],
-        )?;
+        ) {
+            tx.rollback()?;
+            if matches!(
+                &error,
+                rusqlite::Error::SqliteFailure(
+                    code,
+                    _
+                ) if code.code == rusqlite::ErrorCode::ConstraintViolation
+            ) {
+                return self
+                    .get_loyalty_transaction_for_sale(&account.id, sale_id, "earn")?
+                    .ok_or_else(|| CoreError::Db(error));
+            }
+            return Err(error.into());
+        }
 
         // Update account.
         tx.execute(
@@ -326,6 +423,56 @@ impl Store<'_> {
             });
         }
 
+        // Redemption is only valid for the customer's completed sale. The
+        // sale lookup is deliberately server-side; callers cannot bind points
+        // to an unrelated or still-pending sale.
+        let (sale_customer_id, sale_total_minor, sale_status, sale_currency): (
+            Option<String>,
+            i64,
+            String,
+            String,
+        ) = self
+            .conn
+            .query_row(
+                "SELECT customer_id, total_minor, status, currency FROM sales WHERE id = ?1",
+                params![sale_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .map_err(|error| match error {
+                rusqlite::Error::QueryReturnedNoRows => CoreError::NotFound {
+                    entity: "sale",
+                    id: sale_id.to_owned(),
+                },
+                other => CoreError::Db(other),
+            })?;
+        if sale_customer_id.as_deref() != Some(customer_id) {
+            return Err(CoreError::Validation {
+                field: "sale_id",
+                message: "sale does not belong to this customer".into(),
+            });
+        }
+        if sale_status != "completed" {
+            return Err(CoreError::Validation {
+                field: "sale_id",
+                message: "loyalty points can only be redeemed on a completed sale".into(),
+            });
+        }
+        if sale_total_minor < 0 {
+            return Err(CoreError::Validation {
+                field: "sale_id",
+                message: "sale total must not be negative".into(),
+            });
+        }
+
+        // A retry of the same checkout is idempotent. This check must happen
+        // before the balance check below: the first redemption has already
+        // reduced the balance, so a retry may no longer have `points` available.
+        if let Some(existing) =
+            self.get_loyalty_transaction_for_sale(&account.id, sale_id, "redeem")?
+        {
+            return Ok((existing.clone(), existing.points.saturating_abs()));
+        }
+
         if account.points < points {
             return Err(CoreError::Validation {
                 field: "points",
@@ -336,14 +483,25 @@ impl Store<'_> {
             });
         }
 
-        let discount_minor = points * POINTS_TO_MINOR_RATIO;
+        let discount_minor =
+            points
+                .checked_mul(POINTS_TO_MINOR_RATIO)
+                .ok_or_else(|| CoreError::Validation {
+                    field: "points",
+                    message: "discount value overflowed".into(),
+                })?;
+        if discount_minor > sale_total_minor {
+            return Err(CoreError::Validation {
+                field: "points",
+                message: "redemption cannot exceed the sale total".into(),
+            });
+        }
 
         let txn_id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-
         let tx = self.conn.unchecked_transaction()?;
 
-        tx.execute(
+        if let Err(error) = tx.execute(
             "INSERT INTO loyalty_transactions (id, account_id, sale_id, points, txn_type, description, created_at)
              VALUES (?1, ?2, ?3, ?4, 'redeem', ?5, ?6)",
             params![
@@ -351,15 +509,44 @@ impl Store<'_> {
                 account.id,
                 sale_id,
                 -points,
-                format!("Redeemed {} points for {} discount", points, discount_minor),
+                format!(
+                    "Redeemed {} points for {} discount",
+                    points,
+                    format_minor(discount_minor, parse_currency(&sale_currency)),
+                ),
                 now,
             ],
-        )?;
+        ) {
+            tx.rollback()?;
+            if matches!(
+                &error,
+                rusqlite::Error::SqliteFailure(code, _)
+                    if code.code == rusqlite::ErrorCode::ConstraintViolation
+            ) {
+                return self
+                    .get_loyalty_transaction_for_sale(&account.id, sale_id, "redeem")?
+                    .map(|existing| {
+                        let discount = existing.points.saturating_abs();
+                        (existing, discount)
+                    })
+                    .ok_or_else(|| CoreError::Db(error));
+            }
+            return Err(error.into());
+        }
 
-        tx.execute(
-            "UPDATE loyalty_accounts SET points = points - ?1, updated_at = ?2 WHERE id = ?3",
+        let changed = tx.execute(
+            "UPDATE loyalty_accounts
+             SET points = points - ?1, updated_at = ?2
+             WHERE id = ?3 AND points >= ?1",
             params![points, now, account.id],
         )?;
+        if changed != 1 {
+            tx.rollback()?;
+            return Err(CoreError::Validation {
+                field: "points",
+                message: "insufficient points".into(),
+            });
+        }
 
         tx.commit()?;
 
@@ -370,7 +557,11 @@ impl Store<'_> {
                 sale_id: Some(sale_id.to_owned()),
                 points: -points,
                 txn_type: "redeem".into(),
-                description: format!("Redeemed {} points for {} discount", points, discount_minor),
+                description: format!(
+                    "Redeemed {} points for {} discount",
+                    points,
+                    format_minor(discount_minor, parse_currency(&sale_currency)),
+                ),
                 created_at: now,
             },
             discount_minor,
@@ -432,6 +623,55 @@ impl Store<'_> {
         earn_multiplier: f64,
         colour: &str,
     ) -> Result<LoyaltyTier, CoreError> {
+        let tier_exists: bool = self
+            .conn
+            .query_row(
+                "SELECT 1 FROM loyalty_tiers WHERE id = ?1",
+                params![id],
+                |_| Ok(true),
+            )
+            .unwrap_or(false);
+        if !tier_exists {
+            return Err(CoreError::NotFound {
+                entity: "loyalty_tier",
+                id: id.to_owned(),
+            });
+        }
+
+        validate_tier_config(name, min_points, points_per_unit, earn_multiplier, colour)?;
+
+        let duplicate_threshold: bool = self.conn.query_row(
+            "SELECT EXISTS(
+                    SELECT 1 FROM loyalty_tiers
+                    WHERE id <> ?1 AND min_points = ?2
+                )",
+            params![id, min_points],
+            |row| row.get(0),
+        )?;
+        if duplicate_threshold {
+            return Err(CoreError::Validation {
+                field: "min_points",
+                message: "tier thresholds must be unique".into(),
+            });
+        }
+
+        if min_points > 0 {
+            let has_zero_threshold: bool = self.conn.query_row(
+                "SELECT EXISTS(
+                        SELECT 1 FROM loyalty_tiers
+                        WHERE id <> ?1 AND min_points = 0
+                    )",
+                params![id],
+                |row| row.get(0),
+            )?;
+            if !has_zero_threshold {
+                return Err(CoreError::Validation {
+                    field: "min_points",
+                    message: "at least one tier must start at zero points".into(),
+                });
+            }
+        }
+
         let rows = self.conn.execute(
             "UPDATE loyalty_tiers SET name = ?1, min_points = ?2, points_per_unit = ?3,
              earn_multiplier = ?4, colour = ?5 WHERE id = ?6",
@@ -460,8 +700,19 @@ impl Store<'_> {
     }
 
     /// Convert points to monetary value (minor units).
-    pub fn get_points_value(&self, points: i64) -> i64 {
-        points * POINTS_TO_MINOR_RATIO
+    pub fn get_points_value(&self, points: i64) -> Result<i64, CoreError> {
+        if points < 0 {
+            return Err(CoreError::Validation {
+                field: "points",
+                message: "points must not be negative".into(),
+            });
+        }
+        points
+            .checked_mul(POINTS_TO_MINOR_RATIO)
+            .ok_or_else(|| CoreError::Validation {
+                field: "points",
+                message: "points value overflowed".into(),
+            })
     }
 }
 
@@ -489,10 +740,19 @@ mod tests {
     }
 
     fn seed_sale(conn: &Connection, id: &str) {
+        seed_sale_for_customer(conn, id, None, 0);
+    }
+
+    fn seed_sale_for_customer(
+        conn: &Connection,
+        id: &str,
+        customer_id: Option<&str>,
+        total_minor: i64,
+    ) {
         conn.execute(
-            "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at, subtotal_minor, tax_total_minor)
-             VALUES (?1, 0, 'USD', 0, 'completed', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z', 0, 0)",
-            params![id],
+            "INSERT INTO sales (id, total_minor, currency, line_count, status, customer_id, created_at, updated_at, subtotal_minor, tax_total_minor)
+             VALUES (?1, ?2, 'USD', 0, 'completed', ?3, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z', ?2, 0)",
+            params![id, total_minor, customer_id],
         )
         .unwrap();
     }
@@ -538,6 +798,52 @@ mod tests {
     }
 
     #[test]
+    fn earn_points_is_idempotent_for_replayed_sale() {
+        let conn = fresh();
+        seed_customer(&conn, "cust-1", "Alice");
+        seed_sale(&conn, "sale-1");
+        let first = store(&conn).earn_points("cust-1", "sale-1", 1000).unwrap();
+        let second = store(&conn).earn_points("cust-1", "sale-1", 1000).unwrap();
+
+        assert_eq!(first.id, second.id);
+        let details = store(&conn).get_loyalty_account("cust-1").unwrap().unwrap();
+        assert_eq!(details.account.points, first.points);
+        assert_eq!(details.account.lifetime_points, first.points);
+        assert_eq!(details.recent_transactions.len(), 1);
+    }
+
+    #[test]
+    fn earn_points_is_idempotent_even_when_replay_total_differs() {
+        let conn = fresh();
+        seed_customer(&conn, "cust-1", "Alice");
+        seed_sale(&conn, "sale-1");
+        let first = store(&conn).earn_points("cust-1", "sale-1", 1000).unwrap();
+        let second = store(&conn).earn_points("cust-1", "sale-1", 9999).unwrap();
+
+        assert_eq!(first.id, second.id);
+        assert_eq!(first.points, second.points);
+    }
+
+    #[test]
+    fn update_tier_rejects_invalid_values() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        for (field, args) in [
+            ("name", ("", 0, 10, 1.0, "#ffffff")),
+            ("min_points", ("Bronze", -1, 10, 1.0, "#ffffff")),
+            ("points_per_unit", ("Bronze", 0, 0, 1.0, "#ffffff")),
+            ("earn_multiplier", ("Bronze", 0, 10, 0.0, "#ffffff")),
+            ("colour", ("Bronze", 0, 10, 1.0, "not-a-colour")),
+        ] {
+            let err = s
+                .update_tier("tier-bronze", args.0, args.1, args.2, args.3, args.4)
+                .unwrap_err();
+            assert!(matches!(err, CoreError::Validation { field: actual, .. } if actual == field));
+        }
+    }
+
+    #[test]
     fn earn_points_with_silver_multiplier() {
         let conn = fresh();
         seed_customer(&conn, "cust-1", "Alice");
@@ -561,13 +867,15 @@ mod tests {
     fn redeem_points_deducts_and_returns_value() {
         let conn = fresh();
         seed_customer(&conn, "cust-1", "Alice");
-        seed_sale(&conn, "sale-1");
-        seed_sale(&conn, "sale-2");
+        seed_sale_for_customer(&conn, "sale-1", Some("cust-1"), 5000);
+        seed_sale_for_customer(&conn, "sale-2", Some("cust-1"), 1000);
         store(&conn).earn_points("cust-1", "sale-1", 5000).unwrap();
 
         let (txn, discount) = store(&conn).redeem_points("cust-1", 200, "sale-2").unwrap();
         assert_eq!(txn.points, -200);
         assert_eq!(discount, 200); // 200 points = 200 minor units
+        // The seeded sale is USD (exp 2): 200 minor units render as a decimal.
+        assert_eq!(txn.description, "Redeemed 200 points for 2.00 discount");
 
         let details = store(&conn).get_loyalty_account("cust-1").unwrap().unwrap();
         // 5000 * 10 / 100 * 1.0 = 500 earned - 200 redeemed = 300
@@ -575,10 +883,108 @@ mod tests {
     }
 
     #[test]
+    fn redeem_points_note_uses_sale_currency_exponent() {
+        let conn = fresh();
+        seed_customer(&conn, "cust-1", "Alice");
+        seed_sale_for_customer(&conn, "sale-earn", Some("cust-1"), 5000);
+        // IDR sale (exp 0): the minor unit IS the Rupiah, so the discount
+        // stays raw in the description.
+        conn.execute(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status, customer_id, created_at, updated_at, subtotal_minor, tax_total_minor)
+             VALUES ('sale-idr', 10000, 'IDR', 0, 'completed', 'cust-1', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z', 10000, 0)",
+            [],
+        )
+        .unwrap();
+        store(&conn)
+            .earn_points("cust-1", "sale-earn", 5000)
+            .unwrap();
+
+        let (txn, discount) = store(&conn)
+            .redeem_points("cust-1", 500, "sale-idr")
+            .unwrap();
+        assert_eq!(discount, 500);
+        assert_eq!(txn.description, "Redeemed 500 points for 500 discount");
+
+        // The DB-stored row (written inside the transaction) formats the same way.
+        let details = store(&conn).get_loyalty_account("cust-1").unwrap().unwrap();
+        let stored = details
+            .recent_transactions
+            .iter()
+            .find(|t| t.txn_type == "redeem")
+            .unwrap();
+        assert_eq!(stored.description, "Redeemed 500 points for 500 discount");
+    }
+
+    #[test]
+    fn redeem_points_retry_returns_original_transaction_after_balance_changes() {
+        let conn = fresh();
+        seed_customer(&conn, "cust-1", "Alice");
+        seed_sale_for_customer(&conn, "sale-earn", Some("cust-1"), 5000);
+        seed_sale_for_customer(&conn, "sale-redeem", Some("cust-1"), 1000);
+        store(&conn)
+            .earn_points("cust-1", "sale-earn", 5000)
+            .unwrap();
+
+        let first = store(&conn)
+            .redeem_points("cust-1", 200, "sale-redeem")
+            .unwrap();
+        let retry = store(&conn)
+            .redeem_points("cust-1", 200, "sale-redeem")
+            .unwrap();
+
+        assert_eq!(first.0.id, retry.0.id);
+        assert_eq!(first.1, retry.1);
+        assert_eq!(
+            store(&conn)
+                .get_loyalty_account("cust-1")
+                .unwrap()
+                .unwrap()
+                .account
+                .points,
+            300
+        );
+    }
+
+    #[test]
+    fn redeem_points_rejects_customer_mismatch_and_over_discount() {
+        let conn = fresh();
+        seed_customer(&conn, "cust-1", "Alice");
+        seed_customer(&conn, "cust-2", "Bob");
+        seed_sale_for_customer(&conn, "sale-earn", Some("cust-1"), 5000);
+        seed_sale_for_customer(&conn, "sale-other", Some("cust-2"), 1000);
+        seed_sale_for_customer(&conn, "sale-small", Some("cust-1"), 50);
+        store(&conn)
+            .earn_points("cust-1", "sale-earn", 5000)
+            .unwrap();
+
+        let mismatch = store(&conn)
+            .redeem_points("cust-1", 100, "sale-other")
+            .unwrap_err();
+        assert!(matches!(
+            mismatch,
+            CoreError::Validation {
+                field: "sale_id",
+                ..
+            }
+        ));
+
+        let over_discount = store(&conn)
+            .redeem_points("cust-1", 100, "sale-small")
+            .unwrap_err();
+        assert!(matches!(
+            over_discount,
+            CoreError::Validation {
+                field: "points",
+                ..
+            }
+        ));
+    }
+
+    #[test]
     fn redeem_points_insufficient() {
         let conn = fresh();
         seed_customer(&conn, "cust-1", "Alice");
-        seed_sale(&conn, "sale-1");
+        seed_sale_for_customer(&conn, "sale-1", Some("cust-1"), 1000);
         store(&conn)
             .get_or_create_loyalty_account("cust-1")
             .unwrap();
@@ -613,9 +1019,16 @@ mod tests {
     #[test]
     fn get_points_value_converts_correctly() {
         let conn = fresh();
-        assert_eq!(store(&conn).get_points_value(100), 100);
-        assert_eq!(store(&conn).get_points_value(50), 50);
-        assert_eq!(store(&conn).get_points_value(0), 0);
+        assert_eq!(store(&conn).get_points_value(100).unwrap(), 100);
+        assert_eq!(store(&conn).get_points_value(50).unwrap(), 50);
+        assert_eq!(store(&conn).get_points_value(0).unwrap(), 0);
+        assert!(matches!(
+            store(&conn).get_points_value(-1),
+            Err(CoreError::Validation {
+                field: "points",
+                ..
+            })
+        ));
     }
 
     #[test]
@@ -772,8 +1185,8 @@ mod tests {
     fn redeem_points_zero_returns_validation_error() {
         let conn = fresh();
         seed_customer(&conn, "cust-1", "Alice");
-        seed_sale(&conn, "sale-1");
-        seed_sale(&conn, "sale-2");
+        seed_sale_for_customer(&conn, "sale-1", Some("cust-1"), 5000);
+        seed_sale_for_customer(&conn, "sale-2", Some("cust-1"), 1000);
         store(&conn).earn_points("cust-1", "sale-1", 5000).unwrap();
 
         let err = store(&conn)
@@ -786,8 +1199,8 @@ mod tests {
     fn redeem_points_negative_returns_validation_error() {
         let conn = fresh();
         seed_customer(&conn, "cust-1", "Alice");
-        seed_sale(&conn, "sale-1");
-        seed_sale(&conn, "sale-2");
+        seed_sale_for_customer(&conn, "sale-1", Some("cust-1"), 5000);
+        seed_sale_for_customer(&conn, "sale-2", Some("cust-1"), 1000);
         store(&conn).earn_points("cust-1", "sale-1", 5000).unwrap();
 
         let err = store(&conn)

@@ -1,6 +1,6 @@
 # Changelog
 
-<!-- Audit stamp: 2026-07-26 · Hermes-Agent · status: ACCURATE (3 noted findings) · F1: top release header [0.0.21] vs Cargo.toml/branch 0.0.22 drift · F2: "27 modules self-register via modules/index.ts" -> 24 feature register.tsx wired via @/features barrel (decentralized self-registration model accurate) · F3: "5,221+ Rust tests" -> actual repo-wide 5,212 · verified accurate: 48 .ftl files, 98 migrations (highest N=100), Node>=22/npm>=11, Vite ^6, 214 UI test files, modules/currency CurrencyRepository, crates/oz-core/src/user_preferences.rs + 038_user_preferences.sql, KDS Kanban/Focus/Metro + Switcher + KdsTicketCard + useKdsPreferences all exist, 10 modules/ -->
+<!-- Audit stamp: 2026-07-26 · Hermes-Agent · status: ACCURATE (3 noted findings) · F1: top release header [0.0.21] vs Cargo.toml/branch 0.0.22 drift · F2: "27 modules self-register via modules/index.ts" -> 24 feature register.tsx wired via @/features barrel (decentralized self-registration model accurate) · F3: "5,221+ Rust tests" -> actual repo-wide 5,212 · re-verified 2026-07-31 (3,476 UI tests, 14 check.sh steps) · verified accurate: 48 .ftl files, 101 migrations (highest N=106), Node>=22/npm>=11, Vite ^6, 228 UI test files, modules/currency CurrencyRepository, crates/oz-core/src/user_preferences.rs + 038_user_preferences.sql, KDS Kanban/Focus/Metro + Switcher + KdsTicketCard + useKdsPreferences all exist, 10 modules/ -->
 
 All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
@@ -34,8 +34,42 @@ Desktop App Security & Stability Audit closeout: **all 18 findings resolved** ac
 
 - **L-1 — Typed `PaymentKind` enum (`apps/desktop-client/src/commands/pos.rs`)** — Introduced `pub enum PaymentKind { Single, Split }` with a `wire_method(&self, &str) -> String` helper. Replaced the magic `"split"` literal at both `complete_sale` and `complete_sale_scoped` sites with typed enum dispatch. Both call sites collapsed to a single ternary so the bool-binding bug class is structurally impossible to recur.
 - **L-2 — `#[tauri::command]` shorthand consistency (`apps/desktop-client/src/commands/*.rs`)** — Bulk-replaced 280 occurrences of the bare `#[command]` macro pattern with the fully-qualified `#[tauri::command]` attribute across 25 command files (audit, branding, customers, gift_cards, categories, bundles, auth, currencies, exchange_rates, history, kds, health, inventory, hardware, inventory_counts, loyalty, features, license, offline_queue, printer, promotions, settings, shifts, topology, tax). Cleaned up dead `, command` imports in `use tauri::{...}` lines.
-- **L-3 — Workspace-pinned `hmac` / `sha2` / `hex` (`Cargo.toml`, `apps/desktop-client/Cargo.toml`)** — Added `hex = "0.4"` to root `[workspace.dependencies]` and switched the three crates to `hmac = { workspace = true }`, `sha2 = { workspace = true }`, `hex = { workspace = true }`. Single source of truth for crypto dep versions.
+- **L-3 — Workspace-pinned `hmac` / `sha2` / `hex` (`Cargo.toml`, `apps/desktop-client/Cargo.toml`)** — Desktop-client's `hmac` / `sha2` / `hex` Cargo.toml entries now reference the workspace `[workspace.dependencies]` table (`hmac = "0.12"`, `sha2 = "0.10"`, `hex = "0.4"`, via `workspace = true`) per the audit doc L-3 directive to centralise direct-version deps into root `[workspace.dependencies]`. `Cargo.lock` shows transitive dep-chains elsewhere in the workspace still resolve to newer minor versions (`hmac 0.13.0`, `sha2 0.11.0`); `hex` remains single-version (0.4.3).
 - **L-4 — Release-process runbook (`docs/releases/release-process.md`)** — New 138-line document covering build → sign → notarize → publish → rotate steps. Most critical section: **updater pubkey rotation procedure** (when the `oz-pos-updater.key` keypair is rotated, how to bump the `tauri.conf.json` `updater.pubkey`, how to publish overlapping releases so old clients can still verify, and the 2-maintainer review requirement for the rotation PR).
+
+---
+
+## [0.0.24] — 2026-07-31
+
+Retail + Restaurant (KDS) release: closed the full KDS production-readiness roadmap, completed ADR #22 workspace settings, overhauled the Retail POS UX, ran a codebase-wide i18n audit (89 fixes), and shipped E2E test infrastructure. All 3,476 UI tests (228 files) and the 14-step pre-CI gate (`scripts/check.sh`) pass.
+
+### Added
+
+- **KDS — real-time push (TODO 1a)** — Replaced adaptive polling with Tauri event push for live ticket updates; `table_number` wired end-to-end (removed the `as unknown` hack).
+- **KDS — course/modifier pipeline (TODO 2a)** — New course/modifier schema + `kds_line_items` table; course-grouped ticket cards with indented modifiers (Phase 2); course selector + modifier UI in the POS cart (Phase 3).
+- **KDS — offline resilience (TODO 3b)** — `useKdsOffline` cache, retry queue, and optimistic updates, backed by a 31-test suite.
+- **KDS — per-item status (TODO 3e)** — Item-level status column with per-line badges advancing pending → preparing → ready → served.
+- **KDS — mid-order editing (TODO 3f)** — `update_kds_order_items` API + product-picker modal for line-item replacement, with line refetch after edits.
+- **KDS — chit printing + profiles (TODO 3c/4c/4e)** — Printer HAL wired for automatic kitchen chit printing; separate kitchen-printer field; hardware profiles migrated to DB with schema versioning.
+- **KDS — UX (TODO 2b/2c/2d/3a/3d/2e)** — History/recall view, rush-priority flag, keyboard shortcuts, zone-switching chip bar, voice callout on 'ready', theme-color tokenization, wired auto-acknowledge.
+- **KDS + Retail — loading/error UX** — Shimmer loading skeletons and error banners with retry on both screens; KDS keyboard-help overlay, arrival animation, layout independence.
+- **Workspace settings (ADR #22)** — F10 keybinding opens the settings modal (TODO 4b); terminalId wired from AppShell; duplicate F10 removed; `markSettingsUpdated` on all 5 card saves; 6 card audit findings resolved; `setReceiptSettings` migrated to the scoped ADR #7 variant.
+- **E2E infrastructure (Phase B)** — `npm run e2e` + `check:all` commands, E2E PR workflow, `--changed-only` flag, and critical-path specs: POS→KDS flow, KDS lifecycle, sale→history, settings persistence, shift reconciliation.
+
+### Fixed
+
+- **Retail POS — 5 P0 bugs** — `modifierLine` not reset on cart clear; in-flight product-fetch race (stale requests aborted); stale-closure stock-check callbacks; course dropdown click-through; corrupt held-cart lines rejected on resume.
+- **Retail POS — 7 P1 UX gaps** — Screen-reader announce on add-to-cart; low-stock filter empty state; held-cart delete confirmation; grid scroll preservation; Ctrl+K credit shortcut; reminder-popup re-show logic; distinct SKU vs barcode error messages.
+- **i18n — full-codebase audit (89 fixes across 6 cycles)** — 75 attribute-only FTL keys silently returning `undefined` via `l10n.getString()` fixed across 16 bundles; hardcoded strings closed in RestaurantMenu (13 keys), SettingsPage, PosScreen, Product/Category management, AuditLog, RetailProductGrid, AddCategoryModal.
+- **Management & settings audits** — ShiftManagementScreen (6 bug categories); SalesHistoryScreen (focus traps, CSV DOM leak, Profiler); SettingsNavTree (7 aria-labels); TerminalManagement FEATURE_GROUPS labels; DataManagement aria-labels; 16 test regressions + 4 pre-existing failing test files rescued.
+- **Pre-CI gate** — 3 UI lint fixes; `.kds-picker-modal` noise-dither compliance (3 CSS parity blocks + test baseline); LocationPicker load-flake hardening (18 waitFor timeouts). `scripts/check.sh` passes all 15 steps.
+
+### Changed
+
+- **Test infrastructure** — Shared mock factories (`createUsePosStateMock`, `mockedBarcode` singleton, retail fixtures) removed ~385 lines of boilerplate across 5 files; compile-time drift guard fails `tsc` if `usePosState` gains a field the mock lacks.
+- **Settings test coverage** — 76 new tests across General (12), Sync (32), Appearance (14), and Receipt (18) sections plus workspace cards.
+- **Retail POS code quality** — 37 static inline styles extracted to CSS classes (P2–P4); retail theming audit retained (global theme tokens + `color-mix()` fallbacks + 3 regression guards).
+- **Docs** — 9 ARCHITECTURE.md drifts fixed; TODO.md roadmap marked complete; topology inspector Phase 2 (Ctrl+I, sessionToken, ErrorBoundary); CHANGELOG/JOURNAL audit records.
 
 ---
 

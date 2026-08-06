@@ -14,6 +14,7 @@ import { Skeleton } from '@/components/Skeleton';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast, useContextMenu, ContextMenu } from '@/frontend/shared';
 import LiveSetupPreview from '@/features/setup/components/LiveSetupPreview';
+import { l10nErrorMessage } from '@/utils/app-error';
 import './FeatureToggleScreen.css';
 
 /** Duration (ms) for both the row flash and checkmark overlay to persist after a toggle. */
@@ -184,7 +185,7 @@ export default function FeatureToggleScreen() {
       const result = await listAllFeatures();
       setFeatures(result.features);
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10nRef.current.getString('feature-toggle-error-load'));
+      setError(l10nErrorMessage(err, l10nRef.current, 'feature-toggle-error-load'));
     } finally {
       setLoading(false);
     }
@@ -214,7 +215,7 @@ export default function FeatureToggleScreen() {
       }
     } catch (err) {
       addToast({
-        message: err instanceof Error ? err.message : l10n.getString('feature-toggle-error-toggle'),
+        message: l10nErrorMessage(err, l10n, 'feature-toggle-error-toggle'),
         type: 'error',
       });
     } finally {
@@ -282,7 +283,7 @@ export default function FeatureToggleScreen() {
       });
     } catch (err) {
       addToast({
-        message: err instanceof Error ? err.message : l10n.getString('feature-toggle-error-toggle'),
+        message: l10nErrorMessage(err, l10n, 'feature-toggle-error-toggle'),
         type: 'error',
       });
     } finally {

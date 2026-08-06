@@ -500,6 +500,90 @@ describe('useFocusTrap', () => {
     expect(outerOnEscape).toHaveBeenCalledTimes(1);
   });
 
+  // ── Focus restoration (A11Y-01) ─────────────────────────
+
+  it('restores focus to the previously focused element on unmount', () => {
+    elements.outside.focus();
+    expect(document.activeElement).toBe(elements.outside);
+
+    const { unmount } = renderHook(() =>
+      useFocusTrap({ current: elements.panel }, true, onEscape),
+    );
+
+    // Auto-focus moved into the panel while active.
+    expect(document.activeElement).toBe(elements.first);
+
+    unmount();
+
+    expect(document.activeElement).toBe(elements.outside);
+  });
+
+  it('restores focus to the previously focused element on deactivation', () => {
+    elements.outside.focus();
+
+    const { rerender } = renderHook(
+      ({ active }) => useFocusTrap({ current: elements.panel }, active, onEscape),
+      { initialProps: { active: true } },
+    );
+
+    expect(document.activeElement).toBe(elements.first);
+
+    rerender({ active: false });
+
+    expect(document.activeElement).toBe(elements.outside);
+  });
+
+  it('does not restore focus when the trigger was removed from the DOM', () => {
+    const trigger = document.createElement('button');
+    trigger.textContent = 'Trigger';
+    document.body.appendChild(trigger);
+    trigger.focus();
+
+    const { unmount } = renderHook(() =>
+      useFocusTrap({ current: elements.panel }, true, onEscape),
+    );
+
+    // The trap auto-focused the first panel element while active.
+    expect(document.activeElement).toBe(elements.first);
+
+    trigger.remove();
+    unmount();
+
+    // The detached trigger must NOT be refocused; focus stays where the
+    // panel left it (the auto-focused first element, still in the DOM).
+    expect(document.activeElement).not.toBe(trigger);
+    expect(document.activeElement).toBe(elements.first);
+  });
+
+  it('does not restore focus when the trigger is disabled', () => {
+    const trigger = document.createElement('button');
+    trigger.textContent = 'Trigger';
+    document.body.appendChild(trigger);
+    trigger.focus();
+
+    const { unmount } = renderHook(() =>
+      useFocusTrap({ current: elements.panel }, true, onEscape),
+    );
+
+    expect(document.activeElement).toBe(elements.first);
+
+    trigger.disabled = true;
+    unmount();
+
+    // The disabled trigger must NOT be refocused.
+    expect(document.activeElement).not.toBe(trigger);
+    expect(document.activeElement).toBe(elements.first);
+  });
+
+  it('does not crash when nothing was focused before activation', () => {
+    // No explicit focus — activeElement is body in jsdom.
+    const { unmount } = renderHook(() =>
+      useFocusTrap({ current: elements.panel }, true, onEscape),
+    );
+
+    expect(() => unmount()).not.toThrow();
+  });
+
   // ── Scroll lock ───────────────────────────────────────────
 
   it('locks body scroll when active', () => {

@@ -238,7 +238,7 @@ describe('StockCountDetail', () => {
 
     await user.click(screen.getByRole('button', { name: /start counting/i }));
     await waitFor(() => {
-      expect(mockUpdateStatus).toHaveBeenCalledWith('sc-1', 'in_progress');
+      expect(mockUpdateStatus).toHaveBeenCalledWith('mock-session-token', 'sc-1', 'in_progress');
     });
   });
 
@@ -271,7 +271,7 @@ describe('StockCountDetail', () => {
 
     await user.click(screen.getByRole('button', { name: /complete count/i }));
     await waitFor(() => {
-      expect(mockComplete).toHaveBeenCalledWith({ countId: 'sc-1' });
+      expect(mockComplete).toHaveBeenCalledWith('mock-session-token', { countId: 'sc-1' });
       expect(screen.getByText(/count completed/i)).toBeInTheDocument();
     });
   });
@@ -292,7 +292,7 @@ describe('StockCountDetail', () => {
 
     await user.click(screen.getByRole('button', { name: /complete count/i }));
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('Network failure');
+      expect(screen.getByRole('alert')).toHaveTextContent('Failed to complete count');
     });
   });
 

@@ -39,14 +39,11 @@ tax-config-modal-aria =
         [true] Ubah tarif pajak
        *[other] Tambah tarif pajak
     }
-tax-config-field-name-placeholder =
-    .placeholder = mis. PPN
-tax-config-field-rate-placeholder =
-    .placeholder = 1100
+tax-config-field-name-placeholder = mis. PPN
+tax-config-field-rate-placeholder = 1100
 tax-config-rate-hint = Masukkan tarif dalam basis poin (mis. 1100 = 11%%)
 tax-config-tax-type = Tipe Pajak
-tax-config-tax-type-aria =
-    .aria-label = Tipe pajak
+tax-config-tax-type-aria = Tipe pajak
 tax-config-type-exclusive-label = Eksklusif
 tax-config-type-exclusive-desc = Ditambahkan saat checkout
 tax-config-type-inclusive-label = Inklusif
@@ -62,5 +59,20 @@ tax-config-modal-close =
 tax-config-save-error = Gagal menyimpan tarif pajak
 tax-config-delete-error = Gagal menghapus tarif pajak
 tax-config-cat-save-error = Gagal menyimpan tarif pajak kategori
+tax-config-load-error = Gagal memuat konfigurasi pajak.
+tax-config-load-retry = Coba lagi
+tax-config-rate-invalid = Tarif harus antara 0 dan { $max } basis poin.
+tax-config-delete-confirm-title = Hapus { $name }?
+tax-config-delete-confirm-message = Arsipkan “{ $name }”? Ini akan menyembunyikannya dari daftar dan menghapus penugasan produk/kategorinya. Penjualan historis tetap menyimpan tautan tarifnya.
+tax-config-delete-blocked-title = Tidak dapat menghapus { $name }
+tax-config-delete-blocked-message = “{ $name }” dirujuk oleh { $count } penjualan historis dan tidak dapat diarsipkan. Tarif yang dipakai penjualan lalu disimpan agar struk dan catatan audit tetap utuh.
+tax-config-delete-deps-products = { $count ->
+    [one] 1 penugasan produk
+   *[other] { $count } penugasan produk
+}
+tax-config-delete-deps-categories = { $count ->
+    [one] 1 penugasan kategori
+   *[other] { $count } penugasan kategori
+}
 
 # ── Multi-Store ──

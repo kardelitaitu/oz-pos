@@ -34,6 +34,7 @@
   --text-2xl:  1.5rem;    /* 24px */
   --text-3xl:  1.875rem;  /* 30px */
   --text-4xl:  2.25rem;   /* 36px */
+  --text-5xl:  2.5rem;    /* 40px — empty-state hero icons */
   --text-hero: 4rem;      /* 64px — kiosk hero title */
 
   --font-weight-normal:   400;
@@ -140,12 +141,27 @@
   --color-danger-bg:       rgba(220, 38, 38, 0.12);
   --color-danger-dim:      #fca5a5;
   --color-danger-fg:       #ffffff;
+  /* Status surface foreground pairs (TBL-11) — contrast-safe text on the
+     status gradients. Dark text on the luminous bright fills used by the
+     default/dark themes; light text on the saturated deep fills of the
+     light theme. */
+  --color-success-fg:      #07111d;
+  --color-warning-fg:      #07111d;
+  --color-cleaning-fg:     #ffffff;
   --color-info:            #60a5fa;
   --color-info-bg:         rgba(96, 165, 250, 0.08);
 
   --color-link:            #73b2e0;
   --color-link-hover:      #93c5fd;
   --color-link-visited:    #a78bfa;
+
+  /* Muted foreground + subtle status surfaces (THM-05) — formally ghost
+     tokens that components referenced with hardcoded fallbacks. */
+  --color-fg-muted:        #94a3b8;
+  --color-purple:          #9333ea;
+  --color-warning-border:  #ffc107;
+  --color-danger-subtle:   #fee2e2;
+  --color-warning-subtle:  #fef3c7;
 
   --color-bg-primary:      var(--neutral-50);
   --color-bg-secondary:    var(--neutral-100);
@@ -208,7 +224,11 @@
   --shadow-glow-success: 0 0 8px rgba(16, 185, 129, 0.4);
   --shadow-glow-warning: 0 0 8px rgba(245, 158, 11, 0.4);
   --shadow-glow-danger:  0 0 8px rgba(239, 68, 68, 0.4);
-  /* QR scan expanding-ring start state (green glow at 30%) */
+  /* QR scan expanding-ring start state (green glow at 30%). The plain-rgba
+     fallback covers engines without color-mix() (WebView2/Chromium < 111,
+     Safari < 16.2); color-mix() unsupported would otherwise drop the whole
+     declaration and the pulse ring would silently disappear (THM-06). */
+  --shadow-pulse: 0 0 0 0 rgba(74, 222, 128, 0.3);
   --shadow-pulse: 0 0 0 0 color-mix(in srgb, var(--color-success) 30%, transparent);
 
   /* ── Timing / transitions ──────────────────────── */
@@ -253,6 +273,56 @@
   --z-modal:     400;
   --z-toast:     500;
   --z-tooltip:   600;
+
+  /* ── POS Brand-Locked Tokens (audit P0-2, stable across themes) ─────
+   * Navy primary, bronze warning, gold F-key — POS keeps its visual
+   * identity (POS brand-stamped look) regardless of which Steel Blue
+   * variant the user has selected. Declared once in :root; later
+   * [data-theme=...] blocks omit these so :root values cascade. */
+  --color-primary-pos:        #1e3a5f;
+  --color-primary-pos-light:  #2e578c;
+  --color-primary-pos-dark:   #112239;
+  --color-success-pos:        #10b981;
+  --color-success-pos-darker: #059669;
+  --color-warning-pos:        #d97706;
+  --color-fn-key-pos:         #fbbf24;
+  --color-dark-bg-pos:        #0d131f;
+  --color-dark-border-pos:    #1f2937;
+
+  /* ── POS Surface Tokens ─── Default = Steel Blue Glassmorphism ── */
+  --color-bg-pos:             var(--color-bg);
+  --color-ink:                #000000;
+  /* Text on POS primary-coloured surfaces — always light for contrast. */
+  --color-pos-on-primary:     #ffffff;
+
+  /* ── POS Modal Tokens (theme-aware, replaces hardcoded Tailwind greys) ─ */
+  --color-pos-modal-overlay:      rgba(0, 0, 0, 0.8);
+  --color-pos-modal-bg:           #111827;
+  --color-pos-modal-border:       #374151;
+  --color-pos-modal-fg:           #f9fafb;
+  --color-pos-modal-heading:      #f9fafb;
+  --color-pos-modal-label:        #9ca3af;
+  --color-pos-modal-input-bg:     #1f2937;
+  --color-pos-modal-input-border: #374151;
+  --color-pos-modal-input-fg:     #f9fafb;
+  --color-pos-modal-btn-bg:       #374151;
+  --color-pos-modal-btn-fg:       #f3f4f6;
+  --color-pos-modal-btn-border:   #4b5563;
+  --color-pos-modal-btn-hover-bg: #4b5563;
+  --color-pos-modal-btn-hover-fg: #ffffff;
+  --color-pos-modal-shadow:       0 25px 50px -12px rgba(0, 0, 0, 0.9);
+
+  /* ── Toast Tokens (default = dark panel, always-on contrast) ─ */
+  --color-toast-bg:            #1e2535;
+  --color-toast-border:        #374151;
+  --color-toast-fg:            #f9fafb;
+  --color-toast-fg-muted:      #9ca3af;
+  --color-toast-hover-bg:      rgba(255, 255, 255, 0.1);
+  --color-toast-shadow:        0 10px 24px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4);
+  --color-toast-accent-success: #10b981;
+  --color-toast-accent-error:   #ef4444;
+  --color-toast-accent-warning: #f59e0b;
+  --color-toast-accent-info:    #3b82f6;
 }
 
 /* ── Light mode (Steel Blue Elevated) ────────────────────────────── */
@@ -327,12 +397,24 @@
   --color-danger-bg:       #fef2f2;
   --color-danger-dim:      #fecaca;
   --color-danger-fg:       #ffffff;
+  /* Status surface foreground pairs (TBL-11) — light text on the darker
+     semantic fills of the light theme. */
+  --color-success-fg:      #ffffff;
+  --color-warning-fg:      #ffffff;
+  --color-cleaning-fg:     #ffffff;
   --color-info:            #2563eb;
   --color-info-bg:         #eff6ff;
 
   --color-link:            var(--primary-600);
   --color-link-hover:      var(--primary-700);
   --color-link-visited:    #6d28d9;
+
+  /* Muted foreground + subtle status surfaces (THM-05) — light-theme values. */
+  --color-fg-muted:        #64748b;
+  --color-purple:          #9333ea;
+  --color-warning-border:  #d97706;
+  --color-danger-subtle:   #fef2f2;
+  --color-warning-subtle:  #fffbeb;
 
   --color-bg-primary:      #ffffff;
   --color-bg-secondary:    var(--neutral-100);
@@ -354,6 +436,41 @@
   --shadow-glow-success: 0 0 8px rgba(16, 185, 129, 0.4);
   --shadow-glow-warning: 0 0 8px rgba(245, 158, 11, 0.4);
   --shadow-glow-danger:  0 0 8px rgba(239, 68, 68, 0.4);
+
+  /* ── POS Surface Tokens (Light = Steel Blue Elevated) ──────── */
+  --color-bg-pos:             var(--neutral-100);
+  --color-ink:                #000000;
+  /* Text on POS primary-coloured surfaces — always light for contrast. */
+  --color-pos-on-primary:     #ffffff;
+
+  /* ── POS Modal Tokens (light) ─ */
+  --color-pos-modal-overlay:      rgba(0, 0, 0, 0.5);
+  --color-pos-modal-bg:           #ffffff;
+  --color-pos-modal-border:       #d1d5db;
+  --color-pos-modal-fg:           #111827;
+  --color-pos-modal-heading:      #111827;
+  --color-pos-modal-label:        #6b7280;
+  --color-pos-modal-input-bg:     #f9fafb;
+  --color-pos-modal-input-border: #d1d5db;
+  --color-pos-modal-input-fg:     #111827;
+  --color-pos-modal-btn-bg:       #f3f4f6;
+  --color-pos-modal-btn-fg:       #374151;
+  --color-pos-modal-btn-border:   #d1d5db;
+  --color-pos-modal-btn-hover-bg: #e5e7eb;
+  --color-pos-modal-btn-hover-fg: #111827;
+  --color-pos-modal-shadow:       0 25px 50px -12px rgba(0, 0, 0, 0.15);
+
+  /* ── Toast Tokens (light = light panel, dark text) ─ */
+  --color-toast-bg:            #ffffff;
+  --color-toast-border:        #d1d5db;
+  --color-toast-fg:            #111827;
+  --color-toast-fg-muted:      #6b7280;
+  --color-toast-hover-bg:      rgba(17, 24, 39, 0.06);
+  --color-toast-shadow:        0 10px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.08);
+  --color-toast-accent-success: #059669;
+  --color-toast-accent-error:   #dc2626;
+  --color-toast-accent-warning: #d97706;
+  --color-toast-accent-info:    #2563eb;
 }
 
 /* ── Dark mode (Steel Blue Solid) ──────────────── */
@@ -425,12 +542,24 @@
   --color-danger-hover:    #b91c1c;
   --color-danger-bg:       rgba(220, 38, 38, 0.12);
   --color-danger-fg:       #ffffff;
+  /* Status surface foreground pairs (TBL-11) — same contrast logic as the
+     default theme: dark text on luminous fills. */
+  --color-success-fg:      #07111d;
+  --color-warning-fg:      #07111d;
+  --color-cleaning-fg:     #ffffff;
   --color-info:            #60a5fa;
   --color-info-bg:         rgba(96, 165, 250, 0.08);
 
   --color-link:            #73b2e0;
   --color-link-hover:      #93c5fd;
   --color-link-visited:    #a78bfa;
+
+  /* Muted foreground + subtle status surfaces (THM-05) — dark-theme values. */
+  --color-fg-muted:        #94a3b8;
+  --color-purple:          #9333ea;
+  --color-warning-border:  #ffc107;
+  --color-danger-subtle:   #fee2e2;
+  --color-warning-subtle:  #fef3c7;
 
   --color-bg-primary:      var(--neutral-100);
   --color-bg-secondary:    var(--neutral-200);
@@ -452,6 +581,41 @@
   --shadow-glow-success: 0 0 8px rgba(16, 185, 129, 0.4);
   --shadow-glow-warning: 0 0 8px rgba(245, 158, 11, 0.4);
   --shadow-glow-danger:  0 0 8px rgba(239, 68, 68, 0.4);
+
+  /* ── POS Surface Tokens (Dark = Steel Blue Solid) ──────────── */
+  --color-bg-pos:             var(--neutral-50);
+  --color-ink:                #000000;
+  /* Text on POS primary-coloured surfaces — always light for contrast. */
+  --color-pos-on-primary:     #ffffff;
+
+  /* ── POS Modal Tokens (dark) ─ */
+  --color-pos-modal-overlay:      rgba(0, 0, 0, 0.8);
+  --color-pos-modal-bg:           var(--neutral-100);
+  --color-pos-modal-border:       var(--neutral-300);
+  --color-pos-modal-fg:           var(--neutral-900);
+  --color-pos-modal-heading:      var(--neutral-900);
+  --color-pos-modal-label:        var(--neutral-600);
+  --color-pos-modal-input-bg:     var(--neutral-200);
+  --color-pos-modal-input-border: var(--neutral-300);
+  --color-pos-modal-input-fg:     var(--neutral-800);
+  --color-pos-modal-btn-bg:       var(--neutral-300);
+  --color-pos-modal-btn-fg:       var(--neutral-800);
+  --color-pos-modal-btn-border:   var(--neutral-400);
+  --color-pos-modal-btn-hover-bg: var(--neutral-400);
+  --color-pos-modal-btn-hover-fg: var(--neutral-950);
+  --color-pos-modal-shadow:       0 25px 50px -12px rgba(0, 0, 0, 0.9);
+
+  /* ── Toast Tokens (dark = dark panel, always-on contrast) ─ */
+  --color-toast-bg:            var(--neutral-100);
+  --color-toast-border:        var(--neutral-300);
+  --color-toast-fg:            var(--neutral-900);
+  --color-toast-fg-muted:      var(--neutral-600);
+  --color-toast-hover-bg:      rgba(255, 255, 255, 0.1);
+  --color-toast-shadow:        0 10px 24px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.4);
+  --color-toast-accent-success: #10b981;
+  --color-toast-accent-error:   #ef4444;
+  --color-toast-accent-warning: #f59e0b;
+  --color-toast-accent-info:    #3b82f6;
 }
 
 /* ── Smooth theme transitions ──────────────────── */

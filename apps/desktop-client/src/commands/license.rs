@@ -296,8 +296,32 @@ fn get_system_uuid() -> Option<String> {
         }
     }
 
+    // 3. Linux/macOS: stable machine-id files (no wmic/reg available).
+    //    /etc/machine-id is the canonical systemd identifier and is stable
+    //    for the lifetime of an installation — the right hardware anchor
+    //    for Linux CI runners and Linux desktops alike. The dbus fallback
+    //    covers hosts without systemd.
+    for path in ["/etc/machine-id", "/var/lib/dbus/machine-id"] {
+        if let Ok(content) = std::fs::read_to_string(path) {
+            let id = content.trim();
+            if !id.is_empty()
+                && id != "00000000-0000-0000-0000-000000000000"
+                && id != "ffffffffffffffffffffffffffffffff"
+            {
+                return Some(id.to_string());
+            }
+        }
+    }
+
     None
 }
+
+/// Per-process fallback machine-ID source, so the last-resort random UUID
+/// is drawn once and then reused. Without this cache, a machine with no
+/// queryable hardware ID (e.g. a minimal container) would derive a NEW
+/// random machine ID on every `generate_machine_id()` call, breaking the
+/// determinism guarantee that the 15-char fingerprint depends on.
+static FALLBACK_MACHINE_ID: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
 /// Generate a stable 15-char lowercase alphanumeric machine ID based on
 /// system/hardware UUID, falling back to a random UUID if queries fail.
@@ -306,7 +330,11 @@ fn get_system_uuid() -> Option<String> {
 /// per-installation fingerprint. The ID is persisted in the local
 /// Settings table and reused across activations.
 fn generate_machine_id() -> String {
-    let raw_id = get_system_uuid().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let raw_id = get_system_uuid().unwrap_or_else(|| {
+        FALLBACK_MACHINE_ID
+            .get_or_init(|| uuid::Uuid::new_v4().to_string())
+            .clone()
+    });
 
     let mut hasher = Sha256::new();
     hasher.update(raw_id.as_bytes());

@@ -41,19 +41,23 @@ vi.mock('@/contexts/AuthContext', () => ({
   }),
 }));
 
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({ sessionToken: 'session-1' }),
+}));
+
 beforeEach(() => {
   invokeMock.mockClear();
   invokeMock.mockImplementation((cmd: string) => {
-    if (cmd === 'list_staff') return Promise.resolve(SAMPLE_STAFF);
-    if (cmd === 'list_roles') return Promise.resolve(SAMPLE_ROLES);
-    if (cmd === 'create_staff') return Promise.resolve({ ...SAMPLE_STAFF[0], username: 'newuser' });
-    if (cmd === 'update_staff') return Promise.resolve(SAMPLE_STAFF[0]);
-    if (cmd === 'list_all_workspaces') return Promise.resolve([
+    if (cmd === 'list_staff_scoped') return Promise.resolve(SAMPLE_STAFF);
+    if (cmd === 'list_roles_scoped') return Promise.resolve(SAMPLE_ROLES);
+    if (cmd === 'create_staff_scoped') return Promise.resolve({ ...SAMPLE_STAFF[0], username: 'newuser' });
+    if (cmd === 'update_staff_scoped') return Promise.resolve(SAMPLE_STAFF[0]);
+    if (cmd === 'list_all_workspaces_scoped') return Promise.resolve([
       { key: 'restaurant', name: 'Restaurant', description: 'Dine-in service', icon: 'restaurant' },
       { key: 'store', name: 'Retail Store', description: 'Retail counter', icon: 'store' },
     ]);
-    if (cmd === 'get_user_workspaces') return Promise.resolve([]);
-    if (cmd === 'set_user_workspaces') return Promise.resolve(undefined);
+    if (cmd === 'get_user_workspaces_scoped') return Promise.resolve([]);
+    if (cmd === 'set_user_workspaces_scoped') return Promise.resolve(undefined);
     return Promise.reject(new Error(`Unknown command: ${cmd}`));
   });
 });
@@ -85,10 +89,10 @@ describe('StaffManagementScreen', () => {
 
   it('shows empty state when no staff', async () => {
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === 'list_staff') return Promise.resolve([]);
-      if (cmd === 'list_roles') return Promise.resolve(SAMPLE_ROLES);
-      if (cmd === 'list_all_workspaces') return Promise.resolve([]);
-      if (cmd === 'get_user_workspaces') return Promise.resolve([]);
+      if (cmd === 'list_staff_scoped') return Promise.resolve([]);
+      if (cmd === 'list_roles_scoped') return Promise.resolve(SAMPLE_ROLES);
+      if (cmd === 'list_all_workspaces_scoped') return Promise.resolve([]);
+      if (cmd === 'get_user_workspaces_scoped') return Promise.resolve([]);
       return Promise.resolve([]);
     });
     renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
@@ -125,9 +129,34 @@ describe('StaffManagementScreen', () => {
     expect(dialog).toHaveTextContent(/edit staff member/i);
   });
 
+  // ── STAFF-09 regression — editing must not reactivate inactive staff ─
+
+  it('preserves is_active when editing an inactive member', async () => {
+    renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
+    await waitForTable();
+
+    // Edit John (inactive) and save a profile change.
+    const editBtn = screen.getByRole('button', { name: /edit.*john doe/i });
+    fireEvent.click(editBtn);
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByRole('textbox', { name: /display name/i }), { target: { value: 'John D.' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /update/i }));
+
+    // update_staff_scoped must carry is_active: false (unchanged), not true.
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('update_staff_scoped', expect.objectContaining({
+        sessionToken: 'session-1',
+        args: expect.objectContaining({
+          id: 'staff-2',
+          is_active: false,
+        }),
+      }));
+    }, FAST_WAIT);
+  });
+
   // ── New edge-case tests ─────────────────────────────────────────
 
-  it('deactivates an active staff member when Deactivate is clicked', async () => {
+  it('deactivates an active staff member after confirming the dialog (STAFF-10)', async () => {
     renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
     await waitForTable();
 
@@ -135,10 +164,20 @@ describe('StaffManagementScreen', () => {
     const deactivateBtn = screen.getByRole('button', { name: /deactivate.*jane smith/i });
     fireEvent.click(deactivateBtn);
 
-    // update_staff should be called with is_active: false
-    // Note: updateStaff from @/api/staff wraps args in { args } for the IPC call
+    // The confirmation dialog must appear before any request is sent.
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toBeInTheDocument();
+    expect(invokeMock).not.toHaveBeenCalledWith('update_staff_scoped', expect.objectContaining({
+      args: expect.objectContaining({ id: 'staff-1', is_active: false }),
+    }));
+
+    // Confirm the deactivation.
+    fireEvent.click(within(dialog).getByRole('button', { name: /deactivate/i }));
+
+    // update_staff_scoped should be called with is_active: false
     await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith('update_staff', expect.objectContaining({
+      expect(invokeMock).toHaveBeenCalledWith('update_staff_scoped', expect.objectContaining({
+        sessionToken: 'session-1',
         args: expect.objectContaining({
           id: 'staff-1',
           is_active: false,
@@ -155,9 +194,10 @@ describe('StaffManagementScreen', () => {
     const restoreBtn = screen.getByText('Restore').closest('button')!;
     fireEvent.click(restoreBtn);
 
-    // update_staff wraps args in { args } — assert the inner payload
+    // update_staff_scoped wraps args in { args } — assert the inner payload
     await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith('update_staff', expect.objectContaining({
+      expect(invokeMock).toHaveBeenCalledWith('update_staff_scoped', expect.objectContaining({
+        sessionToken: 'session-1',
         args: expect.objectContaining({
           id: 'staff-2',
           is_active: true,
@@ -208,9 +248,10 @@ describe('StaffManagementScreen', () => {
     // Click Create
     fireEvent.click(within(dialog).getByRole('button', { name: /create/i }));
 
-    // create_staff wraps args in { args }
+    // create_staff_scoped wraps args in { args }
     await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith('create_staff', expect.objectContaining({
+      expect(invokeMock).toHaveBeenCalledWith('create_staff_scoped', expect.objectContaining({
+        sessionToken: 'session-1',
         args: expect.objectContaining({
           username: 'newuser',
         }),
@@ -224,14 +265,14 @@ describe('StaffManagementScreen', () => {
   });
 
   it('handles save failure gracefully in add modal', async () => {
-    // Mock create_staff to fail
+    // Mock create_staff_scoped to fail
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === 'create_staff') return Promise.reject(new Error('DB error'));
-      if (cmd === 'list_staff') return Promise.resolve(SAMPLE_STAFF);
-      if (cmd === 'list_roles') return Promise.resolve(SAMPLE_ROLES);
-      if (cmd === 'list_all_workspaces') return Promise.resolve([]);
-      if (cmd === 'get_user_workspaces') return Promise.resolve([]);
-      if (cmd === 'set_user_workspaces') return Promise.resolve(undefined);
+      if (cmd === 'create_staff_scoped') return Promise.reject(new Error('DB error'));
+      if (cmd === 'list_staff_scoped') return Promise.resolve(SAMPLE_STAFF);
+      if (cmd === 'list_roles_scoped') return Promise.resolve(SAMPLE_ROLES);
+      if (cmd === 'list_all_workspaces_scoped') return Promise.resolve([]);
+      if (cmd === 'get_user_workspaces_scoped') return Promise.resolve([]);
+      if (cmd === 'set_user_workspaces_scoped') return Promise.resolve(undefined);
       return Promise.resolve([]);
     });
 
@@ -258,18 +299,18 @@ describe('StaffManagementScreen', () => {
   it('renders workspace column for staff members', async () => {
     // Mock some workspace assignments
     invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === 'list_staff') return Promise.resolve(SAMPLE_STAFF);
-      if (cmd === 'list_roles') return Promise.resolve(SAMPLE_ROLES);
-      if (cmd === 'list_all_workspaces') return Promise.resolve([
+      if (cmd === 'list_staff_scoped') return Promise.resolve(SAMPLE_STAFF);
+      if (cmd === 'list_roles_scoped') return Promise.resolve(SAMPLE_ROLES);
+      if (cmd === 'list_all_workspaces_scoped') return Promise.resolve([
         { key: 'restaurant', name: 'Restaurant', description: 'Dine-in', icon: 'restaurant' },
         { key: 'store', name: 'Retail Store', description: 'Retail', icon: 'store' },
       ]);
-      if (cmd === 'get_user_workspaces') {
+      if (cmd === 'get_user_workspaces_scoped') {
         // Both staff members get the same workspace assignment — sufficient
         // to verify the workspace column renders without crashing.
         return Promise.resolve(['restaurant']);
       }
-      if (cmd === 'set_user_workspaces') return Promise.resolve(undefined);
+      if (cmd === 'set_user_workspaces_scoped') return Promise.resolve(undefined);
       return Promise.resolve([]);
     });
 

@@ -157,11 +157,11 @@
   @keyframes login-card-in {
     from {
       opacity: 0;
-      transform: translateY(clamp(0.75rem, 2vh, 1.5rem)) scale(0.97);
+      transform: translateY(clamp(0.75rem, 2vh, 1.5rem));
     }
     to {
       opacity: 1;
-      transform: translateY(0) scale(1);
+      transform: translateY(0);
     }
   }
 
@@ -260,6 +260,9 @@
 .staff-login-input {
   width: 100%;
   box-sizing: border-box;
+  /* P7-2: 44px touch-target floor. The rem-based padding/font shrink under
+     ZoomContext scaling, so enforce a px-based min-height. */
+  min-height: 44px;
   padding: clamp(var(--space-3), 2vw, var(--space-4));
   padding-right: calc(clamp(var(--space-3), 2vw, var(--space-4)) + 1.25rem + var(--space-2));
   font-size: clamp(var(--text-md), 3vw, var(--text-xl));
@@ -310,6 +313,13 @@
   justify-content: center;
   width: 2rem;
   height: 2rem;
+  /* P7-2: 44px touch-target floor — px-based so ZoomContext rem scaling
+     can never shrink the target below the WCAG minimum. Height only: the
+     button is absolutely positioned inside the input, and widening it past
+     the input's padding-right would overlap the typed text. 48px matches
+     the --tablet-tap-target token and leaves headroom so fractional
+     centering can't round the rendered height below the 44px floor. */
+  min-height: 48px;
   padding: 0;
   border: none;
   border-radius: var(--radius-full);
@@ -323,8 +333,11 @@
 
 @media (pointer: coarse) {
   .staff-login-submit-btn {
-    width: 2.75rem;
-    height: 2.75rem;
+    /* 48px (matches the --tablet-tap-target token) instead of the 2rem
+       desktop size: guarantees the ≥44px WCAG touch-target floor even
+       after devicePixelRatio sub-pixel rounding on tablet screens. */
+    width: 3rem;
+    height: 3rem;
   }
 }
 

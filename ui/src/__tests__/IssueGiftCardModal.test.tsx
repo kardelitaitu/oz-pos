@@ -101,7 +101,7 @@ describe('IssueGiftCardModal', () => {
     await userEvent.click(screen.getByRole('button', { name: /issue card/i }));
 
     await vi.waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('Network error');
+      expect(screen.getByRole('alert')).toHaveTextContent('Failed to issue gift card');
     });
   });
 
@@ -118,5 +118,55 @@ describe('IssueGiftCardModal', () => {
     await userEvent.clear(cardInput);
     await userEvent.type(cardInput, 'GC-MYCARD');
     expect(cardInput).toHaveValue('GC-MYCARD');
+  });
+
+  it('uses password type for PIN input', () => {
+    renderWithFluentSync(<IssueGiftCardModal onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
+    expect(screen.getByLabelText('PIN')).toHaveAttribute('type', 'password');
+  });
+
+  it('rejects decimal amounts with validation error', async () => {
+    renderWithFluentSync(<IssueGiftCardModal onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
+    const amountInput = screen.getByLabelText('Initial amount');
+    await userEvent.clear(amountInput);
+    await userEvent.type(amountInput, '50000.75');
+    await userEvent.click(screen.getByRole('button', { name: /issue card/i }));
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+  });
+
+  it('clears error when editing issuedTo after validation failure', async () => {
+    renderWithFluentSync(<IssueGiftCardModal onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
+    await userEvent.click(screen.getByRole('button', { name: /issue card/i }));
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    const nameInput = screen.getByLabelText('Issued to');
+    await userEvent.type(nameInput, 'Alice');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('clears error when editing PIN after validation failure', async () => {
+    renderWithFluentSync(<IssueGiftCardModal onClose={vi.fn()} onIssued={vi.fn()} />, giftCardsFtl);
+    await userEvent.click(screen.getByRole('button', { name: /issue card/i }));
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    const pinInput = screen.getByLabelText('PIN');
+    await userEvent.type(pinInput, '1234');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('closes when backdrop overlay is clicked', async () => {
+    const onClose = vi.fn();
+    renderWithFluentSync(<IssueGiftCardModal onClose={onClose} onIssued={vi.fn()} />, giftCardsFtl);
+    const overlay = screen.getByRole('presentation');
+    await userEvent.click(overlay);
+    await vi.waitFor(() => {
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('does not close when modal panel is clicked', async () => {
+    const onClose = vi.fn();
+    renderWithFluentSync(<IssueGiftCardModal onClose={onClose} onIssued={vi.fn()} />, giftCardsFtl);
+    const panel = document.querySelector('.gift-cards-modal')!;
+    await userEvent.click(panel);
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

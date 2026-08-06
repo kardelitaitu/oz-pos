@@ -3,13 +3,15 @@
 //! Displays the active shift status, a list of all shifts with
 //! reconciliation details, and allows opening/closing shifts.
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
-import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
+import { l10nErrorMessage } from '@/utils/app-error';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useAnimatedModal } from '@/hooks/useAnimatedModal';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { EmptyState } from '@/frontend/shared';
@@ -18,9 +20,9 @@ import { Skeleton } from '@/components/Skeleton';
 import { formatMoney } from '@/types/domain';
 import {
   listShiftsScoped,
-  openShift,
-  closeShift,
-  getActiveShift,
+  openShiftScoped,
+  closeShiftScoped,
+  getActiveShiftScoped,
   getShiftReport,
   createCashPayout,
   type ShiftDto,
@@ -40,11 +42,9 @@ const fmt = (minor: number, currency = 'USD') =>
 export default function ShiftManagementScreen() {
   const { l10n } = useLocalization();
   const { addToast } = useToast();
-  const { session } = useAuth();
   const { sessionToken: rawToken } = useWorkspace();
   const sessionToken = rawToken || '';
   const { currency } = useCurrency();
-  const userId = session?.user_id ?? '';
   const [shifts, setShifts] = useState<ShiftDto[]>([]);
   const [activeShift, setActiveShift] = useState<ShiftDto | null>(null);
   const [loading, setLoading] = useState(true);
@@ -74,16 +74,16 @@ export default function ShiftManagementScreen() {
     try {
       const [allShifts, active] = await Promise.all([
         listShiftsScoped(sessionToken),
-        userId ? getActiveShift(userId) : Promise.resolve(null),
+        getActiveShiftScoped(sessionToken).catch(() => null),
       ]);
       setShifts(allShifts);
       setActiveShift(active);
     } catch {
-      addToast({ message: l10n.getString('shift-load-error') || 'Failed to load shifts', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'shift-load-error'), type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [userId, sessionToken, l10n, addToast]);
+  }, [sessionToken, l10n, addToast]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -109,41 +109,45 @@ export default function ShiftManagementScreen() {
     setSaving(true);
     setError(null);
     try {
-      await openShift(userId, safeBalance);
+      await openShiftScoped(sessionToken, safeBalance);
       setShowOpenModal(false);
       setOpeningBalance('');
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('shift-open-error') || 'Failed to open shift');
+      setError(l10nErrorMessage(err, l10n, 'shift-open-error'));
     } finally {
       setSaving(false);
     }
-  }, [openingBalance, userId, load, l10n]);
+  }, [openingBalance, sessionToken, load, l10n]);
 
   // ── Close shift ───────────────────────────────────────────────────
 
   const handleCloseShift = useCallback(async () => {
     if (!activeShift) return;
     const balance = parseInt(closingBalance, 10);
-    if (Number.isNaN(balance) || balance < 0) return;
+    if (Number.isNaN(balance) || balance < 0) {
+      setError(requiredLocalized(l10n, 'shift-invalid-balance'));
+      return;
+    }
 
     setSaving(true);
     setError(null);
     try {
-      const closed = await closeShift({
-        userId,
-        id: activeShift.id,
-        closingBalanceMinor: balance,
-        notes: shiftNotes.trim() || null,
-      });
+      const closed = await closeShiftScoped(
+        sessionToken,
+        activeShift.id,
+        balance,
+        shiftNotes.trim() || null,
+      );
+      setShowCloseModal(false);
       setClosedShiftSummary(closed);
       setActiveShift(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('shift-close-error') || 'Failed to close shift');
+      setError(l10nErrorMessage(err, l10n, 'shift-close-error'));
     } finally {
       setSaving(false);
     }
-  }, [activeShift, closingBalance, shiftNotes, userId, l10n]);
+  }, [activeShift, closingBalance, shiftNotes, sessionToken, l10n]);
 
 
   const dismissCloseSummary = useCallback(async () => {
@@ -160,7 +164,10 @@ export default function ShiftManagementScreen() {
   const handleCreatePayout = useCallback(async () => {
     if (!activeShift) return;
     const amount = parseInt(payoutAmount, 10);
-    if (Number.isNaN(amount) || amount <= 0) return;
+    if (Number.isNaN(amount) || amount <= 0) {
+      setError(requiredLocalized(l10n, 'shift-invalid-payout-amount'));
+      return;
+    }
     const reason = payoutReason.trim() || 'safe drop';
 
     setSaving(true);
@@ -172,7 +179,7 @@ export default function ShiftManagementScreen() {
       setPayoutReason('');
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('shift-payout-error') || 'Failed to record payout');
+      setError(l10nErrorMessage(err, l10n, 'shift-payout-error'));
     } finally {
       setSaving(false);
     }
@@ -194,6 +201,18 @@ export default function ShiftManagementScreen() {
   const { mounted: mClose, exiting: eClose } = useAnimatedModal(showCloseModal);
   const { mounted: mClosedSum, exiting: eClosedSum } = useAnimatedModal(!!closedShiftSummary);
   const { mounted: mDetail, exiting: eDetail } = useAnimatedModal(!!showDetailModal);
+
+  // ── Focus trap refs ───────────────────────────────
+  const openPanelRef = useRef<HTMLDivElement>(null);
+  const payoutPanelRef = useRef<HTMLDivElement>(null);
+  const closePanelRef = useRef<HTMLDivElement>(null);
+  const closedSumPanelRef = useRef<HTMLDivElement>(null);
+  const detailPanelRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(openPanelRef, mOpen && !eOpen, () => { setShowOpenModal(false); setError(null); });
+  useFocusTrap(payoutPanelRef, mPayout && !ePayout, () => { setShowPayoutModal(false); setPayoutAmount(''); setPayoutReason(''); setError(null); });
+  useFocusTrap(closePanelRef, mClose && !eClose, () => { setShowCloseModal(false); setClosingBalance(''); setShiftNotes(''); setError(null); });
+  useFocusTrap(closedSumPanelRef, mClosedSum && !eClosedSum, dismissCloseSummary);
+  useFocusTrap(detailPanelRef, mDetail && !eDetail, () => setShowDetailModal(null));
 
   // ── Render ────────────────────────────────────────────────────────
 
@@ -400,7 +419,7 @@ export default function ShiftManagementScreen() {
               <div className="shift-mgmt-empty">
                 <EmptyState
                   icon={<NoShiftsIcon />}
-                  title={l10n.getString('shift-empty') || 'No shifts recorded yet.'}
+                  title={requiredLocalized(l10n, 'shift-empty')}
                 />
               </div>
             ) : (
@@ -485,7 +504,7 @@ export default function ShiftManagementScreen() {
       {/* ── Open Shift Modal ──────────────────────────── */}
       {mOpen && (
         <div className={`shift-mgmt-overlay${eOpen ? ' shift-overlay-exit' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('shift-modal-open-label')}>
-          <div className={`shift-mgmt-modal${eOpen ? ' shift-modal-exit' : ''}`}>
+          <div ref={openPanelRef} className={`shift-mgmt-modal${eOpen ? ' shift-modal-exit' : ''}`}>
             <div className="shift-mgmt-modal-header">
               <Localized id="shift-modal-open-title">
                 <h2>Open Shift</h2>
@@ -545,7 +564,7 @@ export default function ShiftManagementScreen() {
       {/* ── Payout Modal ─────────────────────────────── */}
       {mPayout && activeShift && (
         <div className={`shift-mgmt-overlay${ePayout ? ' shift-overlay-exit' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('shift-modal-payout-label')}>
-          <div className={`shift-mgmt-modal${ePayout ? ' shift-modal-exit' : ''}`}>
+          <div ref={payoutPanelRef} className={`shift-mgmt-modal${ePayout ? ' shift-modal-exit' : ''}`}>
             <div className="shift-mgmt-modal-header">
               <Localized id="shift-modal-payout-title">
                 <h2>Record Cash Payout</h2>
@@ -635,7 +654,7 @@ export default function ShiftManagementScreen() {
       {/* ── Close Shift Modal ─────────────────────────── */}
       {mClose && activeShift && (
         <div className={`shift-mgmt-overlay${eClose ? ' shift-overlay-exit' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('shift-modal-close-label')}>
-          <div className={`shift-mgmt-modal shift-mgmt-modal--wide${eClose ? ' shift-modal-exit' : ''}`}>
+          <div ref={closePanelRef} className={`shift-mgmt-modal shift-mgmt-modal--wide${eClose ? ' shift-modal-exit' : ''}`}>
             <div className="shift-mgmt-modal-header">
               <Localized id="shift-modal-close-title">
                 <h2>Close Shift</h2>
@@ -680,17 +699,11 @@ export default function ShiftManagementScreen() {
                 </div>
                 <div className="shift-mgmt-recon-row shift-mgmt-recon-row--total">
                   <Localized id="shift-recon-expected">
-                    <span>Expected cash</span>
+                    <span>Expected in drawer</span>
                   </Localized>
                   <span className="shift-mgmt-cell-mono">
                     {fmt(activeShift.openingBalanceMinor + activeShift.totalCashMinor - activeShift.totalPayoutsMinor, currency)}
                   </span>
-                </div>
-                <div className="shift-mgmt-recon-row">
-                  <Localized id="shift-recon-payouts-returned">
-                    <span>+ Payouts returned</span>
-                  </Localized>
-                  <span className="shift-mgmt-cell-mono">{fmt(activeShift.totalPayoutsMinor, currency)}</span>
                 </div>
                 <div className="shift-mgmt-recon-divider" />
                 <div className="shift-mgmt-close-info-row">
@@ -774,7 +787,7 @@ export default function ShiftManagementScreen() {
       {/* ── Closed Shift Summary ──────────────────────── */}
       {mClosedSum && closedShiftSummary && (
         <div className={`shift-mgmt-overlay${eClosedSum ? ' shift-overlay-exit' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('shift-modal-closed-label')}>
-          <div className={`shift-mgmt-modal${eClosedSum ? ' shift-modal-exit' : ''}`}>
+          <div ref={closedSumPanelRef} className={`shift-mgmt-modal${eClosedSum ? ' shift-modal-exit' : ''}`}>
             <div className="shift-mgmt-modal-header">
               <Localized id="shift-modal-closed-title">
                 <h2>Shift Closed</h2>
@@ -873,7 +886,7 @@ export default function ShiftManagementScreen() {
         const s = showDetailModal;
         return (
         <div className={`shift-mgmt-overlay${eDetail ? ' shift-overlay-exit' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('shift-modal-detail-label')}>
-          <div className={`shift-mgmt-modal shift-mgmt-modal--wide${eDetail ? ' shift-modal-exit' : ''}`}>
+          <div ref={detailPanelRef} className={`shift-mgmt-modal shift-mgmt-modal--wide${eDetail ? ' shift-modal-exit' : ''}`}>
             <div className="shift-mgmt-modal-header">
               <Localized id="shift-modal-detail-title">
                 <h2>Shift Details</h2>

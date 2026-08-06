@@ -96,7 +96,7 @@ fn make_line(
     expected: i64,
     counted: Option<i64>,
 ) -> StockCountLine {
-    let diff = counted.unwrap_or(0) - expected;
+    let diff = counted.map(|value| value - expected).unwrap_or(0);
     StockCountLine {
         id: uuid::Uuid::new_v4().to_string(),
         count_id: count_id.into(),

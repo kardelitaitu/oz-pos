@@ -390,7 +390,7 @@ describe('TopologyScreen', () => {
     expect(mockAddToast).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'error',
-        message: expect.stringContaining('DB locked'),
+        message: expect.stringContaining('Something went wrong'),
       }),
     );
   });
@@ -407,7 +407,7 @@ describe('TopologyScreen', () => {
     expect(mockAddToast).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'error',
-        message: expect.stringContaining('Network failure'),
+        message: expect.stringContaining('Something went wrong'),
       }),
     );
   });

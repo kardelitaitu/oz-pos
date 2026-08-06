@@ -638,6 +638,31 @@ impl Store<'_> {
         description: &str,
         colour: Option<&str>,
     ) -> Result<WorkspaceInstanceRow, CoreError> {
+        if id.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "id",
+                message: "workspace instance id must not be empty".into(),
+            });
+        }
+        if type_key.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "type_key",
+                message: "type_key must not be empty".into(),
+            });
+        }
+        if store_id.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "store_id",
+                message: "store_id must not be empty".into(),
+            });
+        }
+        if name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "workspace instance name must not be empty".into(),
+            });
+        }
+
         let tx = self.conn.unchecked_transaction()?;
 
         let exists: bool = tx
@@ -889,6 +914,13 @@ impl Store<'_> {
         description: Option<&str>,
         colour: Option<&str>,
     ) -> Result<(), CoreError> {
+        if name.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: "workspace instance name must not be empty".into(),
+            });
+        }
+
         let affected = self.conn.execute(
             "UPDATE workspace_instances
              SET name = ?2,
@@ -1995,5 +2027,67 @@ mod tests {
         assert_eq!(row.colour.as_deref(), Some("#abcdef"));
         assert_eq!(row.type_key, "store-pos");
         assert_eq!(row.store_id, "default");
+    }
+
+    // ── Input validation ────────────────────────────────────────────────
+
+    #[test]
+    fn create_workspace_instance_rejects_empty_id() {
+        let (store, _) = fresh();
+        let err = store
+            .create_workspace_instance("", "store-pos", "default", "Name", "desc", None)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field: "id", .. }));
+    }
+
+    #[test]
+    fn create_workspace_instance_rejects_empty_type_key() {
+        let (store, _) = fresh();
+        let err = store
+            .create_workspace_instance("ws-1", "", "default", "Name", "desc", None)
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "type_key",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn create_workspace_instance_rejects_empty_store_id() {
+        let (store, _) = fresh();
+        let err = store
+            .create_workspace_instance("ws-1", "store-pos", "", "Name", "desc", None)
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            CoreError::Validation {
+                field: "store_id",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn create_workspace_instance_rejects_empty_name() {
+        let (store, _) = fresh();
+        let err = store
+            .create_workspace_instance("ws-1", "store-pos", "default", "", "desc", None)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field: "name", .. }));
+    }
+
+    #[test]
+    fn update_workspace_instance_rejects_empty_name() {
+        let (store, _) = fresh();
+        store
+            .create_workspace_instance("ws-1", "store-pos", "default", "Name", "desc", None)
+            .unwrap();
+        let err = store
+            .update_workspace_instance("ws-1", "", None, None)
+            .unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field: "name", .. }));
     }
 }

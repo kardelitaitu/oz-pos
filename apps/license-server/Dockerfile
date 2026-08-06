@@ -11,7 +11,8 @@
 
 # ── Stage 1: Build ────────────────────────────────────────────────────
 # Uses golang:1.25-alpine to satisfy fatih/color@v1.19.0 (requires go >= 1.25)
-FROM golang:1.25-alpine AS builder
+# DOCKER-02: base images pinned to immutable digests (refreshed 2026-08-03).
+FROM golang:1.25-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587 AS builder
 
 RUN apk add --no-cache gcc musl-dev
 
@@ -31,15 +32,25 @@ RUN CGO_ENABLED=1 go build -o /pb/pocketbase -ldflags="-s -w" .
 RUN CGO_ENABLED=0 go build -o /pb/healthcheck -ldflags="-s -w" healthcheck.go
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────
-FROM alpine:3.20
+# alpine:3.22 tag — multi-arch index digest (refreshed 2026-08-03). Bumped
+# from 3.20 (EOL per Trivy, no security updates) to a supported release.
+FROM alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
 
-RUN apk add --no-cache ca-certificates tzdata
+# DOCKER-01: non-root runtime. su-exec is Alpine's gosu equivalent and is
+# used by the entrypoint to drop from root (which only fixes volume
+# ownership for pre-existing root-owned volumes) to the `pb` user before
+# PocketBase serves HTTP — the same pattern Dockerfile.server uses with gosu.
+RUN apk add --no-cache ca-certificates tzdata su-exec
 
-RUN mkdir -p /pb/pb_data
+RUN addgroup -S pb && adduser -S -G pb -h /pb pb
+
+RUN mkdir -p /pb/pb_data && chown -R pb:pb /pb
 VOLUME ["/pb/pb_data"]
 
 COPY --from=builder /pb/pocketbase /pb/pocketbase
 COPY --from=builder /pb/healthcheck /pb/healthcheck
+COPY docker-entrypoint.sh /pb/docker-entrypoint.sh
+RUN chmod +x /pb/docker-entrypoint.sh
 
 EXPOSE 8080
 
@@ -48,4 +59,9 @@ EXPOSE 8080
 HEALTHCHECK --interval=5s --timeout=5s --retries=3 \
     CMD /pb/healthcheck http://localhost:8080/api/health || exit 1
 
-ENTRYPOINT ["/pb/pocketbase", "serve", "--http=0.0.0.0:8080"]
+# Explicit HTTP keeps the E2E healthcheck on plain http://localhost:8080.
+# A positional value is treated as an AutoTLS domain by PocketBase v0.39.6.
+# The entrypoint drops privileges to `pb` before starting PocketBase
+# (DOCKER-01) so the server never serves HTTP as root.
+ENTRYPOINT ["/pb/docker-entrypoint.sh"]
+CMD ["/pb/pocketbase", "serve", "--http=0.0.0.0:8080"]

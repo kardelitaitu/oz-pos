@@ -14,11 +14,17 @@ impl<'a> TaxRepository<'a> {
         Self { conn }
     }
 
-    /// Retrieve a tax rate by ID.
+    /// Retrieve an active tax rate by ID.
+    ///
+    /// TAX-03: honours the `is_active` soft-delete flag exactly like
+    /// `oz_core::db::Store::get_tax_rate`, so archived (immutable) rates
+    /// stay hidden through the module boundary too. The cross-layer
+    /// contract test `modules/tax/tests/boundary_contract.rs` pins this
+    /// parity.
     pub fn get_tax_rate(&self, id: &str) -> Result<Option<TaxRate>, anyhow::Error> {
         let mut stmt = self.conn.prepare(
             "SELECT id, name, rate_bps, is_default, is_inclusive, created_at, updated_at
-             FROM tax_rates WHERE id = ?1",
+             FROM tax_rates WHERE id = ?1 AND is_active = 1",
         )?;
 
         let mut rows = stmt.query(params![id])?;
@@ -36,5 +42,33 @@ impl<'a> TaxRepository<'a> {
             created_at: row.get(5)?,
             updated_at: row.get(6)?,
         }))
+    }
+
+    /// List all active tax rates, ordered by name.
+    ///
+    /// TAX-03: honours the `is_active` soft-delete flag exactly like
+    /// `oz_core::db::Store::list_tax_rates` — archived (immutable) rates
+    /// are filtered out (`is_active = 1`) so callers across the module
+    /// boundary only ever see assignable rates. The cross-layer contract
+    /// test `modules/tax/tests/boundary_contract.rs` pins this parity.
+    pub fn list_tax_rates(&self) -> Result<Vec<TaxRate>, anyhow::Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, rate_bps, is_default, is_inclusive, created_at, updated_at
+             FROM tax_rates WHERE is_active = 1 ORDER BY name",
+        )?;
+
+        let rows = stmt.query_map([], |row| {
+            Ok(TaxRate {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                rate_bps: row.get(2)?,
+                is_default: row.get::<_, i64>(3)? != 0,
+                is_inclusive: row.get::<_, i64>(4)? != 0,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+            })
+        })?;
+
+        rows.map(|r| Ok(r?)).collect()
     }
 }

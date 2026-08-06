@@ -38,6 +38,7 @@ import {
   finalizeSale,
   voidPendingSale,
   setCartDiscountScoped,
+  getProductTrackSerialBatch,
 } from '@/api/sales';
 
 describe('sales.ts IPC contract', () => {
@@ -191,6 +192,21 @@ describe('sales.ts IPC contract', () => {
       sessionToken: 'tok',
       args: { cartId: 'c1' as CartId, percent: 10, label: 'Senior' },
     });
+  });
+
+  it('getProductTrackSerialBatch invokes "get_product_track_serial_batch" with skus (PERF-03)', async () => {
+    mockInvoke.mockResolvedValue([
+      { sku: 'TRACKED', track_serial: true },
+      { sku: 'PLAIN', track_serial: false },
+    ]);
+    const rows = await getProductTrackSerialBatch(['TRACKED', 'PLAIN']);
+    expect(mockInvoke).toHaveBeenCalledWith('get_product_track_serial_batch', {
+      skus: ['TRACKED', 'PLAIN'],
+    });
+    expect(rows).toEqual([
+      { sku: 'TRACKED', track_serial: true },
+      { sku: 'PLAIN', track_serial: false },
+    ]);
   });
 
   it('propagates errors from the backend (does not swallow)', async () => {
@@ -350,6 +366,9 @@ describe('settings.ts IPC contract', () => {
       scaleDevicePath: '',
       scaleBaudRate: 9600,
       scaleZeroOnBoot: false,
+      kitchenPrinterConnection: 'disabled',
+      kitchenPrinterDevicePath: '',
+      schemaVersion: 1,
       soundVolume: 80,
       darkMode: false,
       scaleAutoZero: true,
@@ -370,6 +389,9 @@ describe('settings.ts IPC contract', () => {
       scaleDevicePath: 'COM3',
       scaleBaudRate: 115200,
       scaleZeroOnBoot: true,
+      kitchenPrinterConnection: 'disabled',
+      kitchenPrinterDevicePath: '',
+      schemaVersion: 1,
       soundVolume: 60,
       darkMode: true,
       scaleAutoZero: false,
@@ -484,6 +506,7 @@ describe('products.ts IPC contract', () => {
 
 import {
   listWorkspacesScoped,
+  listWorkspaceScreens,
   createWorkspaceInstanceScoped,
   updateWorkspaceInstanceScoped,
   archiveWorkspaceInstanceScoped,
@@ -496,6 +519,15 @@ describe('workspaces.ts IPC contract', () => {
     mockInvoke.mockResolvedValue([]);
     await listWorkspacesScoped('tok');
     expect(mockInvoke).toHaveBeenCalledWith('list_workspaces_scoped', { sessionToken: 'tok' });
+  });
+
+  it('listWorkspaceScreens routes pre-session reads with typeKey + storeId', async () => {
+    mockInvoke.mockResolvedValue([]);
+    await listWorkspaceScreens('restaurant-pos', 'store-1');
+    expect(mockInvoke).toHaveBeenCalledWith('list_workspace_screens', {
+      typeKey: 'restaurant-pos',
+      storeId: 'store-1',
+    });
   });
 
   it('createWorkspaceInstanceScoped invokes "create_workspace_instance_scoped" with sessionToken + req', async () => {

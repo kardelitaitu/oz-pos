@@ -14,7 +14,7 @@ vi.mock('@/api/sales', () => ({
 }));
 
 vi.mock('@/api/staff', () => ({
-  listStaff: vi.fn(),
+  listStaffScoped: vi.fn(),
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -22,6 +22,10 @@ vi.mock('@/contexts/AuthContext', () => ({
     session: { user_id: 'user-1', display_name: 'Cashier', role_name: 'cashier' },
     isManager: true,
   }),
+}));
+
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({ sessionToken: 'session-1' }),
 }));
 
 vi.mock('@/features/sales/RefundModal', () => ({
@@ -34,12 +38,12 @@ vi.mock('@/features/sales/RefundModal', () => ({
 
 import SalesHistoryScreen from '@/features/sales/SalesHistoryScreen';
 import { listSales, getSale, listRefunds } from '@/api/sales';
-import { listStaff } from '@/api/staff';
+import { listStaffScoped } from '@/api/staff';
 
 const mockListSales = listSales as ReturnType<typeof vi.fn>;
 const mockGetSale = getSale as ReturnType<typeof vi.fn>;
 const mockListRefunds = listRefunds as ReturnType<typeof vi.fn>;
-const mockListStaff = listStaff as ReturnType<typeof vi.fn>;
+const mockListStaff = listStaffScoped as ReturnType<typeof vi.fn>;
 
 
 

@@ -121,6 +121,8 @@ shift-field-payout-amount = Jumlah penarikan dalam unit minor
 shift-field-payout-reason = Alasan penarikan
 shift-field-closing-balance = Saldo akhir dalam unit minor
 shift-field-notes = Catatan shift
+shift-invalid-balance = Masukkan saldo penutupan yang valid
+shift-invalid-payout-amount = Masukkan jumlah penarikan yang valid
 
 # Shift Open Balance (ShiftManagementScreen)
 shift-open-balance-label = Saldo awal

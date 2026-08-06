@@ -25,7 +25,7 @@ const COMPONENTS_CSS = resolve(UI_SRC, 'frontend/themes/components.css');
 // When a new shadow-using component is added, its CSS class selector
 // must be added to the ::after list in components.css AND to this set.
 //
-// Current count: 35 selectors (5 core + 1 utility + 29 deprecated legacy).
+// Current count: 39 selectors (6 core + 1 utility + 32 deprecated legacy).
 // Increment when adding new selectors; decrement when cleaning up legacy.
 const KNOWN_NOISE_SELECTORS = [
   // Core pattern classes (always covered)
@@ -33,8 +33,12 @@ const KNOWN_NOISE_SELECTORS = [
   '.modal-panel',
   '.staff-login-card',
   '.workspace-card',
+  // Emergency fallback card — elevated surface (ERR-02)
+  '.error-boundary__card',
   // Reusable utility class (recommended for NEW components)
   '.noise-dither',
+  // Emergency fallback card (ERR-02)
+  '.error-boundary__card',
   // DEPRECATED LEGACY SELECTORS (feature-specific classes)
   '.retail-shift-modal',
   '.retail-held-carts-modal',
@@ -103,7 +107,11 @@ const KNOWN_NOISE_SELECTORS = [
   '.retail-menu',
   '.pos-cart-undo-bar',
   ".pos-cart-tip-segment[aria-pressed='true']",
+  '.retail-reminder-popup',
   '.modifier-modal',
+  '.kds-ticket-rush-badge',
+  '.kds-picker-modal',
+  '.retail-cart-course-dropdown',
   '.pos-hold-modal',
   '.pos-held-list-modal',
   '.pos-close-shift-modal',
@@ -116,6 +124,7 @@ const KNOWN_NOISE_SELECTORS = [
   '.node-selected',
   '.settings-shortcuts-popover',
   '.canvas-hud',
+  '.customer-mgmt-history',
   '.panel',
   ':global(.dark) .panel',
 ];

@@ -68,7 +68,7 @@ describe('FeatureToggleScreen', () => {
     await renderWithFluent(<ToastProvider><FeatureToggleScreen /></ToastProvider>, settingsFtl, sharedFtl);
 
     await waitFor(() => {
-      expect(screen.getByText('IPC error')).toBeInTheDocument();
+      expect(screen.getByText('Failed to load features')).toBeInTheDocument();
     }, FAST_WAIT);
     expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
   });

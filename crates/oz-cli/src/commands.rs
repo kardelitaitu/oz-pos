@@ -10,7 +10,7 @@ use clap::{CommandFactory, Parser};
 use rusqlite::Connection;
 
 use oz_core::db::Store;
-use oz_core::{CoreError, Currency, FeatureRegistry, Money, SaleStatus, Settings};
+use oz_core::{CoreError, Currency, FeatureRegistry, Money, SaleStatus, Settings, format_minor};
 
 use crate::cli::*;
 
@@ -370,11 +370,7 @@ pub(crate) fn run_sale_list(store: &Store<'_>) -> Result<()> {
     );
 
     for s in &sales {
-        let total_str = format!(
-            "{}.{:02}",
-            s.total.minor_units / 100,
-            s.total.minor_units.abs() % 100,
-        );
+        let total_str = format_minor(s.total.minor_units, s.total.currency);
         let status_str = match s.status {
             SaleStatus::Pending => "pending",
             SaleStatus::Active => "active",
@@ -405,9 +401,8 @@ pub(crate) fn run_sale_get(store: &Store<'_>, id: &str, format: &str) -> Result<
                 println!("{json}");
             } else {
                 let total_str = format!(
-                    "{}.{:02} {}",
-                    sale.total.minor_units / 100,
-                    sale.total.minor_units.abs() % 100,
+                    "{} {}",
+                    format_minor(sale.total.minor_units, sale.currency),
                     std::str::from_utf8(&sale.currency.0).unwrap_or("???"),
                 );
                 println!("ID:           {}", sale.id);
@@ -426,11 +421,7 @@ pub(crate) fn run_sale_get(store: &Store<'_>, id: &str, format: &str) -> Result<
                     println!("{:<4} {:<24} {:>6} {:>10}", "#", "SKU", "Qty", "Unit");
                     println!("{:-<4} {:-<24} {:->6} {:->10}", "", "", "", "");
                     for line in &sale.lines {
-                        let unit_str = format!(
-                            "{}.{:02}",
-                            line.unit_price.minor_units / 100,
-                            line.unit_price.minor_units.abs() % 100,
-                        );
+                        let unit_str = format_minor(line.unit_price.minor_units, sale.currency);
                         println!(
                             "{:<4} {:<24} {:>6} {:>10}",
                             line.line_position, line.sku, line.qty, unit_str
@@ -692,11 +683,7 @@ pub(crate) fn run_product_list(store: &Store<'_>) -> Result<()> {
     println!("{:-<12} {:-<24} {:->10}  {:-}", "", "", "", "");
 
     for p in &products {
-        let price_str = format!(
-            "{}.{:02}",
-            p.product.price.minor_units / 100,
-            p.product.price.minor_units.abs() % 100
-        );
+        let price_str = format_minor(p.product.price.minor_units, p.product.price.currency);
         let stock_str = match p.stock_qty {
             Some(q) => q.to_string(),
             None => "-".into(),
@@ -717,9 +704,8 @@ pub(crate) fn run_product_get(store: &Store<'_>, sku: &str) -> Result<()> {
     match store.get_product(sku).context("looking up product")? {
         Some(p) => {
             let price_str = format!(
-                "{}.{:02} {}",
-                p.product.price.minor_units / 100,
-                p.product.price.minor_units.abs() % 100,
+                "{} {}",
+                format_minor(p.product.price.minor_units, p.product.price.currency),
                 std::str::from_utf8(&p.product.price.currency.0).unwrap_or("???"),
             );
             println!("SKU:          {}", p.product.sku.as_str());
@@ -1005,6 +991,20 @@ pub(crate) fn run_export_ozpkg(
 // ── Import .ozpkg ─────────────────────────────────────────────────────
 
 /// Import data from an encrypted .ozpkg file.
+/// Decode a product's raw currency bytes as UTF-8, returning a recoverable
+/// error instead of panicking when an imported `.ozpkg` carries non-UTF-8
+/// currency bytes (RUST-07: recoverable user-supplied input).
+fn currency_to_utf8(product: &oz_core::Product) -> Result<String> {
+    std::str::from_utf8(&product.price.currency.0)
+        .map(|s| s.to_owned())
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "product {} has invalid (non-UTF-8) currency: {e}",
+                product.sku
+            )
+        })
+}
+
 pub(crate) fn run_import_ozpkg(
     conn: &Connection,
     input: &str,
@@ -1095,16 +1095,14 @@ pub(crate) fn run_import_ozpkg(
                 )
                 .is_ok();
             if exists {
-                let cur_str =
-                    std::str::from_utf8(&product.price.currency.0).expect("valid UTF-8 currency");
+                let cur_str = currency_to_utf8(&product)?;
                 let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
                 tx.execute(
                     "UPDATE products SET name = ?1, price_minor = ?2, currency = ?3, category_id = ?4, barcode = ?5, updated_at = ?6 WHERE sku = ?7",
                     rusqlite::params![product.name, product.price.minor_units, cur_str, product.category_id, product.barcode.as_ref().map(|b| b.as_str()), now, product.sku.to_string()],
                 )?;
             } else {
-                let cur_str =
-                    std::str::from_utf8(&product.price.currency.0).expect("valid UTF-8 currency");
+                let cur_str = currency_to_utf8(&product)?;
                 let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
                 tx.execute(
                     "INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at)

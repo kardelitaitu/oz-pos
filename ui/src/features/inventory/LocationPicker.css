@@ -38,25 +38,98 @@
   transition: transform var(--duration-150) var(--ease-out);
 }
 
+/* Durable error state (INV-08) — compact inline alert with a retry button. */
+.location-picker-error {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1_5) var(--space-3);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-lg);
+  background: var(--color-danger-bg);
+}
+
+.location-picker-error-text {
+  color: var(--color-danger-fg);
+  font-size: var(--text-sm);
+}
+
+.location-picker-retry {
+  padding: var(--space-1) var(--space-2_5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  color: var(--color-fg);
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.location-picker-retry:hover {
+  background: var(--color-bg-elevated);
+  border-color: var(--color-border-hover);
+}
+
+.location-picker-retry:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 .location-picker-chevron--open {
   transform: rotate(180deg);
 }
 
+/* LOC-09: the dropdown is now a wrapper (popover chrome) around the optional
+   inline search field and the listbox <ul>. */
 .location-picker-dropdown {
   position: absolute;
   left: 0;
   top: calc(100% + 4px);
   min-width: 220px;
-  max-height: 320px;
-  overflow-y: auto;
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   z-index: var(--z-dropdown);
+  padding: var(--space-1);
+}
+
+/* LOC-09: inline search shown for large location sets (SEARCH_THRESHOLD). */
+.location-picker-search-wrap {
+  padding: 0 var(--space-1) var(--space-1_5);
+}
+
+.location-picker-search {
+  width: 100%;
+  padding: var(--space-1_5) var(--space-2_5);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-fg);
+  font-size: var(--text-sm);
+}
+
+.location-picker-search:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/* LOC-09: the listbox itself scrolls inside the popover wrapper. */
+.location-picker-listbox {
   list-style: none;
   margin: 0;
-  padding: var(--space-1);
+  padding: 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* LOC-09: no-results state for a search query that matches nothing. */
+.location-picker-no-results {
+  display: block;
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-fg-tertiary);
+  font-size: var(--text-sm);
+  font-style: italic;
 }
 
 .location-picker-option {
@@ -90,6 +163,18 @@
   font-weight: var(--font-weight-semibold);
 }
 
+/* Keyboard-highlighted option (LOC-04) — visual cue for aria-activedescendant.
+   The outline signals keyboard position; the currently-selected option keeps
+   its accent-subtle background (don't override it with bg-surface). */
+.location-picker-option--highlighted {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.location-picker-option--highlighted:not(.location-picker-option--active) {
+  background: var(--color-bg-surface);
+}
+
 .location-picker-option--active:hover {
   background: var(--color-accent-subtle);
 }
@@ -99,9 +184,35 @@
 }
 
 .location-picker-option-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1_5);
   font-size: var(--text-xs);
   color: var(--color-fg-tertiary);
   text-transform: capitalize;
+}
+
+/* LOC-08: binding-policy badges (primary / negative-stock allowed). */
+.location-picker-badge {
+  display: inline-block;
+  padding: 0 var(--space-1_5);
+  border-radius: var(--radius-full);
+  font-size: 0.625rem;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.4;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.location-picker-badge--primary {
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-active);
+}
+
+.location-picker-badge--neg {
+  background: var(--color-warning-bg, var(--color-danger-bg));
+  color: var(--color-warning-fg, var(--color-danger));
 }
 
 .location-picker-option--active .location-picker-option-meta {

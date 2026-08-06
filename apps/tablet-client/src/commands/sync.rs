@@ -211,6 +211,29 @@ pub async fn test_sync_connection(
     }
 }
 
+/// Arguments for `sync_pull`.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncPullArgs {
+    /// Must be `true` to proceed with the destructive pull.
+    /// Prevents accidental local-data overwrite from UI double-clicks
+    /// or programmatic calls without user consent (H-2).
+    pub confirm_destructive: bool,
+}
+
+/// Reject a pull that lacks explicit destructive consent (H-2).
+///
+/// Extracted as a free function so the consent gate can be unit-tested
+/// without a Tauri runtime.
+fn validate_pull_consent(args: &SyncPullArgs) -> Result<(), AppError> {
+    if !args.confirm_destructive {
+        return Err(AppError::Invalid(
+            "confirm_destructive must be true to proceed with sync pull".into(),
+        ));
+    }
+    Ok(())
+}
+
 /// Pull a server snapshot and overwrite the local cache for products,
 /// tax rates, and users. The UI is expected to confirm the overwrite
 /// before invoking this command.
@@ -218,7 +241,11 @@ pub async fn test_sync_connection(
 /// Uses a three-phase split (read → async HTTP → write) so the DB
 /// lock is not held during the network round-trip.
 #[command]
-pub async fn sync_pull(state: State<'_, AppState>) -> Result<PullResult, AppError> {
+pub async fn sync_pull(
+    args: SyncPullArgs,
+    state: State<'_, AppState>,
+) -> Result<PullResult, AppError> {
+    validate_pull_consent(&args)?;
     // Phase 1: Read config from DB (brief lock).
     let config_opt = {
         let db = state.db.lock().await;
@@ -298,6 +325,41 @@ mod tests {
         let args: UpdateSyncSettingsArgs = serde_json::from_str(json).unwrap();
         assert!(args.server_url.is_none());
         assert!(args.api_key.is_none());
+    }
+
+    #[test]
+    fn sync_pull_args_deserialize() {
+        let json = r#"{"confirmDestructive":true}"#;
+        let args: SyncPullArgs = serde_json::from_str(json).unwrap();
+        assert!(args.confirm_destructive);
+    }
+
+    #[test]
+    fn sync_pull_args_missing_consent_fails() {
+        // SYNC-03: a payload with no consent key must not silently
+        // default to true — serde errors on the missing field.
+        let result = serde_json::from_str::<SyncPullArgs>(r#"{}"#);
+        assert!(
+            result.is_err(),
+            "missing confirm_destructive must fail deserialization"
+        );
+    }
+
+    #[test]
+    fn validate_pull_consent_accepts_true() {
+        let args = SyncPullArgs {
+            confirm_destructive: true,
+        };
+        assert!(validate_pull_consent(&args).is_ok());
+    }
+
+    #[test]
+    fn validate_pull_consent_rejects_false() {
+        let args = SyncPullArgs {
+            confirm_destructive: false,
+        };
+        let err = validate_pull_consent(&args).unwrap_err();
+        assert!(err.to_string().contains("confirm_destructive"));
     }
 
     #[test]

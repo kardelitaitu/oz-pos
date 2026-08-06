@@ -4,7 +4,7 @@
 //! SIGTERM (Unix) or Ctrl+C (all platforms). The returned future can be
 //! passed directly to [`axum::serve(...).with_graceful_shutdown(...)`].
 
-use tracing::info;
+use tracing::{info, warn};
 
 /// Wait for a shutdown signal (SIGTERM or Ctrl+C), then log and return.
 ///
@@ -22,20 +22,32 @@ use tracing::info;
 ///     .unwrap();
 /// ```
 pub async fn shutdown_signal() {
+    // RUST-07: signal-handler installation is a recoverable OS interaction.
+    // On failure we log a warning and fall back to a never-resolving future so
+    // the process keeps running (and can still be terminated externally)
+    // instead of panicking during startup.
     let ctrl_c = async {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("failed to install Ctrl+C handler");
-        info!("received Ctrl+C, starting graceful shutdown");
+        match tokio::signal::ctrl_c().await {
+            Ok(()) => info!("received Ctrl+C, starting graceful shutdown"),
+            Err(e) => {
+                warn!(error = %e, "failed to install Ctrl+C handler; graceful shutdown via Ctrl+C unavailable");
+                std::future::pending::<()>().await;
+            }
+        }
     };
 
     #[cfg(unix)]
     let terminate = async {
-        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-            .expect("failed to install SIGTERM handler")
-            .recv()
-            .await;
-        info!("received SIGTERM, starting graceful shutdown");
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut sig) => {
+                sig.recv().await;
+                info!("received SIGTERM, starting graceful shutdown");
+            }
+            Err(e) => {
+                warn!(error = %e, "failed to install SIGTERM handler; graceful shutdown via SIGTERM unavailable");
+                std::future::pending::<()>().await;
+            }
+        }
     };
 
     #[cfg(not(unix))]

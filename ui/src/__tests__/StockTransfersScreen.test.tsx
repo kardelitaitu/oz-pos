@@ -162,8 +162,8 @@ describe('StockTransfersScreen', () => {
 
     const inTransitBadge = document.querySelector('.stock-transfers-badge--in_transit');
     expect(inTransitBadge).toBeInTheDocument();
-    // statusLabel('in_transit') produces "In transit" (lowercase t).
-    expect(inTransitBadge!.textContent).toBe('In transit');
+    // The badge uses the localized stock-transfers-status-in_transit key.
+    expect(inTransitBadge!.textContent).toBe('In Transit');
   });
 
   it('shows View button for each transfer row', async () => {
@@ -348,7 +348,7 @@ describe('StockTransfersScreen', () => {
     await user.click(screen.getByRole('button', { name: /send transfer/i }));
 
     await waitFor(() => {
-      expect(mockSendTransfer).toHaveBeenCalledWith('st-1');
+      expect(mockSendTransfer).toHaveBeenCalledWith('mock-session-token', 'st-1');
     });
   });
 
@@ -365,7 +365,7 @@ describe('StockTransfersScreen', () => {
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
     await waitFor(() => {
-      expect(mockCancelTransfer).toHaveBeenCalledWith('st-1');
+      expect(mockCancelTransfer).toHaveBeenCalledWith('mock-session-token', 'st-1');
     });
   });
 });

@@ -1,6 +1,9 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
+import { l10nErrorMessage } from '@/utils/app-error';
 import {
   listStockCounts,
   type StockCountDto,
@@ -14,24 +17,31 @@ import './StockCountsScreen.css';
 export default function StockCountsScreen() {
   const [counts, setCounts] = useState<StockCountDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('all');
 
   const { l10n } = useLocalization();
   const l10nRef = useRef(l10n);
   l10nRef.current = l10n;
   const { addToast } = useToast();
+  const { sessionToken: rawSessionToken } = useWorkspace();
+  const sessionToken = rawSessionToken ?? '';
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
-      const data = await listStockCounts();
+      if (!sessionToken) throw new Error(requiredLocalized(l10nRef.current, 'sc-error-session'));
+      const data = await listStockCounts(sessionToken);
       setCounts(data);
-    } catch {
-      addToast({ message: l10nRef.current.getString('sc-error-load') || 'Failed to load stock counts', type: 'error' });
+    } catch (err) {
+      const message = l10nErrorMessage(err, l10nRef.current, 'sc-error-load');
+      setError(message);
+      addToast({ message, type: 'error' });
     } finally {
       setLoading(false);
     }
-  }, [addToast]);
+  }, [addToast, sessionToken]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -107,6 +117,13 @@ export default function StockCountsScreen() {
               </Card>
             ))}
           </div>
+        </div>
+      ) : error ? (
+        <div className="sc-load-error" role="alert">
+          <p>{error}</p>
+          <Button variant="secondary" onClick={load}>
+            <Localized id="retry"><span>Retry</span></Localized>
+          </Button>
         </div>
       ) : filtered.length === 0 ? (
         <p className="sc-empty">

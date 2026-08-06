@@ -8,8 +8,63 @@ use tauri::{State, command};
 use oz_core::db::Store;
 use oz_core::stock_transfer::{StockTransfer, StockTransferLine};
 
+use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
+
+/// Verify inventory-transfer permission against the global identity database.
+async fn require_inventory_permission(state: &AppState, user_id: &str) -> Result<(), AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, user_id, oz_core::permissions::INVENTORY_TRANSFER)
+}
+
+/// Validate that a client-supplied location belongs to this store database.
+fn validate_location(
+    db: &rusqlite::Connection,
+    location_id: Option<&str>,
+    field: &'static str,
+) -> Result<(), AppError> {
+    let Some(location_id) = location_id else {
+        return Ok(());
+    };
+    let exists: bool = db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM inventory_locations WHERE id = ?1 AND is_active = 1)",
+        [location_id],
+        |row| row.get(0),
+    )?;
+    if exists {
+        Ok(())
+    } else {
+        Err(AppError::Invalid(format!(
+            "{field} location '{location_id}' is not active in the current store"
+        )))
+    }
+}
+
+/// Validate an optional terminal identifier against the active terminals in
+/// the resolved store database.
+fn validate_terminal(
+    db: &rusqlite::Connection,
+    terminal_id: Option<&str>,
+    field: &'static str,
+) -> Result<(), AppError> {
+    let Some(terminal_id) = terminal_id else {
+        return Ok(());
+    };
+    let exists: bool = db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM terminals WHERE id = ?1 AND is_active = 1)",
+        [terminal_id],
+        |row| row.get(0),
+    )?;
+    if exists {
+        Ok(())
+    } else {
+        Err(AppError::Invalid(format!(
+            "{field} terminal '{terminal_id}' is not active in the current store"
+        )))
+    }
+}
 
 /// A received quantity for a single transfer line.
 #[derive(Debug, Deserialize)]
@@ -29,40 +84,54 @@ pub struct TransferWithLines {
     pub lines: Vec<StockTransferLine>,
 }
 
+// ── Session-scoped commands (ADR #7) ─────────────────────────────────
+
+/// Create a stock transfer in the store resolved from the session token.
 #[command]
-/// Create stock transfer.
-pub async fn create_stock_transfer(
+#[allow(clippy::too_many_arguments)]
+pub async fn create_stock_transfer_scoped(
+    session_token: String,
     source_location: Option<String>,
     destination_location: Option<String>,
     source_terminal_id: Option<String>,
     destination_terminal_id: Option<String>,
     notes: String,
-    created_by: String,
     lines: Vec<StockTransferLine>,
     state: State<'_, AppState>,
 ) -> Result<StockTransfer, AppError> {
-    let db = state.db.lock().await;
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_inventory_permission(&state, &session.user_id).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    validate_location(&db, source_location.as_deref(), "source")?;
+    validate_location(&db, destination_location.as_deref(), "destination")?;
+    validate_terminal(&db, source_terminal_id.as_deref(), "source")?;
+    validate_terminal(&db, destination_terminal_id.as_deref(), "destination")?;
     let store = Store::new(&db);
-    let result = store.create_transfer(
+    Ok(store.create_transfer(
         source_location.as_deref(),
         destination_location.as_deref(),
         source_terminal_id.as_deref(),
         destination_terminal_id.as_deref(),
         &notes,
-        &created_by,
+        &session.user_id,
         &lines,
-    )?;
-    drop(db);
-    Ok(result)
+    )?)
 }
 
+/// Get a stock transfer from the session-scoped store.
 #[command]
-/// Get stock transfer.
-pub async fn get_stock_transfer(
+pub async fn get_stock_transfer_scoped(
+    session_token: String,
     id: String,
     state: State<'_, AppState>,
 ) -> Result<Option<TransferWithLines>, AppError> {
-    let db = state.db.lock().await;
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_inventory_permission(&state, &session.user_id).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     let transfer = store.get_transfer(&id)?;
     let lines = if transfer.is_some() {
@@ -70,110 +139,141 @@ pub async fn get_stock_transfer(
     } else {
         vec![]
     };
-    drop(db);
     Ok(transfer.map(|t| TransferWithLines { transfer: t, lines }))
 }
 
+/// List stock transfers from the session-scoped store.
 #[command]
-/// List stock transfers.
-pub async fn list_stock_transfers(
+pub async fn list_stock_transfers_scoped(
+    session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<StockTransfer>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let result = store.list_transfers()?;
-    drop(db);
-    Ok(result)
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_inventory_permission(&state, &session.user_id).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).list_transfers()?)
 }
 
+/// List in-transit transfers with their line items in one batch request.
 #[command]
-/// Get stock transfer lines.
-pub async fn get_stock_transfer_lines(
+pub async fn list_in_transit_transfers_scoped(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<TransferWithLines>, AppError> {
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_inventory_permission(&state, &session.user_id).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db)
+        .list_transfers_with_lines_by_status("in_transit")?
+        .into_iter()
+        .map(|(transfer, lines)| TransferWithLines { transfer, lines })
+        .collect())
+}
+
+/// Get transfer lines from the session-scoped store.
+#[command]
+pub async fn get_stock_transfer_lines_scoped(
+    session_token: String,
     transfer_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<StockTransferLine>, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let result = store.get_transfer_lines(&transfer_id)?;
-    drop(db);
-    Ok(result)
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_inventory_permission(&state, &session.user_id).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).get_transfer_lines(&transfer_id)?)
 }
 
+/// Add a transfer line in the session-scoped store.
 #[command]
-/// Add stock transfer line.
-pub async fn add_stock_transfer_line(
+pub async fn add_stock_transfer_line_scoped(
+    session_token: String,
     transfer_id: String,
     sku: String,
     product_name: String,
     qty: i64,
     state: State<'_, AppState>,
 ) -> Result<StockTransferLine, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let result = store.add_transfer_line(&transfer_id, &sku, &product_name, qty)?;
-    drop(db);
-    Ok(result)
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_inventory_permission(&state, &session.user_id).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).add_transfer_line(&transfer_id, &sku, &product_name, qty)?)
 }
 
+/// Remove a transfer line in the session-scoped store.
 #[command]
-/// Remove stock transfer line.
-pub async fn remove_stock_transfer_line(
+pub async fn remove_stock_transfer_line_scoped(
+    session_token: String,
     line_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    store.remove_transfer_line(&line_id)?;
-    drop(db);
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_inventory_permission(&state, &session.user_id).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Store::new(&db).remove_transfer_line(&line_id)?;
     Ok(())
 }
 
+/// Send a transfer in the session-scoped store.
 #[command]
-/// Send stock transfer.
-pub async fn send_stock_transfer(
+pub async fn send_stock_transfer_scoped(
+    session_token: String,
     id: String,
     state: State<'_, AppState>,
 ) -> Result<StockTransfer, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let result = store.send_transfer(&id)?;
-    drop(db);
-    Ok(result)
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_inventory_permission(&state, &session.user_id).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).send_transfer(&id)?)
 }
 
+/// Receive a transfer, attributing the actor to the authenticated session.
 #[command]
-/// Receive stock transfer.
-pub async fn receive_stock_transfer(
+pub async fn receive_stock_transfer_scoped(
+    session_token: String,
     id: String,
-    received_by: String,
     received_lines: Vec<ReceivedLineInput>,
     state: State<'_, AppState>,
 ) -> Result<StockTransfer, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let rls: Vec<oz_core::db::stock_transfers::ReceivedLine> = received_lines
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_inventory_permission(&state, &session.user_id).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    let received_lines = received_lines
         .into_iter()
-        .map(|rl| oz_core::db::stock_transfers::ReceivedLine {
-            line_id: rl.line_id,
-            received_qty: rl.received_qty,
+        .map(|line| oz_core::db::stock_transfers::ReceivedLine {
+            line_id: line.line_id,
+            received_qty: line.received_qty,
         })
-        .collect();
-    let result = store.receive_transfer(&id, &received_by, &rls)?;
-    drop(db);
-    Ok(result)
+        .collect::<Vec<_>>();
+    Ok(Store::new(&db).receive_transfer(&id, &session.user_id, &received_lines)?)
 }
 
+/// Cancel a transfer in the session-scoped store.
 #[command]
-/// Cancel stock transfer.
-pub async fn cancel_stock_transfer(
+pub async fn cancel_stock_transfer_scoped(
+    session_token: String,
     id: String,
     state: State<'_, AppState>,
 ) -> Result<StockTransfer, AppError> {
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let result = store.cancel_transfer(&id)?;
-    drop(db);
-    Ok(result)
+    let (session, conn) = state.resolve_scope(&session_token)?;
+    require_inventory_permission(&state, &session.user_id).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).cancel_transfer(&id)?)
 }
 
 #[cfg(test)]
@@ -203,6 +303,7 @@ mod tests {
     fn transfer_with_lines_serialize() {
         let transfer = StockTransfer {
             id: "t1".into(),
+            transfer_number: "TRF-20260115-001".into(),
             source_location: Some("Warehouse".into()),
             destination_location: Some("Store A".into()),
             source_terminal_id: None,
@@ -226,6 +327,7 @@ mod tests {
     fn transfer_with_lines_debug() {
         let transfer = StockTransfer {
             id: "t2".into(),
+            transfer_number: "TRF-20260115-002".into(),
             source_location: None,
             destination_location: None,
             source_terminal_id: None,

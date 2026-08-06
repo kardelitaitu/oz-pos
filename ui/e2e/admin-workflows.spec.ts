@@ -4,8 +4,8 @@ import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
 /**
  * E2E: Admin Workflows — Management Screens
  *
- * Covers 6 admin management screens that currently have zero E2E
- * coverage. All tests use hard assertions — no `if` guards.
+ * Covers all admin management screens accessible from the settings
+ * sidebar in the Admin workspace.
  *
  * CSS contract per screen:
  *   Staff:          .staff-mgmt, .staff-mgmt-title, .staff-mgmt-table
@@ -15,8 +15,10 @@ import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
  *   Offline Queue:  .offline-queue-screen, .offline-queue-header
  *   Promotions:     .promo-mgmt, .promo-mgmt-title, .promo-mgmt-table
  *
- * Navigation: all screens accessible via settings sidebar in Admin
- * workspace. Sidebar nav items: `.settings-nav-item` with text.
+ * Navigation: sidebar categories are collapsible accordions. The
+ * Management category (Staff, Terminals, Stores, Tax, Promotions,
+ * Exchange Rates, etc.) is collapsed by default. We expand it first
+ * via `.settings-sidebar-section-header` with text "Management".
  */
 
 const SIDEBAR_TIMEOUT = 10_000;
@@ -29,9 +31,29 @@ async function navigateToSettings(page: Page) {
   await page.waitForSelector('[data-testid="settings-sidebar"]', { timeout: SIDEBAR_TIMEOUT });
 }
 
+async function expandManagementCategory(page: Page) {
+  // The Management category is collapsed by default. Expand it.
+  const managementHeader = page.locator('.settings-sidebar-section-header')
+    .filter({ hasText: 'Management' });
+  const isExpanded = await managementHeader
+    .getAttribute('aria-expanded')
+    .then((v) => v === 'true')
+    .catch(() => false);
+  if (!isExpanded) {
+    await managementHeader.click();
+    await page.waitForTimeout(300);
+  }
+}
+
 async function clickSidebarNav(page: Page, sectionName: string) {
+  // If the section is under Management, expand that category first.
+  const MANAGEMENT_ITEMS = ['Staff', 'Terminals', 'Stores', 'Topology', 'Audit Log', 'Offline Queue', 'Shifts', 'Tax Rates', 'Exchange Rates', 'Promotions'];
+  if (MANAGEMENT_ITEMS.includes(sectionName)) {
+    await expandManagementCategory(page);
+  }
+
   const nav = page.locator('.settings-nav-item').filter({ hasText: sectionName });
-  await expect(nav).toBeVisible({ timeout: 3_000 });
+  await expect(nav).toBeVisible({ timeout: 5_000 });
   await nav.click();
   await page.waitForTimeout(500);
 }

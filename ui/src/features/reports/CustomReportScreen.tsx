@@ -1,4 +1,6 @@
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useContext, useState, useCallback, useMemo, useRef } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
+import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import { buildCustomReport, type CustomReportRequest, type CustomReportResponse } from '@/api/reports';
 import { Card } from '@/components/Card';
@@ -61,6 +63,7 @@ type DatasetKey = keyof typeof DATASETS;
 
 export default function CustomReportScreen() {
   const { l10n } = useLocalization();
+  const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
   const [dataset, setDataset] = useState<DatasetKey>('sales');
   const [startDate, setStartDate] = useState(monthAgo());
   const [endDate, setEndDate] = useState(today());
@@ -184,14 +187,14 @@ export default function CustomReportScreen() {
         start_date: dsDef.hasDateFilter ? startDate : null,
         end_date: dsDef.hasDateFilter ? endDate : null,
       };
-      const resp = await buildCustomReport(req);
+      const resp = await buildCustomReport(req, sessionToken);
       setResult(resp);
     } catch (e: unknown) {
       setError((e as Error).message ?? String(e));
     } finally {
       setLoading(false);
     }
-  }, [dataset, columnOrder, selectedCols, startDate, endDate, dsDef]);
+  }, [dataset, columnOrder, selectedCols, startDate, endDate, dsDef, sessionToken]);
 
   const exportCsv = useCallback(() => {
     if (!result || result.rows.length === 0) return;
@@ -213,7 +216,7 @@ export default function CustomReportScreen() {
   const hasEmptyResults = result && result.rows.length === 0;
 
   return (
-    <div className="custom-report" role="region" aria-label={l10n.getString('custom-report-region-aria') || 'Custom Report Builder'}>
+    <div className="custom-report" role="region" aria-label={requiredLocalized(l10n, 'custom-report-region-aria')}>
       <div className="custom-report-header">
         <Localized id="custom-report-title">
           <h1 className="custom-report-title">Custom Report</h1>
@@ -231,7 +234,7 @@ export default function CustomReportScreen() {
               value={dataset}
               onChange={(e) => { changeDataset(e.target.value as DatasetKey); }}
               className="custom-report-select"
-              aria-label={l10n.getString('custom-report-dataset-aria') || 'Dataset'}
+              aria-label={requiredLocalized(l10n, 'custom-report-dataset-aria')}
             >
               {Object.entries(DATASETS).map(([key, def]) => (
                 <option key={key} value={key}>{def.label}</option>
@@ -245,13 +248,13 @@ export default function CustomReportScreen() {
                 <label htmlFor="cr-start" className="custom-report-label">
                   <Localized id="custom-report-start">Start</Localized>
                 </label>
-                <input id="cr-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="custom-report-input" aria-label={l10n.getString('custom-report-start-aria') || 'Start date'} />
+                <input id="cr-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="custom-report-input" aria-label={requiredLocalized(l10n, 'custom-report-start-aria')} />
               </div>
               <div className="custom-report-field">
                 <label htmlFor="cr-end" className="custom-report-label">
                   <Localized id="custom-report-end">End</Localized>
                 </label>
-                <input id="cr-end" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="custom-report-input" aria-label={l10n.getString('custom-report-end-aria') || 'End date'} />
+                <input id="cr-end" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="custom-report-input" aria-label={requiredLocalized(l10n, 'custom-report-end-aria')} />
               </div>
             </>
           )}
@@ -264,23 +267,23 @@ export default function CustomReportScreen() {
                 <span className="custom-report-label">Columns</span>
               </Localized>
               <span className="custom-report-columns-count" aria-live="polite">
-                {l10n.getString('custom-report-columns-selected', { selected: String(selectedCount), total: String(filteredItems.length) }) || `${selectedCount} / ${filteredItems.length} selected`}
+                {requiredLocalized(l10n, 'custom-report-columns-selected', { selected: String(selectedCount), total: String(filteredItems.length) })}
               </span>
             </div>
             <div className="custom-report-columns-search">
               <input
                 type="text"
                 className="custom-report-search-input"
-                placeholder={l10n.getString('custom-report-search-placeholder') || 'Search columns…'}
+                placeholder={requiredLocalized(l10n, 'custom-report-search-placeholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                aria-label={l10n.getString('custom-report-search-aria') || 'Search columns'}
+                aria-label={requiredLocalized(l10n, 'custom-report-search-aria')}
               />
               {searchTerm && (
                 <button
                   className="custom-report-search-clear"
                   onClick={() => setSearchTerm('')}
-                  aria-label={l10n.getString('custom-report-search-clear-aria') || 'Clear search'}
+                  aria-label={requiredLocalized(l10n, 'custom-report-search-clear-aria')}
                 >
                   ×
                 </button>
@@ -288,7 +291,7 @@ export default function CustomReportScreen() {
             </div>
           </div>
 
-          <div className="custom-report-columns-list" role="listbox" aria-label={l10n.getString('custom-report-columns-aria') || 'Column selection'} aria-multiselectable="true">
+          <div className="custom-report-columns-list" role="listbox" aria-label={requiredLocalized(l10n, 'custom-report-columns-aria')} aria-multiselectable="true">
             {filteredItems.map((item, index) => (
               <div
                 key={item.key}
@@ -325,7 +328,7 @@ export default function CustomReportScreen() {
         </div>
 
         <div className="custom-report-actions">
-          <Button onClick={runReport} disabled={loading || selectedCount === 0} aria-label={l10n.getString('custom-report-run-aria') || 'Run report'}>
+          <Button onClick={runReport} disabled={loading || selectedCount === 0} aria-label={requiredLocalized(l10n, 'custom-report-run-aria')}>
             {loading ? (
               <Localized id="shared-loading">Loading…</Localized>
             ) : (
@@ -349,7 +352,7 @@ export default function CustomReportScreen() {
             <Localized id="custom-report-results">
               <h2 className="custom-report-section-title">Results</h2>
             </Localized>
-            <Button variant="secondary" onClick={exportCsv} aria-label={l10n.getString('custom-report-export-aria') || 'Export CSV'}>
+            <Button variant="secondary" onClick={exportCsv} aria-label={requiredLocalized(l10n, 'custom-report-export-aria')}>
               <Localized id="custom-report-export-csv">Export CSV</Localized>
             </Button>
           </div>

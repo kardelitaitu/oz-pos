@@ -1,5 +1,6 @@
 //! Fuzz target for SKU parsing — feeds arbitrary byte sequences to
-//! `Sku::new()` and verifies no panics, no invalid states.
+//! `Sku`'s fallible constructor and verifies no panics on the accept
+//! path, plus the invariants `Sku` actually guarantees.
 
 #![no_main]
 
@@ -8,14 +9,24 @@ use foundation::sku::Sku;
 
 fuzz_target!(|data: &[u8]| {
     if let Ok(s) = std::str::from_utf8(data) {
-        // Sku::new should never panic, regardless of input.
-        let sku = Sku::new(s);
+        // Empty / whitespace-only input is a *legitimate rejection*:
+        // `Sku::new` panics by contract on such input, so the harness
+        // must use the fallible constructor and treat rejection as the
+        // expected outcome rather than a crash.
+        if let Some(sku) = Sku::try_new(s) {
+            // Accepted SKUs are trimmed — no leading/trailing whitespace.
+            assert_eq!(
+                sku.as_str().trim(),
+                sku.as_str(),
+                "accepted SKU must be trimmed"
+            );
 
-        // SKU length must be ≤ 100 characters.
-        assert!(sku.as_str().len() <= 100, "SKU exceeds max length");
-
-        // SKU must not contain control characters.
-        let valid = sku.as_str().chars().all(|c| !c.is_control());
-        assert!(valid, "SKU contains control character");
+            // Display must round-trip to the same value.
+            assert_eq!(
+                sku.to_string(),
+                sku.as_str(),
+                "Display round-trip mismatch"
+            );
+        }
     }
 });

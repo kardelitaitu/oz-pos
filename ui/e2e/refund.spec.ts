@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAs, selectWorkspace, WORKSPACES, navigateTo } from './helpers';
+import { loginAs, selectWorkspace, WORKSPACES } from './helpers';
 
 /**
  * E2E: Refund Flow — Complete a sale, find it in history, and process a refund.
@@ -38,8 +38,9 @@ test.describe('Refund Flow', () => {
     await firstProduct.click();
     await page.waitForTimeout(500);
 
-    // The cart panel should show at least one item.
-    await expect(page.locator('[data-testid="cart-panel"]')).toBeVisible({ timeout: 5_000 });
+    // The cart panel should show at least one line item. The panel
+    // container is .retail-cart (no data-testid="cart-panel" exists).
+    await expect(page.locator('[data-testid="cart-panel-line-item"]').first()).toBeVisible({ timeout: 5_000 });
 
     // Click the Pay button to open the payment modal.
     const payBtn = page.locator('.retail-cart-action-btn--pay').first();
@@ -50,11 +51,15 @@ test.describe('Refund Flow', () => {
     // Payment modal must appear.
     await expect(page.locator('[data-testid="payment-modal"]')).toBeVisible({ timeout: 5_000 });
 
-    // Click a quick-pay button (Cash) to settle.
-    const quickPay = page.locator('[data-testid="quick-pay-button"]').first();
-    await expect(quickPay).toBeVisible({ timeout: 5_000 });
-    await quickPay.click();
-    await page.waitForTimeout(500);
+    // Enter a tender amount above the total so the settle button enables
+    // (default method is cash; cash requires tendered >= total). NOTE:
+    // data-testid "quick-pay-button" is the payment-METHOD radio
+    // (cash/card/qris/credit) — clicking it never enables settle.
+    const tenderInput = page.locator('.payment-tendered-input');
+    await expect(tenderInput).toBeVisible({ timeout: 5_000 });
+    await tenderInput.click();
+    await tenderInput.pressSequentially('9999999', { delay: 30 });
+    await page.waitForTimeout(300);
 
     // Find and click settle/confirm button.
     const settleBtn = page.locator('[data-testid="settle-button"], button:has-text("Settle"), button:has-text("Confirm")').first();
@@ -67,7 +72,9 @@ test.describe('Refund Flow', () => {
 
     // ── Step 2: Navigate to Sales History ──────────────────────
 
-    await navigateTo(page, 'sales-history');
+    // In store-pos workspace, sales history is a sub-view opened via F6.
+    await page.keyboard.press('F6');
+    await page.waitForTimeout(1_000);
 
     // Sales history container must render.
     await expect(page.locator('.sales-history')).toBeVisible({ timeout: TIMEOUT });

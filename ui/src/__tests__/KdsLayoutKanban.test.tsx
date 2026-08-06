@@ -31,28 +31,28 @@ const orders: KdsOrder[] = [
     status: 'pending', items_summary: 'Coffee x2', item_count: 2,
     display_number: 101, received_at: new Date(now - 30 * MIN).toISOString(),
     started_at: null, ready_at: null, served_at: null,
-    prep_time_seconds: 0, kitchen_zone: null, notes: '',
+    prep_time_seconds: 0, kitchen_zone: null, notes: '', table_number: null, priority: false,
   },
   {
     id: 'order-2', sale_id: 'sale-2', store_id: null,
     status: 'preparing', items_summary: 'Tea x1, Toast x1', item_count: 2,
     display_number: 102, received_at: new Date(now - 15 * MIN).toISOString(),
     started_at: new Date(now - 12 * MIN).toISOString(), ready_at: null, served_at: null,
-    prep_time_seconds: 180, kitchen_zone: null, notes: '',
+    prep_time_seconds: 180, kitchen_zone: null, notes: '', table_number: null, priority: false,
   },
   {
     id: 'order-3', sale_id: 'sale-3', store_id: null,
     status: 'ready', items_summary: 'Burger x1', item_count: 1,
     display_number: 103, received_at: new Date(now - 5 * MIN).toISOString(),
     started_at: new Date(now - 10 * MIN).toISOString(), ready_at: new Date(now - 2 * MIN).toISOString(),
-    served_at: null, prep_time_seconds: 480, kitchen_zone: null, notes: '',
+    served_at: null, prep_time_seconds: 480, kitchen_zone: null, notes: '', table_number: null, priority: false,
   },
   {
     id: 'order-4', sale_id: 'sale-4', store_id: null,
     status: 'pending', items_summary: 'Pancake x3', item_count: 3,
     display_number: 104, received_at: new Date(now - 60 * MIN).toISOString(),
     started_at: null, ready_at: null, served_at: null,
-    prep_time_seconds: 0, kitchen_zone: null, notes: '',
+    prep_time_seconds: 0, kitchen_zone: null, notes: '', table_number: null, priority: false,
   },
 ];
 
@@ -61,6 +61,9 @@ const defaultProps = {
   onAdvance: vi.fn(),
   showOrderId: true,
   showTableNumber: true,
+  selectedOrderId: null,
+  sessionToken: 'test-token',
+  newOrderIds: new Set<string>(),
 };
 
 describe('KdsLayoutKanban', () => {
@@ -132,9 +135,11 @@ describe('KdsLayoutKanban', () => {
       <KdsLayoutKanban {...defaultProps} orders={orders.filter(o => o.status === 'pending')} />,
       kdsFtl,
     );
-    // 1 column has tickets (pending), 2 are empty
-    const emptyMessages = screen.getAllByText('No orders yet');
-    expect(emptyMessages.length).toBe(2); // preparing + ready are empty
+    // 1 column has tickets (pending), 2 are empty — but the board has
+    // orders elsewhere, so the empty columns use status-scoped copy
+    // (EMPTY-04: "No orders yet" would be misleading here).
+    const filteredMessages = screen.getAllByText('No orders in this status');
+    expect(filteredMessages.length).toBe(2); // preparing + ready are empty
   });
 
   // ── Advance action ───────────────────────────────────────────

@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use crate::error::PluginError;
 use crate::manifest::PluginManifest;
+use crate::package::sanitise_entry_name;
 
 /// A loaded plugin with its manifest and script paths.
 #[derive(Debug, Clone)]
@@ -38,6 +39,69 @@ impl PluginRegistry {
     }
 }
 
+/// Resolve and validate a plugin's declared script paths (PLG-02).
+///
+/// Every declared script is confined to its plugin directory:
+///
+/// - Structurally unsafe paths (absolute, drive/UNC prefixes, `..` components)
+///   are rejected outright and fail the plugin. A redundant `./` prefix is
+///   likewise rejected as a non-canonical path.
+/// - Declared scripts that do not exist are tolerated (optional scripts, so a
+///   missing file silently contributes nothing — matches prior behaviour).
+/// - Existing entries must be regular files whose canonical path resolves
+///   *inside* the canonical plugin directory. Symlinks/hardlinks that escape
+///   the plugin directory fail the plugin; a symlink that stays inside the
+///   plugin directory is permitted because the canonical containment check is
+///   the authoritative boundary.
+///
+/// Returns the canonicalised script paths on success, or an error that should
+/// cause the whole plugin to be rejected.
+fn resolve_plugin_scripts(
+    plugin_dir: &Path,
+    scripts: &[String],
+) -> Result<Vec<PathBuf>, PluginError> {
+    let canonical_dir = std::fs::canonicalize(plugin_dir).map_err(|e| {
+        PluginError::Manifest(format!(
+            "cannot canonicalise plugin directory {}: {e}",
+            plugin_dir.display()
+        ))
+    })?;
+
+    let mut resolved = Vec::new();
+    for script in scripts {
+        // Structural check first: reject traversal / absolute / drive / UNC.
+        let safe = sanitise_entry_name(script)
+            .map_err(|e| PluginError::Manifest(format!("script '{script}': {e}")))?;
+
+        let joined = plugin_dir.join(&safe);
+        if !joined.exists() {
+            // Optional script — tolerated (contributes nothing).
+            continue;
+        }
+
+        let meta = std::fs::metadata(&joined)
+            .map_err(|e| PluginError::Manifest(format!("script '{script}': {e}")))?;
+        if !meta.is_file() {
+            return Err(PluginError::Manifest(format!(
+                "script '{script}' is not a regular file"
+            )));
+        }
+
+        // Canonicalise and verify containment: a symlink pointing outside the
+        // plugin directory is rejected rather than followed.
+        let canonical = std::fs::canonicalize(&joined)
+            .map_err(|e| PluginError::Manifest(format!("script '{script}': {e}")))?;
+        if !canonical.starts_with(&canonical_dir) {
+            return Err(PluginError::Manifest(format!(
+                "script '{script}' resolves outside the plugin directory (symlink?)"
+            )));
+        }
+
+        resolved.push(canonical);
+    }
+    Ok(resolved)
+}
+
 /// Scan a directory for plugin manifests and load them.
 pub fn load_plugins(plugins_dir: &Path) -> Result<PluginRegistry, PluginError> {
     let mut registry = PluginRegistry::new();
@@ -59,25 +123,32 @@ pub fn load_plugins(plugins_dir: &Path) -> Result<PluginRegistry, PluginError> {
         }
 
         match PluginManifest::load(&manifest_path) {
-            Ok(manifest) => {
-                let scripts: Vec<PathBuf> = manifest
-                    .capabilities
-                    .scripts
-                    .iter()
-                    .map(|s| path.join(s))
-                    .filter(|p| p.exists())
-                    .collect();
-
-                let plugin = LoadedPlugin {
-                    manifest,
-                    directory: path,
-                    scripts,
-                };
-                tracing::info!(name = %plugin.manifest.plugin.name, "plugin loaded");
-                registry.plugins.push(plugin);
-            }
+            Ok(manifest) => match resolve_plugin_scripts(&path, &manifest.capabilities.scripts) {
+                Ok(scripts) => {
+                    let plugin = LoadedPlugin {
+                        manifest,
+                        directory: path,
+                        scripts,
+                    };
+                    tracing::info!(name = %plugin.manifest.plugin.name, "plugin loaded");
+                    registry.plugins.push(plugin);
+                }
+                Err(e) => {
+                    // Unsafe script path (PLG-02): reject just this plugin but
+                    // keep the rest of the registry — the plugin is skipped
+                    // loudly in the log rather than loaded unsafely.
+                    tracing::warn!(
+                        dir = %path.display(),
+                        error = %e,
+                        "failed to load plugin (unsafe script path)"
+                    );
+                }
+            },
             Err(e) => {
-                tracing::warn!(dir = %path.display(), error = %e, "failed to load plugin");
+                // Manifest schema violation (PLG-08): fail loudly instead of
+                // silently skipping — a typo'd manifest must never appear as
+                // "loaded and doing nothing".
+                return Err(e);
             }
         }
     }
@@ -198,5 +269,143 @@ scripts = ["test.lua"]
     fn load_nonexistent_directory() {
         let registry = load_plugins(std::path::Path::new("/nonexistent/path/for/plugins")).unwrap();
         assert!(registry.is_empty());
+    }
+
+    // ── PLG-02: script path confinement ───────────────────────────────
+
+    /// Helper: write a plugin dir with the given manifest `scripts` list and
+    /// return the plugins_root. Scripts that should exist on disk are passed
+    /// as (name, contents) pairs.
+    fn write_plugin(
+        dir: &std::path::Path,
+        name: &str,
+        scripts_decl: &[&str],
+        files: &[(&str, &str)],
+    ) {
+        let plugin_dir = dir.join(name);
+        std::fs::create_dir_all(&plugin_dir).unwrap();
+        let scripts_list = scripts_decl
+            .iter()
+            .map(|s| format!("\"{s}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+        std::fs::write(
+            plugin_dir.join("plugin.toml"),
+            format!(
+                "[plugin]\nname = \"{name}\"\nversion = \"1.0.0\"\n\n[capabilities]\nscripts = [{scripts_list}]\n\n[permissions]\nrequired_permissions = [\"cart:read\"]\n"
+            ),
+        )
+        .unwrap();
+        for (file, contents) in files {
+            if let Some(parent) = plugin_dir.join(file).parent() {
+                std::fs::create_dir_all(parent).unwrap();
+            }
+            std::fs::write(plugin_dir.join(file), contents).unwrap();
+        }
+    }
+
+    #[test]
+    fn plugin_with_dotdot_script_is_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        // Declare a script that escapes the plugin dir via `..`.
+        write_plugin(dir.path(), "evil", &["../../escape.lua"], &[]);
+        // Plant a file at the target location to prove it would be reachable.
+        std::fs::write(dir.path().join("escape.lua"), "-- pwn").unwrap();
+
+        let registry = load_plugins(dir.path()).unwrap();
+        assert!(
+            registry.is_empty(),
+            "plugin declaring a '..' script must be rejected"
+        );
+    }
+
+    #[test]
+    fn plugin_with_absolute_script_is_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        write_plugin(dir.path(), "evil", &["/etc/passwd"], &[]);
+        let registry = load_plugins(dir.path()).unwrap();
+        assert!(
+            registry.is_empty(),
+            "plugin declaring an absolute script must be rejected"
+        );
+    }
+
+    #[test]
+    fn plugin_with_directory_as_script_is_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        // Declare a script that is actually a directory.
+        write_plugin(dir.path(), "evil", &["scripts"], &[]);
+        std::fs::create_dir_all(dir.path().join("evil/scripts")).unwrap();
+        let registry = load_plugins(dir.path()).unwrap();
+        assert!(
+            registry.is_empty(),
+            "plugin whose declared script is a directory must be rejected"
+        );
+    }
+
+    #[test]
+    fn plugin_with_symlink_escape_is_rejected() {
+        // Symlink creation requires privileges on Windows — skip there.
+        #[cfg(unix)]
+        {
+            let dir = tempfile::tempdir().unwrap();
+            // Target file OUTSIDE the plugins root.
+            let outside = tempfile::tempdir().unwrap();
+            std::fs::write(outside.path().join("secret.lua"), "-- outside").unwrap();
+
+            let plugin_dir = dir.path().join("evil");
+            std::fs::create_dir_all(&plugin_dir).unwrap();
+            std::fs::write(
+                plugin_dir.join("plugin.toml"),
+                "[plugin]\nname = \"evil\"\nversion = \"1.0.0\"\n\n[capabilities]\nscripts = [\"link.lua\"]\n\n[permissions]\nrequired_permissions = [\"cart:read\"]\n",
+            )
+            .unwrap();
+            // Symlink INSIDE the plugin dir pointing OUTSIDE it.
+            std::os::unix::fs::symlink(
+                outside.path().join("secret.lua"),
+                plugin_dir.join("link.lua"),
+            )
+            .unwrap();
+
+            let registry = load_plugins(dir.path()).unwrap();
+            assert!(
+                registry.is_empty(),
+                "plugin whose script symlinks outside its dir must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn plugin_with_legit_scripts_still_loads() {
+        let dir = tempfile::tempdir().unwrap();
+        write_plugin(
+            dir.path(),
+            "good",
+            &["a.lua", "sub/b.lua"],
+            &[("a.lua", "-- a"), ("sub/b.lua", "-- b")],
+        );
+        let registry = load_plugins(dir.path()).unwrap();
+        assert_eq!(registry.len(), 1);
+        let plugin = &registry.plugins[0];
+        assert_eq!(plugin.scripts.len(), 2);
+        // Scripts are canonicalised and confined to the plugin dir.
+        for script in &plugin.scripts {
+            let canonical_dir = std::fs::canonicalize(dir.path().join("good")).unwrap();
+            assert!(
+                script.starts_with(&canonical_dir),
+                "script {:?} must stay inside the plugin dir",
+                script
+            );
+        }
+    }
+
+    #[test]
+    fn plugin_with_missing_script_is_still_tolerated() {
+        let dir = tempfile::tempdir().unwrap();
+        // Declared script does not exist on disk — tolerated (optional script).
+        write_plugin(dir.path(), "sparse", &["missing.lua"], &[]);
+        let registry = load_plugins(dir.path()).unwrap();
+        assert_eq!(registry.len(), 1);
+        assert!(registry.plugins[0].scripts.is_empty());
     }
 }

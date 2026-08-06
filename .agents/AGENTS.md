@@ -82,13 +82,13 @@ npm ci --no-audit --no-fund
 
 - Follow the POS software framework conventions.
 - Ensure all code follows the project's coding standards.
-- **Version is locked at `0.0.21`.** Never change the version number
+- **Version is locked at `0.0.24`.** Never change the version number
   (in `Cargo.toml`, `tauri.conf.json`, `package.json`, `CHANGELOG.md`,
   or anywhere else) unless the user explicitly asks you to bump it.
 
 ### Rust Standards
-- Format all Rust code with `rustfmt` before committing.
-- Run `cargo clippy -- -D warnings` and resolve all warnings.
+- **Development Iteration:** Use `cargo check` (or `cargo check -p <crate>`) for quick compilation validation and run specific target tests (e.g. `cargo test -p <crate> <test_name>`) during active development. **Agents must NOT run `cargo clippy` or full workspace tests (`cargo test --workspace`) during routine iteration unless specifically requested by the user or executing final pre-push verification.**
+- **Pre-Push Verification:** Run `cargo fmt --all`, `cargo clippy --all-targets --all-features -- -D warnings` (resolving all warnings), and full workspace tests prior to pushing code or completing final verification.
 - Every public function, struct, and trait must have a doc comment (`///`).
 - Prefer `thiserror` for error types and `anyhow` for application-level error propagation.
 - Store all monetary values as integer minor units (`i64`) using the `Money` struct; never use `f32`/`f64` for currency.

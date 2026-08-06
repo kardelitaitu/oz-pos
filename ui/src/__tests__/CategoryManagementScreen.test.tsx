@@ -18,15 +18,31 @@ const { mockListCategories, mockCreateCategory, mockUpdateCategory, mockDeleteCa
     mockDeleteCategory: vi.fn(),
   }));
 
+// CAT-01: prove the session token flows through every scoped call. The
+// mock preserves both args (token first) so tests can assert on them.
+const TOKEN = 'mock-session-token';
+
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({
+    sessionToken: TOKEN,
+    workspaceId: 'workspace-1',
+    storeId: 'store-1',
+  }),
+  useWorkspaceScope: () => null,
+}));
+
 vi.mock('@/api/products', () => ({
   listCategories: () => mockListCategories(),
   listCategoriesScoped: (...args: unknown[]) => mockListCategories(...args),
   createCategory: (args: unknown) => mockCreateCategory(args),
-  createCategoryScoped: (args: unknown) => mockCreateCategory(args),
+  createCategoryScoped: (sessionToken: string, args: unknown) =>
+    mockCreateCategory(sessionToken, args),
   updateCategory: (args: unknown) => mockUpdateCategory(args),
-  updateCategoryScoped: (args: unknown) => mockUpdateCategory(args),
+  updateCategoryScoped: (sessionToken: string, args: unknown) =>
+    mockUpdateCategory(sessionToken, args),
   deleteCategory: (id: string) => mockDeleteCategory(id),
-  deleteCategoryScoped: (id: string) => mockDeleteCategory(id),
+  deleteCategoryScoped: (sessionToken: string, id: string) =>
+    mockDeleteCategory(sessionToken, id),
 }));
 
 const bundle = new FluentBundle('en-US');
@@ -60,7 +76,7 @@ describe('CategoryManagementScreen', () => {
     mockListCategories.mockResolvedValue([]);
     mockCreateCategory.mockResolvedValue({ id: 'new-cat' });
     mockUpdateCategory.mockResolvedValue({ id: 'cat-1' });
-    mockDeleteCategory.mockResolvedValue(undefined);
+    mockDeleteCategory.mockResolvedValue({ affected_products: 0 });
   });
 
   it('renders the title', async () => {
@@ -111,7 +127,31 @@ describe('CategoryManagementScreen', () => {
     await waitFor(() => {
       const badge = document.querySelector('.cat-mgmt-icon-badge') as HTMLElement;
       expect(badge).toBeDefined();
-      expect(badge?.style.background).toBe('rgb(249, 115, 22)');
+      // CAT-07: dynamic colour now flows through the --cat-bg custom property
+      // instead of an inline `background` style.
+      expect(badge?.style.getPropertyValue('--cat-bg')).toBe('#f97316');
+    });
+  });
+
+  it('uses a contrast-safe foreground on the icon badge (CAT-07)', async () => {
+    // Light amber badge -> dark near-black foreground (never fixed white).
+    mockListCategories.mockResolvedValue([makeCategory({ colour: '#f59e0b' })]);
+    renderScreen();
+    await waitFor(() => {
+      const badge = document.querySelector('.cat-mgmt-icon-badge') as HTMLElement;
+      expect(badge?.style.getPropertyValue('--cat-bg')).toBe('#f59e0b');
+      expect(badge?.style.getPropertyValue('--cat-fg')).toBe('#0a0a0a');
+    });
+  });
+
+  it('uses white foreground for a dark badge colour (CAT-07)', async () => {
+    // Dark sky-blue badge -> white foreground.
+    mockListCategories.mockResolvedValue([makeCategory({ colour: '#0ea5e9' })]);
+    renderScreen();
+    await waitFor(() => {
+      const badge = document.querySelector('.cat-mgmt-icon-badge') as HTMLElement;
+      expect(badge?.style.getPropertyValue('--cat-bg')).toBe('#0ea5e9');
+      expect(badge?.style.getPropertyValue('--cat-fg')).toBe('#ffffff');
     });
   });
 
@@ -139,7 +179,7 @@ describe('CategoryManagementScreen', () => {
     );
   });
 
-  it('calls deleteCategory on confirm', async () => {
+  it('calls deleteCategoryScoped on confirm with the session token (CAT-01)', async () => {
     mockListCategories.mockResolvedValue([makeCategory()]);
     renderScreen();
     await waitFor(() => expect(screen.getByText('Bakery')).toBeDefined());
@@ -148,11 +188,78 @@ describe('CategoryManagementScreen', () => {
     await waitFor(() => expect(screen.getByText('Delete Category')).toBeDefined());
 
     // Confirm delete — click the danger Delete button in the SettingsPopup footer.
-    // Card delete buttons have aria-label="Delete category {name}", modal has exact "Delete".
     const modalDeleteBtn = screen.getByRole('button', { name: 'Delete' });
     await userEvent.click(modalDeleteBtn);
 
-    await waitFor(() => expect(mockDeleteCategory).toHaveBeenCalledWith('cat-bakery'));
+    // CAT-01: the scoped command must receive the session token first.
+    await waitFor(() =>
+      expect(mockDeleteCategory).toHaveBeenCalledWith(TOKEN, 'cat-bakery'),
+    );
+  });
+
+  it('reports how many products were unlinked after deletion (CAT-02)', async () => {
+    mockListCategories.mockResolvedValue([makeCategory()]);
+    mockDeleteCategory.mockResolvedValue({ affected_products: 3 });
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Bakery')).toBeDefined());
+
+    await userEvent.click(document.querySelector('.cat-mgmt-delete-btn')!);
+    await waitFor(() => expect(screen.getByText('Delete Category')).toBeDefined());
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    // Fluent wraps the interpolated count in Unicode directional-isolate
+    // characters (⁨3⁩), so match on the message shape, not a literal regex.
+    await waitFor(() =>
+      expect(
+        screen.getByText((content) => /^unlinked/i.test(content) && content.includes('3')),
+      ).toBeDefined(),
+    );
+  });
+
+  it('surfaces a delete failure instead of swallowing it (CAT-01)', async () => {
+    mockListCategories.mockResolvedValue([makeCategory()]);
+    mockDeleteCategory.mockRejectedValue(new Error('category has linked tax config'));
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Bakery')).toBeDefined());
+
+    await userEvent.click(document.querySelector('.cat-mgmt-delete-btn')!);
+    await waitFor(() => expect(screen.getByText('Delete Category')).toBeDefined());
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() =>
+      // ERR-05: raw backend text never renders — the localized copy does.
+      expect(screen.getByText('Failed to delete category')).toBeDefined(),
+    );
+    expect(screen.queryByText(/category has linked tax config/i)).toBeNull();
+  });
+
+  it('calls createCategoryScoped and updateCategoryScoped with the session token (CAT-01)', async () => {
+    mockListCategories.mockResolvedValue([makeCategory()]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Bakery')).toBeDefined());
+
+    // Create flow
+    await userEvent.click(screen.getByText('Add Category').closest('button')!);
+    await userEvent.type(screen.getByPlaceholderText(/e\.g\. bakery/i), 'Snacks');
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    // CAT-01: token must precede the payload in the scoped call.
+    await waitFor(() =>
+      expect(mockCreateCategory).toHaveBeenCalledWith(
+        TOKEN,
+        expect.objectContaining({ name: 'Snacks' }),
+      ),
+    );
+
+    // Edit flow
+    await userEvent.click(document.querySelector('.cat-mgmt-edit-btn')!);
+    await waitFor(() => expect(screen.getByText('Edit')).toBeDefined());
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(mockUpdateCategory).toHaveBeenCalledWith(
+        TOKEN,
+        expect.objectContaining({ id: 'cat-bakery' }),
+      ),
+    );
   });
 
   it('opens add modal when Add Category is clicked', async () => {
@@ -172,5 +279,251 @@ describe('CategoryManagementScreen', () => {
 
     await userEvent.click(document.querySelector('.cat-mgmt-edit-btn')!);
     await waitFor(() => expect(screen.getByText('Edit')).toBeDefined());
+  });
+
+  // ── CAT-03: load errors are distinct from an empty store ──────────────
+
+  it('renders a load error state with Retry instead of the empty state (CAT-03)', async () => {
+    mockListCategories.mockRejectedValue(new Error('database locked'));
+    renderScreen();
+
+    await waitFor(() =>
+      expect(screen.getByText('Failed to load categories')).toBeDefined(),
+    );
+    // The genuine empty-state copy must NOT be shown.
+    expect(screen.queryByText('No categories yet')).toBeNull();
+    // ERR-05: the raw backend message is NEVER surfaced as detail.
+    expect(screen.queryByText('database locked')).toBeNull();
+  });
+
+  it('recovers via Retry after a load failure (CAT-03)', async () => {
+    mockListCategories
+      .mockRejectedValueOnce(new Error('database locked'))
+      .mockResolvedValueOnce([makeCategory()]);
+    renderScreen();
+
+    await waitFor(() =>
+      expect(screen.getByText('Failed to load categories')).toBeDefined(),
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(screen.getByText('Bakery')).toBeDefined());
+    expect(screen.queryByText('Failed to load categories')).toBeNull();
+  });
+
+  // ── CAT-08: overlapping loads resolve in order ────────────────────────
+
+  it('ignores a stale load that resolves after a newer one (CAT-08)', async () => {
+    // Load #1 (mount) hangs; load #2 (post-create refresh) resolves first.
+    let resolveFirst: (v: CategoryDto[]) => void = () => {};
+    let resolveSecond: (v: CategoryDto[]) => void = () => {};
+    mockListCategories
+      .mockImplementationOnce(
+        () =>
+          new Promise<CategoryDto[]>((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<CategoryDto[]>((resolve) => {
+            resolveSecond = resolve;
+          }),
+      );
+
+    renderScreen();
+    // Trigger the second load through the create flow (handleCreate calls
+    // `await load()` after createCategoryScoped succeeds).
+    await userEvent.click(screen.getByText('Add Category').closest('button')!);
+    await userEvent.type(screen.getByPlaceholderText(/e\.g\. bakery/i), 'Fresh');
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    // Second load resolves FIRST with fresh data.
+    resolveSecond([makeCategory({ id: 'cat-fresh', name: 'Fresh' })]);
+    await waitFor(() => expect(screen.getByText('Fresh')).toBeDefined());
+
+    // The stale first load resolves later with older data — must be ignored.
+    resolveFirst([makeCategory({ id: 'cat-stale', name: 'Stale' })]);
+    await waitFor(() => expect(screen.queryByText('Stale')).toBeNull());
+    expect(screen.getByText('Fresh')).toBeDefined();
+  });
+
+  // ── CAT-09: field-level validation ────────────────────────────────────
+
+  it('explains a disabled Save with a localized error once the name is typed then cleared (CAT-09)', async () => {
+    mockListCategories.mockResolvedValue([makeCategory()]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Bakery')).toBeDefined());
+
+    await userEvent.click(screen.getByText('Add Category').closest('button')!);
+    await waitFor(() => expect(screen.getByText('Cancel')).toBeDefined());
+
+    // The Save/Create button stays disabled while the name is empty; the
+    // field-level message appears once the operator has typed and cleared it.
+    const createBtn = screen.getByRole('button', {
+      name: 'Create',
+    }) as HTMLButtonElement;
+    expect(createBtn.disabled).toBe(true);
+
+    const nameInput = screen.getByPlaceholderText(/e\.g\. bakery/i);
+    await userEvent.type(nameInput, 'Snacks');
+    await userEvent.clear(nameInput);
+    await waitFor(() =>
+      expect(screen.getByText('Category name is required')).toBeDefined(),
+    );
+    expect(mockCreateCategory).not.toHaveBeenCalled();
+  });
+
+  it('rejects a duplicate category ID with a localized conflict error (CAT-09)', async () => {
+    mockListCategories.mockResolvedValue([makeCategory()]); // id: cat-bakery
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Bakery')).toBeDefined());
+
+    await userEvent.click(screen.getByText('Add Category').closest('button')!);
+    await waitFor(() => expect(screen.getByText('Cancel')).toBeDefined());
+
+    // "Bakery" derives the same id (cat-bakery) as the existing category.
+    await userEvent.type(screen.getByPlaceholderText(/e\.g\. bakery/i), 'Bakery');
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() =>
+      expect(screen.getByText('A category with this ID already exists')).toBeDefined(),
+    );
+    expect(mockCreateCategory).not.toHaveBeenCalled();
+  });
+
+  it('rejects a case-variant name that collides with an existing ID (CAT-04)', async () => {
+    mockListCategories.mockResolvedValue([makeCategory()]); // id: cat-bakery
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Bakery')).toBeDefined());
+
+    await userEvent.click(screen.getByText('Add Category').closest('button')!);
+    await waitFor(() => expect(screen.getByText('Cancel')).toBeDefined());
+
+    // "BAKERY" normalises to the same slug (cat-bakery) as the existing card.
+    await userEvent.type(screen.getByPlaceholderText(/e\.g\. bakery/i), 'BAKERY');
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() =>
+      expect(screen.getByText('A category with this ID already exists')).toBeDefined(),
+    );
+    expect(mockCreateCategory).not.toHaveBeenCalled();
+  });
+
+  it('rejects a punctuation-variant name that collides with an existing ID (CAT-04)', async () => {
+    mockListCategories.mockResolvedValue([makeCategory()]); // id: cat-bakery
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Bakery')).toBeDefined());
+
+    await userEvent.click(screen.getByText('Add Category').closest('button')!);
+    await waitFor(() => expect(screen.getByText('Cancel')).toBeDefined());
+
+    // "Bakery!" slugs to cat-bakery, colliding with the existing category.
+    await userEvent.type(screen.getByPlaceholderText(/e\.g\. bakery/i), 'Bakery!');
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() =>
+      expect(screen.getByText('A category with this ID already exists')).toBeDefined(),
+    );
+    expect(mockCreateCategory).not.toHaveBeenCalled();
+  });
+
+  it('derives a stable non-empty ID for a non-ASCII name (CAT-04)', async () => {
+    mockListCategories.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Add Category')).toBeDefined());
+
+    await userEvent.click(screen.getByText('Add Category').closest('button')!);
+    await waitFor(() => expect(screen.getByText('Cancel')).toBeDefined());
+
+    // A fully non-ASCII name must not collapse to the degenerate `cat-` slug.
+    await userEvent.type(screen.getByPlaceholderText(/e\.g\. bakery/i), 'カフェ');
+    const idPreview = document.querySelector('.cat-mgmt-hint code') as HTMLElement;
+    expect(idPreview).toBeDefined();
+    const derivedId = idPreview?.textContent ?? '';
+    expect(derivedId.startsWith('cat-')).toBe(true);
+    expect(derivedId.length).toBeGreaterThan(4);
+  });
+
+  it('allows a fresh non-conflicting name to create a category (CAT-04)', async () => {
+    mockListCategories.mockResolvedValue([makeCategory()]); // id: cat-bakery
+    mockCreateCategory.mockResolvedValue({ id: 'cat-drinks' });
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Bakery')).toBeDefined());
+
+    await userEvent.click(screen.getByText('Add Category').closest('button')!);
+    await waitFor(() => expect(screen.getByText('Cancel')).toBeDefined());
+
+    await userEvent.type(screen.getByPlaceholderText(/e\.g\. bakery/i), 'Drinks');
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() =>
+      expect(mockCreateCategory).toHaveBeenCalledWith(TOKEN, {
+        id: 'cat-drinks',
+        name: 'Drinks',
+        colour: expect.any(String),
+        icon: expect.any(String),
+      }),
+    );
+  });
+
+  it('surfaces a create rejection with a localized error in the modal (CAT-10)', async () => {
+    mockListCategories.mockResolvedValue([]);
+    mockCreateCategory.mockRejectedValue(new Error('backend exploded'));
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Add Category')).toBeDefined());
+
+    await userEvent.click(screen.getByText('Add Category').closest('button')!);
+    await waitFor(() => expect(screen.getByText('Cancel')).toBeDefined());
+
+    await userEvent.type(screen.getByPlaceholderText(/e\.g\. bakery/i), 'Drinks');
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    // CAT-09: raw IPC text must not leak — the modal shows the localized generic.
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('Failed to create category'),
+    );
+    expect(screen.queryByText(/backend exploded/i)).toBeNull();
+    // The modal stays open so the operator can retry.
+    expect(screen.getByText('Cancel')).toBeDefined();
+  });
+
+  it('surfaces an update rejection with a localized error in the edit modal (CAT-10)', async () => {
+    mockListCategories.mockResolvedValue([makeCategory()]);
+    mockUpdateCategory.mockRejectedValue(new Error('fk violation'));
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Bakery')).toBeDefined());
+
+    await userEvent.click(document.querySelector('.cat-mgmt-edit-btn')!);
+    await waitFor(() => expect(screen.getByText('Edit')).toBeDefined());
+    // The edit input is labelled by the visible "Name" label (htmlFor=cat-edit-name).
+    await userEvent.type(screen.getByLabelText('Name'), 'Bakery 2');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('Failed to update category'),
+    );
+    expect(screen.queryByText(/fk violation/i)).toBeNull();
+  });
+
+  it('closes the create modal with Escape and leaves it dismissed (CAT-10)', async () => {
+    mockListCategories.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Add Category')).toBeDefined());
+
+    await userEvent.click(screen.getByText('Add Category').closest('button')!);
+    await waitFor(() => expect(screen.getByText('Cancel')).toBeDefined());
+
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByText('Cancel')).toBeNull());
+    // The screen itself stays rendered behind the modal.
+    expect(screen.getByText('Add Category')).toBeDefined();
+  });
+
+  it('localizes the delete button aria-label via the Fluent bundle (CAT-10)', async () => {
+    mockListCategories.mockResolvedValue([makeCategory()]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Bakery')).toBeDefined());
+
+    // category-delete-aria = Delete category { $name } (settings.ftl). Fluent
+    // wraps interpolated vars in Unicode bidi isolation marks, so strip them.
+    const deleteBtn = document.querySelector('.cat-mgmt-delete-btn');
+    const label = (deleteBtn?.getAttribute('aria-label') ?? '').replace(/[\u2066-\u2069]/g, '');
+    expect(label).toBe('Delete category Bakery');
   });
 });

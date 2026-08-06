@@ -72,15 +72,6 @@
   pointer-events: none;
 }
 
-.suppliers-empty {
-  padding: var(--space-12) var(--space-4);
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-4);
-  color: var(--color-fg-secondary);
-}
 
 .suppliers-table-wrap {
   overflow-x: auto;

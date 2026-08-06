@@ -9,107 +9,36 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/__tests__/test-utils/render';
+import { createUsePosStateMock } from '@/__tests__/test-utils/mocks/usePosState';
+import { mockedBarcode } from '@/__tests__/test-utils/mocks/barcodeScanner';
+import { retailProducts } from '@/__tests__/test-utils/mocks/retailPos';
 import salesFtl from '@/locales/sales.ftl?raw';
 import productsFtl from '@/locales/products.ftl?raw';
 import tablesFtl from '@/locales/tables.ftl?raw';
 import RetailPosScreen from '@/features/retail/RetailPosScreen';
-
-// ── Hoisted mock helpers ──────────────────────────────────────────
-
-const mockedBarcode = vi.hoisted(() => {
-  let onProductFound: ((payload: { code: string; symbology: string }) => void) | null = null;
-  return {
-    triggerScan(code: string) {
-      onProductFound?.({ code, symbology: 'test' });
-    },
-    reset() {
-      onProductFound = null;
-    },
-    useBarcodeScanner: vi.fn(
-      (opts: { onProductFound: (p: { code: string; symbology: string }) => void }) => {
-        onProductFound = opts.onProductFound;
-      },
-    ),
-  };
-});
+import { useTheme } from '@/frontend/shell/ThemeProvider';
+import type { ReactNode } from 'react';
+import type { LineId, Sku } from '@/types/domain';
 
 // ── Mock modules ──────────────────────────────────────────────────
 
-vi.mock('@/features/sales/usePosState', () => ({
-  usePosState: vi.fn(() => ({
-    lines: [],
-    total: null,
-    subtotal: null,
-    discountPercent: 0,
-    discountLabel: '',
-    discountAmount: null,
-    tipPercent: 0,
-    tipAmount: null,
-    serviceChargeEnabled: false,
-    serviceChargePercent: 0,
-    serviceChargeAmount: null,
-    addProduct: vi.fn(),
-    removeLine: vi.fn(),
-    updateQty: vi.fn(),
-    setDiscount: vi.fn(),
-    updateLinePrice: vi.fn(),
-    setTipPercent: vi.fn(),
-    setServiceCharge: vi.fn(),
-    resetCart: vi.fn(),
-    setLines: vi.fn(),
-    assignCourse: vi.fn(),
-    fireCourse: vi.fn(),
-    fireAllCourses: vi.fn(),
-  })),
-}));
+vi.mock('@/features/sales/usePosState', async () => {
+  const { createUsePosStateMock } =
+    await import('@/__tests__/test-utils/mocks/usePosState');
+  return { usePosState: vi.fn(() => createUsePosStateMock()) };
+});
 
-vi.mock('@/features/sales/useBarcodeScanner', () => ({
-  useBarcodeScanner: mockedBarcode.useBarcodeScanner,
-}));
+vi.mock('@/features/sales/useBarcodeScanner', async () => {
+  const { createBarcodeScannerModuleMock } =
+    await import('@/__tests__/test-utils/mocks/barcodeScanner');
+  return createBarcodeScannerModuleMock();
+});
 
-const mockProducts = [
-  { sku: 'SKU-001', name: 'Indomie Goreng', category: 'cat-food', price: { minor_units: 3500, currency: 'IDR' }, barcode: '8991002100110', in_stock: true, stock_qty: 100, tax_rate_ids: [], created_at: '',
-    price_updated_at: '', product_type: 'retail' },
-  { sku: 'SKU-002', name: 'Teh Botol Sosro', category: 'cat-drink', price: { minor_units: 5000, currency: 'IDR' }, barcode: '8991002100220', in_stock: true, stock_qty: 50, tax_rate_ids: [], created_at: '',
-    price_updated_at: '', product_type: 'retail' },
-  { sku: 'SKU-003', name: 'Nasi Goreng Spesial', category: 'cat-food', price: { minor_units: 15000, currency: 'IDR' }, barcode: null, in_stock: true, stock_qty: 20, tax_rate_ids: [], created_at: '',
-    price_updated_at: '', product_type: 'retail' },
-  { sku: 'SKU-004', name: 'Aqua 600ml', category: 'cat-drink', price: { minor_units: 3000, currency: 'IDR' }, barcode: '8991002100330', in_stock: true, stock_qty: 3, tax_rate_ids: [], created_at: '',
-    price_updated_at: '', product_type: 'retail' },
-];
-const mockCategories = [
-  { id: 'cat-food', name: 'Makanan', colour: '#e74c3c' },
-  { id: 'cat-drink', name: 'Minuman', colour: '#3498db' },
-];
-
-vi.mock('@/api/products', () => ({
-  listProducts: vi.fn(() => Promise.resolve(mockProducts)),
-  listProductsScoped: vi.fn((_token: string) => Promise.resolve(mockProducts)),
-  listCategories: vi.fn(() => Promise.resolve(mockCategories)),
-  listCategoriesScoped: vi.fn((_token: string) => Promise.resolve(mockCategories)),
-  lookupProductBySku: vi.fn(() => Promise.resolve(null)),
-  lookupProductBySkuScoped: vi.fn((_token: string, _sku: string) => Promise.resolve(null)),
-  lookupByBarcode: vi.fn(() => Promise.resolve(null)),
-  lookupByBarcodeScoped: vi.fn((_token: string, _code: string) => Promise.resolve(null)),
-  createProduct: vi.fn(),
-  createProductScoped: vi.fn(),
-  updateProduct: vi.fn(),
-  updateProductScoped: vi.fn(),
-  deleteProduct: vi.fn(),
-  deleteProductScoped: vi.fn(),
-  adjustStock: vi.fn(),
-  adjustStockScoped: vi.fn(),
-  listProductVariants: vi.fn(() => Promise.resolve([])),
-  getProductVariant: vi.fn(() => Promise.resolve(null)),
-  createProductVariant: vi.fn(),
-  updateProductVariant: vi.fn(),
-  deleteProductVariant: vi.fn(),
-  createCategory: vi.fn(),
-  updateCategory: vi.fn(),
-  deleteCategory: vi.fn(),
-  getProductTrackSerial: vi.fn(() => Promise.resolve(false)),
-  getProductTrackSerialScoped: vi.fn(() => Promise.resolve(false)),
-}));
+vi.mock('@/api/products', async () => {
+  const { createRetailProductsApiMock } =
+    await import('@/__tests__/test-utils/mocks/retailPos');
+  return createRetailProductsApiMock();
+});
 
 vi.mock('@/api/shifts', async () => {
   const { createShiftsApiMock } = await import('@/__tests__/test-utils/mocks/api');
@@ -137,34 +66,35 @@ vi.mock('@/api/sales', async () => {
   return createSalesApiMock();
 });
 
-vi.mock('@/api/kds', () => ({
-  createKdsOrderFromSale: vi.fn((_userId: string, _saleId: string) => Promise.resolve()),
-}));
+vi.mock('@/api/kds', async () => {
+  const { createRetailKdsApiMock } = await import('@/__tests__/test-utils/mocks/retailPos');
+  return createRetailKdsApiMock();
+});
 
-vi.mock('@/features/tables/TableManagementScreen', () => ({
-  default: () => <div data-testid="table-management-screen">Table Management Floor Plan</div>,
-}));
+vi.mock('@/features/tables/TableManagementScreen', async () => {
+  const { createTableManagementScreenStub } = await import('@/__tests__/test-utils/mocks/retailPos');
+  return createTableManagementScreenStub();
+});
 
-vi.mock('@/features/sales/SalesHistoryScreen', () => ({
-  default: () => <div data-testid="sales-history-screen">Sales History</div>,
-}));
+vi.mock('@/features/sales/SalesHistoryScreen', async () => {
+  const { createSalesHistoryScreenStub } = await import('@/__tests__/test-utils/mocks/retailPos');
+  return createSalesHistoryScreenStub();
+});
 
-vi.mock('@/features/products/ProductLookupScreen', () => ({
-  default: () => <div data-testid="stock-inquiry-screen">Stock Inquiry</div>,
-}));
+vi.mock('@/features/products/ProductLookupScreen', async () => {
+  const { createProductLookupScreenStub } = await import('@/__tests__/test-utils/mocks/retailPos');
+  return createProductLookupScreenStub();
+});
 
-vi.mock('@/api/currency', () => ({
-  listCurrencies: vi.fn(() => Promise.resolve([])),
-  listExchangeRates: vi.fn(() => Promise.resolve([])),
-  getDefaultCurrency: vi.fn(() => Promise.resolve({ code: 'IDR', name: 'Indonesian Rupiah', symbol: 'Rp', decimalPlaces: 2, isDefault: true })),
-}));
+vi.mock('@/api/currency', async () => {
+  const { createRetailCurrencyApiMock } = await import('@/__tests__/test-utils/mocks/retailPos');
+  return createRetailCurrencyApiMock();
+});
 
-vi.mock('@/api/customers', () => ({
-  listCustomers: vi.fn(() => Promise.resolve([])),
-  createCustomer: vi.fn(),
-  updateCustomer: vi.fn(),
-  deleteCustomer: vi.fn(),
-}));
+vi.mock('@/api/customers', async () => {
+  const { createRetailCustomersApiMock } = await import('@/__tests__/test-utils/mocks/retailPos');
+  return createRetailCustomersApiMock();
+});
 
 vi.mock('@/contexts/AuthContext', async () => {
   const { createAuthContextMock } = await import('@/__tests__/test-utils/mocks/contexts');
@@ -183,6 +113,17 @@ const catFtl = `
   category-cat-drink = Minuman
 `;
 
+function ToggleThemeWrapper({ children }: { children: ReactNode }) {
+  const { setTheme } = useTheme();
+  return (
+    <div>
+      <button type="button" onClick={() => setTheme('dark')}>Dark</button>
+      <button type="button" onClick={() => setTheme('light')}>Light</button>
+      {children}
+    </div>
+  );
+}
+
 // ── Helper to click "All Categories" button ──────────────────────
 
 async function showAllProducts() {
@@ -197,32 +138,7 @@ describe('RetailPosScreen — rendering', () => {
     mockedBarcode.reset();
     const sp = await import('@/features/sales/usePosState');
     vi.mocked(sp.usePosState).mockReset();
-    vi.mocked(sp.usePosState).mockImplementation(() => ({
-      lines: [],
-      total: null,
-      subtotal: null,
-      discountPercent: 0,
-      discountLabel: '',
-      discountAmount: null,
-      tipPercent: 0,
-      tipAmount: null,
-      serviceChargeEnabled: false,
-      serviceChargePercent: 0,
-      serviceChargeAmount: null,
-      addProduct: vi.fn(),
-      removeLine: vi.fn(),
-      updateQty: vi.fn(),
-      setDiscount: vi.fn(),
-      updateLinePrice: vi.fn(),
-      setTipPercent: vi.fn(),
-      setServiceCharge: vi.fn(),
-      resetCart: vi.fn(),
-      setLines: vi.fn(),
-      assignCourse: vi.fn(),
-      fireCourse: vi.fn(),
-      fireAllCourses: vi.fn(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any));
+    vi.mocked(sp.usePosState).mockReturnValue(createUsePosStateMock());
   });
 
   it('renders the store header with name, branch, and clock', async () => {
@@ -267,6 +183,28 @@ describe('RetailPosScreen — rendering', () => {
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
     await showAllProducts();
     await waitFor(() => expect(screen.getByText('3')).toBeInTheDocument());
+  });
+
+  it('filters to low-stock products when reminder row is clicked', async () => {
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await showAllProducts();
+    await waitFor(() => expect(screen.getByText('Indomie Goreng')).toBeInTheDocument());
+
+    // Click the low-stock reminder row — filter on
+    const lowStockRow = document.querySelector('.retail-reminder-row--low-stock')!;
+    expect(lowStockRow).toBeInTheDocument();
+    await userEvent.click(lowStockRow);
+
+    // Only Aqua (stock_qty=3 <= 5) should remain visible
+    await waitFor(() => expect(screen.queryByText('Indomie Goreng')).not.toBeInTheDocument());
+    expect(screen.queryByText('Teh Botol Sosro')).not.toBeInTheDocument();
+    expect(screen.getByText('Aqua 600ml')).toBeInTheDocument();
+
+    // Click again — filter off, all products return
+    await userEvent.click(lowStockRow);
+    await waitFor(() => expect(screen.getByText('Indomie Goreng')).toBeInTheDocument());
+    expect(screen.getByText('Teh Botol Sosro')).toBeInTheDocument();
+    expect(screen.getByText('Aqua 600ml')).toBeInTheDocument();
   });
 
   it('renders category filter buttons', async () => {
@@ -357,27 +295,15 @@ describe('RetailPosScreen — rendering', () => {
     expect(holdBtn).toBeDisabled();
   });
 
-  it('shows zero credit reminders when no outstanding credits', async () => {
+  it('hides credit reminders button when no outstanding credits', async () => {
     const sp = await import('@/features/sales/usePosState');
-    vi.mocked(sp.usePosState).mockReturnValue({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      lines: [{ id: crypto.randomUUID(), sku: 'SKU-001', name: 'Indomie Goreng', category: 'cat-food', unit_price: { minor_units: 3500, currency: 'IDR' }, qty: 1 }] as any,
+    vi.mocked(sp.usePosState).mockReturnValue(createUsePosStateMock({
+      lines: [{ id: 'line-1' as LineId, sku: 'SKU-001' as Sku, name: 'Indomie Goreng', category: 'cat-food', qty: 1, unit_price: { minor_units: 3500, currency: 'IDR' } }],
       total: { minor_units: 3500, currency: 'IDR' },
       subtotal: { minor_units: 3500, currency: 'IDR' },
-      discountPercent: 0, discountLabel: '', discountAmount: null,
-      tipPercent: 0, tipAmount: null,
-      serviceChargeEnabled: false, serviceChargePercent: 0, serviceChargeAmount: null,
-      addProduct: vi.fn(), removeLine: vi.fn(), updateQty: vi.fn(),
-      setDiscount: vi.fn(), updateLinePrice: vi.fn(),
-      setTipPercent: vi.fn(), setServiceCharge: vi.fn(),
-      resetCart: vi.fn(), setLines: vi.fn(),
-      assignCourse: vi.fn(), fireCourse: vi.fn(), fireAllCourses: vi.fn(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
+    }));
     await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
-    const creditBtn = await screen.findByText(/Credit Reminders/);
-    expect(creditBtn).toBeInTheDocument();
-    expect(creditBtn.textContent).toMatch(/Credit Reminders/);
+    expect(screen.queryByText(/Credit Reminders/)).not.toBeInTheDocument();
   });
 
   // ── Table Management ─────────────────────────────────────────
@@ -439,5 +365,105 @@ describe('RetailPosScreen — rendering', () => {
     await waitFor(() => expect(screen.getByText('F1')).toBeInTheDocument());
     await userEvent.keyboard('{F12}');
     expect(screen.queryByTestId('kds-screen')).not.toBeInTheDocument();
+  });
+
+  // ── Low-stock filter (Ctrl+L) shortcut ─────────────────────
+
+  it('shows filtered indicator when low-stock filter is active', async () => {
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await showAllProducts();
+    await waitFor(() => expect(screen.getByText('Indomie Goreng')).toBeInTheDocument());
+
+    // No indicator before filtering
+    expect(screen.queryByText(/filtered/i)).not.toBeInTheDocument();
+
+    // Toggle on
+    await userEvent.keyboard('{Control>}l{/Control}');
+    await waitFor(() => expect(screen.getByText(/filtered/i)).toBeInTheDocument());
+
+    // Toggle off — indicator disappears
+    await userEvent.keyboard('{Control>}l{/Control}');
+    await waitFor(() => expect(screen.queryByText(/filtered/i)).not.toBeInTheDocument());
+  });
+
+  it('Ctrl+K opens the credit reminders list', async () => {
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await waitFor(() => expect(screen.getByText('F1')).toBeInTheDocument());
+    await userEvent.keyboard('{Control>}k{/Control}');
+    await waitFor(() => expect(screen.getByRole('heading', { name: /credit reminders/i })).toBeInTheDocument());
+  });
+
+  it('F11 key badge is present in the function bar', async () => {
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await waitFor(() => expect(screen.getByText('F1')).toBeInTheDocument());
+    // F11 badge should exist (was previously missing; keyboard shortcut tested via code review)
+    expect(screen.getByText('F11')).toBeInTheDocument();
+  });
+
+  it('Ctrl+L toggles low-stock filter in the product grid', async () => {
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await showAllProducts();
+    await waitFor(() => expect(screen.getByText('Indomie Goreng')).toBeInTheDocument());
+
+    // Toggle on: Ctrl+L
+    await userEvent.keyboard('{Control>}l{/Control}');
+    await waitFor(() => expect(screen.queryByText('Indomie Goreng')).not.toBeInTheDocument());
+    expect(screen.getByText('Aqua 600ml')).toBeInTheDocument();
+
+    // Toggle off: Ctrl+L again
+    await userEvent.keyboard('{Control>}l{/Control}');
+    await waitFor(() => expect(screen.getByText('Indomie Goreng')).toBeInTheDocument());
+    expect(screen.getByText('Teh Botol Sosro')).toBeInTheDocument();
+  });
+
+  it('shows the low-stock-specific empty message when the filter matches nothing (P1-2)', async () => {
+    // Override the products so every stock_qty is above the threshold → the
+    // low-stock filter yields zero rows and the grid shows its dedicated message.
+    // Persistent mock (not Once) since the load path may re-run (abort/retry).
+    const productsApi = await import('@/api/products');
+    vi.mocked(productsApi.listProductsScoped).mockResolvedValue(
+      retailProducts.map((p) => ({ ...p, stock_qty: 100 })),
+    );
+
+    await renderWithProviders(<RetailPosScreen />, salesFtl, productsFtl, tablesFtl, catFtl);
+    await showAllProducts();
+    await waitFor(() => expect(screen.getByText('Indomie Goreng')).toBeInTheDocument());
+
+    // No low-stock message before the filter is active
+    expect(screen.queryByText(/No products below the low-stock threshold/)).not.toBeInTheDocument();
+
+    // Ctrl+L toggles the filter → every product is filtered out
+    await userEvent.keyboard('{Control>}l{/Control}');
+    await waitFor(() => expect(screen.getByText(/No products below the low-stock threshold/)).toBeInTheDocument());
+    expect(screen.queryByText('Indomie Goreng')).not.toBeInTheDocument();
+    expect(screen.queryByText('Aqua 600ml')).not.toBeInTheDocument();
+
+    // Reset the persistent mock so high stock values don't leak into later tests
+    vi.mocked(productsApi.listProductsScoped).mockResolvedValue(retailProducts);
+  });
+
+  it('syncs the retail-pos root data-theme with the global theme provider', async () => {
+    await renderWithProviders(
+      <ToggleThemeWrapper><RetailPosScreen /></ToggleThemeWrapper>,
+      salesFtl, productsFtl, tablesFtl, catFtl,
+    );
+    await waitFor(() => expect(screen.getByText('TOKO TEST')).toBeInTheDocument());
+    const retailRoot = document.querySelector('.retail-pos') as HTMLElement;
+    expect(retailRoot).toBeInTheDocument();
+
+    const globalTheme = () => document.documentElement.getAttribute('data-theme') ?? 'default';
+
+    // Default theme: global <html> has no data-theme, component carries 'default'.
+    expect(retailRoot.getAttribute('data-theme')).toBe(globalTheme());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Dark' }));
+    await waitFor(() => expect(document.documentElement.getAttribute('data-theme')).toBe('dark'));
+    expect(retailRoot.getAttribute('data-theme')).toBe('dark');
+    expect(retailRoot.getAttribute('data-theme')).toBe(globalTheme());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Light' }));
+    await waitFor(() => expect(document.documentElement.getAttribute('data-theme')).toBe('light'));
+    expect(retailRoot.getAttribute('data-theme')).toBe('light');
+    expect(retailRoot.getAttribute('data-theme')).toBe(globalTheme());
   });
 });

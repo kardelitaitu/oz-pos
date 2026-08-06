@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getHardwareSettings, setHardwareSettings, type HardwareSettingsDto } from '@/api/settings';
+import { plainErrorMessage } from '@/utils/app-error';
 
 // ── Types ──────────────────────────────────────────────────────────
 
-export type PrinterConnection = 'network' | 'usb' | 'serial' | 'auto';
+export type PrinterConnection = 'network' | 'usb' | 'serial' | 'auto' | 'disabled';
 export type PaperSize = '58' | '80' | 'a4' | 'letter';
 export type ScaleConnection = 'serial' | 'usb' | 'none';
 export type ScannerMode = 'keyboard' | 'serial' | 'auto';
@@ -29,6 +30,7 @@ export interface ScannerConfig {
 
 export interface HardwareConfig {
   printer: PrinterConfig;
+  kitchenPrinter: PrinterConfig;
   scale: ScaleConfig;
   scanner: ScannerConfig;
 }
@@ -46,6 +48,7 @@ export interface TerminalHardwareProfile {
   localPrefs: LocalPrefs;
   initialized: string;
   version: number;
+  schemaVersion: number;
 }
 
 // ── Defaults ────────────────────────────────────────────────────────
@@ -82,12 +85,14 @@ export function createDefaultProfile(terminalId: string, storeId?: string): Term
     storeId: storeId ?? '',
     hardware: {
       printer: { ...DEFAULT_PRINTER },
+      kitchenPrinter: { ...DEFAULT_PRINTER, connection: 'disabled' },
       scale: { ...DEFAULT_SCALE },
       scanner: { ...DEFAULT_SCANNER },
     },
     localPrefs: { ...DEFAULT_LOCAL_PREFS },
     initialized: new Date().toISOString(),
     version: 1,
+    schemaVersion: 1,
   };
 }
 
@@ -105,6 +110,9 @@ function toHardwareSettingsDto(profile: TerminalHardwareProfile): HardwareSettin
     scaleDevicePath: profile.hardware.scale.devicePath,
     scaleBaudRate: profile.hardware.scale.baudRate,
     scaleZeroOnBoot: profile.hardware.scale.zeroOnBoot,
+    kitchenPrinterConnection: profile.hardware.kitchenPrinter.connection,
+    kitchenPrinterDevicePath: profile.hardware.kitchenPrinter.devicePath,
+    schemaVersion: profile.schemaVersion,
     soundVolume: profile.localPrefs.soundVolume,
     darkMode: profile.localPrefs.darkMode,
     scaleAutoZero: profile.localPrefs.scaleAutoZero,
@@ -120,6 +128,7 @@ function fromHardwareSettingsDto(
   const defaults = createDefaultProfile(terminalId, storeId);
   return {
     ...defaults,
+    schemaVersion: dto.schemaVersion ?? defaults.schemaVersion,
     hardware: {
       ...defaults.hardware,
       printer: {
@@ -127,6 +136,11 @@ function fromHardwareSettingsDto(
         connection: (dto.printerConnection as PrinterConnection) || defaults.hardware.printer.connection,
         devicePath: dto.printerDevicePath ?? defaults.hardware.printer.devicePath,
         paperSize: (dto.printerPaperSize as PaperSize) || defaults.hardware.printer.paperSize,
+      },
+      kitchenPrinter: {
+        ...defaults.hardware.kitchenPrinter,
+        connection: (dto.kitchenPrinterConnection as PrinterConnection) || defaults.hardware.kitchenPrinter.connection,
+        devicePath: dto.kitchenPrinterDevicePath ?? defaults.hardware.kitchenPrinter.devicePath,
       },
       scanner: {
         ...defaults.hardware.scanner,
@@ -161,6 +175,8 @@ export interface UseTerminalHardwareResult {
   error: string | null;
   /** Update printer configuration (local state only, call save() to persist). */
   updatePrinter: (partial: Partial<PrinterConfig>) => void;
+  /** Update kitchen printer configuration. */
+  updateKitchenPrinter: (partial: Partial<PrinterConfig>) => void;
   /** Update scale configuration. */
   updateScale: (partial: Partial<ScaleConfig>) => void;
   /** Update scanner configuration. */
@@ -240,6 +256,19 @@ export function useTerminalHardware(
     });
   }, []);
 
+  const updateKitchenPrinter = useCallback((partial: Partial<PrinterConfig>) => {
+    setProfile((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        hardware: {
+          ...prev.hardware,
+          kitchenPrinter: { ...prev.hardware.kitchenPrinter, ...partial },
+        },
+      };
+    });
+  }, []);
+
   const updateScale = useCallback((partial: Partial<ScaleConfig>) => {
     setProfile((prev) => {
       if (!prev) return prev;
@@ -288,7 +317,7 @@ export function useTerminalHardware(
       await setHardwareSettings(toHardwareSettingsDto(profile), userId ?? '');
       setIsLoading(false);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to save hardware profile';
+      const msg = plainErrorMessage(err, 'Failed to save hardware profile');
       setError(msg);
       setIsLoading(false);
     }
@@ -305,6 +334,7 @@ export function useTerminalHardware(
     isLoading,
     error,
     updatePrinter,
+    updateKitchenPrinter,
     updateScale,
     updateScanner,
     updateLocalPrefs,

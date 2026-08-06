@@ -25,6 +25,61 @@ use serde_json::Value;
 
 use crate::error::PluginError;
 
+/// Maximum number of entries allowed in an `.ozpkg` archive (PLG-06).
+const MAX_ARCHIVE_ENTRIES: usize = 512;
+/// Maximum compressed size of a single entry, in bytes (PLG-06).
+const MAX_ENTRY_COMPRESSED_SIZE: u64 = 8 * 1024 * 1024; // 8 MiB
+/// Maximum uncompressed size of a single entry, in bytes (PLG-06).
+const MAX_ENTRY_UNCOMPRESSED_SIZE: u64 = 16 * 1024 * 1024; // 16 MiB
+/// Maximum total uncompressed size across all entries, in bytes (PLG-06).
+const MAX_TOTAL_UNCOMPRESSED_SIZE: u64 = 64 * 1024 * 1024; // 64 MiB
+/// Maximum acceptable compression ratio (uncompressed ÷ compressed) —
+/// defends against zip-bomb archives (PLG-06).
+const MAX_COMPRESSION_RATIO: u64 = 100;
+
+/// Validate an archive entry name and return its forward-slash normalised form.
+///
+/// Rejects absolute paths, Windows drive/UNC prefixes, empty or `.` components,
+/// and any `..` component so an untrusted archive can never write outside the
+/// destination directory during extraction (PLG-01).
+pub(crate) fn sanitise_entry_name(name: &str) -> Result<String, PluginError> {
+    let normalised = name.replace('\\', "/");
+    // Check UNC before the single-slash absolute check: `//server/share/...`
+    // must be reported as a UNC path, not just an absolute one.
+    if normalised.starts_with("//") {
+        return Err(PluginError::Archive(format!(
+            "entry name '{name}' is a UNC path — rejected"
+        )));
+    }
+    if normalised.starts_with('/') {
+        return Err(PluginError::Archive(format!(
+            "entry name '{name}' is an absolute path — rejected"
+        )));
+    }
+    // Windows drive prefix, e.g. `C:` or `C:/...`.
+    if normalised.len() >= 2 && normalised.as_bytes()[1] == b':' {
+        return Err(PluginError::Archive(format!(
+            "entry name '{name}' contains a drive prefix — rejected"
+        )));
+    }
+    for component in normalised.split('/') {
+        match component {
+            "" | "." => {
+                return Err(PluginError::Archive(format!(
+                    "entry name '{name}' contains an empty or '.' component — rejected"
+                )));
+            }
+            ".." => {
+                return Err(PluginError::Archive(format!(
+                    "entry name '{name}' contains a '..' component — rejected"
+                )));
+            }
+            _ => {}
+        }
+    }
+    Ok(normalised)
+}
+
 /// The recognised entry types inside an `.ozpkg` archive.
 #[derive(Debug, Clone, PartialEq)]
 pub enum OzpkEntry {
@@ -100,9 +155,16 @@ impl OzpkArchive {
         let mut entries: Vec<(String, OzpkEntry)> = Vec::new();
         let mut entry_contents: HashMap<String, Vec<u8>> = HashMap::new();
         let mut manifest_found = false;
+        let mut total_uncompressed: u64 = 0;
 
         for i in 0..archive.len() {
-            let mut file = archive
+            if i >= MAX_ARCHIVE_ENTRIES {
+                return Err(PluginError::Archive(format!(
+                    "archive exceeds maximum entry count ({MAX_ARCHIVE_ENTRIES})"
+                )));
+            }
+
+            let file = archive
                 .by_index(i)
                 .map_err(|e| PluginError::Archive(e.to_string()))?;
 
@@ -111,10 +173,49 @@ impl OzpkArchive {
                 continue;
             }
 
-            let name = file.name().to_string();
+            // Reject traversal / absolute / drive-prefixed entry names at parse
+            // time so a malicious archive fails closed (PLG-01).
+            let name = sanitise_entry_name(file.name())?;
+
+            // Resource limits (PLG-06): compressed size, uncompressed size, and
+            // compression ratio are all checked BEFORE buffering, so a zip-bomb
+            // archive cannot exhaust memory or disk during decompression.
+            if file.compressed_size() > MAX_ENTRY_COMPRESSED_SIZE {
+                return Err(PluginError::Archive(format!(
+                    "entry '{name}' exceeds maximum compressed size ({MAX_ENTRY_COMPRESSED_SIZE} bytes)"
+                )));
+            }
+            if file.size() > MAX_ENTRY_UNCOMPRESSED_SIZE {
+                return Err(PluginError::Archive(format!(
+                    "entry '{name}' exceeds maximum uncompressed size ({MAX_ENTRY_UNCOMPRESSED_SIZE} bytes)"
+                )));
+            }
+            if file.size() / file.compressed_size().max(1) > MAX_COMPRESSION_RATIO {
+                return Err(PluginError::Archive(format!(
+                    "entry '{name}' has an excessive compression ratio (possible zip bomb)"
+                )));
+            }
+
+            // Read at most MAX_ENTRY_UNCOMPRESSED_SIZE + 1 bytes, then verify
+            // the cap was not exceeded (defense in depth against a size mismatch
+            // between the central-directory header and the actual stream).
             let mut data = Vec::new();
-            file.read_to_end(&mut data)
+            file.take(MAX_ENTRY_UNCOMPRESSED_SIZE + 1)
+                .read_to_end(&mut data)
                 .map_err(|e| PluginError::Archive(e.to_string()))?;
+            if data.len() as u64 > MAX_ENTRY_UNCOMPRESSED_SIZE {
+                return Err(PluginError::Archive(format!(
+                    "entry '{name}' exceeds maximum uncompressed size ({MAX_ENTRY_UNCOMPRESSED_SIZE} bytes)"
+                )));
+            }
+            total_uncompressed = total_uncompressed
+                .checked_add(data.len() as u64)
+                .ok_or_else(|| PluginError::Archive("uncompressed size overflow".into()))?;
+            if total_uncompressed > MAX_TOTAL_UNCOMPRESSED_SIZE {
+                return Err(PluginError::Archive(format!(
+                    "archive total uncompressed size exceeds limit ({MAX_TOTAL_UNCOMPRESSED_SIZE} bytes)"
+                )));
+            }
 
             // Normalise path separators to forward-slash for consistent matching
             let normalised = name.replace('\\', "/");
@@ -245,9 +346,20 @@ impl OzpkArchive {
     pub fn extract_to(&self, dest: impl AsRef<Path>) -> Result<(), PluginError> {
         let dest = dest.as_ref();
         std::fs::create_dir_all(dest)?;
+        // Canonicalise the destination so every written file can be verified to
+        // remain inside it (PLG-01). Entry names are already sanitised at parse
+        // time; this containment check is defense in depth for any future code
+        // path that constructs an `OzpkArchive` with raw names.
+        let canonical_dest = std::fs::canonicalize(dest)?;
 
         for (name, data) in &self.entry_contents {
-            let target_path = dest.join(name);
+            let safe_name = sanitise_entry_name(name)?;
+            let target_path = canonical_dest.join(&safe_name);
+            if !target_path.starts_with(&canonical_dest) {
+                return Err(PluginError::Archive(format!(
+                    "entry '{name}' resolves outside the destination directory — rejected"
+                )));
+            }
             if let Some(parent) = target_path.parent() {
                 std::fs::create_dir_all(parent)?;
             }
@@ -275,14 +387,16 @@ impl OzpkArchive {
             match entry {
                 OzpkEntry::Script(name) => {
                     if let Some(data) = self.read_entry(name) {
+                        let safe = sanitise_entry_name(name)?;
                         std::fs::create_dir_all(&scripts_dir)?;
-                        std::fs::write(scripts_dir.join(name), data)?;
+                        std::fs::write(scripts_dir.join(safe), data)?;
                     }
                 }
                 OzpkEntry::Migration(name) => {
                     if let Some(data) = self.read_entry(name) {
+                        let safe = sanitise_entry_name(name)?;
                         std::fs::create_dir_all(&migrations_dir)?;
-                        std::fs::write(migrations_dir.join(name), data)?;
+                        std::fs::write(migrations_dir.join(safe), data)?;
                     }
                 }
                 _ => {}
@@ -318,6 +432,22 @@ mod tests {
 
         for (name, data) in files {
             zip.start_file::<&str, ()>(*name, zip::write::FileOptions::default())
+                .unwrap();
+            zip.write_all(data).unwrap();
+        }
+
+        zip.finish().unwrap();
+        buf.into_inner()
+    }
+
+    /// Owned-string variant of `build_ozpkg` for tests that need to build
+    /// many or large entries programmatically.
+    fn build_ozpkg_owned(files: &[(String, Vec<u8>)]) -> Vec<u8> {
+        let mut buf = std::io::Cursor::new(Vec::new());
+        let mut zip = zip::ZipWriter::new(&mut buf);
+
+        for (name, data) in files {
+            zip.start_file::<&str, ()>(name.as_str(), zip::write::FileOptions::default())
                 .unwrap();
             zip.write_all(data).unwrap();
         }
@@ -427,6 +557,166 @@ mod tests {
 
         // read_entry_exact with just filename does NOT work (no fallback)
         assert!(archive.read_entry_exact("foo.lua").is_none());
+    }
+
+    // ── PLG-01: path-traversal protection ─────────────────────────────
+
+    #[test]
+    fn extract_to_rejects_dotdot_escape() {
+        let manifest = br#"{"id": "evil", "name": "Evil", "version": "1.0.0"}"#;
+        let bytes = build_ozpkg(&[
+            ("manifest.json", manifest),
+            ("../escape.lua", b"-- escaped"),
+        ]);
+        // Entry names are sanitised at parse time — a `..` component fails closed.
+        let result = OzpkArchive::from_bytes(&bytes, "evil.ozpkg");
+        assert!(
+            result.is_err(),
+            "archive with '..' entry should be rejected"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains(".."), "got: {err}");
+    }
+
+    #[test]
+    fn extract_to_rejects_rooted_path() {
+        let manifest = br#"{"id": "evil", "name": "Evil", "version": "1.0.0"}"#;
+        let bytes = build_ozpkg(&[
+            ("manifest.json", manifest),
+            ("/etc/cron.d/evil", b"* * * * * root pwn"),
+        ]);
+        let result = OzpkArchive::from_bytes(&bytes, "evil.ozpkg");
+        assert!(
+            result.is_err(),
+            "archive with absolute entry should be rejected"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("absolute"), "got: {err}");
+    }
+
+    #[test]
+    fn extract_to_rejects_windows_drive_path() {
+        let manifest = br#"{"id": "evil", "name": "Evil", "version": "1.0.0"}"#;
+        let bytes = build_ozpkg(&[
+            ("manifest.json", manifest),
+            ("C:\\windows\\system32\\evil.dll", b"MZ"),
+        ]);
+        let result = OzpkArchive::from_bytes(&bytes, "evil.ozpkg");
+        assert!(
+            result.is_err(),
+            "archive with drive prefix should be rejected"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("drive"), "got: {err}");
+    }
+
+    #[test]
+    fn extract_to_rejects_unc_path() {
+        let manifest = br#"{"id": "evil", "name": "Evil", "version": "1.0.0"}"#;
+        let bytes = build_ozpkg(&[
+            ("manifest.json", manifest),
+            ("//server/share/evil.lua", b"-- evil"),
+        ]);
+        let result = OzpkArchive::from_bytes(&bytes, "evil.ozpkg");
+        assert!(result.is_err(), "archive with UNC entry should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("UNC"), "got: {err}");
+    }
+
+    #[test]
+    fn extract_to_rejects_empty_component() {
+        let manifest = br#"{"id": "evil", "name": "Evil", "version": "1.0.0"}"#;
+        let bytes = build_ozpkg(&[
+            ("manifest.json", manifest),
+            ("scripts//evil.lua", b"-- evil"),
+        ]);
+        let result = OzpkArchive::from_bytes(&bytes, "evil.ozpkg");
+        assert!(
+            result.is_err(),
+            "archive with empty component should be rejected"
+        );
+    }
+
+    #[test]
+    fn extract_to_keeps_legit_subdirectories() {
+        let manifest = br#"{"id": "sub", "name": "Sub", "version": "1.0.0"}"#;
+        let bytes = build_ozpkg(&[
+            ("manifest.json", manifest),
+            ("scripts/a.lua", b"-- a"),
+            ("migrations/b.sql", b"-- b"),
+        ]);
+        let archive = OzpkArchive::from_bytes(&bytes, "sub.ozpkg").unwrap();
+        let dest = tempfile::tempdir().unwrap();
+        archive.extract_to(dest.path()).unwrap();
+        assert!(dest.path().join("scripts/a.lua").exists());
+        assert!(dest.path().join("migrations/b.sql").exists());
+    }
+
+    // ── PLG-06: resource limits ────────────────────────────────────────
+
+    #[test]
+    fn archive_exceeding_entry_count_is_rejected() {
+        let manifest = br#"{"id": "big", "name": "Big", "version": "1.0.0"}"#;
+        // 513 tiny entries + manifest > MAX_ARCHIVE_ENTRIES (512)
+        let mut files: Vec<(String, Vec<u8>)> = vec![("manifest.json".into(), manifest.to_vec())];
+        for i in 0..513 {
+            files.push((format!("f{i:04}.lua"), b"-- x".to_vec()));
+        }
+        let bytes = build_ozpkg_owned(&files);
+        let result = OzpkArchive::from_bytes(&bytes, "big.ozpkg");
+        assert!(result.is_err(), "archive over entry cap should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("entry count"), "got: {err}");
+    }
+
+    #[test]
+    fn archive_with_oversized_compressed_entry_is_rejected() {
+        // A single entry whose COMPRESSED size exceeds the cap. We build a
+        // large incompressible payload (random bytes) so the stored size is
+        // large; the parse-time `compressed_size()` check rejects it early.
+        let manifest = br#"{"id": "big", "name": "Big", "version": "1.0.0"}"#;
+        let mut payload: Vec<u8> = Vec::with_capacity(10 * 1024 * 1024);
+        let mut seed = 0x1234_5678u64;
+        for _ in 0..payload.capacity() {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            payload.push((seed & 0xFF) as u8);
+        }
+        let files = vec![
+            ("manifest.json".to_string(), manifest.to_vec()),
+            ("big.lua".to_string(), payload),
+        ];
+        let bytes = build_ozpkg_owned(&files);
+        let result = OzpkArchive::from_bytes(&bytes, "big.ozpkg");
+        assert!(result.is_err(), "oversized entry should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("size"), "got: {err}");
+    }
+
+    #[test]
+    fn archive_with_zip_bomb_ratio_is_rejected() {
+        // A highly compressible entry (all zeros, 1 MiB) compresses to a few
+        // KB — a ratio far above MAX_COMPRESSION_RATIO (100).
+        let manifest = br#"{"id": "bomb", "name": "Bomb", "version": "1.0.0"}"#;
+        let files = vec![
+            ("manifest.json".to_string(), manifest.to_vec()),
+            ("zeros.lua".to_string(), vec![0u8; 1024 * 1024]),
+        ];
+        let bytes = build_ozpkg_owned(&files);
+        let result = OzpkArchive::from_bytes(&bytes, "bomb.ozpkg");
+        assert!(result.is_err(), "zip-bomb ratio should be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("ratio"), "got: {err}");
+    }
+
+    #[test]
+    fn sanitise_entry_name_accepts_normal_paths() {
+        assert_eq!(
+            sanitise_entry_name("scripts/a.lua").unwrap(),
+            "scripts/a.lua"
+        );
+        assert_eq!(sanitise_entry_name("a\\b.lua").unwrap(), "a/b.lua");
     }
 
     #[test]

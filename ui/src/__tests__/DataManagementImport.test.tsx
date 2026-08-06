@@ -240,7 +240,7 @@ describe('DataManagement — Import', () => {
     await user.click(screen.getByText('Analyse file'));
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeInTheDocument();
-      expect(screen.getByText('Wrong password')).toBeInTheDocument();
+      expect(screen.getByText('data-mgmt-toast-import-fail')).toBeInTheDocument();
     });
   });
 
@@ -330,7 +330,7 @@ describe('DataManagement — Import', () => {
     await confirmImportDialog(user);
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith(
-        expect.objectContaining({ message: 'Disk full', type: 'error' }),
+        expect.objectContaining({ message: 'data-mgmt-toast-import-fail', type: 'error' }),
       );
     });
     expect(screen.getByText('Preview import')).toBeInTheDocument();

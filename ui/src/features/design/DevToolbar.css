@@ -16,10 +16,10 @@
   width: 256px;
   height: 256px;
 
-  background: var(--color-bg-elevated, rgba(16, 82, 188, 0.08));
+  background: var(--color-bg-elevated);
   border: 1px solid var(--color-border, rgba(90, 159, 212, 0.12));
-  border-radius: var(--radius-lg, 0.5rem);
-  box-shadow: var(--shadow-xl, 0 20px 40px -5px rgba(4, 10, 18, 0.65));
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
 
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -39,7 +39,7 @@
   border-bottom: 1px solid var(--color-border, rgba(90, 159, 212, 0.12));
   font-size: var(--text-2xs, 0.5625rem);
   font-weight: var(--font-weight-semibold, 600);
-  color: var(--color-accent-fg, #07111d);
+  color: var(--color-accent-fg);
   text-transform: uppercase;
   letter-spacing: var(--tracking-wide, 0.02em);
   cursor: grab;
@@ -71,7 +71,7 @@
   gap: var(--space-0_5);
   padding: var(--space-1) var(--space-0_5);
   border: 1px solid var(--color-border, rgba(90, 159, 212, 0.12));
-  border-radius: var(--radius-sm, 0.125rem);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-fg-secondary, #a8c4e0);
   cursor: pointer;

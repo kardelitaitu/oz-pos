@@ -17,8 +17,7 @@ sales-report-export-pdf = Ekspor PDF
 
 pos-title = Terminal POS
 # ── Shortfall Resolution ──
-shortfall-dialog-aria =
-    .aria-label = Resolusi stok tidak mencukupi
+shortfall-dialog-aria = Resolusi stok tidak mencukupi
 shortfall-title = Stok Tidak Mencukupi
 shortfall-description = Beberapa item tidak memiliki stok yang cukup di lokasi utama. Pilih sumber alternatif di bawah.
 shortfall-wanted = Dibutuhkan
@@ -127,6 +126,40 @@ payment-failed = Pembayaran Gagal
 payment-gateway-status = Status Gateway
 payment-qris-scan = Pindai dengan aplikasi QRIS
 payment-qris-waiting = Menunggu konfirmasi pembayaran…
+payment-qris-dialog-aria = Pembayaran QR QRIS
+payment-qris-close-aria = Tutup pembayaran QR
+payment-qris-qr-aria = Kode QR
+payment-qris-waiting-aria = Menunggu pembayaran
+payment-qris-confirmed-aria = Pembayaran dikonfirmasi
+payment-qris-confirmed = Pembayaran dikonfirmasi!
+payment-qris-amount = Jumlah
+payment-qris-reference = Referensi
+payment-qris-merchant = Pedagang
+payment-qris-merchant-name = OZ-POS Store
+
+# Price Override Modal
+price-override-dialog-aria = Override harga
+price-override-close-aria = Tutup
+price-override-title = Override Harga
+price-override-current-label = Harga saat ini
+price-override-new-label = Harga baru (dalam unit minor)
+price-override-new-aria = Masukkan harga baru dalam unit minor
+price-override-cancel = Batal
+price-override-next = Lanjut
+price-override-back = Kembali
+price-override-username-label = Masukkan username manajer
+price-override-username-placeholder = Username
+price-override-username-aria = Username manajer
+price-override-pin-label = Masukkan PIN manajer
+price-override-pin-aria = Entri PIN
+price-override-pin-dots-aria = Entri PIN: { $count } dari { $max } digit
+price-override-keypad-aria = Papan angka
+price-override-clear = Hapus
+price-override-backspace-aria = Backspace
+price-override-verifying = Memverifikasi…
+price-override-error-zero = Harga harus lebih besar dari 0
+price-override-error-max = Harga melebihi 10x harga saat ini. Maksimum yang diizinkan adalah { $max }.
+price-override-pin-failed = Verifikasi PIN gagal
 
 orders-title = Pesanan
 orders-search = Cari pesanan…
@@ -152,9 +185,15 @@ pos-cart-line-qty-aria = Jumlah: { $qty }
 pos-cart-line-increase-aria = Tambah jumlah { $sku }
 pos-cart-line-remove-aria = Hapus { $sku } dari keranjang
 pos-cart-line-swipe-remove-aria = Hapus { $sku }
+pos-cart-line-override = Timpa
+pos-cart-line-override-aria = Timpa harga untuk { $name }
 
 # POS Cart Panel
 pos-cart-panel-aria = Keranjang
+
+# Cart course firing
+pos-cart-course-fire-aria = Kirim { $label } ({ $count } item)
+pos-cart-course-btn--all = Kirim Semua
 
 # POS Cart Actions
 pos-cart-table-aria = Nomor meja
@@ -162,58 +201,37 @@ pos-cart-options-collapse-aria =
     .aria-label = Tutup opsi
 pos-cart-options-expand-aria =
     .aria-label = Buka opsi
-pos-cart-discount-pct-aria =
-    .aria-label = Persentase diskon
-pos-cart-discount-label-aria =
-    .aria-label = Label diskon
-pos-cart-discount-remove-aria =
-    .aria-label = Hapus diskon
-pos-cart-discount-cancel-aria =
-    .aria-label = Batal diskon
-pos-cart-clear-aria =
-    .aria-label = Kosongkan semua item dari keranjang
-pos-cart-charge-aria =
-    .aria-label = Tagih pelanggan
-pos-cart-open-bill-aria =
-    .aria-label = Simpan sebagai tagihan terbuka
-pos-cart-open-bills-aria =
-    .aria-label = Lihat tagihan terbuka
+pos-cart-discount-pct-aria = Persentase diskon
+pos-cart-discount-label-aria = Label diskon
+pos-cart-discount-remove-aria = Hapus diskon
+pos-cart-discount-cancel-aria = Batal diskon
+pos-cart-clear-aria = Kosongkan semua item dari keranjang
+pos-cart-charge-aria = Tagih pelanggan
+pos-cart-open-bill-aria = Simpan sebagai tagihan terbuka
+pos-cart-open-bills-aria = Lihat tagihan terbuka
 pos-cart-undo-btn = Urungkan
-pos-cart-undo-dismiss-aria =
-    .aria-label = Tutup notifikasi urungkan
-pos-dismiss-error-aria =
-    .aria-label = Tutup kesalahan
+pos-cart-undo-dismiss-aria = Tutup notifikasi urungkan
+pos-dismiss-error-aria = Tutup kesalahan
 
 # POS Shift Overlays
-pos-close-shift-overlay-aria =
-    .aria-label = Tutup shift
-pos-close-shift-balance-aria =
-    .aria-label = Saldo akhir dalam unit minor
-pos-close-shift-notes-aria =
-    .aria-label = Catatan shift
-pos-close-shift-summary-aria =
-    .aria-label = Ringkasan shift ditutup
-pos-open-shift-overlay-aria =
-    .aria-label = Buka shift
-pos-open-shift-balance-aria =
-    .aria-label = Saldo awal dalam unit minor
+pos-close-shift-overlay-aria = Tutup shift
+pos-close-shift-balance-aria = Saldo akhir dalam unit minor
+pos-close-shift-notes-aria = Catatan shift
+pos-close-shift-summary-aria = Ringkasan shift ditutup
+pos-open-shift-overlay-aria = Buka shift
+pos-open-shift-balance-aria = Saldo awal dalam unit minor
 
 # POS Open Bill
-pos-open-bill-overlay-aria =
-    .aria-label = Tagihan terbuka
-pos-open-bills-overlay-aria =
-    .aria-label = Daftar tagihan terbuka
+pos-open-bill-overlay-aria = Tagihan terbuka
+pos-open-bills-overlay-aria = Daftar tagihan terbuka
 pos-open-bill-desc = Masukkan nama pelanggan untuk tagihan terbuka ini.
-pos-open-bill-placeholder =
-    .placeholder = mis. John Doe
-pos-open-bill-name-aria =
-    .aria-label = Nama pelanggan
+pos-open-bill-placeholder = mis. John Doe
+pos-open-bill-name-aria = Nama pelanggan
 pos-open-bill-cancel = Batal
 pos-open-bill-saving = Menyimpan…
 pos-open-bill-save = Simpan Tagihan Terbuka
 pos-open-bills-title = Tagihan Terbuka
-pos-open-bills-close-aria =
-    .aria-label = Tutup daftar tagihan terbuka
+pos-open-bills-close-aria = Tutup daftar tagihan terbuka
 pos-open-bills-empty = Tidak ada tagihan terbuka.
 pos-open-bills-resume = Lanjutkan
 
@@ -231,8 +249,7 @@ pos-cart-undo-dismiss = Tutup
 pos-cart-open-bill = Tagihan Terbuka
 pos-cart-open-bills = Tagihan Terbuka
 pos-cart-table-label = Meja #
-pos-cart-table-placeholder =
-    .placeholder = No.
+pos-cart-table-placeholder = No.
 pos-cart-lock-aria =
     .aria-label = Kunci terminal dan keluar
 pos-cart-lock-title = Kunci terminal
@@ -246,6 +263,7 @@ sales-report-revenue-label = Pendapatan
 sales-report-rank = #
 sales-history-title = Riwayat Penjualan
 sales-history-loading = Memuat penjualan…
+sales-history-error-load = Gagal memuat riwayat penjualan
 sales-history-empty = Belum ada penjualan tercatat
 sales-history-empty-filtered = Tidak ada penjualan yang cocok dengan filter Anda
 sales-history-count = { $count } penjualan
@@ -338,6 +356,11 @@ sales-dashboard-hourly-aria = Penjualan per jam
 sales-dashboard-hourly-bars-aria = Grafik penjualan per jam
 sales-dashboard-category-aria = Rincian kategori
 sales-dashboard-heatmap-aria = Peta panas penjualan per jam
+sales-dashboard-chart-other = Lainnya
+sales-dashboard-revenue-aria = Grafik pendapatan 14 hari
+sales-dashboard-revenue-summary = Grafik pendapatan 14 hari: { $total } total dari { $days } hari
+sales-dashboard-category-summary = Rincian kategori: { $count } kategori
+sales-dashboard-heatmap-summary = Peta panas penjualan per jam: { $count } slot waktu aktif
 
 # ── Void Orders ──
 void-orders-title = Pesanan
@@ -422,8 +445,7 @@ refund-title = Proses Pengembalian Dana
 refund-done-title = Pengembalian Dana Diproses
 refund-done-amount = Dikembalikan: { $amount }
 refund-done = Selesai
-refund-dialog-aria =
-    .aria-label = Proses pengembalian dana
+refund-dialog-aria = Proses pengembalian dana
 refund-close-aria =
     .aria-label = Batal pengembalian dana
 refund-sale-id = Penjualan: { $id }
@@ -432,20 +454,16 @@ refund-sale-date = Tanggal: { $date }
 refund-items-title = Pilih Item untuk Dikembalikan
 refund-item-aria =
     .aria-label = Kembalikan { $sku }
-refund-qty-decrease-aria =
-    .aria-label = Kurangi jumlah pengembalian
-refund-qty-increase-aria =
-    .aria-label = Tambah jumlah pengembalian
+refund-qty-decrease-aria = Kurangi jumlah pengembalian
+refund-qty-increase-aria = Tambah jumlah pengembalian
 refund-reason-label = Alasan *
 refund-reason-placeholder =
     .placeholder = mis. Pelanggan berubah pikiran
-refund-reason-aria =
-    .aria-label = Alasan pengembalian
+refund-reason-aria = Alasan pengembalian
 refund-note-label = Catatan (internal)
 refund-note-placeholder =
     .placeholder = Catatan internal opsional
-refund-note-aria =
-    .aria-label = Catatan pengembalian
+refund-note-aria = Catatan pengembalian
 refund-total-label = Total Pengembalian
 refund-cancel = Batal
 refund-submit = Proses Pengembalian Dana
@@ -465,6 +483,7 @@ modifier-base-price = Harga dasar
 modifier-addons = Tambahan
 modifier-total = Total
 modifier-add-to-cart = Tambah ke Keranjang
+modifier-dialog-aria = Sesuaikan { $productName }
 
 # ── EOD Report ──
 eod-title = Laporan Akhir Hari
@@ -603,10 +622,8 @@ payment-toast-currency-failed = Gagal memuat data mata uang
 payment-toast-customers-failed = Gagal memuat pelanggan
 payment-toast-loyalty-failed = Gagal memuat akun loyalitas
 payment-toast-points-value-failed = Gagal memuat nilai poin
-payment-customer-placeholder =
-    .placeholder = mis. John Doe
-payment-loyalty-points-aria =
-    .aria-label = Poin
+payment-customer-placeholder = mis. John Doe
+payment-loyalty-points-aria = Poin
 payment-search-customers-aria = Cari pelanggan
 payment-search-customers-placeholder = Cari berdasarkan nama, telepon, atau email...
 payment-split-title = Pembayaran Terpisah
@@ -637,6 +654,7 @@ payment-customer-name = Nama Pelanggan
 payment-customer-name-label = Nama Pelanggan
 payment-customer-change = Ganti
 payment-customer-select = Pilih Pelanggan
+payment-customer-remove-aria = Hapus pelanggan
 payment-loyalty-use-points = Gunakan Poin
 payment-loyalty-points-label = Poin
 payment-loyalty-discount-label = Diskon: -{ $amount }
@@ -650,12 +668,15 @@ payment-retry = Coba Lagi
 
 # ── Shift (remaining) ──
 pos-open-bill-title = Tagihan Terbuka
-pos-shift-close-aria =
-    .aria-label = Tutup shift saat ini
-pos-shift-open-aria =
-    .aria-label = Buka shift baru
+pos-shift-close-aria = Tutup shift saat ini
+pos-shift-open-aria = Buka shift baru
 
 # ── Spinner ──
+
+# ── Retail POS load error / retry ──
+retail-load-error = Gagal memuat produk. Menampilkan data demo.
+retail-load-error-unavailable = Gagal memuat produk. Periksa koneksi lalu coba lagi.
+retail-load-error-retry-aria = Coba lagi memuat produk
 
 # ── Retail POS screen ──
 retail-store-name-fallback = TOKO
@@ -666,6 +687,9 @@ retail-search-clear-aria = Hapus pencarian
 retail-recent-label = Terbaru
 retail-no-products = Tidak ada produk
 retail-no-products-match = Tidak ada produk yang cocok
+retail-no-products-in-category = Tidak ada produk di kategori ini
+retail-products-loading = Memuat produk…
+retail-store-logo-alt = Logo toko
 retail-sku-label = SKU
 retail-sku-placeholder = Scan atau ketik barcode / SKU
 retail-sku-go = CARI
@@ -704,6 +728,15 @@ retail-shift-closed-cash-sales = Penjualan Tunai:
 retail-shift-closed-expected-label = Diharapkan:
 retail-shift-closed-difference-label = Selisih:
 retail-credit-reminders-title = Pengingat Piutang
+retail-reminder-dismiss-aria = Tutup notifikasi
+retail-reminder-low-stock-aria = Lihat { $count } produk stok rendah
+retail-reminder-credit-aria = Lihat { $count } penjualan kredit
+retail-reminder-held-cart-aria = Lihat { $count } pesanan ditahan
+retail-held-cart-reminders =
+    { $count ->
+        [one] { $count } pesanan ditahan
+       *[other] { $count } pesanan ditahan
+    }
 retail-credit-no-outstanding = Tidak ada piutang
 retail-credit-col-customer = Pelanggan
 retail-credit-col-amount = Jumlah
@@ -722,13 +755,14 @@ retail-discount-rp-tab = Rp
 retail-discount-pct-label = Diskon (%)
 retail-discount-rp-label = Diskon (Rp)
 retail-customer-search-title = Pilih Pelanggan
-retail-customer-search-placeholder =
-    .placeholder = Cari berdasarkan nama, telepon, atau email…
+retail-customer-search-placeholder = Cari berdasarkan nama, telepon, atau email…
 retail-customer-search-loading = Memuat…
 retail-customer-search-empty = Tidak ada pelanggan
 retail-customer-clear = Hapus
 retail-qty-total = Total:
+retail-qty-picker-title = Pilih Jumlah
 retail-qty-add = Tambah
+retail-qty-backspace-aria = Hapus
 retail-shortcuts-title = Pintasan Keyboard
 retail-shortcut-pay = Bayar / Charge
 retail-shortcut-clear = Hapus keranjang (Void)
@@ -740,6 +774,8 @@ retail-shortcut-options = Opsi
 retail-shortcut-list = Daftar pintasan
 retail-shortcut-close = Tutup modal / Opsi
 retail-shortcut-fullscreen = Alihkan Layar Penuh
+retail-shortcut-credit = Pengingat kredit
+retail-shortcut-low-stock = Filter produk stok rendah
 retail-toast-failed-products = Gagal memuat produk
 retail-toast-failed-categories = Gagal memuat kategori
 retail-toast-failed-settings = Gagal memuat pengaturan toko
@@ -747,6 +783,7 @@ retail-toast-open-shift-first = Buka shift terlebih dahulu
 retail-toast-order-held = Pesanan ditahan
 retail-toast-failed-hold = Gagal menahan pesanan
 retail-toast-failed-resume = Gagal melanjutkan pesanan
+retail-toast-corrupt-cart = Data pesanan ditahan rusak dan telah dihapus
 retail-toast-sale-complete = Transaksi selesai
 retail-toast-credit-settled = Piutang dibayar
 retail-toast-failed-settle = Gagal membayar piutang
@@ -759,6 +796,11 @@ retail-toast-failed-delete-held = Gagal menghapus pesanan ditahan
 retail-toast-failed-cart = Gagal membuat keranjang penjualan
 retail-toast-no-cart = Tidak ada keranjang penjualan aktif
 retail-override-btn = Ganti Harga
+retail-cart-course-aria =
+    .aria-label = Kursus untuk { $name }
+retail-cart-modifier-aria =
+    .aria-label = Modifikasi untuk { $name }
+retail-cart-modifier-btn = Modifikasi
 retail-override-aria = Ganti harga untuk { $name }
 retail-serial-placeholder = No. Seri
 retail-serial-aria = Nomor seri untuk { $name }
@@ -768,25 +810,104 @@ retail-fn-bar-aria = Bilah fungsi
 retail-page-nav-aria = Halaman produk
 retail-page-prev-aria = Halaman sebelumnya
 retail-page-next-aria = Halaman berikutnya
-retail-cart-qty-decrease-aria = Kurangi jumlah
-retail-cart-qty-increase-aria = Tambah jumlah
-retail-cart-remove-aria = Hapus dari keranjang
-retail-toast-insufficient-stock = Stok tidak mencukupi
+retail-cart-qty-decrease-aria = Kurangi jumlah { $sku }
+retail-cart-qty-increase-aria = Tambah jumlah { $sku }
+retail-cart-remove-aria = Hapus { $sku } dari keranjang
+retail-toast-insufficient-stock = Stok tidak mencukupi untuk { $name }
 retail-toast-customers-failed = Gagal memuat pelanggan
+retail-sku-not-found = Tidak ada produk yang cocok dengan SKU "{ $sku }"
+retail-added-to-cart = { $name } ditambahkan
+retail-no-low-stock-products = Tidak ada produk di bawah ambang stok minimum
+retail-held-cart-delete-confirm = Hapus "{ $label }"? Tindakan ini tidak dapat dibatalkan.
+retail-held-cart-delete-btn = Hapus
 retail-low-stock-banner =
     { $count ->
         [one] { $count } produk stok menipis
        *[other] { $count } produk stok menipis
     }
 retail-held-cart-delete-aria = Hapus pesanan ditahan
+retail-held-cart-resume-aria = Lanjutkan pesanan
+retail-held-cart-delete-title = Hapus Pesanan Ditahan
 retail-fn-quick-return = Retur Cepat
+retail-filtered-low-stock = Difilter: { $count } produk stok rendah
+retail-filter-indicator-aria = Filter stok rendah aktif
+
+# ── Quick Return ──────────────────────────────────────────────────────
+retail-quick-return-title = Retur Cepat
+retail-quick-return-desc = Pindai atau masukkan barcode struk untuk mencari transaksi retur.
+retail-quick-return-placeholder = Barcode struk
+retail-quick-return-aria = Input barcode struk
+retail-quick-return-lookup = Cari
+retail-quick-return-not-found = Transaksi tidak ditemukan untuk barcode ini
+retail-quick-return-error = Gagal mencari struk
 retail-header-workspaces-title = Kembali ke ruang kerja
+retail-resize-handle-aria = Ubah ukuran panel keranjang
+
+# ── Retail skip-to-content ────────────────────────────────────────────
+retail-skip-to-main = Lewati ke konten utama
 retail-header-workspaces-aria = Kembali ke ruang kerja
+
+# ── Retail POS table columns ──
+retail-col-sku = SKU / Kode
+retail-col-name = Nama Produk
+retail-col-stock = Stok
+retail-col-price = Harga
+retail-col-action = Aksi
+retail-product-out-of-stock = Stok habis
+retail-product-add-title = Tambah ke Keranjang
+retail-product-add-aria = Tambah { $name } ke keranjang
+retail-product-edit-title = Edit Produk
+retail-product-edit-aria = Edit { $name }
+retail-product-weigh-aria = Timbang { $name }
+retail-price-volatility-hint = Harga baru saja berubah
+retail-edit-modal-close-aria = Tutup
+
+# ── Edit Product Modal ──
+retail-edit-product-title = Edit Produk
+retail-edit-field-sku = SKU / Kode
+retail-edit-field-name = Nama Produk
+retail-edit-field-price = Harga (IDR)
+retail-edit-field-stock = Jumlah Stok
+retail-edit-field-low-stock = Ambang Stok Rendah
+retail-edit-field-high-stock = Ambang Stok Tinggi
+retail-edit-save = Simpan Perubahan
+retail-edit-cancel = Batal
+retail-edit-btn-aria = Edit produk { $name }
+
+# ── Add Category / Add Product Modals ──
+retail-add-category-btn = + Kategori
+retail-add-category-btn-aria = Tambah kategori baru
+retail-add-category-btn-title = Tambah kategori baru
+retail-add-category-title = Tambah Kategori
+retail-add-category-field-name = Nama Kategori
+retail-add-category-name-placeholder = mis. Penyimpanan, Periferal, Aksesoris
+retail-add-product-btn = + Produk
+retail-add-product-btn-aria = Tambah produk baru
+retail-add-product-btn-title = Tambah produk baru
+retail-add-product-title = Tambah Produk
+retail-add-product-category-label = Kategori
+retail-add-product-name-placeholder = mis. Logitech G Pro X Wireless Mouse
+retail-sku-lookup-aria = Cari berdasarkan SKU
 
 # ── Scale indicator widget ────────────────────────────────────────────────────
 scale-indicator-aria = Indikator timbangan
 scale-idle = Timbangan
+scale-stable = Stabil
+scale-unstable = …
 scale-read-error = Error timbangan
+scale-weigh-add = Timbang & Tambah
+scale-weigh-add-aria = Timbang & tambah { $name }
+scale-weigh-added = Ditambahkan { $weight }g dari { $name }
+scale-target-set = { $name } dipilih untuk ditimbang
+scale-clear-aria = Hapus target timbangan
+weight-scale-aria = Timbangan
+weight-scale-stable = Stabil
+weight-scale-unstable = Tidak stabil
+weight-scale-error = Kesalahan timbangan
+weight-scale-idle = —
+weight-scale-weigh-aria = Timbang
+weight-scale-weighing = Menimbang…
+weight-scale-weigh = Timbang
 
 # ── Gift Cards ─────────────────────────────────────────────────────
 gift-cards-loading = Memuat...

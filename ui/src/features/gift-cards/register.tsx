@@ -1,7 +1,8 @@
+import { lazy } from 'react';
 import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
 import { icon } from '@/platform/ui/icon';
-import GiftCardsScreen from './GiftCardsScreen';
+const GiftCardsScreen = lazy(() => import('./GiftCardsScreen'));
 
 export function registerGiftCardsFeature() {
   registerPage({ route: 'gift-cards', component: GiftCardsScreen, label: 'Gift Cards', feature: 'gift-cards', requiredRole: 'manager' });

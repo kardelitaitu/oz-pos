@@ -223,9 +223,8 @@ describe('StockTransfersScreen — modal keyboard interaction', () => {
     fillField('Source', 'Warehouse A');
     fillField('Destination', 'Store B');
 
-    // Add a line item
-    fireEvent.click(screen.getByRole('button', { name: /add line/i }));
-
+    // The create form seeds one line row on open (mirrors PurchaseOrderForm),
+    // so fill the existing SKU/Qty inputs rather than adding another line.
     fillField('SKU', 'SKU-001');
 
     const qtyInput = screen.getByLabelText('Qty');

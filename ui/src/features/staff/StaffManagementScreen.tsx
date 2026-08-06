@@ -1,30 +1,31 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import {
-  listStaff,
-  listRoles,
-  createStaff,
-  updateStaff,
+  listStaffScoped,
+  listRolesScoped,
+  createStaffScoped,
+  updateStaffScoped,
   type StaffMemberDto,
   type RoleDto,
 } from '@/api/staff';
 import {
-  listAllWorkspaces,
-  setUserWorkspaces,
-  getUserWorkspaces,
+  listAllWorkspacesScoped,
+  getUserWorkspacesScoped,
   type WorkspaceTypeDto,
 } from '@/api/workspaces';
-import { useAuth } from '@/contexts/AuthContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Badge } from '@/components/Badge';
 import { Skeleton } from '@/components/Skeleton';
-import { SettingsPopup } from '@/frontend/shared';
+import { SettingsPopup, requiredLocalized } from '@/frontend/shared';
+import { l10nErrorMessage } from '@/utils/app-error';
 import { RoleIcon } from '@/components/RoleIcon';
 import { useToast } from '@/frontend/shared/Toast';
 import { EmptyState } from '@/frontend/shared';
 import { NoStaffIcon } from '@/components/EmptyStateIllustrations';
 import SettingsSelect from '@/features/settings/SettingsSelect';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import './StaffManagementScreen.css';
 
 // ── SVG icon props ────────────────────────────────────────────────
@@ -53,6 +54,8 @@ interface FormData {
   displayName: string;
   pin: string;
   roleId: string;
+  /** STAFF-09: current active state — preserved unchanged on profile edits. */
+  isActive: boolean;
   /** Only used when editing — workspace assignment mode */
   wsMode: 'default' | 'custom';
   /** Only used when editing — selected workspace keys */
@@ -64,6 +67,7 @@ const EMPTY_FORM: FormData = {
   displayName: '',
   pin: '',
   roleId: '',
+  isActive: true,
   wsMode: 'default',
   wsKeys: [],
 };
@@ -73,7 +77,7 @@ const EMPTY_FORM: FormData = {
 /** Staff management screen — manage user accounts, roles, PIN codes, and workspace assignments. */
 export default function StaffManagementScreen() {
   const { l10n } = useLocalization();
-  const { session } = useAuth();
+  const { sessionToken } = useWorkspace();
   const { addToast } = useToast();
   const [staff, setStaff] = useState<StaffMemberDto[]>([]);
   const [roles, setRoles] = useState<RoleDto[]>([]);
@@ -81,29 +85,41 @@ export default function StaffManagementScreen() {
   const [workspaceNameMap, setWorkspaceNameMap] = useState<Map<string, string>>(new Map());
   const [staffWorkspaces, setStaffWorkspaces] = useState<Map<string, string[]>>(new Map());
   const [loading, setLoading] = useState(true);
+  /** STAFF-08: primary staff/roles load failed — show error + retry. */
+  const [loadError, setLoadError] = useState<string | null>(null);
+  /** STAFF-08: workspace data failed to load — staff rows still render. */
+  const [workspacesUnavailable, setWorkspacesUnavailable] = useState(false);
+  /** STAFF-10: member awaiting deactivation confirmation. */
+  const [confirmTarget, setConfirmTarget] = useState<StaffMemberDto | null>(null);
+  /** STAFF-10: true while the confirmed deactivation request is in flight. */
+  const [deactivating, setDeactivating] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const callerUserId = session?.user_id ?? '';
-
   // ── Load data
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
+      if (!sessionToken) {
+        return;
+      }
       const [staffData, rolesData] = await Promise.all([
-        listStaff(),
-        listRoles(),
+        listStaffScoped(sessionToken),
+        listRolesScoped(sessionToken),
       ]);
       setStaff(staffData);
       setRoles(rolesData);
 
       // Load workspace names and assignments for the table column.
+      // STAFF-08: a workspace failure must NOT hide staff rows — show an
+      // explicit "workspace data unavailable" notice instead.
       try {
-        const workspaces = await listAllWorkspaces(callerUserId);
+        const workspaces = await listAllWorkspacesScoped(sessionToken);
         const nameMap = new Map<string, string>();
         for (const w of workspaces) {
           nameMap.set(w.key, w.name);
@@ -112,7 +128,7 @@ export default function StaffManagementScreen() {
 
         const wsMap = new Map<string, string[]>();
         const results = await Promise.allSettled(
-          staffData.map((m) => getUserWorkspaces(m.id)),
+          staffData.map((m) => getUserWorkspacesScoped(sessionToken, m.id)),
         );
         for (let i = 0; i < results.length; i++) {
           const member = staffData[i];
@@ -124,15 +140,19 @@ export default function StaffManagementScreen() {
           }
         }
         setStaffWorkspaces(wsMap);
+        setWorkspacesUnavailable(false);
       } catch {
-        // Workspace data unavailable — column will be empty.
+        setWorkspacesUnavailable(true);
       }
-    } catch {
-      // IPC unavailable.
+    } catch (err) {
+      // STAFF-08: surface a retryable error instead of swallowing it.
+      setLoadError(l10nErrorMessage(err, l10n, 'staff-error-load'));
+      setStaff([]);
+      setRoles([]);
     } finally {
       setLoading(false);
     }
-  }, [callerUserId]);
+  }, [sessionToken, l10n]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -146,11 +166,14 @@ export default function StaffManagementScreen() {
   }, []);
 
   const openEdit = useCallback(async (member: StaffMemberDto) => {
+    // STAFF-09: preserve the member's current active state so a profile
+    // edit never silently reactivates a deactivated account.
     setForm({
       username: member.username,
       displayName: member.display_name,
       pin: '',
       roleId: member.role_id,
+      isActive: member.is_active,
       wsMode: 'default',
       wsKeys: [],
     });
@@ -160,19 +183,22 @@ export default function StaffManagementScreen() {
 
     // Load workspaces and user's current assignments in parallel.
     try {
+      if (!sessionToken) {
+        return;
+      }
       const [workspaces, userKeys] = await Promise.all([
-        listAllWorkspaces(callerUserId),
-        getUserWorkspaces(member.id),
+        listAllWorkspacesScoped(sessionToken),
+        getUserWorkspacesScoped(sessionToken, member.id),
       ]);
       setAllWorkspaces(workspaces);
       if (userKeys.length > 0) {
         setForm((prev) => ({ ...prev, wsMode: 'custom', wsKeys: userKeys }));
       }
     } catch {
-      addToast({ message: l10n.getString('staff-error-workspaces-failed') || 'Failed to load workspace settings', type: 'error' });
+      addToast({ message: requiredLocalized(l10n, 'staff-error-workspaces-failed'), type: 'error' });
       setAllWorkspaces([]);
     }
-  }, [callerUserId, addToast, l10n]);
+  }, [sessionToken, addToast, l10n]);
 
   const closeModal = useCallback(() => {
     setShowModal(false);
@@ -222,29 +248,34 @@ export default function StaffManagementScreen() {
     setSaving(true);
     setError(null);
     try {
+      if (!sessionToken) {
+        setError(l10n.getString('staff-error-save-failed'));
+        return;
+      }
       if (editingId) {
-        await updateStaff({
+        const trimmedPin = form.pin.trim();
+        // STAFF-05: profile + workspace assignment are now ONE IPC call —
+        // the backend commits both and rolls the profile back if the
+        // workspace write fails, so a partial failure can't leave the
+        // account half-updated.
+        await updateStaffScoped(sessionToken, {
           id: editingId,
           username,
           display_name: displayName,
           role_id: form.roleId,
-          is_active: true,
-          caller_user_id: callerUserId,
+          // STAFF-09: send the preserved active state unchanged.
+          is_active: form.isActive,
+          // STAFF-03: rotate PIN only when a new one was entered.
+          ...(trimmedPin ? { pin: trimmedPin } : {}),
+          // STAFF-05: workspace assignment rides on the same command.
+          workspace_keys: form.wsMode === 'custom' ? form.wsKeys : [],
         });
-
-        // Save workspace assignments.
-        await setUserWorkspaces(
-          editingId,
-          form.wsMode === 'custom' ? form.wsKeys : [],
-          callerUserId,
-        );
       } else {
-        await createStaff({
+        await createStaffScoped(sessionToken, {
           username,
           pin: form.pin,
           display_name: displayName,
           role_id: form.roleId,
-          caller_user_id: callerUserId,
         });
       }
 
@@ -257,7 +288,7 @@ export default function StaffManagementScreen() {
       });
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : l10n.getString('staff-error-save-failed'));
+      setError(l10nErrorMessage(err, l10n, 'staff-error-save-failed'));
     } finally {
       setSaving(false);
     }
@@ -265,15 +296,18 @@ export default function StaffManagementScreen() {
 
   // ── Deactivate / Reactivate ────────────────────────────────────
 
-  const toggleActive = useCallback(async (member: StaffMemberDto) => {
+  const performActivate = useCallback(async (member: StaffMemberDto) => {
     try {
-      await updateStaff({
+      if (!sessionToken) {
+        addToast({ message: l10n.getString('staff-error-save-failed'), type: 'error' });
+        return;
+      }
+      await updateStaffScoped(sessionToken, {
         id: member.id,
         username: member.username,
         display_name: member.display_name,
         role_id: member.role_id,
         is_active: !member.is_active,
-        caller_user_id: callerUserId,
       });
       addToast({
         type: 'success',
@@ -285,7 +319,34 @@ export default function StaffManagementScreen() {
     } catch {
       addToast({ message: l10n.getString('staff-error-save-failed'), type: 'error' });
     }
-  }, [load, callerUserId, addToast, l10n]);
+  }, [load, sessionToken, addToast, l10n]);
+
+  // STAFF-10: deactivating an account is high-impact — require an explicit
+  // confirmation with the staff member's name before sending the request.
+  // Reactivating (restoring) an inactive account needs no confirmation.
+  const toggleActive = useCallback((member: StaffMemberDto) => {
+    if (member.is_active) {
+      setConfirmTarget(member);
+    } else {
+      void performActivate(member);
+    }
+  }, [performActivate]);
+
+  const confirmDeactivate = useCallback(async () => {
+    if (!confirmTarget) return;
+    setDeactivating(true);
+    try {
+      await performActivate(confirmTarget);
+      setConfirmTarget(null);
+    } finally {
+      setDeactivating(false);
+    }
+  }, [confirmTarget, performActivate]);
+
+  const cancelDeactivate = useCallback(() => {
+    if (deactivating) return;
+    setConfirmTarget(null);
+  }, [deactivating]);
 
   // ── Role colour mapping ────────────────────────────────────────
 
@@ -325,7 +386,16 @@ export default function StaffManagementScreen() {
         </Localized>
       </div>
 
-      {loading ? (
+      {loadError ? (
+        <Card shadow="sm">
+          <div className="staff-mgmt-load-error" role="alert">
+            <p className="staff-mgmt-load-error-message">{loadError}</p>
+            <Button onClick={() => load()} variant="secondary">
+              <Localized id="staff-retry"><span>Retry</span></Localized>
+            </Button>
+          </div>
+        </Card>
+      ) : loading ? (
         <div className="staff-mgmt-loading-skeleton" aria-hidden="true">
           <div className="staff-mgmt-header">
             <Skeleton variant="block" width="6rem" height="1.75rem" />
@@ -359,13 +429,23 @@ export default function StaffManagementScreen() {
           <div className="staff-mgmt-empty">
             <EmptyState
               icon={<NoStaffIcon />}
-              title={l10n.getString('staff-empty') || 'No staff members yet.'}
-              action={{ label: l10n.getString('staff-empty-cta') || 'Add your first staff member', onClick: openCreate }}
+              title={requiredLocalized(l10n, 'staff-empty')}
+              action={{ label: requiredLocalized(l10n, 'staff-empty-cta'), onClick: openCreate }}
             />
           </div>
         </Card>
       ) : (
         <div className="staff-mgmt-table-wrap">
+          {workspacesUnavailable && (
+            <div className="staff-mgmt-ws-unavailable" role="status">
+              <Localized id="staff-workspaces-unavailable">
+                <strong>Workspace data unavailable</strong>
+              </Localized>
+              <Localized id="staff-workspaces-unavailable-hint">
+                <span>Could not load workspace assignments. Staff data below is still current.</span>
+              </Localized>
+            </div>
+          )}
           <table className="staff-mgmt-table" aria-label={l10n.getString('staff-table-aria')}>
             <thead>
               <tr>
@@ -603,6 +683,19 @@ export default function StaffManagementScreen() {
           </fieldset>
         )}
       </SettingsPopup>
+
+      {/* ── Deactivate Confirmation (STAFF-10) ─────────────────── */}
+      <ConfirmDialog
+        open={confirmTarget !== null}
+        onCancel={cancelDeactivate}
+        onConfirm={() => void confirmDeactivate()}
+        title={l10n.getString('staff-deactivate-confirm-title')}
+        message={l10n.getString('staff-deactivate-confirm-body', { name: confirmTarget?.display_name ?? '' })}
+        variant="danger"
+        loading={deactivating}
+        confirmLabel={l10n.getString('staff-deactivate-confirm-confirm')}
+        cancelLabel={l10n.getString('staff-deactivate-confirm-cancel')}
+      />
     </div>
   );
 }

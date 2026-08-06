@@ -111,7 +111,7 @@
 
 .ssel-option--selected {
   background: var(--color-accent);
-  color: var(--color-accent-fg, #fff);
+  color: var(--color-accent-fg);
   font-weight: var(--font-weight-medium);
 }
 

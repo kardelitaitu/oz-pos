@@ -208,7 +208,9 @@ describe('useTerminalHardware', () => {
       expect(result.current.isLoading).toBe(false);
     });
 
-    expect(result.current.error).toBe('Disk full');
+    // ERR-05: raw backend text never surfaces — the safe fallback copy does.
+    expect(result.current.error).toBe('Failed to save hardware profile');
+    expect(result.current.error).not.toBe('Disk full');
   });
 
   // ── Reload ──────────────────────────────────────────────────────

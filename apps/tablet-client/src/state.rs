@@ -31,6 +31,7 @@ use tokio::sync::{Mutex, oneshot};
 use oz_core::migrations;
 use oz_core::session::SessionContext;
 use oz_hal::DriverRegistry;
+use platform_core::StoreDatabaseManager;
 use platform_kernel::Kernel;
 
 use crate::error::AppError;
@@ -75,6 +76,10 @@ pub struct AppState {
     /// Consumers (Redis pub/sub subscriber, inventory change publisher)
     /// read this field instead of calling std::env::var().
     pub terminal_id: tokio::sync::Mutex<Option<String>>,
+
+    /// Store-scoped database manager (ADR #4 Phase 2 / ADR #7).
+    /// Each resolved store is opened in its own migrated SQLite database.
+    pub db_manager: StoreDatabaseManager,
 }
 
 impl AppState {
@@ -105,6 +110,11 @@ impl AppState {
             .and_then(|s| s.parse::<i64>().ok())
             .unwrap_or(86400);
 
+        let data_dir = db_path
+            .parent()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("."));
+        let db_manager = StoreDatabaseManager::new(data_dir, oz_core::migrations::ALL);
         let registry = Arc::new(DriverRegistry::default());
 
         tracing::info!(?db_path, "AppState initialised");
@@ -119,6 +129,7 @@ impl AppState {
             session_store: Arc::new(RwLock::new(HashMap::new())),
             session_ttl_seconds,
             terminal_id: Mutex::new(None),
+            db_manager,
         })
     }
 
@@ -163,6 +174,60 @@ impl AppState {
         }
 
         Err(AppError::InvalidSession)
+    }
+
+    /// Resolve a session token and return its context and store-scoped database.
+    ///
+    /// ADR #7: The session determines the store; callers never supply a
+    /// store identifier directly for scoped commands.
+    pub fn resolve_scope(
+        &self,
+        token: &str,
+    ) -> Result<(SessionContext, std::sync::Arc<std::sync::Mutex<Connection>>), AppError> {
+        let session = self.resolve_session(token)?;
+        let conn = self
+            .db_manager
+            .open_store(&session.store_id)
+            .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
+        Ok((session, conn))
+    }
+
+    /// Resolve a session token and return only its store-scoped database.
+    pub fn resolve_store(
+        &self,
+        token: &str,
+    ) -> Result<std::sync::Arc<std::sync::Mutex<Connection>>, AppError> {
+        self.resolve_scope(token).map(|(_, conn)| conn)
+    }
+
+    /// Remove every session bound to `user_id` except the token in
+    /// `keep_token` (STAFF-03 PIN rotation).
+    ///
+    /// The caller's own session is preserved — they authenticated moments
+    /// ago and the UI follows up with a reload using the same token — while
+    /// stale terminal sessions issued under the old PIN are invalidated.
+    pub fn invalidate_user_sessions_except(&self, user_id: &str, keep_token: &str) -> usize {
+        let mut store = match self.session_store.write() {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!("session store lock poisoned during invalidation: {e}");
+                return 0;
+            }
+        };
+        let before = store.len();
+        store.retain(|token, ctx| {
+            ctx.user_id != user_id || (!keep_token.is_empty() && token == keep_token)
+        });
+        let removed = before - store.len();
+        if removed > 0 {
+            tracing::info!(
+                user_id = %user_id,
+                removed = %removed,
+                keep_token = %keep_token,
+                "sessions invalidated after PIN rotation"
+            );
+        }
+        removed
     }
 
     /// Remove all expired sessions from the store in a single sweep.
@@ -242,6 +307,7 @@ impl AppState {
             session_store: Arc::new(RwLock::new(HashMap::new())),
             session_ttl_seconds: 86400,
             terminal_id: Mutex::new(None),
+            db_manager: StoreDatabaseManager::new(std::env::temp_dir(), oz_core::migrations::ALL),
         }
     }
 
@@ -258,7 +324,18 @@ impl AppState {
             session_store: Arc::new(RwLock::new(HashMap::new())),
             session_ttl_seconds: 86400,
             terminal_id: Mutex::new(None),
+            db_manager: StoreDatabaseManager::new(std::env::temp_dir(), oz_core::migrations::ALL),
         }
+    }
+
+    /// Construct a test state with an isolated store database directory.
+    ///
+    /// Injecting the manager lets scope tests prove that a session cannot
+    /// observe another store's database file.
+    pub fn for_test_with_db_manager(db_manager: StoreDatabaseManager) -> Self {
+        let mut state = Self::for_test();
+        state.db_manager = db_manager;
+        state
     }
 }
 
@@ -305,6 +382,84 @@ mod tests {
         let state = AppState::for_test();
         let result = state.resolve_session("nonexistent-token");
         assert!(matches!(result, Err(AppError::InvalidSession)));
+    }
+
+    #[test]
+    fn resolve_session_expired_token_is_rejected_and_removed() {
+        let state = AppState::for_test();
+        let ctx = SessionContext {
+            user_id: "expired-user".into(),
+            store_id: "store-expired".into(),
+            role_id: "role-owner".into(),
+            terminal_id: "term-1".into(),
+            instance_id: "inst-1".into(),
+            type_key: "pos".into(),
+            expires_at: Some(1),
+            created_at: 0,
+        };
+        state
+            .session_store
+            .write()
+            .unwrap()
+            .insert("expired-token".into(), ctx);
+
+        assert!(matches!(
+            state.resolve_session("expired-token"),
+            Err(AppError::InvalidSession)
+        ));
+        assert!(
+            !state
+                .session_store
+                .read()
+                .unwrap()
+                .contains_key("expired-token")
+        );
+    }
+
+    #[test]
+    fn resolve_scope_isolates_store_databases() {
+        let test_dir =
+            std::env::temp_dir().join(format!("oz-pos-tablet-scope-test-{}", uuid::Uuid::now_v7()));
+        let manager = StoreDatabaseManager::new(test_dir.clone(), oz_core::migrations::ALL);
+        let state = AppState::for_test_with_db_manager(manager);
+        for (token, store_id) in [("token-a", "store-a"), ("token-b", "store-b")] {
+            state.session_store.write().unwrap().insert(
+                token.into(),
+                SessionContext {
+                    user_id: "user-1".into(),
+                    store_id: store_id.into(),
+                    role_id: "role-owner".into(),
+                    terminal_id: "term-1".into(),
+                    instance_id: "inst-1".into(),
+                    type_key: "pos".into(),
+                    expires_at: None,
+                    created_at: 0,
+                },
+            );
+        }
+
+        let (_, store_a) = state.resolve_scope("token-a").unwrap();
+        let conn_a = store_a.lock().unwrap();
+        conn_a
+            .execute_batch(
+                "CREATE TABLE scope_probe (value TEXT NOT NULL); INSERT INTO scope_probe VALUES ('A');",
+            )
+            .unwrap();
+        drop(conn_a);
+
+        let (_, store_b) = state.resolve_scope("token-b").unwrap();
+        let conn_b = store_b.lock().unwrap();
+        let table_count: i64 = conn_b
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'scope_probe'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(table_count, 0, "store B must not see store A data");
+        drop(conn_b);
+        drop(state);
+        let _ = std::fs::remove_dir_all(test_dir);
     }
 
     #[test]

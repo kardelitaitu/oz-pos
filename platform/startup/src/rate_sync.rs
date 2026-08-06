@@ -141,7 +141,9 @@ impl RateSyncDaemon {
         let db_clone = db.clone();
         let (enabled, base_currency, interval_minutes) =
             match tokio::task::spawn_blocking(move || {
-                let conn = db_clone.lock().unwrap();
+                // RUST-07: recover from a poisoned lock by reusing the guard
+                // (the Connection itself is still usable) instead of panicking.
+                let conn = db_clone.lock().unwrap_or_else(|e| e.into_inner());
                 let enabled =
                     oz_core::settings::Settings::is_rate_sync_enabled(&conn).unwrap_or(false);
                 let base = oz_core::settings::Settings::get_rate_sync_base_currency(&conn)
@@ -221,7 +223,9 @@ impl RateSyncDaemon {
         let base_inner = base.clone();
         let date_inner = effective_date.clone();
         let result = tokio::task::spawn_blocking(move || {
-            let conn = db_clone.lock().unwrap();
+            // RUST-07: recover from a poisoned lock by reusing the guard
+            // (the Connection itself is still usable) instead of panicking.
+            let conn = db_clone.lock().unwrap_or_else(|e| e.into_inner());
             let repo = CurrencyRepository::new(&conn);
             let mut updated = 0usize;
             for (to_currency, rate) in &rates {

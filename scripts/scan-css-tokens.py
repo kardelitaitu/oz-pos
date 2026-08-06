@@ -17,8 +17,10 @@ from collections import defaultdict
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-TOKENS_FILE = PROJECT_ROOT / "ui" / "src" / "styles" / "tokens.css"
-THEME_TOKENS_FILE = PROJECT_ROOT / "ui" / "src" / "frontend" / "themes" / "tokens.css"
+# THM-01: the design tokens live in ui/src/frontend/themes/tokens.css.
+# (The old ui/src/styles/tokens.css path never existed — the scanner
+# errored out immediately and could never run.)
+TOKENS_FILE = PROJECT_ROOT / "ui" / "src" / "frontend" / "themes" / "tokens.css"
 UI_SRC_DIR = PROJECT_ROOT / "ui" / "src"
 EXCLUDE_DIRS = {"node_modules"}
 
@@ -146,33 +148,21 @@ def main():
     print("=" * 72)
     print()
 
-    # Parse tokens from all token sources
+    # Parse tokens from the single source of truth (THM-01 path fix)
     if not TOKENS_FILE.exists():
         print(f"ERROR: tokens.css not found at {TOKENS_FILE}")
         sys.exit(1)
 
     tokens = parse_tokens(TOKENS_FILE)
-    print(f"[TOKENS] Tokens from styles/tokens.css: {len(tokens)}")
-
-    # Also parse frontend/themes/tokens.css (has POS-domain additions)
-    if THEME_TOKENS_FILE.exists():
-        theme_tokens = parse_tokens(THEME_TOKENS_FILE)
-        # Merge theme tokens (they may add new ones or override existing)
-        before = len(tokens)
-        tokens.update(theme_tokens)
-        added = len(tokens) - before
-        print(f"[TOKENS] Tokens from frontend/themes/tokens.css: {len(theme_tokens)} ({added} new, rest overlap)")
-        print(f"[TOKENS] Total merged unique tokens: {len(tokens)}")
-    else:
-        print(f"[TOKENS] frontend/themes/tokens.css not found, skipping")
+    print(f"[TOKENS] Tokens from frontend/themes/tokens.css: {len(tokens)}")
     print()
 
     known_tokens = set(tokens.keys())
 
     # Find all CSS files
     css_files = find_all_css_files(UI_SRC_DIR)
-    css_files = [f for f in css_files if f.resolve() != TOKENS_FILE.resolve() and f.resolve() != THEME_TOKENS_FILE.resolve()]
-    print(f"[FILES] CSS files scanned (excluding both tokens.css files): {len(css_files)}")
+    css_files = [f for f in css_files if f.resolve() != TOKENS_FILE.resolve()]
+    print(f"[FILES] CSS files scanned (excluding tokens.css): {len(css_files)}")
     print()
 
     # Scan for var() references
@@ -254,10 +244,8 @@ def main():
     print()
 
     tokens_css_refs: dict[str, int] = defaultdict(int)
-    # Count self-references in both token definition files
+    # Count self-references in the token definition file
     token_texts = [TOKENS_FILE.read_text(encoding="utf-8")]
-    if THEME_TOKENS_FILE.exists():
-        token_texts.append(THEME_TOKENS_FILE.read_text(encoding="utf-8"))
     for text in token_texts:
         for m in VAR_REF_RE.finditer(text):
             token_name = m.group(1)

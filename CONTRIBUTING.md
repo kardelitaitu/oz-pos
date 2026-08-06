@@ -180,6 +180,33 @@ Be specific in your review comments. "This is wrong" is not actionable; "This Mo
 
 ---
 
+## Flaky tests (AUDIT-27 CI-09)
+
+Flaky tests are detected with `scripts/report-flaky.sh` (runs the suite N
+`--runs` times and lists tests that fail intermittently). The nightly
+`flaky-detect` job runs it on a schedule and uploads the report.
+
+Quarantining a test is a **documented, temporary, enforced** action — it is
+not a permanent exclusion:
+
+1. **Investigate first.** Re-run the test a few times and look for a root
+   cause (race, shared state, timing, network). Fixing is always preferred.
+2. **Quarantine via the manifest only.** Add an entry to
+   `scripts/flaky-quarantine.json` with `test`, `owner`, `issue` (URL or
+   `#NN`), `reason`, `date`, and `expiry`. Optionally tag the test with
+   `#[cfg_attr(feature = "slow-tests", ignore)]` as the report suggests.
+3. **CI enforces the loop.** The `flaky-quarantine` job (required in CI)
+   runs `scripts/verify-flaky-quarantine.py`, which **fails** if an entry is
+   expired, missing an issue, or missing an owner — forcing re-investigation.
+4. **Critical-path tests cannot be quarantined silently.** If a test
+   covers a critical path, open the issue and get review sign-off on the
+   quarantine before adding it.
+
+A quarantined test is a debt item: it must be fixed before the entry's
+`expiry`, at which point the gate fails until it is renewed or resolved.
+
+---
+
 ## Reporting issues
 
 Open a GitHub issue with:

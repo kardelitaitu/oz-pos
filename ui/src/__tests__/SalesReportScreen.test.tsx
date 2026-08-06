@@ -478,7 +478,7 @@ describe('SalesReportScreen', () => {
     fireEvent.change(startInput, { target: { value: '2026-06-01' } });
 
     await waitFor(() => {
-      expect(mockGetDailyRevenue).toHaveBeenCalledWith('2026-06-01', expect.any(String));
+      expect(mockGetDailyRevenue).toHaveBeenCalledWith('2026-06-01', expect.any(String), '');
     });
   });
 
@@ -496,7 +496,7 @@ describe('SalesReportScreen', () => {
     fireEvent.change(endInput, { target: { value: '2026-07-24' } });
 
     await waitFor(() => {
-      expect(mockGetDailyRevenue).toHaveBeenCalledWith(expect.any(String), '2026-07-24');
+      expect(mockGetDailyRevenue).toHaveBeenCalledWith(expect.any(String), '2026-07-24', '');
     });
   });
 

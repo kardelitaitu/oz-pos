@@ -91,6 +91,18 @@
   opacity: 0.5;
 }
 
+.customer-mgmt-load-error-title {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg);
+}
+
+.customer-mgmt-load-error-detail {
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+  max-width: 32rem;
+  overflow-wrap: anywhere;
+}
+
 /* ── Table ────────────────────────────────────────────────────────── */
 
 .customer-mgmt-table-wrap {
@@ -172,10 +184,14 @@
   justify-content: flex-end;
 }
 
+/* CUST-08: guaranteed 44px touch targets while keeping compact visual
+   styling — min-height/min-width drive the hit area, padding stays small. */
 .customer-mgmt-action-btn {
   background: none;
   border: 1px solid var(--color-border);
   padding: var(--space-1) var(--space-2);
+  min-height: 2.75rem; /* 44px */
+  min-width: 2.75rem; /* 44px */
   border-radius: var(--radius-md);
   font-size: var(--text-xs);
   cursor: pointer;
@@ -211,6 +227,12 @@
   color: var(--color-fg-secondary);
 }
 
+.customer-mgmt-field-error {
+  font-size: var(--text-xs);
+  color: var(--color-danger);
+  margin: 0;
+}
+
 .customer-mgmt-input {
   padding: var(--space-2) var(--space-3);
   font-size: var(--text-base);
@@ -244,4 +266,170 @@
   .customer-mgmt-input {
     transition: border-color var(--duration-150) var(--ease-out), box-shadow var(--duration-150) var(--ease-out);
   }
+}
+
+/* ── Search status (CUST-06) ─────────────────────────────────────── */
+
+.customer-mgmt-search-status {
+  font-size: var(--text-sm);
+  color: var(--color-fg-tertiary);
+  margin: var(--space-1) var(--space-3) var(--space-2);
+}
+
+/* ── History modal (CUST-05) ─────────────────────────────────────── */
+
+.customer-mgmt-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--color-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal);
+  padding: var(--space-4);
+}
+
+.customer-mgmt-history {
+  /* Positioned ancestor for the noise-dither ::after (inset: 0) — the
+     overlay must resolve against the dialog, not the fixed overlay. */
+  position: relative;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  width: min(34rem, 100%);
+  max-height: min(80vh, 40rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.customer-mgmt-history-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.customer-mgmt-history-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg);
+}
+
+.customer-mgmt-history-subtitle {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+}
+
+.customer-mgmt-history-close {
+  flex-shrink: 0;
+}
+
+.customer-mgmt-history-body {
+  padding: var(--space-4);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.customer-mgmt-history-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-8) var(--space-2);
+  color: var(--color-fg-secondary);
+  text-align: center;
+}
+
+.customer-mgmt-history-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.customer-mgmt-history-section-title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.customer-mgmt-history-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.customer-mgmt-history-grid dt {
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.customer-mgmt-history-grid dd {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg);
+}
+
+.customer-mgmt-history-empty-note {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-fg-tertiary);
+}
+
+.customer-mgmt-history-sales {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.customer-mgmt-history-sale {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+}
+
+.customer-mgmt-history-sale-meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+}
+
+.customer-mgmt-history-sale-date {
+  font-size: var(--text-sm);
+  color: var(--color-fg);
+}
+
+.customer-mgmt-history-sale-status {
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
+  text-transform: capitalize;
+}
+
+.customer-mgmt-history-sale-amount {
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg);
+  white-space: nowrap;
 }

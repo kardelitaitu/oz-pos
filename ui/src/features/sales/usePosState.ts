@@ -74,9 +74,9 @@ export function usePosState() {
     setLines((prev) => prev.filter((l) => l.id !== lineId));
   }, []);
 
-  /** Update the quantity of a line. */
+  /** Update the quantity of a line. Non-positive quantities are rejected (use removeLine instead). */
   const updateQty = useCallback((lineId: LineId, qty: number) => {
-    if (qty < 1) return;
+    if (qty <= 0) return;
     setLines((prev) =>
       prev.map((l) => (l.id === lineId ? { ...l, qty } : l)),
     );
@@ -249,6 +249,7 @@ export function usePosState() {
     setDiscountLabel('');
     setTipPercentState(0);
     setServiceChargeEnabled(false);
+    setServiceChargePercentState(SERVICE_CHARGE_DEFAULT_PERCENT);
   }, []);
 
   return {

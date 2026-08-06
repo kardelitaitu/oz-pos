@@ -34,11 +34,16 @@ hex = "0.4"
 lettre = { workspace = true }
 console-subscriber = { workspace = true, optional = true }
 
-prometheus = "0.13"
+prometheus = "0.14"
 
 [features]
 default = []
 console = ["dep:console-subscriber"]
+
+[build-dependencies]
+# Embeds the asInvoker application manifest into the Windows exe (see
+# build.rs + app.manifest + app.rc). No-op on non-Windows targets.
+embed-resource = "2"
 
 [dev-dependencies]
 tempfile = "3"

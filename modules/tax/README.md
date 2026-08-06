@@ -25,7 +25,7 @@ The Tax module owns the tax configuration vertical. It handles tax rate CRUD, pr
 - **API** — TypeScript API client (`ui/src/api/tax.ts`)
 - **Locale** — Fluent translation strings (`ui/src/locales/*/tax.ftl`)
 
-In the current phase, these files remain in their original locations. They will be physically moved into `modules/tax/` in subsequent phases.
+This crate is the **contractual layer** for the tax vertical: it owns the canonical domain types (`TaxRate`, `RoundingMode`), which `oz-core` re-exports. The implementation layers above remain in their original locations, and the boundary between this crate and those layers is pinned by the cross-layer contract tests in `modules/tax/tests/boundary_contract.rs` (manifest registration ↔ type identity ↔ DB behaviour parity ↔ serde wire shape). A future phase may physically move the implementation into this crate as the module system matures.
 
 ## Lifecycle
 

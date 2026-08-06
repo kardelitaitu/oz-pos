@@ -35,6 +35,9 @@ const ESSENTIAL_KEYFRAMES = new Set([
   // Status / connection
   'pulse', 'kds-pulse', 'shift-pulse', 'table-occupied-pulse',
   'ws-dot-pulse', 'ws-glow-breath',
+  // New-ticket arrival highlight (functional feedback — must pulse to
+  // catch the kitchen's attention when a ticket is sent)
+  'kds-new-ticket',
   // Tooltip / toast
   'toast-slide-in', 'ctx-menu-enter',
   // Update banner (functional — must show/hide)

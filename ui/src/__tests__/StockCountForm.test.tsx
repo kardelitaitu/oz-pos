@@ -85,6 +85,7 @@ describe('StockCountForm', () => {
 
     expect(mockCreate).toHaveBeenCalledTimes(1);
     expect(mockCreate).toHaveBeenCalledWith(
+      'mock-session-token',
       expect.objectContaining({ countType: 'full' }),
     );
 
@@ -104,6 +105,7 @@ describe('StockCountForm', () => {
     await userEvent.click(screen.getByText('Start Count'));
 
     expect(mockCreate).toHaveBeenCalledWith(
+      'mock-session-token',
       expect.objectContaining({ countType: 'spot', notes: 'Urgent check' }),
     );
   });
@@ -116,7 +118,7 @@ describe('StockCountForm', () => {
     await userEvent.click(screen.getByText('Start Count'));
 
     await vi.waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('Server error');
+      expect(screen.getByRole('alert')).toHaveTextContent('Failed to create count');
     });
   });
 

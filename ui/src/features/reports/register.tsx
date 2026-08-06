@@ -1,11 +1,12 @@
+import { lazy } from 'react';
 import { registerPage } from '@/platform/ui/page-registry';
 import { registerNavItem } from '@/platform/ui/menu-registry';
 import { icon } from '@/platform/ui/icon';
-import DashboardScreen from './DashboardScreen';
-import SalesReportScreen from './SalesReportScreen';
-import InventoryReportScreen from './InventoryReportScreen';
-import MenuEngineeringScreen from './MenuEngineeringScreen';
-import CustomReportScreen from './CustomReportScreen';
+const DashboardScreen = lazy(() => import('./DashboardScreen'));
+const SalesReportScreen = lazy(() => import('./SalesReportScreen'));
+const InventoryReportScreen = lazy(() => import('./InventoryReportScreen'));
+const MenuEngineeringScreen = lazy(() => import('./MenuEngineeringScreen'));
+const CustomReportScreen = lazy(() => import('./CustomReportScreen'));
 
 export function registerReportsFeature() {
   registerPage({ route: 'dashboard', component: DashboardScreen, label: 'Dashboard' });

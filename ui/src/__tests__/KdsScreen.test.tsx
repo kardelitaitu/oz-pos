@@ -7,21 +7,25 @@ import KdsScreen from '@/features/kds/KdsScreen';
 import kdsFtl from '@/locales/kds.ftl?raw';
 import type { KdsOrder } from '@/api/kds';
 
-const { mockGetKdsQueue, mockUpdateKdsStatus, mockUseTicketSla, mockPlayAlert, mockUseWorkspaceScope } = vi.hoisted(() => ({
+const { mockGetKdsQueue, mockUpdateKdsStatus, mockListKdsOrdersScoped, mockGetKdsOrderLines, mockUseTicketSla, mockPlayAlert, mockSpeak, mockUseWorkspaceScope } = vi.hoisted(() => ({
   mockGetKdsQueue: vi.fn(),
   mockUpdateKdsStatus: vi.fn(),
+  mockListKdsOrdersScoped: vi.fn().mockResolvedValue([]),
+  mockGetKdsOrderLines: vi.fn().mockResolvedValue([]),
   mockUseTicketSla: vi.fn((): { level: 'green' | 'yellow' | 'red'; elapsedSeconds: number; display: string } => ({
     level: 'green',
     elapsedSeconds: 120,
     display: '2m 0s',
   })),
   mockPlayAlert: vi.fn(),
+  mockSpeak: vi.fn(),
   mockUseWorkspaceScope: vi.fn<() => { storeId: string; instanceId: string; typeKey: string } | null>(() => null),
 }));
 
 vi.mock('@/api/kds', () => ({
   getKdsQueue: (_userId: string) => mockGetKdsQueue(),
   getKdsQueueScoped: (_token: string, _userId: string) => mockGetKdsQueue(),
+  listKdsOrdersScoped: (_token: string, _status: string) => mockListKdsOrdersScoped(),
   updateKdsStatus: (_userId: string, id: string, status: string) =>
     mockUpdateKdsStatus(id, status),
   updateKdsStatusScoped: (
@@ -29,6 +33,7 @@ vi.mock('@/api/kds', () => ({
     id: string,
     status: string,
   ) => mockUpdateKdsStatus(id, status),
+  getKdsOrderLinesScoped: (_token: string, _orderId: string) => mockGetKdsOrderLines(),
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -45,6 +50,7 @@ vi.mock('@/frontend/shared/useSound', () => ({
     playBeep: vi.fn(),
     playError: vi.fn(),
     playSuccess: vi.fn(),
+    speak: mockSpeak,
     setSoundEnabled: vi.fn(),
   }),
 }));
@@ -97,6 +103,8 @@ function makeOrder(overrides: Partial<KdsOrder> = {}): KdsOrder {
     prep_time_seconds: 0,
     kitchen_zone: null,
     notes: '',
+    table_number: null,
+    priority: false,
     ...overrides,
   };
 }
@@ -104,6 +112,7 @@ function makeOrder(overrides: Partial<KdsOrder> = {}): KdsOrder {
 describe('KdsScreen', () => {
   beforeEach(() => {
     mockGetKdsQueue.mockResolvedValue([]);
+    mockSpeak.mockClear();
   });
 
   it('renders the title', async () => {
@@ -207,10 +216,13 @@ describe('KdsScreen', () => {
     );
   });
 
-  it('displays error when getKdsQueue fails', async () => {
+  it('shows offline banner when getKdsQueue fails', async () => {
     mockGetKdsQueue.mockRejectedValue(new Error('Network down'));
     renderScreen();
-    await waitFor(() => expect(screen.getByText('Network down')).toBeDefined());
+    // The offline banner should show instead of the raw error.
+    await waitFor(() => {
+      expect(document.querySelector('.kds-offline-banner')).not.toBeNull();
+    });
   });
 
   it('shows time ago on tickets', async () => {
@@ -250,7 +262,8 @@ describe('KdsScreen', () => {
     ]);
     renderScreen();
     await waitFor(() => {
-      // All three columns should be empty
+      // Cancelled tickets are terminal history — the board is truly empty
+      // (never surfaces on the kitchen board, history panel only).
       const empties = screen.getAllByText('No orders yet');
       expect(empties.length).toBe(3);
     });
@@ -393,5 +406,258 @@ describe('KdsScreen', () => {
     // Header count should show 2 orders
     const countEl = document.querySelector('.kds-order-count');
     expect(countEl?.textContent).toMatch(/2/);
+  });
+
+  // ── 2d: Keyboard shortcuts tests ─────────────────────────────────
+
+  it('selects the first order when pressing key 1', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending', display_number: 101 }),
+      makeOrder({ id: 'o-2', status: 'pending', display_number: 102 }),
+    ]);
+    mockUpdateKdsStatus.mockResolvedValue({});
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#101')).toBeDefined());
+
+    const kds = document.querySelector('.kds')!;
+    kds.dispatchEvent(new KeyboardEvent('keydown', { key: '1', bubbles: true }));
+
+    // First ticket should have selected class
+    await waitFor(() => {
+      const tickets = document.querySelectorAll('.kds-ticket');
+      expect(tickets[0]?.classList.contains('kds-ticket--selected')).toBe(true);
+      expect(tickets[1]?.classList.contains('kds-ticket--selected')).toBe(false);
+    });
+  });
+
+  it('selects the second order when pressing key 2', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending', display_number: 101 }),
+      makeOrder({ id: 'o-2', status: 'pending', display_number: 102 }),
+    ]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#101')).toBeDefined());
+
+    const kds = document.querySelector('.kds')!;
+    kds.dispatchEvent(new KeyboardEvent('keydown', { key: '2', bubbles: true }));
+
+    await waitFor(() => {
+      const tickets = document.querySelectorAll('.kds-ticket');
+      expect(tickets[0]?.classList.contains('kds-ticket--selected')).toBe(false);
+      expect(tickets[1]?.classList.contains('kds-ticket--selected')).toBe(true);
+    });
+  });
+
+  it('advances selected order when pressing Space', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending' }),
+    ]);
+    mockUpdateKdsStatus.mockResolvedValue({});
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#101')).toBeDefined());
+
+    const kds = document.querySelector('.kds')!;
+    // Select the first order
+    kds.dispatchEvent(new KeyboardEvent('keydown', { key: '1', bubbles: true }));
+    // Then advance it with Space
+    await waitFor(() => {
+      expect(document.querySelector('.kds-ticket--selected')).not.toBeNull();
+    });
+    kds.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+
+    await waitFor(() =>
+      expect(mockUpdateKdsStatus).toHaveBeenCalledWith('o-1', 'preparing'),
+    );
+  });
+
+  it('deselects on Escape key', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending' }),
+    ]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#101')).toBeDefined());
+
+    const kds = document.querySelector('.kds')!;
+    // Select first order then deselect
+    kds.dispatchEvent(new KeyboardEvent('keydown', { key: '1', bubbles: true }));
+    await waitFor(() => {
+      expect(document.querySelector('.kds-ticket--selected')).not.toBeNull();
+    });
+    kds.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await waitFor(() => {
+      expect(document.querySelector('.kds-ticket--selected')).toBeNull();
+    });
+  });
+
+  // ── 3a: Zone-switching tests ───────────────────────────────────
+
+  it('shows zone chips when orders have kitchen zones', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending', display_number: 101, kitchen_zone: 'Grill' }),
+      makeOrder({ id: 'o-2', status: 'pending', display_number: 102, kitchen_zone: 'Fry' }),
+    ]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#101')).toBeDefined());
+
+    // Should show "All" chip and both zone chips
+    expect(screen.getByText('All')).toBeDefined();
+    expect(screen.getByText('Grill')).toBeDefined();
+    expect(screen.getByText('Fry')).toBeDefined();
+  });
+
+  it('hides zone chips when no orders have kitchen zones', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending', kitchen_zone: null }),
+    ]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#101')).toBeDefined());
+
+    // "All" chip should NOT be shown since the zone bar is hidden entirely
+    expect(screen.queryByText('All')).toBeNull();
+  });
+
+  it('activates clicked zone chip', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending', display_number: 101, kitchen_zone: 'Grill' }),
+      makeOrder({ id: 'o-2', status: 'pending', display_number: 102, kitchen_zone: 'Fry' }),
+    ]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#101')).toBeDefined());
+
+    // Click the "Grill" zone chip
+    await userEvent.click(screen.getByText('Grill'));
+
+    // The Grill chip should have the active class (zones sorted: Fry, Grill → index 2)
+    await waitFor(() => {
+      const chips = document.querySelectorAll('.kds-zone-chip');
+      expect(chips[0]?.classList.contains('kds-zone-chip--active')).toBe(false);
+      expect(chips[2]?.classList.contains('kds-zone-chip--active')).toBe(true);
+    });
+  });
+
+  it('resets to All zone when All chip is clicked', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending', display_number: 101, kitchen_zone: 'Grill' }),
+    ]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#101')).toBeDefined());
+
+    // First click Grill to activate a specific zone
+    await userEvent.click(screen.getByText('Grill'));
+    await waitFor(() => {
+      expect(screen.getByText('Grill').closest('.kds-zone-chip')?.classList.contains('kds-zone-chip--active')).toBe(true);
+    });
+
+    // Then click All to reset
+    await userEvent.click(screen.getByText('All'));
+    await waitFor(() => {
+      expect(screen.getByText('All').closest('.kds-zone-chip')?.classList.contains('kds-zone-chip--active')).toBe(true);
+      expect(screen.getByText('Grill').closest('.kds-zone-chip')?.classList.contains('kds-zone-chip--active')).toBe(false);
+    });
+  });
+
+  // ── 2b: History view tests ─────────────────────────────────────
+
+  it('renders history toggle button', async () => {
+    mockGetKdsQueue.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      const toggle = document.querySelector('.kds-history-toggle');
+      expect(toggle).not.toBeNull();
+    });
+  });
+
+  it('shows history panel when toggle is clicked', async () => {
+    mockGetKdsQueue.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      const toggle = document.querySelector('.kds-history-toggle');
+      expect(toggle).not.toBeNull();
+    });
+
+    // Click the history toggle
+    const toggle = document.querySelector('.kds-history-toggle') as HTMLButtonElement;
+    await userEvent.click(toggle);
+
+    // History panel should render
+    await waitFor(() => {
+      expect(document.querySelector('.kds-history')).not.toBeNull();
+    });
+  });
+
+  // ── 3d: Voice callout tests ────────────────────────────────────
+
+  it('announces order up via TTS when ticket advances to ready', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'preparing', display_number: 42 }),
+    ]);
+    mockUpdateKdsStatus.mockResolvedValue({});
+
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#42')).toBeDefined());
+
+    const ticket = document.querySelector('.kds-ticket')!;
+    await userEvent.click(ticket);
+
+    await waitFor(() =>
+      expect(mockUpdateKdsStatus).toHaveBeenCalledWith('o-1', 'ready'),
+    );
+
+    // Should have called speak with the TTS string
+    await waitFor(() =>
+      expect(mockSpeak).toHaveBeenCalledWith('Order 42 up!'),
+    );
+  });
+
+  it('does not announce when advancing to preparing (only on ready)', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending', display_number: 42 }),
+    ]);
+    mockUpdateKdsStatus.mockResolvedValue({});
+
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#42')).toBeDefined());
+
+    const ticket = document.querySelector('.kds-ticket')!;
+    await userEvent.click(ticket);
+
+    await waitFor(() =>
+      expect(mockUpdateKdsStatus).toHaveBeenCalledWith('o-1', 'preparing'),
+    );
+
+    // speak should NOT have been called (not advancing to ready)
+    expect(mockSpeak).not.toHaveBeenCalled();
+  });
+
+  it('navigates selection with ArrowDown and ArrowUp', async () => {
+    mockGetKdsQueue.mockResolvedValue([
+      makeOrder({ id: 'o-1', status: 'pending' }),
+      makeOrder({ id: 'o-2', status: 'pending', display_number: 102 }),
+      makeOrder({ id: 'o-3', status: 'pending', display_number: 103 }),
+    ]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('#101')).toBeDefined());
+
+    const kds = document.querySelector('.kds')!;
+    // Start at second order
+    kds.dispatchEvent(new KeyboardEvent('keydown', { key: '2', bubbles: true }));
+    await waitFor(() => {
+      const tickets = document.querySelectorAll('.kds-ticket');
+      expect(tickets[1]?.classList.contains('kds-ticket--selected')).toBe(true);
+    });
+
+    // ArrowDown goes to third
+    kds.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    await waitFor(() => {
+      const tickets = document.querySelectorAll('.kds-ticket');
+      expect(tickets[2]?.classList.contains('kds-ticket--selected')).toBe(true);
+    });
+
+    // ArrowUp goes back to second
+    kds.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    await waitFor(() => {
+      const tickets = document.querySelectorAll('.kds-ticket');
+      expect(tickets[1]?.classList.contains('kds-ticket--selected')).toBe(true);
+    });
   });
 });

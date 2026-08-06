@@ -164,11 +164,14 @@ describe('useProducts', () => {
 
     it('sets error message when API throws', async () => {
       mocks.listProducts.mockRejectedValue(new Error('IPC timeout'));
+      // ERR-05: the localized copy (what getString returns) is surfaced —
+      // never the raw backend message.
+      mocks.getString.mockReturnValue('Failed to load products');
 
       const { result } = renderHook(() => useProducts());
 
       await waitFor(() => {
-        expect(result.current.error).toBe('IPC timeout');
+        expect(result.current.error).toBe('Failed to load products');
         expect(result.current.usingFallback).toBe(true);
       });
     });
@@ -181,6 +184,62 @@ describe('useProducts', () => {
       await waitFor(() => {
         expect(result.current.usingFallback).toBe(true);
         expect(result.current.products.length).toBeGreaterThan(0);
+      });
+    });
+  });
+
+  describe('production mode (LOAD-03)', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('does NOT expose demo products when listProducts rejects in a production build', async () => {
+      // Simulate a production build: DEV=false and VITE_DEMO_MODE unset.
+      vi.stubEnv('DEV', false);
+      vi.stubEnv('VITE_DEMO_MODE', undefined);
+      mocks.listProducts.mockRejectedValue(new Error('IPC unavailable'));
+
+      const { result } = renderHook(() => useProducts());
+
+      await waitFor(() => {
+        expect(result.current.usingFallback).toBe(false);
+        expect(result.current.products).toEqual([]);
+        expect(result.current.error).not.toBeNull();
+      });
+    });
+
+    it('does NOT substitute sample products for an empty DB in a production build', async () => {
+      vi.stubEnv('DEV', false);
+      vi.stubEnv('VITE_DEMO_MODE', undefined);
+      mocks.listProducts.mockResolvedValue([]);
+
+      const { result } = renderHook(() => useProducts());
+
+      await waitFor(() => {
+        expect(result.current.usingFallback).toBe(false);
+        expect(result.current.products).toEqual([]);
+        expect(result.current.error).toBeNull();
+      });
+    });
+
+    it('surfaces a Retry action that refetches after a production failure', async () => {
+      vi.stubEnv('DEV', false);
+      vi.stubEnv('VITE_DEMO_MODE', undefined);
+      mocks.listProducts.mockRejectedValueOnce(new Error('IPC unavailable'));
+      mocks.listProducts.mockResolvedValueOnce([makeProductDto()]);
+
+      const { result } = renderHook(() => useProducts());
+
+      await waitFor(() => {
+        expect(result.current.products).toEqual([]);
+        expect(result.current.error).not.toBeNull();
+      });
+
+      act(() => result.current.reload());
+
+      await waitFor(() => {
+        expect(result.current.products).toHaveLength(1);
+        expect(result.current.error).toBeNull();
       });
     });
   });

@@ -21,12 +21,16 @@ services:
     ports:
       - "8080:8080"
     environment:
-      OZ_LICENSE_PRIVATE_KEY: ${OZ_LICENSE_PRIVATE_KEY}
+      # REQUIRED — Compose fails fast if unset (DOCKER-04). Generate keys:
+      # bash scripts/generate-license-keys.sh / .\scripts\generate-license-keys.ps1
+      OZ_LICENSE_PRIVATE_KEY: "${OZ_LICENSE_PRIVATE_KEY:?OZ_LICENSE_PRIVATE_KEY is required (generate: bash scripts/generate-license-keys.sh)}"
     volumes:
       - pb_data:/pb/pb_data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/"]
+      # DOCKER-05: use the compiled Go healthcheck binary (the runtime image
+      # does not install curl) — same endpoint contract as the root compose.
+      test: ["CMD", "/pb/healthcheck", "http://localhost:8080/api/health"]
       interval: 15s
       timeout: 5s
       retries: 3

@@ -4,7 +4,7 @@ use rusqlite::params;
 
 use crate::error::CoreError;
 use crate::money::Currency;
-use crate::tax_rate::TaxRate;
+use crate::tax_rate::{RoundingMode, TaxRate};
 use crate::{AuditEntry, Money, Sale, SaleLine, SaleStatus};
 
 use super::Store;
@@ -382,8 +382,9 @@ impl Store<'_> {
             tx.execute(
                 "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor,
                                          currency, line_position, tax_minor, tax_rate_id,
-                                         serial_number)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                                         tax_breakdown_json, serial_number, course,
+                                         modifiers_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
                 rusqlite::params![
                     line.id,
                     line.sale_id,
@@ -395,7 +396,10 @@ impl Store<'_> {
                     line.line_position,
                     line.tax_amount.minor_units,
                     line.tax_rate_id,
+                    line.tax_breakdown_json,
                     line.serial_number,
+                    line.course,
+                    line.modifiers_json,
                 ],
             )?;
         }
@@ -743,8 +747,9 @@ impl Store<'_> {
             tx.execute(
                 "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor,
                                          currency, line_position, tax_minor, tax_rate_id,
-                                         serial_number)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                                         tax_breakdown_json, serial_number, course,
+                                         modifiers_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
                 rusqlite::params![
                     line.id,
                     line.sale_id,
@@ -756,7 +761,10 @@ impl Store<'_> {
                     line.line_position,
                     line.tax_amount.minor_units,
                     line.tax_rate_id,
+                    line.tax_breakdown_json,
                     line.serial_number,
+                    line.course,
+                    line.modifiers_json,
                 ],
             )?;
         }
@@ -951,7 +959,10 @@ impl Store<'_> {
                 currency,
             },
             tax_rate_id: row.get("tax_rate_id")?,
+            tax_breakdown_json: row.get("tax_breakdown_json")?,
             serial_number: row.get("serial_number")?,
+            course: row.get("course")?,
+            modifiers_json: row.get("modifiers_json")?,
         })
     }
 
@@ -989,14 +1000,18 @@ impl Store<'_> {
             })?;
             tx.execute(
                 "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position,
-                                        tax_minor, tax_rate_id, serial_number)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                                        tax_minor, tax_rate_id, tax_breakdown_json,
+                                        serial_number, course, modifiers_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
                 params![
                     line.id, line.sale_id, line.sku, line.qty,
                     line.unit_price.minor_units, line.line_total.minor_units,
                     unit_cur, line.line_position,
                     line.tax_amount.minor_units, line.tax_rate_id,
+                    line.tax_breakdown_json,
                     line.serial_number,
+                    line.course,
+                    line.modifiers_json,
                 ],
             )?;
         }
@@ -1056,6 +1071,141 @@ impl Store<'_> {
             })
         })?;
         rows.map(|r| Ok(r?)).collect()
+    }
+
+    /// List sales visible to one store (soft-scoping layer, migration
+    /// 069/117), most recent first, without line items.
+    ///
+    /// A store sees the shared global sales (`store_id IS NULL`) plus its
+    /// own tagged rows — never another store's rows. In the per-store
+    /// database model every row is NULL, so this degenerates to the global
+    /// list; it is the enforcement surface for shared/cloud databases
+    /// where `store_id` is the soft-scoping column.
+    pub fn list_sales_for_store(&self, store_id: &str) -> Result<Vec<Sale>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, total_minor, currency, line_count, status,
+                    payment_method, tendered_minor, discount_percent, discount_label,
+                    user_id, created_at, updated_at,
+                    subtotal_minor, tax_total_minor, customer_id, version
+             FROM sales
+             WHERE store_id IS NULL OR store_id = ?1
+             ORDER BY created_at DESC",
+        )?;
+        let rows = stmt.query_map(params![store_id], |row| {
+            let cur_str: String = row.get("currency")?;
+            let status_str: String = row.get("status")?;
+            let currency: Currency = cur_str.parse::<Currency>().map_err(|e| {
+                rusqlite::Error::ToSqlConversionFailure(
+                    std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()).into(),
+                )
+            })?;
+            let status = SaleStatus::from_stored_str(&status_str).unwrap_or(SaleStatus::Pending);
+            Ok(Sale {
+                id: row.get("id")?,
+                status,
+                total: Money {
+                    minor_units: row.get("total_minor")?,
+                    currency,
+                },
+                line_count: row.get("line_count")?,
+                currency,
+                payment_method: row.get("payment_method")?,
+                tendered_minor: row.get("tendered_minor")?,
+                discount_percent: row
+                    .get::<_, Option<i64>>("discount_percent")
+                    .unwrap_or(Some(0))
+                    .unwrap_or(0),
+                discount_label: row.get("discount_label")?,
+                user_id: row.get("user_id")?,
+                created_at: row.get("created_at")?,
+                updated_at: row.get("updated_at")?,
+                lines: Vec::new(),
+                subtotal: Money {
+                    minor_units: row.get("subtotal_minor")?,
+                    currency,
+                },
+                tax_total: Money {
+                    minor_units: row.get("tax_total_minor")?,
+                    currency,
+                },
+                customer_id: row.get("customer_id")?,
+                version: row.get("version").unwrap_or(1),
+            })
+        })?;
+        rows.map(|r| Ok(r?)).collect()
+    }
+
+    /// List sales for one customer (most recent first), without line items.
+    ///
+    /// CUST-05: powers the customer history view. The result is bounded and
+    /// sorted explicitly; the total count lets the caller paginate. Returns
+    /// an empty vector (and total 0) when the customer has no sales yet.
+    pub fn list_sales_for_customer(
+        &self,
+        customer_id: &str,
+        limit: u64,
+        offset: u64,
+    ) -> Result<(Vec<Sale>, u64), CoreError> {
+        let bounded = limit.clamp(1, 100);
+        let total: u64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM sales WHERE customer_id = ?1",
+            params![customer_id],
+            |row| row.get(0),
+        )?;
+
+        let mut stmt = self.conn.prepare(
+            "SELECT id, total_minor, currency, line_count, status,
+                    payment_method, tendered_minor, discount_percent, discount_label,
+                    user_id, created_at, updated_at,
+                    subtotal_minor, tax_total_minor, customer_id, version
+             FROM sales WHERE customer_id = ?1
+             ORDER BY created_at DESC LIMIT ?2 OFFSET ?3",
+        )?;
+        let rows = stmt.query_map(params![customer_id, bounded, offset], |row| {
+            let cur_str: String = row.get("currency")?;
+            let status_str: String = row.get("status")?;
+            let currency: Currency = cur_str.parse::<Currency>().map_err(|e| {
+                rusqlite::Error::ToSqlConversionFailure(
+                    std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()).into(),
+                )
+            })?;
+            let status = SaleStatus::from_stored_str(&status_str).unwrap_or(SaleStatus::Pending);
+            Ok(Sale {
+                id: row.get("id")?,
+                status,
+                total: Money {
+                    minor_units: row.get("total_minor")?,
+                    currency,
+                },
+                line_count: row.get("line_count")?,
+                currency,
+                payment_method: row.get("payment_method")?,
+                tendered_minor: row.get("tendered_minor")?,
+                discount_percent: row
+                    .get::<_, Option<i64>>("discount_percent")
+                    .unwrap_or(Some(0))
+                    .unwrap_or(0),
+                discount_label: row.get("discount_label")?,
+                user_id: row.get("user_id")?,
+                created_at: row.get("created_at")?,
+                updated_at: row.get("updated_at")?,
+                lines: Vec::new(),
+                subtotal: Money {
+                    minor_units: row.get("subtotal_minor")?,
+                    currency,
+                },
+                tax_total: Money {
+                    minor_units: row.get("tax_total_minor")?,
+                    currency,
+                },
+                customer_id: row.get("customer_id")?,
+                version: row.get("version").unwrap_or(1),
+            })
+        })?;
+        let items = rows
+            .map(|r| Ok(r?))
+            .collect::<Result<Vec<_>, CoreError>>()?;
+        Ok((items, total))
     }
 
     /// Look up a single sale by id, including all line items.
@@ -1118,7 +1268,8 @@ impl Store<'_> {
 
         let mut line_stmt = self.conn.prepare(
             "SELECT id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position,
-                    tax_minor, tax_rate_id, serial_number
+                    tax_minor, tax_rate_id, tax_breakdown_json, serial_number, course,
+                    modifiers_json
              FROM sale_lines WHERE sale_id = ?1 ORDER BY line_position",
         )?;
         let line_rows = line_stmt.query_map(params![id], Self::row_to_sale_line)?;
@@ -1443,6 +1594,50 @@ impl Store<'_> {
 
 // ── Tax Computation ───────────────────────────────────────────────────
 
+/// Compute the tax contribution for one line/rate pair with integer-safe
+/// arithmetic (TAX-04) and an explicit rounding policy (TAX-05).
+///
+/// Exclusive tax: `base * bps / 10_000`; inclusive tax:
+/// `base * bps / (10_000 + bps)`. Uses checked multiplication and
+/// division so an extreme (bounded) rate or large amount cannot panic
+/// or silently truncate through overflow. The fractional result is then
+/// reduced per `mode` ([`RoundingMode::Truncate`] for legacy behavior,
+/// [`RoundingMode::HalfUp`] as the recommended default).
+fn compute_line_tax(
+    base_minor: i64,
+    rate_bps: i64,
+    is_inclusive: bool,
+    currency: Currency,
+    mode: RoundingMode,
+) -> Result<Money, CoreError> {
+    let numerator = base_minor
+        .checked_mul(rate_bps)
+        .ok_or_else(|| CoreError::Validation {
+            field: "tax",
+            message: "tax multiplication overflow".into(),
+        })?;
+    let divisor = if is_inclusive {
+        10_000i64
+            .checked_add(rate_bps)
+            .ok_or_else(|| CoreError::Validation {
+                field: "rate_bps",
+                message: "inclusive divisor overflow".into(),
+            })?
+    } else {
+        10_000i64
+    };
+    let tax_minor = mode
+        .divide(numerator, divisor)
+        .ok_or_else(|| CoreError::Validation {
+            field: "tax",
+            message: "tax rounding overflow".into(),
+        })?;
+    Ok(Money {
+        minor_units: tax_minor,
+        currency,
+    })
+}
+
 impl Store<'_> {
     /// Compute tax breakdown for a sale in-place.
     ///
@@ -1459,10 +1654,15 @@ impl Store<'_> {
     /// first rate's id in `tax_rate_id` for backward compatibility.
     /// Updates each line's `tax_amount`, then sets `sale.subtotal`
     /// and `sale.tax_total`.
+    ///
+    /// `mode` controls how fractional per-rate results are rounded
+    /// (TAX-05): pass [`RoundingMode::HalfUp`] for new sales and
+    /// [`RoundingMode::Truncate`] when reproducing legacy behavior.
     pub fn compute_sale_tax(
         &self,
         sale: &mut Sale,
         lua_overrides: &[(String, i64, bool)],
+        mode: RoundingMode,
     ) -> Result<(), CoreError> {
         let currency = sale.currency;
         let mut total_tax: Option<Money> = None;
@@ -1471,6 +1671,10 @@ impl Store<'_> {
         for line in &mut sale.lines {
             let line_subtotal = line.line_total;
             let mut line_tax = Money::zero(currency);
+            // TAX-02: per-rate breakdown persisted on the line so multi-rate
+            // detail survives (state + local, etc.) even if a rate is later
+            // archived/renamed. `tax_rate_id` keeps only the FIRST rate id.
+            let mut line_breakdown: Vec<serde_json::Value> = Vec::new();
 
             // Check for a Lua plugin override first.
             let override_idx = lua_overrides
@@ -1480,50 +1684,63 @@ impl Store<'_> {
             if let Some(idx) = override_idx {
                 let (_, rate_bps, is_inclusive) = &lua_overrides[idx];
                 let rbps = *rate_bps;
-                let tax = if *is_inclusive {
-                    let divisor = 10_000 + rbps;
-                    let tax_minor = line_subtotal.minor_units * rbps / divisor;
-                    Money {
-                        minor_units: tax_minor,
-                        currency: line_subtotal.currency,
-                    }
-                } else {
-                    let tax_minor = line_subtotal.minor_units * rbps / 10_000;
-                    Money {
-                        minor_units: tax_minor,
-                        currency: line_subtotal.currency,
-                    }
-                };
+                let tax = compute_line_tax(
+                    line_subtotal.minor_units,
+                    rbps,
+                    *is_inclusive,
+                    line_subtotal.currency,
+                    mode,
+                )?;
                 line_tax = line_tax
                     .checked_add(tax)
-                    .unwrap_or_else(|| Money::zero(currency));
+                    .ok_or_else(|| CoreError::Validation {
+                        field: "tax",
+                        message: "line tax overflow".into(),
+                    })?;
                 // No DB tax_rate_id for override lines.
                 line.tax_rate_id = None;
+                line_breakdown.push(serde_json::json!({
+                    "rate_id": null,
+                    "rate_bps": rbps,
+                    "is_inclusive": *is_inclusive,
+                    "tax_minor": tax.minor_units,
+                }));
             } else {
                 let rates = self.resolve_best_tax_rates_for_sku(&line.sku)?;
 
                 for rate in &rates {
-                    let tax = if rate.is_inclusive {
-                        let divisor = 10_000 + rate.rate_bps;
-                        let tax_minor = line_subtotal.minor_units * rate.rate_bps / divisor;
-                        Money {
-                            minor_units: tax_minor,
-                            currency: line_subtotal.currency,
-                        }
-                    } else {
-                        let tax_minor = line_subtotal.minor_units * rate.rate_bps / 10_000;
-                        Money {
-                            minor_units: tax_minor,
-                            currency: line_subtotal.currency,
-                        }
-                    };
+                    let tax = compute_line_tax(
+                        line_subtotal.minor_units,
+                        rate.rate_bps,
+                        rate.is_inclusive,
+                        line_subtotal.currency,
+                        mode,
+                    )?;
                     line_tax = line_tax
                         .checked_add(tax)
-                        .unwrap_or_else(|| Money::zero(currency));
+                        .ok_or_else(|| CoreError::Validation {
+                            field: "tax",
+                            message: "line tax overflow".into(),
+                        })?;
+                    line_breakdown.push(serde_json::json!({
+                        "rate_id": rate.id,
+                        "rate_bps": rate.rate_bps,
+                        "is_inclusive": rate.is_inclusive,
+                        "tax_minor": tax.minor_units,
+                    }));
                 }
 
                 line.tax_rate_id = rates.first().map(|r| r.id.clone());
             }
+
+            line.tax_breakdown_json =
+                if line_breakdown.is_empty() {
+                    None
+                } else {
+                    Some(serde_json::to_string(&line_breakdown).map_err(|e| {
+                        CoreError::Internal(format!("serializing tax breakdown: {e}"))
+                    })?)
+                };
 
             line.tax_amount = line_tax;
 
@@ -1547,10 +1764,15 @@ impl Store<'_> {
     ///
     /// For each cart line resolves ALL applicable tax rates and sums
     /// their contributions. Returns the total tax amount.
+    ///
+    /// `mode` controls how fractional per-rate results are rounded
+    /// (TAX-05): pass [`RoundingMode::HalfUp`] for new sales and
+    /// [`RoundingMode::Truncate`] when reproducing legacy behavior.
     pub fn compute_cart_tax(
         &self,
         lines: &[CartLineTaxInput],
         currency: Currency,
+        mode: RoundingMode,
     ) -> Result<Money, CoreError> {
         let mut total_tax: Option<Money> = None;
 
@@ -1559,19 +1781,21 @@ impl Store<'_> {
             let rates = self.resolve_best_tax_rates_for_sku(&line.sku)?;
 
             for rate in &rates {
-                let tax_minor = if rate.is_inclusive {
-                    let divisor = 10_000 + rate.rate_bps;
-                    line_total_minor * rate.rate_bps / divisor
-                } else {
-                    line_total_minor * rate.rate_bps / 10_000
-                };
-                let tax = Money {
-                    minor_units: tax_minor,
+                let tax = compute_line_tax(
+                    line_total_minor,
+                    rate.rate_bps,
+                    rate.is_inclusive,
                     currency,
-                };
+                    mode,
+                )?;
                 total_tax = match total_tax {
                     None => Some(tax),
-                    Some(acc) => acc.checked_add(tax),
+                    Some(acc) => {
+                        Some(acc.checked_add(tax).ok_or_else(|| CoreError::Validation {
+                            field: "tax",
+                            message: "cart tax overflow".into(),
+                        })?)
+                    }
                 };
             }
         }
@@ -2318,17 +2542,25 @@ mod tests {
                 line_position: 1,
                 tax_amount: price(0),
                 tax_rate_id: None,
+                tax_breakdown_json: None,
                 serial_number: None,
+                course: None,
+                modifiers_json: None,
             }],
         }
     }
 
+    // TAX-05: tests below that call `compute_sale_tax` with
+    // `RoundingMode::Truncate` pin the historical per-line integer-
+    // truncation results; new golden tests at the end of this section
+    // exercise `HalfUp` (the recommended default).
     #[test]
     fn compute_tax_no_rates() {
         let conn = fresh();
         let s = store(&conn);
         let mut sale = make_single_line_sale("COFFEE", 2, 350);
-        s.compute_sale_tax(&mut sale, &[]).unwrap();
+        s.compute_sale_tax(&mut sale, &[], RoundingMode::Truncate)
+            .unwrap();
         assert_eq!(sale.subtotal.minor_units, 700);
         assert_eq!(sale.tax_total.minor_units, 0);
         assert_eq!(sale.lines[0].tax_amount.minor_units, 0);
@@ -2342,7 +2574,8 @@ mod tests {
         seed_tax_rate(&conn, "VAT 10%", 1000, true, false);
 
         let mut sale = make_single_line_sale("COFFEE", 2, 350);
-        s.compute_sale_tax(&mut sale, &[]).unwrap();
+        s.compute_sale_tax(&mut sale, &[], RoundingMode::Truncate)
+            .unwrap();
         // exclusive: tax = 700 * 1000 / 10000 = 70
         assert_eq!(sale.subtotal.minor_units, 700);
         assert_eq!(sale.tax_total.minor_units, 70);
@@ -2357,7 +2590,8 @@ mod tests {
         seed_tax_rate(&conn, "GST 10%", 1000, true, true);
 
         let mut sale = make_single_line_sale("COFFEE", 2, 350);
-        s.compute_sale_tax(&mut sale, &[]).unwrap();
+        s.compute_sale_tax(&mut sale, &[], RoundingMode::Truncate)
+            .unwrap();
         // inclusive: tax = 700 * 1000 / (10000 + 1000) = 700000 / 11000 = 63
         assert_eq!(sale.subtotal.minor_units, 700);
         assert_eq!(sale.tax_total.minor_units, 63);
@@ -2375,7 +2609,8 @@ mod tests {
             .unwrap();
 
         let mut sale = make_single_line_sale("COFFEE", 1, 1000);
-        s.compute_sale_tax(&mut sale, &[]).unwrap();
+        s.compute_sale_tax(&mut sale, &[], RoundingMode::Truncate)
+            .unwrap();
         // product rate (10%) wins over default (5%): tax = 1000 * 1000 / 10000 = 100
         assert_eq!(sale.tax_total.minor_units, 100);
         assert_eq!(
@@ -2396,7 +2631,8 @@ mod tests {
         seed_product_with_category(&conn, "COFFEE", Some("cat-1"));
 
         let mut sale = make_single_line_sale("COFFEE", 1, 1000);
-        s.compute_sale_tax(&mut sale, &[]).unwrap();
+        s.compute_sale_tax(&mut sale, &[], RoundingMode::Truncate)
+            .unwrap();
         // category rate (8%) wins over default (5%): tax = 1000 * 800 / 10000 = 80
         assert_eq!(sale.tax_total.minor_units, 80);
         assert_eq!(sale.lines[0].tax_rate_id.as_deref(), Some(cat_id.as_str()));
@@ -2418,7 +2654,10 @@ mod tests {
             line_position: 1,
             tax_amount: price(0),
             tax_rate_id: None,
+            tax_breakdown_json: None,
             serial_number: None,
+            course: None,
+            modifiers_json: None,
         };
         let line2 = SaleLine {
             id: uuid::Uuid::now_v7().to_string(),
@@ -2430,7 +2669,10 @@ mod tests {
             line_position: 2,
             tax_amount: price(0),
             tax_rate_id: None,
+            tax_breakdown_json: None,
             serial_number: None,
+            course: None,
+            modifiers_json: None,
         };
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let mut sale = Sale {
@@ -2453,7 +2695,8 @@ mod tests {
             lines: vec![line1, line2],
         };
 
-        s.compute_sale_tax(&mut sale, &[]).unwrap();
+        s.compute_sale_tax(&mut sale, &[], RoundingMode::Truncate)
+            .unwrap();
         // line1: 700 * 1000 / 10000 = 70
         // line2: 450 * 1000 / 10000 = 45
         // total tax = 115
@@ -2470,7 +2713,8 @@ mod tests {
         seed_tax_rate(&conn, "VAT 10%", 1000, true, false);
 
         let mut sale = make_single_line_sale("COFFEE", 2, 350);
-        s.compute_sale_tax(&mut sale, &[]).unwrap();
+        s.compute_sale_tax(&mut sale, &[], RoundingMode::Truncate)
+            .unwrap();
         s.create_sale(&sale).unwrap();
 
         let loaded = s.get_sale(&sale.id).unwrap().unwrap();
@@ -2504,9 +2748,213 @@ mod tests {
             version: 1,
             lines: vec![],
         };
-        s.compute_sale_tax(&mut sale, &[]).unwrap();
+        s.compute_sale_tax(&mut sale, &[], RoundingMode::Truncate)
+            .unwrap();
         assert_eq!(sale.subtotal.minor_units, 0);
         assert_eq!(sale.tax_total.minor_units, 0);
+    }
+
+    // ── TAX-05: Rounding policy golden tests ──────────────────────
+
+    #[test]
+    fn rounding_mode_default_is_half_up() {
+        // TAX-05: HalfUp is the recommended default for new sales;
+        // Truncate is preserved only for legacy reproduction.
+        assert_eq!(RoundingMode::default(), RoundingMode::HalfUp);
+    }
+
+    #[test]
+    fn compute_line_tax_half_up_rounds_fractional_cents() {
+        let c = usd();
+        // 3333 * 1000 / 10000 = 333.3 — below the tie, both modes agree.
+        assert_eq!(
+            compute_line_tax(3333, 1000, false, c, RoundingMode::Truncate)
+                .unwrap()
+                .minor_units,
+            333
+        );
+        assert_eq!(
+            compute_line_tax(3333, 1000, false, c, RoundingMode::HalfUp)
+                .unwrap()
+                .minor_units,
+            333
+        );
+        // 3335 * 1000 / 10000 = 333.5 — the tie: legacy truncates,
+        // HalfUp rounds away from zero to 334.
+        assert_eq!(
+            compute_line_tax(3335, 1000, false, c, RoundingMode::Truncate)
+                .unwrap()
+                .minor_units,
+            333
+        );
+        assert_eq!(
+            compute_line_tax(3335, 1000, false, c, RoundingMode::HalfUp)
+                .unwrap()
+                .minor_units,
+            334
+        );
+    }
+
+    #[test]
+    fn compute_line_tax_half_up_inclusive() {
+        let c = usd();
+        // inclusive 10%: 3350 * 1000 / 11000 = 304.545…
+        assert_eq!(
+            compute_line_tax(3350, 1000, true, c, RoundingMode::Truncate)
+                .unwrap()
+                .minor_units,
+            304
+        );
+        assert_eq!(
+            compute_line_tax(3350, 1000, true, c, RoundingMode::HalfUp)
+                .unwrap()
+                .minor_units,
+            305
+        );
+    }
+
+    #[test]
+    fn compute_tax_multi_rate_line_half_up() {
+        let conn = fresh();
+        let s = store(&conn);
+        let r1 = seed_tax_rate(&conn, "State 3%", 300, false, false);
+        let r2 = seed_tax_rate(&conn, "Local 2%", 200, false, false);
+        seed_product_with_category(&conn, "COFFEE", None);
+        s.set_product_tax_rates("COFFEE", &[r1, r2]).unwrap();
+
+        // base 3335: 3% = 100.05 → 100; 2% = 66.7 → 66 (Truncate) / 67 (HalfUp)
+        let mut sale = make_single_line_sale("COFFEE", 1, 3335);
+        s.compute_sale_tax(&mut sale, &[], RoundingMode::Truncate)
+            .unwrap();
+        assert_eq!(sale.tax_total.minor_units, 166);
+
+        let mut sale2 = make_single_line_sale("COFFEE", 1, 3335);
+        s.compute_sale_tax(&mut sale2, &[], RoundingMode::HalfUp)
+            .unwrap();
+        assert_eq!(sale2.tax_total.minor_units, 167);
+    }
+
+    // TAX-02: the full per-rate breakdown survives on the persisted line,
+    // even though `tax_rate_id` only keeps the first applicable rate.
+    #[test]
+    fn compute_tax_multi_rate_persists_breakdown_json() {
+        let conn = fresh();
+        let s = store(&conn);
+        let r1 = seed_tax_rate(&conn, "State 3%", 300, false, false);
+        let r2 = seed_tax_rate(&conn, "Local 2%", 200, false, false);
+        seed_product_with_category(&conn, "COFFEE", None);
+        s.set_product_tax_rates("COFFEE", &[r1.clone(), r2.clone()])
+            .unwrap();
+
+        let mut sale = make_single_line_sale("COFFEE", 1, 3335);
+        s.compute_sale_tax(&mut sale, &[], RoundingMode::Truncate)
+            .unwrap();
+
+        // In-memory: breakdown carries BOTH rates with their tax amounts.
+        let json = sale.lines[0].tax_breakdown_json.as_deref().unwrap();
+        let breakdown: Vec<serde_json::Value> = serde_json::from_str(json).unwrap();
+        assert_eq!(breakdown.len(), 2);
+        assert_eq!(breakdown[0]["rate_id"], serde_json::json!(r1));
+        assert_eq!(breakdown[0]["tax_minor"], 100);
+        assert_eq!(breakdown[1]["rate_id"], serde_json::json!(r2));
+        assert_eq!(breakdown[1]["tax_minor"], 66);
+        // Legacy single-id field still points at the first rate.
+        assert_eq!(sale.lines[0].tax_rate_id.as_deref(), Some(r1.as_str()));
+
+        // Persist + reload: breakdown must survive the round-trip.
+        s.create_sale(&sale).unwrap();
+        let loaded = s.get_sale(&sale.id).unwrap().unwrap();
+        let loaded_json = loaded.lines[0].tax_breakdown_json.as_deref().unwrap();
+        let loaded_breakdown: Vec<serde_json::Value> = serde_json::from_str(loaded_json).unwrap();
+        assert_eq!(loaded_breakdown, breakdown);
+    }
+
+    // TAX-02: Lua override lines get a breakdown entry with a null rate_id.
+    #[test]
+    fn compute_tax_override_persists_breakdown_with_null_rate_id() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_product_with_category(&conn, "COFFEE", None);
+
+        let mut sale = make_single_line_sale("COFFEE", 2, 350);
+        s.compute_sale_tax(
+            &mut sale,
+            &[("COFFEE".into(), 1000, false)],
+            RoundingMode::Truncate,
+        )
+        .unwrap();
+
+        let json = sale.lines[0].tax_breakdown_json.as_deref().unwrap();
+        let breakdown: Vec<serde_json::Value> = serde_json::from_str(json).unwrap();
+        assert_eq!(breakdown.len(), 1);
+        assert!(breakdown[0]["rate_id"].is_null());
+        assert_eq!(breakdown[0]["rate_bps"], 1000);
+        assert_eq!(breakdown[0]["tax_minor"], 70);
+        assert!(sale.lines[0].tax_rate_id.is_none());
+    }
+
+    #[test]
+    fn compute_cart_tax_zero_decimal_currency_jpy() {
+        let conn = fresh();
+        let s = store(&conn);
+        let jpy: Currency = "JPY".parse().unwrap();
+        seed_tax_rate(&conn, "Consumption Tax 10%", 1000, true, false);
+
+        let lines = vec![CartLineTaxInput {
+            sku: "COFFEE".into(),
+            qty: 1,
+            unit_price_minor: 3335,
+        }];
+        // JPY has no sub-unit: 3335 yen * 10% = 333.5 yen.
+        let half_up = s
+            .compute_cart_tax(&lines, jpy, RoundingMode::HalfUp)
+            .unwrap();
+        assert_eq!(half_up.minor_units, 334);
+        let trunc = s
+            .compute_cart_tax(&lines, jpy, RoundingMode::Truncate)
+            .unwrap();
+        assert_eq!(trunc.minor_units, 333);
+    }
+
+    #[test]
+    fn refund_full_amount_after_half_up_tax() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_tax_rate(&conn, "VAT 10%", 1000, true, false);
+        // Refund persistence resolves the product by SKU — seed it first.
+        seed_product_with_category(&conn, "COFFEE", None);
+
+        let mut sale = make_single_line_sale("COFFEE", 2, 350);
+        s.compute_sale_tax(&mut sale, &[], RoundingMode::HalfUp)
+            .unwrap();
+        s.create_sale(&sale).unwrap();
+        // 700 subtotal + 70 tax = 770 total.
+        assert_eq!(sale.subtotal.minor_units, 700);
+        assert_eq!(sale.tax_total.minor_units, 70);
+
+        let line = crate::RefundLine::new(
+            &sale.lines[0].id,
+            "COFFEE",
+            2,
+            price(350),
+            sale.lines[0].line_total,
+        );
+        let refund = crate::Refund::new(
+            &sale.id,
+            crate::Money {
+                minor_units: 770,
+                currency: usd(),
+            },
+            "full refund",
+            "",
+            "user-1",
+            vec![line],
+        );
+        s.create_refund(&refund).unwrap();
+
+        let refunds = s.list_refunds_for_sale(&sale.id).unwrap();
+        assert_eq!(refunds.len(), 1);
+        assert_eq!(refunds[0].total.minor_units, 770);
     }
 
     #[test]
@@ -3517,5 +3965,100 @@ mod tests {
             matches!(err, CoreError::NotFound { .. }),
             "expected NotFound for already-finalized sale, got: {err:?}"
         );
+    }
+
+    // ── Customer history (CUST-05) ─────────────────────────────────
+
+    fn seed_customer_row(conn: &rusqlite::Connection, id: &str) {
+        // INSERT OR IGNORE keeps repeated seeding of the same customer id
+        // idempotent (several sales can share one customer).
+        conn.execute(
+            "INSERT OR IGNORE INTO customers (id, name, created_at, updated_at)
+             VALUES (?1, ?2, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+            rusqlite::params![id, format!("Customer {id}")],
+        )
+        .unwrap();
+    }
+
+    fn seed_sale_for_customer(
+        conn: &rusqlite::Connection,
+        id: &str,
+        customer_id: &str,
+        total_minor: i64,
+    ) {
+        seed_customer_row(conn, customer_id);
+        conn.execute(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status, customer_id, created_at, updated_at, subtotal_minor, tax_total_minor)
+             VALUES (?1, ?2, 'USD', 1, 'completed', ?3, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z', ?2, 0)",
+            rusqlite::params![id, total_minor, customer_id],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn list_sales_for_customer_returns_only_that_customers_sales() {
+        let conn = fresh();
+        seed_sale_for_customer(&conn, "s-1", "cust-1", 1000);
+        seed_sale_for_customer(&conn, "s-2", "cust-1", 2000);
+        seed_sale_for_customer(&conn, "s-3", "cust-2", 3000);
+
+        let (items, total) = store(&conn)
+            .list_sales_for_customer("cust-1", 100, 0)
+            .unwrap();
+        assert_eq!(total, 2);
+        assert_eq!(items.len(), 2);
+        assert!(
+            items
+                .iter()
+                .all(|s| s.customer_id.as_deref() == Some("cust-1"))
+        );
+    }
+
+    #[test]
+    fn list_sales_for_customer_orders_most_recent_first() {
+        let conn = fresh();
+        seed_customer_row(&conn, "cust-1");
+        conn.execute(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status, customer_id, created_at, updated_at, subtotal_minor, tax_total_minor)
+             VALUES ('s-old', 100, 'USD', 1, 'completed', 'cust-1', '2024-01-01T00:00:00.000Z', '2024-01-01T00:00:00.000Z', 100, 0),
+                    ('s-new', 200, 'USD', 1, 'completed', 'cust-1', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z', 200, 0)",
+            [],
+        )
+        .unwrap();
+
+        let (items, _) = store(&conn)
+            .list_sales_for_customer("cust-1", 100, 0)
+            .unwrap();
+        assert_eq!(items[0].id, "s-new");
+        assert_eq!(items[1].id, "s-old");
+    }
+
+    #[test]
+    fn list_sales_for_customer_paginates() {
+        let conn = fresh();
+        for i in 0..3 {
+            seed_sale_for_customer(&conn, &format!("s-{i}"), "cust-1", i);
+        }
+
+        let (page, total) = store(&conn)
+            .list_sales_for_customer("cust-1", 2, 0)
+            .unwrap();
+        assert_eq!(total, 3);
+        assert_eq!(page.len(), 2);
+
+        let (rest, _) = store(&conn)
+            .list_sales_for_customer("cust-1", 2, 2)
+            .unwrap();
+        assert_eq!(rest.len(), 1);
+    }
+
+    #[test]
+    fn list_sales_for_customer_no_sales_returns_empty() {
+        let conn = fresh();
+        let (items, total) = store(&conn)
+            .list_sales_for_customer("cust-ghost", 100, 0)
+            .unwrap();
+        assert!(items.is_empty());
+        assert_eq!(total, 0);
     }
 }

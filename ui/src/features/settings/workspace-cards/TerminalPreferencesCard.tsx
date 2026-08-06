@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { useTerminalHardware } from '@/hooks/useTerminalHardware';
+import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
 import type { WorkspaceCardProps } from './types';
 import { hasChanges } from './helpers';
 
@@ -22,7 +24,12 @@ export function TerminalPreferencesCard({
   variant = 'full-page',
   onSaved,
 }: WorkspaceCardProps) {
+  const { l10n } = useLocalization();
+  const { addToast } = useToast();
   const hw = useTerminalHardware(terminalId ?? '');
+  // Note: no markSettingsUpdated call here because TerminalPreferencesCard
+  // saves to terminal_profile.json (local file), not to server-side settings
+  // that SettingsContext tracks. No other card needs to react to these changes.
 
   // ── Draft state derived from hardware profile ────────────────
 
@@ -31,6 +38,7 @@ export function TerminalPreferencesCard({
   const [scaleAutoZero, setScaleAutoZero] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [dirtyVersion, setDirtyVersion] = useState(0);
 
   const originalsRef = useRef<Record<string, unknown>>({
     soundVolume, darkMode, scaleAutoZero,
@@ -39,7 +47,7 @@ export function TerminalPreferencesCard({
   const dirty = useMemo(() => hasChanges(
     { soundVolume, darkMode, scaleAutoZero } as Record<string, unknown>,
     originalsRef.current,
-  ), [soundVolume, darkMode, scaleAutoZero, loaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  ), [soundVolume, darkMode, scaleAutoZero, loaded, dirtyVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Sync state with hardware profile on initial load only ───
 
@@ -78,13 +86,17 @@ export function TerminalPreferencesCard({
       if (terminalId && hw.profile) {
         await hw.save(userId);
       }
+      originalsRef.current = { soundVolume, darkMode, scaleAutoZero };
+      setDirtyVersion((v) => v + 1);
       onSaved?.();
     } catch {
-      // Hook handles error state
+      addToast({ message: l10n.getString('settings-save-error'), type: 'error' });
     } finally {
       setSaving(false);
     }
-  }, [terminalId, hw, userId, onSaved]);
+  // The only deps that change are draft values. addToast/l10n are stable.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [terminalId, hw, userId, soundVolume, darkMode, scaleAutoZero, onSaved]);
 
   const isCompact = variant === 'inspector-drawer';
 
@@ -113,7 +125,7 @@ export function TerminalPreferencesCard({
               step={5}
               value={soundVolume}
               onChange={(e) => updateSoundVolume(Number(e.target.value))}
-              aria-label="Sound volume"
+              aria-label={requiredLocalized(l10n, 'terminal-sound-volume-aria')}
             />
             {!isCompact && (
               <span className="settings-range-value">{soundVolume}%</span>

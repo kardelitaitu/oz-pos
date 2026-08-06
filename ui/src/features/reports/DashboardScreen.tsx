@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
+import { WorkspaceContext } from '@/contexts/WorkspaceContext';
 import { Localized, useLocalization } from '@fluent/react';
 import {
   getDailyRevenue,
@@ -10,6 +12,7 @@ import {
 } from '@/api/reports';
 import { Card } from '@/components/Card';
 import { Spinner } from '@/components/Spinner';
+import { minorUnitExponent } from '@/types/domain';
 import './DashboardScreen.css';
 
 function today(): string {
@@ -23,16 +26,21 @@ function weekAgo(): string {
 }
 
 function fmtCurrency(minor: number, currency: string): string {
+  // Exponent-driven via the shared minorUnitExponent map (IDR/JPY = 0,
+  // KWD = 3, USD/EUR = 2) — mirrors Currency::minor_unit_exponent.
+  const exp = minorUnitExponent(currency);
   return new Intl.NumberFormat('en', {
     style: 'currency',
     currency,
-    minimumFractionDigits: 2,
-  }).format(minor / 100);
+    minimumFractionDigits: exp,
+    maximumFractionDigits: exp,
+  }).format(minor / 10 ** exp);
 }
 
 /** Dashboard screen — daily revenue summary, weekly trend, top products, and low-stock alerts in a card-based overview. */
 export default function DashboardScreen() {
   const { l10n } = useLocalization();
+  const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [revenue, setRevenue] = useState<DailyRevenueRow[]>([]);
@@ -44,10 +52,10 @@ export default function DashboardScreen() {
     const t = today();
     const w = weekAgo();
     Promise.all([
-      getDailyRevenue(t, t),
-      getDailyRevenue(w, t),
-      getTopProducts(t, t, 1),
-      getLowStockAlerts(10),
+      getDailyRevenue(t, t, sessionToken),
+      getDailyRevenue(w, t, sessionToken),
+      getTopProducts(t, t, 1, sessionToken),
+      getLowStockAlerts(10, sessionToken),
     ])
       .then(([rev, weekRev, top, stock]) => {
         setRevenue(rev);
@@ -61,7 +69,7 @@ export default function DashboardScreen() {
       .finally(() => {
         setLoading(false);
       });
-  }, []);
+  }, [sessionToken]);
 
   if (loading) {
     return (
@@ -89,7 +97,7 @@ export default function DashboardScreen() {
     : 1;
 
   return (
-    <div className="dashboard" role="region" aria-label={l10n.getString('dashboard-region-aria') || 'Dashboard'}>
+    <div className="dashboard" role="region" aria-label={requiredLocalized(l10n, 'dashboard-region-aria')}>
       <Localized id="dashboard-title">
         <h1 className="dashboard-title">Dashboard</h1>
       </Localized>
@@ -158,13 +166,13 @@ export default function DashboardScreen() {
         ) : (
           <ul
             className="dashboard-low-stock-list"
-            aria-label={l10n.getString('dashboard-stock-alerts-aria') || 'Low stock alerts'}
+            aria-label={requiredLocalized(l10n, 'dashboard-stock-alerts-aria')}
           >
             {lowStock.map((item) => (
               <li key={item.product_id} className="dashboard-low-stock-item">
                 <span className="dashboard-low-stock-name">{item.name}</span>
                 <span className="dashboard-low-stock-qty">
-                  {item.current_qty} {l10n.getString('dashboard-stock-left') || 'left'}
+                  {item.current_qty} {requiredLocalized(l10n, 'dashboard-stock-left')}
                 </span>
               </li>
             ))}

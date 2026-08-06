@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { requiredLocalized } from '@/frontend/shared';
 import { Localized, useLocalization } from '@fluent/react';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import {
@@ -13,6 +14,7 @@ import {
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
+import { deriveAsyncPhase } from '@/utils/retry-state';
 import './OfflineQueueScreen.css';
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -67,7 +69,13 @@ export default function OfflineQueueScreen() {
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [conflictCount, setConflictCount] = useState<number>(0);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // ERR-07: generation guard + last-refresh tracking for the poll loop.
+  // A late poll response after unmount/supersession is ignored, and repeated
+  // failures surface a non-blocking stale indicator instead of being silent.
+  const pollGenRef = useRef(0);
+  const pollFailuresRef = useRef(0);
+  const [pollStale, setPollStale] = useState(false);
+  const [lastPolledAt, setLastPolledAt] = useState<Date | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -98,21 +106,41 @@ export default function OfflineQueueScreen() {
   useEffect(() => { load(); }, [load]);
 
   // Poll pending count and conflict count every 10 seconds (P1-3).
+  // ERR-07: recursive timeout with a generation guard instead of a fixed
+  // interval so a slow poll never overlaps the next one, late results after
+  // unmount are ignored, and repeated failures become visible.
   useEffect(() => {
-    pollRef.current = setInterval(async () => {
+    const gen = ++pollGenRef.current;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const poll = async () => {
       try {
         const [count, summary] = await Promise.all([
           pendingOfflineCount(),
           getOfflineQueueStatusSummary().catch(() => null),
         ]);
+        if (gen !== pollGenRef.current) return; // superseded or unmounted
         setPendingCount(count);
         if (summary) setConflictCount(summary.conflictCount);
+        pollFailuresRef.current = 0;
+        setPollStale(false);
+        setLastPolledAt(new Date());
       } catch {
-        // Silently ignore poll errors.
+        if (gen !== pollGenRef.current) return;
+        // Three consecutive failures → show a stale notice (ERR-07).
+        pollFailuresRef.current += 1;
+        if (pollFailuresRef.current >= 3) setPollStale(true);
+      } finally {
+        if (gen === pollGenRef.current) {
+          timer = setTimeout(() => { void poll(); }, 10_000);
+        }
       }
-    }, 10_000);
+    };
+
+    void poll();
     return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
+      pollGenRef.current += 1; // invalidate any in-flight poll
+      if (timer) clearTimeout(timer);
     };
   }, []);
 
@@ -145,6 +173,15 @@ export default function OfflineQueueScreen() {
   }, [load, l10n]);
 
   // ── Render ─────────────────────────────────────────────────────
+
+  // ERR-09: derive the standardized async phase so a reload with rows on
+  // screen is `refreshing` (rows stay visible + status announced) instead
+  // of blanking to the skeleton.
+  const phase = deriveAsyncPhase({
+    loading,
+    error: error !== null,
+    hasData: items.length > 0,
+  });
 
   return (
     <div className="offline-queue-screen">
@@ -182,14 +219,30 @@ export default function OfflineQueueScreen() {
         </div>
       )}
 
+      {/* ERR-07: non-blocking stale notice after repeated poll failures */}
+      {pollStale && (
+        <div className="offline-queue-stale" role="status">
+          <Localized id="offline-queue-status-stale">
+            <span>Queue status may be out of date.</span>
+          </Localized>
+          {lastPolledAt && (
+            <span className="offline-queue-stale-time">
+              {requiredLocalized(l10n, 'offline-queue-last-refreshed', {
+                time: lastPolledAt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
+              })}
+            </span>
+          )}
+        </div>
+      )}
+
       {syncResult && (
         <div className="offline-queue-sync-result" role="status">
           <Localized
             id="offline-queue-sync-success"
-            vars={{ synced: String(syncResult.synced), failed: String(syncResult.failed) }}
+            vars={{ synced: String(syncResult.syncedCount), failed: String(syncResult.failedCount) }}
           >
             <span>
-              Synced {syncResult.synced} items, {syncResult.failed} failed.
+              Synced {syncResult.syncedCount} items, {syncResult.failedCount} failed.
             </span>
           </Localized>
         </div>
@@ -211,16 +264,16 @@ export default function OfflineQueueScreen() {
           }}
         >
           {pullState === 'pulling' && (
-            <span>{l10n.getString('offline-queue-pull-to-refresh') || 'Pull to refresh'}</span>
+            <span>{requiredLocalized(l10n, 'offline-queue-pull-to-refresh')}</span>
           )}
           {pullState === 'ready' && (
-            <span>{l10n.getString('offline-queue-release-to-refresh') || 'Release to refresh'}</span>
+            <span>{requiredLocalized(l10n, 'offline-queue-release-to-refresh')}</span>
           )}
           {pullState === 'loading' && <span className="offline-queue-refresh-spinner" />}
         </div>
       )}
 
-      {loading ? (
+      {phase === 'loading' ? (
         <div className="offline-queue-loading-skeleton" {...pullRefreshProps}>
           {/* Header skeleton */}
           <div className="offline-queue-skeleton-header">
@@ -238,7 +291,7 @@ export default function OfflineQueueScreen() {
                   <th>Last Error</th>
                   <th>Created</th>
                   <th>Synced At</th>
-                  <th aria-label="Actions"> </th>
+                  <th aria-label={l10n.getString('offline-queue-table-actions')}> </th>
                 </tr>
               </thead>
               <tbody>{Array.from({ length: 5 }).map((_, i) => (
@@ -256,7 +309,7 @@ export default function OfflineQueueScreen() {
             </table>
           </div>
         </div>
-      ) : error ? (
+      ) : phase === 'error' ? (
         <Card shadow="sm">
           <div className="offline-queue-empty">
             <Localized id="offline-queue-error">
@@ -267,7 +320,7 @@ export default function OfflineQueueScreen() {
             </Localized>
           </div>
         </Card>
-      ) : items.length === 0 ? (
+      ) : phase === 'idle' ? (
         <Card shadow="sm">
           <div className="offline-queue-empty" {...pullRefreshProps}>
             <Localized id="offline-queue-empty">
@@ -277,6 +330,14 @@ export default function OfflineQueueScreen() {
         </Card>
       ) : (
         <div className="offline-queue-table-wrap" {...pullRefreshProps}>
+          {/* ERR-09: rows stay visible during a reload — announce the retry intent */}
+          {phase === 'refreshing' && (
+            <div className="offline-queue-refreshing" role="status" aria-live="polite">
+              <Localized id="offline-queue-refreshing">
+                <span>Refreshing…</span>
+              </Localized>
+            </div>
+          )}
           {/* P7-3: Pull-to-refresh indicator */}
           {pullState !== 'idle' && (
             <div
@@ -287,15 +348,15 @@ export default function OfflineQueueScreen() {
               }}
             >
               {pullState === 'pulling' && (
-                <span>{l10n.getString('offline-queue-pull-to-refresh') || 'Pull down to refresh'}</span>
+                <span>{requiredLocalized(l10n, 'offline-queue-pull-to-refresh')}</span>
               )}
               {pullState === 'ready' && (
-                <span>{l10n.getString('offline-queue-release-to-refresh') || 'Release to refresh'}</span>
+                <span>{requiredLocalized(l10n, 'offline-queue-release-to-refresh')}</span>
               )}
               {pullState === 'loading' && <span className="offline-queue-refresh-spinner" />}
             </div>
           )}
-          <table className="offline-queue-table" aria-label={l10n.getString('offline-queue-table-aria') || 'Offline queue items'}>
+          <table className="offline-queue-table" aria-label={requiredLocalized(l10n, 'offline-queue-table-aria')}>
             <thead>
               <tr>
                 <Localized id="offline-queue-action"><th>Action</th></Localized>

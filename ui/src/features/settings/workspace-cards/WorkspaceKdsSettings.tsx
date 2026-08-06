@@ -4,6 +4,8 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { useToast } from '@/frontend/shared/Toast';
+import { requiredLocalized } from '@/frontend/shared';
+import { useSettings } from '@/contexts/SettingsContext';
 import { getSetting, setSettings } from '@/api/settings';
 import SettingsSelect from '../SettingsSelect';
 import type { WorkspaceCardProps } from './types';
@@ -46,9 +48,11 @@ export function WorkspaceKdsSettings({
 
   const { l10n } = useLocalization();
   const { addToast } = useToast();
+  const { markSettingsUpdated } = useSettings();
 
   const [draft, setDraft] = useState<KdsDraftState>(DEFAULT_KDS);
   const [saving, setSaving] = useState(false);
+  const [dirtyVersion, setDirtyVersion] = useState(0);
 
   // Originals for dirty tracking — captured after initial load
   const originalsRef = useRef<KdsDraftState>({ ...draft });
@@ -56,7 +60,7 @@ export function WorkspaceKdsSettings({
   const dirty = useMemo(() => hasChanges(
     draft as unknown as Record<string, unknown>,
     originalsRef.current as unknown as Record<string, unknown>,
-  ), [draft, originalsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  ), [draft, originalsLoaded, dirtyVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Initialise from backend ─────────────────────────────────
 
@@ -111,13 +115,24 @@ export function WorkspaceKdsSettings({
         'kds.density': draft.density,
       }, userId ?? 'default');
       originalsRef.current = { ...draft };
+      setDirtyVersion((v) => v + 1);
+
+      // Notify other cards that KDS settings changed
+      markSettingsUpdated([
+        'kds.sound_enabled',
+        'kds.yellow_threshold_min',
+        'kds.red_threshold_min',
+        'kds.auto_acknowledge',
+        'kds.density',
+      ]);
+
       onSaved?.();
     } catch {
       addToast({ message: l10n.getString('settings-save-error'), type: 'error' });
     } finally {
       setSaving(false);
     }
-  }, [userId, draft, onSaved, addToast, l10n]);
+  }, [userId, draft, onSaved, addToast, l10n, markSettingsUpdated]);
 
   const isCompact = variant === 'inspector-drawer';
 
@@ -168,7 +183,7 @@ export function WorkspaceKdsSettings({
               step={1}
               value={draft.yellowThresholdMin}
               onChange={(e) => update('yellowThresholdMin', Number(e.target.value))}
-              aria-label="Yellow escalation threshold in minutes"
+              aria-label={requiredLocalized(l10n, 'workspace-kds-yellow-threshold-aria')}
             />
             {!isCompact && (
               <span className="settings-range-value">{draft.yellowThresholdMin} min</span>
@@ -189,7 +204,7 @@ export function WorkspaceKdsSettings({
               step={1}
               value={draft.redThresholdMin}
               onChange={(e) => update('redThresholdMin', Number(e.target.value))}
-              aria-label="Red escalation threshold in minutes"
+              aria-label={requiredLocalized(l10n, 'workspace-kds-red-threshold-aria')}
             />
             {!isCompact && (
               <span className="settings-range-value">{draft.redThresholdMin} min</span>

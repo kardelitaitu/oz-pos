@@ -11,6 +11,10 @@ export interface KdsPreferences {
   showTableNumber: boolean;
   /** Kitchen zone filter (empty string = no zone / all orders). */
   kdsZone: string;
+  /** Auto-advance pending tickets to preparing after a configurable delay. */
+  autoAcknowledge: boolean;
+  /** Delay in minutes before a pending ticket is auto-advanced. */
+  acknowledgeDelayMin: number;
 }
 
 const DEFAULTS: KdsPreferences = {
@@ -18,6 +22,8 @@ const DEFAULTS: KdsPreferences = {
   showOrderId: true,
   showTableNumber: true,
   kdsZone: '',
+  autoAcknowledge: false,
+  acknowledgeDelayMin: 2,
 };
 
 const STORAGE_KEY_PREFIX = 'oz-kds-prefs-';
@@ -51,6 +57,8 @@ export function useKdsPreferences(): {
   setShowOrderId: (show: boolean) => void;
   setShowTableNumber: (show: boolean) => void;
   setKdsZone: (zone: string) => void;
+  setAutoAcknowledge: (enabled: boolean) => void;
+  setAcknowledgeDelay: (min: number) => void;
   loading: boolean;
 } {
   const { session } = useAuth();
@@ -80,6 +88,8 @@ export function useKdsPreferences(): {
           showOrderId: raw['kds_show_order_id'] !== 'false',
           showTableNumber: raw['kds_show_table_number'] !== 'false',
           kdsZone: raw['kds_zone'] ?? DEFAULTS.kdsZone,
+          autoAcknowledge: raw['kds_auto_acknowledge'] === 'true',
+          acknowledgeDelayMin: Number(raw['kds_ack_delay_min']) || DEFAULTS.acknowledgeDelayMin,
         };
         setPrefs(serverPrefs);
         writeLocalPrefs(userId, serverPrefs);
@@ -152,5 +162,30 @@ export function useKdsPreferences(): {
     [userId, persist],
   );
 
-  return { prefs, setLayout, setShowOrderId, setShowTableNumber, setKdsZone, loading };
+  const setAutoAcknowledge = useCallback(
+    (enabled: boolean) => {
+      setPrefs((p) => {
+        const next = { ...p, autoAcknowledge: enabled };
+        writeLocalPrefs(userId, next);
+        return next;
+      });
+      persist({ kds_auto_acknowledge: String(enabled) });
+    },
+    [userId, persist],
+  );
+
+  const setAcknowledgeDelay = useCallback(
+    (min: number) => {
+      const clamped = Math.max(1, Math.min(10, min));
+      setPrefs((p) => {
+        const next = { ...p, acknowledgeDelayMin: clamped };
+        writeLocalPrefs(userId, next);
+        return next;
+      });
+      persist({ kds_ack_delay_min: String(clamped) });
+    },
+    [userId, persist],
+  );
+
+  return { prefs, setLayout, setShowOrderId, setShowTableNumber, setKdsZone, setAutoAcknowledge, setAcknowledgeDelay, loading };
 }

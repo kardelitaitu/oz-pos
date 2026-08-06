@@ -960,7 +960,7 @@ describe('SettingsPage', () => {
 
     expect(preventDefaultSpy).toHaveBeenCalled();
     expect((event as BeforeUnloadEvent).returnValue).toBeDefined();
-    expect((event as BeforeUnloadEvent).returnValue).toBe('');
+    expect((event as BeforeUnloadEvent).returnValue).toBe('unsaved');
   });
 
   it('does not trigger beforeunload when form is clean', async () => {
