@@ -1,4 +1,15 @@
 
+## 2026-08-06 — TDD cycle: reset dirty flag after a successful Apply (save-as-baseline)
+
+### Preset loads asked "unsaved changes?" even right after Apply persisted everything
+**Problem:** `isDirtyRef` was only reset by `loadPreset` and the fresh-topology reload paths — never by a successful Apply. So the flow edit → Apply → click a preset popped the "Load Preset" confirm dialog even though the canvas already matched the backend.
+
+**Solution:** Red→Green. The save handler now sets `isDirtyRef.current = false` after the try/catch completes without an exception (a failed save returns early and stays dirty). Pinned by a Red test (edit → Apply → preset loads with NO dialog) and a guard (a new edit after Apply re-arms the dialog). This is the journal follow-up from the save+remap cycle — it completes the save-as-baseline semantics: after Apply the canvas IS the baseline; any later edit re-dirties it.
+
+**Validation:** 58/58 editor tests (2 new) · 28/28 TopologyScreen + InspectorIntegration · typecheck clean · eslint clean.
+
+**Follow-up:** Undo-after-save still restores pre-save canvas states (deliberate — ids stay valid, undo remains useful). A demo-mode Apply (no onSave prop) also clears dirty since there is nothing to persist; harmless, but note if demo mode ever gets real persistence semantics.
+
 ## 2026-08-06 — TDD cycle: hardware-node inspector (closes the last node-type gap)
 
 ### Hardware nodes had no type-specific inspector — a test pinned it as "not implemented"
