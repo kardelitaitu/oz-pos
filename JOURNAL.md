@@ -1,4 +1,15 @@
 
+## 2026-08-06 — TDD cycle: KDS product picker contract + double-confirm merge guard (TODO 3f)
+
+### The mid-preparation picker had no test suite, a double-fired Escape, and a double-tap duplicate-add race
+**Problem:** `KdsProductPickerModal` (TODO 3f) had zero direct tests. Two real defects surfaced once Red tests pinned the contract: (1) pressing Escape fired `onClose` TWICE — the modal's own overlay `onKeyDown` handled Escape redundantly with `useFocusTrap`'s `onEscape`, so closing the dialog triggered the parent's close handler twice per keypress; (2) the Confirm button stays enabled while the parent's async merge (`getKdsOrderLinesScoped` → `updateKdsOrderItemsScoped` → close) is in flight, so a fast double-tap on a touchscreen fired the merge twice and duplicated the picked items onto the ticket.
+
+**Solution:** Red→Green. New `KdsProductPickerModal.test.tsx` (5 tests) pins the contract: confirm emits the picked items ONCE with the exact payload (sku, display_name, qty, category-derived course, empty modifiers), backdrop-click and Escape cancel without confirming, a failed fetch renders the localized error with a working Retry, and the course dropdown + qty stepper edit the picked entry before confirm. Escape double-fire pinned by asserting `onClose` called once — Green removed the modal's redundant `onKeyDown` (the focus trap owns Escape), with a comment warning not to re-add it. Then `KdsScreen.test.tsx` gained a deferred-promise double-tap test (update gated until after the second click) that failed Red with 2 update calls; Green added a `pickerSavingRef` re-entry guard in the parent's `onConfirm` (ignore while in flight, reset in `finally`). Two early Red attempts failed for the wrong reason (my `getByRole` names matched the picked-list Remove buttons — fixed with anchored regexes).
+
+**Validation:** 154/154 KDS tests (9 files, 6 new: 5 picker + 1 screen) · typecheck clean · eslint clean (the backdrop click now carries a justified a11y disable — keyboard users close via the Close button and trap Escape).
+
+**Follow-ups:** The modal shows no visual pending state during the merge (Confirm stays enabled, guard silently drops the second tap) — a `pending` prop to disable the button would surface the in-flight state. The `KdsTicketCard` lazy-fetch/re-fetch (`fetchKey`) was NOT the double-add source — the merge path is single-shot now; re-check if ticket-level edits ever race the picker merge on the same order.
+
 ## 2026-08-06 — TDD cycle: retail cart remove→undo restores modifiers and course (first RetailCartPanel suite)
 
 ### Undo of a removed line re-added a bare product — course assignment and modifiers were silently dropped
