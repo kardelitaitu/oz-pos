@@ -1,4 +1,15 @@
 
+## 2026-08-06 — TDD cycle: toast when a preset load drops the selection
+
+### Preset swaps dropped the selection silently
+**Problem:** Preset ids only partially overlap (wh-1 is retail-only; w-3/w-4 are restaurant-only). Loading a preset that lacks the selected element cleared the selection via the re-validation effect with no feedback — the inspector just closed and the user had no idea why.
+
+**Solution:** Red→Green. `loadPreset` now checks the incoming preset for the selected node/wire BEFORE the re-validation effect runs and fires an info toast (`topology-toast-selection-dropped`, added to both en and id bundles) when the selection won't survive. One generic message covers node and wire drops; a surviving selection (store-1 in both presets) toasts nothing — pinned by a guard that also asserts the inspector stays open on the new preset's name.
+
+**Validation:** 56/56 editor tests (3 new) · 28/28 TopologyScreen + InspectorIntegration · typecheck clean · eslint clean · i18n lint clean.
+
+**Follow-ups:** Scope was preset load only — the same silent drop also happens on the fresh-topology reload path (workspaceInstances rebuild) and on undo/redo; toasting there could get noisy, so it was deliberately not added. The toast is 'info' severity; a future cycle could distinguish node vs wire in the message.
+
 ## 2026-08-06 — TDD cycle: undo-of-delete re-selects the restored node (inspector reopens)
 
 ### Undoing a node deletion restored the node but the selection stayed cleared
