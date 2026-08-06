@@ -1131,6 +1131,10 @@ export default function NodeTopologyEditor({
                   skipNextLoadRef.current = false;
                   return;
                 }
+                // Save succeeded — the canvas now matches the backend, so a
+                // preset load must not ask about unsaved changes. (A failed
+                // save returned above and stays dirty.)
+                isDirtyRef.current = false;
                 // Defer reset so React commits state updates + fires effects first,
                 // preventing post-save reload from clobbering in-flight edits (#8).
                 setTimeout(() => { skipNextLoadRef.current = false; }, 0);

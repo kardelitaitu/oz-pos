@@ -739,6 +739,53 @@ describe('NodeTopologyEditor Component', () => {
     expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
   });
 
+  it('does not ask about unsaved changes when a preset loads after a successful Apply', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    renderEditor({ onSave });
+
+    await waitFor(() => {
+      expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
+    });
+
+    // Make an edit so the canvas is dirty.
+    fireEvent.click(screen.getByText('+ Store Node'));
+    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+
+    // Apply persists the canvas — after a successful save the canvas matches
+    // the backend, so a preset load must NOT ask about unsaved changes.
+    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(screen.getByText('Retail Preset'));
+
+    // No "Load Preset" confirm dialog — the preset loads directly.
+    expect(screen.queryByText('Load Preset')).not.toBeInTheDocument();
+    expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
+  });
+
+  it('re-arms the unsaved-changes dialog for a new edit made after Apply', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    renderEditor({ onSave });
+
+    await waitFor(() => {
+      expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
+    });
+
+    // Edit → save (canvas clean) → new edit re-dirties the canvas.
+    fireEvent.click(screen.getByText('+ Store Node'));
+    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledTimes(1);
+    });
+    fireEvent.click(screen.getByText('+ Hardware Node'));
+
+    // The new unsaved edit must bring the confirm dialog back.
+    fireEvent.click(screen.getByText('Retail Preset'));
+    expect(screen.getAllByText('Load Preset').length).toBeGreaterThanOrEqual(1);
+  });
+
   it('handles empty idMap gracefully (no remapping)', async () => {
     const onSave = vi.fn().mockResolvedValue({});
     renderEditor({ onSave });
