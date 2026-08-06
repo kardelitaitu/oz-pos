@@ -408,6 +408,7 @@ pub fn run() {
                 commands::offline::retry_offline_sync,
                 commands::offline::delete_offline_item,
                 commands::offline::requeue_remote_failure,
+                commands::offline::list_remote_failures,
                 commands::sync::get_sync_settings,
                 commands::sync::update_sync_settings,
                 commands::sync::sync_run,

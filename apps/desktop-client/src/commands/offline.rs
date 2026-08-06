@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use oz_core::sync_client::{self, SyncConfig};
-use oz_core::{OfflineQueueItem, Store, SyncPriority};
+use oz_core::{OfflineQueueItem, RemoteSyncFailure, Store, SyncPriority};
 
 use foundation::validate_not_empty;
 
@@ -55,6 +55,42 @@ impl From<OfflineQueueItem> for OfflineQueueItemDto {
             synced_at: item.synced_at,
             tenant_id: item.tenant_id,
             priority: item.priority.as_str().to_owned(),
+        }
+    }
+}
+
+/// Retained remote-application failure DTO for the front-end.
+///
+/// Exposes everything an operator needs to decide whether to requeue a
+/// dead-lettered item (via `requeue_remote_failure`): the remote item id,
+/// action, retained payload for inspection, attempt count, the latest
+/// error, and the dead-letter flag.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteSyncFailureDto {
+    /// Remote item identifier.
+    pub item_id: String,
+    /// Remote action name.
+    pub action: String,
+    /// Original payload retained for operator inspection.
+    pub payload: String,
+    /// Number of failed application attempts.
+    pub attempts: i64,
+    /// Most recent application error.
+    pub last_error: String,
+    /// Whether retry is exhausted and the item is quarantined.
+    pub dead_lettered: bool,
+}
+
+impl From<RemoteSyncFailure> for RemoteSyncFailureDto {
+    fn from(failure: RemoteSyncFailure) -> Self {
+        Self {
+            item_id: failure.item_id,
+            action: failure.action,
+            payload: failure.payload,
+            attempts: failure.attempts,
+            last_error: failure.last_error,
+            dead_lettered: failure.dead_lettered,
         }
     }
 }
@@ -318,6 +354,36 @@ fn run_requeue_remote_failure(conn: &rusqlite::Connection, item_id: &str) -> Res
     let store = Store::new(conn);
     store.requeue_remote_failure(item_id)?;
     Ok(())
+}
+
+/// List retained remote-application failures (dead-letter discovery).
+///
+/// Operators call this to discover which remote items are quarantined (or
+/// still being retried) before deciding to `requeue_remote_failure` — the
+/// dead-letter workflow needs the ids, and the DTO carries the retained
+/// payload + last error so the remediation is informed. Returns the newest
+/// failure first, mirroring the store's ordering.
+#[tauri::command]
+pub async fn list_remote_failures(
+    state: State<'_, AppState>,
+) -> Result<Vec<RemoteSyncFailureDto>, AppError> {
+    let db = state.db.lock().await;
+    let failures = run_list_remote_failures(&db)?;
+    drop(db);
+    Ok(failures)
+}
+
+/// Execute the listing against a connection, extracted so the command
+/// boundary is unit-testable without a Tauri runtime.
+fn run_list_remote_failures(
+    conn: &rusqlite::Connection,
+) -> Result<Vec<RemoteSyncFailureDto>, AppError> {
+    let store = Store::new(conn);
+    let failures = store.list_remote_failures()?;
+    Ok(failures
+        .into_iter()
+        .map(RemoteSyncFailureDto::from)
+        .collect())
 }
 
 #[cfg(test)]

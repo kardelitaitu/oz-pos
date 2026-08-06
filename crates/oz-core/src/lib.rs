@@ -171,7 +171,7 @@ pub use db::reports::{
     CategoryBreakdownRow, DailyRevenueRow, HourlyHeatmapRow, LowStockAlert, MonthlyRevenueRow,
     StockAlertEvent, TopProductRow, WeeklyRevenueRow,
 };
-pub use db::{ProductWithDetails, Store};
+pub use db::{ProductWithDetails, RemoteSyncFailure, Store};
 pub use error::{CoreError, CoreErrorKind};
 pub use features::{
     Feature, FeatureGuard, FeatureGuardRegistry, FeatureRegistry, KdsFeatureGuard,
