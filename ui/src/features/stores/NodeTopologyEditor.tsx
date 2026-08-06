@@ -195,6 +195,10 @@ export default function NodeTopologyEditor({
 
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
   const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  /** Set once a drag has actually moved the node — history is pushed on the
+   *  first movement, not on mousedown, so a plain click-to-select never
+   *  creates a no-op undo entry or marks the canvas dirty. */
+  const dragHasMovedRef = useRef(false);
   /** Set of node ids that were just added (for scale-in animation). */
   const [freshNodeIds, setFreshNodeIds] = useState<Set<string>>(new Set());
   /** Timers for fresh-node animation cleanup; cleared on unmount to prevent leaks. */
@@ -572,10 +576,10 @@ export default function NodeTopologyEditor({
   const handleNodeMouseDown = (e: React.MouseEvent, nodeId: string) => {
     e.stopPropagation();
     if (e.button !== 0) return;
-    pushHistory();
     setSelectedNodeId(nodeId);
     setSelectedWireId(null);
     setDraggingNodeId(nodeId);
+    dragHasMovedRef.current = false;
 
     const node = nodeMap.get(nodeId);
     if (node) {
@@ -590,6 +594,12 @@ export default function NodeTopologyEditor({
     mousePosRef.current = { x: e.clientX, y: e.clientY };
 
     if (draggingNodeId) {
+      // Push history once, on the first real movement — a plain click that
+      // never moves must not create a no-op undo entry.
+      if (!dragHasMovedRef.current) {
+        dragHasMovedRef.current = true;
+        pushHistory();
+      }
       const newX = snap(Math.max(20, e.clientX / zoom - dragOffsetRef.current.x));
       const newY = snap(Math.max(20, e.clientY / zoom - dragOffsetRef.current.y));
 
@@ -622,6 +632,7 @@ export default function NodeTopologyEditor({
 
   const handleCanvasMouseUp = () => {
     setDraggingNodeId(null);
+    dragHasMovedRef.current = false;
   };
 
   // Clear hoveredTarget when connection mode ends

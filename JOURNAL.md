@@ -1,4 +1,15 @@
 
+## 2026-08-06 — TDD cycle: plain click no longer pollutes topology undo history
+
+### Clicking a node created no-op undo entries and dirtied the canvas
+**Problem:** `NodeTopologyEditor.handleNodeMouseDown` called `pushHistory()` on every mousedown, even a click with zero movement. Two observable symptoms: (1) the Undo button appeared after a mere click and undoing did nothing visible; (2) the canvas was marked dirty (`pushHistory` sets `isDirtyRef`), so clicking a node and then hitting a preset button demanded the "unsaved changes" confirm dialog even though nothing had changed — and the dirty flag also feeds TopologyScreen's unsaved-change prompt on navigation.
+
+**Solution:** Red→Green. Two tests pinned the bug (Undo visible after a plain click; preset confirm dialog after a plain click) and a third guard pinned the correct drag semantics (a real drag creates exactly one undo entry and undo restores the snapped position). The fix moves the history push out of `handleNodeMouseDown` into the first real drag movement via a new `dragHasMovedRef` — click-to-select never creates an entry or marks the canvas dirty, while drags, arrow nudges, add/delete, wire toggles, and preset loads keep their single-entry-per-operation history.
+
+**Validation:** 37/37 editor tests (3 new) · 28/28 TopologyScreen + InspectorIntegration · typecheck clean · eslint clean. Drift guard reports only the pre-existing tdd SKILL.md audit-date finding.
+
+**Follow-ups:** Inspector edits (node name, subtitle, workspace type selector) are still not undoable — a rename can't be reverted with Ctrl+Z. A future slice should push one history entry per inspector edit session (first change after the field gains focus). Arrow-key nudges also push one entry per keypress rather than one per nudge gesture; a session-based entry would compress them.
+
 ## 2026-08-06 — TDD cycle: operator rewind survives daemon apply phase (SYNC-09)
 
 ### Daemon clobbered an operator's anchor rewind landing mid-pull

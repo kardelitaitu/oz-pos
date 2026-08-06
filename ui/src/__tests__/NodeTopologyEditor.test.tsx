@@ -363,6 +363,67 @@ describe('NodeTopologyEditor Component', () => {
     expect(getWireCount()).toBe(initialWireCount);
   });
 
+  // ── Click-to-select must not pollute undo/dirty state (#11) ───────
+
+  it('does not enable Undo when a node is merely clicked (no drag)', () => {
+    renderEditor();
+
+    const firstNode = document.querySelector('.topology-node');
+    expect(firstNode).not.toBeNull();
+
+    // Plain click: mousedown + mouseup with zero movement. Selecting a
+    // node is not an edit, so it must not push an undo entry.
+    fireEvent.mouseDown(firstNode as Element, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseUp(firstNode as Element, { button: 0, clientX: 0, clientY: 0 });
+
+    expect(screen.queryByText('Undo (Ctrl+Z)')).not.toBeInTheDocument();
+  });
+
+  it('does not mark the canvas dirty when a node is clicked without editing', () => {
+    renderEditor();
+
+    const firstNode = document.querySelector('.topology-node');
+    expect(firstNode).not.toBeNull();
+
+    fireEvent.mouseDown(firstNode as Element, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseUp(firstNode as Element, { button: 0, clientX: 0, clientY: 0 });
+
+    // A plain click is not an edit — the preset must load directly,
+    // without the "unsaved changes" confirm dialog.
+    fireEvent.click(screen.getByText('Resto & KDS Preset'));
+
+    expect(screen.queryByText('Load Preset')).not.toBeInTheDocument();
+    expect(screen.getByText('Grand Bistro')).toBeInTheDocument();
+  });
+
+  it('enables Undo only after an actual drag and restores the position on undo', () => {
+    renderEditor();
+
+    const firstNode = document.querySelector('.topology-node') as HTMLElement;
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    expect(firstNode).not.toBeNull();
+    expect(canvas).not.toBeNull();
+
+    // Retail preset: store-1 at (80, 140), snapped to the 24px grid.
+    expect(firstNode.style.left).toBe('80px');
+    expect(firstNode.style.top).toBe('140px');
+
+    // mousedown at clientX/Y 0, then drag 48px right + 48px down.
+    // newX = snap(0 - (0 - 80)) = snap(128) = 120; newY = snap(188) = 192.
+    fireEvent.mouseDown(firstNode, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 48, clientY: 48 });
+
+    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+    expect(firstNode.style.left).toBe('120px');
+    expect(firstNode.style.top).toBe('192px');
+
+    fireEvent.mouseUp(canvas, { button: 0 });
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+
+    expect(firstNode.style.left).toBe('80px');
+    expect(firstNode.style.top).toBe('140px');
+  });
+
   // ── Wire direction toggle ───────────────────────────────────────
 
   it('toggles wire direction on label click', () => {
