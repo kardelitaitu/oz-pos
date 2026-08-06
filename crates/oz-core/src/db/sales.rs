@@ -3402,14 +3402,7 @@ mod tests {
         seed_product_with_stock(&conn, "COFFEE", 10);
 
         let sale = make_single_line_sale("COFFEE", 2, 350);
-        let splits = vec![crate::PaymentSplitArg {
-            method: "cash".into(),
-            amount_minor: 700,
-            gateway_reference: None,
-            gateway_status: None,
-            gateway_response: None,
-            idempotency_key: None,
-        }];
+        let splits = tender(700);
         let result = s
             .complete_sale_deduction(&sale, None, &splits, "cashier-1", None)
             .unwrap();
@@ -3599,6 +3592,51 @@ mod tests {
             other => {
                 panic!("resolved-shortfalls under-paid splits must not complete, got: {other:?}")
             }
+        }
+    }
+
+    /// The split sum uses checked arithmetic: a hostile list whose total
+    /// overflows i64 must fail with a structured error, not wrap past the
+    /// sale total.
+    #[test]
+    fn complete_sale_deduction_rejects_overflowing_payment_split_sum() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_product_with_stock(&conn, "COFFEE", 10);
+
+        let sale = make_single_line_sale("COFFEE", 2, 350); // total 700
+        let splits = vec![
+            crate::PaymentSplitArg {
+                method: "cash".into(),
+                amount_minor: i64::MAX,
+                gateway_reference: None,
+                gateway_status: None,
+                gateway_response: None,
+                idempotency_key: None,
+            },
+            crate::PaymentSplitArg {
+                method: "card".into(),
+                amount_minor: 1,
+                gateway_reference: None,
+                gateway_status: None,
+                gateway_response: None,
+                idempotency_key: None,
+            },
+        ];
+        let result = s.complete_sale_deduction(&sale, None, &splits, "cashier-1", None);
+
+        match result {
+            Err(CoreError::Validation { field, message }) => {
+                assert_eq!(
+                    field, "payments",
+                    "expected field 'payments', got '{field}'"
+                );
+                assert!(
+                    message.contains("overflow"),
+                    "expected an overflow message, got: {message}"
+                );
+            }
+            other => panic!("overflowing split sum must not complete the sale, got: {other:?}"),
         }
     }
 

@@ -2,6 +2,17 @@
 
 # OZ-POS Development Journal
 
+## 2026-08-06 — TDD cycle: payment splits must cover the sale total (MONEY-04)
+
+### `complete_sale*` accepted under-paid / empty / negative payment splits
+**Problem:** `complete_sale_deduction` and `complete_sale_with_resolved_shortfalls` persisted the sale plus whatever `payment_splits` the caller passed, with no check that the sum covers `sale.total`. The command layer defaults `None` to a single full-total split, but a hostile IPC caller could pass `payment_splits: Some([])` (empty — bypassing the default, zero payment rows written) or an under-summing list, completing a 700-minor sale for 500. Red run proved it: `Ok(CompleteSaleResult)` with the sale persisted. The existing `complete_sale_deduction_with_payment_splits` test literally pinned the bug (500 vs 700 total).
+
+**Solution:** Red→Green TDD cycle. Five new tests pin the contract: under-paid splits rejected, empty splits rejected, negative split rejected ([900, −200] sums to 700 but writes garbage payment rows), over-tender accepted (change), and the resolved-shortfalls command enforces the same. All failed on `Ok(...)` before the fix. GREEN: private `validate_payment_splits_cover_total` — rejects `amount_minor < 0`, sums with `checked_add` (overflow → Validation), rejects `sum < total_minor` (`Validation { field: "payments" }`). Field `"payments"` deliberately avoids `"stock"` (the PartialStockResult special-case). Called in BOTH functions AFTER stock-shortfall resolution (so the cashier's StockShortfallDialog keeps precedence) but BEFORE `adjust_stock_batch` — any error rolls the whole tx back.
+
+**Test fallout (intentional):** eight existing unit tests passed `&[]` or under-paid splits and were updated to full tender via a new `tender(amount)` test helper; the `[500/700]` test now pays exactly 700. Zero-total sales (empty lines, `total = 0`) still pass with empty splits — free sales remain legal.
+
+**Deliberately NOT done (follow-ups):** (1) **the threshold is the pre-tax `sale.total`** — `compute_sale_tax` never recomputes `sale.total`, so the gate guarantees splits ≥ the recorded (pre-tax) total, not ≥ what the customer owes (subtotal + tax). A hostile caller can still settle for less than total+tax; closing that means validating against `subtotal + tax_total` (ties into the MONEY-01 note on `sale.total` excluding tax). (2) The deprecated global-db desktop `complete_sale` (uses `create_payments` directly) is not validated — it is off the live scoped path; the same contract should be added there before it is ever used. (3) `sale.tendered_minor` (the single-cash change field) is not validated — the split record is the ledger row, so out of scope.
+
 ## 2026-08-06 — TDD cycle: bind the pre-session workspace picker to the authenticated user (audit/06)
 
 ### The picker trusted caller-supplied `role_id` / `user_id` for listing
