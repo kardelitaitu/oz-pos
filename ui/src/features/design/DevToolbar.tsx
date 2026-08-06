@@ -47,7 +47,7 @@ interface ThemeOption {
 
 const THEMES: ThemeOption[] = [
   { key: 'default', label: 'Glass', icon: <GlassIcon />, swatches: ['#132540', '#5a9fd4', '#f0f6ff'] },
-  { key: 'light', label: 'Light', icon: <SunIcon />, swatches: ['#f8fafc', '#1052bc', '#1e293b'] },
+  { key: 'light', label: 'Light', icon: <SunIcon />, swatches: ['#f1f5f9', '#1052bc', '#1e293b'] },
   { key: 'dark', label: 'Dark', icon: <MoonIcon />, swatches: ['#080e16', '#5a9fd4', '#cddff0'] },
 ];
 
