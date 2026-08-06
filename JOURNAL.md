@@ -2,6 +2,28 @@
 
 # OZ-POS Development Journal
 
+## 2026-08-06 — TDD slice: tablet vs desktop pre-session auth surface (audit/06 parity audit)
+
+### Comparison result: the tablet now shares the hardened picker AND session-mint surface — no gaps remain
+**Prompt:** run a TDD slice comparing the tablet client's pre-session auth surface against the hardened desktop commands.
+
+**Evidence (command-by-command diff of `apps/*-client/src/lib.rs` registrations + command bodies):**
+
+| Pre-session surface | Desktop | Tablet | Verdict |
+|---|---|---|---|
+| `staff_login` (PIN verify + mints picker ticket) | ✓ | ✓ (b10f4929) | parity — both mint `user_id.expiry.hmac`, 5-min TTL, per-process secret |
+| `bootstrap_owner` (first-owner) | ✓ registered | ✗ not registered | deliberate — tablet shell (`TabletAppShell`) never imports `CreatePinScreen` / never calls `bootstrapOwner`; tablet is a paired device provisioned from the desktop |
+| `create_session` (session mint, `verify_instance_access` fail-closed gate) | ✓ | ✓ | parity — identical `role_id`/`user_id`/`instance_id`/`store_id` gate, real role resolved from DB |
+| `list_workspaces` (ticket → real user+role → store listing) | ✓ | ✓ | parity — identical body (verify ticket → resolve user/role from global DB → `Store::list_workspaces(real_role, user, store)`) |
+| `list_workspace_screens` (ticket-gated bootstrap read) | ✓ | ✓ | parity |
+| `resolve_boot_store` | ✓ device-binding + primary fallback | ✓ primary fallback only | deliberate difference — tablet has no device-binding keyring, `is_bound` is always `false` (documented in the command doc) |
+
+**Frontend contract traced end-to-end (why the empty state can only mean a null ticket):** `AuthContext.login` stores `result.picker_ticket`; `CreatePinScreen` bootstrap passes `result.picker_ticket` through `swapSession(session, ticket)`; `WorkspaceContext.fetchWorkspaces` returns early when `pickerTicket` is null (→ `WorkspaceHome` empty state) and falls back to demo cards on empty/error listings. So the screenshot's `No workspaces available` was the pre-fix tablet (no ticket minted) — closed by b10f4929.
+
+**Verify:** tablet `commands::auth` 13/13 + `commands::workspaces` 7/7 · desktop `commands::auth` 19/19 + `commands::workspaces` 17/17 — all parity regression tests green on both clients. `swapSession` optional-ticket path (FastPINOverlay hot-swap, mid-workspace) intentionally bypasses the picker, so no null-ticket picker path remains.
+
+**Follow-ups:** (1) `bootstrap_owner` absence on the tablet is by design but UNTESTED as a guarantee — a registration-level test asserting the tablet surface contains exactly the documented command set would pin it against accidental drift. (2) The tablet never implements device binding, so `resolve_boot_store` always reports `is_bound: false`; if tablets are ever expected to auto-boot into a bound workspace, the binding HMAC + keyring slice is the gap to close.
+
 ## 2026-08-06 — TDD cycle: checked PO money math + plugin float hand-off (MONEY-05)
 
 ### Purchase orders wrap silently; plugin Lua arithmetic wraps in the VM
@@ -42,6 +64,15 @@
 **Commits:** (this cycle) `apps/desktop-client/src/commands/picker_ticket.rs` (new), `state.rs`, `auth.rs`, `staff.rs`, `workspaces.rs`, `lib.rs` + `ui/src/api/{staff,workspaces}.ts`, `ui/src/contexts/{AuthContext,WorkspaceContext}.tsx`, `ui/src/features/terminals/TerminalManagementScreen.tsx`, `ui/src/components/FastPINOverlay.tsx`, `ui/src/features/auth/CreatePinScreen.tsx`, UI tests.
 **Tests:** oz-pos-app lib **795/795** (7 picker-ticket crypto + 7 command-level gate tests + 1 login-mint test, all new); tablet `cargo check` clean (shares oz-core, untouched); UI vitest **3761/3761** (169 in the directly-affected files); `cargo fmt` clean; clippy `-D warnings` clean on changed files (workspace still fails only on the pre-existing `products.rs:876` type_complexity).
 **Follow-ups:** the picker ticket has a 5-min TTL — a stalled picker requires re-login (deliberate); `list_workspace_screens` store routing is ticket-gated but not store-access-checked (screens are nav metadata); the tablet client has no pre-session picker, so no parity work there.
+## 2026-08-06 — TDD cycle: PG pull composite (created_at, id) cursor
+
+### PG pull skipped equal-timestamp rows and stalled the anchor on never-stamped synced_at
+**Problem:** the PG transport's pull filtered `WHERE synced_at > $1` with no cursor — (a) rows sharing the anchor's exact `synced_at` timestamp were permanently skipped (strict `>`), and (b) the durable anchor was computed from `synced_at`, so a remote that never stamps it (rows stay NULL) never advanced the anchor and the daemon re-pulled the entire queue every cycle. The HTTP server had long since moved to a composite `(created_at, id)` cursor with `created_at >= since` — the PG path never caught up.
+**Solution:** TDD slice mirroring the HTTP server's pagination. `pg_transport::pull_updates(since, cursor)` now takes a composite cursor, decodes `"created_at|id"`, and builds three query shapes via a pure `build_pull_sql` (cursor tiebreak `created_at > $2 OR (created_at = $2 AND id > $3)`, since-only `created_at >= $1`, initial full pull). It fetches 501 rows, keeps 500, and derives `next_cursor` from the last KEPT row (RUST-07). `pg_daemon::apply_pulled_page` now advances the monotonic anchor on the page's newest `created_at` — never `synced_at` — and `run_tick` loops pages while a next cursor is returned, persisting `(since, next_cursor)` after each page and retaining both on retryable failure.
+**Commits:** `platform/sync/src/pg_transport.rs` + `platform/sync/src/pg_daemon.rs` (two-file change; pg_transport swept into another agent's commit, verified intact).
+**Tests:** 254 crate tests (9 new: cursor decode, SQL shape × 3, next-cursor derivation × 2, created_at-anchor-when-synced_at-NULL regression, roundtrip) · 19/19 gated integration suite · fmt + clippy `-D warnings` clean.
+**Follow-ups:** the PG remote query has no tenant filter (the transport pulls every tenant's rows) — add `tenant_id` scoping when real multi-tenant PG deployments appear; and the SQLite daemon still lacks a snapshot path entirely.
+
 
 ## 2026-08-06 — TDD cycle: PostgreSQL daemon replay-safety parity (SYNC-01/02)
 
