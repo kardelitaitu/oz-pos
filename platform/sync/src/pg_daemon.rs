@@ -142,7 +142,13 @@ impl PgSyncDaemon {
                 // not move those).
                 let pull_since = store.get_sync_pull_state().ok().and_then(|s| s.since);
 
-                let pg_config = if enabled && !pending.is_empty() {
+                // Build the transport whenever PG sync is ENABLED — not only
+                // when there are pending items — so a pull-only terminal (a
+                // pure consumer of another terminal's rows on a shared remote
+                // PG) still pulls every cycle. Previously the pull phase was
+                // unreachable on push-idle cycles, which would have starved
+                // relay terminals of remote updates.
+                let pg_config = if enabled {
                     let host = Settings::get_pg_sync_host(&conn)
                         .unwrap_or_default()
                         .unwrap_or_default();
@@ -195,61 +201,65 @@ impl PgSyncDaemon {
             });
 
         if let Some(ref transport) = pg_transport {
-            match transport.push_items(&pending).await {
-                Ok(results) => {
-                    pushed = results.len(); // Phase 3: Apply push results to local DB (blocking)
-                    let db_clone = db.clone();
-                    let outcome = tokio::task::spawn_blocking(move || {
-                        let conn = db_clone.blocking_lock();
-                        let store = Store::new(&conn);
-                        let queue = SyncQueue::new();
-                        for (item, outcome) in pending.iter().zip(results.iter()) {
-                            match outcome {
-                                crate::transport::PushOutcome::Accepted => {
-                                    if let Err(e) = store.mark_offline_synced(&item.id) {
-                                        tracing::error!(
-                                            item_id = %item.id,
-                                            error = %e,
-                                            "pg sync daemon: failed to mark item synced"
-                                        );
+            // Phase 3: push pending items (no-op when nothing is pending).
+            if !pending.is_empty() {
+                match transport.push_items(&pending).await {
+                    Ok(results) => {
+                        pushed = results.len(); // Phase 3: Apply push results to local DB (blocking)
+                        let db_clone = db.clone();
+                        let outcome = tokio::task::spawn_blocking(move || {
+                            let conn = db_clone.blocking_lock();
+                            let store = Store::new(&conn);
+                            let queue = SyncQueue::new();
+                            for (item, outcome) in pending.iter().zip(results.iter()) {
+                                match outcome {
+                                    crate::transport::PushOutcome::Accepted => {
+                                        if let Err(e) = store.mark_offline_synced(&item.id) {
+                                            tracing::error!(
+                                                item_id = %item.id,
+                                                error = %e,
+                                                "pg sync daemon: failed to mark item synced"
+                                            );
+                                        }
                                     }
-                                }
-                                crate::transport::PushOutcome::Rejected { reason } => {
-                                    if let Err(e) = store.mark_offline_failed(&item.id, reason) {
-                                        tracing::error!(
-                                            item_id = %item.id,
-                                            error = %e,
-                                            "pg sync daemon: failed to mark item failed"
-                                        );
+                                    crate::transport::PushOutcome::Rejected { reason } => {
+                                        if let Err(e) = store.mark_offline_failed(&item.id, reason)
+                                        {
+                                            tracing::error!(
+                                                item_id = %item.id,
+                                                error = %e,
+                                                "pg sync daemon: failed to mark item failed"
+                                            );
+                                        }
                                     }
-                                }
-                                crate::transport::PushOutcome::Conflict(server_item) => {
-                                    // SYNC-02 parity: route the conflict through the shared
-                                    // ADR #21 service (version LWW / sale status DAG / stock
-                                    // CRDT merge) instead of blanket mark-synced + re-enqueue,
-                                    // which could resurrect stale remote state.
-                                    if let Err(e) =
-                                        queue.apply_push_conflict(&store, item, server_item)
-                                    {
-                                        tracing::error!(
-                                            item_id = %item.id,
-                                            action = %item.action,
-                                            error = %e,
-                                            "pg sync daemon: conflict resolution failed"
-                                        );
+                                    crate::transport::PushOutcome::Conflict(server_item) => {
+                                        // SYNC-02 parity: route the conflict through the shared
+                                        // ADR #21 service (version LWW / sale status DAG / stock
+                                        // CRDT merge) instead of blanket mark-synced + re-enqueue,
+                                        // which could resurrect stale remote state.
+                                        if let Err(e) =
+                                            queue.apply_push_conflict(&store, item, server_item)
+                                        {
+                                            tracing::error!(
+                                                item_id = %item.id,
+                                                action = %item.action,
+                                                error = %e,
+                                                "pg sync daemon: conflict resolution failed"
+                                            );
+                                        }
                                     }
                                 }
                             }
-                        }
-                    })
-                    .await;
+                        })
+                        .await;
 
-                    if let Err(e) = outcome {
-                        sync_error = Some(format!("apply push phase: {e}"));
+                        if let Err(e) = outcome {
+                            sync_error = Some(format!("apply push phase: {e}"));
+                        }
                     }
-                }
-                Err(e) => {
-                    sync_error = Some(e.to_string());
+                    Err(e) => {
+                        sync_error = Some(e.to_string());
+                    }
                 }
             }
 
@@ -259,7 +269,8 @@ impl PgSyncDaemon {
             // idempotency ledger, and the anchor advances only after the
             // page applied — so a replaying remote queue can never re-apply
             // a mutation, and a poison item dead-letters instead of erroring
-            // forever.
+            // forever. The pull runs on every enabled cycle, independent of
+            // whether anything was pending to push.
             match transport.pull_updates(pull_since.as_deref()).await {
                 Ok(pull_resp) => {
                     pulled = pull_resp.items.len();
