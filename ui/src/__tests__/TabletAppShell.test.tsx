@@ -94,6 +94,7 @@ const mockAuthSession: Mock<() => AuthContextValue> = vi.fn(() => ({
   logout: vi.fn(),
   clearError: vi.fn(),
   swapSession: vi.fn(),
+  pickerTicket: null,
   isManager: true,
   isOwner: true,
 }));
@@ -136,6 +137,7 @@ function mockOwnerSession() {
     logout: vi.fn(),
     clearError: vi.fn(),
     swapSession: vi.fn(),
+  pickerTicket: null,
     isManager: true,
     isOwner: true,
   });
@@ -155,6 +157,7 @@ function mockCashierSession() {
     logout: vi.fn(),
     clearError: vi.fn(),
     swapSession: vi.fn(),
+  pickerTicket: null,
     isManager: false,
     isOwner: false,
   });
@@ -169,6 +172,7 @@ function mockNoSession() {
     logout: vi.fn(),
     clearError: vi.fn(),
     swapSession: vi.fn(),
+  pickerTicket: null,
     isManager: false,
     isOwner: false,
   });

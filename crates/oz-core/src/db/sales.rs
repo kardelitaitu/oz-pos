@@ -99,6 +99,46 @@ pub struct HeldCartFull {
 
 // ── Sale Deduction (ADR-19) ────────────────────────────────────────
 
+/// MONEY-04: payment splits must cover the recorded sale total before a
+/// sale may be persisted.
+///
+/// Over-tender is allowed (the difference becomes change back to the
+/// customer); under-payment is rejected so a hostile IPC caller (or a buggy
+/// front-end) cannot complete a sale for less than the ledger total. A
+/// negative split is never legitimate and is rejected even when the sum
+/// happens to cover the total. Summing uses checked arithmetic so a huge
+/// split list cannot overflow past the total.
+fn validate_payment_splits_cover_total(
+    splits: &[crate::PaymentSplitArg],
+    total_minor: i64,
+) -> Result<(), CoreError> {
+    let mut sum: i64 = 0;
+    for split in splits {
+        if split.amount_minor < 0 {
+            return Err(CoreError::Validation {
+                field: "payments",
+                message: format!(
+                    "payment split amount must be non-negative, got {}",
+                    split.amount_minor
+                ),
+            });
+        }
+        sum = sum
+            .checked_add(split.amount_minor)
+            .ok_or_else(|| CoreError::Validation {
+                field: "payments",
+                message: "payment split total overflow".into(),
+            })?;
+    }
+    if sum < total_minor {
+        return Err(CoreError::Validation {
+            field: "payments",
+            message: format!("payment splits ({sum}) do not cover the sale total ({total_minor})"),
+        });
+    }
+    Ok(())
+}
+
 impl Store<'_> {
     /// Complete a sale with location-aware stock deduction (ADR-19 §6).
     ///
@@ -322,6 +362,11 @@ impl Store<'_> {
                 .unwrap_or_else(|_| "shortfalls serialization failed".into()),
             });
         }
+
+        // MONEY-04: validate payment splits against the ledger total AFTER
+        // stock resolution (so the PartialStockResult dialog keeps precedence)
+        // but BEFORE any write — the error path rolls the whole tx back.
+        validate_payment_splits_cover_total(payment_splits, sale.total.minor_units)?;
 
         // ── Phase 2: execute deductions ───────────────────────────
         let deduct_tx_id = InventoryTransactionId::new();
@@ -707,6 +752,9 @@ impl Store<'_> {
                 }));
             }
         }
+
+        // MONEY-04: same ledger-integrity contract as complete_sale_deduction.
+        validate_payment_splits_cover_total(payment_splits, sale.total.minor_units)?;
 
         // ── Phase 2: Execute deductions ───────────────────────────
         let deduct_tx_id = InventoryTransactionId::new();
@@ -3202,7 +3250,7 @@ mod tests {
 
         let sale = make_single_line_sale("COFFEE", 2, 350);
         let result = s
-            .complete_sale_deduction(&sale, None, &[], "cashier-1", None)
+            .complete_sale_deduction(&sale, None, &tender(700), "cashier-1", None)
             .unwrap();
 
         assert_eq!(result.sale_id, sale.id);
@@ -3356,7 +3404,7 @@ mod tests {
         let sale = make_single_line_sale("COFFEE", 2, 350);
         let splits = vec![crate::PaymentSplitArg {
             method: "cash".into(),
-            amount_minor: 500,
+            amount_minor: 700,
             gateway_reference: None,
             gateway_status: None,
             gateway_response: None,
@@ -3376,6 +3424,182 @@ mod tests {
             )
             .unwrap();
         assert_eq!(payment_count, 1, "one payment row created");
+    }
+
+    /// One full-tender cash split for the given amount (MONEY-04 tests).
+    fn tender(amount_minor: i64) -> Vec<crate::PaymentSplitArg> {
+        vec![crate::PaymentSplitArg {
+            method: "cash".into(),
+            amount_minor,
+            gateway_reference: None,
+            gateway_status: None,
+            gateway_response: None,
+            idempotency_key: None,
+        }]
+    }
+
+    /// MONEY-04: payment splits must cover the ledger total. Over-tender is
+    /// allowed (change back); under-payment must be rejected even though the
+    /// old code happily persisted the sale — a hostile IPC caller could
+    /// complete a 700-minor sale with a 500-minor "payment".
+    #[test]
+    fn complete_sale_deduction_rejects_underpaid_payment_splits() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_product_with_stock(&conn, "COFFEE", 10);
+
+        let sale = make_single_line_sale("COFFEE", 2, 350); // total 700
+        let result = s.complete_sale_deduction(&sale, None, &tender(500), "cashier-1", None);
+
+        match result {
+            Err(CoreError::Validation { field, message }) => {
+                assert_eq!(
+                    field, "payments",
+                    "expected field 'payments', got '{field}'"
+                );
+                assert!(
+                    message.contains("do not cover"),
+                    "expected an under-payment message, got: {message}"
+                );
+            }
+            other => panic!("under-paid splits must not complete the sale, got: {other:?}"),
+        }
+
+        // Nothing may be persisted: no sale row, no payment rows.
+        assert!(
+            s.get_sale(&sale.id).unwrap().is_none(),
+            "no sale row may exist"
+        );
+        let payment_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM payments WHERE sale_id = ?1",
+                rusqlite::params![sale.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(payment_count, 0, "no payment rows may exist");
+    }
+
+    /// The worst case: `payment_splits: Some([])` bypasses the command layer's
+    /// full-tender default and would previously complete a sale with zero
+    /// payment records.
+    #[test]
+    fn complete_sale_deduction_rejects_empty_payment_splits() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_product_with_stock(&conn, "COFFEE", 10);
+
+        let sale = make_single_line_sale("COFFEE", 2, 350); // total 700
+        let result = s.complete_sale_deduction(&sale, None, &[], "cashier-1", None);
+
+        match result {
+            Err(CoreError::Validation { field, .. }) => {
+                assert_eq!(
+                    field, "payments",
+                    "expected field 'payments', got '{field}'"
+                );
+            }
+            other => panic!("empty splits must not complete the sale, got: {other:?}"),
+        }
+    }
+
+    /// Over-tender must remain legal — the difference is change back to the
+    /// customer.
+    #[test]
+    fn complete_sale_deduction_accepts_overpaid_payment_splits() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_product_with_stock(&conn, "COFFEE", 10);
+
+        let sale = make_single_line_sale("COFFEE", 2, 350); // total 700
+        let result = s
+            .complete_sale_deduction(&sale, None, &tender(1000), "cashier-1", None)
+            .unwrap();
+        assert_eq!(result.status, SaleStatus::Pending);
+
+        let paid: i64 = conn
+            .query_row(
+                "SELECT amount_minor FROM payments WHERE sale_id = ?1",
+                rusqlite::params![sale.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(paid, 1000, "the over-tendered split is recorded for change");
+    }
+
+    /// A negative split could game the sum check (e.g. [900, -200] sums to
+    /// 700) while still writing garbage payment rows into reports.
+    #[test]
+    fn complete_sale_deduction_rejects_negative_payment_split() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_product_with_stock(&conn, "COFFEE", 10);
+
+        let sale = make_single_line_sale("COFFEE", 2, 350); // total 700
+        let splits = vec![
+            crate::PaymentSplitArg {
+                method: "cash".into(),
+                amount_minor: 900,
+                gateway_reference: None,
+                gateway_status: None,
+                gateway_response: None,
+                idempotency_key: None,
+            },
+            crate::PaymentSplitArg {
+                method: "other".into(),
+                amount_minor: -200,
+                gateway_reference: None,
+                gateway_status: None,
+                gateway_response: None,
+                idempotency_key: None,
+            },
+        ];
+        let result = s.complete_sale_deduction(&sale, None, &splits, "cashier-1", None);
+
+        match result {
+            Err(CoreError::Validation { field, message }) => {
+                assert_eq!(
+                    field, "payments",
+                    "expected field 'payments', got '{field}'"
+                );
+                assert!(
+                    message.contains("non-negative"),
+                    "expected a non-negative message, got: {message}"
+                );
+            }
+            other => panic!("negative splits must not complete the sale, got: {other:?}"),
+        }
+    }
+
+    /// The resolved-shortfalls command shares the same ledger-write path and
+    /// must enforce the identical contract.
+    #[test]
+    fn complete_sale_with_resolved_shortfalls_rejects_underpaid_payment_splits() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_product_with_stock(&conn, "COFFEE", 10);
+
+        let sale = make_single_line_sale("COFFEE", 2, 350); // total 700
+        let result = s.complete_sale_with_resolved_shortfalls(
+            &sale,
+            None,
+            &tender(500),
+            "cashier-1",
+            None,
+            &[],
+        );
+
+        match result {
+            Err(CoreError::Validation { field, .. }) => {
+                assert_eq!(
+                    field, "payments",
+                    "expected field 'payments', got '{field}'"
+                );
+            }
+            other => {
+                panic!("resolved-shortfalls under-paid splits must not complete, got: {other:?}")
+            }
+        }
     }
 
     // ── complete_sale_with_resolved_shortfalls (ADR-19 §6b) ─────
@@ -3407,7 +3631,7 @@ mod tests {
             .complete_sale_with_resolved_shortfalls(
                 &sale,
                 None,
-                &[],
+                &tender(4200),
                 "cashier-1",
                 None,
                 &[resolution],
@@ -3653,7 +3877,7 @@ mod tests {
             .complete_sale_with_resolved_shortfalls(
                 &sale,
                 None,
-                &[],
+                &tender(1950),
                 "cashier-1",
                 None,
                 &[resolution],
@@ -3700,7 +3924,14 @@ mod tests {
 
         let sale = make_single_line_sale("COFFEE", 3, 350);
         let result = s
-            .complete_sale_with_resolved_shortfalls(&sale, None, &[], "cashier-1", None, &[])
+            .complete_sale_with_resolved_shortfalls(
+                &sale,
+                None,
+                &tender(1050),
+                "cashier-1",
+                None,
+                &[],
+            )
             .unwrap();
         assert_eq!(result.status, SaleStatus::Pending);
 
@@ -3830,7 +4061,7 @@ mod tests {
         s.complete_sale_with_resolved_shortfalls(
             &sale,
             None,
-            &[],
+            &tender(1600),
             "cashier-1",
             None,
             &[resolution],
@@ -3932,7 +4163,8 @@ mod tests {
             handles.push(std::thread::spawn(move || {
                 let conn = rusqlite::Connection::open(&p).unwrap();
                 let store = Store::new(&conn);
-                let result = store.complete_sale_deduction(&sl, None, &[], "cashier-1", None);
+                let result =
+                    store.complete_sale_deduction(&sl, None, &tender(700), "cashier-1", None);
                 (i, result)
             }));
         }
@@ -4031,7 +4263,7 @@ mod tests {
             .unwrap();
         let sale = Sale::from_cart(&cart).unwrap();
 
-        s.complete_sale_deduction(&sale, None, &[], "staff-1", None)
+        s.complete_sale_deduction(&sale, None, &tender(15000), "staff-1", None)
             .unwrap();
 
         // First void succeeds
@@ -4076,7 +4308,7 @@ mod tests {
             .unwrap();
         let sale = Sale::from_cart(&cart).unwrap();
 
-        s.complete_sale_deduction(&sale, None, &[], "staff-1", None)
+        s.complete_sale_deduction(&sale, None, &tender(2000), "staff-1", None)
             .unwrap();
 
         // Manually set pending_expires_at to 1 hour in the past.
@@ -4142,7 +4374,7 @@ mod tests {
         let sale = Sale::from_cart(&cart).unwrap();
 
         // Use complete_sale_deduction which sets pending_expires_at = NOW + 30 min.
-        s.complete_sale_deduction(&sale, None, &[], "staff-1", None)
+        s.complete_sale_deduction(&sale, None, &tender(1000), "staff-1", None)
             .unwrap();
 
         // Reap should NOT touch this fresh sale.
@@ -4185,7 +4417,7 @@ mod tests {
             .unwrap();
         let sale = Sale::from_cart(&cart).unwrap();
 
-        s.complete_sale_deduction(&sale, None, &[], "staff-1", None)
+        s.complete_sale_deduction(&sale, None, &tender(1000), "staff-1", None)
             .unwrap();
 
         // First operation succeeds (finalize).

@@ -168,7 +168,7 @@ const DEFAULT_STORE_ID = "default";
  * session token switching (ADR #6).
  */
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  const { session } = useAuth();
+  const { session, pickerTicket } = useAuth();
   // Standalone state — not derived from activeInstance, so it works
   // even before availableWorkspaces is loaded (no race condition).
   const [activeWorkspace, setActiveWorkspace] = useState<string | null>(null);
@@ -182,8 +182,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const roleId = session?.role_id ?? "";
-  const userId = session?.user_id ?? "";
 
   // ADR #4 Phase 3: Dynamically resolved store ID from device binding or primary store.
   const [resolvedStoreId, setResolvedStoreId] =
@@ -254,12 +252,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const fetchWorkspaces = useCallback(
     async (storeId: string, cancelled: () => boolean) => {
+      // audit/06: the picker ticket binds the caller server-side; the
+      // backend derives the real role from the ticket, so the UI never
+      // sends a role/user claim that could be forged.
+      if (!pickerTicket) return;
       try {
-        const workspaces = await listWorkspaces(
-          roleId,
-          storeId,
-          userId || undefined,
-        );
+        const workspaces = await listWorkspaces(pickerTicket, storeId);
         if (!cancelled()) {
           if (workspaces.length > 0) {
             setAvailableWorkspaces(workspaces);
@@ -282,7 +280,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [roleId, userId],
+    [pickerTicket],
   );
 
   // ADR #4 Phase 2b: Switch to a different store.
@@ -349,9 +347,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   );
 
   // ADR #4 Phase 3: Resolve the boot store first, then load workspaces.
-  // This is called once on mount (or when roleId changes).
+  // This is called once on mount (or when the picker ticket changes).
   useEffect(() => {
-    if (!roleId) {
+    if (!pickerTicket) {
       setAvailableWorkspaces([]);
       setWorkspaceScreensState([]);
       setLoading(false);
@@ -395,7 +393,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [roleId, userId, fetchWorkspaces]);
+  }, [pickerTicket, fetchWorkspaces]);
 
   useEffect(() => {
     let cancelled = false;
@@ -403,7 +401,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setWorkspaceScreensState([]);
       return;
     }
-    listWorkspaceScreens(activeInstance.type_key, activeInstance.store_id)
+    // audit/06: the picker ticket binds the caller server-side — the screen
+    // list is only readable by a genuinely-authenticated user.
+    listWorkspaceScreens(
+      pickerTicket ?? "",
+      activeInstance.type_key,
+      activeInstance.store_id,
+    )
       .then((screens) => {
         if (cancelled) return;
         if (screens.length > 0) {
@@ -416,7 +420,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         if (!cancelled) setWorkspaceScreensState([]);
       });
     return () => { cancelled = true; };
-  }, [activeInstance]);
+  }, [activeInstance, pickerTicket]);
 
   const [lastWorkspace, setLastWorkspace] = useState<string | null>(null);
 
@@ -500,13 +504,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   );
 
   const retry = useCallback(() => {
-    if (!roleId) return;
+    if (!pickerTicket) return;
     setLoading(true);
     setError(null);
     fetchWorkspaces(resolvedStoreId, () => false).finally(() =>
       setLoading(false),
     );
-  }, [roleId, resolvedStoreId, fetchWorkspaces]);
+  }, [pickerTicket, resolvedStoreId, fetchWorkspaces]);
 
   // Derived scope from active instance
   const scope: WorkspaceScope | null = useMemo(

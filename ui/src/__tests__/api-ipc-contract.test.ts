@@ -506,6 +506,8 @@ describe('products.ts IPC contract', () => {
 
 import {
   listWorkspacesScoped,
+  listWorkspaces,
+  listWorkspacesForStoreScoped,
   listWorkspaceScreens,
   createWorkspaceInstanceScoped,
   updateWorkspaceInstanceScoped,
@@ -521,10 +523,29 @@ describe('workspaces.ts IPC contract', () => {
     expect(mockInvoke).toHaveBeenCalledWith('list_workspaces_scoped', { sessionToken: 'tok' });
   });
 
-  it('listWorkspaceScreens routes pre-session reads with typeKey + storeId', async () => {
+  it('listWorkspaces binds the picker ticket server-side (audit/06)', async () => {
     mockInvoke.mockResolvedValue([]);
-    await listWorkspaceScreens('restaurant-pos', 'store-1');
+    await listWorkspaces('ticket-abc', 'store-1');
+    expect(mockInvoke).toHaveBeenCalledWith('list_workspaces', {
+      ticket: 'ticket-abc',
+      storeId: 'store-1',
+    });
+  });
+
+  it('listWorkspacesForStoreScoped invokes "list_workspaces_for_store_scoped" with sessionToken + storeId', async () => {
+    mockInvoke.mockResolvedValue([]);
+    await listWorkspacesForStoreScoped('tok', 'store-1');
+    expect(mockInvoke).toHaveBeenCalledWith('list_workspaces_for_store_scoped', {
+      sessionToken: 'tok',
+      storeId: 'store-1',
+    });
+  });
+
+  it('listWorkspaceScreens routes pre-session reads with ticket + typeKey + storeId (audit/06)', async () => {
+    mockInvoke.mockResolvedValue([]);
+    await listWorkspaceScreens('ticket-abc', 'restaurant-pos', 'store-1');
     expect(mockInvoke).toHaveBeenCalledWith('list_workspace_screens', {
+      ticket: 'ticket-abc',
       typeKey: 'restaurant-pos',
       storeId: 'store-1',
     });

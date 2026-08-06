@@ -48,7 +48,7 @@ export default function CreatePinScreen({ onCreated }: CreatePinScreenProps) {
         pin,
         display_name: displayName.trim(),
       });
-      swapSession(result.session);
+      swapSession(result.session, result.picker_ticket);
       addToast({ type: 'success', message: l10n.getString('auth-create-pin-success') });
       onCreated();
       } catch (err: unknown) {

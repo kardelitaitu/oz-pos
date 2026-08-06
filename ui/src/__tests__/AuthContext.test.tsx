@@ -15,12 +15,13 @@ vi.mock('@/api/staff', () => ({
 
 // ── test consumer ─────────────────────────────────────────────────────
 function TestConsumer() {
-  const { session, loading, error, login, logout, clearError, isManager, isOwner, swapSession } = useAuth();
+  const { session, pickerTicket, loading, error, login, logout, clearError, isManager, isOwner, swapSession } = useAuth();
   return (
     <div>
       <span data-testid="loading">{String(loading)}</span>
       <span data-testid="error">{error ?? 'no-error'}</span>
       <span data-testid="session">{session ? session.display_name : 'no-session'}</span>
+      <span data-testid="ticket">{pickerTicket ?? 'no-ticket'}</span>
       <span data-testid="role">{session?.role_name ?? 'none'}</span>
       <span data-testid="userId">{session?.user_id ?? 'none'}</span>
       <span data-testid="isManager">{String(isManager)}</span>
@@ -53,11 +54,28 @@ async function renderProvider() {
 }
 
 describe('AuthContext', () => {
-  it('starts with no session, no loading, no error', async () => {
+  it('starts with no session, no ticket, no loading, no error', async () => {
     await renderProvider();
     expect(screen.getByTestId('session').textContent).toBe('no-session');
+    expect(screen.getByTestId('ticket').textContent).toBe('no-ticket');
     expect(screen.getByTestId('loading').textContent).toBe('false');
     expect(screen.getByTestId('error').textContent).toBe('no-error');
+  });
+
+  it('stores the picker ticket from login and clears it on logout', async () => {
+    mockStaffLogin.mockResolvedValue({
+      session: { display_name: 'Alice', role_name: 'cashier', user_id: 'u1', role_id: 'r1' },
+      picker_ticket: 'ticket-abc',
+    });
+    await renderProvider();
+    fireEvent.click(screen.getByTestId('login-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ticket').textContent).toBe('ticket-abc');
+    });
+
+    fireEvent.click(screen.getByTestId('logout-btn'));
+    expect(screen.getByTestId('ticket').textContent).toBe('no-ticket');
   });
 
   it('isManager and isOwner are false with no session', async () => {
@@ -70,6 +88,7 @@ describe('AuthContext', () => {
     mockStaffLogin.mockImplementation(
       () => new Promise((resolve) => setTimeout(() => resolve({
         session: { display_name: 'Alice', role_name: 'manager', user_id: 'u1', role_id: 'r1' },
+        picker_ticket: 'ticket-1',
       }), 100)),
     );
 
@@ -113,6 +132,7 @@ describe('AuthContext', () => {
   it('logs out and clears session and error', async () => {
     mockStaffLogin.mockResolvedValue({
       session: { display_name: 'Alice', role_name: 'cashier', user_id: 'u1', role_id: 'r1' },
+      picker_ticket: 'ticket-1',
     });
     await renderProvider();
     fireEvent.click(screen.getByTestId('login-btn'));
@@ -129,6 +149,7 @@ describe('AuthContext', () => {
   it('isManager=true for manager role', async () => {
     mockStaffLogin.mockResolvedValue({
       session: { display_name: 'Bob', role_name: 'manager', user_id: 'u2', role_id: 'r2' },
+      picker_ticket: 'ticket-2',
     });
     await renderProvider();
     fireEvent.click(screen.getByTestId('login-btn'));
@@ -143,6 +164,7 @@ describe('AuthContext', () => {
   it('isOwner=true and isManager=true for owner role', async () => {
     mockStaffLogin.mockResolvedValue({
       session: { display_name: 'Eve', role_name: 'owner', user_id: 'u3', role_id: 'r3' },
+      picker_ticket: 'ticket-3',
     });
     await renderProvider();
     fireEvent.click(screen.getByTestId('login-btn'));
@@ -157,6 +179,7 @@ describe('AuthContext', () => {
     it('replaces session without changing loading state', async () => {
       mockStaffLogin.mockResolvedValue({
         session: { display_name: 'Alice', role_name: 'cashier', user_id: 'u1', role_id: 'r1' },
+        picker_ticket: 'ticket-1',
       });
       await renderProvider();
       fireEvent.click(screen.getByTestId('login-btn'));
@@ -193,6 +216,7 @@ describe('AuthContext', () => {
     it('does not call staffLogin API', async () => {
       mockStaffLogin.mockResolvedValue({
         session: { display_name: 'Alice', role_name: 'cashier', user_id: 'u1', role_id: 'r1' },
+        picker_ticket: 'ticket-1',
       });
       await renderProvider();
       fireEvent.click(screen.getByTestId('login-btn'));

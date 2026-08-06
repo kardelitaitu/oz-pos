@@ -23,6 +23,12 @@ export interface LoginSessionDto {
 /** Result of a successful staff login. */
 export interface StaffLoginResult {
   session: LoginSessionDto;
+  /**
+   * Short-lived ticket for the pre-session workspace picker (audit/06).
+   * Passed to listWorkspaces / listWorkspaceScreens until createSession
+   * returns the opaque session token.
+   */
+  picker_ticket: string;
 }
 
 /** Arguments for checking if a username exists. */
@@ -60,6 +66,8 @@ export interface BootstrapOwnerArgs {
 /** Result of bootstrapping the first owner account. */
 export interface BootstrapOwnerResult {
   session: LoginSessionDto;
+  /** Short-lived ticket for the pre-session workspace picker (audit/06). */
+  picker_ticket: string;
 }
 
 /**

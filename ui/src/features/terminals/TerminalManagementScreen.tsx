@@ -18,9 +18,13 @@ import {
   type DeviceBindingDto,
 } from '@/api/terminals';
 import { listStores, type StoreProfile } from '@/api/stores';
-import { listWorkspaces, type WorkspaceDto } from '@/api/workspaces';
+import {
+  listWorkspacesForStoreScoped,
+  type WorkspaceDto,
+} from '@/api/workspaces';
 import { FEATURES } from '@/hooks/useFeatures';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
@@ -145,6 +149,7 @@ function formatDate(iso: string): string {
 export default function TerminalManagementScreen() {
   const { l10n } = useLocalization();
   const { session } = useAuth();
+  const { sessionToken } = useWorkspace();
   const { addToast } = useToast();
   const [terminals, setTerminals] = useState<TerminalDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -260,9 +265,12 @@ export default function TerminalManagementScreen() {
           setBindingStores(stores);
           if (b.boundStoreId) {
             setSelectedStoreId(b.boundStoreId);
-            // Load instances for the bound store.
+            // Load instances for the bound store (audit/06: session-scoped,
+            // never a hardcoded role-owner claim).
             try {
-              const instances = await listWorkspaces('role-owner', b.boundStoreId);
+              const instances = sessionToken
+                ? await listWorkspacesForStoreScoped(sessionToken, b.boundStoreId)
+                : [];
               if (!cancelled) {
                 setBindingInstances(instances);
                 if (b.boundInstanceId) setSelectedInstanceId(b.boundInstanceId);
@@ -279,7 +287,7 @@ export default function TerminalManagementScreen() {
       }
     })();
     return () => { cancelled = true; };
-  }, [editingId, l10n]);
+  }, [editingId, l10n, sessionToken]);
 
   // Load instances when the selected store changes.
   useEffect(() => {
@@ -291,7 +299,9 @@ export default function TerminalManagementScreen() {
     let cancelled = false;
     (async () => {
       try {
-        const instances = await listWorkspaces('role-owner', selectedStoreId);
+        const instances = sessionToken
+          ? await listWorkspacesForStoreScoped(sessionToken, selectedStoreId)
+          : [];
         if (!cancelled) {
           setBindingInstances(instances);
           setSelectedInstanceId((prev) =>
@@ -303,7 +313,7 @@ export default function TerminalManagementScreen() {
       }
     })();
     return () => { cancelled = true; };
-  }, [selectedStoreId, editingId]);
+  }, [selectedStoreId, editingId, sessionToken]);
 
   const closeModal = useCallback(() => {
     setShowModal(false);

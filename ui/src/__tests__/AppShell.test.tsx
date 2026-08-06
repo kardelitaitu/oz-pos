@@ -127,6 +127,7 @@ const mockAuthSession: Mock<() => AuthContextValue> =
   logout: vi.fn(),
   clearError: vi.fn(),
   swapSession: vi.fn(),
+  pickerTicket: null,
   isManager: false,
   isOwner: false,
 }));
@@ -199,6 +200,7 @@ function mockKitchenRole() {
     logout: vi.fn(),
     clearError: vi.fn(),
     swapSession: vi.fn(),
+  pickerTicket: null,
     isManager: false,
     isOwner: false,
   });
@@ -223,6 +225,7 @@ describe('AppShell — KDS workspace navigation', () => {
       logout: vi.fn(),
       clearError: vi.fn(),
       swapSession: vi.fn(),
+  pickerTicket: null,
       isManager: false,
       isOwner: false,
     });
@@ -252,6 +255,7 @@ describe('AppShell — KDS workspace navigation', () => {
         logout: vi.fn(),
         clearError: vi.fn(),
         swapSession: vi.fn(),
+  pickerTicket: null,
         isManager: false,
         isOwner: false,
       });
@@ -292,6 +296,7 @@ describe('AppShell — KDS workspace navigation', () => {
         logout: vi.fn(),
         clearError: vi.fn(),
         swapSession: vi.fn(),
+  pickerTicket: null,
         isManager: false,
         isOwner: false,
       });
@@ -539,6 +544,7 @@ describe('AppShell — KDS workspace navigation', () => {
         logout: vi.fn(),
         clearError: vi.fn(),
         swapSession: vi.fn(),
+  pickerTicket: null,
         isManager: false,
         isOwner: false,
       });

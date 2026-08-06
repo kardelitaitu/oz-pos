@@ -125,6 +125,7 @@ describe('CreatePinScreen', () => {
     it('calls bootstrapOwner on submit and navigates on success', async () => {
       mockBootstrapOwner.mockResolvedValue({
         session: { user_id: 'owner-1', display_name: 'Owner', role_name: 'owner', role_id: 'role-owner' },
+        picker_ticket: 'ticket-boot',
       });
 
       renderScreen();
@@ -139,9 +140,12 @@ describe('CreatePinScreen', () => {
         });
       });
 
-      expect(mockSwapSession).toHaveBeenCalledWith({
-        user_id: 'owner-1', display_name: 'Owner', role_name: 'owner', role_id: 'role-owner',
-      });
+      expect(mockSwapSession).toHaveBeenCalledWith(
+        {
+          user_id: 'owner-1', display_name: 'Owner', role_name: 'owner', role_id: 'role-owner',
+        },
+        'ticket-boot',
+      );
       expect(mockAddToast).toHaveBeenCalled();
       expect(onCreated).toHaveBeenCalled();
     });

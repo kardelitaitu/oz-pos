@@ -596,6 +596,53 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn staff_login_mints_verifiable_picker_ticket() {
+        // audit/06: the picker ticket returned by a successful login must
+        // verify against the process secret and bind the authenticated user.
+        let conn = migrations::fresh_db();
+        let store = Store::new(&conn);
+        store.seed_default_roles().unwrap();
+        let hash = oz_core::auth::hash_pin("1234").unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-owner', 'owner', ?1, 'Owner', 'role-owner', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [hash],
+        )
+        .unwrap();
+        let app = tauri::test::mock_builder()
+            .manage(AppState::for_test_with_conn(conn))
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result = staff_login(
+            StaffLoginArgs {
+                username: "owner".into(),
+                pin: "1234".into(),
+                device_id: None,
+            },
+            app.state(),
+        )
+        .await
+        .unwrap();
+
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        let state = app.state::<AppState>();
+        assert_eq!(
+            picker_ticket::verify_picker_ticket(
+                &state.picker_ticket_secret,
+                &result.picker_ticket,
+                now
+            )
+            .as_deref(),
+            Some("user-owner"),
+            "login must mint a ticket bound to the authenticated user"
+        );
+    }
+
+    #[tokio::test]
     async fn create_session_rejects_forged_role_id() {
         // A cashier user whose REAL role is role-cashier claims role-owner.
         let conn = migrations::fresh_db();

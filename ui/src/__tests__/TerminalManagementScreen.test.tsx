@@ -52,6 +52,19 @@ vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({ session: { user_id: 'user-1' } }),
 }));
 
+vi.mock('@/contexts/WorkspaceContext', () => ({
+  useWorkspace: () => ({ sessionToken: 'tok-1' }),
+}));
+
+const { mockListWorkspacesForStoreScoped } = vi.hoisted(() => ({
+  mockListWorkspacesForStoreScoped: vi.fn(),
+}));
+
+vi.mock('@/api/workspaces', () => ({
+  listWorkspacesForStoreScoped: (...args: unknown[]) =>
+    mockListWorkspacesForStoreScoped(...args),
+}));
+
 const bundle = new FluentBundle('en-US');
 bundle.addResource(new FluentResource(terminalsFtl));
 const l10n = new ReactLocalization([bundle]);
@@ -81,6 +94,7 @@ describe('TerminalManagementScreen', () => {
     mockListTerminalOverrides.mockResolvedValue([]);
     mockRegisterTerminal.mockResolvedValue({ id: 'new-t' });
     mockDeleteTerminal.mockResolvedValue(undefined);
+    mockListWorkspacesForStoreScoped.mockResolvedValue([]);
   });
 
   it('renders the title', async () => {
