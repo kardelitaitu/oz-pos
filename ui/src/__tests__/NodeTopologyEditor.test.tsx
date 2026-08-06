@@ -1132,4 +1132,63 @@ describe('NodeTopologyEditor Component', () => {
 
     expect(screen.queryByText('Delete Selected Element')).not.toBeInTheDocument();
   });
+
+  // ── Undo-of-delete re-selects the restored node (#17) ─────────────
+
+  it('re-selects a node restored by undoing a dialog (wired) delete', () => {
+    renderEditor();
+
+    // store-1 has connected wires → the dialog delete path.
+    const storeNode = document.querySelector('.node-type-store') as HTMLElement;
+    expect(storeNode).not.toBeNull();
+    fireEvent.mouseDown(storeNode, { button: 0 });
+    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Delete Selected Element'));
+    expect(screen.getByText('Delete Node')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Delete')); // confirm
+    expect(screen.queryByText('Downtown Branch')).not.toBeInTheDocument();
+
+    // Undo restores store-1 AND must re-select it so the inspector reopens.
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+
+    expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
+    expect(
+      (document.querySelector('.inspector-field input[type="text"]') as HTMLInputElement).value,
+    ).toBe('Downtown Branch');
+    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+  });
+
+  it('re-selects a node restored by undoing an immediate (wireless) delete', () => {
+    renderEditor();
+
+    // A freshly added node has no wires → the immediate delete path.
+    fireEvent.click(screen.getByText('+ Store Node'));
+    expect(screen.getByText('New Store')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Delete Selected Element'));
+    expect(screen.queryByText('New Store')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+
+    expect(screen.getByText('New Store')).toBeInTheDocument();
+    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+  });
+
+  it('does not re-select a node when undoing a wire deletion', () => {
+    renderEditor();
+
+    // Select w-1 via its hitbox and delete it through the dialog.
+    const hitbox = document.querySelector('.wire-hitbox') as Element;
+    expect(hitbox).not.toBeNull();
+    fireEvent.click(hitbox);
+    fireEvent.click(screen.getByText('Delete Selected Element'));
+    fireEvent.click(screen.getByText('Delete')); // confirm
+    expect(getWireCount()).toBe(1);
+
+    // Undo restores the wire — no node was restored, so nothing may be
+    // re-selected (the Delete button must stay hidden).
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    expect(getWireCount()).toBe(2);
+    expect(screen.queryByText('Delete Selected Element')).not.toBeInTheDocument();
+  });
 });

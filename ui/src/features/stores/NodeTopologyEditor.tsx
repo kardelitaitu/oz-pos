@@ -491,6 +491,16 @@ export default function NodeTopologyEditor({
     setHistory((prev) => prev.slice(0, -1));
     // A post-undo edit is a fresh session — it must push a new entry.
     inspectorHistoryPushedForRef.current = null;
+    // Undoing a deletion restores the removed node — re-select it so the
+    // inspector reopens on the restored element (the delete flow cleared
+    // the selection). Exactly one node restored from the entry is the
+    // delete signature: an undo of an add/move/toggle restores no nodes
+    // and must leave the selection untouched.
+    const currentIds = new Set(nodes.map((n) => n.id));
+    const restoredNodes = entry.nodes.filter((n) => !currentIds.has(n.id));
+    if (restoredNodes.length === 1) {
+      setSelectedNodeId(restoredNodes[0]!.id);
+    }
   }, [nodes, wires]);
 
   const popRedo = useCallback(() => {
