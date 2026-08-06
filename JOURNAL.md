@@ -9,7 +9,7 @@
 **Solution:** After a successful snapshot import, advance the durable anchor to the server's reported `oldest_available` (the oldest retained row — the snapshot already captured everything older, so the client needs nothing below it), or clear the anchor when the server omitted it. The next pull starts from a non-expired point; the `sync_applied_items` ledger absorbs any replay. Regression test `engine_resets_anchor_after_snapshot_import` uses a mock server that mirrors the real P-1 check (410 only when `since` predates `oldest_available`) and counts snapshot hits — cycle 2 must flow items without a second snapshot fetch.
 **Commits:** `platform/sync/src/lib.rs` — single-file fix + test.
 **Tests:** 245 crate tests (1 new) · 19/19 gated integration suite · fmt + clippy `-D warnings` clean.
-**Follow-ups:** the SQLite daemon has NO snapshot path — an expired anchor there just logs `pull phase: anchor expired` every cycle forever. Wiring the daemon to the same snapshot-recovery + anchor-reset flow is a natural next slice.
+**Follow-ups:** the SQLite daemon has NO snapshot path — an expired anchor there just logs `pull phase: anchor expired` every cycle forever. Wiring the daemon to the same snapshot-recovery + anchor-reset flow is a natural next slice. Also note: the snapshot restores reference data (products/tax/users) only — `stock.adjusted`/`complete_sale` mutations that fell inside the pruned gap `(stale_since, oldest_available)` are unrecoverable with any anchor value (inherent P-1 retention loss, not introduced by this fix).
 
 ## 2026-08-06 — TDD cycle: payment splits must cover the sale total (MONEY-04)
 
