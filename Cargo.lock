@@ -4323,6 +4323,7 @@ dependencies = [
  "oz-hal",
  "oz-logging",
  "oz-reporting",
+ "oz-security",
  "platform-core",
  "platform-kernel",
  "platform-startup",

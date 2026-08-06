@@ -1060,6 +1060,73 @@ impl Store<'_> {
 
     /// Persist a [`Sale`] (header + all line items) inside a single transaction.
     pub fn create_sale(&self, sale: &Sale) -> Result<(), CoreError> {
+        // MONEY-07: this legacy global-db door deserializes a Sale straight from
+        // import/CLI JSON (oz-cli) — CartLine::new's qty > 0 assert never runs.
+        // Reject the same negative money/qty class MONEY-06 guards on the
+        // complete_sale* entry points, or a hostile import writes negative
+        // ledger rows. Zero-total (free) sales with empty lines stay legal.
+        for line in &sale.lines {
+            if line.qty < 0 {
+                return Err(CoreError::Validation {
+                    field: "qty",
+                    message: format!("sale line quantity must be positive, got {}", line.qty),
+                });
+            }
+            if line.line_total.minor_units < 0 {
+                return Err(CoreError::Validation {
+                    field: "line_total",
+                    message: format!(
+                        "sale line total must be non-negative, got {}",
+                        line.line_total.minor_units
+                    ),
+                });
+            }
+            if line.tax_amount.minor_units < 0 {
+                return Err(CoreError::Validation {
+                    field: "tax_amount",
+                    message: format!(
+                        "sale line tax must be non-negative, got {}",
+                        line.tax_amount.minor_units
+                    ),
+                });
+            }
+        }
+        if sale.total.minor_units < 0 {
+            return Err(CoreError::Validation {
+                field: "total",
+                message: format!(
+                    "sale total must be non-negative, got {}",
+                    sale.total.minor_units
+                ),
+            });
+        }
+        if sale.subtotal.minor_units < 0 {
+            return Err(CoreError::Validation {
+                field: "subtotal",
+                message: format!(
+                    "sale subtotal must be non-negative, got {}",
+                    sale.subtotal.minor_units
+                ),
+            });
+        }
+        if sale.tax_total.minor_units < 0 {
+            return Err(CoreError::Validation {
+                field: "tax_total",
+                message: format!(
+                    "sale tax total must be non-negative, got {}",
+                    sale.tax_total.minor_units
+                ),
+            });
+        }
+        if let Some(tendered) = sale.tendered_minor
+            && tendered < 0
+        {
+            return Err(CoreError::Validation {
+                field: "tendered_minor",
+                message: format!("tendered amount must be non-negative, got {tendered}"),
+            });
+        }
+
         let cur_str = std::str::from_utf8(&sale.currency.0).map_err(|e| CoreError::Validation {
             field: "currency",
             message: format!("invalid UTF-8 in currency bytes: {e}"),
@@ -2081,6 +2148,88 @@ mod tests {
         assert_eq!(loaded.line_count, 0);
         assert_eq!(loaded.lines.len(), 0);
         assert_eq!(loaded.total.minor_units, 0);
+    }
+
+    // MONEY-07: create_sale is the legacy global-db import door (oz-cli
+    // deserializes a Sale straight from JSON payloads, bypassing CartLine's
+    // qty > 0 assert). Every money/qty field must be validated the same way
+    // the complete_sale* entry points were in MONEY-06, or a hostile import
+    // writes negative ledger rows.
+    #[test]
+    fn create_sale_rejects_negative_line_qty() {
+        let conn = fresh();
+        let mut sale = Sale::from_cart(&make_cart()).unwrap();
+        sale.lines[0].qty = -2;
+
+        let err = store(&conn).create_sale(&sale).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "qty"));
+        assert!(store(&conn).get_sale(&sale.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn create_sale_rejects_negative_line_total() {
+        let conn = fresh();
+        let mut sale = Sale::from_cart(&make_cart()).unwrap();
+        sale.lines[0].line_total = price(-500);
+
+        let err = store(&conn).create_sale(&sale).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "line_total"));
+        assert!(store(&conn).get_sale(&sale.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn create_sale_rejects_negative_total() {
+        let conn = fresh();
+        let mut sale = Sale::from_cart(&make_cart()).unwrap();
+        sale.total = price(-700);
+
+        let err = store(&conn).create_sale(&sale).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "total"));
+        assert!(store(&conn).get_sale(&sale.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn create_sale_rejects_negative_tendered_minor() {
+        let conn = fresh();
+        let mut sale = Sale::from_cart(&make_cart()).unwrap();
+        sale.tendered_minor = Some(-500);
+
+        let err = store(&conn).create_sale(&sale).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "tendered_minor"));
+        assert!(store(&conn).get_sale(&sale.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn create_sale_rejects_negative_subtotal() {
+        let conn = fresh();
+        let mut sale = Sale::from_cart(&make_cart()).unwrap();
+        sale.subtotal = price(-1150);
+
+        let err = store(&conn).create_sale(&sale).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "subtotal"));
+        assert!(store(&conn).get_sale(&sale.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn create_sale_rejects_negative_tax_total() {
+        let conn = fresh();
+        let mut sale = Sale::from_cart(&make_cart()).unwrap();
+        sale.tax_total = price(-100);
+
+        let err = store(&conn).create_sale(&sale).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "tax_total"));
+        assert!(store(&conn).get_sale(&sale.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn create_sale_rejects_negative_line_tax_amount() {
+        let conn = fresh();
+        let mut sale = Sale::from_cart(&make_cart()).unwrap();
+        sale.lines[0].tax_amount = price(-10);
+
+        let err = store(&conn).create_sale(&sale).unwrap_err();
+        assert!(matches!(err, CoreError::Validation { field, .. } if field == "tax_amount"));
+        assert!(store(&conn).get_sale(&sale.id).unwrap().is_none());
     }
 
     #[test]

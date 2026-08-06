@@ -188,12 +188,12 @@ pub async fn resolve_boot_store(
                 .or_else(|_| std::env::var("HOSTNAME"))
                 .ok()
         })
-        .unwrap_or_default();
-
-    // A keyring failure must never break boot: without a keyring there is
+        .unwrap_or_default(); // A keyring failure must never break boot: without a keyring there is
     // no way to verify a binding, so resolution degrades to primary store.
-    let keyring = oz_security::default_keyring().ok();
+    // The (non-Send) keyring is acquired only after the lock so no `.await`
+    // point holds it — Tauri requires command futures to be Send.
     let db = state.db.lock().await;
+    let keyring = oz_security::default_keyring().ok();
     let resolution =
         resolve_boot_store_core(&db, &state.db_manager, &device_id, keyring.as_deref())?;
     drop(db);

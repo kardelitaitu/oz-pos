@@ -26,6 +26,7 @@ foundation = { workspace = true }
 oz-core = { workspace = true }
 oz-hal = { workspace = true }
 oz-logging = { workspace = true }
+oz-security = { workspace = true }
 modules-crm = { workspace = true }
 modules-inventory = { workspace = true }
 modules-settings = { workspace = true }

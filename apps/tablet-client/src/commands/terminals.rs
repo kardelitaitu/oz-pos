@@ -60,18 +60,6 @@ fn sign_binding(
     Ok(hex::encode(result.into_bytes()))
 }
 
-/// Verify a device binding HMAC signature (parity with the desktop client).
-fn verify_binding(
-    keyring: &dyn oz_security::Keyring,
-    terminal_id: &str,
-    store_id: &str,
-    instance_id: &str,
-    signature: &str,
-) -> Result<bool, AppError> {
-    let expected = sign_binding(keyring, terminal_id, store_id, instance_id)?;
-    Ok(expected == signature)
-}
-
 // ── DTOs ──────────────────────────────────────────────────────────────
 
 /// Terminal DTO for the front-end.
@@ -192,10 +180,11 @@ pub async fn set_device_binding(
     args: SetDeviceBindingArgs,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
+    let db = state.db.lock().await;
+    // Acquire the (non-Send) keyring only after the lock so no `.await`
+    // point holds it — Tauri requires command futures to be Send.
     let keyring = oz_security::default_keyring()
         .map_err(|e| AppError::Internal(format!("keyring unavailable: {e}")))?;
-
-    let db = state.db.lock().await;
     let store = Store::new(&db);
     require_permission_for_user(&store, &user_id, oz_core::permissions::TERMINALS_EDIT)?;
     run_set_device_binding(&db, keyring.as_ref(), &args)?;
@@ -222,10 +211,11 @@ pub async fn set_device_binding_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    let db = state.db.lock().await;
+    // Acquire the (non-Send) keyring only after the lock so no `.await`
+    // point holds it — Tauri requires command futures to be Send.
     let keyring = oz_security::default_keyring()
         .map_err(|e| AppError::Internal(format!("keyring unavailable: {e}")))?;
-
-    let db = state.db.lock().await;
     let store = Store::new(&db);
     require_permission_for_user(
         &store,
@@ -885,34 +875,37 @@ mod tests {
     // ── Device binding (parity with desktop client) ─────────────────────
 
     #[test]
-    fn sign_binding_roundtrip_verifies() {
+    fn sign_binding_roundtrip_matches() {
         let keyring = oz_security::InMemoryKeyring::new();
         let sig = sign_binding(&keyring, "term-1", "store-a", "ws-a-1").unwrap();
         assert!(!sig.is_empty());
-        assert!(
-            verify_binding(&keyring, "term-1", "store-a", "ws-a-1", &sig).unwrap(),
-            "signature made with the same keyring must verify"
+        assert_eq!(
+            sign_binding(&keyring, "term-1", "store-a", "ws-a-1").unwrap(),
+            sig,
+            "signing the same payload with the same keyring must be stable"
         );
     }
 
     #[test]
-    fn sign_binding_different_secret_fails_verify() {
+    fn sign_binding_different_secret_differs() {
         let signer = oz_security::InMemoryKeyring::new();
         let other = oz_security::InMemoryKeyring::new();
         let sig = sign_binding(&signer, "term-1", "store-a", "ws-a-1").unwrap();
-        assert!(
-            !verify_binding(&other, "term-1", "store-a", "ws-a-1", &sig).unwrap(),
-            "a signature from a different keyring secret must not verify"
+        assert_ne!(
+            sign_binding(&other, "term-1", "store-a", "ws-a-1").unwrap(),
+            sig,
+            "a signature from a different keyring secret must not match"
         );
     }
 
     #[test]
-    fn verify_binding_false_for_wrong_payload() {
+    fn sign_binding_differs_for_wrong_payload() {
         let keyring = oz_security::InMemoryKeyring::new();
         let sig = sign_binding(&keyring, "term-1", "store-a", "ws-a-1").unwrap();
-        assert!(
-            !verify_binding(&keyring, "term-1", "store-a", "ws-a-2", &sig).unwrap(),
-            "signature for a different instance must not verify"
+        assert_ne!(
+            sign_binding(&keyring, "term-1", "store-a", "ws-a-2").unwrap(),
+            sig,
+            "signature for a different instance must not match"
         );
     }
 
@@ -943,13 +936,13 @@ mod tests {
             },
         )
         .unwrap();
-
         let (store_id, instance_id, sig) = store.get_terminal_binding(&t.id).unwrap().unwrap();
         assert_eq!(store_id, "store-a");
         assert_eq!(instance_id, "ws-a-1");
-        assert!(
-            verify_binding(&keyring, &t.id, &store_id, &instance_id, &sig).unwrap(),
-            "persisted binding must verify against the same keyring"
+        assert_eq!(
+            sign_binding(&keyring, &t.id, &store_id, &instance_id).unwrap(),
+            sig,
+            "persisted binding must match the same keyring's signature"
         );
     }
 

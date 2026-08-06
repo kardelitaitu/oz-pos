@@ -291,6 +291,7 @@ impl PgSyncDaemon {
                         let db_clone = db.clone();
                         let items = pull_resp.items;
                         let prev_since = pull_since;
+                        let prev_cursor = pull_cursor.clone();
                         // The closure needs the cursor to persist it with the
                         // anchor; the outer loop re-owns the original for the
                         // next pull iteration.
@@ -311,14 +312,26 @@ impl PgSyncDaemon {
                             // flight; writing new_since blindly would clobber
                             // it and the requeued item would never be
                             // re-fetched. Skip the write when the durable
-                            // state no longer matches what this tick captured.
+                            // (since, cursor) no longer matches what this tick
+                            // captured — full-state comparison, so a
+                            // concurrent writer moving the anchor can never
+                            // be overwritten with our now-stale value. Both
+                            // the read and the (skipped) write hold the same
+                            // `blocking_lock()`, so nothing can interleave.
                             let durable = store
                                 .get_sync_pull_state()
                                 .unwrap_or_default();
-                            if durable.since.is_none() && prev_since.is_some() {
+                            let rewound = durable.since.as_deref()
+                                != prev_since.as_deref()
+                                || durable.cursor.as_deref()
+                                    != prev_cursor.as_deref();
+                            if rewound {
                                 tracing::warn!(
                                     "pg sync daemon: operator rewind detected mid-pull — retaining rewound anchor for full re-pull"
                                 );
+                                // Pagination may still continue in-memory: the
+                                // retained NULL anchor makes the NEXT tick a
+                                // full re-pull (ledger absorbs the replay).
                             } else if let Err(e) = store.set_sync_pull_state(
                                 Some(&new_since),
                                 next_cursor_for_persist.as_deref(),

@@ -365,7 +365,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       // Step 1: Resolve the store from device binding or primary store.
       let storeId = DEFAULT_STORE_ID;
       try {
-        const resolution = await resolveBootStore();
+        // ADR #4 Phase 3: pass the device id so a bound terminal
+        // auto-boots into its store+instance instead of the primary.
+        const deviceId = await getDeviceId().catch(() => "");
+        const resolution = await resolveBootStore(deviceId || undefined);
         storeId = resolution.store_id;
         if (!cancelled) {
           setResolvedStoreId(storeId);

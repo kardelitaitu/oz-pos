@@ -389,6 +389,7 @@ impl SyncDaemon {
                                 let items = pull_resp.items;
                                 let next_cursor = pull_resp.next_cursor;
                                 let prev_since = pull_since.clone();
+                                let prev_cursor = pull_cursor.clone();
                                 let outcome = tokio::task::spawn_blocking(move || {
                                     let conn = db_clone.blocking_lock();
                                     let store = Store::new(&conn);
@@ -484,15 +485,23 @@ impl SyncDaemon {
                                         // to force a full re-pull) can land while this
                                         // page was in flight; blindly writing new_since
                                         // would clobber it and the requeued item would
-                                        // never be re-fetched. Skip the advance when the
-                                        // durable state no longer matches what this tick
-                                        // captured (a captured Some→durable None
-                                        // transition is exactly the rewind signature).
+                                        // never be re-fetched. Skip the advance when
+                                        // the durable (since, cursor) no longer matches
+                                        // what this tick captured — a full-state
+                                        // comparison, not just the Some→None rewind
+                                        // signature, so a concurrent writer moving the
+                                        // anchor (forward or back) can never be
+                                        // overwritten with our now-stale value. The
+                                        // re-read and the write below share the same
+                                        // `blocking_lock()` hold, so no rewind can
+                                        // interleave between them.
                                         let durable = store
                                             .get_sync_pull_state()
                                             .unwrap_or_default();
-                                        let rewound = durable.since.is_none()
-                                            && prev_since.is_some();
+                                        let rewound = durable.since.as_deref()
+                                            != prev_since.as_deref()
+                                            || durable.cursor.as_deref()
+                                                != prev_cursor.as_deref();
                                         if rewound {
                                             tracing::warn!(
                                                 "operator rewind detected mid-pull — retaining rewound anchor for full re-pull"
@@ -1285,8 +1294,11 @@ mod tests {
 
         // Wait until the daemon's pull request reached the server — the
         // anchor is captured by now — then rewind it exactly as an operator
-        // requeue would.
-        pull_arrived.notified().await;
+        // requeue would. Timeout so a daemon regression that never reaches
+        // the pull phase FAILS this test instead of hanging the suite.
+        tokio::time::timeout(Duration::from_secs(10), pull_arrived.notified())
+            .await
+            .expect("daemon never reached the pull phase");
         let db_rewind = db.clone();
         tokio::task::spawn_blocking(move || {
             let conn = db_rewind.blocking_lock();

@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   resolveBootStore: vi.fn(),
   createSession: vi.fn(),
   destroySession: vi.fn(),
+  getDeviceId: vi.fn(),
 }));
 
 // ── Mock context for AuthContext ───────────────────────────────────────
@@ -55,6 +56,10 @@ vi.mock('@/api/workspaces', () => ({
 vi.mock('@/api/staff', () => ({
   createSession: (...args: unknown[]) => mocks.createSession(...args),
   destroySession: (...args: unknown[]) => mocks.destroySession(...args),
+}));
+
+vi.mock('@/api/system', () => ({
+  getDeviceId: (...args: unknown[]) => mocks.getDeviceId(...args),
 }));
 
 // ── Test data ─────────────────────────────────────────────────────────
@@ -188,6 +193,7 @@ beforeEach(() => {
   ]);
   mocks.createSession.mockResolvedValue(makeSessionResult());
   mocks.destroySession.mockResolvedValue(undefined);
+  mocks.getDeviceId.mockResolvedValue('');
 });
 
 afterEach(() => {
@@ -214,6 +220,28 @@ describe('WorkspaceContext', () => {
       expect(mocks.resolveBootStore).toHaveBeenCalled();
       expect(mocks.listWorkspaces).toHaveBeenCalledWith('ticket-abc', 'store-1');
       expect(result.current.workspace.availableWorkspaces).toHaveLength(2);
+    });
+
+    it('passes the device id to boot resolution for bound auto-boot', async () => {
+      // A terminal with a stored device binding must auto-boot into its
+      // bound store+instance; the device id has to reach resolve_boot_store.
+      mocks.getDeviceId.mockResolvedValue('tablet-1');
+      const { result } = renderWorkspaceHook();
+
+      await waitForLoaded(result);
+
+      expect(mocks.resolveBootStore).toHaveBeenCalledWith('tablet-1');
+      expect(mocks.listWorkspaces).toHaveBeenCalledWith('ticket-abc', 'store-1');
+    });
+
+    it('boot resolution receives undefined when no device id resolves', async () => {
+      mocks.getDeviceId.mockRejectedValue(new Error('IPC unavailable'));
+      const { result } = renderWorkspaceHook();
+
+      await waitForLoaded(result);
+
+      expect(mocks.resolveBootStore).toHaveBeenCalledWith(undefined);
+      expect(mocks.listWorkspaces).toHaveBeenCalledWith('ticket-abc', 'store-1');
     });
 
     it('does not load workspaces when session is null', async () => {
