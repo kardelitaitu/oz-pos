@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { screen, waitFor, act } from '@testing-library/react';
+import { screen, waitFor, act, fireEvent } from '@testing-library/react';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import { withFluent } from '@/locales/test-utils';
 import userEvent from '@testing-library/user-event';
@@ -129,10 +129,42 @@ describe('RestaurantMenu', () => {
     expect(screen.getByText('Menu is empty')).toBeTruthy();
   });
 
-  it('renders product cards', () => {
+  it('renders product cards as non-selectable buttons without changing search selection', () => {
+    renderMenu();
+    const card = screen.getByRole('button', { name: /Nasi Goreng.*Rp 25\.000.*Add/i });
+    const input = screen.getByRole('searchbox', { name: 'Search menu items' });
+
+    expect(card).toHaveClass('restaurant-card');
+    // The card's CSS disables selection while the search field explicitly
+    // remains selectable for operators who need to copy a query.
+    expect(input).toHaveStyle({ userSelect: 'text' });
+  });
+
+  it('renders product cards with localized prices and accessible add labels', () => {
     renderMenu();
     expect(screen.getByText('Nasi Goreng')).toBeTruthy();
     expect(screen.getByText('Es Teh')).toBeTruthy();
+    expect(screen.getByText('Rp 25.000')).toBeTruthy();
+    expect(screen.getByText('Rp 5.000')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Nasi Goreng.*Rp 25\.000.*Add/i })).toBeTruthy();
+  });
+
+  it('shows a visible and accessible unavailable status without adding the card', async () => {
+    mockUseProducts.mockReturnValue({
+      products: [{ ...mockProducts[0]!, inStock: false }, mockProducts[1]!],
+      categories: ['Makanan', 'Minuman'],
+      categoryMeta: [],
+      loading: false,
+    });
+    const onAddProduct = vi.fn();
+    renderMenu({ onAddProduct });
+    const card = screen.getByRole('button', { name: /Nasi Goreng.*Unavailable/i });
+    expect(card.querySelector('.restaurant-card-status')).toHaveTextContent('Unavailable');
+    expect(card.querySelectorAll('.restaurant-card-status')).toHaveLength(1);
+    expect(card.querySelector('.restaurant-card-add-icon--disabled')).toHaveTextContent('—');
+    expect(card).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(card);
+    expect(onAddProduct).not.toHaveBeenCalled();
   });
 
   it('renders category pills', () => {
@@ -232,6 +264,101 @@ describe('RestaurantMenu', () => {
 
     expect(screen.queryByText('Nasi Goreng')).toBeNull();
     expect(screen.getByText('Es Teh')).toBeTruthy();
+  });
+
+  it('supports long-press context menu on touch without adding the card', async () => {
+    const onAddProduct = vi.fn();
+    renderMenu({ onAddProduct });
+    const card = screen.getByText('Nasi Goreng').closest('button')!;
+
+    await act(async () => {
+      fireEvent.pointerDown(card, { pointerType: 'touch', clientX: 100, clientY: 200 });
+      await new Promise((resolve) => setTimeout(resolve, 550));
+      fireEvent.pointerUp(card, { pointerType: 'touch', clientX: 100, clientY: 200 });
+    });
+
+    await waitFor(() => expect(screen.getByText('Pin to top')).toBeTruthy());
+    expect(onAddProduct).not.toHaveBeenCalled();
+    expect(screen.queryByText('Nasi Goreng')).toBeTruthy();
+
+    // Dismissing the touch menu must not poison the next legitimate tap.
+    await userEvent.keyboard('{Escape}');
+    fireEvent.pointerDown(card, { pointerType: 'touch', clientX: 100, clientY: 200 });
+    fireEvent.pointerUp(card, { pointerType: 'touch', clientX: 100, clientY: 200 });
+    fireEvent.click(card);
+    expect(onAddProduct).toHaveBeenCalledWith(expect.objectContaining({ sku: 'NASI-GORENG' }));
+  });
+
+  it('adds on a normal touch tap without opening the context menu', async () => {
+    const onAddProduct = vi.fn();
+    renderMenu({ onAddProduct });
+    const card = screen.getByText('Nasi Goreng').closest('button')!;
+
+    fireEvent.pointerDown(card, { pointerType: 'touch', clientX: 100, clientY: 200 });
+    fireEvent.pointerUp(card, { pointerType: 'touch', clientX: 100, clientY: 200 });
+    fireEvent.click(card);
+
+    expect(onAddProduct).toHaveBeenCalledWith(expect.objectContaining({ sku: 'NASI-GORENG' }));
+    expect(screen.queryByText('Pin to top')).toBeNull();
+  });
+
+  it('cancels long-press when the pointer leaves or is cancelled', async () => {
+    renderMenu();
+    const card = screen.getByText('Nasi Goreng').closest('button')!;
+
+    fireEvent.pointerDown(card, { pointerType: 'touch', clientX: 100, clientY: 200 });
+    fireEvent.pointerLeave(card, { pointerType: 'touch' });
+    await new Promise((resolve) => setTimeout(resolve, 550));
+    expect(screen.queryByText('Pin to top')).toBeNull();
+
+    fireEvent.pointerDown(card, { pointerType: 'touch', clientX: 100, clientY: 200 });
+    fireEvent.pointerCancel(card, { pointerType: 'touch' });
+    await new Promise((resolve) => setTimeout(resolve, 550));
+    expect(screen.queryByText('Pin to top')).toBeNull();
+  });
+
+  it('does not trigger long-press after touch movement', async () => {
+    renderMenu();
+    const card = screen.getByText('Nasi Goreng').closest('button')!;
+
+    await act(async () => {
+      fireEvent.pointerDown(card, { pointerType: 'touch', clientX: 100, clientY: 200 });
+      fireEvent.pointerMove(card, { pointerType: 'touch', clientX: 140, clientY: 200 });
+      await new Promise((resolve) => setTimeout(resolve, 550));
+      fireEvent.pointerUp(card, { pointerType: 'touch', clientX: 140, clientY: 200 });
+    });
+
+    await waitFor(() => expect(screen.queryByText('Pin to top')).toBeNull());
+  });
+
+  it('uses native button semantics without nested heading content', () => {
+    renderMenu();
+    const card = screen.getByRole('button', { name: /Nasi Goreng.*Add/i });
+
+    expect(card.tagName).toBe('BUTTON');
+    expect(card.querySelector('h1, h2, h3, h4, h5, h6')).toBeNull();
+    expect(card).toHaveAttribute('aria-label', 'Nasi Goreng, Rp 25.000, Add');
+  });
+
+  it('keeps long names readable at the largest persisted card and font settings', () => {
+    const longProduct = {
+      ...mockProducts[0]!,
+      name: 'Nasi Goreng Spesial dengan Telur Mata Sapi dan Sambal Tradisional',
+    };
+    localStorage.setItem('restaurant-user-1-cardsize', '4');
+    localStorage.setItem('restaurant-user-1-fontsize', '4');
+    mockUseProducts.mockReturnValue({
+      products: [longProduct],
+      categories: ['Makanan'],
+      categoryMeta: [],
+      loading: false,
+    });
+
+    renderMenu();
+
+    const card = screen.getByRole('button', { name: /Nasi Goreng Spesial/ });
+    expect(card).toHaveTextContent('Rp 25.000');
+    expect(card).toHaveClass('restaurant-card');
   });
 
   it('calls onAddProduct when a card is clicked', async () => {
@@ -340,6 +467,20 @@ describe('RestaurantMenu', () => {
     await user.click(screen.getByText('Nasi Goreng'));
 
     expect(onAddProduct).not.toHaveBeenCalled();
+  });
+
+  it('falls back to safe context-menu coordinates when touch coordinates are unavailable', async () => {
+    renderMenu();
+    const card = screen.getByText('Nasi Goreng').closest('button')!;
+
+    await act(async () => {
+      fireEvent.pointerDown(card, { pointerType: 'touch' });
+      await new Promise((resolve) => setTimeout(resolve, 550));
+      fireEvent.pointerUp(card, { pointerType: 'touch' });
+    });
+
+    await waitFor(() => expect(screen.getByText('Pin to top')).toBeTruthy());
+    expect(document.querySelector('.restaurant-context-menu')).not.toHaveStyle({ left: 'NaNpx', top: 'NaNpx' });
   });
 
   it('shows context menu on right-click', async () => {
