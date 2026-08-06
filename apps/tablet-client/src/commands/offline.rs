@@ -504,6 +504,62 @@ mod tests {
         assert!(d.contains("test"));
     }
 
+    // ── list_remote_failures (dead-letter discovery) ────────────────
+
+    #[test]
+    fn run_list_remote_failures_empty_db() {
+        let conn = fresh_conn();
+        let failures = run_list_remote_failures(&conn).unwrap();
+        assert!(failures.is_empty(), "fresh db must have no failures");
+    }
+
+    #[test]
+    fn run_list_remote_failures_returns_retained_failures_newest_first() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+
+        // Two distinct remote items: one retryable, one dead-lettered after
+        // the third failed attempt. Both must be listed — operators need to
+        // see every retained failure, with dead-lettered items flagged.
+        store
+            .record_remote_failure(
+                "dl-item-1",
+                "complete_sale",
+                "{\"sale_id\":\"s1\"}",
+                "missing product",
+                3,
+            )
+            .unwrap();
+        for _ in 0..3 {
+            store
+                .record_remote_failure("retry-item-2", "stock.adjusted", "{}", "bad", 3)
+                .unwrap();
+        }
+        assert!(store.is_remote_failure_dead_lettered("dl-item-1").unwrap());
+        assert!(
+            store
+                .is_remote_failure_dead_lettered("retry-item-2")
+                .unwrap()
+        );
+
+        let failures = run_list_remote_failures(&conn).unwrap();
+        assert_eq!(failures.len(), 2);
+        let by_id: std::collections::HashMap<_, _> = failures
+            .iter()
+            .map(|dto| (dto.item_id.clone(), dto))
+            .collect();
+        let dl = by_id.get("dl-item-1").unwrap();
+        assert_eq!(dl.action, "complete_sale");
+        assert_eq!(dl.attempts, 1);
+        assert_eq!(dl.last_error, "missing product");
+        assert!(!dl.dead_lettered, "dl-item-1 is still retryable");
+        let retry = by_id.get("retry-item-2").unwrap();
+        assert_eq!(retry.action, "stock.adjusted");
+        assert_eq!(retry.attempts, 3);
+        assert!(retry.dead_lettered, "retry-item-2 hit the dead letter");
+        assert_eq!(retry.payload, "{}");
+    }
+
     // ── requeue_remote_failure (dead-letter requeue workflow) ────────
 
     #[test]
