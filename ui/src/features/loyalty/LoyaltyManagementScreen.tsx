@@ -297,9 +297,16 @@ export default function LoyaltyManagementScreen() {
                 <tbody>{accounts.map((a) => {
                     const customerName = customerMap.get(a.account.customer_id) ?? a.account.customer_id;
                     const isExpanded = selectedAccount === a.account.id;
+                    const toggleExpand = () => setSelectedAccount(isExpanded ? null : a.account.id);
+                    // LOY-10: the accessible name must identify WHICH account
+                    // expands, not a generic "Expand" label shared by every row.
+                    const expandLabel = l10n.getString(
+                      isExpanded ? 'loyalty-collapse-account' : 'loyalty-expand-account',
+                      { name: customerName },
+                    );
                     return (
                       <Fragment key={a.account.id}>
-                        <tr className="loyalty-table-row" tabIndex={0} role="button" aria-expanded={isExpanded} aria-label={l10n.getString(isExpanded ? 'loyalty-collapse' : 'loyalty-expand')} onClick={() => setSelectedAccount(isExpanded ? null : a.account.id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedAccount(isExpanded ? null : a.account.id); } }}>
+                        <tr className="loyalty-table-row" tabIndex={0} role="button" aria-expanded={isExpanded} aria-label={expandLabel} onClick={toggleExpand} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpand(); } }}>
                           <td><span className="loyalty-customer-name">{customerName}</span></td>
                           <td>
                             {a.tier ? (
@@ -316,7 +323,7 @@ export default function LoyaltyManagementScreen() {
                           <td>{a.points_to_next_tier > 0 ? a.points_to_next_tier.toLocaleString() : '—'}</td>
                           <td>
                             { }
-                            <button type="button" className="loyalty-expand-btn" aria-label={l10n.getString(isExpanded ? 'loyalty-collapse' : 'loyalty-expand')} aria-expanded={isExpanded}>
+                            <button type="button" className="loyalty-expand-btn" aria-label={expandLabel} aria-expanded={isExpanded} onClick={toggleExpand}>
                               {isExpanded ? '\u25B2' : '\u25BC'}
                             </button>
                           </td>

@@ -171,6 +171,24 @@ describe('LoyaltyManagementScreen', () => {
 
   // ── Account expand/collapse ───────────────────────────────────
 
+  it('names the expand control with the customer (LOY-10)', async () => {
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+    });
+
+    // The account row is a button (role="button") that expands/collapses.
+    // Its accessible name must identify WHICH customer will be expanded,
+    // not a generic "Expand" label with no context.
+    const aliceRow = screen.getByText('Alice').closest('tr')!;
+    expect(aliceRow.getAttribute('aria-label')).toMatch(/Alice/);
+
+    // The nested expand button must carry the same customer-specific name
+    // so screen-reader users can target a specific account.
+    const expandButtons = screen.getAllByRole('button', { name: /Alice/ });
+    expect(expandButtons.length).toBeGreaterThan(0);
+  });
+
   it('expands account row to show transactions', async () => {
     const user = userEvent.setup();
     renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);

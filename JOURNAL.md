@@ -2,7 +2,16 @@
 
 # OZ-POS Development Journal
 
-## 2026-07-29 — Full-Codebase i18n Audit & FTL Sweep
+## 2026-08-06 — TDD cycle: LOY-10 loyalty expand-control accessible name
+
+### LoyaltyManagementScreen expand control (LOY-10)
+**Problem:** The expandable loyalty account row (`tr role="button"`) and its nested expand button exposed a generic `aria-label` ("Expand"/"Collapse") with no customer identity. Screen-reader users could not tell which account a control would expand. The nested button had no handler and relied on click bubbling to the row. Evidence: `audit/02-loyalty-module.md` LOY-10 (P2, still open — verified in code at `ui/src/features/loyalty/LoyaltyManagementScreen.tsx`).
+
+**Solution:** Red→Green TDD cycle per `.agents/skills/tdd/SKILL.md`. RED test `names the expand control with the customer (LOY-10)` asserted the row + button accessible names include the customer name — failed on `'Expand'`. GREEN: added `loyalty-expand-account`/`loyalty-collapse-account` Fluent keys with `{ $name }` var (en + id), threaded the customer name through both controls, and gave the nested button a real `onClick` handler (`toggleExpand`) instead of relying on bubbling.
+
+**Commits:** (this cycle) — see `git log`.
+
+**Validation:** LoyaltyManagementScreen 20/20 vitest; api-loyalty-contract 5/5; typecheck clean; eslint clean on changed files; i18n lint clean; bundle-parity 0 missing; FTL dedupe clean. Area-scoped per tdd skill (no full workspace run — not pre-push).
 
 ### Attribute-Only FTL Sweep (TODO #3)
 **Problem:** ~268 attribute-only FTL messages (`.aria-label = ...` with no message value) silently returned `undefined` when accessed via `l10n.getString()`, causing empty aria-labels and placeholders across 25 files.

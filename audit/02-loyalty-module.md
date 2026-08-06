@@ -283,3 +283,5 @@ The baseline audit found critical integrity and authorization gaps behind that h
 ## Fix status
 
 LOY-01 is **remediated and validated in the current working tree**. The remediation changes the desktop/tablet command boundary, frontend API/callers, development IPC mock, loyalty permission manifest, and focused tests. LOY-02 through LOY-12 remain **Open** and require separate implementation work; in particular, the startup event handler's store-aware routing and duplicate-event behavior were not silently marked complete by this change.
+
+> **2026-08-06 — LOY-10 partial remediation (accessible name):** the account expand row and its nested expand button now expose a customer-specific accessible name (`loyalty-expand-account` / `loyalty-collapse-account` with `{ $name }`, en + id), and the nested button received a real `onClick` handler instead of relying on click bubbling. Pinned by the `names the expand control with the customer (LOY-10)` vitest. Remaining LOY-10 items (tablist semantics for tier tabs, localized transaction dates) stay open.
