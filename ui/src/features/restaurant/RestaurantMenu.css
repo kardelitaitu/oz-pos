@@ -560,9 +560,15 @@
 
 /* Add badge — icon-only circle centred in the accent strip.
    The strip's ::after supplies the coloured background; the badge is a
-   two-tone circle (--color-accent-fg fill, accent glyph) that reads as a
-   tappable button. The visible "Add" label moved to an sr-only span so
-   screen readers and bundle parity are unaffected. */
+   two-tone circle that reads as a tappable button. The circle fills
+   --color-fg-inverse and the glyph strokes --color-fg-primary — the two
+   theme inks are always opposite, so the pair contrasts in every theme
+   AND under brand overrides (the demo brand forces --color-accent-fg to
+   white in both glass and light, which made an accent-stroked glyph wash
+   out to ~2.5:1 on the circle — below the 3:1 non-text AA threshold):
+   light = white circle + slate-900 glyph, glass/dark = navy circle +
+   white glyph. The visible "Add" label moved to an sr-only span so screen
+   readers and bundle parity are unaffected. */
 .restaurant-card-add-icon {
   position: absolute;
   inset: 0 0 0 auto;
@@ -584,12 +590,12 @@
 }
 
 .restaurant-card-add-badge circle {
-  fill: var(--color-accent-fg);
+  fill: var(--color-fg-inverse);
 }
 
 .restaurant-card-add-badge path {
   fill: none;
-  stroke: var(--color-accent);
+  stroke: var(--color-fg-primary);
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
