@@ -1,4 +1,15 @@
 
+## 2026-08-06 — TDD cycle: undo-of-delete re-selects the restored node (inspector reopens)
+
+### Undoing a node deletion restored the node but the selection stayed cleared
+**Problem:** Both delete paths (immediate and confirm-dialog) clear `selectedNodeId`, and `popUndo` restored the canvas without re-selecting — so Ctrl+Z after deleting a node brought the node back but left the inspector closed, forcing the cashier to click it again to resume editing.
+
+**Solution:** Red→Green. `popUndo` now detects the delete signature — exactly one node in the restored entry absent from the current canvas — and re-selects it, reopening the inspector. The heuristic is precise: an undo of an add/move/toggle restores no nodes and leaves the selection untouched, and an undo of a wire deletion restores no NODE so nothing is re-selected (pinned by a guard). Sits alongside the existing re-validation effect (clears dangling, preserves valid).
+
+**Validation:** 53/53 editor tests (3 new) · 28/28 TopologyScreen + InspectorIntegration · typecheck clean · eslint clean.
+
+**Follow-ups:** Redo is NOT symmetric — redo of an undo-of-add restores the node without re-selecting it (acceptable; the add itself auto-selects). Wire symmetry (re-select a wire restored by undo-of-wire-delete) was deliberately skipped since wires have no inspector. The heuristic keys on "exactly one" restored node — a hypothetical multi-node delete would need revisiting, but deletions are always single-selection today.
+
 ## 2026-08-06 — TDD cycle: clear undo stack after save+idMap remap (pre-remap ids)
 
 ### Undo could restore pre-remap UUIDs that contradict the backend after Apply
