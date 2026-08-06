@@ -564,26 +564,21 @@ impl Store<'_> {
     /// id or a request to requeue an item that is already being retried must
     /// not be a silent no-op.
     pub fn requeue_remote_failure(&self, item_id: &str) -> Result<(), CoreError> {
-        let dead_lettered: bool = self
-            .conn
-            .query_row(
-                "SELECT EXISTS(SELECT 1 FROM sync_remote_failures WHERE item_id = ?1 AND dead_lettered = 1)",
-                params![item_id],
-                |row| row.get(0),
-            )
-            .map_err(CoreError::from)?;
-        if !dead_lettered {
+        let tx = self.conn.unchecked_transaction()?;
+        // The dead-letter predicate lives in the DELETE so the check and the
+        // mutation are atomic — an id that is not currently quarantined
+        // (never recorded, or still being retried) deletes nothing and fails
+        // with NotFound instead of silently no-op'ing.
+        let affected = tx.execute(
+            "DELETE FROM sync_remote_failures WHERE item_id = ?1 AND dead_lettered = 1",
+            params![item_id],
+        )?;
+        if affected == 0 {
             return Err(CoreError::NotFound {
                 entity: "sync_remote_failures",
                 id: item_id.to_owned(),
             });
         }
-
-        let tx = self.conn.unchecked_transaction()?;
-        tx.execute(
-            "DELETE FROM sync_remote_failures WHERE item_id = ?1",
-            params![item_id],
-        )?;
         // Rewind the durable pull anchor (single-row table). A NULL `since`
         // means "pull everything" on the next cycle — the idempotency
         // ledger makes that safe. No row (pre-114 database) is a no-op.

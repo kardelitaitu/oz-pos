@@ -2,6 +2,19 @@
 
 # OZ-POS Development Journal
 
+## 2026-08-06 — TDD cycle: reject negative cart-tax inputs (MONEY-02)
+
+### `compute_cart_tax` negative `qty` / `unit_price_minor` accepted
+**Problem:** Follow-up from the MONEY-01 cycle's review note. `CartLineTaxInput` arrives over IPC (untrusted), and `Store::compute_cart_tax` accepted negative `qty` or `unit_price_minor` — a negative line total flows into `compute_line_tax` and the preview returns a **negative tax** the front-end renders raw (Red run proved it: `qty: -2, price: 350` → `Ok(tax = -69)`). The cart model never allows negative qty/price (`CartLine::new` asserts `qty > 0`), so a hostile renderer could distort the displayed tax.
+
+**Solution:** Red→Green TDD cycle. RED test `compute_cart_tax_rejects_negative_qty_and_price` asserts both cases return `CoreError::Validation` with the right field (`qty` / `price`) — failed on `Ok(-69)`. GREEN: the loop now rejects `qty < 0` (`field: "qty"`, "qty must be positive, got {n}") and `unit_price_minor < 0` (`field: "price"`, "unit price must be non-negative, got {n}") with early returns, mirroring the existing `set_cart_discount` message style. `qty == 0` and `unit_price_minor == 0` remain **allowed by deliberate scope**: zero contributes zero tax, zero price = free item, and the slice was "negative" only — noted here so the boundary is explicit.
+
+**Deliberately NOT done (follow-ups):** (1) `compute_sale_tax` has the same-class hole via a hand-built `Sale` with a negative `line_total` (it feeds `line.line_total` straight into `compute_line_tax`) — the natural next slice; (2) reviewer nit: the price `format!` could sit on one line — skipped as cosmetic churn in a volatile shared tree (code is fmt-clean and committed); (3) the pre-existing `clippy::type_complexity` in `products.rs:876` remains untouched.
+
+**Commits:** (this cycle) — `crates/oz-core/src/db/sales.rs` + this journal + `CHANGELOG.md`. **Note on history:** another agent thread's `06e9fb7d` ("fix(restaurant): harden menu keyboard interactions") swept this cycle's `sales.rs` RED test + GREEN fix into its commit via a broad add. History was NOT rewritten (shared working tree); the `sales.rs` hunks are exactly this cycle's regression test + negative-input validation.
+
+**Validation:** Red test failed (`Ok(-69)`) then passed; `db::sales::tests` 77/77 (76 + 1 new); full `cargo test -p oz-core --lib` 1621/1621 (includes the new test); `cargo fmt --all` clean; clippy `-D warnings` clean on the changed file (workspace still fails only on the pre-existing `products.rs:876`). One transient compile failure was observed mid-cycle from another agent's in-progress `db/offline.rs` edit — resolved on its own; no process was killed.
+
 ## 2026-08-06 — TDD cycle: dead-letter requeue workflow
 
 ### Dead-lettered remote items are now requeueable (audit/09 SYNC-01 follow-up)
