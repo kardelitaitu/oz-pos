@@ -750,6 +750,15 @@ mod tests {
             1,
             "snapshot fetched exactly once in cycle 1"
         );
+        // The snapshot import must have actually landed — the anchor reset
+        // is conditional on a successful import.
+        assert!(
+            store
+                .product_id_by_sku("SNAPSHOT-COFFEE")
+                .unwrap()
+                .is_some(),
+            "snapshot reference data must be imported before the anchor resets"
+        );
         // The durable anchor must be reset to the server's oldest retained
         // row so the next pull is not expired again.
         let state = store.get_sync_pull_state().unwrap();
