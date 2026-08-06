@@ -2,6 +2,32 @@
 
 # OZ-POS Development Journal
 
+## 2026-08-06 — TDD cycle: session-mint authorization gate (right user, right store, right permission)
+
+### `verify_instance_access` fail-closed identity binding (audit/06 residual)
+**Problem:** The pre-session workspace picker ends in `create_session`, whose server-side gate `Store::verify_instance_access` trusted the caller-supplied `role_id` for the owner/manager bypass and never resolved the user. `create_session(user_id: <any known id>, role_id: "role-owner", store_id: ..., instance_id: ...)` passed the bypass whenever no `user_store_access` rows existed (single-store mode), minting an opaque session AS that user — without their PIN — in ANY store's active instance. Every subsequent `require_permission_for_user` then resolved the victim's DB role, so a caller who knew an owner's user id inherited full permissions (privilege escalation) and could open sessions in stores/instances they were never assigned (cross-store session minting). This was the residual recorded in `audit/06-staff-module.md`: "the pre-session workspace picker still accepts role/user/store identifiers supplied by the client… the caller identity is not cryptographically bound before an opaque session exists." The gate had zero unit tests.
+
+**Solution:** Red→Green TDD cycle. RED: 3 oz-core tests (`verify_instance_access_denies_unknown_user`, `_rejects_forged_owner_role`, `_denies_inactive_user`) + 3 desktop command tests (`create_session_rejects_forged_role_id`, `_rejects_unknown_user`, plus positive `create_session_allows_real_owner`). All negative tests failed for the right reason (session was minted). GREEN: `verify_instance_access` now resolves the user from `users`, fails closed (returns `Ok(false)`) for unknown/inactive users and for a claimed `role_id` that differs from the user's actual DB role, then runs the existing owner-bypass / explicit-assignment / role-based branches using the REAL role. `Ok(false)` (not `Err`) keeps the caller's wire error uniform, so the gate cannot be used to enumerate user ids. No frontend change needed: every honest flow (login, workspace picker, FastPIN hot-swap) sends the role returned by `staff_login`, which equals the DB role.
+
+**Deliberately NOT done (follow-ups):** (1) the pre-session `list_workspaces`/`list_workspace_screens` reads still trust the claimed role for listing (workspace-name disclosure only, no data access) — a server-issued picker credential remains the architectural fix per audit/06; (2) `create_session` does not cross-check `type_key` against the instance's real type (UI-routing cosmetic); (3) pre-existing `clippy::type_complexity` in `crates/oz-core/src/db/products.rs:876` remains (documented in the 08-06 pull-parity entry).
+
+**Commits:** (this cycle) — `oz-core` `db/workspaces.rs` + `apps/desktop-client/src/commands/auth.rs` only.
+
+**Validation:** `cargo test -p oz-core --lib db::workspaces` 54/54 (6 new); `cargo test -p oz-pos-app --lib commands::auth` 18/18 (3 new); `cargo test -p oz-pos-tablet --lib commands::auth` 9/9; `store_scoping_integration` 9/9; `cargo fmt --all -- --check` clean; clippy `-D warnings` clean on the changed files (workspaces.rs, auth.rs); tablet lib compiles.
+
+## 2026-08-06 — TDD cycle: engine pull parity for replay idempotency + durable anchor
+
+### SyncEngine pull path: durable anchor + atomic replay (SYNC-01 parity)
+**Problem:** `platform_sync::SyncEngine::run_sync_cycle()` — the immediate/manual sync path — did not share the SYNC-01 safeguards the daemon got. It derived its pull `since` anchor from `queue.last_synced_at()` (the local offline queue's `synced_at` timestamps), which pulled remote items never move, and applied remote mutations via the non-atomic `apply_remote()`. Consequence: every manual sync cycle re-fetched the same remote pages and re-applied stock/sale mutations (silent inventory corruption), and the durable `sync_pull_state` anchor was never persisted. The daemon path (fixed in `a1ea01e7`) was atomic + anchor-advanced; the engine was not.
+
+**Solution:** Red→Green TDD cycle. RED test `engine_applies_replayed_remote_item_only_once` (in `platform/sync/src/lib.rs`) spins a mock server that always returns the same `stock.adjusted` +10 item (ignores `since`), runs two engine cycles, and asserts: stock 50→60 after cycle 1, the durable anchor is persisted, and stock stays 60 after cycle 2 (not 70) with exactly one ledger receipt. It failed for the right reason (`since: None`). GREEN: the pull phase now reads the durable `sync_pull_state` anchor, applies each item via `apply_remote_atomic` (mutation + idempotency receipt in one transaction, dead-letter quarantine for poison items — matching the daemon), advances the anchor only after a page applied successfully, and retains the anchor + stops pagination on a retryable failure.
+
+**Commits:** swept into `da842f32` (see note below) — my `platform/sync/src/lib.rs` hunks only.
+
+**Validation:** `bash scripts/test-tdd.sh -p platform/sync` — 238/238 passed (19 slow-tests ignored); full `--features slow-tests` integration suite — 19/19 passed incl. cross-terminal relay + throughput; `cargo clippy -p platform-sync --all-targets --no-deps -- -D warnings` clean; `cargo fmt` applied. Note: `cargo clippy -D warnings` on the workspace currently fails pre-existing in `crates/oz-core/src/db/products.rs:876` (`type_complexity`, committed code, not touched here).
+
+**Note on history:** commit `da842f32` (authored by another agent thread) swept this lib.rs change — plus 16 unrelated files (UI autofill, auth, workspaces) — into one commit titled "fix(ui): suppress saved-info autofill in search fields". The lib.rs hunks are exactly this cycle's RED test + GREEN refactor. History was NOT rewritten (shared working tree, another agent actively editing `sales.rs`); splitting the mixed commit is left to the owner if desired.
+
 ## 2026-08-06 — TDD cycle: LOY-10 loyalty expand-control accessible name
 
 ### LoyaltyManagementScreen expand control (LOY-10)

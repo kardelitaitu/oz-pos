@@ -1451,6 +1451,13 @@ impl SyncEngine {
     /// rather than an error — this prevents noisy error logs when the server is
     /// intentionally offline.
     ///
+    /// The pull phase is replay-safe (SYNC-01 parity with the daemon): remote
+    /// items are applied atomically with a durable `sync_applied_items` receipt,
+    /// poison items are dead-lettered after their retry budget, and the durable
+    /// [`oz_core::db::offline::SyncPullState`] anchor advances only after a page
+    /// applied successfully — so a server replay or lost anchor never applies a
+    /// mutation twice.
+    ///
     /// Returns a [`ReplicationResult`] with counts of pushed/pulled items.
     pub async fn run_sync_cycle(&self, store: &Store<'_>) -> SyncResult<ReplicationResult> {
         // Pre-sync health check — skip the full cycle if the server is unreachable.

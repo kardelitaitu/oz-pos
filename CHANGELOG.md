@@ -24,6 +24,11 @@ Architecture enforcement and release baseline update for the 0.0.25 cycle.
 - **Release version synchronization** — Bumped workspace, desktop, tablet, Docker, UI, health endpoint, localized status-bar, test, and lockfile versions from 0.0.24 to 0.0.25.
 - **Atomic remote sync replay handling** — Remote mutations now apply through transaction-aware stock, product, movement, and receipt helpers. The sync daemon commits each mutation with its `sync_applied_items` receipt, preventing crash-window replays from duplicating stock or sale effects; unsupported actions fail closed without recording a receipt.
 - **Replay regression coverage** — Added focused tests for exactly-once replay suppression, rollback when a later sale line fails, and rejection of unknown remote actions. The implementation is documented in spec `0044-critical-delivery-and-sync-replay-safety`.
+- **Engine pull replay safety (SYNC-01 parity)** — `SyncEngine::run_sync_cycle` now pulls through the durable `sync_pull_state` anchor (instead of deriving `since` from the local queue's synced timestamps) and applies each remote item atomically with its `sync_applied_items` receipt via the same dead-lettering path as the daemon. Manual "sync now" runs can no longer re-apply remote stock/sale mutations when the server replays history or the anchor is lost; the anchor advances only after a page applied successfully. Regression test: two engine cycles against a replaying server apply the mutation once.
+
+### Fixed
+
+- **Session-mint authorization gate (right user, right store, right permission)** — `Store::verify_instance_access` (the gate `create_session` calls in both clients) now resolves the caller from `users` and fails closed for unknown users, inactive users, and claimed `role_id` values that differ from the user's actual database role. Previously the claimed role was trusted for the owner/manager bypass, so a caller who knew an owner's user id could mint a session as that owner — without their PIN — and inherit every permission, in any store's active instance (privilege escalation + cross-store session minting; audit/06 residual).
 
 ### Validation
 
