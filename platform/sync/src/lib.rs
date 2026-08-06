@@ -502,6 +502,106 @@ mod tests {
         assert_eq!(ledger_rows, 1, "ledger must hold exactly one receipt");
     }
 
+    /// Spawn a mock server whose pull endpoint ALWAYS returns a malformed
+    /// remote sale (a line referencing a product that does not exist), so
+    /// `apply_remote_atomic` fails on every attempt.
+    async fn spawn_poison_engine_server() -> String {
+        use crate::transport::{PullResponse, PushOutcome, PushResponse};
+        use axum::{
+            Json, Router,
+            routing::{get, post},
+        };
+
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        async fn handle_push(Json(items): Json<Vec<serde_json::Value>>) -> Json<PushResponse> {
+            Json(PushResponse {
+                results: vec![PushOutcome::Accepted; items.len()],
+            })
+        }
+        async fn handle_pull(Json(_req): Json<serde_json::Value>) -> Json<PullResponse> {
+            let mut item = oz_core::offline::OfflineQueueItem::new(
+                "complete_sale",
+                r#"{"line_items":[{"sku":"MISSING","qty":1}]}"#,
+            );
+            item.id = "remote-engine-poison-1".into();
+            item.created_at = "2026-01-03T00:00:00.000Z".into();
+            Json(PullResponse {
+                items: vec![item],
+                next_cursor: None,
+            })
+        }
+
+        let app = Router::new()
+            .route("/api/health", get(|| async { axum::http::StatusCode::OK }))
+            .route("/api/sync/push", post(handle_push))
+            .route("/api/sync/pull", post(handle_pull));
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        format!("http://localhost:{port}")
+    }
+
+    /// Engine-level dead-letter test (parity with the daemon's
+    /// `daemon_retains_anchor_until_remote_item_is_dead_lettered`): a poison
+    /// remote item must retain the durable anchor while it is retryable,
+    /// then allow the anchor to advance after the third failed attempt
+    /// dead-letters it.
+    #[tokio::test]
+    async fn engine_retains_anchor_until_remote_item_is_dead_lettered() {
+        use oz_core::db::Store;
+        use oz_core::migrations;
+
+        let server_url = spawn_poison_engine_server().await;
+        let db = migrations::fresh_db();
+        let store = Store::new(&db);
+
+        let engine = SyncEngine::new(SyncConfig {
+            server_url: server_url.clone(),
+            api_key: None,
+        });
+
+        for attempt in 1..=3 {
+            let result = engine.run_sync_cycle(&store).await.unwrap();
+            assert_eq!(
+                result.pulled, 1,
+                "cycle {attempt} must pull the poison item"
+            );
+
+            let pull_state = store.get_sync_pull_state().unwrap();
+            let dead_lettered = store
+                .is_remote_failure_dead_lettered("remote-engine-poison-1")
+                .unwrap();
+
+            if attempt < 3 {
+                assert!(
+                    pull_state.since.is_none(),
+                    "retryable failure must retain the anchor (attempt {attempt})"
+                );
+                assert!(!dead_lettered);
+            } else {
+                assert!(
+                    pull_state.since.is_some(),
+                    "dead-lettered item may advance the anchor"
+                );
+                assert!(dead_lettered);
+            }
+        }
+
+        let attempts: i64 = db
+            .query_row(
+                "SELECT attempts FROM sync_remote_failures WHERE item_id = 'remote-engine-poison-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(attempts, 3);
+    }
+
     // ── P1-4: import_snapshot tests ───────────────────────────────
 
     /// Seed a role so user FK constraints are satisfied.
@@ -1653,16 +1753,20 @@ impl SyncEngine {
             // applied — they are quarantined). A retryable failure leaves
             // the old anchor and stops pagination so the next cycle
             // re-pulls from the same point; the idempotency ledger absorbs
-            // any replay.
+            // any replay. Retrying the same page is safe because the
+            // bundled server's `(created_at, id)` cursors are stable
+            // (same cursor → same page).
             if !page_all_applied {
                 break;
             }
-            let new_since = pull_result
-                .items
-                .iter()
-                .map(|i| i.created_at.clone())
-                .max()
-                .or(pull_since.clone());
+            // The anchor must be MONOTONIC: take the later of the current
+            // anchor and the page's newest row. `.or()` alone could regress
+            // the anchor when the server returns rows older than `since`
+            // (clock skew / late delivery), which would re-fetch history on
+            // every cycle. ISO-8601 timestamps are fixed-format, so
+            // lexicographic ordering equals chronological ordering here.
+            let page_max = pull_result.items.iter().map(|i| i.created_at.clone()).max();
+            let new_since = std::cmp::max(pull_since.clone(), page_max);
             store.set_sync_pull_state(new_since.as_deref(), pull_result.next_cursor.as_deref())?;
             pull_since = new_since;
             cursor = pull_result.next_cursor;
