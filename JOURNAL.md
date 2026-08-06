@@ -1,4 +1,15 @@
 
+## 2026-08-06 — TDD cycle: dev-mock lockout + shift history survive reloads (audit gaps closed)
+
+### A reloaded preview bypassed the login lockout and wiped every closed shift
+**Problem:** The last two audit-doc gaps: `loginAttempts` lived in module memory, so a reload reset the attempt counter and defeated the lockout the real backend keeps enforcing (`login_attempts` 074 + device 111) — and `mockShiftHistory` reverted to just its one seed on every reload, losing every reconciliation record while the backend's `shifts` (021) keeps them.
+
+**Solution:** Red→Green, following the established `oz-dev-mock:*` pattern. Four contract tests in `dev-mock-auth-contract.test.ts` pin the restart-parity contract: four failed logins then a reload still block the correct PIN (`Account locked` — Red failed because the reloaded login resolved); a successful login clears the persisted counter so a later wrong pin is a fresh first failure; a closed shift (via `close_shift_scoped`) is present in `list_shifts_scoped` after a reload (Red failed — history was seed-only); a fresh browser seeds exactly the one pre-seeded closed shift. Green persists both under `oz-dev-mock:login-attempts` (saved on every failure increment and on the success delete) and `oz-dev-mock:shift-history` (saved on both `close_shift*` pushes; first load seeds the single closed shift, shallow-cloned).
+
+**Validation:** 20/20 contract tests (4 new) · 216/216 across dev-mock/offline/shift/KDS test files (13 files) · typecheck clean · eslint clean. Audit doc updated — both rows moved to ✅ persisted, the gaps section now reads "None remaining" (with the flat-vs-sliding-window lockout model noted as an intentional fidelity gap), and both follow-ups marked done.
+
+**Follow-ups:** The audit's reload-state gaps are all closed; the remaining stretch items are exercising held carts (real `hold_cart`/`list_held_carts` state instead of `[]`) and mirroring the backend's sliding-window lockout model. The lockout counter is a flat per-username count persisted verbatim — matching the backend's per-device + global limits would need a richer shape.
+
 ## 2026-08-06 — Full UI suite back to green: reduced-motion gate + stale test contracts + picker pending state
 
 ### Four lingering vitest failures closed, plus the picker double-tap follow-up
