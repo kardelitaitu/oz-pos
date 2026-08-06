@@ -224,6 +224,37 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
   const { theme, toggleTheme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const hamburgerRef = useRef<HTMLDivElement>(null);
+  const hamburgerButtonRef = useRef<HTMLButtonElement>(null);
+  const hamburgerDropdownRef = useRef<HTMLDivElement>(null);
+  const hamburgerWasOpenRef = useRef(false);
+  const hamburgerOpenedWithKeyboardRef = useRef(false);
+  const contextMenuOpenRef = useRef(false);
+
+  // Move focus into the hamburger menu when it opens and return focus to the
+  // trigger when it closes. This keeps the popover keyboard-operable without
+  // disturbing the separate product context menu focus contract.
+  useEffect(() => {
+    if (menuOpen) {
+      hamburgerDropdownRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
+    } else if (hamburgerWasOpenRef.current && hamburgerOpenedWithKeyboardRef.current) {
+      hamburgerButtonRef.current?.focus();
+    }
+    hamburgerWasOpenRef.current = menuOpen;
+  }, [menuOpen]);
+
+  // Close the hamburger menu on Escape before the global search shortcut can
+  // clear or blur the search field.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      hamburgerOpenedWithKeyboardRef.current = true;
+      setMenuOpen(false);
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [menuOpen]);
 
   // Close hamburger menu on click outside
   useEffect(() => {
@@ -362,6 +393,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
   // A11Y-06: close the menu and, when it was opened from the keyboard, return
   // focus to the triggering card (WAI-ARIA menu pattern).
   const closeContextMenu = useCallback(() => {
+    contextMenuOpenRef.current = false;
     setContextMenu(null);
     if (contextFromKeyboardRef.current) contextTriggerRef.current?.focus();
     contextTriggerRef.current = null;
@@ -402,7 +434,10 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
       }
     };
     const keyHandler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeContextMenu();
+      if (e.key === 'Escape') {
+        e.stopImmediatePropagation();
+        closeContextMenu();
+      }
     };
     document.addEventListener('mousedown', handler);
     document.addEventListener('keydown', keyHandler);
@@ -412,21 +447,27 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
     };
   }, [contextMenu, closeContextMenu]);
 
-  // Listen for global Ctrl+F → focus search input
+  // Listen for global Ctrl+F → focus search input, except while an overlay
+  // owns keyboard interaction.
   useEffect(() => {
-    const handler = () => searchInputRef.current?.focus();
+    const handler = () => {
+      if (menuOpen || contextMenuOpenRef.current || hamburgerDropdownRef.current?.contains(document.activeElement)) return;
+      searchInputRef.current?.focus();
+    };
     window.addEventListener('app-search', handler);
     return () => window.removeEventListener('app-search', handler);
-  }, []);
+  }, [menuOpen]);
 
   // Type anywhere → focus search + insert char, Escape → clear + blur
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (menuOpen || contextMenuOpenRef.current) return;
         setSearchQuery('');
         searchInputRef.current?.blur();
         return;
       }
+      if (menuOpen || contextMenuOpenRef.current) return;
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if (e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1) return;
@@ -446,12 +487,13 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [menuOpen]);
 
   const handleContextMenu = useCallback((sku: string, e: React.MouseEvent, trigger?: HTMLElement, fromKeyboard = false) => {
     e.preventDefault();
     contextTriggerRef.current = trigger ?? null;
     contextFromKeyboardRef.current = fromKeyboard;
+    contextMenuOpenRef.current = true;
     setContextMenu({ sku, x: e.clientX, y: e.clientY, isPinned: pinned.has(sku), isUnavailable: unavailable.has(sku), currentColor: colors[sku], fromKeyboard });
   }, [pinned, colors, unavailable]);
 
@@ -526,6 +568,24 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
     return m;
   }, [categoryMeta]);
 
+  const handleHamburgerKeyDown = useCallback((e: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
+    const items = Array.from(
+      hamburgerDropdownRef.current?.querySelectorAll<HTMLButtonElement>('button') ?? [],
+    );
+    if (items.length === 0) return;
+    const current = items.indexOf(e.currentTarget);
+    const next = e.key === 'Home'
+      ? 0
+      : e.key === 'End'
+        ? items.length - 1
+        : e.key === 'ArrowDown'
+          ? (current + 1 + items.length) % items.length
+          : (current - 1 + items.length) % items.length;
+    e.preventDefault();
+    items[next]?.focus();
+  }, []);
+
   const filtered = useMemo(() => {
     let result = restaurantProducts;
     if (effectiveCategory !== 'All') result = result.filter((p) => p.category === effectiveCategory);
@@ -557,9 +617,19 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
           <button
             type="button"
             className="restaurant-hamburger-btn"
+            ref={hamburgerButtonRef}
+            onPointerDown={() => {
+              hamburgerOpenedWithKeyboardRef.current = false;
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                hamburgerOpenedWithKeyboardRef.current = true;
+              }
+            }}
             onClick={() => setMenuOpen((prev) => !prev)}
             aria-label={l10n.getString('restaurant-menu-hamburger-aria')}
             aria-expanded={menuOpen}
+            aria-controls="restaurant-hamburger-menu"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" style={{ pointerEvents: 'none' }}>
               <line x1="3" y1="6" x2="21" y2="6" />
@@ -569,14 +639,21 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
           </button>
 
           {menuOpen && (
-            <div className="restaurant-hamburger-dropdown" role="menu">
+            <div
+              ref={hamburgerDropdownRef}
+              id="restaurant-hamburger-menu"
+              className="restaurant-hamburger-dropdown"
+              role="group"
+              tabIndex={-1}
+              aria-label={l10n.getString('restaurant-menu-hamburger-aria')}
+            >
               <span className="restaurant-hamburger-label"><Localized id="restaurant-sort-label"><span>Sort</span></Localized></span>
               {(['manual', 'a-z', 'date', 'popularity'] as const).map((mode) => (
                 <button
                   key={mode}
                   type="button"
                   className="restaurant-hamburger-item restaurant-hamburger-item--sort"
-                  role="menuitem"
+                  onKeyDown={handleHamburgerKeyDown}
                   onClick={() => {
                     setSortMode(mode);
                     persistMenuPreference('sort', mode);
@@ -590,12 +667,13 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
                 </button>
               ))}
               <div className="restaurant-hamburger-divider" role="separator" />
-              <div className="restaurant-hamburger-item restaurant-hamburger-size" role="menuitem">
+              <div className="restaurant-hamburger-item restaurant-hamburger-size" role="group" aria-label={l10n.getString('restaurant-size-label')}>
                 <span className="restaurant-hamburger-size-label"><Localized id="restaurant-size-label"><span>Menu Size</span></Localized></span>
                 <div className="restaurant-hamburger-size-controls">
                   <button
                     type="button"
                     className="restaurant-size-btn"
+                    onKeyDown={handleHamburgerKeyDown}
                     disabled={cardSize <= 0}
                     onClick={() => changeCardSize(-1)}
                     aria-label={l10n.getString('restaurant-size-decrease-aria')}
@@ -606,6 +684,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
                   <button
                     type="button"
                     className="restaurant-size-btn"
+                    onKeyDown={handleHamburgerKeyDown}
                     disabled={cardSize >= 4}
                     onClick={() => changeCardSize(1)}
                     aria-label={l10n.getString('restaurant-size-increase-aria')}
@@ -615,7 +694,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
                 </div>
               </div>
               <div className="restaurant-hamburger-divider" role="separator" />
-              <div className="restaurant-hamburger-item restaurant-hamburger-size" role="menuitem">
+              <div className="restaurant-hamburger-item restaurant-hamburger-size" role="group" aria-label={l10n.getString('restaurant-font-size-label')}>
                 <Localized id="restaurant-font-size-label">
                   <span className="restaurant-hamburger-size-label">Font Size</span>
                 </Localized>
@@ -623,6 +702,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
                   <button
                     type="button"
                     className="restaurant-size-btn"
+                    onKeyDown={handleHamburgerKeyDown}
                     disabled={fontSize <= 0}
                     onClick={() => changeFontSize(-1)}
                     aria-label={l10n.getString('restaurant-font-size-decrease-aria')}
@@ -633,6 +713,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
                   <button
                     type="button"
                     className="restaurant-size-btn"
+                    onKeyDown={handleHamburgerKeyDown}
                     disabled={fontSize >= 4}
                     onClick={() => changeFontSize(1)}
                     aria-label={l10n.getString('restaurant-font-size-increase-aria')}
@@ -645,7 +726,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
               <button
                 type="button"
                 className="restaurant-hamburger-item"
-                role="menuitem"
+                onKeyDown={handleHamburgerKeyDown}
                 aria-label={l10n.getString(theme === 'dark' ? 'restaurant-theme-light' : 'restaurant-theme-dark')}
                 onClick={() => { toggleTheme(); setMenuOpen(false); }}
               >
@@ -656,7 +737,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
               <button
                 type="button"
                 className="restaurant-hamburger-item"
-                role="menuitem"
+                onKeyDown={handleHamburgerKeyDown}
                 aria-label={l10n.getString('restaurant-lock-terminal')}
                 onClick={() => { logout(); setMenuOpen(false); }}
               >
@@ -665,7 +746,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
               <button
                 type="button"
                 className="restaurant-hamburger-item"
-                role="menuitem"
+                onKeyDown={handleHamburgerKeyDown}
                 aria-label={l10n.getString('restaurant-toggle-fullscreen')}
                 onClick={() => { toggleFullscreen(); setMenuOpen(false); }}
               >
@@ -706,6 +787,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           aria-label={l10n.getString('restaurant-search-aria')}
+          style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
         />
         {searchQuery && (
           <button
@@ -820,7 +902,7 @@ export default function RestaurantMenu({ onAddProduct }: RestaurantMenuProps) {
           </button>
           <div className="restaurant-context-divider" role="separator" />
           <span className="restaurant-context-label"><Localized id="restaurant-context-color-label"><span>Colorize Add</span></Localized></span>
-          <div className="restaurant-context-colors" role="menuitem">
+          <div className="restaurant-context-colors" role="group" aria-label={l10n.getString('restaurant-context-color-label')}>
             {COLOR_PALETTE.map((c) => (
               <button
                 key={c}

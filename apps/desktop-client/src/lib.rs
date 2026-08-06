@@ -527,6 +527,7 @@ pub fn run() {
             commands::offline::pending_offline_count,
             commands::offline::retry_offline_sync,
             commands::offline::delete_offline_item,
+            commands::offline::requeue_remote_failure,
             commands::sync::get_sync_settings,
             commands::sync::get_sync_settings_scoped,
             commands::sync::update_sync_settings,

@@ -210,6 +210,14 @@ describe('RestaurantMenu', () => {
     expect(input).toHaveAttribute('data-bwignore', 'true');
   });
 
+  it('allows selecting text in the search field', () => {
+    renderMenu();
+    const input = screen.getByRole('searchbox', { name: 'Search menu items' });
+
+    expect(input).toHaveClass('restaurant-search-input');
+    expect(input).toHaveStyle({ userSelect: 'text' });
+  });
+
   it('filters by search query', async () => {
     renderMenu();
     const input = document.querySelector('.restaurant-search-input') as HTMLInputElement;
@@ -246,6 +254,63 @@ describe('RestaurantMenu', () => {
     await waitFor(() => {
       expect(screen.getByText('Manual')).toBeTruthy();
     });
+  });
+
+  it('closes the hamburger menu with Escape and restores focus to its trigger', async () => {
+    renderMenu();
+    const user = userEvent.setup();
+    const hamburger = document.querySelector('.restaurant-hamburger-btn') as HTMLButtonElement;
+
+    hamburger.focus();
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(screen.getByText('Manual')).toBeTruthy());
+    expect(document.activeElement?.textContent).toContain('Manual');
+
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(screen.queryByText('Manual')).toBeNull());
+    expect(document.activeElement).toBe(hamburger);
+  });
+
+  it('supports keyboard navigation within the hamburger menu', async () => {
+    renderMenu();
+    const user = userEvent.setup();
+    const hamburger = document.querySelector('.restaurant-hamburger-btn') as HTMLButtonElement;
+
+    await user.click(hamburger);
+    await waitFor(() => expect(screen.getByText('Manual')).toBeTruthy());
+
+    await user.keyboard('{ArrowDown}');
+    expect(document.activeElement?.textContent).toContain('A–Z');
+    await user.keyboard('{End}');
+    expect(document.activeElement?.textContent).toContain('Toggle Fullscreen');
+    await user.keyboard('{Home}');
+    expect(document.activeElement?.textContent).toContain('Manual');
+  });
+
+  it('does not let the app-search shortcut steal focus while the hamburger menu is open', async () => {
+    renderMenu();
+    const user = userEvent.setup();
+    const hamburger = document.querySelector('.restaurant-hamburger-btn') as HTMLButtonElement;
+
+    await user.click(hamburger);
+    await waitFor(() => expect(screen.getByText('Manual')).toBeTruthy());
+    window.dispatchEvent(new Event('app-search'));
+
+    expect(document.activeElement).not.toBe(screen.getByRole('searchbox', { name: 'Search menu items' }));
+  });
+
+  it('does not let global typing shortcuts steal focus while the hamburger menu is open', async () => {
+    renderMenu();
+    const user = userEvent.setup();
+    const hamburger = document.querySelector('.restaurant-hamburger-btn') as HTMLButtonElement;
+
+    await user.click(hamburger);
+    await waitFor(() => expect(screen.getByText('Manual')).toBeTruthy());
+    await user.keyboard('x');
+
+    expect(screen.queryByDisplayValue('x')).toBeNull();
+    expect(document.activeElement?.textContent).toContain('Manual');
   });
 
   it('persists hamburger menu settings through the scoped preference API', async () => {
@@ -377,6 +442,22 @@ describe('RestaurantMenu', () => {
     });
     // Focus must return to the triggering card (not the body).
     expect(document.activeElement).toBe(card);
+  });
+
+  it('preserves search text when Escape closes the context menu', async () => {
+    renderMenu();
+    const user = userEvent.setup();
+    const input = screen.getByRole('searchbox', { name: 'Search menu items' });
+    await user.type(input, 'Teh');
+    const card = screen.getByText('Es Teh').closest('button')!;
+
+    await act(async () => {
+      card.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 100, clientY: 200 }));
+    });
+    await waitFor(() => expect(screen.getByText('Pin to top')).toBeTruthy());
+    await user.keyboard('{Escape}');
+
+    expect(input).toHaveValue('Teh');
   });
 
   it('closes the pointer-opened context menu via Escape without moving focus into the menu', async () => {

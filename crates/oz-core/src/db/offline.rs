@@ -548,6 +548,53 @@ impl Store<'_> {
         Ok(())
     }
 
+    /// Requeue a dead-lettered remote item so the next sync cycle retries it.
+    ///
+    /// Operators call this after remediating the item's source (for example
+    /// creating the missing product a remote sale referenced, or upgrading a
+    /// client whose version rejected the payload). The quarantine row is
+    /// deleted and the durable pull anchor (`sync_pull_state`) is rewound to
+    /// a full re-pull, so the next daemon cycle re-fetches the item and
+    /// retries it with a fresh attempt budget. The re-pull is safe because
+    /// the `sync_applied_items` idempotency ledger skips every already-
+    /// applied item — only the requeued (never-applied) item mutates.
+    ///
+    /// Returns [`CoreError::NotFound`] when the item is not currently
+    /// dead-lettered (either never recorded or still retryable) — a mistyped
+    /// id or a request to requeue an item that is already being retried must
+    /// not be a silent no-op.
+    pub fn requeue_remote_failure(&self, item_id: &str) -> Result<(), CoreError> {
+        let dead_lettered: bool = self
+            .conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sync_remote_failures WHERE item_id = ?1 AND dead_lettered = 1)",
+                params![item_id],
+                |row| row.get(0),
+            )
+            .map_err(CoreError::from)?;
+        if !dead_lettered {
+            return Err(CoreError::NotFound {
+                entity: "sync_remote_failures",
+                id: item_id.to_owned(),
+            });
+        }
+
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
+            "DELETE FROM sync_remote_failures WHERE item_id = ?1",
+            params![item_id],
+        )?;
+        // Rewind the durable pull anchor (single-row table). A NULL `since`
+        // means "pull everything" on the next cycle — the idempotency
+        // ledger makes that safe. No row (pre-114 database) is a no-op.
+        tx.execute(
+            "UPDATE sync_pull_state SET since = NULL, cursor = NULL WHERE id = 1",
+            [],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
     /// Record a remote item using a caller-owned transaction.
     ///
     /// The sync applier uses this method in the same transaction as the
@@ -1040,6 +1087,74 @@ mod tests {
         // Verify state unchanged.
         let count = s.pending_offline_count().unwrap();
         assert_eq!(count, 0);
+    }
+
+    // ── requeue_remote_failure (dead-letter requeue workflow) ────────
+
+    #[test]
+    fn requeue_remote_failure_clears_quarantine_and_rewinds_anchor() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        // Drive a remote item to the dead letter (3 failed attempts).
+        let mut dead_lettered = false;
+        for _ in 0..3 {
+            dead_lettered = s
+                .record_remote_failure(
+                    "remote-item-1",
+                    "complete_sale",
+                    "{}",
+                    "permanent failure",
+                    3,
+                )
+                .unwrap();
+        }
+        assert!(dead_lettered, "third attempt must dead-letter the item");
+        assert!(s.is_remote_failure_dead_lettered("remote-item-1").unwrap());
+
+        // The daemon had already advanced the durable pull anchor past the
+        // item (the anchor is what let it skip the quarantine).
+        s.set_sync_pull_state(Some("2026-06-01T00:00:00Z"), Some("cursor-1"))
+            .unwrap();
+
+        s.requeue_remote_failure("remote-item-1").unwrap();
+
+        // Quarantine cleared: no failure row remains.
+        assert!(!s.is_remote_failure_dead_lettered("remote-item-1").unwrap());
+        assert!(s.list_remote_failures().unwrap().is_empty());
+
+        // Anchor rewound so the next pull re-fetches the requeued item. A
+        // full re-pull is safe: the idempotency ledger skips every
+        // already-applied item, and only the requeued item mutates.
+        let st = s.get_sync_pull_state().unwrap();
+        assert!(st.since.is_none(), "anchor must rewind to a full re-pull");
+        assert!(
+            st.cursor.is_none(),
+            "cursor must be cleared with the anchor"
+        );
+    }
+
+    #[test]
+    fn requeue_remote_failure_refuses_non_dead_lettered() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        // A retryable failure (not yet quarantined) cannot be requeued —
+        // the daemon is already retrying it and the anchor is retained.
+        s.record_remote_failure("remote-item-2", "complete_sale", "{}", "transient", 3)
+            .unwrap();
+        assert!(!s.is_remote_failure_dead_lettered("remote-item-2").unwrap());
+
+        let err = s.requeue_remote_failure("remote-item-2").unwrap_err();
+        assert!(
+            matches!(err, CoreError::NotFound { entity, .. } if entity == "sync_remote_failures")
+        );
+
+        // An id that was never recorded is likewise NotFound.
+        let err = s.requeue_remote_failure("never-seen").unwrap_err();
+        assert!(
+            matches!(err, CoreError::NotFound { entity, .. } if entity == "sync_remote_failures")
+        );
     }
 
     // ── Dedup tests ───────────────────────────────────────────────────

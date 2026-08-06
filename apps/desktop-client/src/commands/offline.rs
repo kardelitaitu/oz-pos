@@ -278,6 +278,48 @@ pub async fn delete_offline_item(id: String, state: State<'_, AppState>) -> Resu
     Ok(())
 }
 
+/// Arguments for `requeue_remote_failure`.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequeueRemoteFailureArgs {
+    /// Remote item id currently quarantined in `sync_remote_failures`.
+    pub item_id: String,
+}
+
+/// Requeue a dead-lettered remote item so the next sync cycle retries it.
+///
+/// Operators call this after remediating the item's source (e.g. creating
+/// the missing product a remote sale referenced, or upgrading a client that
+/// rejected the payload). The quarantine row is cleared and the durable
+/// pull anchor is rewound, so the next pull re-fetches the item and retries
+/// it with a fresh attempt budget; the idempotency ledger makes the full
+/// re-pull safe.
+///
+/// An id that is not currently dead-lettered returns `NotFound` — a
+/// mistyped id must not be a silent no-op.
+#[tauri::command]
+pub async fn requeue_remote_failure(
+    args: RequeueRemoteFailureArgs,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    validate_not_empty("itemId", &args.item_id).map_err(|e| AppError::Invalid(e.to_string()))?;
+
+    let db = state.db.lock().await;
+    run_requeue_remote_failure(&db, &args.item_id)?;
+    drop(db);
+
+    tracing::info!(item_id = %args.item_id, "dead-lettered remote item requeued for sync retry");
+    Ok(())
+}
+
+/// Execute the requeue against a connection, extracted so the command
+/// boundary is unit-testable without a Tauri runtime.
+fn run_requeue_remote_failure(conn: &rusqlite::Connection, item_id: &str) -> Result<(), AppError> {
+    let store = Store::new(conn);
+    store.requeue_remote_failure(item_id)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -392,6 +434,51 @@ mod tests {
 
         let remaining = store.list_pending_offline().unwrap();
         assert!(remaining.is_empty());
+    }
+
+    // ── requeue_remote_failure (dead-letter requeue workflow) ────────
+
+    #[test]
+    fn run_requeue_remote_failure_clears_dead_letter() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+
+        // Drive a remote item to the dead letter, then persist a pull
+        // anchor past it (as the daemon would after quarantining it).
+        for _ in 0..3 {
+            store
+                .record_remote_failure("dl-item-1", "complete_sale", "{}", "bad", 3)
+                .unwrap();
+        }
+        assert!(store.is_remote_failure_dead_lettered("dl-item-1").unwrap());
+        store
+            .set_sync_pull_state(Some("2026-06-01T00:00:00Z"), Some("cursor-1"))
+            .unwrap();
+
+        run_requeue_remote_failure(&conn, "dl-item-1").unwrap();
+
+        assert!(!store.is_remote_failure_dead_lettered("dl-item-1").unwrap());
+        assert!(store.list_remote_failures().unwrap().is_empty());
+        let st = store.get_sync_pull_state().unwrap();
+        assert!(st.since.is_none(), "anchor must rewind after requeue");
+        assert!(st.cursor.is_none(), "cursor must clear with the anchor");
+    }
+
+    #[test]
+    fn run_requeue_remote_failure_unknown_id_errors() {
+        let conn = fresh_conn();
+        let result = run_requeue_remote_failure(&conn, "never-seen");
+        assert!(
+            result.is_err(),
+            "unknown dead-letter id must not be a silent no-op"
+        );
+    }
+
+    #[test]
+    fn requeue_remote_failure_args_deserialize() {
+        let json = r#"{"itemId":"dl-1"}"#;
+        let args: RequeueRemoteFailureArgs = serde_json::from_str(json).unwrap();
+        assert_eq!(args.item_id, "dl-1");
     }
 
     // -- DTO struct tests --

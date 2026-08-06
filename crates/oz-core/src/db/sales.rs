@@ -1777,6 +1777,25 @@ impl Store<'_> {
         let mut total_tax: Option<Money> = None;
 
         for line in lines {
+            // MONEY-02: negative qty/price would produce a negative line total
+            // and a negative "tax" preview (the front-end renders it raw). The
+            // cart model never allows negative qty/price, so reject them with a
+            // structured Validation error naming the offending field.
+            if line.qty < 0 {
+                return Err(CoreError::Validation {
+                    field: "qty",
+                    message: format!("qty must be positive, got {}", line.qty),
+                });
+            }
+            if line.unit_price_minor < 0 {
+                return Err(CoreError::Validation {
+                    field: "price",
+                    message: format!(
+                        "unit price must be non-negative, got {}",
+                        line.unit_price_minor
+                    ),
+                });
+            }
             // MONEY-01: the line total comes from untrusted IPC input and must
             // use checked arithmetic like `compute_line_tax` (TAX-04). The
             // workspace disables overflow-checks for dev/test builds, so a
@@ -2956,6 +2975,42 @@ mod tests {
             }
             Err(other) => panic!("expected Validation overflow error, got: {other:?}"),
             Ok(m) => panic!("overflow must not wrap silently, got Ok({m:?})"),
+        }
+    }
+
+    // ── MONEY-02: negative qty / unit price must be rejected ──
+    //
+    // CartLineTaxInput comes off the IPC boundary; a hostile renderer can
+    // send a negative qty or price. That yields a negative line total and a
+    // negative "tax" preview (the front-end displays it raw). The cart model
+    // never allows negative qty/price, so fail with a structured Validation
+    // error naming the offending field.
+    #[test]
+    fn compute_cart_tax_rejects_negative_qty_and_price() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_tax_rate(&conn, "VAT 10%", 1000, true, false);
+
+        let negative_qty = vec![CartLineTaxInput {
+            sku: "COFFEE".into(),
+            qty: -2,
+            unit_price_minor: 350,
+        }];
+        match s.compute_cart_tax(&negative_qty, usd(), RoundingMode::HalfUp) {
+            Err(CoreError::Validation { field, .. }) => assert_eq!(field, "qty"),
+            Err(other) => panic!("expected qty Validation error, got: {other:?}"),
+            Ok(m) => panic!("negative qty must be rejected, got Ok({m:?})"),
+        }
+
+        let negative_price = vec![CartLineTaxInput {
+            sku: "COFFEE".into(),
+            qty: 1,
+            unit_price_minor: -350,
+        }];
+        match s.compute_cart_tax(&negative_price, usd(), RoundingMode::HalfUp) {
+            Err(CoreError::Validation { field, .. }) => assert_eq!(field, "price"),
+            Err(other) => panic!("expected price Validation error, got: {other:?}"),
+            Ok(m) => panic!("negative price must be rejected, got Ok({m:?})"),
         }
     }
 
