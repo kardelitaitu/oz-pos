@@ -867,6 +867,59 @@ impl Store<'_> {
                 message: format!("invalid UTF-8 in currency bytes: {e}"),
             })?
             .to_owned();
+
+        // A repeated SKU is only idempotent when it describes the same
+        // product. Silently accepting a different payload would record a
+        // receipt while discarding a legitimate remote catalog conflict.
+        {
+            use rusqlite::OptionalExtension;
+            let existing: Option<(String, i64, String, Option<String>, Option<String>, String)> =
+                tx.query_row(
+                    "SELECT p.name, p.price_minor, p.currency, p.category_id, p.barcode,
+                            p.product_type
+                     FROM products p
+                     WHERE p.sku = ?1",
+                    params![sku.trim()],
+                    |row| {
+                        Ok((
+                            row.get(0)?,
+                            row.get(1)?,
+                            row.get(2)?,
+                            row.get(3)?,
+                            row.get(4)?,
+                            row.get(5)?,
+                        ))
+                    },
+                )
+                .optional()?;
+            if let Some((
+                existing_name,
+                existing_price,
+                existing_currency,
+                existing_category,
+                existing_barcode,
+                existing_type,
+            )) = existing
+            {
+                let same = existing_name == name.trim()
+                    && existing_price == price.minor_units
+                    && existing_currency == cur_str
+                    && existing_category.as_deref() == category_id
+                    && existing_barcode.as_deref() == barcode
+                    && existing_type == product_type;
+                // `initial_stock` is write-once creation metadata. Current
+                // inventory is mutable, so it is intentionally not compared
+                // when recognizing a replay of an already-existing SKU.
+                if !same {
+                    return Err(CoreError::Conflict {
+                        entity: "product",
+                        field: "sku",
+                    });
+                }
+                return Ok(false);
+            }
+        }
+
         let id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let inserted = tx.execute(

@@ -43,6 +43,23 @@ pub struct SyncPullState {
     pub cursor: Option<String>,
 }
 
+/// A retained failure from applying a remote sync item.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteSyncFailure {
+    /// Remote item identifier.
+    pub item_id: String,
+    /// Remote action name.
+    pub action: String,
+    /// Original payload retained for operator inspection.
+    pub payload: String,
+    /// Number of failed application attempts.
+    pub attempts: i64,
+    /// Most recent application error.
+    pub last_error: String,
+    /// Whether retry is exhausted and the item is quarantined.
+    pub dead_lettered: bool,
+}
+
 impl Store<'_> {
     /// Enqueue a transaction for later sync (default tenant).
     pub fn enqueue_offline(
@@ -436,6 +453,97 @@ impl Store<'_> {
         self.conn.execute(
             "INSERT OR IGNORE INTO sync_applied_items (item_id, action) VALUES (?1, ?2)",
             params![item_id, action],
+        )?;
+        Ok(())
+    }
+
+    /// Record a remote application failure and advance its retry/dead-letter state.
+    ///
+    /// The payload is retained for operator inspection. Once `max_attempts`
+    /// is reached, the item is quarantined and no longer eligible for page
+    /// application until a future explicit operator requeue workflow is added.
+    pub fn record_remote_failure(
+        &self,
+        item_id: &str,
+        action: &str,
+        payload: &str,
+        error: &str,
+        max_attempts: i64,
+    ) -> Result<bool, CoreError> {
+        let max_attempts = max_attempts.max(1);
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
+            "INSERT INTO sync_remote_failures
+                (item_id, action, payload, attempts, last_error, dead_lettered)
+             VALUES (?1, ?2, ?3, 1, ?4, CASE WHEN 1 >= ?5 THEN 1 ELSE 0 END)
+             ON CONFLICT(item_id) DO UPDATE SET
+                action = excluded.action,
+                payload = excluded.payload,
+                attempts = sync_remote_failures.attempts + 1,
+                last_error = excluded.last_error,
+                last_failed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                dead_lettered = CASE
+                    WHEN sync_remote_failures.attempts + 1 >= ?5 THEN 1
+                    ELSE 0
+                END",
+            params![item_id, action, payload, error, max_attempts],
+        )?;
+        let dead_lettered: bool = tx.query_row(
+            "SELECT dead_lettered FROM sync_remote_failures WHERE item_id = ?1",
+            params![item_id],
+            |row| row.get(0),
+        )?;
+        tx.commit()?;
+        Ok(dead_lettered)
+    }
+
+    /// List retained remote application failures, newest failure first.
+    pub fn list_remote_failures(&self) -> Result<Vec<RemoteSyncFailure>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT item_id, action, payload, attempts, last_error, dead_lettered
+             FROM sync_remote_failures ORDER BY last_failed_at DESC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(RemoteSyncFailure {
+                item_id: row.get(0)?,
+                action: row.get(1)?,
+                payload: row.get(2)?,
+                attempts: row.get(3)?,
+                last_error: row.get(4)?,
+                dead_lettered: row.get::<_, i64>(5)? != 0,
+            })
+        })?;
+        rows.map(|row| row.map_err(CoreError::from)).collect()
+    }
+
+    /// Return whether a remote item has been quarantined as a dead letter.
+    pub fn is_remote_failure_dead_lettered(&self, item_id: &str) -> Result<bool, CoreError> {
+        self.conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sync_remote_failures WHERE item_id = ?1 AND dead_lettered = 1)",
+                params![item_id],
+                |row| row.get(0),
+            )
+            .map_err(Into::into)
+    }
+
+    /// Clear a resolved remote failure after its item is applied successfully.
+    pub fn clear_remote_failure(&self, item_id: &str) -> Result<(), CoreError> {
+        let tx = self.conn.unchecked_transaction()?;
+        self.clear_remote_failure_in_tx(&tx, item_id)?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Clear a remote failure using a caller-owned transaction.
+    pub fn clear_remote_failure_in_tx(
+        &self,
+        tx: &rusqlite::Transaction<'_>,
+        item_id: &str,
+    ) -> Result<(), CoreError> {
+        tx.execute(
+            "DELETE FROM sync_remote_failures WHERE item_id = ?1",
+            params![item_id],
         )?;
         Ok(())
     }

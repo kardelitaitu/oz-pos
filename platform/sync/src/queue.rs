@@ -205,6 +205,13 @@ impl SyncQueue {
         store: &Store<'_>,
         item: &OfflineQueueItem,
     ) -> Result<bool, CoreError> {
+        // A quarantined item must not be retried by every subsequent page
+        // pull. Operators can inspect the retained payload and explicitly
+        // requeue it after correcting the source or client version.
+        if store.is_remote_failure_dead_lettered(&item.id)? {
+            return Ok(false);
+        }
+
         let tx = store.conn().unchecked_transaction()?;
         let already: bool = tx.query_row(
             "SELECT EXISTS(SELECT 1 FROM sync_applied_items WHERE item_id = ?1)",
@@ -216,10 +223,25 @@ impl SyncQueue {
             return Ok(false);
         }
 
-        self.apply_remote_in_tx(&tx, item)?;
-        store.mark_remote_item_applied_in_tx(&tx, &item.id, &item.action)?;
-        tx.commit()?;
-        Ok(true)
+        match self.apply_remote_in_tx(&tx, item) {
+            Ok(()) => {
+                store.mark_remote_item_applied_in_tx(&tx, &item.id, &item.action)?;
+                store.clear_remote_failure_in_tx(&tx, &item.id)?;
+                tx.commit()?;
+                Ok(true)
+            }
+            Err(error) => {
+                drop(tx);
+                store.record_remote_failure(
+                    &item.id,
+                    &item.action,
+                    &item.payload,
+                    &error.to_string(),
+                    3,
+                )?;
+                Err(error)
+            }
+        }
     }
 
     /// Apply a remote mutation using a caller-owned transaction.
@@ -896,6 +918,75 @@ mod tests {
         assert!(queue.apply_remote_atomic(&store, &remote).is_err());
         assert_eq!(inventory_qty(&store, "COFFEE"), 50);
         assert!(!store.is_remote_item_applied(&remote.id).unwrap());
+        assert!(!store.is_remote_failure_dead_lettered(&remote.id).unwrap());
+
+        // The third failed attempt quarantines the poison item. A later
+        // replay is skipped without mutating state or advancing a receipt.
+        assert!(queue.apply_remote_atomic(&store, &remote).is_err());
+        assert!(queue.apply_remote_atomic(&store, &remote).is_err());
+        assert!(store.is_remote_failure_dead_lettered(&remote.id).unwrap());
+        assert!(!queue.apply_remote_atomic(&store, &remote).unwrap());
+    }
+
+    #[test]
+    fn apply_remote_atomic_clears_stale_failure_after_success() {
+        let store = setup_store();
+        seed_product_and_inventory(&store);
+        let queue = SyncQueue::new();
+        let remote = OfflineQueueItem {
+            id: "remote-sale-recovered".into(),
+            action: "complete_sale".into(),
+            payload: r#"{"line_items":[{"sku":"COFFEE","qty":1}]}"#.into(),
+            ..OfflineQueueItem::new("complete_sale", "{}")
+        };
+
+        store
+            .record_remote_failure(
+                &remote.id,
+                &remote.action,
+                &remote.payload,
+                "temporary failure",
+                3,
+            )
+            .unwrap();
+        assert_eq!(store.list_remote_failures().unwrap().len(), 1);
+
+        assert!(queue.apply_remote_atomic(&store, &remote).unwrap());
+        assert_eq!(inventory_qty(&store, "COFFEE"), 49);
+        assert!(store.list_remote_failures().unwrap().is_empty());
+    }
+
+    #[test]
+    fn apply_remote_atomic_rejects_conflicting_existing_product() {
+        let store = setup_store();
+        let queue = SyncQueue::new();
+        store
+            .conn()
+            .execute(
+                "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at,
+                                      product_type, version)
+                 VALUES ('prod-existing', 'COFFEE', 'Existing Coffee', 350, 'USD',
+                         '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z', 'retail', 1)",
+                [],
+            )
+            .unwrap();
+        let payload = serde_json::json!({
+            "sku": "COFFEE",
+            "name": "Different Coffee",
+            "price_minor": 450,
+            "currency": "USD",
+            "initial_stock": 0,
+            "product_type": "retail"
+        })
+        .to_string();
+        let remote = OfflineQueueItem::new("product.created", &payload);
+
+        assert!(queue.apply_remote_atomic(&store, &remote).is_err());
+        assert!(!store.is_remote_item_applied(&remote.id).unwrap());
+        assert_eq!(
+            store.get_product("COFFEE").unwrap().unwrap().product.name,
+            "Existing Coffee"
+        );
     }
 
     #[test]

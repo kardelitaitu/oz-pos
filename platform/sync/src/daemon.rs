@@ -395,6 +395,8 @@ impl SyncDaemon {
                                     let queue = SyncQueue::new();
                                     let mut has_stock_movements = false;
                                     let mut all_applied = true;
+                                    let mut quarantined_item = false;
+                                    let mut retryable_failure = false;
                                     // SYNC-01: captured so anchor-persistence
                                     // failures surface in the daemon status
                                     // (returned from the closure below) instead of
@@ -411,15 +413,42 @@ impl SyncDaemon {
                                         // committed stock mutation with a missing
                                         // receipt.
                                         match queue.apply_remote_atomic(&store, item) {
-                                            Ok(_) => {}
+                                            Ok(applied) => {
+                                                if !applied
+                                                    && store
+                                                        .is_remote_failure_dead_lettered(&item.id)
+                                                        .unwrap_or(false)
+                                                {
+                                                    quarantined_item = true;
+                                                    tracing::error!(
+                                                        item_id = %item.id,
+                                                        action = %item.action,
+                                                        "remote item remains quarantined; advancing page anchor"
+                                                    );
+                                                }
+                                            }
                                             Err(e) => {
-                                                all_applied = false;
-                                                tracing::error!(
-                                                    item_id = %item.id,
-                                                    action = %item.action,
-                                                    error = %e,
-                                                    "failed to atomically apply remote item"
-                                                );
+                                                let dead_lettered = store
+                                                    .is_remote_failure_dead_lettered(&item.id)
+                                                    .unwrap_or(false);
+                                                if dead_lettered {
+                                                    quarantined_item = true;
+                                                    tracing::error!(
+                                                        item_id = %item.id,
+                                                        action = %item.action,
+                                                        error = %e,
+                                                        "remote item quarantined after repeated failures; advancing page anchor"
+                                                    );
+                                                } else {
+                                                    all_applied = false;
+                                                    retryable_failure = true;
+                                                    tracing::error!(
+                                                        item_id = %item.id,
+                                                        action = %item.action,
+                                                        error = %e,
+                                                        "failed to atomically apply remote item; retaining page anchor for retry"
+                                                    );
+                                                }
                                             }
                                         }
                                     }
@@ -448,7 +477,7 @@ impl SyncDaemon {
                                     // the whole page and its derived stock cache
                                     // applied successfully. A crash mid-pull leaves
                                     // the old anchor so the ledger absorbs replay.
-                                    if all_applied && summary_rebuilt {
+                                    if all_applied && !retryable_failure && summary_rebuilt {
                                         let new_since = items
                                             .iter()
                                             .map(|i| i.created_at.clone())
@@ -466,11 +495,18 @@ impl SyncDaemon {
                                                 Some(format!("persist sync pull anchor: {e}"));
                                         }
                                     }
-                                    // Return the anchor-persistence error (if any)
-                                    // so the caller can surface it in the daemon
-                                    // status — a lost anchor makes the NEXT cycle
-                                    // re-pull the whole page, which is exactly the
-                                    // corruption class SYNC-01 prevents.
+                                    // Keep quarantine visible in daemon status even
+                                    // though the page is allowed to advance after
+                                    // the configured retry budget is exhausted.
+                                    if quarantined_item && anchor_error.is_none() {
+                                        anchor_error = Some(
+                                            "one or more remote items were dead-lettered"
+                                                .to_owned(),
+                                        );
+                                    }
+                                    // Return the anchor-persistence/quarantine error
+                                    // so the caller surfaces the recovery action in
+                                    // daemon status and logs.
                                     anchor_error
                                 })
                                 .await;
@@ -1038,6 +1074,189 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(ledger_rows, 1, "ledger must hold one receipt for the item");
+    }
+
+    /// Spawn a mock pull server that continually returns a malformed remote
+    /// sale. It is used to verify that transient failures retain the anchor
+    /// until the retry budget is exhausted, then quarantine the item.
+    async fn spawn_poison_remote_mock_sync_server() -> String {
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        async fn handle_pull(Json(_req): Json<serde_json::Value>) -> Json<PullResponse> {
+            let mut item = oz_core::offline::OfflineQueueItem::new(
+                "complete_sale",
+                r#"{"line_items":[{"sku":"MISSING","qty":1}]}"#,
+            );
+            item.id = "remote-poison-1".into();
+            item.created_at = "2026-01-03T00:00:00.000Z".into();
+            Json(PullResponse {
+                items: vec![item],
+                next_cursor: None,
+            })
+        }
+        async fn handle_push(Json(items): Json<Vec<serde_json::Value>>) -> Json<PushResponse> {
+            Json(PushResponse {
+                results: vec![PushOutcome::Accepted; items.len()],
+            })
+        }
+
+        let app = Router::new()
+            .route("/api/sync/push", post(handle_push))
+            .route("/api/sync/pull", post(handle_pull));
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        format!("http://localhost:{port}")
+    }
+
+    /// SYNC-08 regression: a page containing a quarantined item and a fresh
+    /// retryable item must still retain its anchor for the retryable item.
+    #[tokio::test]
+    async fn daemon_does_not_skip_retryable_item_beside_dead_letter() {
+        let server_url = spawn_poison_remote_mock_server_with_two_items().await;
+        let db = setup_db();
+        let db_setup = db.clone();
+        let url = server_url.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db_setup.blocking_lock();
+            Settings::set_sync_enabled(&conn, true).unwrap();
+            Settings::set_sync_server_url(&conn, &url).unwrap();
+            conn.execute(
+                "INSERT INTO sync_remote_failures
+                    (item_id, action, payload, attempts, last_error, dead_lettered)
+                 VALUES ('remote-poison-dead', 'complete_sale', '{}', 3, 'permanent', 1)",
+                [],
+            )
+            .unwrap();
+        })
+        .await
+        .unwrap();
+
+        let status = Arc::new(RwLock::new(DaemonStatus::default()));
+        SyncDaemon::run_tick(&db, &status).await;
+
+        let db_check = db.clone();
+        let (anchor, retry_attempts) = tokio::task::spawn_blocking(move || {
+            let conn = db_check.blocking_lock();
+            let store = Store::new(&conn);
+            (
+                store.get_sync_pull_state().unwrap(),
+                conn.query_row(
+                    "SELECT attempts FROM sync_remote_failures WHERE item_id = 'remote-poison-retry'",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap(),
+            )
+        })
+        .await
+        .unwrap();
+
+        assert!(
+            anchor.since.is_none(),
+            "retryable item must retain the anchor"
+        );
+        assert_eq!(retry_attempts, 1);
+    }
+
+    /// Spawn a mock pull server returning one already-quarantined item and
+    /// one fresh poison item. This pins page-level anchor ordering.
+    async fn spawn_poison_remote_mock_server_with_two_items() -> String {
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        async fn handle_pull(Json(_req): Json<serde_json::Value>) -> Json<PullResponse> {
+            let mut dead = oz_core::offline::OfflineQueueItem::new(
+                "complete_sale",
+                r#"{"line_items":[{"sku":"MISSING-DEAD","qty":1}]}"#,
+            );
+            dead.id = "remote-poison-dead".into();
+            dead.created_at = "2026-01-03T00:00:00.000Z".into();
+            let mut retry = oz_core::offline::OfflineQueueItem::new(
+                "complete_sale",
+                r#"{"line_items":[{"sku":"MISSING-RETRY","qty":1}]}"#,
+            );
+            retry.id = "remote-poison-retry".into();
+            retry.created_at = "2026-01-03T00:00:01.000Z".into();
+            Json(PullResponse {
+                items: vec![dead, retry],
+                next_cursor: None,
+            })
+        }
+        async fn handle_push(Json(items): Json<Vec<serde_json::Value>>) -> Json<PushResponse> {
+            Json(PushResponse {
+                results: vec![PushOutcome::Accepted; items.len()],
+            })
+        }
+
+        let app = Router::new()
+            .route("/api/sync/push", post(handle_push))
+            .route("/api/sync/pull", post(handle_pull));
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        format!("http://localhost:{port}")
+    }
+
+    /// SYNC-08 regression: a failing remote item retains the previous anchor
+    /// while it is retryable, then becomes a visible dead letter and allows
+    /// the page anchor to advance after the third failed attempt.
+    #[tokio::test]
+    async fn daemon_retains_anchor_until_remote_item_is_dead_lettered() {
+        let server_url = spawn_poison_remote_mock_sync_server().await;
+        let db = setup_db();
+        let db_setup = db.clone();
+        let url = server_url.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db_setup.blocking_lock();
+            Settings::set_sync_enabled(&conn, true).unwrap();
+            Settings::set_sync_server_url(&conn, &url).unwrap();
+        })
+        .await
+        .unwrap();
+
+        let status = Arc::new(RwLock::new(DaemonStatus::default()));
+        for attempt in 1..=3 {
+            SyncDaemon::run_tick(&db, &status).await;
+            let db_check = db.clone();
+            let (anchor, dead_lettered, failures) = tokio::task::spawn_blocking(move || {
+                let conn = db_check.blocking_lock();
+                let store = Store::new(&conn);
+                (
+                    store.get_sync_pull_state().unwrap(),
+                    store.is_remote_failure_dead_lettered("remote-poison-1").unwrap(),
+                    conn.query_row(
+                        "SELECT attempts FROM sync_remote_failures WHERE item_id = 'remote-poison-1'",
+                        [],
+                        |row| row.get::<_, i64>(0),
+                    )
+                    .unwrap(),
+                )
+            })
+            .await
+            .unwrap();
+
+            if attempt < 3 {
+                assert!(
+                    anchor.since.is_none(),
+                    "retryable failure must retain anchor"
+                );
+                assert!(!dead_lettered);
+                assert_eq!(failures, attempt);
+            } else {
+                assert!(anchor.since.is_some(), "dead letter may advance anchor");
+                assert!(dead_lettered);
+                assert_eq!(failures, 3);
+            }
+        }
+
+        assert!(
+            status.read().await.last_error.is_some(),
+            "dead-lettering must remain visible in daemon status"
+        );
     }
 
     /// Spawn a mock sync server whose push endpoint ALWAYS returns a

@@ -693,6 +693,11 @@ pub const ALL: &[Migration] = &[
         id: "118_drop_warehouse_id_superseded.sql",
         sql: include_str!("../migrations/118_drop_warehouse_id_superseded.sql"),
     },
+    // ── SYNC-08: durable remote failure/dead-letter ledger ─────────
+    Migration {
+        id: "119_sync_remote_failures.sql",
+        sql: include_str!("../migrations/119_sync_remote_failures.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.
@@ -1117,6 +1122,7 @@ mod tests {
             // ── audit/09 SYNC-01 (migration 114) ──
             "sync_pull_state",
             "sync_applied_items",
+            "sync_remote_failures",
         ];
 
         for table in &expected_tables {
