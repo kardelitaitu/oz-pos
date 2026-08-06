@@ -1777,7 +1777,17 @@ impl Store<'_> {
         let mut total_tax: Option<Money> = None;
 
         for line in lines {
-            let line_total_minor = line.qty * line.unit_price_minor;
+            // MONEY-01: the line total comes from untrusted IPC input and must
+            // use checked arithmetic like `compute_line_tax` (TAX-04). The
+            // workspace disables overflow-checks for dev/test builds, so a
+            // bare `*` silently wraps and feeds a wrong tax to the register.
+            let line_total_minor =
+                line.qty.checked_mul(line.unit_price_minor).ok_or_else(|| {
+                    CoreError::Validation {
+                        field: "tax",
+                        message: "cart line total overflow".into(),
+                    }
+                })?;
             let rates = self.resolve_best_tax_rates_for_sku(&line.sku)?;
 
             for rate in &rates {

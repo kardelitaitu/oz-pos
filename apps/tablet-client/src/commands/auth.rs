@@ -457,4 +457,125 @@ mod tests {
         let debug = format!("{:?}", result);
         assert!(debug.contains("Bob"));
     }
+
+    // ── Session-mint authorization gate (audit/06 residual) ───────────
+    //
+    // Parity with the desktop client: `create_session` must fail closed
+    // when the caller claims an identity it has not authenticated. The
+    // gate itself is `oz_core::Store::verify_instance_access` (shared with
+    // the desktop client); these tests pin the command-level behavior on
+    // the tablet too.
+
+    use oz_core::migrations;
+    use tauri::Manager as _;
+
+    /// Seed the built-in roles plus one owner user in the GLOBAL identity DB.
+    fn seed_owner(conn: &rusqlite::Connection) {
+        let store = Store::new(conn);
+        store.seed_default_roles().unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-owner', 'owner', 'hash', 'Owner', 'role-owner', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn create_session_rejects_forged_role_id() {
+        // A cashier user whose REAL role is role-cashier claims role-owner.
+        let conn = migrations::fresh_db();
+        let store = Store::new(&conn);
+        store.seed_default_roles().unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-cashier', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        let app = tauri::test::mock_builder()
+            .manage(AppState::for_test_with_conn(conn))
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result = create_session(
+            CreateSessionArgs {
+                user_id: "user-cashier".into(),
+                role_id: "role-owner".into(), // forged
+                store_id: "default".into(),
+                instance_id: "default-restaurant-pos".into(),
+                type_key: "restaurant-pos".into(),
+                terminal_id: "terminal-1".into(),
+            },
+            app.state(),
+        )
+        .await;
+        assert!(
+            matches!(result, Err(AppError::Invalid(_))),
+            "forged role must not mint a session"
+        );
+        let state = app.state::<AppState>();
+        assert_eq!(
+            state.session_store.read().unwrap().len(),
+            0,
+            "no session token may be created for a forged role"
+        );
+    }
+
+    #[tokio::test]
+    async fn create_session_rejects_unknown_user() {
+        let conn = migrations::fresh_db();
+        seed_owner(&conn);
+        let app = tauri::test::mock_builder()
+            .manage(AppState::for_test_with_conn(conn))
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result = create_session(
+            CreateSessionArgs {
+                user_id: "ghost-user".into(),
+                role_id: "role-owner".into(),
+                store_id: "default".into(),
+                instance_id: "default-restaurant-pos".into(),
+                type_key: "restaurant-pos".into(),
+                terminal_id: "terminal-1".into(),
+            },
+            app.state(),
+        )
+        .await;
+        assert!(
+            matches!(result, Err(AppError::Invalid(_))),
+            "unknown user must not be able to open a session"
+        );
+        let state = app.state::<AppState>();
+        assert_eq!(state.session_store.read().unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn create_session_allows_real_owner() {
+        let conn = migrations::fresh_db();
+        seed_owner(&conn);
+        let app = tauri::test::mock_builder()
+            .manage(AppState::for_test_with_conn(conn))
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result = create_session(
+            CreateSessionArgs {
+                user_id: "user-owner".into(),
+                role_id: "role-owner".into(),
+                store_id: "default".into(),
+                instance_id: "default-restaurant-pos".into(),
+                type_key: "restaurant-pos".into(),
+                terminal_id: "terminal-1".into(),
+            },
+            app.state(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.context.role_id, "role-owner");
+        assert_eq!(result.context.user_id, "user-owner");
+        let state = app.state::<AppState>();
+        assert_eq!(state.session_store.read().unwrap().len(), 1);
+    }
 }

@@ -2171,6 +2171,13 @@ mod tests {
     #[test]
     fn verify_instance_access_denies_inactive_user() {
         let (store, user_id) = fresh();
+        // Claim the user's REAL role AND grant an explicit instance
+        // assignment: without the `is_active` guard, branch 2 would return
+        // Ok(true), so this test uniquely pins the inactive check rather
+        // than being denied by a role mismatch.
+        store
+            .set_user_workspace_instances(&user_id, ["default-admin"], None)
+            .unwrap();
         store
             .conn
             .execute(
@@ -2178,10 +2185,8 @@ mod tests {
                 params![user_id],
             )
             .unwrap();
-        // Owner claim + inactive account previously sailed through the
-        // bypass and minted a session for a deactivated staff member.
         let ok = store
-            .verify_instance_access("role-owner", &user_id, "default-restaurant-pos", "default")
+            .verify_instance_access("role-test", &user_id, "default-admin", "default")
             .unwrap();
         assert!(!ok, "deactivated users must not be able to open a session");
     }
