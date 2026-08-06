@@ -26,7 +26,11 @@
 
 **Validation:** oz-core `db::offline` 44/44; desktop `commands::offline` 18/18; tablet `commands::offline` 18/18; `cargo fmt` clean; clippy `--no-deps -D warnings` clean on desktop + tablet and no warnings in oz-core's new code (workspace clippy still fails only on the pre-existing `products.rs:876` type_complexity).
 
-**Note on history:** commit `06e9fb7d` (restaurant agent's "harden menu keyboard interactions") swept this cycle's five files (`oz-core db/offline.rs`, desktop + tablet `commands/offline.rs` + `lib.rs`) into its diff via the shared index. The requeue code is intact and was verified green on identical content; history was NOT rewritten (shared working tree, agents actively committing). Follow-ups: expose `list_remote_failures` as a command + UI surface so operators can discover dead-letter ids before requeueing; consider storing the remote item's `created_at` on the failure row so requeue can rewind the anchor precisely instead of a full re-pull.
+**Note on history:** commit `06e9fb7d` (restaurant agent's "harden menu keyboard interactions") swept this cycle's five files (`oz-core db/offline.rs`, desktop + tablet `commands/offline.rs` + `lib.rs`) into its diff via the shared index. The requeue code is intact and was verified green on identical content; history was NOT rewritten (shared working tree, agents actively committing).
+
+**Known limitation (reviewed):** the requeue anchor rewind can be clobbered by the sync daemon if the command lands between the daemon's read phase and its apply-phase `set_sync_pull_state` write (the daemon re-writes the stale pre-rewind anchor it captured). Low probability (daemon cycle is 60–120s, requeue is a rare operator action), no data corruption — the requeue just doesn't take effect that cycle. Fix (separate TDD slice): in the daemon's apply phase, re-read `get_sync_pull_state()` before writing and skip the anchor advance when the stored `since` is `None` (operator rewind in flight).
+
+**Follow-ups:** expose `list_remote_failures` as a command + UI surface so operators can discover dead-letter ids before requeueing; wire `requeue_remote_failure` into `ui/src/api/offline.ts` (+ IPC contract test) to make the workflow end-to-end; consider storing the remote item's `created_at` on the failure row so requeue can rewind the anchor precisely instead of a full re-pull.
 
 ## 2026-08-06 — TDD cycle: checked cart-tax line totals (MONEY-01)
 

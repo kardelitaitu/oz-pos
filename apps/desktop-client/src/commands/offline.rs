@@ -463,15 +463,16 @@ mod tests {
         assert!(st.since.is_none(), "anchor must rewind after requeue");
         assert!(st.cursor.is_none(), "cursor must clear with the anchor");
     }
-
     #[test]
     fn run_requeue_remote_failure_unknown_id_errors() {
         let conn = fresh_conn();
-        let result = run_requeue_remote_failure(&conn, "never-seen");
-        assert!(
-            result.is_err(),
-            "unknown dead-letter id must not be a silent no-op"
-        );
+        let err = run_requeue_remote_failure(&conn, "never-seen").unwrap_err();
+        match err {
+            AppError::Core { sub_kind, .. } => {
+                assert_eq!(format!("{sub_kind:?}"), "NotFound");
+            }
+            other => panic!("expected NotFound Core error, got {other:?}"),
+        }
     }
 
     #[test]
