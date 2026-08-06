@@ -209,6 +209,10 @@ export default function NodeTopologyEditor({
   const isPanningRef = useRef(false);
   const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const panCleanupRef = useRef<(() => void) | null>(null);
+  /** Cancels an in-flight node drag when the pointer is released outside
+   *  the canvas — the canvas onMouseUp never fires there, so without this
+   *  the node would keep following the cursor on re-entry (ghost drag). */
+  const dragCleanupRef = useRef<(() => void) | null>(null);
 
   const [connectingFromNodeId, setConnectingFromNodeId] = useState<string | null>(null);
   const [connectingFromPort, setConnectingFromPort] = useState<PortName | null>(null);
@@ -229,6 +233,13 @@ export default function NodeTopologyEditor({
   const skipNextLoadRef = useRef(false);
   /** Track whether user has made any edits since last preset load. */
   const isDirtyRef = useRef(false);
+  /**
+   * Node id for which an inspector edit already pushed an undo entry in
+   * the current selection session. Inspector fields push history once on
+   * the FIRST change after selecting a node, so a whole typing burst in
+   * the name/subtitle/type controls is a single undo step — not one
+   * entry per keystroke. Reset on selection change and undo/redo. */
+  const inspectorHistoryPushedForRef = useRef<string | null>(null);
 
   const isProAllowed = useMemo(() => ['pro', 'enterprise'].includes(currentTier), [currentTier]);
 
@@ -355,6 +366,11 @@ export default function NodeTopologyEditor({
             });
           setNodes(mergedNodes);
           setWires(loadedWires);
+          // A fresh authoritative load replaces the canvas — the undo/redo
+          // stacks hold stale pre-reload states that contradict the loaded
+          // instances. Clear them so Undo can never restore a phantom canvas.
+          setHistory([]);
+          setRedo([]);
           isDirtyRef.current = false;
           return;
         }
@@ -377,6 +393,9 @@ export default function NodeTopologyEditor({
           return wire;
         });
         setWires(loadedWires);
+        // Fresh authoritative load — drop stale pre-load undo/redo state.
+        setHistory([]);
+        setRedo([]);
         isDirtyRef.current = false;
       })
       .catch((err) => {
@@ -405,6 +424,24 @@ export default function NodeTopologyEditor({
     });
   }, [nodes, wires]);
 
+  /**
+   * Push history at most once per node selection session when an
+   * inspector field changes — the first keystroke/select of a session
+   * snapshots the pre-edit state; later changes in the same session
+   * mutate without creating more undo entries.
+   */
+  const beginInspectorEdit = useCallback((nodeId: string) => {
+    if (inspectorHistoryPushedForRef.current !== nodeId) {
+      inspectorHistoryPushedForRef.current = nodeId;
+      pushHistory();
+    }
+  }, [pushHistory]);
+
+  // A fresh selection starts a fresh inspector edit session.
+  useEffect(() => {
+    inspectorHistoryPushedForRef.current = null;
+  }, [selectedNodeId]);
+
   const loadPreset = useCallback((preset: 'retail' | 'restaurant') => {
     const data = preset === 'retail' ? PRESET_RETAIL : PRESET_RESTAURANT;
     pushHistory();
@@ -426,6 +463,8 @@ export default function NodeTopologyEditor({
     setNodes(entry.nodes);
     setWires(entry.wires);
     setHistory((prev) => prev.slice(0, -1));
+    // A post-undo edit is a fresh session — it must push a new entry.
+    inspectorHistoryPushedForRef.current = null;
   }, [nodes, wires]);
 
   const popRedo = useCallback(() => {
@@ -436,13 +475,16 @@ export default function NodeTopologyEditor({
     setNodes(entry.nodes);
     setWires(entry.wires);
     setRedo((prev) => prev.slice(0, -1));
+    // A post-redo edit is a fresh session — it must push a new entry.
+    inspectorHistoryPushedForRef.current = null;
   }, [redo, nodes, wires]);
 
-  // Clean up pan listeners and fresh-node timers on unmount
+  // Clean up pan/drag listeners and fresh-node timers on unmount
   useEffect(() => {
     const timers = freshTimersRef.current;
     return () => {
       panCleanupRef.current?.();
+      dragCleanupRef.current?.();
       timers.forEach(clearTimeout);
       timers.clear();
     };
@@ -510,7 +552,7 @@ export default function NodeTopologyEditor({
         }
         return;
       }
-      if (selectedNodeId && (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      if (selectedNodeId && !e.repeat && (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
         e.preventDefault();
         pushHistory();
         const step = e.shiftKey ? GRID_SIZE : 8;
@@ -580,6 +622,22 @@ export default function NodeTopologyEditor({
     setSelectedWireId(null);
     setDraggingNodeId(nodeId);
     dragHasMovedRef.current = false;
+
+    // Cancel any in-flight drag listener from a previous drag, then arm a
+    // document-level mouseup so releasing the pointer outside the canvas
+    // still ends the drag (the canvas onMouseUp is unreachable there).
+    dragCleanupRef.current?.();
+    const handleDocumentMouseUp = () => {
+      setDraggingNodeId(null);
+      dragHasMovedRef.current = false;
+      document.removeEventListener('mouseup', handleDocumentMouseUp);
+      dragCleanupRef.current = null;
+    };
+    document.addEventListener('mouseup', handleDocumentMouseUp);
+    dragCleanupRef.current = () => {
+      document.removeEventListener('mouseup', handleDocumentMouseUp);
+      dragCleanupRef.current = null;
+    };
 
     const node = nodeMap.get(nodeId);
     if (node) {
@@ -1313,6 +1371,7 @@ export default function NodeTopologyEditor({
                   type="text"
                   value={selectedNode.name}
                   onChange={(e) => {
+                    beginInspectorEdit(selectedNode.id);
                     const name = e.target.value;
                     setNodes((prev) => prev.map((n) => (n.id === selectedNode.id ? { ...n, name } : n)));
                   }}
@@ -1326,6 +1385,7 @@ export default function NodeTopologyEditor({
                   type="text"
                   value={selectedNode.subtitle || ''}
                   onChange={(e) => {
+                    beginInspectorEdit(selectedNode.id);
                     const subtitle = e.target.value;
                     setNodes((prev) => prev.map((n) => (n.id === selectedNode.id ? { ...n, subtitle } : n)));
                   }}
@@ -1342,6 +1402,7 @@ export default function NodeTopologyEditor({
                     className="inspector-select"
                     value={(selectedNode.metadata?.['typeKey'] as string) ?? 'store-pos'}
                     onChange={(e) => {
+                      beginInspectorEdit(selectedNode.id);
                       const newTypeKey = e.target.value;
                       setNodes((prev) =>
                         prev.map((n) =>

@@ -1,7 +1,8 @@
+import { useState } from 'react';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
-import NodeTopologyEditor from '../features/stores/NodeTopologyEditor';
+import NodeTopologyEditor, { type WorkspaceInstanceSeed } from '../features/stores/NodeTopologyEditor';
 import { loadTopology, saveTopology } from '@/api/topology';
 import multiStoreFtl from '@/locales/multi-store.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
@@ -98,6 +99,25 @@ const mockSaveTopology = vi.mocked(saveTopology);
 
 const renderEditor = (props?: { onSave?: (nodes: unknown, wires: unknown) => Promise<Record<string, string> | void> }) =>
   renderWithProvidersSync(<NodeTopologyEditor currentTier="standard" {...props} />, multiStoreFtl, sharedFtl);
+
+/**
+ * Harness that re-renders the editor with a NEW workspaceInstances array
+ * on demand — simulating the TopologyScreen parent refreshing instances
+ * after a save/apply. The load effect depends on [workspaceInstances], so
+ * a new identity re-triggers the non-skip reload path.
+ */
+function ReloadingHarness({ next }: { next: WorkspaceInstanceSeed[] }) {
+  const [instances, setInstances] = useState<WorkspaceInstanceSeed[] | undefined>(undefined);
+  return (
+    <>
+      <button type="button" onClick={() => setInstances(next)}>
+        reload-instances
+      </button>
+      {/* exactOptionalPropertyTypes: omit the prop while instances is undefined */}
+      <NodeTopologyEditor currentTier="standard" {...(instances ? { workspaceInstances: instances } : {})} />
+    </>
+  );
+}
 
 const getNodeCount = () => document.querySelectorAll('.topology-node').length;
 const getWireCount = () => document.querySelectorAll('.wire-group').length;
@@ -422,6 +442,107 @@ describe('NodeTopologyEditor Component', () => {
 
     expect(firstNode.style.left).toBe('80px');
     expect(firstNode.style.top).toBe('140px');
+  });
+
+  // ── Drag released outside the canvas must cancel (#13) ───────────
+
+  it('cancels the node drag when the pointer is released outside the canvas', () => {
+    renderEditor();
+
+    const firstNode = document.querySelector('.topology-node') as HTMLElement;
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    expect(firstNode).not.toBeNull();
+    expect(canvas).not.toBeNull();
+    expect(firstNode.style.left).toBe('80px');
+    expect(firstNode.style.top).toBe('140px');
+
+    // mousedown then drag 48px right + down, as in the normal drag test.
+    fireEvent.mouseDown(firstNode, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 48, clientY: 48 });
+    expect(firstNode.style.left).toBe('120px');
+    expect(firstNode.style.top).toBe('192px');
+
+    // Release OUTSIDE the canvas (document-level mouseup never reaches
+    // the canvas onMouseUp handler). The drag must be cancelled.
+    fireEvent.mouseUp(document, { button: 0 });
+
+    // Further mousemoves over the canvas must NOT move the node — no
+    // button is held and no ghost drag may follow the cursor.
+    fireEvent.mouseMove(canvas, { clientX: 96, clientY: 96 });
+    fireEvent.mouseMove(canvas, { clientX: 144, clientY: 144 });
+
+    expect(firstNode.style.left).toBe('120px');
+    expect(firstNode.style.top).toBe('192px');
+  });
+
+  // ── Arrow-key auto-repeat must not flood the undo stack (#14) ────
+
+  it('ignores auto-repeated arrow nudges so one nudge is one undo step', () => {
+    renderEditor();
+
+    const firstNode = document.querySelector('.topology-node') as HTMLElement;
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    expect(firstNode).not.toBeNull();
+    expect(canvas).not.toBeNull();
+    expect(firstNode.style.left).toBe('80px');
+
+    selectFirstNode();
+
+    // Shift+ArrowRight moves a full grid step: snap(80 + 24) = 96.
+    fireEvent.keyDown(canvas, { key: 'ArrowRight', shiftKey: true });
+    expect(firstNode.style.left).toBe('96px');
+
+    // Holding the key fires repeated keydowns (repeat: true). Those are
+    // the SAME held nudge — they must not move further nor create extra
+    // undo entries.
+    fireEvent.keyDown(canvas, { key: 'ArrowRight', shiftKey: true, repeat: true });
+    expect(firstNode.style.left).toBe('96px');
+
+    // A single undo must return the node to the ORIGINAL position — the
+    // held key produced exactly one history entry.
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    expect(firstNode.style.left).toBe('80px');
+  });
+
+  // ── Fresh topology reload clears the undo stack (#15) ────────────
+
+  it('clears the undo stack when a fresh topology loads (non-skip path)', async () => {
+    mockLoadTopology.mockResolvedValue({
+      nodes: [{ id: 'store-x', type: 'store', name: 'Loaded Store', x: 100, y: 100 }],
+      wires: [],
+    });
+
+    renderWithProvidersSync(
+      <ReloadingHarness
+        next={[{ instanceId: 'ws-new', typeKey: 'restaurant-pos', name: 'New Instance' }]}
+      />,
+      multiStoreFtl,
+      sharedFtl,
+    );
+
+    // Legacy path (no instances yet): saved diagram renders.
+    await waitFor(() => {
+      expect(screen.getByText('Loaded Store')).toBeInTheDocument();
+    });
+
+    // Make an edit so the undo stack has an entry.
+    fireEvent.click(screen.getByText('+ Store Node'));
+    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+    expect(screen.getByText('New Store')).toBeInTheDocument();
+
+    // Parent pushes a fresh workspaceInstances array → non-skip reload.
+    fireEvent.click(screen.getByText('reload-instances'));
+
+    // The new authoritative topology replaces the canvas — the manually
+    // added node is gone (rebuilt from instances, not the undo stack).
+    await waitFor(() => {
+      expect(screen.getByText('New Instance')).toBeInTheDocument();
+      expect(screen.queryByText('New Store')).not.toBeInTheDocument();
+    });
+
+    // The undo stack must be cleared — Undo can never restore a stale
+    // canvas that contradicts the loaded workspace instances.
+    expect(screen.queryByText('Undo (Ctrl+Z)')).not.toBeInTheDocument();
   });
 
   // ── Wire direction toggle ───────────────────────────────────────
@@ -785,5 +906,70 @@ describe('NodeTopologyEditor Component', () => {
 
     // Wire should still render (just without the two-way marker)
     expect(getWireCount()).toBe(1);
+  });
+
+  // ── Inspector edits are undoable and mark the canvas dirty (#12) ──
+
+  it('pushes a single undo entry for an inspector rename burst', () => {
+    renderEditor();
+
+    const firstNode = document.querySelector('.topology-node') as HTMLElement;
+    fireEvent.mouseDown(firstNode, { button: 0, clientX: 0, clientY: 0 });
+
+    const nameInput = document.querySelector('.inspector-field input[type="text"]') as HTMLInputElement;
+    expect(nameInput).not.toBeNull();
+    expect(nameInput.value).toBe('Downtown Branch');
+
+    // Type a burst: two change events in one focus session. The whole
+    // burst must be a SINGLE undo entry, not one per keystroke.
+    fireEvent.change(nameInput, { target: { value: 'Renamed' } });
+    fireEvent.change(nameInput, { target: { value: 'Renamed Branch' } });
+
+    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+
+    // One undo must restore the ORIGINAL name.
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+
+    expect(
+      (document.querySelector('.inspector-field input[type="text"]') as HTMLInputElement).value,
+    ).toBe('Downtown Branch');
+  });
+
+  it('marks the canvas dirty when the inspector renames a node', () => {
+    renderEditor();
+
+    const firstNode = document.querySelector('.topology-node') as HTMLElement;
+    fireEvent.mouseDown(firstNode, { button: 0, clientX: 0, clientY: 0 });
+
+    const nameInput = document.querySelector('.inspector-field input[type="text"]') as HTMLInputElement;
+    fireEvent.change(nameInput, { target: { value: 'Renamed' } });
+
+    // A rename is a real edit — the preset load must ask first.
+    fireEvent.click(screen.getByText('Resto & KDS Preset'));
+
+    // "Load Preset" appears as both the modal title and the confirm
+    // button — either is proof the confirm dialog opened.
+    expect(screen.getAllByText('Load Preset').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('pushes an undo entry when the workspace type select changes', () => {
+    renderEditor();
+
+    const wsNode = document.querySelector('.node-type-workspace') as HTMLElement;
+    expect(wsNode).not.toBeNull();
+    fireEvent.mouseDown(wsNode, { button: 0, clientX: 0, clientY: 0 });
+
+    const select = document.querySelector('.inspector-select') as HTMLSelectElement;
+    expect(select).not.toBeNull();
+    expect(select.value).toBe('store-pos');
+
+    fireEvent.change(select, { target: { value: 'restaurant-pos' } });
+    expect(select.value).toBe('restaurant-pos');
+    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+
+    expect((document.querySelector('.inspector-select') as HTMLSelectElement).value).toBe('store-pos');
   });
 });
