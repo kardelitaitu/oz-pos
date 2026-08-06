@@ -694,6 +694,8 @@ describe('KdsScreen', () => {
     await userEvent.click(screen.getByRole('button', { name: /^espresso shot( \(added\))?$/i }));
     const confirmBtn = screen.getByRole('button', { name: /add .* item/i });
     await userEvent.click(confirmBtn);
+    // The modal surfaces the in-flight save: Confirm disables until release.
+    await waitFor(() => expect(confirmBtn).toBeDisabled());
     await userEvent.click(confirmBtn); // double-tap before the merge resolves
 
     release();

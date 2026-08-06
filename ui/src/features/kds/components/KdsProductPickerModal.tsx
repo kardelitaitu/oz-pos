@@ -26,6 +26,12 @@ export interface KdsProductPickerModalProps {
   onConfirm: (result: ProductPickerResult) => void;
   /** Called when the modal is dismissed without saving. */
   onClose: () => void;
+  /**
+   * True while the parent is saving the confirmed items — disables the
+   * Confirm button so a double-tap can't re-merge (belt alongside the
+   * parent's re-entry guard, and gives the kitchen visual feedback).
+   */
+  pending?: boolean;
 }
 
 /** Selected product entry in the picker. */
@@ -60,6 +66,7 @@ export const KdsProductPickerModal = memo(function KdsProductPickerModal({
   isOpen,
   onConfirm,
   onClose,
+  pending = false,
 }: KdsProductPickerModalProps) {
   const { l10n } = useLocalization();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -152,7 +159,7 @@ export const KdsProductPickerModal = memo(function KdsProductPickerModal({
   }, []);
 
   const handleConfirm = useCallback(() => {
-    if (picked.length === 0) return;
+    if (pending || picked.length === 0) return;
     const items: CreateKdsLineItemInput[] = picked.map((p) => ({
       sku: p.sku,
       display_name: p.display_name,
@@ -161,7 +168,7 @@ export const KdsProductPickerModal = memo(function KdsProductPickerModal({
       modifiers: [] as KdsModifier[],
     }));
     onConfirm({ orderId, items });
-  }, [picked, orderId, onConfirm]);
+  }, [picked, orderId, onConfirm, pending]);
 
   const handleBackdropClick = useCallback(
     (e: React.MouseEvent) => {
@@ -354,7 +361,7 @@ export const KdsProductPickerModal = memo(function KdsProductPickerModal({
           <button
             className="kds-picker-confirm"
             onClick={handleConfirm}
-            disabled={picked.length === 0}
+            disabled={picked.length === 0 || pending}
           >
             {requiredLocalized(l10n, 'kds-picker-add-btn', { count: picked.length })}
           </button>

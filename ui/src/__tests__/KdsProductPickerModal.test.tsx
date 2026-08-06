@@ -54,7 +54,7 @@ const CROISSANT = makeProduct({
   barcode: '8990000000002',
 });
 
-function renderModal(overrides: { onConfirm?: () => void; onClose?: () => void } = {}) {
+function renderModal(overrides: { onConfirm?: () => void; onClose?: () => void; pending?: boolean } = {}) {
   const onConfirm = overrides.onConfirm ?? vi.fn();
   const onClose = overrides.onClose ?? vi.fn();
   const utils = render(
@@ -63,6 +63,7 @@ function renderModal(overrides: { onConfirm?: () => void; onClose?: () => void }
         orderId="kds-order-1"
         sessionToken="tok-1"
         isOpen
+        pending={overrides.pending ?? false}
         onConfirm={onConfirm}
         onClose={onClose}
       />
@@ -156,5 +157,20 @@ describe('KdsProductPickerModal', () => {
       orderId: 'kds-order-1',
       items: [{ sku: 'ESPR', display_name: 'Espresso Shot', qty: 2, course: 'side', modifiers: [] }],
     });
+  });
+
+  it('disables the confirm button while a save is pending', async () => {
+    mockListProductsScoped.mockResolvedValue([ESPRESSO]);
+    const onConfirm = vi.fn();
+    renderModal({ onConfirm, pending: true });
+    await waitFor(() => expect(screen.getByText('Espresso Shot')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /^espresso shot( \(added\))?$/i }));
+    const confirmBtn = screen.getByRole('button', { name: /add .* item/i });
+    // Even with a picked item, pending locks the button — and the handler
+    // guard would drop the tap even if it were dispatched.
+    expect(confirmBtn).toBeDisabled();
+    await userEvent.click(confirmBtn);
+    expect(onConfirm).not.toHaveBeenCalled();
   });
 });

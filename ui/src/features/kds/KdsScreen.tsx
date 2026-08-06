@@ -77,10 +77,13 @@ export default function KdsScreen() {
   // 3f: Product picker state — which order is being edited.
   const [pickerOrderId, setPickerOrderId] = useState<string | null>(null);
   // Re-entry guard for the picker confirm: the merge is async and the modal
-  // stays open (Confirm still enabled) until it resolves, so a fast
-  // double-tap would fire the merge twice and duplicate the items on the
-  // ticket. Pinned by KdsScreen.test.tsx (deferred-promise double-tap).
+  // stays open until it resolves, so a fast double-tap would fire the merge
+  // twice and duplicate the items on the ticket. Pinned by KdsScreen.test.tsx
+  // (deferred-promise double-tap). The state twin drives the modal's
+  // disabled Confirm for visual feedback; the ref keeps the guard immune to
+  // render timing between two rapid taps.
   const pickerSavingRef = useRef(false);
+  const [pickerSaving, setPickerSaving] = useState(false);
   const { prefs, setLayout, setShowOrderId, setShowTableNumber, setAutoAcknowledge, setKdsZone, loading: prefsLoading } = useKdsPreferences();
 
   // Track previous order IDs for new-ticket arrival animation.
@@ -685,10 +688,12 @@ export default function KdsScreen() {
         orderId={pickerOrderId ?? ''}
         sessionToken={sessionToken}
         isOpen={pickerOrderId !== null}
+        pending={pickerSaving}
         onConfirm={async (result: ProductPickerResult) => {
           // Ignore re-entry while a confirm merge is in flight (double-tap).
           if (pickerSavingRef.current) return;
           pickerSavingRef.current = true;
+          setPickerSaving(true);
           try {
             // Re-fetch existing line items to merge with new ones.
             const existing = await getKdsOrderLinesScoped(sessionToken, result.orderId);
@@ -712,6 +717,7 @@ export default function KdsScreen() {
             setError(String(e));
           } finally {
             pickerSavingRef.current = false;
+            setPickerSaving(false);
             setPickerOrderId(null);
           }
         }}
