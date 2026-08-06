@@ -157,11 +157,8 @@ const _initialKdsOrders = [
     store_id: 'store-1',
   },
 ];
-const mockKdsOrders: Record<string, unknown>[] = [..._initialKdsOrders];
-let kdsDisplayCounter = 104;
-
 // ── Mock KDS line items (course-grouped for per-item advance) ──
-const mockKdsLineItems: Record<string, Array<Record<string, unknown>>> = {
+const _initialKdsLineItems: Record<string, Array<Record<string, unknown>>> = {
   'kds-order-1': [
     { id: 'kds-line-1-1', kds_order_id: 'kds-order-1', sku: 'LATTE', display_name: 'Caffè Latte', qty: 1, course: 'beverage', modifiers: [], line_position: 1, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
     { id: 'kds-line-1-2', kds_order_id: 'kds-order-1', sku: 'CROISS', display_name: 'Butter Croissant', qty: 1, course: 'main', modifiers: [], line_position: 2, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
@@ -175,6 +172,66 @@ const mockKdsLineItems: Record<string, Array<Record<string, unknown>>> = {
     { id: 'kds-line-3-1', kds_order_id: 'kds-order-3', sku: 'MATCHA', display_name: 'Matcha Latte', qty: 1, course: 'beverage', modifiers: [], line_position: 1, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
   ],
 };
+
+// The real backend persists the kitchen queue (kds_orders 032), per-item
+// line statuses (kds_line_items 105), and a daily display counter
+// (kds_daily_counters 032), so a restart resumes exactly where the kitchen
+// left off. Persist the whole KDS state under one key (same stateful pattern
+// as the cart / sales / active-shift mocks above) so previews mirror the DB
+// across reloads — previously a reload wiped the queue, reverted every
+// status, and restarted ticket numbering at 104.
+const MOCK_KDS_KEY = 'oz-dev-mock:kds';
+function loadMockKdsState(): {
+  orders: Record<string, unknown>[];
+  lineItems: Record<string, Array<Record<string, unknown>>>;
+} {
+  try {
+    const raw = localStorage.getItem(MOCK_KDS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as {
+        orders: Record<string, unknown>[];
+        lineItems: Record<string, Array<Record<string, unknown>>>;
+      };
+      if (Array.isArray(parsed.orders) && parsed.lineItems && typeof parsed.lineItems === 'object') {
+        return parsed;
+      }
+    }
+  } catch {
+    // storage unavailable or corrupt — fall through to the seed
+  }
+  // First load: seed the queue (and its line items) so the KDS preview
+  // renders without a completed sale. Shallow-clone each line so mutations
+  // never bleed into the seed literal.
+  return {
+    orders: [..._initialKdsOrders],
+    lineItems: Object.fromEntries(
+      Object.entries(_initialKdsLineItems).map(([orderId, lines]) => [
+        orderId,
+        lines.map((l) => ({ ...l })),
+      ]),
+    ),
+  };
+}
+function saveMockKdsState(): void {
+  try {
+    localStorage.setItem(
+      MOCK_KDS_KEY,
+      JSON.stringify({ orders: mockKdsOrders, lineItems: mockKdsLineItems }),
+    );
+  } catch {
+    // storage unavailable — keep the in-memory copies for this session
+  }
+}
+const mockKdsState = loadMockKdsState();
+const mockKdsOrders: Record<string, unknown>[] = mockKdsState.orders;
+const mockKdsLineItems: Record<string, Array<Record<string, unknown>>> = mockKdsState.lineItems;
+// Next ticket number = one past the highest persisted display_number (the
+// backend's per-day counter), never below the seed baseline of 104.
+const maxDisplay = mockKdsOrders.reduce((max, o) => {
+  const n = Number(o['display_number']);
+  return Number.isFinite(n) ? Math.max(max, n) : max;
+}, 103);
+let kdsDisplayCounter = maxDisplay + 1;
 
 /** Push a new KDS order derived from cart lines into the mock queue. */
 function pushKdsOrderFromCart(lines: CartLine[], storeId: string) {
@@ -221,6 +278,8 @@ function pushKdsOrderFromCart(lines: CartLine[], storeId: string) {
     served_at: null,
     created_at: now,
   }));
+  // Persist the new order + its line items so a reload keeps the queue.
+  saveMockKdsState();
 }
 
 // ── Lockout state (for E2E rate-limit tests) ──────────────────
@@ -1238,6 +1297,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     const order = mockKdsOrders.find((o) => o['id'] === id);
     if (order && status) {
       order['status'] = status;
+      saveMockKdsState();
       void emit('kds:orders-changed', null);
     }
     return order ?? null;
@@ -1247,6 +1307,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     const order = mockKdsOrders.find((o) => o['id'] === id);
     if (order && status) {
       order['status'] = status;
+      saveMockKdsState();
       void emit('kds:orders-changed', null);
     }
     return order ?? null;
@@ -1268,6 +1329,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     const item = Object.values(mockKdsLineItems).flat().find((i) => i['id'] === itemId);
     if (item && status) {
       item['item_status'] = status;
+      saveMockKdsState();
       void emit('kds:orders-changed', null);
     }
     return item ?? null;
@@ -1277,6 +1339,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     const item = Object.values(mockKdsLineItems).flat().find((i) => i['id'] === itemId);
     if (item && status) {
       item['item_status'] = status;
+      saveMockKdsState();
       void emit('kds:orders-changed', null);
     }
     return item ?? null;

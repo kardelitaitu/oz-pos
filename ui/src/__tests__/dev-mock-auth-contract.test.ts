@@ -271,3 +271,93 @@ describe('dev-mock delegates to a real Tauri webview (production regression)', (
     expect(fakeInternalsInvoke).toHaveBeenCalledWith('plugin:event|unlisten', { event: 'kds:orders-changed', eventId: 7 });
   });
 });
+
+// The real backend persists KDS orders (kds_orders 032), per-item line
+// statuses (kds_line_items 105), and the daily display counter
+// (kds_daily_counters 032), so a restart resumes the kitchen queue exactly
+// where the operator left off. The mock previously kept all three in module
+// memory — a reloaded preview wiped the queue, reverted every status, and
+// restarted ticket numbering at 104. Pin the localStorage-backed contract so
+// previews mirror the DB across page reloads.
+describe('dev-mock KDS persistence (restart parity)', () => {
+  const KDS_KEY = 'oz-dev-mock:kds';
+
+  afterEach(() => {
+    localStorage.removeItem(KDS_KEY);
+    vi.resetModules();
+  });
+
+  it('a pushed KDS order and its line items survive a module reload', async () => {
+    const first = await import('@/dev-mock/tauri-api');
+    await first.invoke('start_sale_scoped', { sessionToken: 'session-1' });
+    await first.invoke('add_line_scoped', {
+      sessionToken: 'session-1',
+      args: { cartId: 'mock-cart-1', sku: 'ESPR', qty: 1 },
+    });
+    // complete_sale_scoped pushes a KDS order derived from the cart lines.
+    // '1x Espresso Shot' is unambiguous — the seeds carry different summaries.
+    await first.invoke('complete_sale_scoped', { sessionToken: 'session-1' });
+
+    // Simulate a restart: re-import the module so the in-memory copy is
+    // rebuilt from localStorage (like a fresh page load).
+    vi.resetModules();
+    const second = await import('@/dev-mock/tauri-api');
+    const queue = (await second.invoke('get_kds_queue_scoped', {
+      sessionToken: 'session-1',
+    })) as unknown as Array<Record<string, unknown>>;
+
+    // The pushed order must be in the reloaded queue, not just the 3 seeds.
+    const pushed = queue.find(
+      (o) => o['items_summary'] === '1x Espresso Shot' && o['status'] === 'pending',
+    );
+    expect(pushed).toBeDefined();
+    // …and its course-grouped line items must survive so the ticket renders.
+    const lines = (await second.invoke('get_kds_order_lines_scoped', {
+      sessionToken: 'session-1',
+      args: { orderId: pushed?.['id'] as string },
+    })) as unknown as unknown[];
+    expect(lines.length).toBe(1);
+  });
+
+  it('the display counter continues past the pre-reload ticket number', async () => {
+    const first = await import('@/dev-mock/tauri-api');
+    await first.invoke('start_sale_scoped', { sessionToken: 'session-1' });
+    await first.invoke('add_line_scoped', {
+      sessionToken: 'session-1',
+      args: { cartId: 'mock-cart-1', sku: 'LATTE', qty: 1 },
+    });
+    await first.invoke('complete_sale_scoped', { sessionToken: 'session-1' }); // ticket 104
+
+    vi.resetModules();
+    const second = await import('@/dev-mock/tauri-api');
+    await second.invoke('start_sale_scoped', { sessionToken: 'session-1' });
+    await second.invoke('add_line_scoped', {
+      sessionToken: 'session-1',
+      args: { cartId: 'mock-cart-1', sku: 'ESPR', qty: 1 },
+    });
+    await second.invoke('complete_sale_scoped', { sessionToken: 'session-1' });
+
+    const queue = (await second.invoke('get_kds_queue_scoped', {
+      sessionToken: 'session-1',
+    })) as unknown as Array<Record<string, unknown>>;
+    const displayNumbers = queue.map((o) => Number(o['display_number']));
+    // Ticket numbering must continue past 104 — not restart at the seed.
+    expect(displayNumbers).toContain(105);
+  });
+
+  it('a line-item status update survives a module reload', async () => {
+    const first = await import('@/dev-mock/tauri-api');
+    // Flip a seeded order's line item to 'preparing' (per-item advance).
+    const flipped = (await first.invoke('update_kds_line_item_status', {
+      args: { itemId: 'kds-line-1-1', status: 'preparing' },
+    })) as unknown as { item_status: string } | null;
+    expect(flipped?.item_status).toBe('preparing');
+
+    vi.resetModules();
+    const second = await import('@/dev-mock/tauri-api');
+    const lines = (await second.invoke('get_kds_order_lines', {
+      args: { id: 'kds-order-1' },
+    })) as unknown as Array<Record<string, unknown>>;
+    expect(lines.find((l) => l['id'] === 'kds-line-1-1')?.['item_status']).toBe('preparing');
+  });
+});
