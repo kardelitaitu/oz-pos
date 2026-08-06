@@ -698,6 +698,17 @@ pub const ALL: &[Migration] = &[
         id: "119_sync_remote_failures.sql",
         sql: include_str!("../migrations/119_sync_remote_failures.sql"),
     },
+    // ── Self-healing repair: re-seed default workspace instances ──────
+    // Databases created during the migration 066 regression window can have
+    // an empty workspace_instances table (066 dropped rows whose store_id was
+    // not yet in store_profiles). Because 066 is already "applied", it never
+    // re-runs, so the owner logs in to an empty workspace picker. This
+    // idempotently re-seeds the canonical default instances per store using
+    // the current workspace_types keys.
+    Migration {
+        id: "120_reseed_default_workspace_instances.sql",
+        sql: include_str!("../migrations/120_reseed_default_workspace_instances.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.
@@ -1038,6 +1049,59 @@ mod tests {
             fresh_schema, upgrade_schema,
             "fresh install and upgrade path diverged — schema drift (RUST-09/RUST-10)"
         );
+    }
+
+    // ── Repair migration 120: re-seed default workspace instances ──
+    //
+    // Simulates the migration 066 regression window: a database where
+    // workspace_instances was emptied (066 dropped rows whose store_id was
+    // not yet in store_profiles) and 066 is already recorded as applied, so
+    // it never re-runs. Re-running migrations must restore the default
+    // instances via 120, and must do so idempotently (no duplicate rows).
+    #[test]
+    fn migration_120_reseeds_empty_workspace_instances() {
+        // 1. Build a fully-migrated DB (as an upgrade would): defaults are
+        //    seeded and 120 is recorded as applied.
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+        let seeded: i64 = conn
+            .query_row("SELECT COUNT(*) FROM workspace_instances", [], |r| r.get(0))
+            .unwrap();
+        assert!(
+            seeded > 0,
+            "precondition: defaults seeded by prior migrations"
+        );
+
+        // 2. Simulate the broken window: wipe workspace_instances AND drop the
+        //    120 row from schema_migrations so the runner treats it as not yet
+        //    applied (066 stays "applied", so it will NOT re-run).
+        conn.execute("DELETE FROM workspace_instances", []).unwrap();
+        conn.execute(
+            "DELETE FROM schema_migrations WHERE id = '120_reseed_default_workspace_instances.sql'",
+            [],
+        )
+        .unwrap();
+        let after_wipe: i64 = conn
+            .query_row("SELECT COUNT(*) FROM workspace_instances", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(after_wipe, 0, "simulated broken-window empty table");
+
+        // 3. Re-run migrations — 066 is a no-op, but 120 must re-seed.
+        run(&mut conn).unwrap();
+        let after_repair: i64 = conn
+            .query_row("SELECT COUNT(*) FROM workspace_instances", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(
+            after_repair, seeded,
+            "migration 120 must restore the default instances"
+        );
+
+        // 4. Idempotency: a second re-run must not duplicate rows.
+        run(&mut conn).unwrap();
+        let after_second: i64 = conn
+            .query_row("SELECT COUNT(*) FROM workspace_instances", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(after_second, seeded, "migration 120 must be idempotent");
     }
 
     #[test]

@@ -1057,6 +1057,85 @@ mod tests {
         (state, temp_dir)
     }
 
+    // ── Repair migration 120 end-to-end (store DB) ────────────────
+    //
+    // Simulates the migration 066 regression window at the AppState level:
+    // the store DB's workspace_instances is emptied (066 dropped rows whose
+    // store_id was not yet in store_profiles, and is recorded as applied so
+    // it never re-runs). Re-opening the store DB must run repair migration
+    // 120 and re-seed the default instances, so the owner picker lists them.
+    #[tokio::test]
+    async fn list_workspaces_repairs_empty_store_db_after_066_window() {
+        let (state, _dir) = picker_state();
+        // Wipe store-a's instances to mimic the broken-window empty table.
+        {
+            let conn = state.db_manager.open_store("store-a").unwrap();
+            let db = conn.lock().unwrap();
+            db.execute("DELETE FROM workspace_instances", []).unwrap();
+            // Mark 120 as not-yet-applied (it was recorded during setup) so the
+            // next open re-runs the repair, exactly like a real upgrade.
+            db.execute(
+                "DELETE FROM schema_migrations WHERE id = '120_reseed_default_workspace_instances.sql'",
+                [],
+            )
+            .unwrap();
+            // Verify the wipe while the connection is still cached (no migration
+            // re-run), so this asserts the broken-window empty state.
+            let wiped: i64 = db
+                .query_row("SELECT COUNT(*) FROM workspace_instances", [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(wiped, 0, "precondition: store DB instances wiped");
+        }
+        // Evict the cached connection so open_store re-runs migrations
+        // (the runner only applies unapplied migrations on a fresh open).
+        state.db_manager.close_store("store-a");
+
+        // Re-open the store DB — migrations (incl. 120) run again and repair it.
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let owner_ticket = sign_ticket_for(&app.state(), "user-owner", 300);
+        let rows = list_workspaces(app.state(), owner_ticket, "store-a".into())
+            .await
+            .unwrap();
+        // Diagnostics: inspect the store DB state after the repair.
+        {
+            let conn = app
+                .state::<AppState>()
+                .db_manager
+                .open_store("store-a")
+                .unwrap();
+            let db = conn.lock().unwrap();
+            let wt: i64 = db
+                .query_row("SELECT COUNT(*) FROM workspace_types", [], |r| r.get(0))
+                .unwrap();
+            let wi: i64 = db
+                .query_row("SELECT COUNT(*) FROM workspace_instances", [], |r| r.get(0))
+                .unwrap();
+            let sp: i64 = db
+                .query_row("SELECT COUNT(*) FROM store_profiles", [], |r| r.get(0))
+                .unwrap();
+            eprintln!(
+                "DIAG store-a: workspace_types={wt} workspace_instances={wi} store_profiles={sp}"
+            );
+            let ids: Vec<String> = db
+                .prepare("SELECT id FROM workspace_instances")
+                .unwrap()
+                .query_map([], |r| r.get::<_, String>(0))
+                .unwrap()
+                .map(|r| r.unwrap())
+                .collect();
+            eprintln!("DIAG store-a instance ids: {ids:?}");
+        }
+        assert!(
+            rows.iter()
+                .any(|d| d.instance_id == "default-store-pos" && d.store_id == "store-a"),
+            "repair migration 120 must re-seed the store DB's default instances, got {rows:?}"
+        );
+    }
+
     fn sign_ticket_for(state: &AppState, user_id: &str, ttl_offset: i64) -> String {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)

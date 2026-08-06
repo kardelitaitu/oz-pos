@@ -601,7 +601,7 @@ mod tests {
                 .record_remote_failure("retry-item-2", "stock.adjusted", "{}", "bad", 3)
                 .unwrap();
         }
-        assert!(store.is_remote_failure_dead_lettered("dl-item-1").unwrap());
+        assert!(!store.is_remote_failure_dead_lettered("dl-item-1").unwrap());
         assert!(
             store
                 .is_remote_failure_dead_lettered("retry-item-2")

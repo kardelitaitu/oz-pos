@@ -310,6 +310,13 @@ impl AppState {
 ///
 /// Called once on first startup after migrations run. Subsequent
 /// launches find the existing row and skip the insert.
+///
+/// Migration 025 seeds a `'default'` row with `is_primary = 0` (so tests can
+/// create their own primary stores). If that row already exists we must
+/// promote it to primary with an explicit `UPDATE`, because an
+/// `INSERT OR IGNORE` cannot change the existing `is_primary` value — leaving
+/// `get_primary_store()` (which queries `is_primary = 1`) returning `None`
+/// and breaking boot on a fresh install.
 fn seed_primary_store(conn: &Connection) -> Result<(), rusqlite::Error> {
     let count: i64 = conn.query_row("SELECT COUNT(*) FROM store_profiles", [], |r| r.get(0))?;
     if count == 0 {
@@ -320,6 +327,21 @@ fn seed_primary_store(conn: &Connection) -> Result<(), rusqlite::Error> {
             rusqlite::params![now],
         )?;
         tracing::info!("seeded default primary store profile");
+    } else {
+        // Promote the canonical 'default' store to primary. The unique partial
+        // index on is_primary = 1 allows at most one primary store, so only
+        // promote when no other store is already primary (multi-store case).
+        let affected = conn.execute(
+            "UPDATE store_profiles SET is_primary = 1
+             WHERE id = 'default'
+               AND NOT EXISTS (
+                 SELECT 1 FROM store_profiles WHERE is_primary = 1 AND id != 'default'
+               )",
+            [],
+        )?;
+        if affected > 0 {
+            tracing::info!("promoted 'default' store profile to primary");
+        }
     }
     Ok(())
 }
