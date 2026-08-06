@@ -478,6 +478,12 @@ const SCREENS: ScreenEntry[] = [
     css: ['restaurant/RestaurantMenu.css'],
     dynamicClassPrefixes: ['restaurant-hamburger-item--', 'restaurant-card--'],
     externalClasses: ['restaurant-card', 'restaurant-pill-dot'],
+    knownDynamicFragments: [
+      // Global utility from frontend/themes/components.css (not the screen's
+      // own stylesheet) — the menu card's visible "Add" label moved into an
+      // sr-only span when the + Add affordance became an SVG glyph.
+      'sr-only',
+    ],
   },
 
   // ── Appearance Settings ────────────────────────────────
