@@ -1000,4 +1000,83 @@ describe('NodeTopologyEditor Component', () => {
 
     expect((document.querySelector('.inspector-select') as HTMLSelectElement).value).toBe('store-pos');
   });
+
+  // ── Selection re-validation on undo/redo/preset load (#16) ───────
+
+  it('clears the dangling node selection when undoing a node add', () => {
+    renderEditor();
+
+    // Adding a node auto-selects it — the tool-rack Delete button appears.
+    fireEvent.click(screen.getByText('+ Store Node'));
+    expect(screen.getByText('New Store')).toBeInTheDocument();
+    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+
+    // Undo removes the node. The selection must NOT stay dangling at the
+    // now-gone node — the Delete button (rendered for any selection) is
+    // the observable proof the selection was cleared.
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+
+    expect(screen.queryByText('New Store')).not.toBeInTheDocument();
+    expect(screen.queryByText('Delete Selected Element')).not.toBeInTheDocument();
+  });
+
+  it('preserves a still-valid node selection when undoing a drag', () => {
+    renderEditor();
+
+    const firstNode = document.querySelector('.topology-node') as HTMLElement;
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    expect(firstNode).not.toBeNull();
+    expect(firstNode.style.left).toBe('80px');
+
+    // Drag the selected node (history pushed on first movement), then undo.
+    fireEvent.mouseDown(firstNode, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 48, clientY: 48 });
+    expect(firstNode.style.left).toBe('120px');
+    fireEvent.mouseUp(canvas, { button: 0 });
+
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    expect(firstNode.style.left).toBe('80px');
+
+    // The node still exists — its selection must survive the undo.
+    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+  });
+
+  it('preserves a still-valid wire selection when undoing a direction toggle', () => {
+    renderEditor();
+
+    // Select the first retail wire via its hitbox.
+    const hitbox = document.querySelector('.wire-hitbox') as Element;
+    expect(hitbox).not.toBeNull();
+    fireEvent.click(hitbox);
+    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+
+    // Toggle its direction (pushes an undo entry), then undo.
+    const wireLabels = screen.getAllByText(/→|↔/);
+    fireEvent.click(wireLabels[0]!);
+    expect(wireLabels[0]!.textContent).toContain('↔');
+
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+
+    // Direction restored and the wire still exists — selection preserved.
+    expect(screen.getAllByText(/→|↔/)[0]!.textContent).toContain('→');
+    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+  });
+
+  it('clears a wire selection when a preset load removes the selected wire', () => {
+    renderEditor();
+
+    // Restaurant preset has 4 wires (w-1..w-4); retail has only 2 (w-1, w-2).
+    // Select w-3 — it exists only in the restaurant preset.
+    fireEvent.click(screen.getByText('Resto & KDS Preset'));
+    const hitboxes = document.querySelectorAll('.wire-hitbox');
+    expect(hitboxes.length).toBe(4);
+    fireEvent.click(hitboxes[2]!);
+    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+
+    // Clean canvas (no edits) → Retail Preset loads directly. w-3 no longer
+    // exists, so its selection must not dangle at a removed wire.
+    fireEvent.click(screen.getByText('Retail Preset'));
+
+    expect(screen.queryByText('Delete Selected Element')).not.toBeInTheDocument();
+  });
 });

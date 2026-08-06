@@ -448,6 +448,22 @@ export default function NodeTopologyEditor({
     inspectorHistoryPushedForRef.current = null;
   }, [selectedNodeId]);
 
+  /**
+   * Re-validate the selection whenever the canvas changes — an undo, redo,
+   * preset load, or fresh topology reload can remove the selected node or
+   * wire. A dangling selection (pointing at a now-gone element) renders the
+   * tool-rack Delete button for nothing and lets arrow keys push no-op undo
+   * entries, so clear it; a still-valid selection is preserved.
+   */
+  useEffect(() => {
+    if (selectedNodeId && !nodeMap.has(selectedNodeId)) {
+      setSelectedNodeId(null);
+    }
+    if (selectedWireId && !wires.some((w) => w.id === selectedWireId)) {
+      setSelectedWireId(null);
+    }
+  }, [selectedNodeId, selectedWireId, nodeMap, wires]);
+
   const loadPreset = useCallback((preset: 'retail' | 'restaurant') => {
     const data = preset === 'retail' ? PRESET_RETAIL : PRESET_RESTAURANT;
     pushHistory();
