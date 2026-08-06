@@ -2947,10 +2947,14 @@ mod tests {
             unit_price_minor: 4,
         }];
         match s.compute_cart_tax(&lines, usd(), RoundingMode::HalfUp) {
-            Err(e) => assert!(
-                e.to_string().contains("overflow"),
-                "expected a structured overflow error, got: {e}"
-            ),
+            Err(CoreError::Validation { field, message }) => {
+                assert_eq!(field, "tax");
+                assert!(
+                    message.contains("overflow"),
+                    "unexpected overflow message: {message}"
+                );
+            }
+            Err(other) => panic!("expected Validation overflow error, got: {other:?}"),
             Ok(m) => panic!("overflow must not wrap silently, got Ok({m:?})"),
         }
     }
