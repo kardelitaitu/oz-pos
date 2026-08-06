@@ -1,4 +1,15 @@
 
+## 2026-08-06 — TDD cycle: hardware-node inspector (closes the last node-type gap)
+
+### Hardware nodes had no type-specific inspector — a test pinned it as "not implemented"
+**Problem:** Store → StoreInfoCard, warehouse → WorkspaceInventorySettings, workspace → type selector + settings card — but a hardware node (printer/KDS peripheral) opened the drawer with only the bare name/subtitle fields and nothing else. `InspectorIntegration.test.tsx` literally documented the gap with a test named "does not show inspector (not implemented)".
+
+**Solution:** Red→Green. Flipped that test to expect a hardware-specific card (`data-testid="hardware-inspector"`, "Hardware Device" section) plus the editable name/subtitle flowing through the `beginInspectorEdit` undo session (one undo restores the original name). Green renders the hardware section in the drawer, showing the node's telemetry badge/status, with a new `topology-inspector-hardware-title` key in both en and id bundles. The name/subtitle fields were already unconditional — the card was the missing piece.
+
+**Validation:** 65/65 (56 editor + 9 inspector) · TopologyScreen + api-ipc-contract green · typecheck clean · eslint clean · i18n lint clean.
+
+**Follow-up:** The hardware card is deliberately read-only (telemetry badge only) — wiring real device settings (printer address, port) would need backend backing; hardware nodes have no workspace-instance row, so onSave treats them as diagram-only. With this, all four node types have an inspector section.
+
 ## 2026-08-06 — TDD cycle: toast when a preset load drops the selection
 
 ### Preset swaps dropped the selection silently
