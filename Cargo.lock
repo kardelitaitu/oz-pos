@@ -3448,6 +3448,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "foundation",
+ "oz-core",
  "platform-kernel",
  "rusqlite",
  "serde",
