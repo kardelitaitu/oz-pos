@@ -227,7 +227,7 @@ Each app crate has an identical command surface, wired through `platform-startup
 
 ### ui/ (React Frontend)
 - **Stack**: React 18 + TypeScript + Vite 6 + `@fluent/react` (i18n) + Vitest (testing).
-- **Architecture rule**: Components never call `invoke()` directly — they go through `ui/src/api/pos.ts`.
+- **Architecture rule**: Components never call `invoke()` directly — they go through `ui/src/api/` (or a documented infrastructure adapter). `scripts/verify-architecture-boundaries.py` blocks new production direct calls and tracks existing exceptions in an expiring baseline.
 - **i18n rule**: All user-visible strings use `@fluent/react`. No hardcoded English in JSX.
 - **Types**: `ui/src/types/domain.ts` mirrors Rust types with branded TypeScript (CartId, LineId, Sku, Money).
 

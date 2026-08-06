@@ -8,7 +8,7 @@
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `ci.yml` | PR + push to `main` | Required PR/push gate: Rust fmt/clippy/panic-inventory/tests, UI lint/typecheck/tests, Lighthouse, Docker build+scan+smoke, coverage (advisory), dependency audit, fuzz (advisory), skill drift, flaky-quarantine registry, CI-docs-drift, PR security baseline, E2E (3-shard) |
+| `ci.yml` | PR + push to `main` | Required PR/push gate: Rust fmt/clippy/panic-inventory/tests, architecture-boundaries, UI lint/typecheck/tests, Lighthouse, Docker build+scan+smoke, coverage (advisory), dependency audit, fuzz (advisory), skill drift, flaky-quarantine registry, CI-docs-drift, PR security baseline, E2E (3-shard) |
 | `e2e-pr.yml` | PR (`ui/e2e/**` + E2E infra only) | Fast, changed-spec E2E complement — main CI already runs full E2E on every PR. `run-e2e.mjs` exits 2 (`SKIPPED-NO-SPEC`) when no spec changed; the workflow treats it as a neutral skip with a notice, never a false pass |
 | `nightly.yml` | Daily 03:00 UTC + manual | Full matrix: cross-platform Rust tests, docs, UI shards, E2E shards, release builds, benchmarks, flaky detection |
 | `release.yml` | Tag push `v*` | Build + blocking Trivy scan + publish all artifacts |
@@ -23,6 +23,7 @@
 | `rust-fmt` | PR + push | ~30s | none | — | ✅ Required |
 | `rust-panic-inventory` | PR + push | ~10s | none | — | ✅ Required |
 | `rust-money-format` | PR + push | ~5s | none | — | ✅ Required (no hardcoded `/100` or `{}.{:02}` money formatting) |
+| `architecture-boundaries` | PR + push | ~5s | none | — | ✅ Required (new boundary violations only; existing debt is expiring-baselined) |
 | `rust-clippy` | PR + push | ~3min | rust-cache + sccache | — | ✅ Required |
 | `rust-test-fast` | PR only | ~2min each | rust-cache + sccache | 5-way | ✅ Required |
 | `rust-test-apps` | PR + push | ~3min | rust-cache + sccache | — | ✅ Required (AUDIT-27 CI-01) |
@@ -49,7 +50,7 @@
 All gate **names** and **status** live in `scripts/gates.json`. It is the one place a gate is added, renamed, or re-leveled:
 
 - **Shared gates** (declared by BOTH `check.sh` and `check:all`): UI lint, UI typecheck, UI unit tests, i18n lint, FTL dedupe.
-- **check.sh-only** (repo gate): Rust fmt/clippy/tests, migration, skill-drift, panic-inventory, hardcoded-money-format, a11y (advisory), feature registry, plugin-guide parity, windows config drift (NSIS installMode + asInvoker), CI docs drift.
+- **check.sh-only** (repo gate): Rust fmt/clippy/tests, architecture-boundaries, migration, skill-drift, panic-inventory, hardcoded-money-format, a11y (advisory), feature registry, plugin-guide parity, windows config drift (NSIS installMode + asInvoker), CI docs drift.
 - **check:all-only** (UI gate): bundle budget, E2E, perf smoke.
 - **CI-only / nightly** gates carry the enforcing `workflow` + `job` and a `status` of `required` | `advisory` | `required-on-push`.
 
@@ -122,7 +123,7 @@ The canonical local entry points and what each covers:
 
 | Command | Covers | Skips |
 |---------|--------|-------|
-| `bash scripts/check.sh` (root) | Rust fmt/clippy/tests, migration, skill-drift, panic-inventory, hardcoded-money-format, UI lint/typecheck/tests, i18n lint, **FTL dedupe**, a11y (advisory), feature registry, plugin-guide parity, windows config drift (NSIS installMode + asInvoker), optional `--docker-dry-run` build | Production UI build, E2E (backend not provisioned) |
+| `bash scripts/check.sh` (root) | Rust fmt/clippy/tests, architecture-boundaries, migration, skill-drift, panic-inventory, hardcoded-money-format, UI lint/typecheck/tests, i18n lint, **FTL dedupe**, a11y (advisory), feature registry, plugin-guide parity, windows config drift (NSIS installMode + asInvoker), optional `--docker-dry-run` build | Production UI build, E2E (backend not provisioned) |
 | `cd ui && npm run check:all` | UI lint/typecheck/tests, i18n lint, FTL dedupe, bundle budget, E2E (**provisioned** via `npm run e2e` when Docker is up), perf smoke | Rust gates |
 | `cd ui && npm run e2e` | Full managed E2E (Docker backend + Vite + Playwright + cleanup) | — |
 

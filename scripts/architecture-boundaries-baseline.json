@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "description": "Explicit transitional debt for the architecture boundary checker. Do not add entries without reviewing the underlying boundary and setting an owner and expiry.",
+  "entries": [
+    {
+      "rule": "ui-direct-invoke",
+      "path": "ui/src/features/settings/FeatureToggleScreen.tsx",
+      "target": "list_all_features",
+      "reason": "Existing feature-toggle IPC wrapper discovered while establishing the checker baseline.",
+      "owner": "OZ-POS maintainers",
+      "introduced": "2026-08-06",
+      "expires": "2026-11-06"
+    },
+    {
+      "rule": "ui-direct-invoke",
+      "path": "ui/src/features/settings/FeatureToggleScreen.tsx",
+      "target": "set_feature",
+      "reason": "Existing feature-toggle IPC wrapper discovered while establishing the checker baseline.",
+      "owner": "OZ-POS maintainers",
+      "introduced": "2026-08-06",
+      "expires": "2026-11-06"
+    },
+    {
+      "rule": "ui-direct-invoke",
+      "path": "ui/src/features/settings/FeatureToggleScreen.tsx",
+      "target": "set_features_bulk",
+      "reason": "Existing feature-toggle IPC wrapper discovered while establishing the checker baseline.",
+      "owner": "OZ-POS maintainers",
+      "introduced": "2026-08-06",
+      "expires": "2026-11-06"
+    },
+    {
+      "rule": "core-upward-dependency",
+      "path": "crates/oz-core/Cargo.toml",
+      "target": "modules-crm",
+      "reason": "Existing oz-core upward dependency documented in the Phase 1 architecture baseline.",
+      "owner": "OZ-POS maintainers",
+      "introduced": "2026-08-06",
+      "expires": "2026-11-06"
+    },
+    {
+      "rule": "core-upward-dependency",
+      "path": "crates/oz-core/Cargo.toml",
+      "target": "modules-currency",
+      "reason": "Existing oz-core upward dependency documented in the Phase 1 architecture baseline.",
+      "owner": "OZ-POS maintainers",
+      "introduced": "2026-08-06",
+      "expires": "2026-11-06"
+    },
+    {
+      "rule": "core-upward-dependency",
+      "path": "crates/oz-core/Cargo.toml",
+      "target": "modules-inventory",
+      "reason": "Existing oz-core upward dependency documented in the Phase 1 architecture baseline.",
+      "owner": "OZ-POS maintainers",
+      "introduced": "2026-08-06",
+      "expires": "2026-11-06"
+    },
+    {
+      "rule": "core-upward-dependency",
+      "path": "crates/oz-core/Cargo.toml",
+      "target": "modules-loyalty",
+      "reason": "Existing oz-core upward dependency documented in the Phase 1 architecture baseline.",
+      "owner": "OZ-POS maintainers",
+      "introduced": "2026-08-06",
+      "expires": "2026-11-06"
+    },
+    {
+      "rule": "core-upward-dependency",
+      "path": "crates/oz-core/Cargo.toml",
+      "target": "modules-reporting",
+      "reason": "Existing oz-core upward dependency documented in the Phase 1 architecture baseline.",
+      "owner": "OZ-POS maintainers",
+      "introduced": "2026-08-06",
+      "expires": "2026-11-06"
+    },
+    {
+      "rule": "core-upward-dependency",
+      "path": "crates/oz-core/Cargo.toml",
+      "target": "modules-sales",
+      "reason": "Existing oz-core upward dependency documented in the Phase 1 architecture baseline.",
+      "owner": "OZ-POS maintainers",
+      "introduced": "2026-08-06",
+      "expires": "2026-11-06"
+    },
+    {
+      "rule": "core-upward-dependency",
+      "path": "crates/oz-core/Cargo.toml",
+      "target": "modules-settings",
+      "reason": "Existing oz-core upward dependency documented in the Phase 1 architecture baseline.",
+      "owner": "OZ-POS maintainers",
+      "introduced": "2026-08-06",
+      "expires": "2026-11-06"
+    },
+    {
+      "rule": "core-upward-dependency",
+      "path": "crates/oz-core/Cargo.toml",
+      "target": "modules-staff",
+      "reason": "Existing oz-core upward dependency documented in the Phase 1 architecture baseline.",
+      "owner": "OZ-POS maintainers",
+      "introduced": "2026-08-06",
+      "expires": "2026-11-06"
+    },
+    {
+      "rule": "core-upward-dependency",
+      "path": "crates/oz-core/Cargo.toml",
+      "target": "modules-tax",
+      "reason": "Existing oz-core upward dependency documented in the Phase 1 architecture baseline.",
+      "owner": "OZ-POS maintainers",
+      "introduced": "2026-08-06",
+      "expires": "2026-11-06"
+    },
+    {
+      "rule": "core-upward-dependency",
+      "path": "crates/oz-core/Cargo.toml",
+      "target": "modules-terminal",
+      "reason": "Existing oz-core upward dependency documented in the Phase 1 architecture baseline.",
+      "owner": "OZ-POS maintainers",
+      "introduced": "2026-08-06",
+      "expires": "2026-11-06"
+    },
+    {
+      "rule": "ui-direct-invoke",
+      "path": "ui/src/frontend/shell/UpdateBanner.tsx",
+      "target": "set_setting",
+      "reason": "Existing pre-login updater persistence adapter documented in the Phase 1 architecture baseline.",
+      "owner": "OZ-POS maintainers",
+      "introduced": "2026-08-06",
+      "expires": "2026-11-06"
+    },
+    {
+      "rule": "ui-direct-invoke",
+      "path": "ui/src/hooks/useCloudSync.ts",
+      "target": "get_setting",
+      "reason": "Existing cloud-sync token bootstrap path documented in the Phase 1 architecture baseline.",
+      "owner": "OZ-POS maintainers",
+      "introduced": "2026-08-06",
+      "expires": "2026-11-06"
+    },
+    {
+      "rule": "ui-direct-invoke",
+      "path": "ui/src/hooks/useCloudSync.ts",
+      "target": "set_setting",
+      "reason": "Existing cloud-sync token persistence path documented in the Phase 1 architecture baseline.",
+      "owner": "OZ-POS maintainers",
+      "introduced": "2026-08-06",
+      "expires": "2026-11-06"
+    },
+    {
+      "rule": "ui-direct-invoke",
+      "path": "ui/src/hooks/useGatewayStatus.ts",
+      "target": "get_setting",
+      "reason": "Existing gateway status compatibility path documented in the Phase 1 architecture baseline.",
+      "owner": "OZ-POS maintainers",
+      "introduced": "2026-08-06",
+      "expires": "2026-11-06"
+    }
+  ]
+}

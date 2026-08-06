@@ -46,6 +46,11 @@ step "clippy workspace" "cargo clippy --workspace --all-targets -- -D warnings" 
 # ── ADR #7 Phase 4: no raw store_id/user_id in command signatures ───────
 step "no-raw-params (ADR #7 Phase 4)" "bash scripts/verify-no-raw-params.sh" bash scripts/verify-no-raw-params.sh
 
+# ── Architecture boundary checker (P1 pilot) ────────────────────────────
+# Existing transitional debt is reported but only new, expired, or stale
+# baseline entries fail. This is static-only and has no runtime impact.
+step "architecture boundaries" "python3 scripts/verify-architecture-boundaries.py --strict" python3 scripts/verify-architecture-boundaries.py --strict
+
 # ── Money formatting gate (IDR/JPY/KWD exp-2 regression guard) ───────────
 # Fails when production .rs code hardcodes `/ 100` division or `{}.{:02}`
 # format strings instead of foundation::format_minor(). Pure python — no

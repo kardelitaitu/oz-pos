@@ -81,6 +81,14 @@ Step -Name "clippy auto-fix" -RetryCommand "cargo clippy --fix --allow-dirty -- 
     cargo clippy --fix --allow-dirty -- --allow warnings
 }
 Step -Name "cargo fmt" -RetryCommand "cargo fmt --all" -ScriptBlock { cargo fmt --all }
+$pythonCommand = if (Get-Command "python3" -ErrorAction SilentlyContinue) { "python3" } elseif (Get-Command "python" -ErrorAction SilentlyContinue) { "python" } else { $null }
+if ($pythonCommand) {
+    Step -Name "architecture boundaries" -RetryCommand "$pythonCommand scripts/verify-architecture-boundaries.py --strict" -ScriptBlock { & $pythonCommand scripts/verify-architecture-boundaries.py --strict }
+} else {
+    Write-Host "FAIL architecture boundaries (Python is required)" -ForegroundColor Red
+    exit 1
+}
+
 
 # --- Phase 2: strict verify (mirrors CI rust job) -----------------------
 Step -Name "cargo fmt (verify)" -RetryCommand "cargo fmt --all -- --check" -ScriptBlock {

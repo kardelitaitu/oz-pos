@@ -59,7 +59,10 @@ CRM owns CRM logic.
 ### Rule 2 — No Direct Module-to-Module Calls
 
 Modules communicate exclusively through an event bus. This prevents coupling
-and enables independent testing, loading, and replacement.
+and enables independent testing, loading, and replacement. New production
+module-to-module, upward `oz-core`, and non-composition platform dependencies
+are blocked by `scripts/verify-architecture-boundaries.py`; existing
+transitional findings are explicitly baselined with owners and expiry dates.
 
 ```
   Sales              Inventory

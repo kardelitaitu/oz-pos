@@ -58,6 +58,17 @@ jobs:
       - name: Verify no hardcoded exp-2 money formatting
         run: python3 scripts/verify-no-hardcoded-money-format.py
 
+  # ── Architecture boundary checker (P1 pilot) ───────────────────────
+  # Static-only enforcement: existing transitional findings are tracked in
+  # the expiring baseline; new, expired, or stale findings block CI.
+  architecture-boundaries:
+    name: Architecture Boundaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify architecture boundaries
+        run: python3 scripts/verify-architecture-boundaries.py --strict
+
   # ── Rust: Clippy (needs system deps for compilation, all-features) ─
   rust-clippy:
     name: Rust Clippy
