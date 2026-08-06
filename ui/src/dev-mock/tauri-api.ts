@@ -237,7 +237,27 @@ interface CartLine {
   price: { minor_units: number; currency: string };
   qty: number;
 }
-let cartState: { lines: CartLine[] } = { lines: [] };
+// Persisted so a reloaded preview keeps its in-progress cart — the real
+// backend stores active-cart lines in the store DB. Same stateful pattern
+// as the user-prefs / active-shift mocks below.
+const MOCK_CART_KEY = 'oz-dev-mock:cart';
+function loadMockCart(): { lines: CartLine[] } {
+  try {
+    const raw = localStorage.getItem(MOCK_CART_KEY);
+    if (raw) return JSON.parse(raw) as { lines: CartLine[] };
+  } catch {
+    // storage unavailable — start with an empty cart
+  }
+  return { lines: [] };
+}
+function saveMockCart(): void {
+  try {
+    localStorage.setItem(MOCK_CART_KEY, JSON.stringify(cartState));
+  } catch {
+    // storage unavailable — keep the in-memory copy for this session
+  }
+}
+let cartState: { lines: CartLine[] } = loadMockCart();
 
 // ── Completed sales (persisted so sales history + refund e2e work) ─
 interface MockCompletedSale {
@@ -249,36 +269,71 @@ interface MockCompletedSale {
   userId: string;
   createdAt: string;
 }
-const completedSales: MockCompletedSale[] = [
+interface MockSaleDetails extends MockCompletedSale {
+  subtotal: { minor_units: number; currency: string };
+  taxTotal: { minor_units: number; currency: string };
+  tenderedMinor: number;
+  lines: Array<{
+    id: string;
+    sku: string;
+    name: string;
+    qty: number;
+    unit_price: { minor_units: number; currency: string };
+    total_minor: number;
+    tax_amount: null;
+    tax_rate_id: null;
+  }>;
+}
+// Persisted alongside the cart so sales history (and the per-sale detail
+// view) survives a reload exactly like the store DB does.
+const MOCK_SALES_KEY = 'oz-dev-mock:sales';
+function seedMockSalesStore(): { sales: MockCompletedSale[]; details: Record<string, MockSaleDetails> } {
+  const createdAt = new Date(Date.now() - 3600000).toISOString();
   // Pre-seeded sale so sales history always has at least one row.
-  {
+  const seed: MockCompletedSale = {
     id: 'seed-sale-001',
     total: { minor_units: 1250, currency: 'USD' },
     lineCount: 2,
     status: 'Completed',
     paymentMethod: 'cash',
     userId: 'admin-1',
-    createdAt: new Date(Date.now() - 3600000).toISOString(),
-  },
-];
-const saleDetails: Record<string, MockCompletedSale & { subtotal: { minor_units: number; currency: string }; taxTotal: { minor_units: number; currency: string }; tenderedMinor: number; lines: Array<{ id: string; sku: string; name: string; qty: number; unit_price: { minor_units: number; currency: string }; total_minor: number; tax_amount: null; tax_rate_id: null }> }> = {
-  'seed-sale-001': {
-    id: 'seed-sale-001',
-    total: { minor_units: 1250, currency: 'USD' },
-    subtotal: { minor_units: 1250, currency: 'USD' },
-    taxTotal: { minor_units: 0, currency: 'USD' },
-    lineCount: 2,
-    status: 'Completed',
-    paymentMethod: 'cash',
-    tenderedMinor: 2000,
-    userId: 'admin-1',
-    createdAt: new Date(Date.now() - 3600000).toISOString(),
-    lines: [
-      { id: 'seed-line-1', sku: 'LATTE', name: 'Caffè Latte', qty: 1, unit_price: { minor_units: 450, currency: 'USD' }, total_minor: 450, tax_amount: null, tax_rate_id: null },
-      { id: 'seed-line-2', sku: 'CROISS', name: 'Butter Croissant', qty: 2, unit_price: { minor_units: 320, currency: 'USD' }, total_minor: 640, tax_amount: null, tax_rate_id: null },
-    ],
-  },
-};
+    createdAt,
+  };
+  return {
+    sales: [seed],
+    details: {
+      'seed-sale-001': {
+        ...seed,
+        subtotal: { minor_units: 1250, currency: 'USD' },
+        taxTotal: { minor_units: 0, currency: 'USD' },
+        tenderedMinor: 2000,
+        lines: [
+          { id: 'seed-line-1', sku: 'LATTE', name: 'Caffè Latte', qty: 1, unit_price: { minor_units: 450, currency: 'USD' }, total_minor: 450, tax_amount: null, tax_rate_id: null },
+          { id: 'seed-line-2', sku: 'CROISS', name: 'Butter Croissant', qty: 2, unit_price: { minor_units: 320, currency: 'USD' }, total_minor: 640, tax_amount: null, tax_rate_id: null },
+        ],
+      },
+    },
+  };
+}
+function loadMockSalesStore(): { sales: MockCompletedSale[]; details: Record<string, MockSaleDetails> } {
+  try {
+    const raw = localStorage.getItem(MOCK_SALES_KEY);
+    if (raw) return JSON.parse(raw) as { sales: MockCompletedSale[]; details: Record<string, MockSaleDetails> };
+  } catch {
+    // storage unavailable — fall through to the seed
+  }
+  return seedMockSalesStore();
+}
+const mockSalesStore = loadMockSalesStore();
+const completedSales: MockCompletedSale[] = mockSalesStore.sales;
+const saleDetails: Record<string, MockSaleDetails> = mockSalesStore.details;
+function saveMockSales(): void {
+  try {
+    localStorage.setItem(MOCK_SALES_KEY, JSON.stringify({ sales: completedSales, details: saleDetails }));
+  } catch {
+    // storage unavailable — keep the in-memory copies for this session
+  }
+}
 
 // ── Date helpers (for seeded report data) ───────────────────────
 /** List every ISO date (YYYY-MM-DD) from startDate to endDate inclusive. */
@@ -298,13 +353,59 @@ function mockRevenue(i: number): number {
 }
 
 // ── Active shift state (for pay-btn-enabled E2E test) ──────────
-let mockActiveShift: Record<string, unknown> | null = {
-  id: 'shift-1', userId: 'user-1', terminalId: null, openedAt: new Date().toISOString(), closedAt: null,
-  openingBalanceMinor: 0, closingBalanceMinor: null, expectedCashMinor: null, cashDifferenceMinor: null,
-  totalSalesMinor: 0, totalCashMinor: 0, totalCardMinor: 0, totalOtherMinor: 0,
-  totalVoidsMinor: 0, totalRefundsMinor: 0, totalPayoutsMinor: 0, notes: '', status: 'open',
-  createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-};
+// The real backend persists the open shift (with its opened_at) to the
+// store-scoped `shifts` table, so a restart resumes the elapsed clock from
+// the original opening time. The mock previously built a fresh shift with
+// `openedAt: new Date()` at module load — every page reload reset the
+// resto-POS "Current Order" shift duration to 0m. Seed from localStorage
+// (same stateful pattern as user prefs below) so previews behave like a
+// real store DB across reloads.
+const MOCK_ACTIVE_SHIFT_KEY = 'oz-dev-mock:active-shift';
+// Persisted marker for an explicitly-closed shift. Without it, a reload
+// after close would re-seed a fresh open shift (the demo convenience below
+// applies only on the very first load) and resurrect the clock the user
+// just stopped — the real DB returns no open shift after close.
+const MOCK_SHIFT_CLOSED_SENTINEL = '__closed__';
+function loadMockActiveShift(): Record<string, unknown> | null {
+  try {
+    const raw = localStorage.getItem(MOCK_ACTIVE_SHIFT_KEY);
+    if (raw === MOCK_SHIFT_CLOSED_SENTINEL) return null;
+    if (raw) return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    // storage unavailable — fall through to the in-session default
+  }
+  return null;
+}
+function hasPersistedShiftState(): boolean {
+  try {
+    return localStorage.getItem(MOCK_ACTIVE_SHIFT_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+function saveMockActiveShift(shift: Record<string, unknown> | null): void {
+  try {
+    if (shift) localStorage.setItem(MOCK_ACTIVE_SHIFT_KEY, JSON.stringify(shift));
+    else localStorage.setItem(MOCK_ACTIVE_SHIFT_KEY, MOCK_SHIFT_CLOSED_SENTINEL);
+  } catch {
+    // storage unavailable — keep in-memory copy for this session
+  }
+}
+let mockActiveShift: Record<string, unknown> | null = loadMockActiveShift();
+if (!hasPersistedShiftState()) {
+  // First-ever load in this browser (nothing persisted yet): seed an open
+  // shift so the pay button and the "Current Order" shift duration render
+  // in dev previews without a manual open/close cycle. Explicitly closing
+  // it (or never opening one) leaves the sentinel, so reloads stay closed.
+  mockActiveShift = {
+    id: 'shift-1', userId: 'user-1', terminalId: null, openedAt: new Date().toISOString(), closedAt: null,
+    openingBalanceMinor: 0, closingBalanceMinor: null, expectedCashMinor: null, cashDifferenceMinor: null,
+    totalSalesMinor: 0, totalCashMinor: 0, totalCardMinor: 0, totalOtherMinor: 0,
+    totalVoidsMinor: 0, totalRefundsMinor: 0, totalPayoutsMinor: 0, notes: '', status: 'open',
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  };
+  saveMockActiveShift(mockActiveShift);
+}
 // Closed-shift history so the reconciliation spec can verify shifts appear
 // in the Shift History table after closing. One pre-seeded closed shift
 // guarantees the history table renders on every fresh page load (the older
@@ -727,8 +828,8 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // SALES / CART
   // ═══════════════════════════════════════════════════════════════
 
-  'start_sale': () => { cartState = { lines: [] }; return { cartId: `mock-cart-${Date.now()}`, deduction_location_id: 'default-loc', deductionLocationId: 'default-loc' }; },
-  'start_sale_scoped': () => { cartState = { lines: [] }; return { cartId: `mock-cart-${Date.now()}`, deduction_location_id: 'default-loc', deductionLocationId: 'default-loc' }; },
+  'start_sale': () => { cartState = { lines: [] }; saveMockCart(); return { cartId: `mock-cart-${Date.now()}`, deduction_location_id: 'default-loc', deductionLocationId: 'default-loc' }; },
+  'start_sale_scoped': () => { cartState = { lines: [] }; saveMockCart(); return { cartId: `mock-cart-${Date.now()}`, deduction_location_id: 'default-loc', deductionLocationId: 'default-loc' }; },
 
   'add_line': (args) => {
     // The API sends { args: { cartId, sku, qty, unitPriceMinor } } — read `sku`
@@ -746,6 +847,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
         cartState.lines.push({ sku: product.sku, name: product.name, price: product.price, qty });
       }
     }
+    saveMockCart();
     const lineTotal = product ? product.price.minor_units * qty : 0;
     return { lineId: `mock-line-${Date.now()}`, lineTotal };
   },
@@ -762,6 +864,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
         cartState.lines.push({ sku: product.sku, name: product.name, price: product.price, qty });
       }
     }
+    saveMockCart();
     const lineTotal = product ? product.price.minor_units * qty : 0;
     return { lineId: `mock-line-${Date.now()}`, lineTotal };
   },
@@ -792,7 +895,11 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     };
     // Push a KDS mock order so POS → KDS E2E flow works.
     pushKdsOrderFromCart(cartState.lines, 'store-1');
+    // Persist the completed sale and the now-empty cart so a reload keeps
+    // history and doesn't resurrect the just-completed cart.
+    saveMockSales();
     cartState = { lines: [] };
+    saveMockCart();
     return { saleId, total: { minor_units: minorTotal, currency }, lineCount };
   },
   'complete_sale_scoped': () => {
@@ -817,7 +924,11 @@ const handlers: Record<string, (args: unknown) => unknown> = {
       })),
     };
     pushKdsOrderFromCart(cartState.lines, 'store-1');
+    // Persist the completed sale and the now-empty cart so a reload keeps
+    // history and doesn't resurrect the just-completed cart.
+    saveMockSales();
     cartState = { lines: [] };
+    saveMockCart();
     return { saleId, total: { minor_units: minorTotal, currency }, lineCount };
   },
   'complete_sale_with_resolved_shortfalls_scoped': () => {
@@ -842,7 +953,11 @@ const handlers: Record<string, (args: unknown) => unknown> = {
       })),
     };
     pushKdsOrderFromCart(cartState.lines, 'store-1');
+    // Persist the completed sale and the now-empty cart so a reload keeps
+    // history and doesn't resurrect the just-completed cart.
+    saveMockSales();
     cartState = { lines: [] };
+    saveMockCart();
     return { saleId, total: { minor_units: minorTotal, currency }, lineCount };
   },
 
@@ -991,6 +1106,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
       totalVoidsMinor: 0, totalRefundsMinor: 0, totalPayoutsMinor: 0, notes: '', status: 'open',
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     };
+    saveMockActiveShift(mockActiveShift);
     return mockActiveShift;
   },
   'open_shift_scoped': () => {
@@ -1001,10 +1117,12 @@ const handlers: Record<string, (args: unknown) => unknown> = {
       totalVoidsMinor: 0, totalRefundsMinor: 0, totalPayoutsMinor: 0, notes: '', status: 'open',
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     };
+    saveMockActiveShift(mockActiveShift);
     return mockActiveShift;
   },
   'close_shift': () => {
     mockActiveShift = null;
+    saveMockActiveShift(null);
     const closed: Record<string, unknown> = {
       id: `shift-${mockShiftHistory.length + 1}`, userId: 'user-1', terminalId: null, openedAt: new Date().toISOString(), closedAt: new Date().toISOString(),
       openingBalanceMinor: 100000, closingBalanceMinor: 150000, expectedCashMinor: 150000, cashDifferenceMinor: 0,
@@ -1017,6 +1135,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   },
   'close_shift_scoped': () => {
     mockActiveShift = null;
+    saveMockActiveShift(null);
     const closed: Record<string, unknown> = {
       id: `shift-${mockShiftHistory.length + 1}`, userId: 'user-1', terminalId: null, openedAt: new Date().toISOString(), closedAt: new Date().toISOString(),
       openingBalanceMinor: 100000, closingBalanceMinor: 150000, expectedCashMinor: 150000, cashDifferenceMinor: 0,

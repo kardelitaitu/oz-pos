@@ -80,6 +80,141 @@ describe('dev-mock auth contract (audit/06 picker ticket parity)', () => {
   });
 });
 
+// The real backend persists the open shift (with opened_at) to the store
+// `shifts` table, so a restart resumes the elapsed clock from the original
+// opening time. The mock previously rebuilt the shift with `openedAt: new
+// Date()` at module load, which reset the resto-POS "Current Order" shift
+// duration to 0m on every reload. Pin the localStorage-backed contract so
+// previews mirror the DB across page reloads.
+describe('dev-mock active-shift persistence (restart parity)', () => {
+  const KEY = 'oz-dev-mock:active-shift';
+
+  afterEach(() => {
+    localStorage.removeItem(KEY);
+    vi.resetModules();
+  });
+
+  it('a previously opened shift survives a module reload with its openedAt', async () => {
+    // Open a shift, then simulate a restart: re-import the module so the
+    // in-memory copy is rebuilt from localStorage (like a fresh page load).
+    const first = await import('@/dev-mock/tauri-api');
+    const opened = (await first.invoke('open_shift_scoped', {
+      sessionToken: 'session-1',
+    })) as unknown as { openedAt: string };
+    const openedAt = opened.openedAt;
+
+    vi.resetModules();
+    const second = await import('@/dev-mock/tauri-api');
+    const reloaded = (await second.invoke('get_active_shift_scoped', {
+      sessionToken: 'session-1',
+    })) as unknown as { openedAt: string; status: string } | null;
+
+    expect(reloaded).not.toBeNull();
+    expect(reloaded?.status).toBe('open');
+    // The clock must resume from the ORIGINAL opening time, not re-baseline
+    // to the reload moment — otherwise the elapsed duration resets to 0m.
+    expect(reloaded?.openedAt).toBe(openedAt);
+  });
+
+  it('closing the shift clears the persisted copy so a reload sees no active shift', async () => {
+    const first = await import('@/dev-mock/tauri-api');
+    await first.invoke('open_shift_scoped', { sessionToken: 'session-1' });
+    await first.invoke('close_shift_scoped', {
+      sessionToken: 'session-1',
+      args: { id: 'shift-1', closingBalanceMinor: 0, notes: null },
+    });
+
+    vi.resetModules();
+    const second = await import('@/dev-mock/tauri-api');
+    const reloaded = (await second.invoke('get_active_shift_scoped', {
+      sessionToken: 'session-1',
+    })) as unknown as unknown;
+
+    expect(reloaded).toBeNull();
+  });
+});
+
+// The real backend persists active-cart lines and completed sales in the
+// store DB, so a restart resumes exactly where the operator left off. The
+// mock previously kept cartState / completedSales in module memory, so a
+// reloaded preview dropped the in-progress cart and lost sales history.
+// Pin the localStorage-backed contract so previews mirror the DB.
+describe('dev-mock cart + sales persistence (restart parity)', () => {
+  const CART_KEY = 'oz-dev-mock:cart';
+  const SALES_KEY = 'oz-dev-mock:sales';
+
+  afterEach(() => {
+    localStorage.removeItem(CART_KEY);
+    localStorage.removeItem(SALES_KEY);
+    vi.resetModules();
+  });
+
+  it('an in-progress cart survives a module reload with its lines', async () => {
+    const first = await import('@/dev-mock/tauri-api');
+    await first.invoke('start_sale_scoped', { sessionToken: 'session-1' });
+    await first.invoke('add_line_scoped', {
+      sessionToken: 'session-1',
+      args: { cartId: 'mock-cart-1', sku: 'LATTE', qty: 2 },
+    });
+
+    // Simulate a restart: re-import the module so the in-memory copy is
+    // rebuilt from localStorage (like a fresh page load).
+    vi.resetModules();
+    const second = await import('@/dev-mock/tauri-api');
+    const completed = (await second.invoke('complete_sale_scoped', {
+      sessionToken: 'session-1',
+    })) as unknown as { lineCount: number; total: { minor_units: number } };
+
+    // The cart was rebuilt from storage, so the sale reflects the pre-reload lines.
+    expect(completed.lineCount).toBe(1);
+    expect(completed.total.minor_units).toBe(2 * 45000);
+  });
+
+  it('a completed sale survives a reload and its detail view resolves', async () => {
+    const first = await import('@/dev-mock/tauri-api');
+    await first.invoke('start_sale_scoped', { sessionToken: 'session-1' });
+    await first.invoke('add_line_scoped', {
+      sessionToken: 'session-1',
+      args: { cartId: 'mock-cart-1', sku: 'LATTE', qty: 1 },
+    });
+    const sale = (await first.invoke('complete_sale_scoped', {
+      sessionToken: 'session-1',
+    })) as unknown as { saleId: string };
+
+    vi.resetModules();
+    const second = await import('@/dev-mock/tauri-api');
+    const sales = (await second.invoke('list_sales_scoped', {
+      sessionToken: 'session-1',
+    })) as unknown as Array<{ id: string }>;
+    const detail = (await second.invoke('get_sale_scoped', {
+      id: sale.saleId,
+    })) as unknown as { id: string; lines: unknown[] } | null;
+
+    expect(sales.some(s => s.id === sale.saleId)).toBe(true);
+    expect(detail?.id).toBe(sale.saleId);
+    expect(detail?.lines.length).toBe(1);
+  });
+
+  it('starting a new sale clears the persisted cart so a reload starts fresh', async () => {
+    const first = await import('@/dev-mock/tauri-api');
+    await first.invoke('start_sale_scoped', { sessionToken: 'session-1' });
+    await first.invoke('add_line_scoped', {
+      sessionToken: 'session-1',
+      args: { cartId: 'mock-cart-1', sku: 'LATTE', qty: 1 },
+    });
+    await first.invoke('start_sale_scoped', { sessionToken: 'session-1' });
+
+    vi.resetModules();
+    const second = await import('@/dev-mock/tauri-api');
+    const completed = (await second.invoke('complete_sale_scoped', {
+      sessionToken: 'session-1',
+    })) as unknown as { lineCount: number };
+
+    // The empty cart was persisted on start_sale, so the reloaded sale is empty.
+    expect(completed.lineCount).toBe(0);
+  });
+});
+
 describe('dev-mock delegates to a real Tauri webview (production regression)', () => {
   it('invoke passes through to window.__TAURI_INTERNALS__ when present', async () => {
     installFakeInternals();
