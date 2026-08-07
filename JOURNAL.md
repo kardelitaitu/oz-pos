@@ -583,3 +583,15 @@ Clean (0 errors).
 **Commits:** (hash below)
 
 **Follow-ups (deliberately NOT done):** the `undoStack`/`undoBarExit` contract is owned by RetailPosScreen — the parent's re-add-restores-full-line behavior lives in the screen tests and is not duplicated here; serial-input rendering (isSerialTracking + trackSerialMap) and the manager override button are also untested — both are small follow-up slices if they gain behavior.
+
+
+## 2026-08-07 — RetailCartPanel serial-input + manager override coverage
+
+### Two remaining interaction surfaces on the retail cart panel were untested
+**Problem:** After the characterization suite landed, the serial-tracking input (renders for `trackSerialMap[sku]` skus with the stored value, live `onSerialChange` on type) and the manager override button (gated on `isManager`, opens the override target with the line identity AND calls `onEnsureCart` so the override modal has a cart) still had no direct tests — both real cashier flows, both unguarded.
+
+**Solution:** 6 more characterization tests appended to `ui/src/__tests__/RetailCartPanel.test.tsx`: serial input renders with stored value / updates via onSerialChange / hidden when serial tracking is off / hidden for untracked skus; override button appears only for managers / opens `{id, name, unit_price}` and ensures the cart. All pinned existing behavior (no production change needed) — the suite now covers every interactive surface of the component.
+
+**Validation:** 19/19 in-suite · full UI suite 262 files / 4039 tests green · typecheck clean · eslint clean.
+
+**Commits:** (hash below)

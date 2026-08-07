@@ -258,6 +258,102 @@ describe('RetailCartPanel — pay button and empty state', () => {
   });
 });
 
+// ── Serial tracking input ───────────────────────────────────────
+
+describe('RetailCartPanel — serial tracking input', () => {
+  it('renders the serial input for a tracked sku with the stored value', () => {
+    render(
+      <RetailCartPanel
+        {...makeProps({
+          isSerialTracking: true,
+          trackSerialMap: { 'SKU-001': true },
+          serialNumbers: { 'line-1': 'SN-ABC-123' },
+        })}
+      />,
+    );
+    const input = screen.getByLabelText('retail-serial-aria');
+    expect(input).toBeInTheDocument();
+    expect(input).toHaveValue('SN-ABC-123');
+  });
+
+  it('updates the serial via onSerialChange as the cashier types', () => {
+    const onSerialChange = vi.fn();
+    render(
+      <RetailCartPanel
+        {...makeProps({
+          isSerialTracking: true,
+          trackSerialMap: { 'SKU-001': true },
+          lineActions: { ...makeProps().lineActions, onSerialChange },
+        })}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText('retail-serial-aria'), {
+      target: { value: 'SN-999' },
+    });
+    expect(onSerialChange).toHaveBeenCalledWith('line-1', 'SN-999');
+  });
+
+  it('omits the serial input when serial tracking is off', () => {
+    render(
+      <RetailCartPanel
+        {...makeProps({
+          isSerialTracking: false,
+          trackSerialMap: { 'SKU-001': true },
+        })}
+      />,
+    );
+    expect(screen.queryByLabelText('retail-serial-aria')).toBeNull();
+  });
+
+  it('omits the serial input for skus that are not tracked', () => {
+    render(
+      <RetailCartPanel
+        {...makeProps({
+          isSerialTracking: true,
+          trackSerialMap: {}, // SKU-001 not in the tracked map
+        })}
+      />,
+    );
+    expect(screen.queryByLabelText('retail-serial-aria')).toBeNull();
+  });
+});
+
+// ── Manager override ────────────────────────────────────────────
+
+describe('RetailCartPanel — manager override', () => {
+  it('shows the override button only for managers', () => {
+    const { unmount } = render(<RetailCartPanel {...makeProps({ isManager: true })} />);
+    expect(screen.getByLabelText('retail-override-aria')).toBeInTheDocument();
+    unmount();
+
+    render(<RetailCartPanel {...makeProps({ isManager: false })} />);
+    expect(screen.queryByLabelText('retail-override-aria')).toBeNull();
+  });
+
+  it('opens the override target with the line identity and ensures the cart', () => {
+    const onSetOverrideTarget = vi.fn();
+    const onEnsureCart = vi.fn();
+    render(
+      <RetailCartPanel
+        {...makeProps({
+          isManager: true,
+          lines: [makeLine({ qty: 2, unit_price: money(15000) })],
+          lineActions: { ...makeProps().lineActions, onSetOverrideTarget },
+          onEnsureCart,
+        })}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText('retail-override-aria'));
+
+    expect(onSetOverrideTarget).toHaveBeenCalledWith({
+      id: 'line-1',
+      name: 'Nasi Goreng',
+      unit_price: money(15000),
+    });
+    expect(onEnsureCart).toHaveBeenCalledWith('IDR');
+  });
+});
+
 // ── Modifier badge ──────────────────────────────────────────────
 
 describe('RetailCartPanel — modifier badge', () => {
