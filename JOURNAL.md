@@ -569,3 +569,17 @@ Clean (0 errors).
 **Commits:** (hash below)
 
 **Follow-ups (deliberately NOT done):** the tablet client's `set_setting` still does a plain `Settings::set` with no terminal_id and no enqueue — confirmed the tablet process runs no sync daemon, so wiring the enqueue there would be inert until the tablet gets one (journaled previously). A general `enqueue_offline_scoped_dedup` (action+payload+tenant) is still unneeded — for settings the correct primitive is supersede-by-key, and no other caller needs payload-dedup across tenants today.
+
+
+## 2026-08-07 — RetailCartPanel characterization suite (NO-TEST gap)
+
+### The retail cart panel had real behavior and zero direct tests
+**Problem:** The 5-area TDD scan flagged every `Retail*` component as untested; RetailCartPanel is a fully controlled cart UI with meaningful behavior — the remove→undo round-trip (onRemoveLine payload must carry modifiers + course so undo can restore the full line), qty +/- semantics (decrease at qty 1 removes the line, above 1 updates qty), the course dropdown (open on chip, assign on option, None clears, closes on select), pay-button gating, and the modifier badge — yet no direct suite pinned any of it.
+
+**Solution:** 13-test characterization suite (`ui/src/__tests__/RetailCartPanel.test.tsx`) using the repo's standard @fluent/react identity-key mock. The Red run surfaced one wrong assumption in the test itself, not the component: with zero lines the panel renders the empty state and omits the entire cart UI (no pay button at all) rather than a disabled one — the test now asserts that. Also corrected strict-TS fixture typing (branded `Sku`, `exactOptionalPropertyTypes` on `Partial<CartLine>`, required-shape `undoStack` entries). No production code changed — the suite is the regression net for the remove→undo contract and qty/course interactions.
+
+**Validation:** 13/13 new · full UI suite 262 files / 4033 tests green · typecheck clean · eslint clean.
+
+**Commits:** (hash below)
+
+**Follow-ups (deliberately NOT done):** the `undoStack`/`undoBarExit` contract is owned by RetailPosScreen — the parent's re-add-restores-full-line behavior lives in the screen tests and is not duplicated here; serial-input rendering (isSerialTracking + trackSerialMap) and the manager override button are also untested — both are small follow-up slices if they gain behavior.
