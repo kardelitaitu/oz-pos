@@ -609,3 +609,17 @@ Clean (0 errors).
 **Commits:** (hashes below)
 
 **Follow-ups (deliberately NOT done):** the tablet daemon is PUSH-ONLY — it never pulls remote changes, so the tablet still can't receive remote settings/sales updates; a pull phase is the next real slice. The `"settings.update"` action string is now hardcoded in the oz-core method, the platform-sync apply arms, and the conflict resolver — a shared const would prevent drift (nice-to-have). Tablet settings writes stay tenant "default" because the command resolves user_id, not a session token (no store derivation).
+
+
+## 2026-08-07 — Topology editor: wire creation characterization suite
+
+### The port-connection flow was entirely unguarded
+**Problem:** The editor's undo/redo, selection, presets, inspector, and save paths had deep coverage (58 editor tests), but the wire CREATION flow — clicking a source port then a target port — had zero tests. The logic in `handlePortClick` (start connection, complete on a different node, duplicate detection, same-node cancel, one undo step, workspace→warehouse fallback tier limit) was real behavior with no regression net.
+
+**Solution:** 5 characterization tests appended to `NodeTopologyEditor.test.tsx` using the preset's deterministic node order ([store-1, ws-1, wh-1]) and the `node-port-socket.port-*` classes: create a wire via two port clicks; duplicate connection → toast 'A wire already connects these ports.' + no new wire; clicking the same node's ports cancels; Ctrl+Z removes a created wire in ONE undo step; a second workspace→warehouse wire is blocked on the standard tier with the fallback toast. All pinned existing behavior — no production change needed (the component was already correct; it's now guarded).
+
+**Validation:** 5 new · full UI suite 262 files / 4044 tests green · typecheck clean · eslint clean.
+
+**Commits:** (hash below)
+
+**Follow-ups (deliberately NOT done):** the Delete/Backspace-on-selection path (keydown at line 560: deletes a wireless node immediately, opens the confirm dialog for wired nodes/wires) is still only negatively tested (text-field non-interception) — a positive characterization of the delete-key flow is the next slice. Also untested: the connection-cancel affordance (Escape while connecting) and the wire label priority on multi-warehouse Pro-tier connections.

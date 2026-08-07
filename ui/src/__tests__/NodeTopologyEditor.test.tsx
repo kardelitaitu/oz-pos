@@ -1277,7 +1277,84 @@ describe('NodeTopologyEditor Component', () => {
     ).toBeInTheDocument();
   });
 
-  it('does not toast when the selected node survives a preset load', () => {
+// ── Wire creation via port connections ──────────────────────────
+
+describe('NodeTopologyEditor — wire creation', () => {
+  // Preset renders nodes in array order: [store-1, ws-1, wh-1].
+  const nodeAt = (idx: number) =>
+    document.querySelectorAll('.topology-node')[idx] as HTMLElement;
+  const portOf = (node: HTMLElement, port: string) =>
+    node.querySelector(`.node-port-socket.port-${port}`) as HTMLElement;
+
+  it('creates a wire when two ports on different nodes are connected', () => {
+    renderEditor();
+    const baseline = getWireCount();
+
+    // store-1 bottom → ws-1 top (not an existing connection).
+    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    fireEvent.click(portOf(nodeAt(1), 'top'));
+
+    expect(getWireCount()).toBe(baseline + 1);
+  });
+
+  it('rejects a duplicate connection with a toast and no new wire', () => {
+    renderEditor();
+    const baseline = getWireCount();
+
+    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    fireEvent.click(portOf(nodeAt(1), 'top'));
+    expect(getWireCount()).toBe(baseline + 1);
+
+    // Same two ports again — duplicate.
+    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    fireEvent.click(portOf(nodeAt(1), 'top'));
+
+    expect(getWireCount()).toBe(baseline + 1);
+    expect(screen.getByText('A wire already connects these ports.')).toBeInTheDocument();
+  });
+
+  it('cancels the connection when clicking the same node again', () => {
+    renderEditor();
+    const baseline = getWireCount();
+
+    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    fireEvent.click(portOf(nodeAt(0), 'right')); // same node → cancel
+
+    expect(getWireCount()).toBe(baseline);
+  });
+
+  it('undoes a created wire in a single undo step', () => {
+    renderEditor();
+    const baseline = getWireCount();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    fireEvent.click(portOf(nodeAt(1), 'top'));
+    expect(getWireCount()).toBe(baseline + 1);
+
+    fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true });
+    expect(getWireCount()).toBe(baseline);
+  });
+
+  it('blocks a second workspace→warehouse fallback wire on the standard tier', () => {
+    renderEditor();
+    const baseline = getWireCount();
+
+    // ws-1 bottom → wh-1 top: workspace→warehouse, but the retail preset
+    // already has one warehouse wire (w-2) — standard tier allows one.
+    fireEvent.click(portOf(nodeAt(1), 'bottom'));
+    fireEvent.click(portOf(nodeAt(2), 'top'));
+
+    expect(getWireCount()).toBe(baseline);
+    expect(
+      screen.getByText(
+        'Multi-warehouse stock deduction fallback wires require a Pro Tier license.',
+      ),
+    ).toBeInTheDocument();
+  });
+});
+
+it('does not toast when the selected node survives a preset load', () => {
     renderEditor();
 
     // store-1 exists in BOTH presets — its selection must survive.
