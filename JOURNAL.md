@@ -623,3 +623,17 @@ Clean (0 errors).
 **Commits:** (hash below)
 
 **Follow-ups (deliberately NOT done):** the Delete/Backspace-on-selection path (keydown at line 560: deletes a wireless node immediately, opens the confirm dialog for wired nodes/wires) is still only negatively tested (text-field non-interception) — a positive characterization of the delete-key flow is the next slice. Also untested: the connection-cancel affordance (Escape while connecting) and the wire label priority on multi-warehouse Pro-tier connections.
+
+
+## 2026-08-07 — Topology editor: Delete/Backspace keyboard flow characterized
+
+### The delete-key path was the last unguarded interaction surface
+**Problem:** The editor's delete flows were only tested through the toolbar button; the keyboard path (`Delete`/`Backspace` keydown at line ~560: wireless node → immediate delete; wired node/wire → confirm dialog; text-field non-interception) had zero positive regression net. The journaled follow-up from the wire-creation cycle.
+
+**Solution:** 5 characterization tests pin the keyboard flow end-to-end: Delete on a selected wireless node deletes immediately (no dialog); Delete on a wired node opens the confirm dialog and cancel keeps the node; Delete on a selected wire opens the dialog and confirm removes the wire; Backspace behaves identically to Delete; typing in a text field never triggers deletion (positive pin of the non-interception guard). Selection via node cards / wire hitbox, dialog confirmed/cancelled via the ConfirmDialog buttons. All pinned existing behavior — no production change needed.
+
+**Validation:** 5 new · topology suites 96/96 · full UI suite 262 files / 4049 tests green · typecheck + eslint clean.
+
+**Commits:** (hash below)
+
+**Follow-ups (deliberately NOT done):** the connection-cancel affordance (Escape while connecting) and the wire label priority on multi-warehouse Pro-tier connections remain untested; the dev-mock retail cart/undo reload persistence is still open on the mock side.

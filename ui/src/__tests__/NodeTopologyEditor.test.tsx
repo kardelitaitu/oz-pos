@@ -1354,6 +1354,85 @@ describe('NodeTopologyEditor — wire creation', () => {
   });
 });
 
+// ── Delete / Backspace key flow ─────────────────────────────────
+
+describe('NodeTopologyEditor — Delete/Backspace key flow', () => {
+  it('Delete key deletes a selected wireless node immediately without a dialog', async () => {
+    renderEditor();
+    const baseline = getNodeCount();
+
+    fireEvent.click(screen.getByText('+ Store Node'));
+    await waitFor(() => expect(screen.getByText('New Store')).toBeInTheDocument());
+    const nodes = document.querySelectorAll('.topology-node');
+    fireEvent.mouseDown(nodes[nodes.length - 1] as Element, { button: 0 });
+
+    fireEvent.keyDown(window, { key: 'Delete' });
+
+    await waitFor(() => expect(getNodeCount()).toBe(baseline));
+    expect(screen.queryByText('Delete Node')).not.toBeInTheDocument();
+  });
+
+  it('Backspace key behaves like Delete for a selected wireless node', async () => {
+    renderEditor();
+    const baseline = getNodeCount();
+
+    fireEvent.click(screen.getByText('+ Store Node'));
+    await waitFor(() => expect(screen.getByText('New Store')).toBeInTheDocument());
+    const nodes = document.querySelectorAll('.topology-node');
+    fireEvent.mouseDown(nodes[nodes.length - 1] as Element, { button: 0 });
+
+    fireEvent.keyDown(window, { key: 'Backspace' });
+
+    await waitFor(() => expect(getNodeCount()).toBe(baseline));
+  });
+
+  it('Delete key opens the confirm dialog for a wired node; Cancel leaves everything intact', () => {
+    renderEditor();
+    const nodeCount = getNodeCount();
+    const wireCount = getWireCount();
+    selectFirstNode(); // store-1 has connected wires
+
+    fireEvent.keyDown(window, { key: 'Delete' });
+
+    expect(screen.getByText('Delete Node')).toBeInTheDocument();
+    expect(screen.getByText(/This node has connected wires/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Cancel'));
+    expect(screen.queryByText('Delete Node')).not.toBeInTheDocument();
+    expect(getNodeCount()).toBe(nodeCount);
+    expect(getWireCount()).toBe(wireCount);
+  });
+
+  it('confirming the Delete-key dialog removes the wired node and its wires', () => {
+    renderEditor();
+    const nodeCount = getNodeCount();
+    const wireCount = getWireCount();
+    selectFirstNode();
+
+    fireEvent.keyDown(window, { key: 'Delete' });
+    fireEvent.click(screen.getByText('Delete')); // confirm label
+
+    expect(getNodeCount()).toBe(nodeCount - 1);
+    expect(getWireCount()).toBe(wireCount - 1); // store-1's only wire (w-1) goes with it
+    expect(screen.queryByText('Delete Node')).not.toBeInTheDocument();
+  });
+
+  it('Delete key on a selected wire opens the wire dialog; confirm removes the wire', () => {
+    renderEditor();
+    const wireCount = getWireCount();
+
+    const hitbox = document.querySelector('.wire-hitbox') as HTMLElement;
+    fireEvent.click(hitbox);
+    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'Delete' });
+    expect(screen.getByText('Delete Wire')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Delete')); // confirm label
+    expect(getWireCount()).toBe(wireCount - 1);
+  });
+});
+
 it('does not toast when the selected node survives a preset load', () => {
     renderEditor();
 
