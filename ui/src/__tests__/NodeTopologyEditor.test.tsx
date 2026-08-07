@@ -798,6 +798,46 @@ describe('NodeTopologyEditor Component', () => {
     expect(screen.getAllByText('Load Preset').length).toBeGreaterThanOrEqual(1);
   });
 
+  it('re-arms the unsaved-changes dialog when Undo or Redo runs after Apply', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    renderEditor({ onSave });
+
+    await waitFor(() => {
+      expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
+    });
+
+    // Build a 5-node canvas (preset 3 + A + B), saving after each add so
+    // both additions are persisted and the canvas is clean afterwards.
+    fireEvent.click(screen.getByText('+ Store Node')); // node A → 4
+    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByText('+ Store Node')); // node B → 5
+    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(2));
+
+    // Undo drops node B — the canvas now diverges from the saved 5-node
+    // state, so a preset load must re-confirm instead of silently
+    // discarding the undone-to canvas.
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true });
+    expect(getNodeCount()).toBe(4);
+
+    fireEvent.click(screen.getByText('Retail Preset'));
+    expect(screen.getAllByText('Load Preset').length).toBeGreaterThanOrEqual(1);
+
+    // Cancel the dialog — the undone-to canvas must survive.
+    fireEvent.keyDown(canvas, { key: 'Escape' });
+    expect(getNodeCount()).toBe(4);
+
+    // Redo re-applies node B and must also re-arm the dialog.
+    fireEvent.keyDown(canvas, { key: 'y', ctrlKey: true });
+    expect(getNodeCount()).toBe(5);
+    fireEvent.click(screen.getByText('Resto & KDS Preset'));
+    expect(screen.getAllByText('Load Preset').length).toBeGreaterThanOrEqual(1);
+    fireEvent.keyDown(canvas, { key: 'Escape' });
+    expect(getNodeCount()).toBe(5);
+  });
+
   it('handles empty idMap gracefully (no remapping)', async () => {
     const onSave = vi.fn().mockResolvedValue({});
     renderEditor({ onSave });

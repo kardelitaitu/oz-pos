@@ -795,3 +795,15 @@ Clean (0 errors).
 **Tests:** editor suite 97 (3 new) · topology suites 125/125 · full UI suite 262 files / 4078 tests · typecheck + eslint clean · drift guard clean.
 
 **Follow-ups:** the backend `save`/diff path still writes `from_port: Option` — a future slice could normalize ports server-side at save time so the DB never stores null ports at all; today the editor is fully tolerant either way.
+
+## 2026-08-07 — TDD cycle: undo/redo after Apply silently un-dirties the canvas (topology editor)
+
+### Undo/redo past a saved state let a preset load discard the canvas silently
+**Problem:** `isDirtyRef` was only set true by `pushHistory` and false by Apply-success and preset load — `popUndo`/`popRedo` never touched it. After a successful Apply, undoing (or redoing) restores a state that diverges from the last save, but the flag stayed false. A preset click then loaded directly, silently discarding the undone-to canvas (e.g. add A → Apply → add B → Apply → Undo → the 4-node canvas with A is dropped without the "unsaved changes" confirm). The undo/redo/toolbar/history matrix was otherwise fully pinned; this was the one gap between "canvas differs from backend" and the dirty gate.
+
+**Solution:** Red→Green. The Red test builds a 5-node canvas with two applies, Ctrl+Z (4 nodes), clicks Retail Preset asserting the `Load Preset` dialog appears and Escape-cancel keeps 4 nodes, then Ctrl+Y (5 nodes) asserting the dialog again and Escape keeps 5 — failed pre-fix with "Unable to find an element with the text: Load Preset" (preset loaded directly). Green re-arms `isDirtyRef.current = true` in both `popUndo` and `popRedo`. Conservative over-approximation accepted: undoing a same-preset load restores an identical state yet re-arms the dialog — a harmless spurious confirm errs on the safe side vs. silent data loss. Reviewer confirmed no existing test hits undo→preset without an intervening edit (apply-then-preset, plain-click-preset, in-flight-connection, Apply-failure paths all unaffected); the `isDirtyRef` doc comment was updated to reflect the undo/redo write sites.
+
+**Commits:** `(this cycle)`
+**Tests:** editor suite 98 (1 new) · topology suites 126/126 · full UI suite 262 files / 4079 tests · typecheck + eslint clean · drift guard clean.
+
+**Follow-ups:** the exact-dirty alternative (compare canvas against the last applied snapshot) would remove the false-positive confirm, at the cost of snapshot bookkeeping — worth it only if the spurious dialog ever annoys users; the conservative flag is correct for now.

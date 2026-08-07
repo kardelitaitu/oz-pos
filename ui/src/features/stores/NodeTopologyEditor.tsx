@@ -231,7 +231,8 @@ export default function NodeTopologyEditor({
 
   /** Skip the next workspaceInstances-triggered reload (set before calling onSave). */
   const skipNextLoadRef = useRef(false);
-  /** Track whether user has made any edits since last preset load. */
+  /** Track whether the canvas diverges from the last Apply/preset load — set by
+   *  every edit (pushHistory) and by undo/redo, cleared on save and preset load. */
   const isDirtyRef = useRef(false);
   /**
    * Node id for which an inspector edit already pushed an undo entry in
@@ -514,6 +515,10 @@ export default function NodeTopologyEditor({
     setNodes(entry.nodes);
     setWires(entry.wires);
     setHistory((prev) => prev.slice(0, -1));
+    // The undone-to canvas may diverge from the last Apply — re-arm the
+    // dirty flag so a preset load re-confirms instead of silently
+    // discarding a state the user stepped back to after a save.
+    isDirtyRef.current = true;
     // A post-undo edit is a fresh session — it must push a new entry.
     inspectorHistoryPushedForRef.current = null;
     // Undoing a deletion restores the removed node — re-select it so the
@@ -536,6 +541,9 @@ export default function NodeTopologyEditor({
     setNodes(entry.nodes);
     setWires(entry.wires);
     setRedo((prev) => prev.slice(0, -1));
+    // Same rule as undo: a re-applied canvas may diverge from the last
+    // Apply, so re-arm the dirty flag before any preset load.
+    isDirtyRef.current = true;
     // A post-redo edit is a fresh session — it must push a new entry.
     inspectorHistoryPushedForRef.current = null;
   }, [redo, nodes, wires]);
