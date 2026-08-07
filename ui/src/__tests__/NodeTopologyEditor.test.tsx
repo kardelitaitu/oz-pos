@@ -1485,6 +1485,63 @@ describe('NodeTopologyEditor — duplicate detection vs defaulted ports', () => 
   });
 });
 
+// ── Canvas shortcuts vs focused chrome controls ─────────────────
+
+describe('NodeTopologyEditor — canvas shortcuts vs focused chrome', () => {
+  it('does not delete the canvas when a tool-rack button has keyboard focus', () => {
+    renderEditor();
+
+    // Clicking '+ Store Node' adds AND selects the new node; the button
+    // keeps keyboard focus after the click (browser behavior). A stray
+    // Delete/Backspace must NOT instantly delete the just-added node via
+    // the immediate-delete (no-wires) path.
+    const addBtn = screen.getByText('+ Store Node');
+    fireEvent.click(addBtn);
+    expect(getNodeCount()).toBe(4);
+
+    addBtn.focus();
+    fireEvent.keyDown(addBtn, { key: 'Delete' });
+
+    expect(getNodeCount()).toBe(4);
+    expect(screen.queryByText('Delete Node')).not.toBeInTheDocument();
+  });
+
+  it('keeps arrow-nudge and Escape inert while a header button has focus', () => {
+    renderEditor();
+
+    // Select a node so the nudge/selection paths would otherwise fire.
+    const firstNode = document.querySelector('.topology-node') as HTMLElement;
+    fireEvent.mouseDown(firstNode, { button: 0 });
+    fireEvent.mouseUp(firstNode); // end the drag cleanly (no ghost drag)
+    expect(document.querySelector('.node-selected')).not.toBeNull();
+
+    const simBtn = screen.getByText('Test Order Simulation');
+    simBtn.focus();
+
+    // Arrow keys must not nudge the canvas (no history entry → no Undo).
+    fireEvent.keyDown(simBtn, { key: 'ArrowDown' });
+    expect(screen.queryByText('Undo (Ctrl+Z)')).not.toBeInTheDocument();
+
+    // Escape must not clear the selection under the focused control.
+    fireEvent.keyDown(simBtn, { key: 'Escape' });
+    expect(document.querySelector('.node-selected')).not.toBeNull();
+  });
+
+  it('still deletes via Delete when a canvas node card itself has focus', () => {
+    renderEditor();
+
+    // The guard is chrome-scoped: canvas-internal elements (node cards,
+    // ports, wire labels) keep their keyboard shortcuts.
+    fireEvent.click(screen.getByText('+ Store Node'));
+    const count = getNodeCount();
+    const addedNode = document.querySelectorAll('.topology-node')[count - 1] as HTMLElement;
+    addedNode.focus();
+    fireEvent.keyDown(addedNode, { key: 'Delete' });
+
+    expect(getNodeCount()).toBe(count - 1);
+  });
+});
+
 // ── Delete / Backspace key flow ─────────────────────────────────
 
 describe('NodeTopologyEditor — Delete/Backspace key flow', () => {

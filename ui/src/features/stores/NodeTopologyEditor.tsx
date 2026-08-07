@@ -574,6 +574,19 @@ export default function NodeTopologyEditor({
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
         return;
       }
+      // Guard: while a non-canvas control (tool rack, header, inspector)
+      // owns keyboard focus, canvas shortcuts are inert — a stray
+      // Delete/Backspace/arrow after clicking a tool-card or header button
+      // would otherwise mutate (or instantly delete) the selected element
+      // the user is not looking at. Canvas-internal elements (node cards,
+      // port sockets, wire labels) are NOT covered and keep their
+      // shortcuts, so keyboard Delete on a focused node still works.
+      // `closest` only exists on Elements — keydown can target window/document
+      // (tests, programmatic dispatch), which must never throw out of the guard.
+      if (target && typeof target.closest === 'function'
+        && target.closest('.node-tool-rack, .node-topology-header, .node-inspector-drawer')) {
+        return;
+      }
       // Guard: a confirm dialog owns the keyboard while it is open — Escape
       // (and any canvas shortcut) must not clear the selection or mutate the
       // canvas under an open delete/preset dialog. The Modal's focus trap

@@ -807,3 +807,15 @@ Clean (0 errors).
 **Tests:** editor suite 98 (1 new) · topology suites 126/126 · full UI suite 262 files / 4079 tests · typecheck + eslint clean · drift guard clean.
 
 **Follow-ups:** the exact-dirty alternative (compare canvas against the last applied snapshot) would remove the false-positive confirm, at the cost of snapshot bookkeeping — worth it only if the spurious dialog ever annoys users; the conservative flag is correct for now.
+
+## 2026-08-07 — TDD cycle: canvas shortcuts fire under a focused chrome control (topology editor)
+
+### A stray Delete/Backspace after clicking a tool-card instantly deleted the canvas selection
+**Problem:** the keydown handler guarded INPUT/TEXTAREA/contentEditable and open dialogs, but not chrome controls. After a mouse click, tool-rack and header buttons keep keyboard focus in browsers, so pressing Delete/Backspace immediately after clicking '+ Store Node' hit the canvas handler and instantly deleted the just-added node via the no-wires immediate-delete path (no dialog); arrow keys nudged the selection; Escape cleared it. A keystroke aimed at nothing destroyed canvas work the user wasn't looking at.
+
+**Solution:** Red→Green. Three Red tests: Delete on a focused tool-card keeps the node (count stays 4, no dialog), ArrowDown+Escape on a focused header button do not nudge/deselect (no Undo button, `.node-selected` survives), and a focused canvas node card still deletes via Delete (proving the guard is chrome-scoped, not blanket — a `button`/`role="button"` guard would have broken node-card Delete, port Escape-cancel, and the wire-label toggle). Green added a chrome-scoped guard to the keydown handler: `target.closest('.node-tool-rack, .node-topology-header, .node-inspector-drawer')` returns early; canvas-internal elements (node cards, port sockets, wire labels) are deliberately excluded. The Green run caught a real harness interaction: 5 pre-existing Delete/Backspace tests fire `keyDown(window, …)` where `e.target` is window — the initial `target.closest` threw and killed the handler; fixed with a `typeof target.closest === 'function'` guard (window/document never throw out of the handler). Deliberate decision: ALL shortcuts (incl. Ctrl+Z) are inert while chrome holds focus — the simple "chrome owns the keyboard" model consistent with the dialog guard; the alternative (blocking only destructive keys) is a journaled follow-up if the Ctrl+Z-on-focused-Undo-button case ever annoys.
+
+**Commits:** `(this cycle)`
+**Tests:** editor suite 101 (3 new) · topology suites 129/129 · full UI suite 262 files / 4082 tests · typecheck + eslint clean · drift guard clean.
+
+**Follow-ups:** (1) if the all-shortcuts-inert model ever feels restrictive, narrow the chrome guard to destructive/mutating keys only (Delete/Backspace/arrows); (2) the guard keys off `e.target`, matching the existing INPUT guard — `document.activeElement` would be more robust to programmatic dispatches but diverges from the file's convention.
