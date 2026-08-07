@@ -902,3 +902,13 @@ Clean (0 errors).
 **Commits:** `test(topology): complete chrome-focus keydown guard pin matrix`.
 
 **Follow-ups:** The guard selector is the single source of truth for "chrome owns the keyboard" — any new header/tool-rack/inspector control is automatically covered, but a NEW top-level container (e.g. a future floating toolbar outside the three) must be added to the selector. The `handleAddNode` pushHistory behavior (node adds are undoable) is why arrow-nudge pins must seed selection via mouseDown, not a click.
+
+## 2026-08-07 — TDD cycle: pin load-side stays raw for legacy null wire ports (topology)
+
+**Problem:** The `af7710d8` cycle normalized null `from_port`/`to_port` at SAVE time, but legacy rows written before it still store null ports. The open question was whether `load_topology_data` should also normalize at load — or stay raw. Nothing pinned the load boundary itself (only the serde layer, `load_older_wire_without_direction_label_ports`).
+
+**Decision (documented + pinned):** load-side stays raw. The loader is a faithful reflection of what is stored — normalizing at load would mask rows that still need healing and duplicate the save-side default rule. The frontend applies `fromPort ?? 'right'` / `toPort ?? 'left'` at every consumer (NodeTopologyEditor render, drag-preview, duplicate-wire detector), and a load→save cycle heals legacy nulls via the save-side `get_or_insert`. Pinned by `load_topology_data_preserves_raw_legacy_null_ports`: legacy JSON (no ports) → load returns `None` ports AND the stored JSON key round-trips byte-identical (guards against write-back side effects — the real hazard in a load function).
+
+**Validation:** Red proven via discriminator — temporarily adding `get_or_insert` to the load path made the test fail; restored. Module 189/189 · full lib 805/805 · fmt + clippy clean · reviewer no blockers (doc-comment hash reference softened to a stable phrase; byte-identity assertion kept deliberately as the write-back guard).
+
+**Commits:** test + doc only — no production behavior change.

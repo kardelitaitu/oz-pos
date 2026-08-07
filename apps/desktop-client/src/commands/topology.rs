@@ -379,6 +379,20 @@ pub fn save_topology_data(
 /// Load and deserialise persisted topology data.
 ///
 /// Returns `None` when no topology has been saved yet.
+/// Load and deserialise persisted topology data.
+///
+/// Returns `None` when no topology has been saved yet.
+///
+/// # Why ports stay raw on the load side
+///
+/// This function deliberately does **not** normalize legacy null wire ports
+/// (rows written before `save_topology_data` gained its `get_or_insert`
+/// defaults). The loader is a faithful reflection of what is stored —
+/// normalizing here would mask rows that still need healing, and the
+/// frontend applies the renderer defaults (`fromPort ?? 'right'`, `toPort ??
+/// 'left'`) at every consumption point anyway. A load -> save cycle heals a
+/// legacy row via the save-side normalization; the load boundary stays raw.
+/// Pinned by the `..._preserves_raw_legacy_null_ports` test below.
 pub fn load_topology_data(conn: &Connection) -> Result<Option<TopologyData>, AppError> {
     let raw = oz_core::Settings::get(conn, TOPOLOGY_SETTING_KEY)?;
     match raw {
@@ -718,6 +732,31 @@ mod tests {
         let conn = fresh_conn();
         let result = load_topology_data(&conn).unwrap();
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn load_topology_data_preserves_raw_legacy_null_ports() {
+        // Legacy rows written BEFORE the af7710d8 save-side normalization
+        // store null ports. load_topology_data must NOT normalize them at
+        // load time: the loader faithfully reflects what is stored, and the
+        // frontend applies the renderer defaults (fromPort ?? 'right',
+        // toPort ?? 'left') at every consumption point. A load->save cycle
+        // heals the row via save_topology_data's own normalization — the
+        // load boundary deliberately stays raw.
+        let conn = fresh_conn();
+        let legacy_json = r#"{"nodes":[{"id":"store-1","type":"store","name":"Legacy Store","x":0,"y":0}],"wires":[{"id":"w-legacy","from_node_id":"store-1","to_node_id":"store-1","direction":"one-way"}]}"#;
+        oz_core::Settings::set(&conn, TOPOLOGY_SETTING_KEY, legacy_json).unwrap();
+
+        let loaded = load_topology_data(&conn).unwrap().unwrap();
+        assert_eq!(loaded.wires.len(), 1);
+        // Raw passthrough: legacy null ports stay None at the load boundary.
+        assert_eq!(loaded.wires[0].from_port, None);
+        assert_eq!(loaded.wires[0].to_port, None);
+        // The JSON key round-trips untouched (no write-back side effects).
+        let stored = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)
+            .unwrap()
+            .unwrap();
+        assert_eq!(stored, legacy_json);
     }
 
     #[test]
