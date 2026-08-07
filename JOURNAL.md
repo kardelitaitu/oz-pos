@@ -741,3 +741,17 @@ Clean (0 errors).
 **Commits:** (hash below)
 
 **Follow-ups (deliberately NOT done):** the redo stack is unbounded (only `setRedo([])` clears it on new edits) — a symmetric redo cap was not part of this slice; the `> 50` boundary means the stack holds exactly 50 entries, now commented in the test.
+
+
+## 2026-08-07 — Topology editor: direction-toggle undo/redo + connected label
+
+### Two last wire-label/history micro-gaps after 88 editor tests
+**Problem:** The redo surface was already fully covered (button, Ctrl+Y, Ctrl+Shift+Z, branch clearing), but two micro-gaps remained: (1) the direction toggle pushes history, yet no test proved undo restores a toggled wire's direction and redo re-applies it; (2) the non-warehouse branch of the wire-label ternary (`topology-wire-label-connected`) was unpinned — the warehouse branches (stock-deduct/fallback) had tests but the plain connected label did not.
+
+**Solution:** 2 characterization tests: (1) click the first wire label → ↔, Ctrl+Z → back to →, Ctrl+Y → ↔ again (the label textContent reflects the keyed wire-group reconciliation; both assertions are true discriminators — either missing history wiring fails them); (2) create a store→ws wire with the same non-duplicate fixture as the existing wire-creation test and assert the new (last) wire-group carries `topology-wire-label-connected`. All pinned existing behavior — no production change needed.
+
+**Validation:** 2 new · editor suite 90 · topology suites 118/118 · full UI suite 262 files / 4071 tests green · typecheck + eslint clean.
+
+**Commits:** (hash below)
+
+**Follow-ups (deliberately NOT done):** the label assertions rely on the captured DOM reference / identity-l10n raw keys (file-wide conventions, commented where geometry-dependent); the redo stack remains unbounded (cleared on new edits).

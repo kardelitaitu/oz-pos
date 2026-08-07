@@ -1910,3 +1910,42 @@ describe('NodeTopologyEditor — undo history cap', () => {
     expect(getNodeCount()).toBe(initial + 1);
   });
 });
+
+// ── Direction toggle undo/redo ──────────────────────────────────
+
+describe('NodeTopologyEditor — direction toggle undo/redo', () => {
+  it('undo restores a toggled wire direction and redo re-applies it', () => {
+    renderEditor();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    const firstLabel = screen.getAllByText(/→|↔/)[0]!;
+    expect(firstLabel.textContent).toContain('→');
+
+    // Toggle to two-way — handleToggleWireDirection pushes history.
+    fireEvent.click(firstLabel);
+    expect(firstLabel.textContent).toContain('↔');
+
+    // One undo returns to one-way; one redo re-applies two-way.
+    fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true });
+    expect(firstLabel.textContent).toContain('→');
+    fireEvent.keyDown(canvas, { key: 'y', ctrlKey: true });
+    expect(firstLabel.textContent).toContain('↔');
+  });
+});
+
+// ── Connected label on regular wires ────────────────────────────
+
+describe('NodeTopologyEditor — connected wire label', () => {
+  it('labels a regular store→workspace wire as connected', () => {
+    renderEditor();
+    const baseline = getWireCount();
+
+    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    fireEvent.click(portOf(nodeAt(1), 'top'));
+    expect(getWireCount()).toBe(baseline + 1);
+
+    // Non-warehouse wires carry the plain connected label (raw identity key).
+    const wires = document.querySelectorAll('.wire-group');
+    const last = wires[wires.length - 1]!;
+    expect(last.textContent).toContain('topology-wire-label-connected');
+  });
+});
