@@ -871,3 +871,16 @@ Clean (0 errors).
 **Commits:** `fix(topology): preset load stops simulation; pulse/interval lifecycle pinned`.
 
 **Follow-ups:** (1) The non-skip workspaceInstances rebuild (authoritative reload) has the IDENTICAL hazard — it replaces the canvas and cancels in-flight connections but leaves the sim running on the rebuilt wires; a one-line `setIsSimulating(false)` guard belongs there (the save-triggered skip branch must NOT stop it — it only flips persisted flags). (2) `setSimPulseStep(0)` resets only on preset load, not on the Stop button — restart-after-stop resumes mid-bezier; either reset on both or accept the asymmetry deliberately.
+
+## 2026-08-07 — Save-time port normalization: DB never stores null topology wire ports (topology.rs)
+
+### The boundary gap
+**Problem:** `save_topology_data` validated `Unknown` ports but allowed `None` — so a wire saved with null `from_port`/`to_port` (the frontend sends null for legacy loaded wires) persisted `null` in the `oz-pos/topology` settings JSON. Every consumer (frontend loader, duplicate-wire detector) then had to re-apply the renderer defaults (`fromPort ?? 'right'`, `toPort ?? 'left'`). Journaled as a follow-up from the duplicate-wire cycle (a7849458): normalize server-side at save time.
+
+**Solution:** Red→Green. Red: `save_normalizes_null_ports_to_renderer_defaults` saved a wire with `from_port: None`/`to_port: None` and asserted the loaded wire has `Some(PortName::Right)`/`Some(PortName::Left)` — failed pre-fix (loaded None). Green: `save_topology_data` normalizes BEFORE validation via `wires.into_iter().map(...)` with `Option::get_or_insert(PortName::Right)` / `get_or_insert(PortName::Left)` — fills ONLY None (explicit bottom/top anchors survive untouched; the Unknown-port rejection is unaffected since normalization never touches `Some(Unknown)`). The test also pins the complement: a second wire with explicit Bottom/Top ports round-trips unchanged.
+
+**Boundary notes:** desktop-only command (the tablet client has no topology command — verified). Save-time is the single-writer boundary: new saves are clean, while legacy rows already stored with null ports still load as `None` and the frontend handles them — incremental, non-breaking. The stored JSON is only consumed by `load_topology_data` (serde `Option` accepts both) and settings sync (same deserialization), so no hidden consumer expects null. The frontend IPC contract is untouched — the wire shape on the wire is unchanged; only stored values become non-null.
+
+**Validation:** Red confirmed (assertion failed pre-fix) · topology module 188/188 (incl. strengthened test) · full oz-pos-app lib 804/804 · `cargo fmt --check` clean · `cargo clippy -p oz-pos-app --lib -- -D warnings` clean · reviewer no blockers (get_or_insert + complement-assertion nits applied).
+
+**Commits:** `fix(topology): normalize null wire ports to defaults at save time`.

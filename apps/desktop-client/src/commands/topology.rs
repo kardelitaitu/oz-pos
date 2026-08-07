@@ -275,6 +275,23 @@ pub fn save_topology_data(
     nodes: Vec<TopologyNodePayload>,
     wires: Vec<TopologyWirePayload>,
 ) -> Result<(), AppError> {
+    // Normalize null ports to the editor's renderer defaults so the DB
+    // never stores a wire with null from/to ports — the frontend loader
+    // maps null -> undefined, forcing every consumer (e.g. the frontend
+    // duplicate-wire detector) to re-apply these same defaults
+    // (fromPort ?? 'right', toPort ?? 'left'). Done BEFORE validation so
+    // the port checks below see the values that will actually be stored.
+    let wires: Vec<TopologyWirePayload> = wires
+        .into_iter()
+        .map(|mut w| {
+            // get_or_insert fills ONLY None — explicitly-set ports (e.g. a
+            // bottom/top anchor chosen in the editor) survive untouched.
+            w.from_port.get_or_insert(PortName::Right);
+            w.to_port.get_or_insert(PortName::Left);
+            w
+        })
+        .collect();
+
     // Validate wire IDs are unique.
     let mut seen_wire_ids = std::collections::HashSet::new();
     for wire in &wires {
@@ -628,6 +645,72 @@ mod tests {
         assert_eq!(loaded.wires.len(), 1);
         assert_eq!(loaded.wires[0].id, "w-1");
         assert_eq!(loaded.wires[0].from_port, Some(PortName::Right));
+    }
+
+    #[test]
+    fn save_normalizes_null_ports_to_renderer_defaults() {
+        let conn = fresh_conn();
+        let nodes = vec![
+            TopologyNodePayload {
+                id: "store-1".into(),
+                node_type: "store".into(),
+                name: "Main Store".into(),
+                subtitle: Some("Primary".into()),
+                x: 100.0,
+                y: 200.0,
+                tier_requirement: None,
+                telemetry_badge: Some("Online".into()),
+                telemetry_status: Some("online".into()),
+                metadata: None,
+            },
+            TopologyNodePayload {
+                id: "ws-1".into(),
+                node_type: "workspace".into(),
+                name: "POS #1".into(),
+                subtitle: None,
+                x: 300.0,
+                y: 100.0,
+                tier_requirement: None,
+                telemetry_badge: None,
+                telemetry_status: None,
+                metadata: None,
+            },
+        ];
+        // Null ports must be normalized to the editor's renderer defaults at
+        // SAVE time so the DB never stores a wire with null from/to ports —
+        // the frontend loader maps null → undefined, forcing every consumer
+        // (e.g. the duplicate-wire detector) to re-apply the defaults.
+        let wires = vec![
+            TopologyWirePayload {
+                id: "w-1".into(),
+                from_node_id: "store-1".into(),
+                to_node_id: "ws-1".into(),
+                direction: "one-way".into(),
+                label: Some("Binds Store".into()),
+                from_port: None,
+                to_port: None,
+            },
+            // Explicit non-default ports must NOT be normalized away — only
+            // None gets filled (the get_or_insert contract).
+            TopologyWirePayload {
+                id: "w-2".into(),
+                from_node_id: "store-1".into(),
+                to_node_id: "ws-1".into(),
+                direction: "one-way".into(),
+                label: None,
+                from_port: Some(PortName::Bottom),
+                to_port: Some(PortName::Top),
+            },
+        ];
+
+        save_topology_data(&conn, nodes, wires).unwrap();
+        let loaded = load_topology_data(&conn).unwrap().unwrap();
+
+        assert_eq!(loaded.wires.len(), 2);
+        assert_eq!(loaded.wires[0].from_port, Some(PortName::Right));
+        assert_eq!(loaded.wires[0].to_port, Some(PortName::Left));
+        assert_eq!(loaded.wires[1].from_port, Some(PortName::Bottom));
+        assert_eq!(loaded.wires[1].to_port, Some(PortName::Top));
     }
 
     #[test]
