@@ -1039,6 +1039,20 @@ fn run_set_setting(
 /// and the conflict resolver treats `settings.*` as version-LWW. Callers
 /// enqueue on the GLOBAL db (the sync daemon only watches the global
 /// queue), never the store db the value was written to.
+///
+/// A new local save SUPERSEDES any still-pending `settings.update` item
+/// for the same key (same tenant): the newest local intent replaces
+/// unsynced older ones. Without this, a save of v1→v2→v1 while offline
+/// would leave [v1, v2, v1] pending and the daemon would push v2 last,
+/// leaving the remote at v2 while the local is at v1.
+///
+/// Ordering is deliberately ENQUEUE-THEN-SUPERSEDE: if the enqueue fails
+/// (warn-and-continue at the call site), the old pending items survive —
+/// exactly the pre-supersede behavior. If the supersede fails instead, the
+/// key briefly holds a duplicate (old + new) pair, which the apply side
+/// already handles (replay-safe, version-LWW — the new value pushed last
+/// wins). The reverse order (delete-then-enqueue) would lose the update
+/// entirely if the enqueue failed after the delete.
 fn enqueue_settings_updates(
     store: &Store,
     entries: &HashMap<String, String>,
@@ -1051,12 +1065,39 @@ fn enqueue_settings_updates(
             "value": value,
             "terminal_id": terminal_id,
         });
-        store.enqueue_offline_scoped(
+        let fresh = store.enqueue_offline_scoped(
             "settings.update",
             &payload.to_string(),
             tenant_id,
             SyncPriority::Low,
         )?;
+        // Exempt the item we just created — it IS the newest intent.
+        supersede_pending_settings_key(store, key, tenant_id, &fresh.id)?;
+    }
+    Ok(())
+}
+
+/// Delete still-pending `settings.update` items for the same key within
+/// the given tenant, so the freshest local save wins when the queue drains.
+///
+/// Tenant-scoped by construction (`list_pending_offline_for_tenant` +
+/// `delete_offline_item_for_tenant`), so store-y's save never removes
+/// store-x's pending item. Malformed payloads are skipped defensively.
+fn supersede_pending_settings_key(
+    store: &Store,
+    key: &str,
+    tenant_id: &str,
+    keep_id: &str,
+) -> Result<(), AppError> {
+    let pending = store.list_pending_offline_for_tenant(tenant_id)?;
+    for item in pending {
+        if item.id == keep_id || item.action != "settings.update" {
+            continue;
+        }
+        let v: serde_json::Value = serde_json::from_str(&item.payload).unwrap_or_default();
+        if v["key"].as_str() == Some(key) {
+            store.delete_offline_item_for_tenant(&item.id, tenant_id)?;
+        }
     }
     Ok(())
 }
@@ -1609,6 +1650,119 @@ mod tests {
             .collect();
         keys.sort();
         assert_eq!(keys, vec!["a".to_string(), "b".to_string()]);
+    }
+
+    /// A second local save of the SAME key must supersede the still-pending
+    /// item (replace it), not append a duplicate — otherwise the daemon
+    /// pushes stale values in order and a save of v1→v2→v1 while offline
+    /// ends with the remote at v2 while the local is at v1.
+    #[test]
+    fn settings_save_supersedes_pending_item_for_same_key() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+
+        enqueue_settings_updates(
+            &store,
+            &HashMap::from([("theme".to_string(), "dark".to_string())]),
+            "term-1",
+            "default",
+        )
+        .unwrap();
+        enqueue_settings_updates(
+            &store,
+            &HashMap::from([("theme".to_string(), "light".to_string())]),
+            "term-1",
+            "default",
+        )
+        .unwrap();
+
+        let pending = store.list_pending_offline().unwrap();
+        assert_eq!(
+            pending.len(),
+            1,
+            "second save must replace the pending item"
+        );
+        let v: serde_json::Value = serde_json::from_str(&pending[0].payload).unwrap();
+        assert_eq!(
+            v["value"], "light",
+            "pending item must carry the newest value"
+        );
+    }
+
+    /// Superseding one key must leave pending items for OTHER keys intact.
+    #[test]
+    fn settings_save_keeps_pending_items_for_other_keys() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+
+        enqueue_settings_updates(
+            &store,
+            &HashMap::from([
+                ("a".to_string(), "1".to_string()),
+                ("b".to_string(), "2".to_string()),
+            ]),
+            "term-1",
+            "default",
+        )
+        .unwrap();
+        enqueue_settings_updates(
+            &store,
+            &HashMap::from([("a".to_string(), "3".to_string())]),
+            "term-1",
+            "default",
+        )
+        .unwrap();
+
+        let pending = store.list_pending_offline().unwrap();
+        assert_eq!(pending.len(), 2);
+        let mut keyed: Vec<(String, String)> = pending
+            .iter()
+            .map(|i| {
+                let v: serde_json::Value = serde_json::from_str(&i.payload).unwrap();
+                (
+                    v["key"].as_str().unwrap().to_string(),
+                    v["value"].as_str().unwrap().to_string(),
+                )
+            })
+            .collect();
+        keyed.sort();
+        assert_eq!(
+            keyed,
+            vec![
+                ("a".to_string(), "3".to_string()),
+                ("b".to_string(), "2".to_string())
+            ]
+        );
+    }
+
+    /// Supersede must be tenant-scoped — store-y's save of the same key
+    /// must not remove store-x's pending item (multi-store isolation).
+    #[test]
+    fn settings_supersede_is_tenant_scoped() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+
+        enqueue_settings_updates(
+            &store,
+            &HashMap::from([("theme".to_string(), "dark".to_string())]),
+            "term-1",
+            "store-x",
+        )
+        .unwrap();
+        enqueue_settings_updates(
+            &store,
+            &HashMap::from([("theme".to_string(), "dark".to_string())]),
+            "term-1",
+            "store-y",
+        )
+        .unwrap();
+
+        let pending = store.list_pending_offline().unwrap();
+        assert_eq!(
+            pending.len(),
+            2,
+            "cross-tenant items must not be superseded"
+        );
     }
 
     #[test]

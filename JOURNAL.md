@@ -555,3 +555,17 @@ Clean (0 errors).
 **Commits:** (follow the two commit hashes below this entry)
 
 **Follow-ups (deliberately NOT done):** (1) the tablet client's `set_setting` is a plain write with no daemon in the tablet process — enqueueing there would be inert; revisit when the tablet gets a sync daemon. (2) No scoped dedup API exists (`enqueue_offline_dedup` is tenant-less), so repeated identical saves while offline create duplicate pending items — functionally harmless (apply is replay-safe, version-LWW) but noisy; a tenant-scoped dedup variant is a future slice. (3) Legacy `set_setting`/`set_settings` could enqueue INSIDE the write tx (same global DB) to close the tiny crash window between `tx.commit()` and the enqueue; scoped commands cannot (cross-DB), so warn-and-continue stays the uniform choice.
+
+
+## 2026-08-07 — Settings enqueue supersedes pending same-key items (SYNC-10 follow-up)
+
+### Repeated offline saves piled duplicate settings.update items; naive dedup would lose the newest intent
+**Problem:** After the SYNC-10 enqueue side landed, every local settings save enqueued a fresh `settings.update` item — so saving the same key repeatedly while offline stacked [v1, v2, v1] and the daemon pushed them in order, ending the remote at v2 while the local was at v1 (version-LWW orders by terminal version, not save order). A payload-dedup "fix" would make it worse: with [v1, v2] pending, re-saving v1 would find the stale v1 payload and skip — the newest intent silently dropped.
+
+**Solution (TDD):** Red tests pinned the correct semantics: a new save SUPERSEDES still-pending items for the same key (same tenant) — one pending item carrying the newest value; other keys survive; store-y's save never removes store-x's item. Green: `supersede_pending_settings_key` (list pending for tenant → delete items whose `settings.update` payload key matches, exempting the freshly-enqueued item by id). Ordering is deliberately ENQUEUE-THEN-SUPERSEDE: an enqueue failure leaves the old items (pre-existing warn-and-continue behavior), while a supersede failure degrades to the harmless duplicate state the apply side already handles — the reverse order would lose the update entirely if the enqueue failed after the delete. All existing queue APIs reused; no new oz-core surface.
+
+**Validation:** 803/803 oz-pos-app lib tests (3 new) · clippy -D warnings clean · fmt clean.
+
+**Commits:** (hash below)
+
+**Follow-ups (deliberately NOT done):** the tablet client's `set_setting` still does a plain `Settings::set` with no terminal_id and no enqueue — confirmed the tablet process runs no sync daemon, so wiring the enqueue there would be inert until the tablet gets one (journaled previously). A general `enqueue_offline_scoped_dedup` (action+payload+tenant) is still unneeded — for settings the correct primitive is supersede-by-key, and no other caller needs payload-dedup across tenants today.
