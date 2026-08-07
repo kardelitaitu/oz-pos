@@ -923,6 +923,18 @@ Clean (0 errors).
 
 **Commits:** `executeDelete` guard + 3 tests. Shared-tree note: other thread's clamp refactor (`nodeTopologyClamp.ts` + hunks in the same files) left uncommitted; my hunks staged selectively via `git add -p` (test hunk 4/4, component hunks 4–5/6).
 
+## 2026-08-07 — TDD cycle: wire direction normalized at the contract boundary (topology editor)
+
+**Problem:** `normalizeTopologyGraph` passed `wire.direction` through verbatim. A corrupt value (legacy JSON with `undefined`, or garbage from manual edits) flowed into the semantic graph un-normalized — the editor renderer and location validation both assume a well-formed direction, and the file's own comment claimed "corrupt directions fall back to one-way" but nothing enforced it.
+
+**Red → Green:** New contract test feeds `'backwards'` and a direction-omitted legacy wire through `normalizeTopologyGraph` and asserts both land on `one-way` (and the graph validates cleanly — corrupt direction is a normalization concern, not a validation error). Confirmed Red (the value flowed through), then Green: `normalizeTopologyGraph` now maps only the two legal non-default states (`two-way`, `reverse`) and folds everything else to `one-way`.
+
+**Why `reverse` is legal:** the 3-state visual direction cycle (`one-way → reverse → two-way`) landed in the same uncommitted batch — direction is presentation-only, so the widened type and the relaxed `invalid-location-connection` clause (dropped `direction !== 'one-way'`) ride along in this commit as the contract's direction story.
+
+**Validation:** Red → Green + discriminator (a missing value reverts to `one-way`, proving normalization runs). Contract suite 9/9 · topology suites 174/174 (contract + card + screen + editor) · typecheck clean · eslint 0 errors · drift guard clean. Type-check note: the omitted-direction fixture needs `direction: undefined as never` — `TopologyWireData.direction` is type-required, and the cast simulates the pre-normalization legacy shape.
+
+**Commits:** `topologyContract.ts` (type widening + normalization + relaxed validation) + 1 contract test. Shared-tree note: the rest of the topology batch (editor polish, connector rail, branch selector, wire tooltips, topologyCard registry) stays uncommitted in the tree.
+
 ## 2026-08-07 — TDD cycle: wire-label onClick stopPropagation contract (topology editor)
 
 **Problem:** The wire label group's onClick (`handleToggleWireDirection`) lacked `stopPropagation` while its onKeyDown sibling already had it. The label sits INSIDE the canvas subtree — a future canvas-level background-click-cancels-connection handler would receive the toggle click as it bubbles, wrongly killing the in-flight connection the toggle is supposed to leave untouched (the very contract pinned by the keep-connection cycles).
