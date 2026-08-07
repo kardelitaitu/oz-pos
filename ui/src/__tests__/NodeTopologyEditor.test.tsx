@@ -798,7 +798,7 @@ describe('NodeTopologyEditor Component', () => {
     expect(screen.getAllByText('Load Preset').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('re-arms the unsaved-changes dialog when Undo or Redo runs after Apply', async () => {
+  it('confirms on preset when Undo diverges from the last Apply, but not when Redo restores it exactly', async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     renderEditor({ onSave });
 
@@ -815,10 +815,11 @@ describe('NodeTopologyEditor Component', () => {
     fireEvent.click(screen.getByText('Apply Topology Changes'));
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(2));
 
-    // Undo drops node B — the canvas now diverges from the saved 5-node
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    // Undo drops node B — the canvas now DIVERGES from the saved 5-node
     // state, so a preset load must re-confirm instead of silently
     // discarding the undone-to canvas.
-    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
     fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true });
     expect(getNodeCount()).toBe(4);
 
@@ -829,13 +830,35 @@ describe('NodeTopologyEditor Component', () => {
     fireEvent.keyDown(canvas, { key: 'Escape' });
     expect(getNodeCount()).toBe(4);
 
-    // Redo re-applies node B and must also re-arm the dialog.
+    // Redo re-applies node B — the canvas is now EXACTLY the last applied
+    // 5-node state, so exact tracking must load the preset directly with
+    // NO confirm (the conservative boolean over-approximation would have
+    // shown a spurious dialog here).
     fireEvent.keyDown(canvas, { key: 'y', ctrlKey: true });
     expect(getNodeCount()).toBe(5);
     fireEvent.click(screen.getByText('Resto & KDS Preset'));
-    expect(screen.getAllByText('Load Preset').length).toBeGreaterThanOrEqual(1);
-    fireEvent.keyDown(canvas, { key: 'Escape' });
-    expect(getNodeCount()).toBe(5);
+    expect(screen.queryByText('Load Preset')).not.toBeInTheDocument();
+    expect(screen.getByText('Grand Bistro')).toBeInTheDocument();
+  });
+
+  it('does not confirm when Undo returns the canvas to the last loaded preset', () => {
+    renderEditor();
+
+    // Loading the same preset is not an edit — it loads directly.
+    fireEvent.click(screen.getByText('Retail Preset'));
+    expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
+
+    // Undo restores the IDENTICAL retail canvas — it still matches the last
+    // preset load, so it is NOT dirty. Exact tracking must not confirm here
+    // (the conservative isDirtyRef over-approximation did, spuriously).
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true });
+    expect(getNodeCount()).toBe(3);
+
+    // Clicking the preset again must load directly — no "Load Preset" dialog.
+    fireEvent.click(screen.getByText('Retail Preset'));
+    expect(screen.queryByText('Load Preset')).not.toBeInTheDocument();
+    expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
   });
 
   it('handles empty idMap gracefully (no remapping)', async () => {
@@ -918,6 +941,29 @@ describe('NodeTopologyEditor Component', () => {
 
     // After remapping, wires should still be present (no loss)
     expect(getWireCount()).toBe(1);
+  });
+
+  it('loads a preset directly after an Apply with idMap remapping (snapshot holds remapped ids)', async () => {
+    const onSave = vi.fn().mockResolvedValue({ 'ws-1': 'ws-remapped-id' });
+    renderEditor({ onSave });
+
+    await waitFor(() => {
+      expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
+    });
+
+    // Apply with a non-empty idMap — every workspace node id changes on
+    // screen via the client-side remap.
+    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledTimes(1);
+    });
+
+    // The applied snapshot must contain the REMAPPED ids (the exact arrays
+    // set on the canvas) — so a preset click right after the save loads
+    // directly with no spurious confirm, even though ids changed on screen.
+    fireEvent.click(screen.getByText('Retail Preset'));
+    expect(screen.queryByText('Load Preset')).not.toBeInTheDocument();
+    expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
   });
 
   // ── Delete via keyboard shortcut also uses input guard (#3) ─────
@@ -1916,6 +1962,7 @@ describe('NodeTopologyEditor — Apply failure resilience', () => {
     // Make a dirty edit: add a node.
     fireEvent.click(screen.getByText('+ Store Node'));
     const countAfterEdit = getNodeCount();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
 
     fireEvent.click(screen.getByText('Apply Topology Changes'));
 
@@ -1928,20 +1975,27 @@ describe('NodeTopologyEditor — Apply failure resilience', () => {
     // The in-memory edit survives the failed save.
     expect(getNodeCount()).toBe(countAfterEdit);
 
-    // Undo still works — the pre-save history entry was not cleared.
-    // (Asserted BEFORE opening a dialog: an open confirm dialog owns the
-    // keyboard, so canvas shortcuts are inert under it.)
-    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
-    fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true });
-    expect(getNodeCount()).toBe(countAfterEdit - 1);
-
-    // Still dirty: a preset click asks about unsaved changes (confirm dialog
-    // title + the unsaved-changes message body are both rendered).
+    // Still dirty WHILE the edit is present: a preset click asks about
+    // unsaved changes (confirm dialog title + the unsaved-changes message
+    // body are both rendered).
     fireEvent.click(screen.getByText('Retail Preset'));
     expect(screen.getAllByText('Load Preset').length).toBeGreaterThan(0);
     expect(
       screen.getByText(/Loading a preset will replace your current topology/),
     ).toBeInTheDocument();
+    fireEvent.keyDown(canvas, { key: 'Escape' });
+    expect(getNodeCount()).toBe(countAfterEdit);
+
+    // Undo still works — the pre-save history entry was not cleared.
+    fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true });
+    expect(getNodeCount()).toBe(countAfterEdit - 1);
+
+    // The undone-to canvas equals the last applied state (the failed save
+    // never updated the applied snapshot), so exact tracking loads the
+    // preset directly — NO spurious confirm.
+    fireEvent.click(screen.getByText('Retail Preset'));
+    expect(screen.queryByText('Load Preset')).not.toBeInTheDocument();
+    expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
   });
 
   it('does not clear selection when Apply fails before the idMap branch', async () => {

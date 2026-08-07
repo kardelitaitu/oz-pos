@@ -137,6 +137,51 @@ const PRESET_RESTAURANT: { nodes: TopologyNodeData[]; wires: TopologyWireData[] 
   ],
 };
 
+/**
+ * Exact dirty check: true when two canvas states differ in their PERSISTED
+ * fields. Transient fields are excluded — telemetryBadge/telemetryStatus
+ * (never edited), and metadata.persisted (an internal sync bookkeeping flag
+ * flipped by the save-triggered instance reload, not user content). Projecting
+ * to a fixed key order keeps the JSON comparison order-stable across the
+ * spread-based mutation paths (drag, inspector, idMap remap, preset load).
+ *
+ * The persisted-field set is TRIPLE-COUPLED: it lives here, in the load
+ * effect's backend mapping, and in the onSave serialization. Adding a new
+ * persisted field must touch all three, or the dirty check silently weakens.
+ */
+function canvasStateEqual(
+  aNodes: TopologyNodeData[],
+  aWires: TopologyWireData[],
+  bNodes: TopologyNodeData[],
+  bWires: TopologyWireData[],
+): boolean {
+  if (aNodes.length !== bNodes.length || aWires.length !== bWires.length) return false;
+  const projNodes = (ns: TopologyNodeData[]) =>
+    ns.map((n) => ({
+      id: n.id,
+      type: n.type,
+      name: n.name,
+      subtitle: n.subtitle,
+      x: n.x,
+      y: n.y,
+      ...(n.tierRequirement !== undefined ? { tierRequirement: n.tierRequirement } : {}),
+      // metadata is typed with an index signature — bracket access required.
+      ...(n.metadata ? { metadata: { typeKey: n.metadata['typeKey'] } } : {}),
+    }));
+  const projWires = (ws: TopologyWireData[]) =>
+    ws.map((w) => ({
+      id: w.id,
+      fromNodeId: w.fromNodeId,
+      toNodeId: w.toNodeId,
+      ...(w.fromPort !== undefined ? { fromPort: w.fromPort } : {}),
+      ...(w.toPort !== undefined ? { toPort: w.toPort } : {}),
+      direction: w.direction,
+      ...(w.label !== undefined ? { label: w.label } : {}),
+    }));
+  return JSON.stringify(projNodes(aNodes)) === JSON.stringify(projNodes(bNodes))
+    && JSON.stringify(projWires(aWires)) === JSON.stringify(projWires(bWires));
+}
+
 // Estimated node card dimensions for wire endpoint positioning.
 // Header ~46px + body ~64px + gaps ≈ 112px. Width ~200px for typical content.
 const NODE_WIDTH = 200;
@@ -231,9 +276,29 @@ export default function NodeTopologyEditor({
 
   /** Skip the next workspaceInstances-triggered reload (set before calling onSave). */
   const skipNextLoadRef = useRef(false);
-  /** Track whether the canvas diverges from the last Apply/preset load — set by
-   *  every edit (pushHistory) and by undo/redo, cleared on save and preset load. */
-  const isDirtyRef = useRef(false);
+  /**
+   * Exact dirty tracking: the canvas as of the last Apply success, preset
+   * load, or authoritative load. Dirty is DERIVED at preset-click time by
+   * comparing the current canvas against this snapshot (canvasStateEqual),
+   * instead of the previous conservative boolean that was armed by every
+   * pushHistory/undo/redo — that over-approximated by marking a canvas
+   * dirty even when undo/redo had returned it to EXACTLY the last applied
+   * state (e.g. undoing a same-preset load showed a spurious confirm).
+   * A null snapshot (never applied) counts as dirty.
+   */
+  const appliedSnapshotRef = useRef<{ nodes: TopologyNodeData[]; wires: TopologyWireData[] } | null>(
+    { nodes: PRESET_RETAIL.nodes, wires: PRESET_RETAIL.wires },
+  );
+  // Live mirrors so isCanvasDirty stays stable and always reads the latest canvas.
+  const nodesRef = useRef<TopologyNodeData[]>(nodes);
+  nodesRef.current = nodes;
+  const wiresRef = useRef<TopologyWireData[]>(wires);
+  wiresRef.current = wires;
+  const isCanvasDirty = useCallback(() => {
+    const snap = appliedSnapshotRef.current;
+    if (!snap) return true;
+    return !canvasStateEqual(snap.nodes, snap.wires, nodesRef.current, wiresRef.current);
+  }, []);
   /**
    * Node id for which an inspector edit already pushed an undo entry in
    * the current selection session. Inspector fields push history once on
@@ -380,7 +445,7 @@ export default function NodeTopologyEditor({
           // A reloaded node with a surviving id must start a fresh inspector
           // edit session, or its next edit would silently skip pushHistory.
           inspectorHistoryPushedForRef.current = null;
-          isDirtyRef.current = false;
+          appliedSnapshotRef.current = { nodes: mergedNodes, wires: loadedWires };
           return;
         }
 
@@ -412,7 +477,7 @@ export default function NodeTopologyEditor({
         // A reloaded node with a surviving id must start a fresh inspector
         // edit session, or its next edit would silently skip pushHistory.
         inspectorHistoryPushedForRef.current = null;
-        isDirtyRef.current = false;
+        appliedSnapshotRef.current = { nodes: [...savedById.values()], wires: loadedWires };
       })
       .catch((err) => {
         // Only "no saved topology" (null result) is expected — that is
@@ -430,7 +495,8 @@ export default function NodeTopologyEditor({
   }, [workspaceInstances]);
 
   const pushHistory = useCallback(() => {
-    isDirtyRef.current = true;
+    // Dirty is derived (isCanvasDirty compares against appliedSnapshotRef),
+    // so no flag needs arming here — the mutation itself is the dirty signal.
     setRedo([]); // new edit invalidates the redo branch
     setHistory((prev) => {
       const entry: HistoryEntry = { nodes: nodes.map((n) => ({ ...n })), wires: wires.map((w) => ({ ...w })) };
@@ -487,7 +553,9 @@ export default function NodeTopologyEditor({
     setConnectingFromPort(null);
     setHoveredTarget(null);
     setFreshNodeIds(new Set());
-    isDirtyRef.current = false;
+    // The preset is now the applied state — the canvas matches it exactly,
+    // so a subsequent preset click must not confirm.
+    appliedSnapshotRef.current = { nodes: data.nodes, wires: data.wires };
     // The canvas was replaced — a still-selected node (preset ids overlap)
     // must start a fresh inspector edit session, or its next edit would
     // silently skip pushHistory (no undo entry, no dirty flag).
@@ -515,10 +583,11 @@ export default function NodeTopologyEditor({
     setNodes(entry.nodes);
     setWires(entry.wires);
     setHistory((prev) => prev.slice(0, -1));
-    // The undone-to canvas may diverge from the last Apply — re-arm the
-    // dirty flag so a preset load re-confirms instead of silently
-    // discarding a state the user stepped back to after a save.
-    isDirtyRef.current = true;
+    // Dirty is derived: if the undone-to canvas matches the last applied
+    // snapshot (e.g. undoing a same-preset load), no confirm fires; if it
+    // diverges (undoing past a save), the preset gate confirms. The stale
+    // conservative boolean was removed — it armed a spurious confirm for
+    // the exact-equality case.
     // A post-undo edit is a fresh session — it must push a new entry.
     inspectorHistoryPushedForRef.current = null;
     // Undoing a deletion restores the removed node — re-select it so the
@@ -541,9 +610,8 @@ export default function NodeTopologyEditor({
     setNodes(entry.nodes);
     setWires(entry.wires);
     setRedo((prev) => prev.slice(0, -1));
-    // Same rule as undo: a re-applied canvas may diverge from the last
-    // Apply, so re-arm the dirty flag before any preset load.
-    isDirtyRef.current = true;
+    // Same derived dirty rule as undo: redo to exactly the applied canvas
+    // is clean; redo to anything else confirms on the next preset click.
     // A post-redo edit is a fresh session — it must push a new entry.
     inspectorHistoryPushedForRef.current = null;
   }, [redo, nodes, wires]);
@@ -1125,7 +1193,7 @@ export default function NodeTopologyEditor({
 
           <Button
             variant="secondary"
-            onClick={() => { if (isDirtyRef.current) setConfirmPreset('retail'); else loadPreset('retail'); }}
+            onClick={() => { if (isCanvasDirty()) setConfirmPreset('retail'); else loadPreset('retail'); }}
             icon={<CartIcon size={16} />}
           >
             <Localized id="topology-preset-retail">Retail Preset</Localized>
@@ -1133,7 +1201,7 @@ export default function NodeTopologyEditor({
 
           <Button
             variant="secondary"
-            onClick={() => { if (isDirtyRef.current) setConfirmPreset('restaurant'); else loadPreset('restaurant'); }}
+            onClick={() => { if (isCanvasDirty()) setConfirmPreset('restaurant'); else loadPreset('restaurant'); }}
             icon={<UtensilsIcon size={16} />}
           >
             <Localized id="topology-preset-restaurant">Resto & KDS Preset</Localized>
@@ -1141,6 +1209,11 @@ export default function NodeTopologyEditor({
               variant="primary"
               onClick={async () => {
                 skipNextLoadRef.current = true;
+                // Hoisted ABOVE the try: the snapshot below is written after
+                // the catch, and let/const are block-scoped to the try — a
+                // declaration inside would ReferenceError on success.
+                let savedNodes = nodes;
+                let savedWires = wires;
                 try {
                   const idMap = await onSave?.(nodes, wires);
                   if (idMap && Object.keys(idMap).length > 0) {
@@ -1154,26 +1227,27 @@ export default function NodeTopologyEditor({
                     setSelectedWireId(null);
                     setHistory([]);
                     setRedo([]);
-                    setNodes((prev) =>
-                      prev.map((n) => {
-                        const newId = idMap[n.id];
-                        return newId ? { ...n, id: newId } : n;
-                      }),
-                    );
-                    setWires((prev) =>
-                      prev.map((w) => {
-                        const newFrom = idMap[w.fromNodeId];
-                        const newTo = idMap[w.toNodeId];
-                        if (newFrom || newTo) {
-                          return {
-                            ...w,
-                            fromNodeId: newFrom ?? w.fromNodeId,
-                            toNodeId: newTo ?? w.toNodeId,
-                          };
-                        }
-                        return w;
-                      }),
-                    );
+                    savedNodes = nodes.map((n) => {
+                      const newId = idMap[n.id];
+                      return newId ? { ...n, id: newId } : n;
+                    });
+                    savedWires = wires.map((w) => {
+                      const newFrom = idMap[w.fromNodeId];
+                      const newTo = idMap[w.toNodeId];
+                      if (newFrom || newTo) {
+                        return {
+                          ...w,
+                          fromNodeId: newFrom ?? w.fromNodeId,
+                          toNodeId: newTo ?? w.toNodeId,
+                        };
+                      }
+                      return w;
+                    });
+                    // Direct array set (not the updater form): nothing can
+                    // interleave during this handler's synchronous tail after
+                    // the await, and the same arrays are snapshotted below.
+                    setNodes(savedNodes);
+                    setWires(savedWires);
                   }
                 } catch (err) {
                   addToast({
@@ -1185,8 +1259,10 @@ export default function NodeTopologyEditor({
                 }
                 // Save succeeded — the canvas now matches the backend, so a
                 // preset load must not ask about unsaved changes. (A failed
-                // save returned above and stays dirty.)
-                isDirtyRef.current = false;
+                // save returned above and stays dirty.) The snapshot is the
+                // FINAL canvas — remapped ids included — so exact tracking
+                // compares against what is actually on screen post-remap.
+                appliedSnapshotRef.current = { nodes: savedNodes, wires: savedWires };
                 // Defer reset so React commits state updates + fires effects first,
                 // preventing post-save reload from clobbering in-flight edits (#8).
                 setTimeout(() => { skipNextLoadRef.current = false; }, 0);

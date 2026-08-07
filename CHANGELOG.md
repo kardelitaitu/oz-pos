@@ -25,6 +25,7 @@ Architecture enforcement and release baseline update for the 0.0.25 cycle.
 
 ### Changed
 
+- **Topology editor exact unsaved-changes tracking** — The preset-load confirm now compares the canvas against the last applied/preset state (persisted fields only) instead of a conservative dirty boolean. Undoing a same-preset load, or redoing back to exactly the last saved canvas, no longer shows a spurious "Load Preset" confirmation; any canvas that actually diverges from the last Apply still confirms.
 - **Local validation** — Added the architecture gate to `scripts/check.sh` and `scripts/check.ps1`; the Windows runner now fails closed when Python is unavailable.
 - **Architecture documentation** — Documented the enforced dependency and UI IPC boundaries in `ARCHITECTURE.md` and `docs/ARCHITECTURE.md`, and synchronized the CI pipeline dashboard.
 - **Release version synchronization** — Bumped workspace, desktop, tablet, Docker, UI, health endpoint, localized status-bar, test, and lockfile versions from 0.0.24 to 0.0.25.

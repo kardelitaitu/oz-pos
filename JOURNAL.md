@@ -834,3 +834,23 @@ Clean (0 errors).
 **Commits:** `fix(topology): pin wire-label toggle keeps in-flight connection` (tests only).
 
 **Follow-ups:** The pin only covers the click and keyboard-undo paths; if a future single-wire edit (e.g. a future "reverse wire" button, wire color/weight edits) ever lands, it inherits the same contract — new tests should assert the connection survives it too, or the decision should be revisited deliberately. The label's onClick does not `stopPropagation()` — harmless today (no click-cancel handler on the canvas container) but worth noting if a background-click-cancels-connection behavior is ever added.
+
+## 2026-08-07 — Exact dirty tracking replaces the conservative isDirtyRef (topology editor)
+
+### The over-approximation
+**Problem:** `isDirtyRef` was a boolean armed by every `pushHistory`/undo/redo and cleared on Apply/preset/load. That over-approximated: undoing a same-preset load (or redoing back to exactly the last saved canvas) marked the canvas dirty even though it was byte-identical to the applied state, so the next preset click showed a SPURIOUS "Load Preset" confirm. Journaled as acceptable in the undo/redo-rearm cycle (a7d92032) with the exact-alternative noted as the follow-up.
+
+**Decision — exact comparison.** Replace the boolean with `appliedSnapshotRef` (the canvas as of the last Apply success / preset load / authoritative load) and DERIVE dirty at preset-click time via `canvasStateEqual()` — a persisted-field projection compare (nodes: id/type/name/subtitle/x/y/tierRequirement/metadata.typeKey; wires: id/fromNodeId/fromPort/toNodeId/toPort/direction/label). Transient fields are excluded: telemetryBadge/telemetryStatus (never edited) and metadata.persisted (an internal sync flag flipped by the save-triggered instance reload — excluding it is what keeps a save+reload clean). Null snapshot (never applied) counts as dirty.
+
+**Solution:** Red→Green. Red test: same-preset load → Undo → preset click must load directly (failed pre-fix — spurious dialog). Green: appliedSnapshotRef + isCanvasDirty() (stable useCallback over nodesRef/wiresRef mirrors); snapshot written at both load-effect success paths, loadPreset, and the Apply handler (hoisting `let savedNodes/savedWires` ABOVE the try — the first draft declared them inside the try and the post-catch snapshot write ReferenceError'd on block scoping; the suite caught it as an unhandled rejection `savedNodes is not defined`, and the snapshot never landed). pushHistory/popUndo/popRedo no longer touch any dirty flag.
+
+**Tests updated to the exact contract (they pinned the old over-approximation):**
+- 're-arms the unsaved-changes dialog when Undo or Redo runs after Apply' → renamed 'confirms on preset when Undo diverges from the last Apply, but not when Redo restores it exactly': the redo-to-exact-saved-state half now asserts NO dialog.
+- 'keeps edits, stays dirty, and preserves undo when Apply fails': the dirty-confirm assertion moved BEFORE the undo (while the edit is present); after undo-to-applied-state asserts NO dialog.
+- NEW idMap-remap corner test (reviewer gap): Apply with a non-empty idMap then preset click must load directly — the snapshot must hold the REMAPPED ids or the canvas would appear perpetually dirty.
+
+**Validation:** editor suite 105 · topology suites 133/133 · full UI suite 262 files / 4086 tests · typecheck + eslint clean (fixed an index-signature `typeKey` access TS4111) · drift guard clean · reviewer no blockers (triple-coupling of the persisted-field set documented on canvasStateEqual; direct setNodes justified as safe because nothing interleaves during the handler's synchronous tail).
+
+**Commits:** `fix(topology): exact dirty tracking via applied-state snapshot`.
+
+**Follow-ups:** The persisted-field set is triple-coupled (load mapping ↔ onSave serialization ↔ canvasStateEqual projection) — adding a persisted field must touch all three or the dirty check silently weakens. metadata.persisted is deliberately excluded; if the inspector ever edits another metadata key, it must join the projection.
