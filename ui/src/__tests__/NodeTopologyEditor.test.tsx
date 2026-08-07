@@ -1830,3 +1830,53 @@ describe('NodeTopologyEditor — hover-target preview snap', () => {
     expect(endY).toBeCloseTo(targetY, 1);
   });
 });
+
+// ── Wire arrow markers ──────────────────────────────────────────
+
+describe('NodeTopologyEditor — wire arrow markers', () => {
+  it('renders two-way markers on a toggled wire and only the end marker on one-way wires', () => {
+    renderEditor();
+
+    // Retail preset wires are one-way: end marker only, no start marker.
+    const oneWayPath = document.querySelector('path.wire-path.one-way');
+    expect(oneWayPath).not.toBeNull();
+    expect(oneWayPath!.getAttribute('marker-start')).toBeNull();
+    expect(oneWayPath!.getAttribute('marker-end')).toBe('url(#arrow-end)');
+
+    // Toggle the first wire to two-way via its label.
+    const wireLabels = screen.getAllByText(/→|↔/);
+    const oneWayCount = document.querySelectorAll('path.wire-path.one-way').length;
+    fireEvent.click(wireLabels[0]!);
+
+    // The toggled wire now carries the start marker and the ↔ label, and
+    // exactly ONE wire left the one-way set — the others are untouched.
+    expect(document.querySelectorAll('path.wire-path.one-way').length).toBe(oneWayCount - 1);
+    const twoWayPath = document.querySelector('path.wire-path.two-way');
+    expect(twoWayPath).not.toBeNull();
+    expect(twoWayPath!.getAttribute('marker-start')).toBe('url(#arrow-start)');
+    expect(twoWayPath!.getAttribute('marker-end')).toBe('url(#arrow-end)');
+    expect(wireLabels[0]!.textContent).toContain('↔');
+  });
+});
+
+// ── Fresh-node animation pulse ──────────────────────────────────
+
+describe('NodeTopologyEditor — fresh-node animation pulse', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('marks a newly added node as fresh and clears the pulse after 400ms', () => {
+    vi.useFakeTimers();
+    renderEditor();
+
+    fireEvent.click(screen.getByText('+ Store Node'));
+    expect(document.querySelector('.topology-node.node-fresh')).not.toBeNull();
+
+    // The 400ms fresh-pulse timer expires.
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    expect(document.querySelector('.topology-node.node-fresh')).toBeNull();
+  });
+});

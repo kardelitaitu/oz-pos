@@ -713,3 +713,17 @@ Clean (0 errors).
 **Commits:** (hash below)
 
 **Follow-ups (deliberately NOT done):** the hover-snap test hardcodes `NODE_WIDTH/2` and the top-port dy (−6) — constants change would break it (commented); the preview-snap distance threshold (30px) and the two-way-arrow marker rendering remain unpinned.
+
+
+## 2026-08-07 — Topology editor: wire arrow markers + fresh-node pulse
+
+### Two final rendering surfaces after 85 editor tests
+**Problem:** The wire direction's SVG arrow markers (one-way keeps only `marker-end`, two-way adds `marker-start`) and the fresh-node animation class (`.node-fresh` for 400ms after add) were unguarded. (The toast auto-dismiss candidate turned out to be already covered at the hook level in `useAnimatedToastQueue.test.ts`, so it was skipped.)
+
+**Solution:** 2 characterization tests: (1) a one-way wire path has `marker-start` null and `marker-end="url(#arrow-end)"`; after toggling the first wire's label, exactly ONE wire leaves the one-way set, the two-way path carries `marker-start="url(#arrow-start)"` + `marker-end` + the ↔ label — pinning that the toggle affects only the clicked wire. (2) with `vi.useFakeTimers` (scoped `afterEach(useRealTimers)`), adding a store node renders `.node-fresh`, and `act(() => vi.advanceTimersByTime(400))` clears it — the add flow's only timeout is the fresh timer, so the advance is unambiguous. All pinned existing behavior — no production change needed.
+
+**Validation:** 2 new · editor suite 87 · topology suites 115/115 · full UI suite 262 files / 4068 tests green · typecheck + eslint clean.
+
+**Commits:** (hash below)
+
+**Follow-ups (deliberately NOT done):** the fresh-pulse CSS animation keyframes and the `freshTimersRef` bookkeeping are not asserted (implementation detail); the `wireLabels[0]` assertion reuses a pre-click reference (consistent with the existing toggle test).
