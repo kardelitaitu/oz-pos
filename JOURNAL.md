@@ -727,3 +727,17 @@ Clean (0 errors).
 **Commits:** (hash below)
 
 **Follow-ups (deliberately NOT done):** the fresh-pulse CSS animation keyframes and the `freshTimersRef` bookkeeping are not asserted (implementation detail); the `wireLabels[0]` assertion reuses a pre-click reference (consistent with the existing toggle test).
+
+
+## 2026-08-07 — Topology editor: undo history cap (50-entry eviction)
+
+### The undo depth cap was the last unpinned memory bound
+**Problem:** `pushHistory` caps the stack at 50 (`if (next.length > 50) next.shift()`), evicting the oldest entry, but the eviction semantics were unguarded — no test proved the original pre-edit state becomes unreachable after 51 edits, nor that the 51st undo is a clean no-op.
+
+**Solution:** 1 characterization test: 51 node adds (each pushes one history entry) → the cap drops the oldest snapshot (the ORIGINAL 3-node state); exactly 50 undos walk back to `initial + 1`; a 51st Ctrl+Z is a no-op on the empty stack (`popUndo` returns when `stack.length === 0`). Reviewer verified the 51st-undo assertion is the true discriminator — without the cap it would restore the original state and the final assertion would fail, so the test cannot false-pass. All pinned existing behavior — no production change needed.
+
+**Validation:** 1 new · editor suite 88 · topology suites 116/116 · full UI suite 262 files / 4069 tests green · typecheck + eslint clean.
+
+**Commits:** (hash below)
+
+**Follow-ups (deliberately NOT done):** the redo stack is unbounded (only `setRedo([])` clears it on new edits) — a symmetric redo cap was not part of this slice; the `> 50` boundary means the stack holds exactly 50 entries, now commented in the test.

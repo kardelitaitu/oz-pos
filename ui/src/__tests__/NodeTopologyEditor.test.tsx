@@ -1880,3 +1880,33 @@ describe('NodeTopologyEditor — fresh-node animation pulse', () => {
     expect(document.querySelector('.topology-node.node-fresh')).toBeNull();
   });
 });
+
+// ── Undo history cap ────────────────────────────────────────────
+
+describe('NodeTopologyEditor — undo history cap', () => {
+  it('caps the undo stack at 50 entries, evicting the oldest', () => {
+    renderEditor();
+    const initial = getNodeCount(); // retail preset: 3
+
+    // 51 node adds — each pushes one history entry; the cap (pushHistory
+    // evicts when length > 50, so the stack holds at most 50) drops the
+    // oldest, which is the snapshot of the ORIGINAL pre-edit state.
+    for (let i = 0; i < 51; i++) {
+      fireEvent.click(screen.getByText('+ Store Node'));
+    }
+    expect(getNodeCount()).toBe(initial + 51);
+
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    // Exactly 50 undos are available: they walk back to initial + 1 (the
+    // first add's snapshot is the evicted one).
+    for (let i = 0; i < 50; i++) {
+      fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true });
+    }
+    expect(getNodeCount()).toBe(initial + 1);
+
+    // The evicted oldest entry (the original state) is unreachable — the
+    // 51st undo is a no-op on the empty stack.
+    fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true });
+    expect(getNodeCount()).toBe(initial + 1);
+  });
+});
