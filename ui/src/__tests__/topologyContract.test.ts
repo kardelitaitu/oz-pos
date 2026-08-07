@@ -56,6 +56,29 @@ describe('semantic topology contract', () => {
     expect(validateTopologyGraph(normalized)).toEqual([]);
   });
 
+  it('normalizes corrupt or missing wire directions to one-way', () => {
+    // Direction is presentation-only, but a corrupt/undefined value must
+    // still normalize to a legal value at the contract boundary — the
+    // editor renderer and location validation both assume a well-formed
+    // direction, and a garbage value would flow straight through
+    // otherwise (undefined survives JSON round-trips in legacy data).
+    const normalized = graph(
+      [branch(), workspace('ws-1'), workspace('ws-2')],
+      [
+        { id: 'wire-bad', fromNodeId: 'branch-1', toNodeId: 'ws-1', fromPort: 'right', toPort: 'left', direction: 'backwards' as never },
+        // Legacy payloads may omit `direction` entirely (type-level cast
+        // simulates pre-normalization data).
+        { id: 'wire-missing', fromNodeId: 'branch-1', toNodeId: 'ws-2', fromPort: 'right', toPort: 'left', direction: undefined as never },
+      ],
+    );
+
+    expect(normalized.wires[0]!.direction).toBe('one-way');
+    expect(normalized.wires[1]!.direction).toBe('one-way');
+    // And the graph validates cleanly — corrupt direction is not a
+    // validation error, it is a normalization concern.
+    expect(validateTopologyGraph(normalized)).toEqual([]);
+  });
+
   it('allows one Branch Location output to fan out to many workspaces', () => {
     const normalized = graph(
       [branch(), workspace('ws-a'), workspace('ws-b')],

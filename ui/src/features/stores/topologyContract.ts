@@ -62,7 +62,7 @@ export interface SemanticTopologyWire {
   toNodeId: string;
   toPortId: string;
   relationshipType: SemanticRelationshipType;
-  direction: 'one-way' | 'two-way';
+  direction: 'one-way' | 'reverse' | 'two-way';
   /** True when semantic fields were inferred from the legacy geometric graph. */
   legacyInferred: boolean;
 }
@@ -245,7 +245,14 @@ export function normalizeTopologyGraph(
       toNodeId: wire.toNodeId,
       toPortId: inferred.toPortId,
       relationshipType: inferred.relationshipType,
-      direction: wire.direction,
+      // Direction is presentation-only, but the semantic graph is the
+      // contract boundary: normalize corrupt/legacy values (undefined in
+      // old persisted JSON, or garbage from manual edits) to a legal
+      // value so consumers (renderer, validation) never see an unknown
+      // state. one-way is the historical default.
+      direction: wire.direction === 'two-way' || wire.direction === 'reverse'
+        ? wire.direction
+        : 'one-way',
       legacyInferred: inferred.legacyInferred,
     };
   });
@@ -337,7 +344,6 @@ export function validateTopologyGraph(graph: SemanticTopologyGraph): TopologyVal
       || wire.fromPortId !== 'location-out'
       || !workspaceIds.has(wire.toNodeId)
       || wire.toPortId !== 'location-in'
-      || wire.direction !== 'one-way'
     ) {
       errors.push({
         code: 'invalid-location-connection',
