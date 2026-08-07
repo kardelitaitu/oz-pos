@@ -10,7 +10,7 @@ use tauri::State;
 use std::collections::HashMap;
 
 use oz_core::permissions;
-use oz_core::{Settings, UserPreferences};
+use oz_core::{Settings, Store, SyncPriority, UserPreferences};
 
 use platform_core::terminal_profile::TerminalProfile;
 
@@ -928,6 +928,14 @@ pub async fn set_setting(
         let store = oz_core::db::Store::new(&conn);
         require_permission_for_user(&store, &user_id, permissions::SETTINGS_EDIT)?;
         run_set_setting(&conn, &key, &value, &terminal_id)?;
+        if let Err(e) = enqueue_settings_updates(
+            &store,
+            &HashMap::from([(key.clone(), value.clone())]),
+            &terminal_id,
+            "default",
+        ) {
+            tracing::warn!(key = %key, error = %e, "failed to enqueue settings.update sync item");
+        }
     } // conn, store dropped here
 
     // Publish SettingsUpdated event for cross-terminal reactivity (ADR #22).
@@ -981,6 +989,22 @@ pub async fn set_setting_scoped(
         run_set_setting(&db, &key, &value, &terminal_id)?;
     } // db, store, conn dropped here — safe to .await below
 
+    // Enqueue `settings.update` sync items on the GLOBAL db — the sync
+    // daemon only watches the global queue, so a store-scoped write must
+    // fan out from here (SYNC-10 enqueue side).
+    {
+        let conn = state.db.lock().await;
+        let store = oz_core::db::Store::new(&conn);
+        if let Err(e) = enqueue_settings_updates(
+            &store,
+            &HashMap::from([(key.clone(), value.clone())]),
+            &terminal_id,
+            &session.store_id,
+        ) {
+            tracing::warn!(key = %key, error = %e, "failed to enqueue settings.update sync item");
+        }
+    } // conn dropped — safe to .await below
+
     // Publish SettingsUpdated event for cross-terminal reactivity (ADR #22).
     let kernel = state.kernel.lock().await;
     let bus = kernel.event_bus();
@@ -1005,6 +1029,36 @@ fn run_set_setting(
     terminal_id: &str,
 ) -> Result<(), AppError> {
     Ok(Settings::set_tracked(conn, key, value, terminal_id)?)
+}
+
+/// Enqueue one `settings.update` sync item per changed key (SYNC-10).
+///
+/// The payload shape matches `platform_sync::queue::SettingsUpdatePayload`
+/// (key/value/terminal_id) so the sync apply side can parse it. Items are
+/// scoped to the given tenant at Low priority — settings are low-frequency
+/// and the conflict resolver treats `settings.*` as version-LWW. Callers
+/// enqueue on the GLOBAL db (the sync daemon only watches the global
+/// queue), never the store db the value was written to.
+fn enqueue_settings_updates(
+    store: &Store,
+    entries: &HashMap<String, String>,
+    terminal_id: &str,
+    tenant_id: &str,
+) -> Result<(), AppError> {
+    for (key, value) in entries {
+        let payload = serde_json::json!({
+            "key": key,
+            "value": value,
+            "terminal_id": terminal_id,
+        });
+        store.enqueue_offline_scoped(
+            "settings.update",
+            &payload.to_string(),
+            tenant_id,
+            SyncPriority::Low,
+        )?;
+    }
+    Ok(())
 }
 
 // ── Batch key-value settings (single transaction) ───────────────
@@ -1038,6 +1092,9 @@ pub async fn set_settings(
             Settings::set_tracked(&tx, key, value, &terminal_id)?;
         }
         tx.commit()?;
+        if let Err(e) = enqueue_settings_updates(&store, &entries, &terminal_id, "default") {
+            tracing::warn!(key_count = entries.len(), error = %e, "failed to enqueue settings.update sync items");
+        }
     }
 
     // Publish a single SettingsUpdated event for all changed keys.
@@ -1096,6 +1153,18 @@ pub async fn set_settings_scoped(
         }
         tx.commit()?;
     }
+
+    // Enqueue `settings.update` sync items on the GLOBAL db — the sync
+    // daemon only watches the global queue, so a store-scoped write must
+    // fan out from here (SYNC-10 enqueue side).
+    {
+        let conn = state.db.lock().await;
+        let store = oz_core::db::Store::new(&conn);
+        if let Err(e) = enqueue_settings_updates(&store, &entries, &terminal_id, &session.store_id)
+        {
+            tracing::warn!(key_count = entries.len(), error = %e, "failed to enqueue settings.update sync items");
+        }
+    } // conn dropped — safe to .await below
 
     // Publish a single SettingsUpdated event for all changed keys.
     let kernel = state.kernel.lock().await;
@@ -1476,6 +1545,72 @@ mod tests {
     /// After wiring ADR #22, `run_set_setting` writes a delta row
     /// in addition to updating the settings table. This test verifies
     /// the Tauri command layer actually produces delta records.
+    /// SYNC-10 enqueue side: a settings write must also enqueue a
+    /// `settings.update` sync item so the daemon can push the change to
+    /// the cloud and other terminals re-pull it. The payload shape must
+    /// match `platform_sync::queue::SettingsUpdatePayload`
+    /// (key/value/terminal_id) that the apply side parses.
+    #[test]
+    fn settings_write_enqueues_settings_update_item() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+
+        enqueue_settings_updates(
+            &store,
+            &HashMap::from([("receipt_footer".to_string(), "Thanks".to_string())]),
+            "term-1",
+            "default",
+        )
+        .unwrap();
+
+        let pending = store.list_pending_offline().unwrap();
+        assert_eq!(pending.len(), 1);
+        let item = &pending[0];
+        assert_eq!(item.action, "settings.update");
+        assert_eq!(item.tenant_id, "default");
+        assert_eq!(item.priority, SyncPriority::Low);
+
+        let payload: serde_json::Value = serde_json::from_str(&item.payload).unwrap();
+        assert_eq!(payload["key"], "receipt_footer");
+        assert_eq!(payload["value"], "Thanks");
+        assert_eq!(payload["terminal_id"], "term-1");
+    }
+
+    /// A batch save fans out one item per changed key — the apply side
+    /// applies each as its own version-LWW entry.
+    #[test]
+    fn settings_batch_enqueues_one_item_per_key() {
+        let conn = fresh_conn();
+        let store = Store::new(&conn);
+
+        enqueue_settings_updates(
+            &store,
+            &HashMap::from([
+                ("a".to_string(), "1".to_string()),
+                ("b".to_string(), "2".to_string()),
+            ]),
+            "term-2",
+            "store-x",
+        )
+        .unwrap();
+
+        let pending = store.list_pending_offline().unwrap();
+        assert_eq!(pending.len(), 2);
+        assert!(pending.iter().all(|i| i.action == "settings.update"));
+        assert!(pending.iter().all(|i| i.tenant_id == "store-x"));
+        assert!(pending.iter().all(|i| i.priority == SyncPriority::Low));
+
+        let mut keys: Vec<String> = pending
+            .iter()
+            .map(|i| {
+                let v: serde_json::Value = serde_json::from_str(&i.payload).unwrap();
+                v["key"].as_str().unwrap().to_string()
+            })
+            .collect();
+        keys.sort();
+        assert_eq!(keys, vec!["a".to_string(), "b".to_string()]);
+    }
+
     #[test]
     fn run_set_setting_writes_delta_row() {
         let conn = fresh_conn();
