@@ -1745,6 +1745,96 @@ it('does not toast when the selected node survives a preset load', () => {
   });
 });
 
+// ── Wire deletion vs an in-flight connection ───────────────────
+// Deleting a wire is a single-wire mutation (like toggling direction), so
+// it must NOT cancel a connection in flight — the source node and every
+// port the pending connection references stay valid. The one exception:
+// if the deleted wire is the EXACT duplicate pair the connection would
+// create, the pending state must be cancelled — otherwise completing the
+// connection after the delete silently recreates the wire the user just
+// removed, bypassing the duplicate detector.
+
+describe('NodeTopologyEditor — wire deletion keeps an in-flight connection', () => {
+  it('deleting an unrelated wire keeps the connection in flight and it completes', () => {
+    renderEditor();
+    const baseline = getWireCount();
+
+    // Start a connection from store-1's bottom port.
+    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    expect(nodeAt(0).className).toContain('node-connecting-source');
+    expect(previewLine()).not.toBeNull();
+
+    // Select and delete w-2 (workspace right -> warehouse left) — unrelated
+    // to the store-1 -> ws-1 connection being built.
+    const hitboxes = document.querySelectorAll('.wire-hitbox');
+    fireEvent.click(hitboxes[1] as Element);
+    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Delete' });
+    expect(screen.getByText('Delete Wire')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Delete'));
+    expect(getWireCount()).toBe(baseline - 1);
+
+    // The connection SURVIVED the unrelated wire delete.
+    expect(nodeAt(0).className).toContain('node-connecting-source');
+    expect(previewLine()).not.toBeNull();
+
+    // And it still completes normally.
+    fireEvent.click(portOf(nodeAt(1), 'top'));
+    expect(getWireCount()).toBe(baseline);
+  });
+
+  it('deleting the exact duplicate pair cancels the in-flight connection', () => {
+    renderEditor();
+    const baseline = getWireCount();
+
+    // Start a connection that is an EXACT duplicate of w-1 (store-1 right
+    // -> ws-1 left — the same endpoints AND the same normalized ports).
+    fireEvent.click(portOf(nodeAt(0), 'right'));
+    expect(nodeAt(0).className).toContain('node-connecting-source');
+    expect(previewLine()).not.toBeNull();
+
+    // Delete w-1 mid-connection — this is the wire the connection would
+    // recreate. The pending state must be cancelled, not left dangling to
+    // silently duplicate the deleted wire on completion.
+    const hitboxes = document.querySelectorAll('.wire-hitbox');
+    fireEvent.click(hitboxes[0] as Element);
+    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Delete' });
+    expect(screen.getByText('Delete Wire')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Delete'));
+    expect(getWireCount()).toBe(baseline - 1);
+
+    // Completing the connection must NOT recreate the deleted wire — it
+    // should behave as a cancelled in-flight connection (no new wire).
+    fireEvent.click(portOf(nodeAt(1), 'left'));
+    expect(getWireCount()).toBe(baseline - 1);
+  });
+
+  it('deleting the duplicate pair cancels a connection started from the REVERSED endpoint', () => {
+    renderEditor();
+    const baseline = getWireCount();
+
+    // Start the connection from the OTHER side of w-1 (ws-1 left -> store-1
+    // right). The duplicate detector treats reversed pairs as duplicates,
+    // so deleting w-1 must cancel this pending state too.
+    fireEvent.click(portOf(nodeAt(1), 'left'));
+    expect(nodeAt(1).className).toContain('node-connecting-source');
+    expect(previewLine()).not.toBeNull();
+
+    const hitboxes = document.querySelectorAll('.wire-hitbox');
+    fireEvent.click(hitboxes[0] as Element); // w-1: store-1 right <-> ws-1 left
+    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Delete' });
+    expect(screen.getByText('Delete Wire')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Delete'));
+    expect(getWireCount()).toBe(baseline - 1);
+
+    // The pending state was cancelled — completing cannot recreate w-1.
+    fireEvent.click(portOf(nodeAt(0), 'right'));
+    expect(getWireCount()).toBe(baseline - 1);
+  });
+});
+
 // ── Escape connection-cancel flow ───────────────────────────────
 
 describe('NodeTopologyEditor — Escape connection-cancel flow', () => {

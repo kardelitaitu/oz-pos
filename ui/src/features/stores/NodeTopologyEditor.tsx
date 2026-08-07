@@ -748,6 +748,31 @@ export default function NodeTopologyEditor({
   const executeDelete = useCallback(() => {
     if (confirmDelete === '') {
       if (selectedWireId) {
+        // Deleting a wire is a single-wire mutation — it must NOT cancel a
+        // connection in flight (mirrors the direction-toggle rule). The one
+        // exception: if the deleted wire is the EXACT duplicate pair the
+        // pending connection would create, cancel the pending state —
+        // otherwise completing the connection after the delete would
+        // silently recreate the wire the user just removed, bypassing the
+        // duplicate detector in handlePortClick. The target node is unknown
+        // until the connection completes, so the source endpoint is the only
+        // match signal — conservative by design: a same-source, different-
+        // target wire delete also cancels (ghost preview vanishing signals
+        // it), which is the safer failure than silently recreating the
+        // deleted wire.
+        const deleted = wires.find((w) => w.id === selectedWireId);
+        if (
+          connectingFromNodeId
+          && connectingFromPort
+          && deleted
+          && ((deleted.fromNodeId === connectingFromNodeId
+            && (deleted.fromPort ?? 'right') === connectingFromPort)
+            || (deleted.toNodeId === connectingFromNodeId
+              && (deleted.toPort ?? 'left') === connectingFromPort))
+        ) {
+          setConnectingFromNodeId(null);
+          setConnectingFromPort(null);
+        }
         pushHistory();
         setWires((prev) => prev.filter((w) => w.id !== selectedWireId));
         setSelectedWireId(null);
@@ -759,7 +784,7 @@ export default function NodeTopologyEditor({
       setSelectedNodeId(null);
     }
     setConfirmDelete(null);
-  }, [confirmDelete, selectedWireId, pushHistory]);
+  }, [confirmDelete, selectedWireId, connectingFromNodeId, connectingFromPort, wires, pushHistory]);
 
   const zoomToFit = useCallback(() => {
     if (nodes.length === 0) return;

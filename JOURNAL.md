@@ -912,3 +912,13 @@ Clean (0 errors).
 **Validation:** Red proven via discriminator — temporarily adding `get_or_insert` to the load path made the test fail; restored. Module 189/189 · full lib 805/805 · fmt + clippy clean · reviewer no blockers (doc-comment hash reference softened to a stable phrase; byte-identity assertion kept deliberately as the write-back guard).
 
 **Commits:** test + doc only — no production behavior change.
+
+## 2026-08-07 — TDD cycle: wire deletion vs in-flight connection contract (topology editor)
+
+**Problem:** Deleting a wire mid-connection is a single-wire mutation (mirrors the direction-toggle rule — the connection should survive). But the one exception was a real hole: deleting the EXACT duplicate pair of a pending connection (same endpoints + normalized ports) removed it from `wires`, so completing the connection after the delete silently recreated it — the duplicate detector in `handlePortClick` never fired because the wire was gone. Red test proved it: `expected 2 to be 1`.
+
+**Decision (pinned):** unrelated wire delete keeps the connection in flight (pin); deleting the exact duplicate pair cancels it (fix). `executeDelete` now looks up the deleted wire and, when `connectingFromNodeId`/`connectingFromPort` are set and the wire's from OR to endpoint matches the connecting source node + normalized port (`?? 'right'`/`?? 'left'`, mirroring the duplicate detector), clears both connecting setters before the history push + filter. The target node is unknown until completion, so the source endpoint is the only match signal — conservative by design (a same-source, different-target delete also cancels; the ghost preview vanishing signals it, safer than silently recreating the deleted wire). Reversed-source direction (connection started from the wire's target port) covered by the to-endpoint arm, pinned by a third test.
+
+**Validation:** Red → Green proven; discriminator proven (disabling the guard failed exactly the 2 duplicate-pair tests while the unrelated-delete pin stayed green). Editor suite 122/122 · topology suites 150/150 · full UI suite 262 files / 4103 tests · typecheck + eslint clean · drift guard clean · reviewer no blockers (conservative-edge comment added).
+
+**Commits:** `executeDelete` guard + 3 tests. Shared-tree note: other thread's clamp refactor (`nodeTopologyClamp.ts` + hunks in the same files) left uncommitted; my hunks staged selectively via `git add -p` (test hunk 4/4, component hunks 4–5/6).
