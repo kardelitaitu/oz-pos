@@ -1746,6 +1746,13 @@ describe('NodeTopologyEditor — Apply failure resilience', () => {
     // The in-memory edit survives the failed save.
     expect(getNodeCount()).toBe(countAfterEdit);
 
+    // Undo still works — the pre-save history entry was not cleared.
+    // (Asserted BEFORE opening a dialog: an open confirm dialog owns the
+    // keyboard, so canvas shortcuts are inert under it.)
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true });
+    expect(getNodeCount()).toBe(countAfterEdit - 1);
+
     // Still dirty: a preset click asks about unsaved changes (confirm dialog
     // title + the unsaved-changes message body are both rendered).
     fireEvent.click(screen.getByText('Retail Preset'));
@@ -1753,11 +1760,6 @@ describe('NodeTopologyEditor — Apply failure resilience', () => {
     expect(
       screen.getByText(/Loading a preset will replace your current topology/),
     ).toBeInTheDocument();
-
-    // Undo still works — the pre-save history entry was not cleared.
-    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
-    fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true });
-    expect(getNodeCount()).toBe(countAfterEdit - 1);
   });
 
   it('does not clear selection when Apply fails before the idMap branch', async () => {
@@ -2004,5 +2006,51 @@ describe('NodeTopologyEditor — preset load cancels in-flight connection', () =
     // The stale connection cannot complete: a target click creates no wire.
     fireEvent.click(portOf(nodeAt(1), 'top'));
     expect(getWireCount()).toBe(0);
+  });
+});
+
+// ── Escape on an open dialog does not touch canvas state ────────
+
+describe('NodeTopologyEditor — dialog Escape isolation', () => {
+  it('Escape cancelling the delete dialog keeps the node selected', () => {
+    renderEditor();
+
+    // Select a wired node so the delete flow opens the confirm dialog.
+    selectFirstNode();
+    fireEvent.click(screen.getByText('Delete Selected Element'));
+    expect(screen.getByText('Delete Node')).toBeInTheDocument();
+
+    // Escape closes the dialog (the Modal's focus trap owns it)...
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    fireEvent.keyDown(canvas, { key: 'Escape' });
+    expect(screen.queryByText('Delete Node')).not.toBeInTheDocument();
+
+    // ...without the editor's window-level handler stealing the selection
+    // (the dialog must own the keyboard while it is open).
+    expect(document.querySelector('.topology-node.node-selected')).not.toBeNull();
+  });
+
+  it('Escape cancelling the unsaved-changes preset dialog leaves the edit intact', () => {
+    renderEditor();
+
+    // Make a dirty edit so the preset click opens the confirm dialog. The
+    // add also selects the new node, so the guard's effect is observable:
+    // Escape must NOT steal the selection while the dialog is open.
+    fireEvent.click(screen.getByText('+ Store Node'));
+    const countAfterEdit = getNodeCount();
+    expect(document.querySelector('.topology-node.node-selected')).not.toBeNull();
+
+    fireEvent.click(screen.getByText('Retail Preset'));
+    expect(screen.getAllByText('Load Preset').length).toBeGreaterThan(0);
+
+    // Escape closes the dialog without loading the preset...
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    fireEvent.keyDown(canvas, { key: 'Escape' });
+    expect(screen.queryByText('Load Preset')).not.toBeInTheDocument();
+
+    // ...the edit survives untouched, and the selection was NOT cleared by
+    // the editor's window-level handler (the dialog owns the keyboard).
+    expect(getNodeCount()).toBe(countAfterEdit);
+    expect(document.querySelector('.topology-node.node-selected')).not.toBeNull();
   });
 });

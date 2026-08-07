@@ -566,6 +566,15 @@ export default function NodeTopologyEditor({
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
         return;
       }
+      // Guard: a confirm dialog owns the keyboard while it is open — Escape
+      // (and any canvas shortcut) must not clear the selection or mutate the
+      // canvas under an open delete/preset dialog. The Modal's focus trap
+      // closes the dialog itself (bubble order: document listener first).
+      // NOTE: every editor-owned confirm dialog must be added to this
+      // condition, or its Escape/shortcut handling will leak into the canvas.
+      if (confirmDelete || confirmPreset) {
+        return;
+      }
       if (e.key === 'Escape') {
         setConnectingFromNodeId(null);
         setConnectingFromPort(null);
@@ -632,7 +641,7 @@ export default function NodeTopologyEditor({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedNodeId, selectedWireId, wires, pushHistory, popUndo, popRedo]);
+  }, [selectedNodeId, selectedWireId, wires, pushHistory, popUndo, popRedo, confirmDelete, confirmPreset]);
 
   const executePresetLoad = useCallback(() => {
     if (confirmPreset) {

@@ -769,3 +769,17 @@ Clean (0 errors).
 **Commits:** (hash below)
 
 **Follow-ups (deliberately NOT done):** the Apply/idMap remap branch is the one canvas-mutating path without the guard — a connection in flight during a successful Apply-with-remap self-heals (the preview vanishes because the old id no longer resolves, and the next port click clears the stale source), so it is not a bug; adding the same three clears there would make the invariant complete if that interaction ever becomes common. The triple clear could also be a tiny helper if a fourth site appears.
+
+
+## 2026-08-07 — Topology editor: confirm dialogs own the keyboard (real defect)
+
+### Escape cancelling a confirm dialog silently deselected the element under it
+**Problem:** The editor's window-level keydown handler ran even while a delete/preset confirm dialog was open. Pressing Escape to cancel a delete therefore ALSO hit the handler's Escape branch, clearing `selectedNodeId`/`selectedWireId` (and any in-flight connection) — the node you were about to delete stayed on the canvas but got silently deselected and its inspector closed. Ctrl+Z/Delete/arrows could likewise mutate the canvas under an open dialog.
+
+**Solution:** Red→Green. Red test: select a wired node, open the delete confirm dialog, press Escape, assert the dialog closes AND the node is still selected — failed before the fix (selection was stolen). Green: the keydown handler now early-returns when a confirm dialog is open (`if (confirmDelete || confirmPreset) return;`) — the dialog owns the keyboard, and the Modal's focus-trap (document bubble listener, fires before the window listener) still closes the dialog itself. The guard required adding `confirmDelete`/`confirmPreset` to the keydown effect's dependency array — without it the closure was stale and the guard never fired (the Red run caught this too). A second test pins the unsaved-changes preset dialog: Escape closes it without loading, the dirty edit survives, and the selection is not cleared (strengthened post-review to assert the selection — the original count-only assertions were not a true discriminator). The Apply-failure test was reordered (undo asserted before opening the dialog) because canvas shortcuts are now correctly inert under an open dialog — its intent (undo preserved after failed Apply) is unchanged.
+
+**Validation:** 2 new · editor suite 94 · topology suites 122/122 · full UI suite 262 files / 4075 tests green · typecheck + eslint clean. Reviewer: no blockers (nits applied).
+
+**Commits:** (hash below)
+
+**Follow-ups (deliberately NOT done):** the idMap remap branch remains the one canvas-mutating path without the stale-connection clears — it self-heals (stale id stops resolving; next port click clears it), so not a bug; a comment on the guard now documents that every future editor-owned dialog must be added to the condition.
