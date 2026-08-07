@@ -1720,3 +1720,113 @@ describe('NodeTopologyEditor — simulation pulse', () => {
     expect(after!.getAttribute('cx')).not.toBe(beforeCx);
   });
 });
+
+// ── Apply failure resilience ────────────────────────────────────
+
+describe('NodeTopologyEditor — Apply failure resilience', () => {
+  it('keeps edits, stays dirty, and preserves undo when Apply fails', async () => {
+    renderEditor({
+      onSave: async () => {
+        throw new Error('boom');
+      },
+    });
+
+    // Make a dirty edit: add a node.
+    fireEvent.click(screen.getByText('+ Store Node'));
+    const countAfterEdit = getNodeCount();
+
+    fireEvent.click(screen.getByText('Apply Topology Changes'));
+
+    // The failure surfaces as an error toast (plainErrorMessage sanitizes the
+    // thrown Error to the generic fallback, so pin the save-error key itself).
+    await waitFor(() =>
+      expect(screen.getByText(/topology-toast-save-error/)).toBeInTheDocument(),
+    );
+
+    // The in-memory edit survives the failed save.
+    expect(getNodeCount()).toBe(countAfterEdit);
+
+    // Still dirty: a preset click asks about unsaved changes (confirm dialog
+    // title + the unsaved-changes message body are both rendered).
+    fireEvent.click(screen.getByText('Retail Preset'));
+    expect(screen.getAllByText('Load Preset').length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/Loading a preset will replace your current topology/),
+    ).toBeInTheDocument();
+
+    // Undo still works — the pre-save history entry was not cleared.
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true });
+    expect(getNodeCount()).toBe(countAfterEdit - 1);
+  });
+
+  it('does not clear selection when Apply fails before the idMap branch', async () => {
+    renderEditor({ onSave: vi.fn().mockRejectedValue(new Error('late-fail')) });
+
+    fireEvent.click(screen.getByText('+ Store Node'));
+    // Select a node so a selection exists before the failed save.
+    selectFirstNode();
+    const selectedBefore = document.querySelector('.topology-node.node-selected');
+    expect(selectedBefore).not.toBeNull();
+
+    fireEvent.click(screen.getByText('Apply Topology Changes'));
+
+    await waitFor(() =>
+      expect(screen.getByText(/topology-toast-save-error/)).toBeInTheDocument(),
+    );
+
+    // Selection survives — the failure returns before the idMap branch clears it.
+    expect(document.querySelector('.topology-node.node-selected')).not.toBeNull();
+  });
+});
+
+// ── Keyboard wire-direction toggle ──────────────────────────────
+
+describe('NodeTopologyEditor — keyboard wire-direction toggle', () => {
+  it('toggles wire direction with Enter and Space (keyboard parity)', () => {
+    renderEditor();
+
+    const wireLabels = screen.getAllByText(/→|↔/);
+    const firstLabel = wireLabels[0]!;
+    expect(firstLabel.textContent).toContain('→');
+
+    fireEvent.keyDown(firstLabel, { key: 'Enter' });
+    expect(firstLabel.textContent).toContain('↔');
+
+    fireEvent.keyDown(firstLabel, { key: ' ' });
+    expect(firstLabel.textContent).toContain('→');
+  });
+});
+
+// ── Hover-target preview snap ───────────────────────────────────
+
+describe('NodeTopologyEditor — hover-target preview snap', () => {
+  it('snaps the in-flight preview to a port when hovering near it', () => {
+    renderEditor();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    // Start a connection from store-1's bottom port.
+    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+
+    // Move to ws-1's top port: canvas coords are node.x + NODE_WIDTH/2,
+    // node.y - 6 (pan 0 / zoom 1 / zero rect in jsdom, so clientX/Y ==
+    // canvas coords and the hit is exact).
+    const wsX = parseFloat(nodeAt(1).style.left);
+    const wsY = parseFloat(nodeAt(1).style.top);
+    const targetX = wsX + 100;
+    const targetY = wsY - 6;
+    fireEvent.mouseMove(canvas, { clientX: targetX, clientY: targetY });
+
+    const preview = document.querySelector(
+      'path.wire-path[opacity="0.5"]',
+    ) as SVGPathElement | null;
+    expect(preview).not.toBeNull();
+    const d = preview!.getAttribute('d')!;
+    const nums = d.match(/-?\d+(\.\d+)?/g)!.map(Number);
+    const endX = nums[nums.length - 2]!;
+    const endY = nums[nums.length - 1]!;
+    // The preview endpoint snapped to the ws-1 top port.
+    expect(endX).toBeCloseTo(targetX, 1);
+    expect(endY).toBeCloseTo(targetY, 1);
+  });
+});

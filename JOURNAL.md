@@ -699,3 +699,17 @@ Clean (0 errors).
 **Commits:** (hash below)
 
 **Follow-ups (deliberately NOT done):** pan with the middle button (button: 1 — the handler allows it) is untested but marginal; the pulse `cx` assertion is coupled to preset geometry (wires span distinct x) — commented in the test.
+
+
+## 2026-08-07 — Topology editor: Apply failure resilience, keyboard wire-toggle, hover-snap
+
+### Three more unguarded surfaces after 81 editor tests
+**Problem:** The Apply button's failure path (onSave rejection), the wire-label keyboard toggle (Enter/Space parity for `handleToggleWireDirection`), and the in-flight preview's hover-target snap were all untested.
+
+**Solution:** 4 characterization tests: (1) a rejecting `onSave` shows the save-error toast, keeps the added node in memory, leaves the canvas dirty (a preset click opens the unsaved-changes confirm dialog — title + message body asserted), and preserves the undo stack (Ctrl+Z still removes the added node); (2) a second test pins that a failure before the idMap branch does not clear `node-selected` (the `catch` returns early). The Red run surfaced a test-assumption bug, not a component defect: `plainErrorMessage` sanitizes a raw `Error` to the generic fallback, so the toast never contains the thrown message — the matcher pins the `topology-toast-save-error` key instead. (3) Enter then Space on the wire label text toggles → ↔ → (bubbles from `<text>` to the label `<g>`'s `onKeyDown`). (4) hovering at ws-1's top-port canvas coords (`node.x + NODE_WIDTH/2`, `node.y − 6`; pan 0/zoom 1/zero rect in jsdom) while a connection is in flight snaps the preview path's endpoint to that port (parsed from the `d` attribute, `toBeCloseTo`). All pinned existing behavior — no production change needed.
+
+**Validation:** 4 new · editor suite 85 · topology suites 113/113 · full UI suite 262 files / 4066 tests green · typecheck + eslint clean.
+
+**Commits:** (hash below)
+
+**Follow-ups (deliberately NOT done):** the hover-snap test hardcodes `NODE_WIDTH/2` and the top-port dy (−6) — constants change would break it (commented); the preview-snap distance threshold (30px) and the two-way-arrow marker rendering remain unpinned.
