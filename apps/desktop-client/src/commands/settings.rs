@@ -10,7 +10,7 @@ use tauri::State;
 use std::collections::HashMap;
 
 use oz_core::permissions;
-use oz_core::{Settings, Store, SyncPriority, UserPreferences};
+use oz_core::{Settings, Store, UserPreferences};
 
 use platform_core::terminal_profile::TerminalProfile;
 
@@ -1033,26 +1033,11 @@ fn run_set_setting(
 
 /// Enqueue one `settings.update` sync item per changed key (SYNC-10).
 ///
-/// The payload shape matches `platform_sync::queue::SettingsUpdatePayload`
-/// (key/value/terminal_id) so the sync apply side can parse it. Items are
-/// scoped to the given tenant at Low priority — settings are low-frequency
-/// and the conflict resolver treats `settings.*` as version-LWW. Callers
-/// enqueue on the GLOBAL db (the sync daemon only watches the global
-/// queue), never the store db the value was written to.
-///
-/// A new local save SUPERSEDES any still-pending `settings.update` item
-/// for the same key (same tenant): the newest local intent replaces
-/// unsynced older ones. Without this, a save of v1→v2→v1 while offline
-/// would leave [v1, v2, v1] pending and the daemon would push v2 last,
-/// leaving the remote at v2 while the local is at v1.
-///
-/// Ordering is deliberately ENQUEUE-THEN-SUPERSEDE: if the enqueue fails
-/// (warn-and-continue at the call site), the old pending items survive —
-/// exactly the pre-supersede behavior. If the supersede fails instead, the
-/// key briefly holds a duplicate (old + new) pair, which the apply side
-/// already handles (replay-safe, version-LWW — the new value pushed last
-/// wins). The reverse order (delete-then-enqueue) would lose the update
-/// entirely if the enqueue failed after the delete.
+/// Delegates to [`Store::enqueue_settings_update_superseding`] (oz-core),
+/// which owns the `settings.update` wire contract: payload shape, Low
+/// priority, and supersede-any-pending-same-key semantics. Callers enqueue
+/// on the GLOBAL db (the sync daemon only watches the global queue), never
+/// the store db the value was written to.
 fn enqueue_settings_updates(
     store: &Store,
     entries: &HashMap<String, String>,
@@ -1060,44 +1045,7 @@ fn enqueue_settings_updates(
     tenant_id: &str,
 ) -> Result<(), AppError> {
     for (key, value) in entries {
-        let payload = serde_json::json!({
-            "key": key,
-            "value": value,
-            "terminal_id": terminal_id,
-        });
-        let fresh = store.enqueue_offline_scoped(
-            "settings.update",
-            &payload.to_string(),
-            tenant_id,
-            SyncPriority::Low,
-        )?;
-        // Exempt the item we just created — it IS the newest intent.
-        supersede_pending_settings_key(store, key, tenant_id, &fresh.id)?;
-    }
-    Ok(())
-}
-
-/// Delete still-pending `settings.update` items for the same key within
-/// the given tenant, so the freshest local save wins when the queue drains.
-///
-/// Tenant-scoped by construction (`list_pending_offline_for_tenant` +
-/// `delete_offline_item_for_tenant`), so store-y's save never removes
-/// store-x's pending item. Malformed payloads are skipped defensively.
-fn supersede_pending_settings_key(
-    store: &Store,
-    key: &str,
-    tenant_id: &str,
-    keep_id: &str,
-) -> Result<(), AppError> {
-    let pending = store.list_pending_offline_for_tenant(tenant_id)?;
-    for item in pending {
-        if item.id == keep_id || item.action != "settings.update" {
-            continue;
-        }
-        let v: serde_json::Value = serde_json::from_str(&item.payload).unwrap_or_default();
-        if v["key"].as_str() == Some(key) {
-            store.delete_offline_item_for_tenant(&item.id, tenant_id)?;
-        }
+        store.enqueue_settings_update_superseding(key, value, terminal_id, tenant_id)?;
     }
     Ok(())
 }
@@ -1228,6 +1176,7 @@ pub async fn set_settings_scoped(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oz_core::SyncPriority;
     use oz_core::migrations;
     use rusqlite::Connection;
 

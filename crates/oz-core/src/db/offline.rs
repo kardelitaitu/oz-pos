@@ -135,6 +135,54 @@ impl Store<'_> {
         self.enqueue_offline_inner(action, payload, tenant_id, priority)
     }
 
+    /// Enqueue a `settings.update` sync item for a local settings write,
+    /// superseding any still-pending items for the same key in the same
+    /// tenant (SYNC-10).
+    ///
+    /// The payload matches `SettingsUpdatePayload` (key/value/terminal_id)
+    /// so the sync apply side can parse it. Items are Low priority —
+    /// settings are low-frequency and the conflict resolver treats
+    /// `settings.*` as version-LWW. Ordering is ENQUEUE-THEN-SUPERSEDE: an
+    /// enqueue failure leaves the older pending items intact (pre-supersede
+    /// behavior), while a supersede failure degrades to a duplicate pair
+    /// that the replay-safe apply side already handles — never a lost update.
+    pub fn enqueue_settings_update_superseding(
+        &self,
+        key: &str,
+        value: &str,
+        terminal_id: &str,
+        tenant_id: &str,
+    ) -> Result<(), CoreError> {
+        let payload = serde_json::json!({
+            "key": key,
+            "value": value,
+            "terminal_id": terminal_id,
+        });
+        let fresh = self.enqueue_offline_scoped(
+            "settings.update",
+            &payload.to_string(),
+            tenant_id,
+            SyncPriority::Low,
+        )?;
+        // Supersede older pending items for the SAME key AND SAME
+        // terminal, exempting the item just created — it IS the newest
+        // intent. The terminal filter keeps the supersede per-terminal:
+        // terminal A's re-save must never cancel terminal B's still-pending
+        // save for the same key (version-LWW attributes per terminal).
+        // Malformed payloads are skipped defensively.
+        let pending = self.list_pending_offline_for_tenant(tenant_id)?;
+        for item in pending {
+            if item.id == fresh.id || item.action != "settings.update" {
+                continue;
+            }
+            let v: serde_json::Value = serde_json::from_str(&item.payload).unwrap_or_default();
+            if v["key"].as_str() == Some(key) && v["terminal_id"].as_str() == Some(terminal_id) {
+                self.delete_offline_item_for_tenant(&item.id, tenant_id)?;
+            }
+        }
+        Ok(())
+    }
+
     fn enqueue_offline_inner(
         &self,
         action: &str,
@@ -678,6 +726,135 @@ mod tests {
 
         let items = s.list_all_offline().unwrap();
         assert_eq!(items.len(), 1);
+    }
+
+    /// SYNC-10 tablet parity: a local settings write must enqueue a
+    /// `settings.update` item with the payload shape the sync apply side
+    /// parses ({key, value, terminal_id}), tenant-scoped at Low priority.
+    #[test]
+    fn enqueue_settings_update_superseding_creates_item() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        s.enqueue_settings_update_superseding("theme", "dark", "term-1", "store-x")
+            .unwrap();
+
+        let pending = s.list_pending_offline_for_tenant("store-x").unwrap();
+        assert_eq!(pending.len(), 1);
+        let item = &pending[0];
+        assert_eq!(item.action, "settings.update");
+        assert_eq!(item.priority, SyncPriority::Low);
+        let v: serde_json::Value = serde_json::from_str(&item.payload).unwrap();
+        assert_eq!(v["key"], "theme");
+        assert_eq!(v["value"], "dark");
+        assert_eq!(v["terminal_id"], "term-1");
+    }
+
+    /// A second local save of the same key must replace the still-pending
+    /// item, so a v1→v2→v1 offline sequence pushes the newest value last.
+    #[test]
+    fn enqueue_settings_update_superseding_replaces_same_key() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        s.enqueue_settings_update_superseding("theme", "dark", "term-1", "store-x")
+            .unwrap();
+        s.enqueue_settings_update_superseding("theme", "light", "term-1", "store-x")
+            .unwrap();
+
+        let pending = s.list_pending_offline_for_tenant("store-x").unwrap();
+        assert_eq!(
+            pending.len(),
+            1,
+            "second save must replace the pending item"
+        );
+        let v: serde_json::Value = serde_json::from_str(&pending[0].payload).unwrap();
+        assert_eq!(v["value"], "light");
+    }
+
+    /// Superseding one key must leave pending items for OTHER keys intact.
+    #[test]
+    fn enqueue_settings_update_superseding_keeps_other_keys() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        s.enqueue_settings_update_superseding("a", "1", "term-1", "store-x")
+            .unwrap();
+        s.enqueue_settings_update_superseding("b", "2", "term-1", "store-x")
+            .unwrap();
+        s.enqueue_settings_update_superseding("a", "3", "term-1", "store-x")
+            .unwrap();
+
+        let pending = s.list_pending_offline_for_tenant("store-x").unwrap();
+        assert_eq!(pending.len(), 2);
+        let mut keyed: Vec<(String, String)> = pending
+            .iter()
+            .map(|i| {
+                let v: serde_json::Value = serde_json::from_str(&i.payload).unwrap();
+                (
+                    v["key"].as_str().unwrap().to_string(),
+                    v["value"].as_str().unwrap().to_string(),
+                )
+            })
+            .collect();
+        keyed.sort();
+        assert_eq!(
+            keyed,
+            vec![
+                ("a".to_string(), "3".to_string()),
+                ("b".to_string(), "2".to_string())
+            ]
+        );
+    }
+
+    /// Supersede must be tenant-scoped — store-y's save of the same key
+    /// must not remove store-x's pending item (multi-store isolation).
+    #[test]
+    fn enqueue_settings_update_superseding_is_tenant_scoped() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        s.enqueue_settings_update_superseding("theme", "dark", "term-1", "store-x")
+            .unwrap();
+        s.enqueue_settings_update_superseding("theme", "dark", "term-1", "store-y")
+            .unwrap();
+
+        let pending = s.list_pending_offline().unwrap();
+        assert_eq!(
+            pending.len(),
+            2,
+            "cross-tenant items must not be superseded"
+        );
+    }
+
+    /// Supersede must be per-terminal — term-2's pending save of the same
+    /// key must survive term-1's re-save (version-LWW attributes changes
+    /// per terminal, so neither terminal may cancel the other's intent).
+    #[test]
+    fn enqueue_settings_update_superseding_keeps_other_terminals_items() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        s.enqueue_settings_update_superseding("theme", "dark", "term-1", "store-x")
+            .unwrap();
+        s.enqueue_settings_update_superseding("theme", "dark", "term-2", "store-x")
+            .unwrap();
+        // term-1 saves the same key again — only ITS older pending item is
+        // superseded; term-2's item survives.
+        s.enqueue_settings_update_superseding("theme", "light", "term-1", "store-x")
+            .unwrap();
+
+        let pending = s.list_pending_offline_for_tenant("store-x").unwrap();
+        assert_eq!(pending.len(), 2, "term-2's pending item must survive");
+        let terminals: Vec<String> = pending
+            .iter()
+            .map(|i| {
+                let v: serde_json::Value = serde_json::from_str(&i.payload).unwrap();
+                v["terminal_id"].as_str().unwrap_or("").to_string()
+            })
+            .collect();
+        assert!(terminals.iter().any(|t| t == "term-1"));
+        assert!(terminals.iter().any(|t| t == "term-2"));
     }
 
     // ── List pending ────────────────────────────────────────────────
