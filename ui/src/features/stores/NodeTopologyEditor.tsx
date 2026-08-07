@@ -1465,7 +1465,7 @@ export default function NodeTopologyEditor({
                     <g
                       transform={`translate(${lx}, ${ly})`}
                       className="wire-label-group"
-                      onClick={() => handleToggleWireDirection(wire.id)}
+                      onClick={(e) => { e.stopPropagation(); handleToggleWireDirection(wire.id); }}
                       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); handleToggleWireDirection(wire.id); } }}
                       role="button"
                       tabIndex={0}

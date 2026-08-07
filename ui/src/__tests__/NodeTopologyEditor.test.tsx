@@ -2572,6 +2572,50 @@ describe('NodeTopologyEditor — wire-label toggle keeps an in-flight connection
     fireEvent.click(portOf(nodeAt(1), 'top'));
     expect(getWireCount()).toBe(baseline + 1);
   });
+
+  it('label click does not bubble a cancel to the canvas (stopPropagation contract)', () => {
+    // The wire label's onClick must never reach a canvas-level background
+    // handler (e.g. a future background-click-cancels-connection listener).
+    // The label sits INSIDE the canvas subtree, so without stopPropagation
+    // the toggle click bubbles to a container onClick — where a
+    // background-click cancel would wrongly kill the in-flight connection
+    // the toggle is supposed to leave untouched. The spy is a REACT-level
+    // onClick on a wrapper container: native listeners on intermediate
+    // elements fire regardless of React's synthetic stopPropagation (React
+    // 17+ delegates at the root), so only the delegation-level handler
+    // discriminates the fix.
+    let canvasClicked = false;
+    const onCanvasClick = () => { canvasClicked = true; };
+    // Native <button> as the wrapper: an interactive element that would
+    // receive the bubbled label click, standing in for a future
+    // canvas-level background-click-cancels-connection handler.
+    function Wrap() {
+      return <button type="button" onClick={onCanvasClick}><NodeTopologyEditor currentTier="standard" /></button>;
+    }
+    renderWithProvidersSync(<Wrap />, multiStoreFtl, sharedFtl);
+
+    // Start a connection from store-1's bottom port.
+    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    expect(nodeAt(0).className).toContain('node-connecting-source');
+
+    // Click the first wire label to toggle direction.
+    const firstLabel = screen.getAllByText(/→|↔/)[0]!;
+    fireEvent.click(firstLabel);
+    expect(firstLabel.textContent).toContain('↔');
+
+    // The click must NOT have bubbled to the wrapper's React onClick — a
+    // background-click cancel handler must never fire for a label
+    // interaction.
+    expect(canvasClicked).toBe(false);
+
+    // The user's contract: a background mousedown on the canvas AFTER the
+    // label click must not cancel the in-flight connection — the toggle's
+    // click never reached (and cannot arm) a background-click cancel.
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    fireEvent.mouseDown(canvas, { button: 0 });
+    expect(nodeAt(0).className).toContain('node-connecting-source');
+    expect(previewLine()).not.toBeNull();
+  });
 });
 
 // ── Escape on an open dialog does not touch canvas state ────────

@@ -922,3 +922,15 @@ Clean (0 errors).
 **Validation:** Red → Green proven; discriminator proven (disabling the guard failed exactly the 2 duplicate-pair tests while the unrelated-delete pin stayed green). Editor suite 122/122 · topology suites 150/150 · full UI suite 262 files / 4103 tests · typecheck + eslint clean · drift guard clean · reviewer no blockers (conservative-edge comment added).
 
 **Commits:** `executeDelete` guard + 3 tests. Shared-tree note: other thread's clamp refactor (`nodeTopologyClamp.ts` + hunks in the same files) left uncommitted; my hunks staged selectively via `git add -p` (test hunk 4/4, component hunks 4–5/6).
+
+## 2026-08-07 — TDD cycle: wire-label onClick stopPropagation contract (topology editor)
+
+**Problem:** The wire label group's onClick (`handleToggleWireDirection`) lacked `stopPropagation` while its onKeyDown sibling already had it. The label sits INSIDE the canvas subtree — a future canvas-level background-click-cancels-connection handler would receive the toggle click as it bubbles, wrongly killing the in-flight connection the toggle is supposed to leave untouched (the very contract pinned by the keep-connection cycles).
+
+**Red → Green:** Test renders the editor inside a wrapper whose React-level onClick stands in for the future background handler, starts an in-flight connection, clicks the label, asserts the wrapper handler did NOT fire and the connection survives (plus the user's explicit scenario: a background mousedown after the label click cannot cancel the connection). Fails without the fix, passes with `e.stopPropagation()` added to the label onClick.
+
+**Test-infra lesson (valuable):** the first attempt used a NATIVE `addEventListener` on the canvas — that fired even WITH the fix, because React 17+ delegates events at the root and native listeners on intermediate elements fire regardless of synthetic stopPropagation. The React-level wrapper onClick (same delegation system) is the correct discriminator. Also: the eslint jsx-a11y rule rejects a non-native wrapper div with onClick — a native `<button type="button">` wrapper satisfies it while keeping identical propagation semantics.
+
+**Validation:** Red → Green + discriminator proven (removing stopPropagation failed the test). Editor suite 123/123 · topology suites 151/151 · full UI suite 262 files / 4104 tests · typecheck + eslint clean · drift guard clean.
+
+**Commits:** `stopPropagation` on label onClick + 1 test. Shared-tree note: other thread's clamp refactor (`nodeTopologyClamp.ts` + ADR + hunks in the same files) left uncommitted; staged only my hunks via `git add -p` (test 4/4, component 5/5).
