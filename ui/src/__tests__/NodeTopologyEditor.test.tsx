@@ -1552,6 +1552,25 @@ describe('NodeTopologyEditor — canvas shortcuts vs focused chrome', () => {
     expect(screen.queryByText('Delete Node')).not.toBeInTheDocument();
   });
 
+  it('keeps arrow-nudge inert while a tool-card has focus', () => {
+    renderEditor();
+
+    // Select a node WITHOUT an edit — a plain selection pushes no history,
+    // so the Undo button's absence after the arrow key proves no nudge
+    // (the nudge path would pushHistory).
+    const firstNode = document.querySelector('.topology-node') as HTMLElement;
+    fireEvent.mouseDown(firstNode, { button: 0 });
+    fireEvent.mouseUp(firstNode);
+    expect(document.querySelector('.node-selected')).not.toBeNull();
+    expect(screen.queryByText('Undo (Ctrl+Z)')).not.toBeInTheDocument();
+
+    const toolCard = screen.getByText('+ Store Node');
+    toolCard.focus();
+    fireEvent.keyDown(toolCard, { key: 'ArrowDown' });
+
+    expect(screen.queryByText('Undo (Ctrl+Z)')).not.toBeInTheDocument();
+  });
+
   it('keeps arrow-nudge and Escape inert while a header button has focus', () => {
     renderEditor();
 
@@ -1585,6 +1604,44 @@ describe('NodeTopologyEditor — canvas shortcuts vs focused chrome', () => {
     fireEvent.keyDown(addedNode, { key: 'Delete' });
 
     expect(getNodeCount()).toBe(count - 1);
+  });
+
+  it('does not open the delete dialog when Apply has focus and a wired node is selected', () => {
+    renderEditor();
+
+    // Select a WIRED node (store-1 has preset wires) — without the chrome
+    // guard, Delete on the focused Apply button would hit the hasWires
+    // branch and open the 'Delete Node' confirm dialog.
+    const firstNode = document.querySelector('.topology-node') as HTMLElement;
+    fireEvent.mouseDown(firstNode, { button: 0 });
+    fireEvent.mouseUp(firstNode);
+    expect(document.querySelector('.node-selected')).not.toBeNull();
+
+    const applyBtn = screen.getByText('Apply Topology Changes');
+    applyBtn.focus();
+    fireEvent.keyDown(applyBtn, { key: 'Delete' });
+
+    // Chrome owns the keyboard while focused: no confirm dialog, and the
+    // selection survives (the button itself is untouched).
+    expect(screen.queryByText('Delete Node')).not.toBeInTheDocument();
+    expect(document.querySelector('.node-selected')).not.toBeNull();
+    expect(getNodeCount()).toBe(3);
+  });
+
+  it('does not delete the fresh node via Backspace when a tool-card keeps focus', () => {
+    renderEditor();
+
+    // Backspace shares the Delete branch — the guard must cover it too, or
+    // a stray Backspace instantly deletes the just-added (no-wires) node.
+    const addBtn = screen.getByText('+ Store Node');
+    fireEvent.click(addBtn);
+    expect(getNodeCount()).toBe(4);
+
+    addBtn.focus();
+    fireEvent.keyDown(addBtn, { key: 'Backspace' });
+
+    expect(getNodeCount()).toBe(4);
+    expect(screen.queryByText('Delete Node')).not.toBeInTheDocument();
   });
 });
 

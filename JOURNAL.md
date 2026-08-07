@@ -884,3 +884,21 @@ Clean (0 errors).
 **Validation:** Red confirmed (assertion failed pre-fix) · topology module 188/188 (incl. strengthened test) · full oz-pos-app lib 804/804 · `cargo fmt --check` clean · `cargo clippy -p oz-pos-app --lib -- -D warnings` clean · reviewer no blockers (get_or_insert + complement-assertion nits applied).
 
 **Commits:** `fix(topology): normalize null wire ports to defaults at save time`.
+
+## 2026-08-07 — Chrome-focus keydown guard: pin matrix completed (Delete on Apply, Backspace, tool-card arrows)
+
+### Verification cycle
+**Problem:** The user asked to pin that Delete/Backspace/arrows on a focused tool-card button ('+ Store Node', 'Apply Topology Changes') never mutate the canvas. Investigation showed the chrome-scoped guard from cycle 2198a4df ALREADY covers these — the window keydown handler early-returns when `e.target` is inside `.node-tool-rack, .node-topology-header, .node-inspector-drawer`. Verified the full chrome matrix: Apply/preset/sim buttons live in the header, tool-cards/delete/undo/redo/Fit All/Reset View (canvas-controls-mini) live in the tool-rack, the inspector drawer is covered, dialogs have their own confirmDelete/confirmPreset guard, and node cards/ports/wire labels + the canvas container deliberately keep shortcuts.
+
+**Pin completion (no production change — component verified byte-identical to HEAD after the cycle):** 3 tests added to 'canvas shortcuts vs focused chrome':
+- Delete on a focused 'Apply Topology Changes' with a WIRED node selected → no 'Delete Node' dialog, selection survives (the hasWires/delete-dialog path).
+- Backspace on a focused '+ Store Node' tool-card → the just-added node survives (Backspace shares the Delete branch).
+- ArrowDown on a focused tool-card → no nudge (a plain mouseDown selection pushes no history, so Undo-absence proves no nudge — the naive assertion failed because handleAddNode itself pushHistory()es, which legitimately renders Undo).
+
+**Discriminator proven:** disabling the guard made all 5 chrome tests fail while the node-card-Delete test stayed green (no over-blocking); restored byte-identical.
+
+**Validation:** editor suite 112 · topology suites 139/139 · full UI suite 262 files / 4093 tests · typecheck + eslint clean · drift guard clean · reviewer no blockers.
+
+**Commits:** `test(topology): complete chrome-focus keydown guard pin matrix`.
+
+**Follow-ups:** The guard selector is the single source of truth for "chrome owns the keyboard" — any new header/tool-rack/inspector control is automatically covered, but a NEW top-level container (e.g. a future floating toolbar outside the three) must be added to the selector. The `handleAddNode` pushHistory behavior (node adds are undoable) is why arrow-nudge pins must seed selection via mouseDown, not a click.
