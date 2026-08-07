@@ -1949,6 +1949,120 @@ describe('NodeTopologyEditor — simulation pulse', () => {
   });
 });
 
+// ── Simulation pulse vs canvas mutations ────────────────────────
+//
+// Contract (pinned): the pulse ALWAYS reflects the current canvas — a
+// fresh node adds no pulse (it has no wires), an undone wire's pulse
+// vanishes with it, and a PRESET LOAD STOPS the simulation entirely
+// (canvas replacement resets transient editor state, exactly like it
+// cancels in-flight connections — a pulse animating a "test order" on a
+// topology it was never run against would be misleading). The 30ms
+// interval must never leak: stop and unmount both clear it.
+
+describe('NodeTopologyEditor — simulation pulse vs canvas mutations', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const pulseCount = () => document.querySelectorAll('.wire-simulation-pulse').length;
+
+  it('a fresh node add during simulation adds no pulse and keeps the tick running', () => {
+    vi.useFakeTimers();
+    renderEditor();
+
+    fireEvent.click(screen.getByText('Test Order Simulation'));
+    expect(pulseCount()).toBe(2); // retail preset wires
+
+    fireEvent.click(screen.getByText('+ Store Node'));
+    expect(getNodeCount()).toBe(4);
+    // The new node has no wires — it must not spawn a stale pulse.
+    expect(pulseCount()).toBe(2);
+
+    // The interval keeps ticking on the remaining wires.
+    const cxBefore = document.querySelector('.wire-simulation-pulse')!.getAttribute('cx');
+    act(() => {
+      vi.advanceTimersByTime(30);
+    });
+    expect(document.querySelector('.wire-simulation-pulse')!.getAttribute('cx')).not.toBe(cxBefore);
+  });
+
+  it('undoing a wire during simulation removes its pulse and keeps the rest animating', () => {
+    vi.useFakeTimers();
+    renderEditor();
+
+    fireEvent.click(screen.getByText('Test Order Simulation'));
+    expect(pulseCount()).toBe(2);
+
+    // Create a third wire, then undo it mid-simulation.
+    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    fireEvent.click(portOf(nodeAt(1), 'top'));
+    expect(getWireCount()).toBe(3);
+    expect(pulseCount()).toBe(3);
+
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true });
+    expect(getWireCount()).toBe(2);
+    // The undone wire's pulse is gone — no stale pulse on dead geometry.
+    expect(pulseCount()).toBe(2);
+
+    // Remaining wires still animate.
+    const cxBefore = document.querySelector('.wire-simulation-pulse')!.getAttribute('cx');
+    act(() => {
+      vi.advanceTimersByTime(30);
+    });
+    expect(document.querySelector('.wire-simulation-pulse')!.getAttribute('cx')).not.toBe(cxBefore);
+  });
+
+  it('loading a preset stops the simulation: pulse gone, interval cleared', () => {
+    // Scoped timers keep getTimerCount() to real timers only — the default
+    // also fakes queueMicrotask/nextTick, so a stray promise resolution could
+    // shift the baseline between the delta assertions.
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] });
+    renderEditor();
+    const timerBaseline = vi.getTimerCount();
+
+    fireEvent.click(screen.getByText('Test Order Simulation'));
+    expect(pulseCount()).toBeGreaterThan(0);
+    // Exactly one real timer was added: the 30ms interval.
+    expect(vi.getTimerCount()).toBe(timerBaseline + 1);
+
+    // Canvas-replacement rule: a preset replaces the topology, so the
+    // transient simulation state must reset — pulse gone, interval cleared.
+    fireEvent.click(screen.getByText('Resto & KDS Preset'));
+    expect(screen.getByText('Grand Bistro')).toBeInTheDocument();
+    expect(document.querySelector('.wire-simulation-pulse')).toBeNull();
+    // The sim button shows the START label — the simulation stopped.
+    expect(screen.getByText('Test Order Simulation')).toBeInTheDocument();
+    expect(vi.getTimerCount()).toBe(timerBaseline);
+  });
+
+  it('never leaks the 30ms interval: stop and unmount both clear it', () => {
+    // Assert DELTAS, not absolute counts: the provider stack (toast,
+    // workspace, React scheduling) arms unrelated timers, and vitest's
+    // default fake timers also fake queueMicrotask/nextTick — so only the
+    // interval added by starting the simulation is attributable.
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] });
+    const { unmount } = renderEditor();
+    const timerBaseline = vi.getTimerCount();
+
+    fireEvent.click(screen.getByText('Test Order Simulation'));
+    expect(vi.getTimerCount()).toBe(timerBaseline + 1); // exactly one interval
+
+    fireEvent.click(screen.getByText('Stop Simulation'));
+    expect(vi.getTimerCount()).toBe(timerBaseline); // interval cleared
+
+    // Restart and unmount while running — the effect cleanup must clear it.
+    fireEvent.click(screen.getByText('Test Order Simulation'));
+    expect(vi.getTimerCount()).toBe(timerBaseline + 1);
+    unmount();
+    // Teardown also clears component-owned timers that were part of the
+    // baseline, so assert only that the running interval is definitely gone
+    // (count strictly below start-time count), not an exact post-teardown
+    // number.
+    expect(vi.getTimerCount()).toBeLessThan(timerBaseline + 1);
+  });
+});
+
 // ── Apply failure resilience ────────────────────────────────────
 
 describe('NodeTopologyEditor — Apply failure resilience', () => {

@@ -552,6 +552,12 @@ export default function NodeTopologyEditor({
     setConnectingFromNodeId(null);
     setConnectingFromPort(null);
     setHoveredTarget(null);
+    // Same canvas-replacement rule: the simulation pulse animates the OLD
+    // wire geometry, so stop it — a pulse must never animate a "test order"
+    // on a topology it was never run against. Flipping isSimulating false
+    // makes the interval effect's cleanup clear the 30ms interval.
+    setIsSimulating(false);
+    setSimPulseStep(0);
     setFreshNodeIds(new Set());
     // The preset is now the applied state — the canvas matches it exactly,
     // so a subsequent preset click must not confirm.

@@ -854,3 +854,20 @@ Clean (0 errors).
 **Commits:** `fix(topology): exact dirty tracking via applied-state snapshot`.
 
 **Follow-ups:** The persisted-field set is triple-coupled (load mapping ↔ onSave serialization ↔ canvasStateEqual projection) — adding a persisted field must touch all three or the dirty check silently weakens. metadata.persisted is deliberately excluded; if the inspector ever edits another metadata key, it must join the projection.
+
+## 2026-08-07 — Simulation pulse lifecycle: preset load stops the sim; no stale pulse / no leak (topology editor)
+
+### The three scenarios
+**Problem:** The 30ms simulation tick (`setInterval` → `simPulseStep`) animates a pulse dot along every wire. Three interactions during simulation were unpinned: (1) a fresh node add, (2) an undo, (3) a preset load — must never leave a stale pulse (a dot on dead geometry) or a leaking interval.
+
+**Decision — preset load STOPS the simulation.** The pulse animates the OLD wire geometry; a preset replaces the canvas, so animating a "test order" on a topology it was never run against is misleading. This is the same canvas-replacement rule that already cancels in-flight connections in loadPreset. Fresh adds and undo were verified pulse-correct by inspection (the pulse renders inline per CURRENT wire — a new node has no wire, an undone wire unmounts its group with its pulse) and pinned as characterization tests.
+
+**Solution:** Red→Green. Red: 'loading a preset stops the simulation' failed pre-fix (pulse kept animating the new preset's wires, interval alive). Green: loadPreset gains `setIsSimulating(false)` + `setSimPulseStep(0)` beside the connection cancel (flipping isSimulating makes the interval effect's cleanup clear the 30ms interval). Four tests in a new describe 'simulation pulse vs canvas mutations': fresh-add pin (pulse count stays 2, tick continues), undo pin (3→2, rest animate), preset-stop (pulse gone, START label, interval back to baseline), and a leak pin (delta-based `getTimerCount()`: start +1, stop baseline, restart +1, unmount < start-count).
+
+**Test-infra notes:** (a) vitest's default `useFakeTimers()` also fakes queueMicrotask/nextTick — absolute `getTimerCount()` was 6–7 (pending promise chains), so the leak/preset tests use `toFake: ['setInterval','clearInterval','setTimeout','clearTimeout']` + DELTA assertions (the provider stack arms unrelated real timers, so even scoped absolute counts are unreliable; unmount removes component-owned timers too, hence `toBeLessThan(baseline + 1)`). (b) `vitest run -t "<name>"` filtered runs throw `TypeError: loadTopology() is undefined` (the module mock's `mockResolvedValue(null)` from the nested beforeEach appears not to apply under -t) — full-file runs are green; seen twice now (this + the exact-dirty cycle). Repro: `cd ui && npx vitest run src/__tests__/NodeTopologyEditor.test.tsx -t "loading a preset stops"` — worth investigating for the fast TDD loop.
+
+**Validation:** editor suite 109 · topology suites 137/137 · full UI suite 262 files / 4090 tests · typecheck + eslint clean · drift guard clean · reviewer no blockers.
+
+**Commits:** `fix(topology): preset load stops simulation; pulse/interval lifecycle pinned`.
+
+**Follow-ups:** (1) The non-skip workspaceInstances rebuild (authoritative reload) has the IDENTICAL hazard — it replaces the canvas and cancels in-flight connections but leaves the sim running on the rebuilt wires; a one-line `setIsSimulating(false)` guard belongs there (the save-triggered skip branch must NOT stop it — it only flips persisted flags). (2) `setSimPulseStep(0)` resets only on preset load, not on the Stop button — restart-after-stop resumes mid-bezier; either reset on both or accept the asymmetry deliberately.
