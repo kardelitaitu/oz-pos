@@ -1545,3 +1545,99 @@ describe('NodeTopologyEditor — Pro-tier warehouse fallback label', () => {
     expect(last.textContent).toContain('topology-wire-label-fallback');
   });
 });
+
+// ── First warehouse wire: stock-deduct label ────────────────────
+
+describe('NodeTopologyEditor — first warehouse wire stock-deduct label', () => {
+  it('allows the first workspace→warehouse wire on standard tier with the stock-deduct label', async () => {
+    // Custom topology with a warehouse but NO warehouse wires, so the first
+    // ws→wh connection takes the stock-deduct (priority 1) path.
+    mockLoadTopology.mockResolvedValue({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Store', x: 80, y: 120 },
+        { id: 'ws-1', type: 'workspace', name: 'POS', x: 240, y: 80 },
+        { id: 'wh-1', type: 'warehouse', name: 'WH', x: 420, y: 160 },
+      ],
+      wires: [],
+    });
+    renderEditor();
+
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+    const baseline = getWireCount();
+
+    // ws-1 bottom → wh-1 top: workspace→warehouse, first one — allowed on
+    // the standard tier, labelled as the primary stock-deduction path.
+    fireEvent.click(portOf(nodeAt(1), 'bottom'));
+    fireEvent.click(portOf(nodeAt(2), 'top'));
+
+    expect(getWireCount()).toBe(baseline + 1);
+    expect(
+      screen.queryByText(
+        'Multi-warehouse stock deduction fallback wires require a Pro Tier license.',
+      ),
+    ).not.toBeInTheDocument();
+
+    const wires = document.querySelectorAll('.wire-group');
+    const last = wires[wires.length - 1]!;
+    expect(last.textContent).toContain('topology-wire-label-stock-deduct');
+  });
+});
+
+// ── Warehouse tool-card tier lock ───────────────────────────────
+
+describe('NodeTopologyEditor — warehouse tool-card tier lock', () => {
+  it('locks the warehouse tool-card on standard tier when a warehouse exists', () => {
+    renderEditor(); // retail preset already contains a warehouse
+
+    const locked = document.querySelector('.tool-card.locked');
+    expect(locked).not.toBeNull();
+    expect(locked!.textContent).toContain('Pro');
+
+    const before = getNodeCount();
+    fireEvent.click(screen.getByText('+ Warehouse Node'));
+    // handleAddNode guards the tier: toast, no new node.
+    expect(getNodeCount()).toBe(before);
+    expect(
+      screen.getByText('Multi-Warehouse storage locations require a Pro Tier license.'),
+    ).toBeInTheDocument();
+  });
+
+  it('unlocks the warehouse tool-card on Pro tier and adds a warehouse', () => {
+    renderEditor({ currentTier: 'pro' });
+
+    expect(document.querySelector('.tool-card.locked')).toBeNull();
+
+    const before = getNodeCount();
+    fireEvent.click(screen.getByText('+ Warehouse Node'));
+    expect(getNodeCount()).toBe(before + 1);
+  });
+});
+
+// ── Zoom controls behavior ──────────────────────────────────────
+
+describe('NodeTopologyEditor — zoom controls behavior', () => {
+  it('zooms with the mouse wheel and Reset View returns to 100%', () => {
+    renderEditor();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    fireEvent.wheel(canvas, { deltaY: -100, clientX: 10, clientY: 10 });
+    expect(screen.getByText('Zoom: 110%')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Reset View'));
+    expect(screen.getByText('Zoom: 100%')).toBeInTheDocument();
+  });
+
+  it('Fit All recomputes the zoom from the node bounds', () => {
+    renderEditor();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    fireEvent.wheel(canvas, { deltaY: -100, clientX: 10, clientY: 10 });
+    expect(screen.getByText('Zoom: 110%')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Fit All'));
+    // Fit-to-bounds replaces the wheel zoom with a computed value (still
+    // clamped to the 40%..200% range).
+    expect(screen.queryByText('Zoom: 110%')).not.toBeInTheDocument();
+    expect(screen.getByText(/^Zoom: (?:[4-9]\d|1\d\d|200)%$/)).toBeInTheDocument();
+  });
+});

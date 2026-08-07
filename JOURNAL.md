@@ -671,3 +671,17 @@ Clean (0 errors).
 **Commits:** (hash below)
 
 **Follow-ups:** (1) The f22bb5e6 commit message + its journal entry describe the repair as living inside 120 — this entry supersedes that; do NOT re-apply the COALESCE edit to 120. (2) Future migration edits should check applied checksums on all dev DBs (not just git history) before touching any file — or always add a new migration.
+
+
+## 2026-08-07 — Topology editor: stock-deduct label, warehouse tier lock, zoom controls
+
+### Three last unguarded surfaces after 72 editor tests
+**Problem:** The journaled follow-ups plus two more discovered gaps: (1) the FIRST workspace→warehouse wire's `stock-deduct` label path was only indirectly covered (the retail preset already has a warehouse wire, so the priority-1 branch never ran in tests); (2) the warehouse tool-card's tier lock (`tool-card.locked` + Pro badge + `handleAddNode` guard) had zero tests; (3) the zoom controls were only asserted for presence — the wheel handler, Reset View, and Fit All behavior were untested.
+
+**Solution:** 5 characterization tests: (1) a custom `mockLoadTopology` topology (store + workspace + warehouse, ZERO wires) reaches the first-ws→wh branch — the wire is allowed on the standard tier with no license toast and carries `topology-wire-label-stock-deduct`; (2) on the standard tier with a warehouse present the card is `.tool-card.locked` with the Pro badge, clicking shows the multi-warehouse toast and adds nothing (`handleAddNode` guard); (3) on `currentTier="pro"` the card is unlocked and clicking adds a warehouse node; (4) `fireEvent.wheel` (deltaY −100) moves Zoom 100% → 110% and Reset View returns to 100% (clientX/clientY passed so the zoom-toward-cursor pan math stays NaN-free); (5) Fit All replaces the wheel zoom with a bounds-computed value in the clamped 40%–200% range. All pinned existing behavior — no production change needed.
+
+**Validation:** 5 new · editor suite 77 · topology suites 105/105 · full UI suite 262 files / 4058 tests green · typecheck + eslint clean.
+
+**Commits:** (hash below)
+
+**Follow-ups (deliberately NOT done):** the locked warehouse card is only *visually* locked — the button is not `disabled`, so keyboard users can still activate it and get the upgrade toast. That clickable-to-toast behavior looks like a deliberate Pro-upsell affordance, so I did not flip it to `disabled` unilaterally; revisit if we want the harder a11y posture (then the toast path becomes defense-in-depth only). The zoom-out (deltaY > 0) branch is symmetric and untested — marginal.
