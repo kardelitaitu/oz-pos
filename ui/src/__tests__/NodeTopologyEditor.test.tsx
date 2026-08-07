@@ -1,6 +1,6 @@
 import { useState, type ComponentProps } from 'react';
-import { screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
 import NodeTopologyEditor, { type WorkspaceInstanceSeed } from '../features/stores/NodeTopologyEditor';
 import { loadTopology, saveTopology } from '@/api/topology';
@@ -1639,5 +1639,84 @@ describe('NodeTopologyEditor — zoom controls behavior', () => {
     // clamped to the 40%..200% range).
     expect(screen.queryByText('Zoom: 110%')).not.toBeInTheDocument();
     expect(screen.getByText(/^Zoom: (?:[4-9]\d|1\d\d|200)%$/)).toBeInTheDocument();
+  });
+});
+
+// ── Canvas pan ──────────────────────────────────────────────────
+
+describe('NodeTopologyEditor — canvas pan', () => {
+  it('pans the viewport when dragging on empty canvas background', () => {
+    renderEditor();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    const viewport = document.querySelector('.node-canvas-viewport') as HTMLElement;
+    expect(viewport.style.transform).toContain('translate(0px, 0px)');
+
+    // mousedown at (100,100) on the background, drag to (150,130): the
+    // viewport must translate by the pointer delta (50, 30).
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 100, clientY: 100 });
+    fireEvent.mouseMove(document, { clientX: 150, clientY: 130 });
+    fireEvent.mouseUp(document, { button: 0 });
+
+    expect(viewport.style.transform).toContain('translate(50px, 30px)');
+  });
+
+  it('dragging a node moves the node and leaves the viewport translation untouched', () => {
+    renderEditor();
+    const firstNode = document.querySelector('.topology-node') as HTMLElement;
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    const viewport = document.querySelector('.node-canvas-viewport') as HTMLElement;
+    const beforeLeft = firstNode.style.left;
+
+    // Mirrors the established node-drag pattern: node gets the mousedown,
+    // the canvas receives the move/up events.
+    fireEvent.mouseDown(firstNode, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 48, clientY: 48 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+
+    expect(firstNode.style.left).not.toBe(beforeLeft);
+    expect(viewport.style.transform).toContain('translate(0px, 0px)');
+  });
+});
+
+// ── Simulation pulse ────────────────────────────────────────────
+
+describe('NodeTopologyEditor — simulation pulse', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('shows a pulse dot on wires while simulating and hides it when stopped', () => {
+    vi.useFakeTimers();
+    renderEditor();
+
+    fireEvent.click(screen.getByText('Test Order Simulation'));
+    expect(document.querySelector('.wire-simulation-pulse')).not.toBeNull();
+
+    fireEvent.click(screen.getByText('Stop Simulation'));
+    expect(document.querySelector('.wire-simulation-pulse')).toBeNull();
+  });
+
+  it('advances the pulse dot along the wire on each 30ms tick', () => {
+    vi.useFakeTimers();
+    renderEditor();
+
+    fireEvent.click(screen.getByText('Test Order Simulation'));
+    const pulse = document.querySelector('.wire-simulation-pulse');
+    expect(pulse).not.toBeNull();
+    const beforeCx = pulse!.getAttribute('cx');
+
+    // One 30ms interval tick: simPulseStep 0 -> 1, the dot moves along the
+    // bezier curve (the wire's x-range guarantees cx changes).
+    act(() => {
+      vi.advanceTimersByTime(30);
+    });
+
+    const after = document.querySelector('.wire-simulation-pulse');
+    expect(after).not.toBeNull();
+    // The pulse follows a cubic bezier from the wire's start to end port, so
+    // cx must change on every tick for any wire whose endpoints differ in x
+    // (true of every preset wire today — keep that in mind if the preset's
+    // geometry is ever edited).
+    expect(after!.getAttribute('cx')).not.toBe(beforeCx);
   });
 });

@@ -685,3 +685,17 @@ Clean (0 errors).
 **Commits:** (hash below)
 
 **Follow-ups (deliberately NOT done):** the locked warehouse card is only *visually* locked — the button is not `disabled`, so keyboard users can still activate it and get the upgrade toast. That clickable-to-toast behavior looks like a deliberate Pro-upsell affordance, so I did not flip it to `disabled` unilaterally; revisit if we want the harder a11y posture (then the toast path becomes defense-in-depth only). The zoom-out (deltaY > 0) branch is symmetric and untested — marginal.
+
+
+## 2026-08-07 — Topology editor: canvas pan + simulation pulse
+
+### The last two unguarded interaction surfaces after 77 editor tests
+**Problem:** The canvas pan (drag on empty background → viewport translation via document-level move/up listeners) and the simulation pulse (30ms interval advancing `simPulseStep` along each wire's bezier) had zero tests — the simulation toggle was asserted, but the pulse itself and the pan behavior were unguarded.
+
+**Solution:** 4 characterization tests: (1) mouseDown on the `.node-canvas-container` background at (100,100) + mouseMove/mouseUp on `document` at (150,130) translates `.node-canvas-viewport` by exactly (50px, 30px) — mirroring the handler's document-level listener registration; (2) dragging a node moves the node while the viewport transform stays `translate(0px, 0px)` — a boundary pin between the pan and node-drag handlers; (3) with `vi.useFakeTimers` (scoped `afterEach(useRealTimers)`), clicking 'Test Order Simulation' renders `.wire-simulation-pulse` per wire and 'Stop Simulation' hides it; (4) `act(() => vi.advanceTimersByTime(30))` moves the dot (cx changes as the bezier advances). All pinned existing behavior — no production change needed.
+
+**Validation:** 4 new · editor suite 81 · topology suites 109/109 · full UI suite 262 files / 4062 tests green · typecheck + eslint clean.
+
+**Commits:** (hash below)
+
+**Follow-ups (deliberately NOT done):** pan with the middle button (button: 1 — the handler allows it) is untested but marginal; the pulse `cx` assertion is coupled to preset geometry (wires span distinct x) — commented in the test.
