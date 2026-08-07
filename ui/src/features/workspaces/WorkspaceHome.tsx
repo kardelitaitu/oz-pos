@@ -80,9 +80,11 @@ function SkeletonGrid({ l10n: skL10n }: { l10n: ReturnType<typeof useLocalizatio
       {[1, 2, 3].map((i) => (
         <div key={i} className="workspace-skeleton-card">
           <div className="workspace-skeleton-icon" />
-          <div className="workspace-skeleton-title" />
-          <div className="workspace-skeleton-desc" />
-          <div className="workspace-skeleton-desc" />
+          <div className="workspace-skeleton-body">
+            <div className="workspace-skeleton-title" />
+            <div className="workspace-skeleton-desc" />
+            <div className="workspace-skeleton-desc" />
+          </div>
         </div>
       ))}
     </div>
