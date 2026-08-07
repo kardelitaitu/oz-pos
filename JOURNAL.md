@@ -595,3 +595,17 @@ Clean (0 errors).
 **Validation:** 19/19 in-suite · full UI suite 262 files / 4039 tests green · typecheck clean · eslint clean.
 
 **Commits:** (hash below)
+
+
+## 2026-08-07 — Tablet settings sync parity + shared enqueue contract (SYNC-10)
+
+### The tablet's settings writes were invisible to sync; the enqueue contract was duplicated across apps
+**Problem:** Two gaps. (1) My earlier journal note claimed the tablet runs no sync daemon — WRONG: the tablet has its own inline push-only daemon in lib.rs (every 30s: read SyncConfig + pending items → send_items_to_server → apply outcomes). So a tablet settings save enqueued a `settings.update` item WOULD be pushed to the cloud and re-applied by the desktop's pull — but the tablet's `set_setting` did a plain `Settings::set` with no delta and no enqueue, so tablet changes never left the device. (2) The enqueue+supersede logic lived in the desktop's settings.rs; wiring the tablet the same way would have duplicated the wire contract across two apps.
+
+**Solution (TDD):** (1) Red: 4 oz-core tests pinned the new `Store::enqueue_settings_update_superseding(key, value, terminal_id, tenant_id)` contract — create with the exact `SettingsUpdatePayload` shape at Low priority, replace same-key pending items, keep other keys, tenant-scoped. Green: implemented in the queue module with ENQUEUE-THEN-SUPERSEDE ordering (fresh item exempted by id). The desktop's two local helpers collapsed into a thin loop over the shared method (45 tests still pass). (2) Red: tablet tests pinned `run_set_setting` must write a delta row (set_tracked, version 1) and `set_setting` must enqueue the item. Green: tablet command resolves terminal_id, uses set_tracked, enqueues via the shared method (tenant "default"), warn-and-continue on enqueue failure. Reviewer caught the supersede must also filter by `terminal_id` — terminal A's re-save must not cancel terminal B's pending save (version-LWW attributes per terminal) — added the filter + a 5th oz-core test.
+
+**Validation:** oz-core (incl. 5 new enqueue tests) · oz-pos-app 803 · oz-pos-tablet 420 (2 new) · clippy -D warnings clean on all three · fmt clean.
+
+**Commits:** (hashes below)
+
+**Follow-ups (deliberately NOT done):** the tablet daemon is PUSH-ONLY — it never pulls remote changes, so the tablet still can't receive remote settings/sales updates; a pull phase is the next real slice. The `"settings.update"` action string is now hardcoded in the oz-core method, the platform-sync apply arms, and the conflict resolver — a shared const would prevent drift (nice-to-have). Tablet settings writes stay tenant "default" because the command resolves user_id, not a session token (no store derivation).
