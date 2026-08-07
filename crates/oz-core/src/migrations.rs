@@ -709,6 +709,18 @@ pub const ALL: &[Migration] = &[
         id: "120_reseed_default_workspace_instances.sql",
         sql: include_str!("../migrations/120_reseed_default_workspace_instances.sql"),
     },
+    // ── Follow-up: keep 120 immutable, repair multi-store seeding in 121 ──
+    // 120's original definition seeds under COALESCE(primary, 'default'); on
+    // a multi-store DB with no primary at migration time that lands the
+    // canonical instances under store_id = 'default', invisible to the
+    // store-scoped picker. Because 120 is already applied on upgraded
+    // databases it cannot be edited (audit/29 DB-02), so 121 re-seeds with
+    // the improved COALESCE for fresh DBs and re-points the rows 120 seeded
+    // under 'default' to the store's own profile for upgraded DBs.
+    Migration {
+        id: "121_workspace_instances_store_own_profile.sql",
+        sql: include_str!("../migrations/121_workspace_instances_store_own_profile.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.
@@ -1102,6 +1114,92 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM workspace_instances", [], |r| r.get(0))
             .unwrap();
         assert_eq!(after_second, seeded, "migration 120 must be idempotent");
+    }
+
+    //
+    // Simulates a multi-store upgrade: migration 120 (original definition)
+    // seeded the canonical instances under store_id = 'default' because no
+    // profile was primary at migration time. Because 120 is already applied
+    // it cannot be re-defined (audit/29 DB-02); 121 must re-point those rows
+    // to the store's own non-default profile so the store-scoped picker
+    // (wi.store_id = ?) lists them again.
+    #[test]
+    fn migration_121_repoints_instances_seeded_under_default_store() {
+        // 1. Fully-migrated DB (as an upgrade would): 120 seeded the
+        //    canonical instances, and 121's re-point found no non-default
+        //    profile yet, so they sit under 'default'.
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+        let canonical: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM workspace_instances WHERE id LIKE 'default-%'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(canonical > 0, "precondition: canonical instances exist");
+
+        // 2. The app adds a named store profile (no primary yet — 025's
+        //    legacy 'default' row has is_primary = 0, matching the real
+        //    store-DB bootstrap). Simulate the original-120 seeding state and
+        //    mark 121 as not yet applied, as on a real upgrade.
+        conn.execute(
+            "INSERT INTO store_profiles (id, name, currency, timezone) \
+             VALUES ('store-x', 'Store X', 'USD', 'UTC')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE workspace_instances SET store_id = 'default' WHERE id LIKE 'default-%'",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "DELETE FROM schema_migrations \
+             WHERE id = '121_workspace_instances_store_own_profile.sql'",
+            [],
+        )
+        .unwrap();
+
+        // 3. Re-run — 121 must re-point the canonical instances to the
+        //    store's own profile.
+        run(&mut conn).unwrap();
+        let repointed: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM workspace_instances \
+                 WHERE id LIKE 'default-%' AND store_id = 'store-x'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            repointed, canonical,
+            "121 must re-point every canonical instance to the store's own profile"
+        );
+        let still_default: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM workspace_instances \
+                 WHERE id LIKE 'default-%' AND store_id = 'default'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            still_default, 0,
+            "no canonical instance may remain under 'default' when a better profile exists"
+        );
+
+        // 4. Idempotency: a second run must not change anything.
+        run(&mut conn).unwrap();
+        let after_second: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM workspace_instances \
+                 WHERE id LIKE 'default-%' AND store_id = 'store-x'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(after_second, repointed, "migration 121 must be idempotent");
     }
 
     #[test]

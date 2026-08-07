@@ -1072,10 +1072,17 @@ mod tests {
             let conn = state.db_manager.open_store("store-a").unwrap();
             let db = conn.lock().unwrap();
             db.execute("DELETE FROM workspace_instances", []).unwrap();
-            // Mark 120 as not-yet-applied (it was recorded during setup) so the
-            // next open re-runs the repair, exactly like a real upgrade.
+            // Mark 120 and 121 as not-yet-applied (both were recorded during
+            // setup) so the next open re-runs the repair, exactly like a real
+            // upgrade from before the multi-store re-point (120 reseeds, 121
+            // re-points the canonical instances to the store's own profile).
             db.execute(
                 "DELETE FROM schema_migrations WHERE id = '120_reseed_default_workspace_instances.sql'",
+                [],
+            )
+            .unwrap();
+            db.execute(
+                "DELETE FROM schema_migrations WHERE id = '121_workspace_instances_store_own_profile.sql'",
                 [],
             )
             .unwrap();

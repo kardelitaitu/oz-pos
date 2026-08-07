@@ -651,3 +651,23 @@ Clean (0 errors).
 **Commits:** (hash below)
 
 **Follow-ups (deliberately NOT done):** Escape with nothing selected is untested (low value); the first-warehouse-wire `stock-deduct` label path is only indirectly covered; the dev-mock retail cart/undo reload persistence is still open on the mock side.
+
+
+## 2026-08-07 — Migration drift repair: restore 120 byte-exact, move the repair into 121 (DB-02)
+
+### The app panicked on startup: "migration 120_reseed_default_workspace_instances.sql definition drift"
+**Problem:** The earlier "safe to repair pre-release" judgment was wrong — the user's dev DB had already applied migration 120 (checksum `15377253038134…`) before my in-place COALESCE repair changed the file (checksum `6f98911e…`). The DB-02 drift guard fails closed at startup when an applied migration's definition changes, so `oz-pos-app.exe` refused to boot. The lesson: "unreleased" does not mean "unapplied on dev machines" — a migration edited after ANY database has run it is drift.
+
+**Recovery:** The original 120 was never committed (untracked when created), so git history was useless. It was recovered byte-exact from old `target/debug/deps/liboz_core-*.rlib` artifacts (migrations embed via `include_str!`, so pre-repair builds contain the original bytes): extracted a window around the `-- 120_reseed…` header and verified SHA-256 == the applied checksum `15377253038134…`. Technique worth remembering when git alone can't restore a file.
+
+**Solution (the error's own guidance: restore the original, or add a new migration — did both):**
+1. `120_reseed_default_workspace_instances.sql` restored to the original definition (byte-for-byte; on-disk hash now matches the DB record, so drift is gone).
+2. New `121_workspace_instances_store_own_profile.sql` carries the repair that used to live in 120: an INSERT with the improved COALESCE (primary → this store's own profile → 'default') for fresh DBs, plus an UPDATE re-pointing the rows 120 seeded under `store_id = 'default'` (`id LIKE 'default-%' AND store_id = 'default'`) to the preferred profile, with a COALESCE fallback that keeps the current value on single-store DBs. Both statements idempotent and FK-safe.
+3. `migrations.rs`: registered 121 after 120, with a new test `migration_121_repoints_instances_seeded_under_default_store` (upgrade re-point + idempotency; fresh path covered by the app-level test).
+4. `workspaces.rs` test `list_workspaces_repairs_empty_store_db_after_066_window` now deletes BOTH the 120 and 121 records so the re-open runs the full repair — the repair genuinely lives in 121 now.
+
+**Verify:** restored-120 hash == applied checksum (verified against the real dev DB record, read-only) · oz-core 2160 · oz-pos-app 803 · tablet 420 · fresh-DB `migrate` ×2 idempotent · fmt + clippy `-D warnings` clean. Reviewer: no blocking issues.
+
+**Commits:** (hash below)
+
+**Follow-ups:** (1) The f22bb5e6 commit message + its journal entry describe the repair as living inside 120 — this entry supersedes that; do NOT re-apply the COALESCE edit to 120. (2) Future migration edits should check applied checksums on all dev DBs (not just git history) before touching any file — or always add a new migration.
