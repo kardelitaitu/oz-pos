@@ -1360,6 +1360,91 @@ describe('NodeTopologyEditor — wire creation', () => {
   });
 });
 
+// ── Duplicate detection vs defaulted (null) ports ───────────────
+
+describe('NodeTopologyEditor — duplicate detection vs defaulted ports', () => {
+  it('rejects a duplicate wire against a loaded wire whose ports are defaulted', async () => {
+    // The backend stores from_port/to_port as Option<PortName> and legacy
+    // topologies round-trip wires with no ports. The load path maps that to
+    // undefined — the wire renders on the DEFAULT ports (source right →
+    // target left). Reconnecting the same default ports must be rejected
+    // as a duplicate, not silently create a second overlapping wire.
+    mockLoadTopology.mockResolvedValue({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Loaded Store', x: 100, y: 200 },
+        { id: 'ws-1', type: 'workspace', name: 'Loaded POS', x: 300, y: 100 },
+      ],
+      wires: [{ id: 'w-1', from_node_id: 'store-1', to_node_id: 'ws-1', direction: 'one-way' }],
+    });
+
+    renderEditor();
+
+    await waitFor(() => expect(screen.getByText('Loaded Store')).toBeInTheDocument());
+
+    const baseline = getWireCount();
+    expect(baseline).toBe(1);
+
+    fireEvent.click(portOf(nodeAt(0), 'right'));
+    fireEvent.click(portOf(nodeAt(1), 'left'));
+
+    expect(getWireCount()).toBe(baseline);
+    expect(screen.getByText('A wire already connects these ports.')).toBeInTheDocument();
+  });
+
+  it('rejects a reversed duplicate against a loaded wire with defaulted ports', async () => {
+    mockLoadTopology.mockResolvedValue({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Loaded Store', x: 100, y: 200 },
+        { id: 'ws-1', type: 'workspace', name: 'Loaded POS', x: 300, y: 100 },
+      ],
+      wires: [{ id: 'w-1', from_node_id: 'store-1', to_node_id: 'ws-1', direction: 'one-way' }],
+    });
+
+    renderEditor();
+
+    await waitFor(() => expect(screen.getByText('Loaded Store')).toBeInTheDocument());
+
+    const baseline = getWireCount();
+    fireEvent.click(portOf(nodeAt(1), 'left')); // start from the target node's side
+    fireEvent.click(portOf(nodeAt(0), 'right'));
+
+    expect(getWireCount()).toBe(baseline);
+    expect(screen.getByText('A wire already connects these ports.')).toBeInTheDocument();
+  });
+
+  it('treats a literal null port payload (serde None) as a defaulted port', async () => {
+    // serde serializes Option<PortName>::None as JSON null. The payload
+    // interface types it as optional-string, but the runtime wire can carry
+    // explicit nulls — the load path must coalesce them to undefined so
+    // duplicate detection and rendering agree on the defaults.
+    mockLoadTopology.mockResolvedValue({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Loaded Store', x: 100, y: 200 },
+        { id: 'ws-1', type: 'workspace', name: 'Loaded POS', x: 300, y: 100 },
+      ],
+      wires: [{
+        id: 'w-1',
+        from_node_id: 'store-1',
+        to_node_id: 'ws-1',
+        direction: 'one-way',
+        from_port: null as unknown as string,
+        to_port: null as unknown as string,
+      }],
+    });
+
+    renderEditor();
+
+    await waitFor(() => expect(screen.getByText('Loaded Store')).toBeInTheDocument());
+
+    const baseline = getWireCount();
+    fireEvent.click(portOf(nodeAt(0), 'right'));
+    fireEvent.click(portOf(nodeAt(1), 'left'));
+
+    expect(getWireCount()).toBe(baseline);
+    expect(screen.getByText('A wire already connects these ports.')).toBeInTheDocument();
+  });
+});
+
 // ── Delete / Backspace key flow ─────────────────────────────────
 
 describe('NodeTopologyEditor — Delete/Backspace key flow', () => {

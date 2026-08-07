@@ -783,3 +783,15 @@ Clean (0 errors).
 **Commits:** (hash below)
 
 **Follow-ups (deliberately NOT done):** the idMap remap branch remains the one canvas-mutating path without the stale-connection clears — it self-heals (stale id stops resolving; next port click clears it), so not a bug; a comment on the guard now documents that every future editor-owned dialog must be added to the condition.
+
+## 2026-08-07 — TDD cycle: duplicate wire detection vs defaulted ports (topology editor)
+
+### Loaded wires with null/defaulted ports escaped duplicate detection
+**Problem:** `handlePortClick`'s duplicate check compared raw `w.fromPort`/`w.toPort` against the new connection's named ports. Wires loaded from the backend can carry `from_port: None` (`Option<PortName>` round-trips as JSON null/omitted — the backend's own fixtures assert `from_port.is_none()`), and the load path mapped that to `undefined`/`null`. A wire that *renders* on the default ports (source right → target left) therefore never matched, so reconnecting the same default ports silently created a second overlapping wire — no toast, no rejection.
+
+**Solution:** Red→Green. Two Red tests seeded a persisted topology whose wire omits `from_port`/`to_port`, then reconnected the same default ports (store-1 right → ws-1 left) and the reversed direction (ws-1 left → store-1 right) — both failed pre-fix (wire count 1→2). Green normalizes the duplicate check with the same defaults the renderer uses: `(w.fromPort ?? 'right') === connectingFromPort && (w.toPort ?? 'left') === port`, symmetric for the reversed branch. In-session wires always carry explicit ports, so `??` never fires for them — no behavior change to existing flows, and a null-port wire blocks *only* its own default-port connection, never an unrelated port pair. Review follow-up also applied: the two load-path sites were tightened from `!== undefined` to `!= null` so a literal JSON `null` coalesces to `undefined` at the boundary (killing the `null as PortName` type lie), pinned by a third test seeding explicit `from_port: null`/`to_port: null` (the true serde `None` shape).
+
+**Commits:** `(this cycle)`
+**Tests:** editor suite 97 (3 new) · topology suites 125/125 · full UI suite 262 files / 4078 tests · typecheck + eslint clean · drift guard clean.
+
+**Follow-ups:** the backend `save`/diff path still writes `from_port: Option` — a future slice could normalize ports server-side at save time so the DB never stores null ports at all; today the editor is fully tolerant either way.

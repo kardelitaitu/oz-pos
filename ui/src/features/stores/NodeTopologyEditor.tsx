@@ -360,8 +360,8 @@ export default function NodeTopologyEditor({
                 direction: w.direction as WireDirection,
               };
               if (w.label !== undefined) wire.label = w.label;
-              if (w.from_port !== undefined) wire.fromPort = w.from_port as PortName;
-              if (w.to_port !== undefined) wire.toPort = w.to_port as PortName;
+              if (w.from_port != null) wire.fromPort = w.from_port as PortName;
+              if (w.to_port != null) wire.toPort = w.to_port as PortName;
               return wire;
             });
           setNodes(mergedNodes);
@@ -396,8 +396,8 @@ export default function NodeTopologyEditor({
             direction: w.direction as WireDirection,
           };
           if (w.label !== undefined) wire.label = w.label;
-          if (w.from_port !== undefined) wire.fromPort = w.from_port as PortName;
-          if (w.to_port !== undefined) wire.toPort = w.to_port as PortName;
+          if (w.from_port != null) wire.fromPort = w.from_port as PortName;
+          if (w.to_port != null) wire.toPort = w.to_port as PortName;
           return wire;
         });
         setWires(loadedWires);
@@ -876,12 +876,18 @@ export default function NodeTopologyEditor({
     const toNode = nodeMap.get(nodeId);
     if (!fromNode || !toNode) { setConnectingFromNodeId(null); setConnectingFromPort(null); return; }
 
+    // Ports are normalized to the same defaults the renderer uses
+    // (fromPort ?? 'right', toPort ?? 'left') because wires loaded from the
+    // backend can carry null/undefined ports (Option<PortName> round-trips
+    // as None). Comparing raw values against named ports would let a
+    // loaded wire that renders right→left escape duplicate detection,
+    // silently creating a second overlapping connection.
     const duplicate = wires.some(
       (w) =>
         (w.fromNodeId === connectingFromNodeId && w.toNodeId === nodeId
-          && w.fromPort === connectingFromPort && w.toPort === port)
+          && (w.fromPort ?? 'right') === connectingFromPort && (w.toPort ?? 'left') === port)
         || (w.fromNodeId === nodeId && w.toNodeId === connectingFromNodeId
-          && w.fromPort === port && w.toPort === connectingFromPort),
+          && (w.fromPort ?? 'right') === port && (w.toPort ?? 'left') === connectingFromPort),
     );
     if (duplicate) {
       addToast({ message: l10n.getString('topology-toast-wire-duplicate'), type: 'warning' });
