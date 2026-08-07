@@ -371,6 +371,11 @@ export default function NodeTopologyEditor({
           // instances. Clear them so Undo can never restore a phantom canvas.
           setHistory([]);
           setRedo([]);
+          // Same rule as preset loads: cancel any in-flight port connection
+          // so a later port click cannot complete a wire from a stale source.
+          setConnectingFromNodeId(null);
+          setConnectingFromPort(null);
+          setHoveredTarget(null);
           // A reloaded node with a surviving id must start a fresh inspector
           // edit session, or its next edit would silently skip pushHistory.
           inspectorHistoryPushedForRef.current = null;
@@ -399,6 +404,10 @@ export default function NodeTopologyEditor({
         // Fresh authoritative load — drop stale pre-load undo/redo state.
         setHistory([]);
         setRedo([]);
+        // Same rule as preset loads: cancel any in-flight port connection.
+        setConnectingFromNodeId(null);
+        setConnectingFromPort(null);
+        setHoveredTarget(null);
         // A reloaded node with a surviving id must start a fresh inspector
         // edit session, or its next edit would silently skip pushHistory.
         inspectorHistoryPushedForRef.current = null;
@@ -469,6 +478,13 @@ export default function NodeTopologyEditor({
     pushHistory();
     setNodes(data.nodes);
     setWires(data.wires);
+    // The canvas was replaced — cancel any in-flight port connection so a
+    // later port click starts a fresh connection instead of completing a
+    // wire from a stale source node (the preset ids overlap, so the stale
+    // source could otherwise survive and mis-wire the new canvas).
+    setConnectingFromNodeId(null);
+    setConnectingFromPort(null);
+    setHoveredTarget(null);
     setFreshNodeIds(new Set());
     isDirtyRef.current = false;
     // The canvas was replaced — a still-selected node (preset ids overlap)

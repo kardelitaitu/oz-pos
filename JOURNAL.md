@@ -755,3 +755,17 @@ Clean (0 errors).
 **Commits:** (hash below)
 
 **Follow-ups (deliberately NOT done):** the label assertions rely on the captured DOM reference / identity-l10n raw keys (file-wide conventions, commented where geometry-dependent); the redo stack remains unbounded (cleared on new edits).
+
+
+## 2026-08-07 — Topology editor: preset/reload cancels in-flight connection (real defect)
+
+### Loading a preset mid-connection left a stale wire source — a REAL bug, not characterization
+**Problem:** `loadPreset` replaced the entire canvas but never cleared `connectingFromNodeId/Port`. Reloading the SAME preset mid-connection (e.g. Retail Preset → Retail Preset) kept the stale source, so a later port click COMPLETED a wire from a node the user never intended — the connection was supposed to die with the old canvas. The two post-save reload paths (workspaceInstances rebuild + legacy saved-diagram load) had the identical hazard.
+
+**Solution:** Red→Green. Red test: start a connection, click Retail Preset, assert no ghost preview survives AND a subsequent target click creates no wire — failed before the fix (preview persisted, wire created). Green: `loadPreset` now clears `connectingFromNodeId` + `connectingFromPort` + `hoveredTarget`, and the same three clears were added to BOTH reload sites. The connection never pushed history, so there is no undo/dirty interaction. A second harness-based test pins the workspaceInstances reload path (saved diagram → start connection → `reload-instances` → preview gone, no wire; assertions are robust to post-rebuild node ordering).
+
+**Validation:** 2 new · editor suite 92 · topology suites 120/120 · full UI suite 262 files / 4073 tests green · typecheck + eslint clean. Reviewer: no blockers.
+
+**Commits:** (hash below)
+
+**Follow-ups (deliberately NOT done):** the Apply/idMap remap branch is the one canvas-mutating path without the guard — a connection in flight during a successful Apply-with-remap self-heals (the preview vanishes because the old id no longer resolves, and the next port click clears the stale source), so it is not a bug; adding the same three clears there would make the invariant complete if that interaction ever becomes common. The triple clear could also be a tiny helper if a fourth site appears.

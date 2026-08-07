@@ -1949,3 +1949,60 @@ describe('NodeTopologyEditor — connected wire label', () => {
     expect(last.textContent).toContain('topology-wire-label-connected');
   });
 });
+
+// ── Preset load cancels in-flight connection ────────────────────
+
+describe('NodeTopologyEditor — preset load cancels in-flight connection', () => {
+  it('cancels an in-flight connection when a preset is loaded', () => {
+    renderEditor();
+    const baseline = getWireCount();
+
+    // Start a connection from store-1's bottom port — ghost preview appears.
+    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    expect(previewLine()).not.toBeNull();
+
+    // Load the SAME preset mid-connection (no edits yet, so it loads
+    // directly without the unsaved-changes dialog).
+    fireEvent.click(screen.getByText('Retail Preset'));
+
+    // The canvas was replaced — the in-flight connection must be cancelled:
+    // no ghost preview may survive the replacement...
+    expect(previewLine()).toBeNull();
+    // ...and a subsequent target-port click must start a NEW connection
+    // instead of completing the stale one (no wire may be created).
+    fireEvent.click(portOf(nodeAt(1), 'top'));
+    expect(getWireCount()).toBe(baseline);
+  });
+
+  it('cancels an in-flight connection when the canvas reloads from instances', async () => {
+    // Saved diagram with a store + workspace; the harness then replaces the
+    // canvas via a workspaceInstances reload (post-save/apply path).
+    mockLoadTopology.mockResolvedValue({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Store', x: 80, y: 120 },
+        { id: 'ws-1', type: 'workspace', name: 'POS', x: 240, y: 80 },
+      ],
+      wires: [],
+    });
+    renderWithProvidersSync(
+      <ReloadingHarness
+        next={[{ instanceId: 'ws-1', typeKey: 'store-pos', name: 'POS' }]}
+      />,
+      multiStoreFtl,
+      sharedFtl,
+    );
+
+    await waitFor(() => expect(screen.getByText('Store')).toBeInTheDocument());
+
+    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    expect(previewLine()).not.toBeNull();
+
+    // Trigger the workspaceInstances reload — the canvas is replaced.
+    fireEvent.click(screen.getByText('reload-instances'));
+    await waitFor(() => expect(previewLine()).toBeNull());
+
+    // The stale connection cannot complete: a target click creates no wire.
+    fireEvent.click(portOf(nodeAt(1), 'top'));
+    expect(getWireCount()).toBe(0);
+  });
+});
