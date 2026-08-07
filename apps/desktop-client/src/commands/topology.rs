@@ -7,10 +7,12 @@
 
 use rusqlite::Connection;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_json::Value;
 use tauri::State;
 
 use oz_core::db::Store;
 use oz_core::permissions;
+use oz_core::subscription::TenantSubscription;
 
 use crate::commands::authz::require_permission_for_user;
 use crate::commands::workspaces::CreateInstanceRequest;
@@ -258,6 +260,567 @@ fn default_direction() -> WireDirection {
 // ── Free functions (testable without Tauri runtime) ────────────────
 
 const TOPOLOGY_SETTING_KEY: &str = "oz-pos/topology";
+const TOPOLOGY_APPLY_RECOVERY_KEY: &str = "oz-pos/topology/apply-recovery";
+const TOPOLOGY_SCHEMA_VERSION: u64 = 1;
+
+fn value_string<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
+    value.get(key).and_then(Value::as_str)
+}
+
+fn topology_validation(
+    code: &str,
+    node_id: Option<&str>,
+    wire_id: Option<&str>,
+    port_id: Option<&str>,
+    message: impl Into<String>,
+) -> AppError {
+    AppError::TopologyValidation {
+        code: code.into(),
+        node_id: node_id.map(str::to_owned),
+        wire_id: wire_id.map(str::to_owned),
+        port_id: port_id.map(str::to_owned),
+        message: message.into(),
+    }
+}
+
+fn has_semantic_fields(nodes: &[Value], wires: &[Value]) -> bool {
+    nodes.iter().any(|node| {
+        node.get("store_profile_id").is_some()
+            || node
+                .get("metadata")
+                .and_then(|metadata| metadata.get("storeProfileId"))
+                .is_some()
+    }) || wires.iter().any(|wire| {
+        ["from_port_id", "to_port_id", "relationship_type"]
+            .iter()
+            .any(|key| wire.get(*key).is_some())
+    })
+}
+
+fn semantic_branch_profile_id<'a>(nodes: &'a [Value], wires: &[Value]) -> Option<&'a str> {
+    if !has_semantic_fields(nodes, wires) {
+        return None;
+    }
+    nodes
+        .iter()
+        .find(|node| {
+            matches!(
+                value_string(node, "type"),
+                Some("store" | "branch-location")
+            )
+        })
+        .and_then(|node| {
+            value_string(node, "store_profile_id").or_else(|| {
+                node.get("metadata")
+                    .and_then(|metadata| value_string(metadata, "storeProfileId"))
+            })
+        })
+}
+
+/// Validate the semantic ownership contract at the IPC boundary.
+///
+/// Legacy geometric payloads remain readable during migration. A payload that
+/// contains semantic ownership fields is validated strictly: it must contain
+/// one identified Branch Location and every workspace must have exactly one
+/// `location-out` to `location-in` edge. Geometry and display names are never
+/// used to infer ownership here.
+fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), AppError> {
+    if !has_semantic_fields(nodes, wires) {
+        return Ok(());
+    }
+
+    let branches: Vec<&Value> = nodes
+        .iter()
+        .filter(|node| {
+            matches!(
+                value_string(node, "type"),
+                Some("store" | "branch-location")
+            )
+        })
+        .collect();
+    if branches.len() != 1 {
+        return Err(topology_validation(
+            "multiple-branch-locations",
+            None,
+            None,
+            None,
+            format!(
+                "semantic topology requires exactly one Branch Location, found {}",
+                branches.len()
+            ),
+        ));
+    }
+    let branch = branches[0];
+    let branch_id = value_string(branch, "id").unwrap_or_default();
+    let profile_id = value_string(branch, "store_profile_id")
+        .or_else(|| {
+            branch
+                .get("metadata")
+                .and_then(|metadata| value_string(metadata, "storeProfileId"))
+        })
+        .unwrap_or_default();
+    if branch_id.is_empty() || profile_id.is_empty() {
+        return Err(topology_validation(
+            "branch-location-missing-identity",
+            Some(branch_id),
+            None,
+            None,
+            "Branch Location requires a canonical store_profile_id",
+        ));
+    }
+
+    let workspace_ids: Vec<&str> = nodes
+        .iter()
+        .filter(|node| value_string(node, "type") == Some("workspace"))
+        .filter_map(|node| value_string(node, "id"))
+        .collect();
+    let mut seen_location_wires = std::collections::HashSet::new();
+    for wire in wires {
+        if value_string(wire, "relationship_type") != Some("location") {
+            continue;
+        }
+        let key = (
+            value_string(wire, "from_node_id"),
+            value_string(wire, "from_port_id"),
+            value_string(wire, "to_node_id"),
+            value_string(wire, "to_port_id"),
+        );
+        if !seen_location_wires.insert(key) {
+            return Err(topology_validation(
+                "duplicate-wire",
+                None,
+                value_string(wire, "id"),
+                None,
+                format!(
+                    "duplicate semantic location wire: {}",
+                    value_string(wire, "id").unwrap_or("<unknown>")
+                ),
+            ));
+        }
+        if value_string(wire, "from_node_id") != Some(branch_id)
+            || value_string(wire, "from_port_id") != Some("location-out")
+            || value_string(wire, "to_port_id") != Some("location-in")
+            || value_string(wire, "direction") != Some("one-way")
+            || !workspace_ids.contains(&value_string(wire, "to_node_id").unwrap_or_default())
+        {
+            return Err(topology_validation(
+                "invalid-location-connection",
+                None,
+                value_string(wire, "id"),
+                None,
+                format!(
+                    "invalid semantic location wire: {}",
+                    value_string(wire, "id").unwrap_or("<unknown>")
+                ),
+            ));
+        }
+    }
+
+    for workspace_id in workspace_ids {
+        let purpose_key = nodes
+            .iter()
+            .find(|node| value_string(node, "id") == Some(workspace_id))
+            .and_then(|node| node.get("metadata"))
+            .and_then(|metadata| value_string(metadata, "purposeKey"))
+            .unwrap_or("general");
+        let type_key = nodes
+            .iter()
+            .find(|node| value_string(node, "id") == Some(workspace_id))
+            .and_then(|node| node.get("metadata"))
+            .and_then(|metadata| value_string(metadata, "typeKey"))
+            .unwrap_or("store-pos");
+        let purpose_valid = matches!(
+            (purpose_key, type_key),
+            (
+                "general",
+                "store-pos" | "restaurant-pos" | "kds" | "inventory" | "warehouse"
+            ) | ("checkout" | "returns", "store-pos")
+                | ("dining-room", "restaurant-pos")
+                | ("kitchen-hot-line", "kds")
+                | ("stock-control" | "receiving", "inventory" | "warehouse")
+        );
+        if !purpose_valid {
+            return Err(topology_validation(
+                "invalid-purpose",
+                Some(workspace_id),
+                None,
+                None,
+                format!(
+                    "workspace {workspace_id} has unsupported purpose_key {purpose_key} for type_key {type_key}"
+                ),
+            ));
+        }
+        let incoming = wires
+            .iter()
+            .filter(|wire| {
+                value_string(wire, "relationship_type") == Some("location")
+                    && value_string(wire, "to_node_id") == Some(workspace_id)
+                    && value_string(wire, "to_port_id") == Some("location-in")
+            })
+            .count();
+        if incoming != 1 {
+            return Err(topology_validation(
+                if incoming == 0 {
+                    "missing-location-input"
+                } else {
+                    "multiple-location-inputs"
+                },
+                Some(workspace_id),
+                None,
+                Some("location-in"),
+                format!(
+                    "workspace {workspace_id} requires exactly one Location In connection, found {incoming}"
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Persist the exact command payload in a versioned graph envelope.
+fn validate_topology_envelope(value: &Value) -> Result<(&[Value], &[Value]), AppError> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| AppError::Internal("topology payload must be an object".into()))?;
+    if let Some(version) = object.get("schema_version") {
+        if version.as_u64() != Some(TOPOLOGY_SCHEMA_VERSION) {
+            return Err(topology_validation(
+                "unsupported-schema-version",
+                None,
+                None,
+                None,
+                format!("unsupported topology schema version: {}", version),
+            ));
+        }
+    }
+    let nodes = object
+        .get("nodes")
+        .and_then(Value::as_array)
+        .ok_or_else(|| AppError::Internal("topology payload is missing nodes".into()))?;
+    let wires = object
+        .get("wires")
+        .and_then(Value::as_array)
+        .ok_or_else(|| AppError::Internal("topology payload is missing wires".into()))?;
+    Ok((nodes.as_slice(), wires.as_slice()))
+}
+
+fn save_topology_json(
+    conn: &Connection,
+    nodes: Vec<Value>,
+    wires: Vec<Value>,
+) -> Result<(), AppError> {
+    validate_semantic_ownership(conn, &nodes, &wires)?;
+    // The legacy typed structs validate geometry and known serialized node
+    // kinds. `branch-location` is a semantic alias, so normalize only the
+    // temporary validation copy; the raw command payload is persisted intact.
+    let typed_node_values: Vec<Value> = nodes
+        .iter()
+        .map(|node| {
+            let mut node = node.clone();
+            if node.get("type").and_then(Value::as_str) == Some("branch-location") {
+                node["type"] = Value::String("store".into());
+            }
+            node
+        })
+        .collect();
+    let typed_nodes: Vec<TopologyNodePayload> =
+        serde_json::from_value(Value::Array(typed_node_values))
+            .map_err(|e| AppError::Internal(format!("invalid topology nodes: {e}")))?;
+    let typed_wires: Vec<TopologyWirePayload> = serde_json::from_value(Value::Array(wires.clone()))
+        .map_err(|e| AppError::Internal(format!("invalid topology wires: {e}")))?;
+    let wires: Vec<Value> = wires
+        .into_iter()
+        .map(|mut wire| {
+            if let Some(object) = wire.as_object_mut() {
+                object
+                    .entry("from_port")
+                    .or_insert_with(|| Value::String("right".into()));
+                object
+                    .entry("to_port")
+                    .or_insert_with(|| Value::String("left".into()));
+            }
+            wire
+        })
+        .collect();
+
+    // Reuse the existing structural validator without writing its legacy
+    // representation a second time. The command envelope below is the only
+    // database write, so semantic fields cannot be discarded.
+    validate_topology_structure(&typed_nodes, &typed_wires)?;
+    let envelope = serde_json::json!({
+        "schema_version": TOPOLOGY_SCHEMA_VERSION,
+        "nodes": nodes,
+        "wires": wires,
+    });
+    let json = serde_json::to_string(&envelope)
+        .map_err(|e| AppError::Internal(format!("serialize topology: {e}")))?;
+    let tx = conn.unchecked_transaction()?;
+    oz_core::Settings::set(&tx, TOPOLOGY_SETTING_KEY, &json)?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// Snapshot of a workspace row touched by a topology Apply.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct WorkspaceApplySnapshot {
+    id: String,
+    name: String,
+    description: String,
+    colour: Option<String>,
+    purpose_key: String,
+    status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TopologyApplyRecovery {
+    store_id: String,
+    creations: Vec<CreateInstanceRequest>,
+    snapshots: Vec<WorkspaceApplySnapshot>,
+    previous_topology: Option<String>,
+}
+
+/// Restore the topology setting after a compensating Apply failure.
+///
+/// Diagram settings and workspace instances live in separate SQLite
+/// databases, so Apply uses a forward-write plus compensation boundary. The
+/// restore itself is transactional and preserves the exact prior raw setting,
+/// including legacy envelopes.
+fn restore_topology_setting(conn: &Connection, previous: Option<&str>) -> Result<(), AppError> {
+    let tx = conn.unchecked_transaction()?;
+    match previous {
+        Some(json) => oz_core::Settings::set(&tx, TOPOLOGY_SETTING_KEY, json)?,
+        None => {
+            oz_core::Settings::remove(&tx, TOPOLOGY_SETTING_KEY)?;
+        }
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+fn persist_topology_recovery(
+    conn: &Connection,
+    recovery: &TopologyApplyRecovery,
+) -> Result<(), AppError> {
+    let json = serde_json::to_string(recovery)
+        .map_err(|e| AppError::Internal(format!("serialize topology recovery: {e}")))?;
+    let tx = conn.unchecked_transaction()?;
+    oz_core::Settings::set(&tx, TOPOLOGY_APPLY_RECOVERY_KEY, &json)?;
+    tx.commit()?;
+    Ok(())
+}
+
+fn clear_topology_recovery(conn: &Connection) -> Result<(), AppError> {
+    let tx = conn.unchecked_transaction()?;
+    oz_core::Settings::remove(&tx, TOPOLOGY_APPLY_RECOVERY_KEY)?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// Complete a previously interrupted cross-database Apply before accepting a
+/// new mutation. The journal is intentionally retained until both databases
+/// are restored, making compensation retryable after a process crash or
+/// transient database lock.
+async fn recover_pending_topology_apply(
+    state: &AppState,
+    expected_store_id: &str,
+) -> Result<(), AppError> {
+    let recovery = {
+        let db = state.db.lock().await;
+        oz_core::Settings::get(&db, TOPOLOGY_APPLY_RECOVERY_KEY)?
+            .map(|json| serde_json::from_str::<TopologyApplyRecovery>(&json))
+            .transpose()
+            .map_err(|e| AppError::Internal(format!("invalid topology recovery journal: {e}")))?
+    };
+    let Some(recovery) = recovery else {
+        return Ok(());
+    };
+    if recovery.store_id != expected_store_id {
+        return Err(AppError::Internal(format!(
+            "topology Apply recovery is pending for store {}, not {}",
+            recovery.store_id, expected_store_id
+        )));
+    }
+    compensate_workspace_diff(
+        state,
+        &recovery.store_id,
+        &recovery.creations,
+        &recovery.snapshots,
+    )
+    .await?;
+    {
+        let db = state.db.lock().await;
+        restore_topology_setting(&db, recovery.previous_topology.as_deref())?;
+        clear_topology_recovery(&db)?;
+    }
+    Ok(())
+}
+
+/// Capture rows that the workspace portion of Apply will update or archive.
+async fn snapshot_workspace_rows(
+    state: &AppState,
+    store_id: &str,
+    updates: &[UpdateInstanceRequest],
+    archives: &[String],
+) -> Result<Vec<WorkspaceApplySnapshot>, AppError> {
+    let conn = state
+        .db_manager
+        .open_store(store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db for compensation: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock for compensation: {e}")))?;
+    let mut ids = std::collections::HashSet::new();
+    ids.extend(updates.iter().map(|item| item.id.as_str()));
+    ids.extend(archives.iter().map(String::as_str));
+    let mut snapshots = Vec::with_capacity(ids.len());
+    for id in ids {
+        let row = db
+            .query_row(
+                "SELECT id, name, description, colour, purpose_key, status FROM workspace_instances WHERE id = ?1",
+                rusqlite::params![id],
+                |row| {
+                    Ok(WorkspaceApplySnapshot {
+                        id: row.get(0)?,
+                        name: row.get(1)?,
+                        description: row.get(2)?,
+                        colour: row.get(3)?,
+                        purpose_key: row.get(4)?,
+                        status: row.get(5)?,
+                    })
+                },
+            )
+            .map_err(|e| AppError::Internal(format!("snapshot workspace {id}: {e}")))?;
+        snapshots.push(row);
+    }
+    Ok(snapshots)
+}
+
+/// Compensate workspace mutations after a global diagram write fails.
+async fn compensate_workspace_diff(
+    state: &AppState,
+    store_id: &str,
+    creations: &[CreateInstanceRequest],
+    snapshots: &[WorkspaceApplySnapshot],
+) -> Result<(), AppError> {
+    let conn = state
+        .db_manager
+        .open_store(store_id)
+        .map_err(|e| AppError::Internal(format!("opening store db for rollback: {e}")))?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock for rollback: {e}")))?;
+    let tx = db.unchecked_transaction()?;
+    for creation in creations {
+        tx.execute(
+            "DELETE FROM workspace_instances WHERE id = ?1",
+            rusqlite::params![creation.id],
+        )?;
+    }
+    for snapshot in snapshots {
+        tx.execute(
+            "UPDATE workspace_instances
+             SET name = ?2, description = ?3, colour = ?4, purpose_key = ?5,
+                 status = ?6, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE id = ?1",
+            rusqlite::params![
+                snapshot.id,
+                snapshot.name,
+                snapshot.description,
+                snapshot.colour,
+                snapshot.purpose_key,
+                snapshot.status,
+            ],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+/// Verify the canonical Branch Location exists in the current global database.
+fn validate_semantic_ownership(
+    conn: &Connection,
+    nodes: &[Value],
+    wires: &[Value],
+) -> Result<(), AppError> {
+    validate_semantic_json(nodes, wires)?;
+    if !has_semantic_fields(nodes, wires) {
+        return Ok(());
+    }
+    let Some(profile_id) = semantic_branch_profile_id(nodes, wires) else {
+        return Ok(());
+    };
+    let exists: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM store_profiles WHERE id = ?1)",
+        rusqlite::params![profile_id],
+        |row| row.get(0),
+    )?;
+    if !exists {
+        return Err(topology_validation(
+            "unknown-branch-location",
+            None,
+            None,
+            None,
+            format!("Branch Location references unknown store_profile_id: {profile_id}"),
+        ));
+    }
+    Ok(())
+}
+
+/// Validate typed node and wire structure without persisting it.
+fn validate_topology_structure(
+    nodes: &[TopologyNodePayload],
+    wires: &[TopologyWirePayload],
+) -> Result<(), AppError> {
+    let mut node_ids = std::collections::HashSet::new();
+    for node in nodes {
+        if !node_ids.insert(&node.id) {
+            return Err(AppError::Internal(format!(
+                "duplicate node id: {}",
+                node.id
+            )));
+        }
+        if node.node_type == NodeType::Unknown {
+            return Err(AppError::Internal(format!(
+                "node {} has unknown type",
+                node.id
+            )));
+        }
+    }
+    let mut wire_ids = std::collections::HashSet::new();
+    for wire in wires {
+        if !wire_ids.insert(&wire.id) {
+            return Err(AppError::Internal(format!(
+                "duplicate wire id: {}",
+                wire.id
+            )));
+        }
+        if wire.direction == WireDirection::Unknown {
+            return Err(AppError::Internal(format!(
+                "wire {} has unknown direction",
+                wire.id
+            )));
+        }
+        if wire.from_port == Some(PortName::Unknown) || wire.to_port == Some(PortName::Unknown) {
+            return Err(AppError::Internal(format!(
+                "wire {} has unknown port",
+                wire.id
+            )));
+        }
+        if !node_ids.contains(&wire.from_node_id) {
+            return Err(AppError::Internal(format!(
+                "wire {} references unknown from_node_id: {}",
+                wire.id, wire.from_node_id
+            )));
+        }
+        if !node_ids.contains(&wire.to_node_id) {
+            return Err(AppError::Internal(format!(
+                "wire {} references unknown to_node_id: {}",
+                wire.id, wire.to_node_id
+            )));
+        }
+    }
+    Ok(())
+}
 
 /// Serialise and persist topology data to the settings store.
 ///
@@ -369,7 +932,12 @@ pub fn save_topology_data(
     }
 
     let data = TopologyData { nodes, wires };
-    let json = serde_json::to_string(&data).map_err(|e| AppError::Internal(e.to_string()))?;
+    let json = serde_json::to_string(&serde_json::json!({
+        "schema_version": TOPOLOGY_SCHEMA_VERSION,
+        "nodes": data.nodes,
+        "wires": data.wires,
+    }))
+    .map_err(|e| AppError::Internal(e.to_string()))?;
     let tx = conn.unchecked_transaction()?;
     oz_core::Settings::set(&tx, TOPOLOGY_SETTING_KEY, &json)?;
     tx.commit()?;
@@ -379,7 +947,6 @@ pub fn save_topology_data(
 /// Load and deserialise persisted topology data.
 ///
 /// Returns `None` when no topology has been saved yet.
-/// Load and deserialise persisted topology data.
 ///
 /// Returns `None` when no topology has been saved yet.
 ///
@@ -397,8 +964,19 @@ pub fn load_topology_data(conn: &Connection) -> Result<Option<TopologyData>, App
     let raw = oz_core::Settings::get(conn, TOPOLOGY_SETTING_KEY)?;
     match raw {
         Some(json) => {
-            let data: TopologyData =
+            let value: Value =
                 serde_json::from_str(&json).map_err(|e| AppError::Internal(e.to_string()))?;
+            let data_value = if value.get("schema_version").is_some() {
+                validate_topology_envelope(&value)?;
+                serde_json::json!({
+                    "nodes": value.get("nodes").cloned().unwrap_or(Value::Array(vec![])),
+                    "wires": value.get("wires").cloned().unwrap_or(Value::Array(vec![])),
+                })
+            } else {
+                value
+            };
+            let data: TopologyData = serde_json::from_value(data_value)
+                .map_err(|e| AppError::Internal(e.to_string()))?;
             Ok(Some(data))
         }
         None => Ok(None),
@@ -410,12 +988,12 @@ pub fn load_topology_data(conn: &Connection) -> Result<Option<TopologyData>, App
 /// Save the topology graph to the settings store.
 #[tauri::command]
 pub async fn save_topology(
-    nodes: Vec<TopologyNodePayload>,
-    wires: Vec<TopologyWirePayload>,
+    nodes: Vec<Value>,
+    wires: Vec<Value>,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let conn = state.db.lock().await;
-    save_topology_data(&conn, nodes, wires)
+    save_topology_json(&conn, nodes, wires)
 }
 
 /// Load the persisted topology graph.
@@ -423,18 +1001,36 @@ pub async fn save_topology(
 /// Returns `None` when no topology has been saved yet (the front-end
 /// should fall back to the built-in retail preset).
 #[tauri::command]
-pub async fn load_topology(state: State<'_, AppState>) -> Result<Option<TopologyData>, AppError> {
+pub async fn load_topology(state: State<'_, AppState>) -> Result<Option<Value>, AppError> {
     let conn = state.db.lock().await;
-    load_topology_data(&conn)
+    let raw = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)?;
+    let Some(json) = raw else {
+        return Ok(None);
+    };
+    let value: Value = serde_json::from_str(&json)
+        .map_err(|e| AppError::Internal(format!("invalid topology JSON: {e}")))?;
+    let (nodes, wires) = validate_topology_envelope(&value)?;
+    validate_semantic_ownership(&conn, nodes, wires)?;
+    let typed_nodes: Vec<TopologyNodePayload> =
+        serde_json::from_value(Value::Array(nodes.to_vec()))
+            .map_err(|e| AppError::Internal(format!("invalid topology nodes: {e}")))?;
+    let typed_wires: Vec<TopologyWirePayload> =
+        serde_json::from_value(Value::Array(wires.to_vec()))
+            .map_err(|e| AppError::Internal(format!("invalid topology wires: {e}")))?;
+    validate_topology_structure(&typed_nodes, &typed_wires)?;
+    Ok(Some(value))
 }
 
 /// Request body for updating a workspace instance within a topology diff.
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct UpdateInstanceRequest {
     /// Instance ID to update.
     pub id: String,
     /// New display name.
     pub name: String,
+    /// New controlled business purpose, when changed.
+    #[serde(default)]
+    pub purpose_key: Option<String>,
 }
 
 /// Apply a full topology diff atomically (Critical #4).
@@ -458,20 +1054,29 @@ pub struct UpdateInstanceRequest {
 /// `Connection::execute` directly and therefore compose safely inside
 /// the outer transaction.
 ///
-/// The topology diagram save is a separate step on the global DB and
-/// is not part of the workspace transaction. If the diagram save
-/// fails, the workspace mutations have already been committed.
+/// The topology diagram save is a separate step on the global DB. The command
+/// snapshots the affected workspace rows and previous diagram, then compensates
+/// both databases if the second write fails. A compensation failure is returned
+/// explicitly so the caller can surface an operator-recovery condition.
 #[tauri::command]
 pub async fn apply_topology_diff(
     session_token: String,
     workspace_creations: Vec<CreateInstanceRequest>,
     workspace_updates: Vec<UpdateInstanceRequest>,
     workspace_archives: Vec<String>,
-    diagram_nodes: Vec<TopologyNodePayload>,
-    diagram_wires: Vec<TopologyWirePayload>,
+    diagram_nodes: Vec<Value>,
+    diagram_wires: Vec<Value>,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    recover_pending_topology_apply(&state, &session.store_id).await?;
+
+    // Reject malformed semantic graphs before any workspace mutation. Legacy
+    // geometric payloads remain accepted during the migration window.
+    {
+        let global_db = state.db.lock().await;
+        validate_semantic_ownership(&global_db, &diagram_nodes, &diagram_wires)?;
+    }
 
     // Capture lengths before the workspace block consumes the vectors
     // (via `into_iter`-style moves). Also used for tracing after the
@@ -481,6 +1086,59 @@ pub async fn apply_topology_diff(
     let archived = workspace_archives.len();
     let node_count = diagram_nodes.len();
     let wire_count = diagram_wires.len();
+
+    // Capture the exact diagram state before mutating the store database.
+    // If the later global write fails, the workspace transaction is
+    // compensated from this snapshot.
+    let previous_topology = {
+        let global_db = state.db.lock().await;
+        oz_core::Settings::get(&global_db, TOPOLOGY_SETTING_KEY)?
+    };
+
+    // Snapshot all pre-existing rows that a later compensation may need to restore.
+    let workspace_snapshot = snapshot_workspace_rows(
+        &state,
+        &session.store_id,
+        &workspace_updates,
+        &workspace_archives,
+    )
+    .await?;
+
+    // A semantic graph is scoped to one canonical branch. The backend compiler
+    // binds creates to that stable identity, rather than trusting a caller's
+    // arbitrary store_id or falling back to a primary/default store.
+    if let Some(branch_profile_id) = semantic_branch_profile_id(&diagram_nodes, &diagram_wires) {
+        if branch_profile_id != session.store_id {
+            return Err(AppError::PermissionDenied(format!(
+                "topology Branch Location {branch_profile_id} is outside the session store"
+            )));
+        }
+        for creation in &workspace_creations {
+            if creation.store_id != branch_profile_id {
+                return Err(AppError::TopologyValidation {
+                    code: "workspace-store-mismatch".into(),
+                    node_id: None,
+                    wire_id: None,
+                    port_id: None,
+                    message: format!(
+                        "workspace {} must be compiled to Branch Location {}",
+                        creation.id, branch_profile_id
+                    ),
+                });
+            }
+        }
+    }
+
+    // Load entitlement before acquiring the non-Send store connection guard.
+    // Tauri command futures must remain Send across every await boundary.
+    let effective_tier = {
+        let global_db = state.db.lock().await;
+        TenantSubscription::validate_clock_rollback(&global_db)?;
+        let subscription = TenantSubscription::load(&global_db, "default")?
+            .ok_or_else(|| AppError::Internal("default tenant subscription not found".into()))?;
+        subscription.verify_signature()?;
+        subscription.effective_tier()
+    };
 
     // ── Workspace CRUD in a single transaction ────────────────────────
     //
@@ -499,6 +1157,100 @@ pub async fn apply_topology_diff(
 
         // Permission: workspace topology changes require admin access.
         require_permission_for_user(&store, &session.user_id, permissions::STAFF_UPDATE)?;
+
+        // Preserve the same subscription and entitlement boundary as the
+        // standalone workspace-create command. The topology diff must not
+        // become an entitlement bypass just because it batches mutations.
+        for creation in &workspace_creations {
+            if creation.store_id != session.store_id {
+                return Err(AppError::PermissionDenied(format!(
+                    "workspace {} targets a different store",
+                    creation.id
+                )));
+            }
+            if !effective_tier.allows_workspace_type(&creation.type_key) {
+                return Err(AppError::PermissionDenied(format!(
+                    "subscription tier does not allow workspace type {}",
+                    creation.type_key
+                )));
+            }
+            if creation
+                .purpose_key
+                .as_deref()
+                .unwrap_or("general")
+                .trim()
+                .is_empty()
+            {
+                return Err(AppError::Invalid(
+                    "workspace purpose_key must not be empty".into(),
+                ));
+            }
+        }
+        for update in &workspace_updates {
+            let owner: String = store
+                .conn()
+                .query_row(
+                    "SELECT store_id FROM workspace_instances WHERE id = ?1",
+                    rusqlite::params![update.id],
+                    |row| row.get(0),
+                )
+                .map_err(|_| {
+                    AppError::PermissionDenied(format!(
+                        "workspace {} is not in the session store",
+                        update.id
+                    ))
+                })?;
+            if owner != session.store_id {
+                return Err(AppError::PermissionDenied(format!(
+                    "workspace {} is not in the session store",
+                    update.id
+                )));
+            }
+        }
+        for archive_id in &workspace_archives {
+            let owner: String = store
+                .conn()
+                .query_row(
+                    "SELECT store_id FROM workspace_instances WHERE id = ?1",
+                    rusqlite::params![archive_id],
+                    |row| row.get(0),
+                )
+                .map_err(|_| {
+                    AppError::PermissionDenied(format!(
+                        "workspace {archive_id} is not in the session store"
+                    ))
+                })?;
+            if owner != session.store_id {
+                return Err(AppError::PermissionDenied(format!(
+                    "workspace {archive_id} is not in the session store"
+                )));
+            }
+        }
+        if let Some(limit) = effective_tier.max_pos_instances() {
+            let current = store.count_active_instances(&session.store_id)?;
+            let archived_ids: std::collections::HashSet<&str> =
+                workspace_archives.iter().map(String::as_str).collect();
+            let archived_active = archived_ids
+                .iter()
+                .filter(|id| {
+                    store
+                        .conn()
+                        .query_row(
+                            "SELECT status = 'active' FROM workspace_instances WHERE id = ?1",
+                            rusqlite::params![id],
+                            |row| row.get::<_, bool>(0),
+                        )
+                        .unwrap_or(false)
+                })
+                .count() as i64;
+            let projected = current - archived_active + workspace_creations.len() as i64;
+            if projected > limit {
+                return Err(AppError::PermissionDenied(format!(
+                    "workspace instance quota exceeded: limit {limit}, current {current}, archived {archived_active}, requested {}, projected {projected}",
+                    workspace_creations.len()
+                )));
+            }
+        }
 
         // Inside this transaction, all create / update / archive SQL runs
         // *directly* on `tx`. We deliberately do NOT delegate to
@@ -533,8 +1285,8 @@ pub async fn apply_topology_diff(
             }
             tx.execute(
                 "INSERT INTO workspace_instances \
-                 (id, type_key, store_id, name, description, colour, status, last_accessed_at) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'active', \
+                 (id, type_key, store_id, name, description, colour, purpose_key, status, last_accessed_at) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'active', \
                          strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
                 rusqlite::params![
                     creation.id,
@@ -543,6 +1295,7 @@ pub async fn apply_topology_diff(
                     creation.name,
                     creation.description.as_deref().unwrap_or(""),
                     creation.colour.as_deref(),
+                    creation.purpose_key.as_deref().unwrap_or("general"),
                 ],
             )
             .map_err(|e| AppError::Internal(format!("create instance {}: {e}", creation.id)))?;
@@ -555,6 +1308,17 @@ pub async fn apply_topology_diff(
         let tx_store = Store::new(&tx);
         for update in &workspace_updates {
             tx_store.update_workspace_instance(&update.id, &update.name, None, None)?;
+            if let Some(purpose_key) = update.purpose_key.as_deref() {
+                if purpose_key.trim().is_empty() {
+                    return Err(AppError::Invalid(
+                        "workspace purpose_key must not be empty".into(),
+                    ));
+                }
+                tx.execute(
+                    "UPDATE workspace_instances SET purpose_key = ?2, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
+                    rusqlite::params![update.id, purpose_key],
+                )?;
+            }
         }
 
         // 3. Archive workspace instances removed from the canvas.
@@ -577,7 +1341,53 @@ pub async fn apply_topology_diff(
     // This `.await` is now safe — all non-`Send` types from the store
     // DB block have been dropped.
     let global_db = state.db.lock().await;
-    save_topology_data(&global_db, diagram_nodes, diagram_wires)?;
+    if let Err(save_error) = save_topology_json(&global_db, diagram_nodes, diagram_wires) {
+        drop(global_db);
+        // Journal the compensation before attempting it. If the process or a
+        // database lock interrupts recovery, the next Apply retries the exact
+        // same restoration instead of leaving an undiagnosed partial state.
+        let recovery = TopologyApplyRecovery {
+            store_id: session.store_id.clone(),
+            creations: workspace_creations.clone(),
+            snapshots: workspace_snapshot.clone(),
+            previous_topology: previous_topology.clone(),
+        };
+        let journal = {
+            let db = state.db.lock().await;
+            persist_topology_recovery(&db, &recovery)
+        };
+        if let Err(journal_error) = journal {
+            return Err(AppError::Internal(format!(
+                "topology save failed ({save_error}); recovery journal failed ({journal_error})"
+            )));
+        }
+        if let Err(compensation_error) = compensate_workspace_diff(
+            &state,
+            &session.store_id,
+            &workspace_creations,
+            &workspace_snapshot,
+        )
+        .await
+        {
+            return Err(AppError::Internal(format!(
+                "topology save failed ({save_error}); workspace compensation pending ({compensation_error})"
+            )));
+        }
+        let restore = {
+            let db = state.db.lock().await;
+            restore_topology_setting(&db, previous_topology.as_deref())
+        };
+        if let Err(restore_error) = restore {
+            return Err(AppError::Internal(format!(
+                "topology save failed ({save_error}); diagram compensation pending ({restore_error})"
+            )));
+        }
+        {
+            let db = state.db.lock().await;
+            clear_topology_recovery(&db)?;
+        }
+        return Err(save_error);
+    }
 
     tracing::info!(
         created,
@@ -608,6 +1418,83 @@ mod tests {
         let mut conn = Connection::open_in_memory().unwrap();
         migrations::run(&mut conn).unwrap();
         conn
+    }
+
+    fn semantic_node(id: &str, node_type: &str, store_profile_id: Option<&str>) -> Value {
+        let mut node = serde_json::json!({
+            "id": id,
+            "type": node_type,
+            "name": id,
+            "x": 0.0,
+            "y": 0.0,
+        });
+        if let Some(store_profile_id) = store_profile_id {
+            node["store_profile_id"] = Value::String(store_profile_id.into());
+        }
+        node
+    }
+
+    fn semantic_location_wire(id: &str, to_node_id: &str) -> Value {
+        serde_json::json!({
+            "id": id,
+            "from_node_id": "branch",
+            "to_node_id": to_node_id,
+            "direction": "one-way",
+            "from_port_id": "location-out",
+            "to_port_id": "location-in",
+            "relationship_type": "location",
+        })
+    }
+
+    #[test]
+    fn semantic_save_persists_version_and_fields() {
+        let conn = fresh_conn();
+        let nodes = vec![
+            semantic_node("branch", "branch-location", Some("default")),
+            semantic_node("ws-1", "workspace", None),
+        ];
+        let wires = vec![semantic_location_wire("wire-1", "ws-1")];
+        save_topology_json(&conn, nodes, wires).unwrap();
+
+        let raw = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)
+            .unwrap()
+            .unwrap();
+        let value: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(value["schema_version"], TOPOLOGY_SCHEMA_VERSION);
+        assert_eq!(value["nodes"][0]["store_profile_id"], "default");
+        assert_eq!(value["wires"][0]["from_port_id"], "location-out");
+        assert_eq!(value["wires"][0]["to_port_id"], "location-in");
+        assert_eq!(value["wires"][0]["relationship_type"], "location");
+    }
+
+    #[test]
+    fn semantic_save_requires_one_location_input_per_workspace() {
+        let conn = fresh_conn();
+        let nodes = vec![
+            semantic_node("branch", "branch-location", Some("default")),
+            semantic_node("ws-1", "workspace", None),
+        ];
+        let result = save_topology_json(&conn, nodes, vec![]);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Location In"));
+    }
+
+    #[test]
+    fn semantic_save_rejects_unknown_store_profile() {
+        let conn = fresh_conn();
+        let nodes = vec![
+            semantic_node("branch", "branch-location", Some("missing-store")),
+            semantic_node("ws-1", "workspace", None),
+        ];
+        let result =
+            save_topology_json(&conn, nodes, vec![semantic_location_wire("wire-1", "ws-1")]);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("unknown store_profile_id")
+        );
     }
 
     #[test]
@@ -4202,15 +5089,19 @@ mod tests {
             .build(tauri::generate_context!())
             .unwrap();
 
-        save_topology(vec![make_node_cmd("n1")], vec![], app.state())
-            .await
-            .unwrap();
+        save_topology(
+            vec![serde_json::to_value(make_node_cmd("n1")).unwrap()],
+            vec![],
+            app.state(),
+        )
+        .await
+        .unwrap();
         let loaded = load_topology(app.state()).await.unwrap();
         assert!(loaded.is_some());
         let data = loaded.unwrap();
-        assert_eq!(data.nodes.len(), 1);
-        assert_eq!(data.nodes[0].id, "n1");
-        assert!(data.wires.is_empty());
+        assert_eq!(data["nodes"].as_array().unwrap().len(), 1);
+        assert_eq!(data["nodes"][0]["id"], "n1");
+        assert!(data["wires"].as_array().unwrap().is_empty());
     }
 
     #[tokio::test]
@@ -4226,16 +5117,24 @@ mod tests {
             .build(tauri::generate_context!())
             .unwrap();
 
-        save_topology(vec![make_node_cmd("first")], vec![], app.state())
-            .await
-            .unwrap();
-        save_topology(vec![make_node_cmd("second")], vec![], app.state())
-            .await
-            .unwrap();
+        save_topology(
+            vec![serde_json::to_value(make_node_cmd("first")).unwrap()],
+            vec![],
+            app.state(),
+        )
+        .await
+        .unwrap();
+        save_topology(
+            vec![serde_json::to_value(make_node_cmd("second")).unwrap()],
+            vec![],
+            app.state(),
+        )
+        .await
+        .unwrap();
 
         let loaded = load_topology(app.state()).await.unwrap().unwrap();
-        assert_eq!(loaded.nodes.len(), 1);
-        assert_eq!(loaded.nodes[0].id, "second");
+        assert_eq!(loaded["nodes"].as_array().unwrap().len(), 1);
+        assert_eq!(loaded["nodes"][0]["id"], "second");
     }
 
     #[tokio::test]
@@ -4268,24 +5167,24 @@ mod tests {
             .build(tauri::generate_context!())
             .unwrap();
 
-        let nodes = vec![make_node_cmd("store-a"), make_node_cmd("ws-1")];
-        let wires = vec![TopologyWirePayload {
-            id: "cmd-w-1".into(),
-            from_node_id: "store-a".into(),
-            to_node_id: "ws-1".into(),
-            direction: "one-way".into(),
-            label: None,
-            from_port: None,
-            to_port: None,
-        }];
+        let nodes = vec![
+            serde_json::to_value(make_node_cmd("store-a")).unwrap(),
+            serde_json::to_value(make_node_cmd("ws-1")).unwrap(),
+        ];
+        let wires = vec![serde_json::json!({
+            "id": "cmd-w-1",
+            "from_node_id": "store-a",
+            "to_node_id": "ws-1",
+            "direction": "one-way",
+        })];
 
         save_topology(nodes, wires, app.state()).await.unwrap();
         let loaded = load_topology(app.state()).await.unwrap().unwrap();
 
-        assert_eq!(loaded.nodes.len(), 2);
-        assert_eq!(loaded.wires.len(), 1);
-        assert_eq!(loaded.wires[0].from_node_id, "store-a");
-        assert_eq!(loaded.wires[0].to_node_id, "ws-1");
+        assert_eq!(loaded["nodes"].as_array().unwrap().len(), 2);
+        assert_eq!(loaded["wires"].as_array().unwrap().len(), 1);
+        assert_eq!(loaded["wires"][0]["from_node_id"], "store-a");
+        assert_eq!(loaded["wires"][0]["to_node_id"], "ws-1");
     }
     // ── Audit follow-up: node-id uniqueness + enum validation + atomicity ─
     //

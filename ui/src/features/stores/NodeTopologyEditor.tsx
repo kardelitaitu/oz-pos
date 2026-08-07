@@ -30,6 +30,8 @@ import {
   LockIcon,
 } from './NodeTopologyIcons';
 import { plainErrorMessage } from '@/utils/app-error';
+import { clampNodeToViewport, NODE_WIDTH, NODE_HEIGHT, NODE_PORT_Y } from './nodeTopologyClamp';
+import { normalizeTopologyGraph, validateTopologyGraph } from './topologyContract';
 import './NodeTopologyEditor.css';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -37,6 +39,20 @@ import './NodeTopologyEditor.css';
 export type NodeType = 'store' | 'workspace' | 'warehouse' | 'hardware';
 export type WireDirection = 'one-way' | 'two-way';
 export type PortName = 'top' | 'right' | 'bottom' | 'left';
+
+/** Convert legacy vertical anchors to the UX's canonical left/right sides. */
+function normalizeVisualPort(port: string | null | undefined, fallback: PortName): PortName {
+  if (port === 'top' || port === 'bottom') return fallback;
+  if (port === 'left' || port === 'right') return port;
+  return fallback;
+}
+export type SemanticRelationshipType =
+  | 'location'
+  | 'stock-routing'
+  | 'ticket-routing'
+  | 'hardware-connection'
+  | 'inventory-transfer'
+  | 'generic';
 
 export interface TopologyNodeData {
   id: string;
@@ -49,6 +65,8 @@ export interface TopologyNodeData {
   telemetryBadge?: string;
   telemetryStatus?: 'online' | 'warning' | 'offline';
   metadata?: Record<string, unknown>;
+  /** Stable Branch Location identity when this node is a store alias. */
+  storeProfileId?: string;
 }
 
 export interface TopologyWireData {
@@ -59,8 +77,21 @@ export interface TopologyWireData {
   label?: string;
   /** Which port on the source node the wire originates from (default: 'right'). */
   fromPort?: PortName;
-  /** Which port on the target node the wire connects to (default: 'right'). */
+  /** Which port on the target node the wire connects to (default: 'left'). */
   toPort?: PortName;
+  /** Semantic source port; geometry remains presentation-only. */
+  fromPortId?: string;
+  /** Semantic target port; geometry remains presentation-only. */
+  toPortId?: string;
+  /** Typed relationship represented by this wire. */
+  relationshipType?: SemanticRelationshipType;
+}
+
+export interface BranchLocationSeed {
+  /** Canonical store_profiles.id. */
+  id: string;
+  /** User-visible location name. */
+  name: string;
 }
 
 export interface WorkspaceInstanceSeed {
@@ -68,6 +99,12 @@ export interface WorkspaceInstanceSeed {
   instanceId: string;
   /** Workspace type key (store-pos, restaurant-pos, kds, warehouse). */
   typeKey: string;
+  /** Controlled business purpose, independent from type and instance label. */
+  purposeKey?: string;
+  /** Canonical Branch Location identity for ownership compilation. */
+  storeId?: string;
+  /** Branch Location display name used only for presentation. */
+  storeName?: string;
   name: string;
   subtitle?: string;
   colour?: string;
@@ -89,6 +126,10 @@ export interface NodeTopologyEditorProps {
    * the parent's onSave diff can create / update / archive correctly.
    */
   workspaceInstances?: WorkspaceInstanceSeed[];
+  /** Branch Locations available to seed the ownership graph. */
+  branchLocations?: BranchLocationSeed[];
+  /** Allow Apply before the parent supplies real branch identities. */
+  allowLegacyApply?: boolean;
 }
 
 /** Valid workspace type keys selectable when creating a workspace node.
@@ -97,10 +138,10 @@ const WORKSPACE_TYPE_KEYS = ['store-pos', 'restaurant-pos', 'kds', 'warehouse'] 
 
 function getWorkspaceTypeLabel(key: string, l10n: ReturnType<typeof useLocalization>['l10n']): string {
   const map: Record<string, string> = {
-    'store-pos': l10n.getString('topology-ws-type-store-pos'),
-    'restaurant-pos': l10n.getString('topology-ws-type-restaurant-pos'),
-    'kds': l10n.getString('topology-ws-type-kds'),
-    'warehouse': l10n.getString('topology-ws-type-warehouse'),
+    'store-pos': topologyUiString(l10n, 'topology-ws-type-store-pos'),
+    'restaurant-pos': topologyUiString(l10n, 'topology-ws-type-restaurant-pos'),
+    'kds': topologyUiString(l10n, 'topology-ws-type-kds'),
+    'warehouse': topologyUiString(l10n, 'topology-ws-type-warehouse'),
   };
   return map[key] ?? key;
 }
@@ -115,8 +156,8 @@ const PRESET_RETAIL: { nodes: TopologyNodeData[]; wires: TopologyWireData[] } = 
   ],
   wires: [
     // Natural left-to-right flow: store right → workspace left, workspace right → warehouse left
-    { id: 'w-1', fromNodeId: 'store-1', fromPort: 'right', toNodeId: 'ws-1', toPort: 'left', direction: 'one-way', label: 'Binds Store' },
-    { id: 'w-2', fromNodeId: 'ws-1', fromPort: 'right', toNodeId: 'wh-1', toPort: 'left', direction: 'one-way', label: 'Stock Deduct (P1)' },
+    { id: 'w-1', fromNodeId: 'store-1', fromPort: 'right', toNodeId: 'ws-1', toPort: 'left', fromPortId: 'location-out', toPortId: 'location-in', relationshipType: 'location', direction: 'one-way', label: 'Binds Store' },
+    { id: 'w-2', fromNodeId: 'ws-1', fromPort: 'right', toNodeId: 'wh-1', toPort: 'left', fromPortId: 'stock-out', toPortId: 'stock-in', relationshipType: 'stock-routing', direction: 'one-way', label: 'Stock Deduct (P1)' },
   ],
 };
 
@@ -130,10 +171,10 @@ const PRESET_RESTAURANT: { nodes: TopologyNodeData[]; wires: TopologyWireData[] 
   ],
   wires: [
     // Left-to-right: store right → workspace left; then workspace right → warehouse/printer left
-    { id: 'w-1', fromNodeId: 'store-1', fromPort: 'right', toNodeId: 'ws-1', toPort: 'left', direction: 'one-way', label: 'Binds Store' },
-    { id: 'w-2', fromNodeId: 'store-1', fromPort: 'right', toNodeId: 'ws-kds', toPort: 'left', direction: 'one-way', label: 'Binds Store' },
-    { id: 'w-3', fromNodeId: 'ws-1', fromPort: 'right', toNodeId: 'wh-kitchen', toPort: 'left', direction: 'one-way', label: 'Stock Deduct' },
-    { id: 'w-4', fromNodeId: 'ws-kds', fromPort: 'right', toNodeId: 'hw-prn', toPort: 'left', direction: 'one-way', label: 'Ticket Print' },
+    { id: 'w-1', fromNodeId: 'store-1', fromPort: 'right', toNodeId: 'ws-1', toPort: 'left', fromPortId: 'location-out', toPortId: 'location-in', relationshipType: 'location', direction: 'one-way', label: 'Binds Store' },
+    { id: 'w-2', fromNodeId: 'store-1', fromPort: 'right', toNodeId: 'ws-kds', toPort: 'left', fromPortId: 'location-out', toPortId: 'location-in', relationshipType: 'location', direction: 'one-way', label: 'Binds Store' },
+    { id: 'w-3', fromNodeId: 'ws-1', fromPort: 'right', toNodeId: 'wh-kitchen', toPort: 'left', fromPortId: 'stock-out', toPortId: 'stock-in', relationshipType: 'stock-routing', direction: 'one-way', label: 'Stock Deduct' },
+    { id: 'w-4', fromNodeId: 'ws-kds', fromPort: 'right', toNodeId: 'hw-prn', toPort: 'left', fromPortId: 'ticket-out', toPortId: 'ticket-in', relationshipType: 'ticket-routing', direction: 'one-way', label: 'Ticket Print' },
   ],
 };
 
@@ -166,7 +207,13 @@ function canvasStateEqual(
       y: n.y,
       ...(n.tierRequirement !== undefined ? { tierRequirement: n.tierRequirement } : {}),
       // metadata is typed with an index signature — bracket access required.
-      ...(n.metadata ? { metadata: { typeKey: n.metadata['typeKey'] } } : {}),
+      ...(n.metadata ? {
+        metadata: {
+          typeKey: n.metadata['typeKey'],
+          purposeKey: n.metadata['purposeKey'],
+          enabled: n.metadata['enabled'],
+        },
+      } : {}),
     }));
   const projWires = (ws: TopologyWireData[]) =>
     ws.map((w) => ({
@@ -182,20 +229,77 @@ function canvasStateEqual(
     && JSON.stringify(projWires(aWires)) === JSON.stringify(projWires(bWires));
 }
 
-// Estimated node card dimensions for wire endpoint positioning.
-// Header ~46px + body ~64px + gaps ≈ 112px. Width ~200px for typical content.
-const NODE_WIDTH = 200;
-const NODE_HEIGHT = 112;
-
 /** Port offset from node origin (left, top) for each port name.
- *  Offsets include the 6px port socket overhang so the wire path
- *  connects to the center of the port circle, not the card edge. */
+ *  Left/right wire endpoints sit on the card edge, exactly at the center
+ *  of the visible connector circles. The hit areas may overhang, but the
+ *  geometry contract never does. */
 const PORT_OFFSET: Record<PortName, { dx: number; dy: number }> = {
+  // Kept for legacy loaded wires. New UX renders and authorizes only left/right.
   top:    { dx: NODE_WIDTH / 2, dy: -6 },
-  right:  { dx: NODE_WIDTH + 6, dy: NODE_HEIGHT / 2 },
+  right:  { dx: NODE_WIDTH, dy: NODE_PORT_Y },
   bottom: { dx: NODE_WIDTH / 2, dy: NODE_HEIGHT + 6 },
-  left:   { dx: -6,             dy: NODE_HEIGHT / 2 },
+  left:   { dx: 0,             dy: NODE_PORT_Y },
 };
+
+/** Ports exposed by the frontend-only UX. Top/bottom remain load-compatible. */
+function visiblePortsForNode(node: TopologyNodeData): PortName[] {
+  switch (node.type) {
+    case 'store':
+      return ['right'];
+    case 'workspace':
+    case 'warehouse':
+    case 'hardware':
+      return ['left', 'right'];
+    default:
+      return ['left', 'right'];
+  }
+}
+
+const TOPOLOGY_UI_FALLBACKS: Record<string, string> = {
+  'topology-port-location-out': 'Location Out',
+  'topology-port-location-in': 'Location In',
+  'topology-port-location-out-aria': 'Location Out port',
+  'topology-port-location-in-aria': 'Location In port',
+  'topology-port-workspace-out': 'Operational Out',
+  'topology-port-stock-in': 'Stock In',
+  'topology-port-stock-out': 'Stock Out',
+  'topology-port-ticket-in': 'Ticket In',
+  'topology-port-device-out': 'Device Out',
+  'topology-port-generic-in': 'Input',
+  'topology-port-generic-out': 'Output',
+  'topology-port-aria': 'Topology port',
+  'topology-field-name': 'Name',
+  'topology-field-name-aria': 'Edit name',
+  'topology-field-enabled': 'Enabled',
+  'topology-field-enabled-aria': 'Toggle enabled state',
+};
+
+/** Resolve topology chrome with a safe fallback so a stale or partial locale
+ * bundle never exposes a Fluent message id in the node canvas. */
+function topologyUiString(
+  l10n: ReturnType<typeof useLocalization>['l10n'],
+  id: string,
+  vars?: Record<string, string>,
+): string {
+  return l10n.getString(id, vars ?? null, TOPOLOGY_UI_FALLBACKS[id] ?? id);
+}
+
+function portLabelId(node: TopologyNodeData, port: PortName): string {
+  if (node.type === 'store' && port === 'right') return 'topology-port-location-out';
+  if (node.type === 'workspace' && port === 'left') return 'topology-port-location-in';
+  if (node.type === 'workspace' && port === 'right') return 'topology-port-workspace-out';
+  if (node.type === 'warehouse' && port === 'left') return 'topology-port-stock-in';
+  if (node.type === 'warehouse' && port === 'right') return 'topology-port-stock-out';
+  if (node.type === 'hardware' && port === 'left') return 'topology-port-ticket-in';
+  if (node.type === 'hardware' && port === 'right') return 'topology-port-device-out';
+  return port === 'left' ? 'topology-port-generic-in' : 'topology-port-generic-out';
+}
+
+function portAriaLabelId(node: TopologyNodeData, port: PortName): string {
+  if (node.type === 'store' && port === 'right') return 'topology-port-location-out-aria';
+  if (node.type === 'workspace' && port === 'left') return 'topology-port-location-in-aria';
+  return 'topology-port-aria';
+}
 
 /** Evaluate a cubic bezier at parameter t (0-1). */
 function cubicBezier(
@@ -222,6 +326,8 @@ export default function NodeTopologyEditor({
   currentTier = 'standard',
   onSave,
   workspaceInstances,
+  branchLocations,
+  allowLegacyApply = true,
 }: NodeTopologyEditorProps) {
   const { sessionToken } = useWorkspace();
   const { addToast } = useToast();
@@ -373,6 +479,7 @@ export default function NodeTopologyEditor({
             if (n.telemetry_badge !== undefined) node.telemetryBadge = n.telemetry_badge;
             if (n.telemetry_status !== undefined) node.telemetryStatus = n.telemetry_status as 'online' | 'warning' | 'offline';
             if (n.metadata !== undefined) node.metadata = n.metadata;
+            if (n.store_profile_id !== undefined) node.storeProfileId = n.store_profile_id;
             savedById.set(n.id, node);
           }
         }
@@ -408,12 +515,41 @@ export default function NodeTopologyEditor({
               y: saved?.y ?? snap(80 + i * 140),
               telemetryBadge: saved?.telemetryBadge ?? 'Active',
               telemetryStatus: saved?.telemetryStatus ?? 'online',
-              metadata: { ...(saved?.metadata ?? {}), typeKey: inst.typeKey, persisted: true },
+              metadata: { ...(saved?.metadata ?? {}), typeKey: inst.typeKey, purposeKey: inst.purposeKey ?? 'general', persisted: true },
             };
             return node;
           });
-          // Keep any saved non-workspace nodes (diagram-only in this pass).
-          const otherNodes = [...savedById.values()].filter((n) => n.type !== 'workspace');
+          // Keep saved non-workspace nodes. On a first real workspace load,
+          // seed a stable Branch Location node from the workspace's canonical
+          // store_id so the required Location In graph is authorable without
+          // inventing a primary/default store relationship.
+          const otherNodes = [...savedById.values()]
+            .filter((n) => n.type !== 'workspace')
+            .map((node) => {
+              // Never recover Branch Location identity from a display name.
+              // Legacy nodes without storeProfileId remain unresolved and
+              // are blocked by the strict Apply validator until migrated.
+              if (node.type === 'store' && node.storeProfileId === undefined) {
+                return node;
+              }
+              return node;
+            });
+          const seededStoreIds = new Set(
+            otherNodes.flatMap((node) => node.type === 'store' && node.storeProfileId ? [node.storeProfileId] : []),
+          );
+          for (const location of branchLocations ?? []) {
+            if (seededStoreIds.has(location.id)) continue;
+            seededStoreIds.add(location.id);
+            otherNodes.push({
+              id: location.id,
+              type: 'store',
+              name: location.name,
+              subtitle: 'Branch Location',
+              x: snap(80),
+              y: snap(140),
+              storeProfileId: location.id,
+            });
+          }
           const mergedNodes = [...otherNodes, ...wsNodes];
           const validIds = new Set(mergedNodes.map((n) => n.id));
           const loadedWires: TopologyWireData[] = (data?.wires ?? [])
@@ -426,8 +562,11 @@ export default function NodeTopologyEditor({
                 direction: w.direction as WireDirection,
               };
               if (w.label !== undefined) wire.label = w.label;
-              if (w.from_port != null) wire.fromPort = w.from_port as PortName;
-              if (w.to_port != null) wire.toPort = w.to_port as PortName;
+              if (w.from_port != null) wire.fromPort = normalizeVisualPort(w.from_port, 'right');
+              if (w.to_port != null) wire.toPort = normalizeVisualPort(w.to_port, 'left');
+              if (w.from_port_id !== undefined) wire.fromPortId = w.from_port_id;
+              if (w.to_port_id !== undefined) wire.toPortId = w.to_port_id;
+              if (w.relationship_type !== undefined) wire.relationshipType = w.relationship_type as SemanticRelationshipType;
               return wire;
             });
           setNodes(mergedNodes);
@@ -462,8 +601,11 @@ export default function NodeTopologyEditor({
             direction: w.direction as WireDirection,
           };
           if (w.label !== undefined) wire.label = w.label;
-          if (w.from_port != null) wire.fromPort = w.from_port as PortName;
-          if (w.to_port != null) wire.toPort = w.to_port as PortName;
+          if (w.from_port != null) wire.fromPort = normalizeVisualPort(w.from_port, 'right');
+          if (w.to_port != null) wire.toPort = normalizeVisualPort(w.to_port, 'left');
+          if (w.from_port_id !== undefined) wire.fromPortId = w.from_port_id;
+          if (w.to_port_id !== undefined) wire.toPortId = w.to_port_id;
+          if (w.relationship_type !== undefined) wire.relationshipType = w.relationship_type as SemanticRelationshipType;
           return wire;
         });
         setWires(loadedWires);
@@ -492,7 +634,7 @@ export default function NodeTopologyEditor({
       });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceInstances]);
+  }, [workspaceInstances, branchLocations]);
 
   const pushHistory = useCallback(() => {
     // Dirty is derived (isCanvasDirty compares against appliedSnapshotRef),
@@ -721,22 +863,29 @@ export default function NodeTopologyEditor({
         e.preventDefault();
         pushHistory();
         const step = e.shiftKey ? GRID_SIZE : 8;
+        // Arrow nudges share the SAME dynamic edge clamp as mouse dragging,
+        // so keyboard and pointer movement agree on the reachable bounds.
+        const canvas = canvasRef.current;
         setNodes((prev) =>
-          prev.map((n) =>
-            n.id === selectedNodeId
-              ? {
-                  ...n,
-                  x: snap(n.x + (e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0)),
-                  y: snap(n.y + (e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0)),
-                }
-              : n,
-          ),
+          prev.map((n) => {
+            if (n.id !== selectedNodeId) return n;
+            const rawX = n.x + (e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0);
+            const rawY = n.y + (e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0);
+            const clamped = clampNodeToViewport(rawX, rawY, {
+              panX: pan.x,
+              panY: pan.y,
+              zoom,
+              canvasW: canvas?.clientWidth ?? 0,
+              canvasH: canvas?.clientHeight ?? 0,
+            });
+            return { ...n, x: snap(clamped.x), y: snap(clamped.y) };
+          }),
         );
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedNodeId, selectedWireId, wires, pushHistory, popUndo, popRedo, confirmDelete, confirmPreset]);
+  }, [selectedNodeId, selectedWireId, wires, pushHistory, popUndo, popRedo, confirmDelete, confirmPreset, pan, zoom]);
 
   const executePresetLoad = useCallback(() => {
     if (confirmPreset) {
@@ -831,9 +980,12 @@ export default function NodeTopologyEditor({
 
     const node = nodeMap.get(nodeId);
     if (node) {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      const canvasX = (e.clientX - (rect?.left ?? 0) - pan.x) / zoom;
+      const canvasY = (e.clientY - (rect?.top ?? 0) - pan.y) / zoom;
       dragOffsetRef.current = {
-        x: e.clientX / zoom - node.x,
-        y: e.clientY / zoom - node.y,
+        x: canvasX - node.x,
+        y: canvasY - node.y,
       };
     }
   };
@@ -848,8 +1000,23 @@ export default function NodeTopologyEditor({
         dragHasMovedRef.current = true;
         pushHistory();
       }
-      const newX = snap(Math.max(20, e.clientX / zoom - dragOffsetRef.current.x));
-      const newY = snap(Math.max(20, e.clientY / zoom - dragOffsetRef.current.y));
+      // Dynamic edge clamp (replaces the old hard 20px floor): the node
+      // may travel north/west until its box nearly leaves the visible
+      // canvas, but can never be pushed off-screen and lost. Pan/zoom
+      // aware, so the reachable edge follows the current view.
+      const canvas = canvasRef.current;
+      const rect = canvas?.getBoundingClientRect();
+      const rawX = (e.clientX - (rect?.left ?? 0) - pan.x) / zoom - dragOffsetRef.current.x;
+      const rawY = (e.clientY - (rect?.top ?? 0) - pan.y) / zoom - dragOffsetRef.current.y;
+      const clamped = clampNodeToViewport(rawX, rawY, {
+        panX: pan.x,
+        panY: pan.y,
+        zoom,
+        canvasW: canvas?.clientWidth ?? 0,
+        canvasH: canvas?.clientHeight ?? 0,
+      });
+      const newX = snap(clamped.x);
+      const newY = snap(clamped.y);
 
       setNodes((prev) =>
         prev.map((n) => (n.id === draggingNodeId ? { ...n, x: newX, y: newY } : n)),
@@ -864,7 +1031,7 @@ export default function NodeTopologyEditor({
       let closest: { nodeId: string; port: PortName; dist: number } | null = null;
       for (const n of nodes) {
         if (n.id === connectingFromNodeId) continue;
-        for (const p of ['top', 'right', 'bottom', 'left'] as PortName[]) {
+        for (const p of ['left', 'right'] as PortName[]) {
           const off = PORT_OFFSET[p];
           const px = n.x + off.dx;
           const py = n.y + off.dy;
@@ -963,7 +1130,7 @@ export default function NodeTopologyEditor({
       // New workspace nodes default to the retail POS type until the user
       // picks another in the inspector. `persisted: false` marks it as not
       // yet backed by a workspace_instances row so onSave will create it.
-      ...(type === 'workspace' ? { metadata: { typeKey: 'store-pos', persisted: false } } : {}),
+      ...(type === 'workspace' ? { metadata: { typeKey: 'store-pos', purposeKey: 'general', persisted: false } } : {}),
     };
 
     setNodes((prev) => [...prev, newNode]);
@@ -977,16 +1144,55 @@ export default function NodeTopologyEditor({
     setSelectedNodeId(id);
   };
 
+  const portDirection = useCallback((port: PortName): 'input' | 'output' => (
+    port === 'left' ? 'input' : 'output'
+  ), []);
+
+  const semanticPortId = useCallback((node: TopologyNodeData, port: PortName): string | undefined => {
+    // Socket placement is presentation. These explicit mappings are the only
+    // bridge from a rendered socket to the first-slice semantic contract.
+    if (node.type === 'store' && port === 'right') return 'location-out';
+    if (node.type === 'workspace' && port === 'left') return 'location-in';
+    return undefined;
+  }, []);
+
+  const isPortCompatible = useCallback((nodeId: string, port: PortName): boolean => {
+    if (!connectingFromNodeId || !connectingFromPort) return false;
+    if (nodeId === connectingFromNodeId) return false;
+    if (portDirection(port) !== 'input') return false;
+    const source = nodeMap.get(connectingFromNodeId);
+    const target = nodeMap.get(nodeId);
+    if (!source || !target) return false;
+    // Compatibility is decided by semantic port IDs, not by the visual edge
+    // names. Uncontracted legacy sockets remain authorable for compatibility,
+    // but the location relationship is strict and typed.
+    const sourcePortId = semanticPortId(source, connectingFromPort);
+    const targetPortId = semanticPortId(target, port);
+    if (sourcePortId === 'location-out') return targetPortId === 'location-in';
+    return true;
+  }, [connectingFromNodeId, connectingFromPort, nodeMap, portDirection, semanticPortId]);
+
   const handlePortClick = (e: React.MouseEvent, nodeId: string, port: PortName) => {
     e.stopPropagation();
 
     if (!connectingFromNodeId) {
+      if (portDirection(port) !== 'output') {
+        addToast({ message: l10n.getString('topology-port-input-only'), type: 'info' });
+        return;
+      }
       setConnectingFromNodeId(nodeId);
       setConnectingFromPort(port);
       return;
     }
 
     if (connectingFromNodeId === nodeId) {
+      setConnectingFromNodeId(null);
+      setConnectingFromPort(null);
+      return;
+    }
+
+    if (!isPortCompatible(nodeId, port)) {
+      addToast({ message: l10n.getString('topology-validation-invalid-location'), type: 'warning' });
       setConnectingFromNodeId(null);
       setConnectingFromPort(null);
       return;
@@ -1040,9 +1246,22 @@ export default function NodeTopologyEditor({
         : l10n.getString('topology-wire-label-fallback', { priority })
       : l10n.getString('topology-wire-label-connected');
 
+    const semanticOwnership = semanticPortId(fromNode, connectingFromPort!) === 'location-out'
+      && semanticPortId(toNode, port) === 'location-in';
     setWires((prev) => [
       ...prev,
-      { id: newWireId, fromNodeId: connectingFromNodeId, fromPort: connectingFromPort!, toNodeId: nodeId, toPort: port, direction: 'one-way', label },
+      {
+        id: newWireId,
+        fromNodeId: connectingFromNodeId,
+        fromPort: connectingFromPort!,
+        toNodeId: nodeId,
+        toPort: port,
+        direction: 'one-way',
+        label,
+        ...(semanticOwnership
+          ? { fromPortId: 'location-out', toPortId: 'location-in', relationshipType: 'location' as const }
+          : {}),
+      },
     ]);
     setConnectingFromNodeId(null);
     setConnectingFromPort(null);
@@ -1239,6 +1458,24 @@ export default function NodeTopologyEditor({
           </Button>            <Button
               variant="primary"
               onClick={async () => {
+                const semanticGraph = normalizeTopologyGraph(nodes, wires);
+                // Legacy/demo canvases may still use a geometric `store`
+                // node without a canonical store profile identity. Keep that
+                // compatibility path non-blocking; the real topology screen
+                // opts into strict validation with allowLegacyApply=false.
+                const hasCanonicalBranchIdentity = semanticGraph.nodes.some(
+                  (node) => node.kind === 'branch-location' && node.storeProfileId !== undefined,
+                );
+                const validationErrors = hasCanonicalBranchIdentity || !allowLegacyApply
+                  ? validateTopologyGraph(semanticGraph)
+                  : [];
+                if (validationErrors.length > 0) {
+                  addToast({
+                    message: l10n.getString(validationErrors[0]!.messageId),
+                    type: 'error',
+                  });
+                  return;
+                }
                 skipNextLoadRef.current = true;
                 // Hoisted ABOVE the try: the snapshot below is written after
                 // the catch, and let/const are block-scoped to the try — a
@@ -1499,12 +1736,19 @@ export default function NodeTopologyEditor({
                   key={node.id}
                   className={`topology-node node-type-${node.type} ${isSelected ? 'node-selected' : ''} ${isConnectingSource ? 'node-connecting-source' : ''}${freshNodeIds.has(node.id) ? ' node-fresh' : ''}`}
                   style={{ left: `${node.x}px`, top: `${node.y}px` }}
-                  role="button"
+                  role="group"
                   tabIndex={0}
+                  aria-label={node.name}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setSelectedNodeId(node.id); }}
-                  onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
+                  // Keep the body selectable/draggable for existing canvas
+                  // workflows, while nested controls explicitly opt out.
+                  onMouseDown={(e) => {
+                    const target = e.target as Element;
+                    if (target.closest('input, button, select, textarea, [data-no-node-drag]')) return;
+                    handleNodeMouseDown(e, node.id);
+                  }}
                 >
-                  <div className="node-header">
+                  <div className="node-header node-titlebar">
                     <span className="node-type-accent" />
                     <span className="node-grip" aria-hidden="true" title={l10n.getString('topology-node-drag-hint')}>
                       <svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true">
@@ -1523,6 +1767,44 @@ export default function NodeTopologyEditor({
 
                   <div className="node-body">
                     <span className="node-subtitle">{node.subtitle}</span>
+                    {node.type === 'workspace' && (
+                      <div className="node-config-row">
+                        <label htmlFor={`node-name-${node.id}`} className="node-config-label">
+                          {topologyUiString(l10n, 'topology-field-name')}
+                        </label>
+                        <input
+                          id={`node-name-${node.id}`}
+                          className="node-config-input"
+                          onMouseDown={(e) => e.stopPropagation()}
+                          type="text"
+                          value={node.name}
+                          aria-label={topologyUiString(l10n, 'topology-field-name-aria', { name: node.name })}
+                          onChange={(e) => {
+                            beginInspectorEdit(node.id);
+                            const name = e.target.value;
+                            setNodes((prev) => prev.map((n) => (n.id === node.id ? { ...n, name } : n)));
+                          }}
+                        />
+                      </div>
+                    )}
+                    {node.type === 'workspace' && (
+                      <label className="node-config-row node-config-toggle">
+                        <span className="node-config-label">{topologyUiString(l10n, 'topology-field-enabled')}</span>
+                        <input
+                          type="checkbox"
+                          onMouseDown={(e) => e.stopPropagation()}
+                          checked={node.metadata?.['enabled'] !== false}
+                          aria-label={topologyUiString(l10n, 'topology-field-enabled-aria', { name: node.name })}
+                          onChange={(e) => {
+                            beginInspectorEdit(node.id);
+                            const enabled = e.target.checked;
+                            setNodes((prev) => prev.map((n) => (n.id === node.id
+                              ? { ...n, metadata: { ...n.metadata, enabled } }
+                              : n)));
+                          }}
+                        />
+                      </label>
+                    )}
                     {(() => {
                       const telemetry = getTelemetry(node);
                       if (!telemetry) {
@@ -1541,17 +1823,27 @@ export default function NodeTopologyEditor({
                   </div>
 
                   <div className="node-port-sockets-group">
-                    {(['top', 'right', 'bottom', 'left'] as PortName[]).map((port) => {
+                    {visiblePortsForNode(node).map((port) => {
                       const isActive = connectingFromNodeId === node.id && connectingFromPort === port;
                       const isHovered = hoveredTarget?.nodeId === node.id && hoveredTarget?.port === port;
+                      const compatible = isPortCompatible(node.id, port);
                       const showHighlight = connectingFromNodeId && connectingFromNodeId !== node.id && isHovered;
                       return (
                         <button
                           key={port}
-                          className={`node-port-socket port-${port} ${isActive ? 'port-active' : ''} ${showHighlight ? 'port-highlight' : ''}`}
+                          className={`node-port-socket port-${port} ${isActive ? 'port-active' : ''} ${showHighlight ? 'port-highlight' : ''} ${compatible ? 'port-compatible' : ''} ${connectingFromNodeId && !compatible ? 'port-incompatible' : ''}`}
                           onClick={(e) => handlePortClick(e, node.id, port)}
-                          aria-label={l10n.getString('topology-port-aria', { name: node.name || '', port })}
+                          aria-label={topologyUiString(
+                            l10n,
+                            portAriaLabelId(node, port),
+                            { name: node.name || '', port },
+                          )}
+                          title={topologyUiString(l10n, portLabelId(node, port))}
+
                         >
+                          <span className={`node-port-label node-port-label-${port}`}>
+                            {topologyUiString(l10n, portLabelId(node, port))}
+                          </span>
                         </button>
                       );
                     })}
@@ -1609,11 +1901,43 @@ export default function NodeTopologyEditor({
               </label>
 
               {/* Workspace type selector + settings card */}
-              {selectedNode.type === 'workspace' && (
-                <div className="inspector-section">
+              {selectedNode.type === 'workspace' && (                  <div className="inspector-section">
                   <h4>
                     <Localized id="workspace-type-selector-label">Workspace Type</Localized>
                   </h4>
+                  <div className="topology-workspace-identity" data-testid="workspace-identity-fields">
+                    <span className="topology-identity-row">
+                      <Localized id="topology-workspace-purpose-label">Purpose</Localized>:
+                      <strong>{l10n.getString(`topology-purpose-${(selectedNode.metadata?.['purposeKey'] as string) ?? 'general'}`)}</strong>
+                    </span>
+                    <span className="topology-identity-row topology-identity-technical">
+                      <Localized id="topology-workspace-technical-type-label">Technical type</Localized>:
+                      <code>{(selectedNode.metadata?.['typeKey'] as string) ?? 'store-pos'}</code>
+                    </span>
+                  </div>
+                  <label className="inspector-field">
+                    <span><Localized id="topology-workspace-purpose-selector-label">Workspace purpose</Localized></span>
+                    <select
+                      className="topology-purpose-select"
+                      value={(selectedNode.metadata?.['purposeKey'] as string) ?? 'general'}
+                      onChange={(e) => {
+                        beginInspectorEdit(selectedNode.id);
+                        const purposeKey = e.target.value;
+                        setNodes((prev) => prev.map((n) => n.id === selectedNode.id
+                          ? { ...n, metadata: { ...n.metadata, purposeKey } }
+                          : n));
+                      }}
+                      aria-label={l10n.getString('topology-workspace-purpose-selector-aria')}
+                    >
+                      <option value="general">{l10n.getString('topology-purpose-general')}</option>
+                      <option value="checkout">{l10n.getString('topology-purpose-checkout')}</option>
+                      <option value="returns">{l10n.getString('topology-purpose-returns')}</option>
+                      <option value="dining-room">{l10n.getString('topology-purpose-dining-room')}</option>
+                      <option value="kitchen-hot-line">{l10n.getString('topology-purpose-kitchen-hot-line')}</option>
+                      <option value="stock-control">{l10n.getString('topology-purpose-stock-control')}</option>
+                      <option value="receiving">{l10n.getString('topology-purpose-receiving')}</option>
+                    </select>
+                  </label>
                   <select
                     className="inspector-select"
                     value={(selectedNode.metadata?.['typeKey'] as string) ?? 'store-pos'}

@@ -3,6 +3,14 @@ import { screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
 import NodeTopologyEditor, { type WorkspaceInstanceSeed } from '../features/stores/NodeTopologyEditor';
+import {
+  clampNodeToViewport,
+  NODE_HEIGHT,
+  NODE_PORT_ROW_H,
+  NODE_PORT_MARKER,
+  NODE_PORT_Y,
+  NODE_WIDTH,
+} from '../features/stores/nodeTopologyClamp';
 import { loadTopology, saveTopology } from '@/api/topology';
 import multiStoreFtl from '@/locales/multi-store.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
@@ -51,8 +59,25 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-ws-type-restaurant-pos': 'Restaurant POS',
   'topology-ws-type-kds': 'Kitchen Display (KDS)',
   'topology-ws-type-warehouse': 'Warehouse',
+  'topology-port-location-out': 'Location Out',
+  'topology-port-location-in': 'Location In',
+  'topology-port-location-out-aria': 'Location Out port',
+  'topology-port-location-in-aria': 'Location In port',
+  'topology-port-aria': 'Topology port',
   'topology-wire-flip-hint-connecting':
     'Flip direction? Clicking keeps your connection in progress.',
+  'topology-port-workspace-out': 'Operational Out',
+  'topology-port-stock-in': 'Stock In',
+  'topology-port-stock-out': 'Stock Out',
+  'topology-port-ticket-in': 'Ticket In',
+  'topology-port-device-out': 'Device Out',
+  'topology-port-generic-in': 'Input',
+  'topology-port-generic-out': 'Output',
+  'topology-port-input-only': 'Input connectors receive connections; choose an output connector first.',
+  'topology-field-name': 'Name',
+  'topology-field-name-aria': 'Edit name',
+  'topology-field-enabled': 'Enabled',
+  'topology-field-enabled-aria': 'Toggle enabled state',
 };
 
 vi.mock('@fluent/react', async () => {
@@ -135,11 +160,19 @@ const nodeAt = (idx: number) =>
   document.querySelectorAll('.topology-node')[idx] as HTMLElement;
 const portOf = (node: HTMLElement, port: string) =>
   node.querySelector(`.node-port-socket.port-${port}`) as HTMLElement;
+const typeSelect = () => document.querySelector('select.inspector-select') as HTMLSelectElement;
 const previewLine = () => document.querySelector('path.wire-path[opacity="0.5"]');
 
 const selectFirstNode = () => {
   const firstNode = document.querySelector('.topology-node');
   if (firstNode) fireEvent.mouseDown(firstNode as Element, { button: 0 });
+};
+
+/** Lay the canvas out in jsdom so viewport-relative clamping has a real size. */
+const mockCanvasSize = (width: number, height: number) => {
+  const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+  Object.defineProperty(canvas, 'clientWidth', { value: width, configurable: true });
+  Object.defineProperty(canvas, 'clientHeight', { value: height, configurable: true });
 };
 
 describe('NodeTopologyEditor Component', () => {
@@ -166,6 +199,114 @@ describe('NodeTopologyEditor Component', () => {
     expect(screen.getByText('+ Warehouse Node')).toBeInTheDocument();
     expect(screen.getByText('+ Hardware Node')).toBeInTheDocument();
     expect(screen.getByText('Test Order Simulation')).toBeInTheDocument();
+  });
+
+  it('renders the UX-first titlebar, left/right labeled ports, textbox, and toggle', () => {
+    renderEditor();
+
+    expect(document.querySelectorAll('.node-titlebar')).toHaveLength(3);
+    expect(screen.getAllByText('Location Out').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Location In').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Operational Out').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByRole('textbox', { name: /Edit name/ })).toHaveLength(1);
+    expect(screen.getAllByRole('checkbox', { name: /Toggle enabled state/ })).toHaveLength(1);
+    expect(document.querySelectorAll('.node-port-socket.port-top')).toHaveLength(0);
+    expect(document.querySelectorAll('.node-port-socket.port-bottom')).toHaveLength(0);
+    expect(document.body.textContent).not.toContain('topology-port-');
+    expect(document.body.textContent).not.toContain('topology-field-');
+
+    // The widened card reserves a dedicated connector footer: labels and
+    // sockets are outside the content flow, so they cannot collide with
+    // telemetry or inline workspace controls.
+    const workspace = nodeAt(1);
+    expect(workspace.classList.contains('node-type-workspace')).toBe(true);
+    expect(workspace.querySelector('.node-body')).not.toBeNull();
+    expect(workspace.querySelector('.node-port-sockets-group')).not.toBeNull();
+    expect(workspace.querySelector('.node-port-label-left')).not.toBeNull();
+    expect(workspace.querySelector('.node-port-label-right')).not.toBeNull();
+  });
+
+  it('keeps connector geometry aligned to the card edge and footer centerline', () => {
+    renderEditor();
+
+    const workspace = nodeAt(1);
+    const sockets = workspace.querySelector('.node-port-sockets-group') as HTMLElement;
+    const left = workspace.querySelector('.node-port-socket.port-left') as HTMLElement;
+    const right = workspace.querySelector('.node-port-socket.port-right') as HTMLElement;
+    expect(sockets).not.toBeNull();
+    expect(left).not.toBeNull();
+    expect(right).not.toBeNull();
+
+    // The shared contract is intentionally explicit: wire endpoints are at
+    // x=0 / x=NODE_WIDTH and y=NODE_PORT_Y, while CSS centers each circle at
+    // those same card-edge coordinates inside the footer hit area. The rail
+    // formula mirrors the CSS marker centering (top = (32 − 12) / 2 = 10).
+    expect(NODE_WIDTH).toBe(240);
+    expect(NODE_PORT_Y).toBe(
+      NODE_HEIGHT - NODE_PORT_ROW_H + NODE_PORT_ROW_H / 2,
+    );
+    expect(NODE_PORT_ROW_H - NODE_PORT_MARKER).toBe(20);
+    expect(left.className).toContain('port-left');
+    expect(right.className).toContain('port-right');
+    expect(sockets.className).toContain('node-port-sockets-group');
+  });
+
+  it('keeps long workspace titles visually bounded by the titlebar', () => {
+    renderEditor();
+
+    const title = nodeAt(1).querySelector('.node-title') as HTMLElement;
+    expect(title).not.toBeNull();
+    expect(title.parentElement?.classList.contains('node-title-wrapper')).toBe(true);
+  });
+
+  it('edits inline workspace controls without dragging the node', () => {
+    renderEditor();
+
+    const workspace = nodeAt(1);
+    const nameInput = screen.getAllByRole('textbox', { name: /Edit name/ })[0]!;
+    const enabled = screen.getAllByRole('checkbox', { name: /Toggle enabled state/ })[0]!;
+    fireEvent.change(nameInput, { target: { value: 'Counter POS' } });
+    fireEvent.click(enabled);
+
+    expect(screen.getByText('Counter POS')).toBeInTheDocument();
+    expect((enabled as HTMLInputElement).checked).toBe(false);
+    expect(workspace.style.left).toBe('340px');
+  });
+
+  it('drags from the titlebar while connector clicks remain interaction-only', () => {
+    renderEditor();
+
+    const workspace = nodeAt(1);
+    const titlebar = workspace.querySelector('.node-titlebar') as HTMLElement;
+    const port = portOf(workspace, 'right');
+    const before = workspace.style.left;
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    fireEvent.mouseDown(titlebar, { button: 0, clientX: 340, clientY: 80 });
+    fireEvent.mouseMove(canvas, { clientX: 388, clientY: 80 });
+    expect(workspace.style.left).not.toBe(before);
+    fireEvent.mouseUp(canvas, { button: 0 });
+
+    const afterDrag = workspace.style.left;
+    fireEvent.mouseDown(port, { button: 0, clientX: 0, clientY: 0 });
+    expect(workspace.style.left).toBe(afterDrag);
+  });
+
+  it('renders legacy vertical wire ports on canonical left/right sides', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        { id: 'ws-1', type: 'workspace', name: 'POS', x: 340, y: 80 },
+      ],
+      wires: [{ id: 'legacy-wire', from_node_id: 'store-1', from_port: 'top', to_node_id: 'ws-1', to_port: 'bottom', direction: 'one-way' }],
+    } as never);
+    renderEditor();
+
+    await waitFor(() => expect(getWireCount()).toBe(1));
+    expect(portOf(nodeAt(0), 'right')).not.toBeNull();
+    expect(portOf(nodeAt(0), 'top')).toBeNull();
+    expect(portOf(nodeAt(1), 'left')).not.toBeNull();
+    expect(portOf(nodeAt(1), 'bottom')).toBeNull();
   });
 
   it('switches to restaurant & KDS preset when clicked', () => {
@@ -488,6 +629,99 @@ describe('NodeTopologyEditor Component', () => {
 
     expect(firstNode.style.left).toBe('120px');
     expect(firstNode.style.top).toBe('192px');
+  });
+
+  // ── Dynamic edge clamp: north/west freedom past the old 20px floor ──
+
+  it('lets a node drag freely north/west to the viewport edge (not the 20px floor)', () => {
+    renderEditor();
+
+    const firstNode = document.querySelector('.topology-node') as HTMLElement;
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    expect(firstNode).not.toBeNull();
+    expect(canvas).not.toBeNull();
+    // Lay the canvas out so the clamp has a real viewport to honour.
+    mockCanvasSize(800, 600);
+    expect(firstNode.style.left).toBe('80px');
+    expect(firstNode.style.top).toBe('140px');
+
+    // mousedown at clientX/Y 0 → dragOffset = (0 - 80, 0 - 140).
+    fireEvent.mouseDown(firstNode, { button: 0, clientX: 0, clientY: 0 });
+
+    // Drag far north-west: raw = (-320, -260) → clamped to the viewport
+    // edge (-200, -200) → snapped (-192, -192). The old 20px floor would
+    // have parked the node at (24, 24).
+    fireEvent.mouseMove(canvas, { clientX: -400, clientY: -400 });
+    expect(firstNode.style.left).toBe('-192px');
+    expect(firstNode.style.top).toBe('-192px');
+
+    // Dragging even further must HOLD the node at the edge — the clamp
+    // guarantees a node can never be pushed off-canvas and lost.
+    fireEvent.mouseMove(canvas, { clientX: -1000, clientY: -1000 });
+    expect(firstNode.style.left).toBe('-192px');
+    expect(firstNode.style.top).toBe('-192px');
+
+    fireEvent.mouseUp(canvas, { button: 0 });
+  });
+
+  it('arrow keys respect the same viewport clamp as mouse dragging', () => {
+    renderEditor();
+
+    const firstNode = document.querySelector('.topology-node') as HTMLElement;
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    mockCanvasSize(800, 600);
+
+    selectFirstNode();
+    // Shift nudges move in full grid steps (24px), so every press actually
+    // advances: 80 → 48 → 24 → 0 → -24 → … → clamps at minX = -200,
+    // snaps to the grid bound -192. (A plain 8px nudge oscillates on the
+    // 24px grid and would never reach the edge.)
+    for (let i = 0; i < 15; i += 1) {
+      fireEvent.keyDown(canvas, { key: 'ArrowLeft', shiftKey: true });
+    }
+    expect(firstNode.style.left).toBe('-192px');
+
+    // North: 140 → 120 → 96 → … → clamps at minY = -200,
+    // snapping to the nearest grid position -192.
+    for (let i = 0; i < 15; i += 1) {
+      fireEvent.keyDown(canvas, { key: 'ArrowUp', shiftKey: true });
+    }
+    expect(firstNode.style.top).toBe('-192px');
+  });
+
+  // ── clampNodeToViewport unit contract ────────────────────────────
+
+  describe('clampNodeToViewport (view-relative edge clamp)', () => {
+    it('at identity transform, the west/north bound keeps only the margin visible', () => {
+    // 800×600 canvas, pan 0, zoom 1, default node 240×240, margin 40.
+    expect(clampNodeToViewport(-320, -260, { panX: 0, panY: 0, zoom: 1, canvasW: 800, canvasH: 600 }))
+      .toEqual({ x: -200, y: -200 });
+    });
+
+    it('keeps the node inside the east/south edges with the same margin', () => {
+      expect(clampNodeToViewport(9999, 9999, { panX: 0, panY: 0, zoom: 1, canvasW: 800, canvasH: 600 }))
+        .toEqual({ x: 760, y: 560 });
+    });
+
+    it('is pan-aware: panning extends the reachable west bound', () => {
+      // Pan +200 shifts content right, so the canvas-space origin sits
+      // further left: minX = (40 - 200) - 240 = -400.
+      expect(clampNodeToViewport(-500, -260, { panX: 200, panY: 0, zoom: 1, canvasW: 800, canvasH: 600 }))
+        .toEqual({ x: -400, y: -200 });
+    });
+
+    it('is zoom-aware: zooming out widens the reachable bounds', () => {
+      // Margin is in screen px, so at zoom 0.5 the 40px margin becomes
+      // 80 canvas px: minX = (40/0.5) - 240 = -160.
+      expect(clampNodeToViewport(-320, -260, { panX: 0, panY: 0, zoom: 0.5, canvasW: 800, canvasH: 600 }))
+        .toEqual({ x: -160, y: -160 });
+    });
+
+    it('returns the position unchanged when the canvas has no measured size', () => {
+      // jsdom / pre-layout canvases report 0 — no viewport constraint exists.
+      expect(clampNodeToViewport(120, 90, { panX: 0, panY: 0, zoom: 1, canvasW: 0, canvasH: 0 }))
+        .toEqual({ x: 120, y: 90 });
+    });
   });
 
   // ── Arrow-key auto-repeat must not flood the undo stack (#14) ────
@@ -1189,7 +1423,7 @@ describe('NodeTopologyEditor Component', () => {
     expect(wsNode).not.toBeNull();
     fireEvent.mouseDown(wsNode, { button: 0, clientX: 0, clientY: 0 });
 
-    const select = document.querySelector('.inspector-select') as HTMLSelectElement;
+    const select = typeSelect();
     expect(select).not.toBeNull();
     expect(select.value).toBe('store-pos');
 
@@ -1384,9 +1618,9 @@ describe('NodeTopologyEditor — wire creation', () => {
     renderEditor();
     const baseline = getWireCount();
 
-    // store-1 bottom → ws-1 top (not an existing connection).
-    fireEvent.click(portOf(nodeAt(0), 'bottom'));
-    fireEvent.click(portOf(nodeAt(1), 'top'));
+    // warehouse output → workspace input (not an existing connection).
+    fireEvent.click(portOf(nodeAt(2), 'right'));
+    fireEvent.click(portOf(nodeAt(1), 'left'));
 
     expect(getWireCount()).toBe(baseline + 1);
   });
@@ -1395,13 +1629,13 @@ describe('NodeTopologyEditor — wire creation', () => {
     renderEditor();
     const baseline = getWireCount();
 
-    fireEvent.click(portOf(nodeAt(0), 'bottom'));
-    fireEvent.click(portOf(nodeAt(1), 'top'));
+    fireEvent.click(portOf(nodeAt(2), 'right'));
+    fireEvent.click(portOf(nodeAt(1), 'left'));
     expect(getWireCount()).toBe(baseline + 1);
 
     // Same two ports again — duplicate.
-    fireEvent.click(portOf(nodeAt(0), 'bottom'));
-    fireEvent.click(portOf(nodeAt(1), 'top'));
+    fireEvent.click(portOf(nodeAt(2), 'right'));
+    fireEvent.click(portOf(nodeAt(1), 'left'));
 
     expect(getWireCount()).toBe(baseline + 1);
     expect(screen.getByText('A wire already connects these ports.')).toBeInTheDocument();
@@ -1411,7 +1645,7 @@ describe('NodeTopologyEditor — wire creation', () => {
     renderEditor();
     const baseline = getWireCount();
 
-    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    fireEvent.click(portOf(nodeAt(0), 'right'));
     fireEvent.click(portOf(nodeAt(0), 'right')); // same node → cancel
 
     expect(getWireCount()).toBe(baseline);
@@ -1422,8 +1656,8 @@ describe('NodeTopologyEditor — wire creation', () => {
     const baseline = getWireCount();
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
 
-    fireEvent.click(portOf(nodeAt(0), 'bottom'));
-    fireEvent.click(portOf(nodeAt(1), 'top'));
+    fireEvent.click(portOf(nodeAt(2), 'right'));
+    fireEvent.click(portOf(nodeAt(1), 'left'));
     expect(getWireCount()).toBe(baseline + 1);
 
     fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true });
@@ -1434,10 +1668,10 @@ describe('NodeTopologyEditor — wire creation', () => {
     renderEditor();
     const baseline = getWireCount();
 
-    // ws-1 bottom → wh-1 top: workspace→warehouse, but the retail preset
-    // already has one warehouse wire (w-2) — standard tier allows one.
-    fireEvent.click(portOf(nodeAt(1), 'bottom'));
-    fireEvent.click(portOf(nodeAt(2), 'top'));
+    // Add a second workspace, then connect it to the existing warehouse.
+    fireEvent.click(screen.getByText('+ Workspace Node'));
+    fireEvent.click(portOf(nodeAt(3), 'right'));
+    fireEvent.click(portOf(nodeAt(2), 'left'));
 
     expect(getWireCount()).toBe(baseline);
     expect(
@@ -1493,11 +1727,11 @@ describe('NodeTopologyEditor — duplicate detection vs defaulted ports', () => 
     await waitFor(() => expect(screen.getByText('Loaded Store')).toBeInTheDocument());
 
     const baseline = getWireCount();
-    fireEvent.click(portOf(nodeAt(1), 'left')); // start from the target node's side
-    fireEvent.click(portOf(nodeAt(0), 'right'));
+    // Inputs cannot start a connection in the left/right UX.
+    fireEvent.click(portOf(nodeAt(1), 'left'));
 
     expect(getWireCount()).toBe(baseline);
-    expect(screen.getByText('A wire already connects these ports.')).toBeInTheDocument();
+    expect(screen.getByText('Input connectors receive connections; choose an output connector first.')).toBeInTheDocument();
   });
 
   it('treats a literal null port payload (serde None) as a defaulted port', async () => {
@@ -1761,9 +1995,9 @@ describe('NodeTopologyEditor — wire deletion keeps an in-flight connection', (
     renderEditor();
     const baseline = getWireCount();
 
-    // Start a connection from store-1's bottom port.
-    fireEvent.click(portOf(nodeAt(0), 'bottom'));
-    expect(nodeAt(0).className).toContain('node-connecting-source');
+    // Start a connection from the warehouse output.
+    fireEvent.click(portOf(nodeAt(2), 'right'));
+    expect(nodeAt(2).className).toContain('node-connecting-source');
     expect(previewLine()).not.toBeNull();
 
     // Select and delete w-2 (workspace right -> warehouse left) — unrelated
@@ -1777,11 +2011,11 @@ describe('NodeTopologyEditor — wire deletion keeps an in-flight connection', (
     expect(getWireCount()).toBe(baseline - 1);
 
     // The connection SURVIVED the unrelated wire delete.
-    expect(nodeAt(0).className).toContain('node-connecting-source');
+    expect(nodeAt(2).className).toContain('node-connecting-source');
     expect(previewLine()).not.toBeNull();
 
     // And it still completes normally.
-    fireEvent.click(portOf(nodeAt(1), 'top'));
+    fireEvent.click(portOf(nodeAt(1), 'left'));
     expect(getWireCount()).toBe(baseline);
   });
 
@@ -1816,23 +2050,22 @@ describe('NodeTopologyEditor — wire deletion keeps an in-flight connection', (
     renderEditor();
     const baseline = getWireCount();
 
-    // Start the connection from the OTHER side of w-1 (ws-1 left -> store-1
-    // right). The duplicate detector treats reversed pairs as duplicates,
-    // so deleting w-1 must cancel this pending state too.
-    fireEvent.click(portOf(nodeAt(1), 'left'));
+    // Start the connection from the output side of w-2 (workspace right ->
+    // warehouse left). Inputs cannot start connections in the UX.
+    fireEvent.click(portOf(nodeAt(1), 'right'));
     expect(nodeAt(1).className).toContain('node-connecting-source');
     expect(previewLine()).not.toBeNull();
 
     const hitboxes = document.querySelectorAll('.wire-hitbox');
-    fireEvent.click(hitboxes[0] as Element); // w-1: store-1 right <-> ws-1 left
+    fireEvent.click(hitboxes[1] as Element); // w-2: workspace right <-> warehouse left
     expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
     fireEvent.keyDown(window, { key: 'Delete' });
     expect(screen.getByText('Delete Wire')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Delete'));
     expect(getWireCount()).toBe(baseline - 1);
 
-    // The pending state was cancelled — completing cannot recreate w-1.
-    fireEvent.click(portOf(nodeAt(0), 'right'));
+    // The pending state was cancelled — completing cannot recreate w-2.
+    fireEvent.click(portOf(nodeAt(2), 'left'));
     expect(getWireCount()).toBe(baseline - 1);
   });
 });
@@ -1845,7 +2078,7 @@ describe('NodeTopologyEditor — Escape connection-cancel flow', () => {
     const baseline = getWireCount();
 
     // Start a connection from store-1's bottom port — a ghost preview line appears.
-    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    fireEvent.click(portOf(nodeAt(2), 'right'));
     expect(previewLine()).not.toBeNull();
 
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
@@ -1854,7 +2087,7 @@ describe('NodeTopologyEditor — Escape connection-cancel flow', () => {
     // Preview gone, and clicking a target port on another node does NOT
     // complete a wire — the connection was cancelled, not left dangling.
     expect(previewLine()).toBeNull();
-    fireEvent.click(portOf(nodeAt(1), 'top'));
+    fireEvent.click(portOf(nodeAt(1), 'left'));
     expect(getWireCount()).toBe(baseline);
   });
 
@@ -1864,7 +2097,7 @@ describe('NodeTopologyEditor — Escape connection-cancel flow', () => {
     selectFirstNode();
     expect(document.querySelector('.topology-node.node-selected')).not.toBeNull();
 
-    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    fireEvent.click(portOf(nodeAt(2), 'right'));
     expect(previewLine()).not.toBeNull();
 
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
@@ -1880,7 +2113,7 @@ describe('NodeTopologyEditor — Escape connection-cancel flow', () => {
 
     // Select a node so the inspector (with its text input) is open.
     selectFirstNode();
-    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    fireEvent.click(portOf(nodeAt(2), 'right'));
     expect(previewLine()).not.toBeNull();
 
     const nameInput = document.querySelector(
@@ -1892,7 +2125,7 @@ describe('NodeTopologyEditor — Escape connection-cancel flow', () => {
 
     // The connection is still in flight — completing it creates the wire.
     expect(previewLine()).not.toBeNull();
-    fireEvent.click(portOf(nodeAt(1), 'top'));
+    fireEvent.click(portOf(nodeAt(1), 'left'));
     expect(getWireCount()).toBe(baseline + 1);
   });
 });
@@ -1904,10 +2137,11 @@ describe('NodeTopologyEditor — Pro-tier warehouse fallback label', () => {
     renderEditor({ currentTier: 'pro' });
     const baseline = getWireCount();
 
-    // ws-1 bottom → wh-1 top: the retail preset already has one warehouse
-    // wire, so the new one is the fallback (priority 2) — allowed on Pro.
-    fireEvent.click(portOf(nodeAt(1), 'bottom'));
-    fireEvent.click(portOf(nodeAt(2), 'top'));
+    // Add a second warehouse, then connect the workspace to it. The retail
+    // preset already has one warehouse wire, so this is fallback priority 2.
+    fireEvent.click(screen.getByText('+ Warehouse Node'));
+    fireEvent.click(portOf(nodeAt(1), 'right'));
+    fireEvent.click(portOf(nodeAt(3), 'left'));
 
     expect(getWireCount()).toBe(baseline + 1);
     expect(
@@ -1944,8 +2178,8 @@ describe('NodeTopologyEditor — first warehouse wire stock-deduct label', () =>
 
     // ws-1 bottom → wh-1 top: workspace→warehouse, first one — allowed on
     // the standard tier, labelled as the primary stock-deduction path.
-    fireEvent.click(portOf(nodeAt(1), 'bottom'));
-    fireEvent.click(portOf(nodeAt(2), 'top'));
+    fireEvent.click(portOf(nodeAt(1), 'right'));
+    fireEvent.click(portOf(nodeAt(2), 'left'));
 
     expect(getWireCount()).toBe(baseline + 1);
     expect(
@@ -2143,8 +2377,8 @@ describe('NodeTopologyEditor — simulation pulse vs canvas mutations', () => {
     expect(pulseCount()).toBe(2);
 
     // Create a third wire, then undo it mid-simulation.
-    fireEvent.click(portOf(nodeAt(0), 'bottom'));
-    fireEvent.click(portOf(nodeAt(1), 'top'));
+    fireEvent.click(portOf(nodeAt(2), 'right'));
+    fireEvent.click(portOf(nodeAt(1), 'left'));
     expect(getWireCount()).toBe(3);
     expect(pulseCount()).toBe(3);
 
@@ -2306,16 +2540,15 @@ describe('NodeTopologyEditor — hover-target preview snap', () => {
     renderEditor();
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
 
-    // Start a connection from store-1's bottom port.
-    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    // Start a connection from warehouse's output.
+    fireEvent.click(portOf(nodeAt(2), 'right'));
 
-    // Move to ws-1's top port: canvas coords are node.x + NODE_WIDTH/2,
-    // node.y - 6 (pan 0 / zoom 1 / zero rect in jsdom, so clientX/Y ==
-    // canvas coords and the hit is exact).
+    // Move to ws-1's left input port: the UX exposes only left/right
+    // connectors, so the preview should snap to the labeled Location In.
     const wsX = parseFloat(nodeAt(1).style.left);
     const wsY = parseFloat(nodeAt(1).style.top);
-    const targetX = wsX + 100;
-    const targetY = wsY - 6;
+    const targetX = wsX;
+    const targetY = wsY + NODE_HEIGHT - 16;
     fireEvent.mouseMove(canvas, { clientX: targetX, clientY: targetY });
 
     const preview = document.querySelector(
@@ -2326,7 +2559,7 @@ describe('NodeTopologyEditor — hover-target preview snap', () => {
     const nums = d.match(/-?\d+(\.\d+)?/g)!.map(Number);
     const endX = nums[nums.length - 2]!;
     const endY = nums[nums.length - 1]!;
-    // The preview endpoint snapped to the ws-1 top port.
+    // The preview endpoint snapped to the ws-1 left input port.
     expect(endX).toBeCloseTo(targetX, 1);
     expect(endY).toBeCloseTo(targetY, 1);
   });
@@ -2440,8 +2673,8 @@ describe('NodeTopologyEditor — connected wire label', () => {
     renderEditor();
     const baseline = getWireCount();
 
-    fireEvent.click(portOf(nodeAt(0), 'bottom'));
-    fireEvent.click(portOf(nodeAt(1), 'top'));
+    fireEvent.click(portOf(nodeAt(2), 'right'));
+    fireEvent.click(portOf(nodeAt(1), 'left'));
     expect(getWireCount()).toBe(baseline + 1);
 
     // Non-warehouse wires carry the plain connected label (raw identity key).
@@ -2458,8 +2691,8 @@ describe('NodeTopologyEditor — preset load cancels in-flight connection', () =
     renderEditor();
     const baseline = getWireCount();
 
-    // Start a connection from store-1's bottom port — ghost preview appears.
-    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    // Start a connection from warehouse's output — ghost preview appears.
+    fireEvent.click(portOf(nodeAt(2), 'right'));
     expect(previewLine()).not.toBeNull();
 
     // Load the SAME preset mid-connection (no edits yet, so it loads
@@ -2471,7 +2704,7 @@ describe('NodeTopologyEditor — preset load cancels in-flight connection', () =
     expect(previewLine()).toBeNull();
     // ...and a subsequent target-port click must start a NEW connection
     // instead of completing the stale one (no wire may be created).
-    fireEvent.click(portOf(nodeAt(1), 'top'));
+    fireEvent.click(portOf(nodeAt(1), 'left'));
     expect(getWireCount()).toBe(baseline);
   });
 
@@ -2495,7 +2728,7 @@ describe('NodeTopologyEditor — preset load cancels in-flight connection', () =
 
     await waitFor(() => expect(screen.getByText('Store')).toBeInTheDocument());
 
-    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    fireEvent.click(portOf(nodeAt(0), 'right'));
     expect(previewLine()).not.toBeNull();
 
     // Trigger the workspaceInstances reload — the canvas is replaced.
@@ -2503,7 +2736,7 @@ describe('NodeTopologyEditor — preset load cancels in-flight connection', () =
     await waitFor(() => expect(previewLine()).toBeNull());
 
     // The stale connection cannot complete: a target click creates no wire.
-    fireEvent.click(portOf(nodeAt(1), 'top'));
+    fireEvent.click(portOf(nodeAt(1), 'left'));
     expect(getWireCount()).toBe(0);
   });
 });
@@ -2526,10 +2759,10 @@ describe('NodeTopologyEditor — wire-label toggle keeps an in-flight connection
     renderEditor();
     const baseline = getWireCount();
 
-    // Start a connection from store-1's bottom port — ghost preview + source highlight.
-    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    // Start a connection from warehouse's output — ghost preview + source highlight.
+    fireEvent.click(portOf(nodeAt(2), 'right'));
     expect(previewLine()).not.toBeNull();
-    expect(nodeAt(0).className).toContain('node-connecting-source');
+    expect(nodeAt(2).className).toContain('node-connecting-source');
 
     // Toggle the first wire (store right → workspace left) to two-way.
     const firstLabel = screen.getAllByText(/→|↔/)[0]!;
@@ -2538,13 +2771,13 @@ describe('NodeTopologyEditor — wire-label toggle keeps an in-flight connection
     expect(firstLabel.textContent).toContain('↔');
 
     // The connection SURVIVED the toggle: source highlight + ghost preview intact.
-    expect(nodeAt(0).className).toContain('node-connecting-source');
+    expect(nodeAt(2).className).toContain('node-connecting-source');
     expect(previewLine()).not.toBeNull();
 
     // Completing the connection still creates the expected store→workspace
     // wire from the in-flight source — the toggle's history push did not
     // corrupt the pending state.
-    fireEvent.click(portOf(nodeAt(1), 'top'));
+    fireEvent.click(portOf(nodeAt(1), 'left'));
     expect(getWireCount()).toBe(baseline + 1);
     const wires = document.querySelectorAll('.wire-group');
     const created = wires[wires.length - 1]!;
@@ -2556,7 +2789,7 @@ describe('NodeTopologyEditor — wire-label toggle keeps an in-flight connection
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
     const baseline = getWireCount();
 
-    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    fireEvent.click(portOf(nodeAt(2), 'right'));
     expect(previewLine()).not.toBeNull();
 
     // Toggle to two-way, then undo the toggle mid-connection.
@@ -2567,11 +2800,11 @@ describe('NodeTopologyEditor — wire-label toggle keeps an in-flight connection
     expect(firstLabel.textContent).toContain('→');
 
     // The connection survived BOTH the toggle's history push and its undo.
-    expect(nodeAt(0).className).toContain('node-connecting-source');
+    expect(nodeAt(2).className).toContain('node-connecting-source');
     expect(previewLine()).not.toBeNull();
 
     // And it still completes normally afterwards.
-    fireEvent.click(portOf(nodeAt(1), 'top'));
+    fireEvent.click(portOf(nodeAt(1), 'left'));
     expect(getWireCount()).toBe(baseline + 1);
   });
 
@@ -2596,9 +2829,9 @@ describe('NodeTopologyEditor — wire-label toggle keeps an in-flight connection
     }
     renderWithProvidersSync(<Wrap />, multiStoreFtl, sharedFtl);
 
-    // Start a connection from store-1's bottom port.
-    fireEvent.click(portOf(nodeAt(0), 'bottom'));
-    expect(nodeAt(0).className).toContain('node-connecting-source');
+    // Start a connection from the warehouse output.
+    fireEvent.click(portOf(nodeAt(2), 'right'));
+    expect(nodeAt(2).className).toContain('node-connecting-source');
 
     // Click the first wire label to toggle direction.
     const firstLabel = screen.getAllByText(/→|↔/)[0]!;
@@ -2615,7 +2848,7 @@ describe('NodeTopologyEditor — wire-label toggle keeps an in-flight connection
     // click never reached (and cannot arm) a background-click cancel.
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
     fireEvent.mouseDown(canvas, { button: 0 });
-    expect(nodeAt(0).className).toContain('node-connecting-source');
+    expect(nodeAt(2).className).toContain('node-connecting-source');
     expect(previewLine()).not.toBeNull();
   });
 
@@ -2629,7 +2862,7 @@ describe('NodeTopologyEditor — wire-label toggle keeps an in-flight connection
     // the keep-connection decision explicit: flipping direction is safe and
     // the connection stays in progress. The modifier class (the CSS
     // accent-ring hover affordance hook) must accompany the title.
-    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    fireEvent.click(portOf(nodeAt(2), 'right'));
     const hintTitles = document.querySelectorAll('.wire-label-group title');
     expect(hintTitles.length).toBeGreaterThan(0);
     expect(hintTitles[0]!.textContent).toContain('Flip direction');
@@ -2639,7 +2872,7 @@ describe('NodeTopologyEditor — wire-label toggle keeps an in-flight connection
 
     // Complete the connection — connection mode ends, hint and modifier
     // class disappear.
-    fireEvent.click(portOf(nodeAt(1), 'top'));
+    fireEvent.click(portOf(nodeAt(1), 'left'));
     expect(document.querySelector('.wire-label-group title')).toBeNull();
     expect(document.querySelector('.wire-label-group-connecting')).toBeNull();
   });

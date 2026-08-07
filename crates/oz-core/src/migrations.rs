@@ -721,6 +721,11 @@ pub const ALL: &[Migration] = &[
         id: "121_workspace_instances_store_own_profile.sql",
         sql: include_str!("../migrations/121_workspace_instances_store_own_profile.sql"),
     },
+    // ── Topology builder: separate controlled business purpose from type/name ──
+    Migration {
+        id: "122_workspace_instance_purpose.sql",
+        sql: include_str!("../migrations/122_workspace_instance_purpose.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.

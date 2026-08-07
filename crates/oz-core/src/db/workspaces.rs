@@ -77,6 +77,8 @@ pub struct WorkspaceInstanceRow {
     pub description: String,
     /// Optional per-instance accent colour override.
     pub colour: Option<String>,
+    /// Controlled business purpose independent from type and display label.
+    pub purpose_key: String,
     /// Instance status — 'active', 'quota_suspended', 'archived'.
     pub status: String,
     /// ISO timestamp.
@@ -98,6 +100,8 @@ pub struct WorkspaceDto {
     pub store_id: String,
     /// Store display name (from store_profiles).
     pub store_name: String,
+    /// Controlled business purpose, independent from type, label, and access policy.
+    pub purpose_key: String,
     /// Instance display name.
     pub name: String,
     /// Description (from the type).
@@ -427,6 +431,7 @@ impl Store<'_> {
         format!(
             "SELECT wi.id, wi.type_key, wi.store_id,
                     COALESCE(sp.name, wi.store_id) AS store_name,
+                    wi.purpose_key,
                     wi.name, wt.description, wt.icon, wt.layout_mode,
                     COALESCE(wi.colour, wt.accent_colour) AS colour,
                     COALESCE(uwi.is_default, 0) AS is_default
@@ -445,12 +450,13 @@ impl Store<'_> {
             type_key: row.get(1)?,
             store_id: row.get(2)?,
             store_name: row.get(3)?,
-            name: row.get(4)?,
-            description: row.get(5)?,
-            icon: row.get(6)?,
-            layout_mode: row.get(7)?,
-            colour: row.get(8)?,
-            is_default: row.get::<_, i32>(9)? != 0,
+            purpose_key: row.get(4)?,
+            name: row.get(5)?,
+            description: row.get(6)?,
+            icon: row.get(7)?,
+            layout_mode: row.get(8)?,
+            colour: row.get(9)?,
+            is_default: row.get::<_, i32>(10)? != 0,
         })
     }
 
@@ -533,6 +539,7 @@ impl Store<'_> {
         let mut stmt = self.conn.prepare(
             "SELECT wi.id, wi.type_key, wi.store_id,
                     COALESCE(sp.name, wi.store_id) AS store_name,
+                    wi.purpose_key,
                     wi.name, wt.description, wt.icon, wt.layout_mode,
                     COALESCE(wi.colour, wt.accent_colour) AS colour,
                     COALESCE((SELECT is_default FROM user_workspace_instances
@@ -549,12 +556,13 @@ impl Store<'_> {
                 type_key: row.get(1)?,
                 store_id: row.get(2)?,
                 store_name: row.get(3)?,
-                name: row.get(4)?,
-                description: row.get(5)?,
-                icon: row.get(6)?,
-                layout_mode: row.get(7)?,
-                colour: row.get(8)?,
-                is_default: row.get::<_, i32>(9)? != 0,
+                purpose_key: row.get(4)?,
+                name: row.get(5)?,
+                description: row.get(6)?,
+                icon: row.get(7)?,
+                layout_mode: row.get(8)?,
+                colour: row.get(9)?,
+                is_default: row.get::<_, i32>(10)? != 0,
             })
         })
         .map_err(CoreError::from)
@@ -638,6 +646,32 @@ impl Store<'_> {
         description: &str,
         colour: Option<&str>,
     ) -> Result<WorkspaceInstanceRow, CoreError> {
+        self.create_workspace_instance_with_purpose(
+            id,
+            type_key,
+            store_id,
+            name,
+            description,
+            colour,
+            "general",
+        )
+    }
+
+    /// Create a workspace instance with an explicit controlled business purpose.
+    ///
+    /// `purpose_key` is independent from the technical `type_key`, editable
+    /// instance name, and authorization assignments. The legacy creator above
+    /// delegates to this method with the neutral `general` purpose.
+    pub fn create_workspace_instance_with_purpose(
+        &self,
+        id: &str,
+        type_key: &str,
+        store_id: &str,
+        name: &str,
+        description: &str,
+        colour: Option<&str>,
+        purpose_key: &str,
+    ) -> Result<WorkspaceInstanceRow, CoreError> {
         if id.trim().is_empty() {
             return Err(CoreError::Validation {
                 field: "id",
@@ -662,6 +696,12 @@ impl Store<'_> {
                 message: "workspace instance name must not be empty".into(),
             });
         }
+        if purpose_key.trim().is_empty() {
+            return Err(CoreError::Validation {
+                field: "purpose_key",
+                message: "workspace instance purpose_key must not be empty".into(),
+            });
+        }
 
         let tx = self.conn.unchecked_transaction()?;
 
@@ -681,15 +721,15 @@ impl Store<'_> {
         }
 
         tx.execute(
-            "INSERT INTO workspace_instances (id, type_key, store_id, name, description, colour, status, last_accessed_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'active', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
-            params![id, type_key, store_id, name, description, colour],
+            "INSERT INTO workspace_instances (id, type_key, store_id, name, description, colour, purpose_key, status, last_accessed_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'active', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+            params![id, type_key, store_id, name, description, colour, purpose_key],
         )?;
 
         tx.commit()?;
 
         let row: WorkspaceInstanceRow = self.conn.query_row(
-            "SELECT id, type_key, store_id, name, description, colour, status, created_at, updated_at
+            "SELECT id, type_key, store_id, name, description, colour, purpose_key, status, created_at, updated_at
              FROM workspace_instances WHERE id = ?1",
             params![id],
             |row| {
@@ -700,9 +740,10 @@ impl Store<'_> {
                     name: row.get(3)?,
                     description: row.get(4)?,
                     colour: row.get(5)?,
-                    status: row.get(6)?,
-                    created_at: row.get(7)?,
-                    updated_at: row.get(8)?,
+                    purpose_key: row.get(6)?,
+                    status: row.get(7)?,
+                    created_at: row.get(8)?,
+                    updated_at: row.get(9)?,
                 })
             },
         )?;
@@ -945,7 +986,7 @@ impl Store<'_> {
         store_id: &str,
     ) -> Result<Vec<WorkspaceInstanceRow>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, type_key, store_id, name, description, colour, status, created_at, updated_at
+            "SELECT id, type_key, store_id, name, description, colour, purpose_key, status, created_at, updated_at
              FROM workspace_instances
              WHERE store_id = ?1
              ORDER BY name",
@@ -958,9 +999,10 @@ impl Store<'_> {
                 name: row.get(3)?,
                 description: row.get(4)?,
                 colour: row.get(5)?,
-                status: row.get(6)?,
-                created_at: row.get(7)?,
-                updated_at: row.get(8)?,
+                purpose_key: row.get(6)?,
+                status: row.get(7)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(CoreError::from)
@@ -1308,6 +1350,41 @@ mod tests {
             .unwrap();
         assert_eq!(dto.len(), 6);
         assert!(dto.iter().any(|w| w.instance_id == "test-cashier-1"));
+    }
+
+    #[test]
+    fn purpose_key_is_independent_from_type_and_name() {
+        let (store, _) = fresh();
+        store
+            .create_workspace_instance_with_purpose(
+                "ws-checkout",
+                "store-pos",
+                "default",
+                "Front Counter",
+                "",
+                None,
+                "checkout",
+            )
+            .unwrap();
+        store
+            .create_workspace_instance_with_purpose(
+                "ws-returns",
+                "store-pos",
+                "default",
+                "Returns Counter",
+                "",
+                None,
+                "returns",
+            )
+            .unwrap();
+
+        let rows = store.list_all_instances("default").unwrap();
+        let checkout = rows.iter().find(|row| row.id == "ws-checkout").unwrap();
+        let returns = rows.iter().find(|row| row.id == "ws-returns").unwrap();
+        assert_eq!(checkout.type_key, returns.type_key);
+        assert_eq!(checkout.purpose_key, "checkout");
+        assert_eq!(returns.purpose_key, "returns");
+        assert_ne!(checkout.name, returns.name);
     }
 
     #[test]

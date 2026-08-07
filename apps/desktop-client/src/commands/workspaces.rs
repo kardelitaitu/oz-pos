@@ -57,7 +57,7 @@ pub struct WorkspaceScreenDto {
 }
 
 /// Request body for creating a workspace instance.
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CreateInstanceRequest {
     /// Unique identifier.
     pub id: String,
@@ -67,6 +67,9 @@ pub struct CreateInstanceRequest {
     pub store_id: String,
     /// Display name.
     pub name: String,
+    /// Controlled business purpose, independent from the technical type and label.
+    #[serde(default)]
+    pub purpose_key: Option<String>,
     /// Human-readable description.
     pub description: Option<String>,
     /// Colour.
@@ -170,13 +173,14 @@ pub async fn create_workspace_instance_scoped(
     require_permission_for_user(&store, &session.user_id, permissions::STAFF_UPDATE)?;
     let effective = sub.effective_tier();
     store.enforce_instance_quota(&effective, &req.type_key, &req.store_id)?;
-    let _row = store.create_workspace_instance(
+    let _row = store.create_workspace_instance_with_purpose(
         &req.id,
         &req.type_key,
         &req.store_id,
         &req.name,
         req.description.as_deref().unwrap_or(""),
         req.colour.as_deref(),
+        req.purpose_key.as_deref().unwrap_or("general"),
     )?;
     let dto = store.get_workspace_instance(&req.id, Some(&session.user_id))?;
     drop(db);
@@ -950,6 +954,7 @@ mod tests {
         assert_eq!(req.name, "Downtown - Cashier 1");
         assert!(req.description.is_none());
         assert!(req.colour.is_none());
+        assert!(req.purpose_key.is_none());
     }
 
     // ── BootResolution (ADR #4 Phase 3) ─────────────────────────────────
