@@ -541,3 +541,17 @@ Clean (0 errors).
 ### Test Results
 - **TypeScript**: Clean (0 errors)
 - **Tests**: 261 passed / 15 failed (down from 31 failing pre-migration — all remaining failures are pre-existing FSI/PDI marker issues and structural WorkspaceEntry module-not-found)
+
+
+## 2026-08-07 — SYNC-10 enqueue side + migration 120 multi-store repair
+
+### Local settings saves never pushed settings.update items; migration 120 reseeded the wrong store
+**Problem:** Two gaps. (1) The SYNC-10 apply path could consume remote `settings.update` items, but NO local settings command ever enqueued one — the cross-terminal loop (change here → cloud → there) was a one-way street: `SettingsContext` listened for `settings_updated` while the daemon could only ever apply changes it never received. (2) The full gate exposed a failing test `list_workspaces_repairs_empty_store_db_after_066_window`: repair migration 120 reseeded default workspace instances with `store_id = COALESCE(primary, 'default')`, and in a store DB where no profile is primary (the legacy `'default'` row from 025 is `is_primary = 0`) it landed on `'default'` — but the store-scoped picker filters `wi.store_id = ?` strictly, so a named store (store-a) never listed the reseeded defaults. The repair silently repaired the wrong store.
+
+**Solution (TDD):** (1) Red: two unit tests pinned that a settings write must enqueue one `settings.update` item per key with the exact `SettingsUpdatePayload` shape (`{key, value, terminal_id}`), tenant-scoped, Low priority. Green: extracted `enqueue_settings_updates` and wired all four write commands (`set_setting`, `set_settings`, `set_setting_scoped`, `set_settings_scoped`) to enqueue on the GLOBAL db after the write commits (the sync daemon only watches the global queue — a store-scoped write must fan out from there). Enqueue failures log a warning and do not fail the save, matching the `SettingsUpdated` publish pattern. (2) The failing workspaces test was the Red; the fix: migration 120's store_id selection now prefers the primary profile, then **this store's own profile** (any non-`'default'` row in its own DB, `ORDER BY created_at` for determinism), then `'default'` — so the repair lands inside the store it is repairing. Each store DB is migrated independently, so "any non-default profile here" is exactly "this store". 120 is the newest, unreleased migration, so editing it before release is safe.
+
+**Validation:** 800/800 oz-pos-app lib tests (3 new/restored: 2 settings enqueue + 1 repaired workspaces) · oz-core 25/25 · migrate twice idempotent · clippy -D warnings clean · fmt clean.
+
+**Commits:** (follow the two commit hashes below this entry)
+
+**Follow-ups (deliberately NOT done):** (1) the tablet client's `set_setting` is a plain write with no daemon in the tablet process — enqueueing there would be inert; revisit when the tablet gets a sync daemon. (2) No scoped dedup API exists (`enqueue_offline_dedup` is tenant-less), so repeated identical saves while offline create duplicate pending items — functionally harmless (apply is replay-safe, version-LWW) but noisy; a tenant-scoped dedup variant is a future slice. (3) Legacy `set_setting`/`set_settings` could enqueue INSIDE the write tx (same global DB) to close the tiny crash window between `tx.commit()` and the enqueue; scoped commands cannot (cross-DB), so warn-and-continue stays the uniform choice.
