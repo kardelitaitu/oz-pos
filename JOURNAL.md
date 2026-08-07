@@ -934,3 +934,15 @@ Clean (0 errors).
 **Validation:** Red → Green + discriminator proven (removing stopPropagation failed the test). Editor suite 123/123 · topology suites 151/151 · full UI suite 262 files / 4104 tests · typecheck + eslint clean · drift guard clean.
 
 **Commits:** `stopPropagation` on label onClick + 1 test. Shared-tree note: other thread's clamp refactor (`nodeTopologyClamp.ts` + ADR + hunks in the same files) left uncommitted; staged only my hunks via `git add -p` (test 4/4, component 5/5).
+
+## 2026-08-07 — TDD cycle: connection-mode wire-label affordance (topology editor)
+
+**Problem:** The keep-connection decision (a direction toggle mid-connection never cancels it — pinned across several cycles) was invisible in the UI. A cashier building a connection could misclick a wire label, flip the direction, and not know the connection stayed alive — or worse, avoid labels entirely out of caution.
+
+**Decision (pinned):** hover affordance, not inert labels. While `connectingFromNodeId` is set, every wire label renders a native SVG `<title>` tooltip ('Flip direction? Clicking keeps your connection in progress.') + a `wire-label-group-connecting` modifier class with an accent-ring hover style. The flip stays available (the deliberate contract), but the hover now explains the consequence. Chosen over inert labels because the flip is a valid, connection-preserving action — the affordance informs rather than blocks.
+
+**Red → Green:** test pins idle (no title), connection mode (>0 titles with 'Flip direction' + the modifier class present), completion (both gone). Fails without the title, discriminator proven. Reviewer nit applied: the modifier class (the CSS hook) is asserted alongside the title so the visual affordance can't silently regress.
+
+**Validation:** editor suite 124/124 · topology suites 152/152 · full UI suite 262 files / 4105 tests · typecheck + eslint clean · i18n lint clean (new FTL key in both bundles) · drift guard clean.
+
+**Commits:** conditional `<title>` + modifier class + CSS hover ring + FTL keys (en/id) + 1 test. Shared-tree note: other thread's clamp refactor (component/css/test hunks, TopologyScreen.tsx, ADR) left uncommitted; staged only my hunks via `git add -p`.

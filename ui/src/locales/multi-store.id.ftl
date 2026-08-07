@@ -79,6 +79,8 @@ topology-ws-type-warehouse = Gudang
 # ── Aria labels & tooltips ──
 topology-node-drag-hint = Seret untuk memindahkan
 topology-wire-toggle-aria = Alihkan arah koneksi
+topology-wire-flip-hint-connecting =
+    Balik arah? Klik tetap menjaga koneksi Anda tetap berjalan.
 topology-inspector-close-aria = Tutup inspektur
 topology-inspector-hardware-title = Perangkat Keras
 topology-ws-type-select-aria = Pilih tipe workspace

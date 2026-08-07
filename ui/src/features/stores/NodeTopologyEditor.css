@@ -256,6 +256,15 @@
   stroke: var(--color-accent-hover);
 }
 
+/* While a connection is in flight, hovering a label shows the native
+   <title> tooltip and the accent ring — signalling that flipping
+   direction here is safe and the connection stays in progress. */
+.wire-label-group-connecting:hover .wire-label-bg {
+  fill: var(--color-accent-subtle);
+  stroke: var(--color-accent-hover);
+  stroke-width: 2px;
+}
+
 .wire-label-bg {
   fill: var(--color-bg-surface);
   stroke: var(--color-accent);

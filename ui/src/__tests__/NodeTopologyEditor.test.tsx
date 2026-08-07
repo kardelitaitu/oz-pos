@@ -51,6 +51,8 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-ws-type-restaurant-pos': 'Restaurant POS',
   'topology-ws-type-kds': 'Kitchen Display (KDS)',
   'topology-ws-type-warehouse': 'Warehouse',
+  'topology-wire-flip-hint-connecting':
+    'Flip direction? Clicking keeps your connection in progress.',
 };
 
 vi.mock('@fluent/react', async () => {
@@ -2615,6 +2617,31 @@ describe('NodeTopologyEditor — wire-label toggle keeps an in-flight connection
     fireEvent.mouseDown(canvas, { button: 0 });
     expect(nodeAt(0).className).toContain('node-connecting-source');
     expect(previewLine()).not.toBeNull();
+  });
+
+  it('shows the flip-direction hint on wire labels while a connection is in flight', () => {
+    renderEditor();
+
+    // Idle: no hint anywhere.
+    expect(document.querySelector('.wire-label-group title')).toBeNull();
+
+    // Start a connection — every wire label now carries the hint, making
+    // the keep-connection decision explicit: flipping direction is safe and
+    // the connection stays in progress. The modifier class (the CSS
+    // accent-ring hover affordance hook) must accompany the title.
+    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    const hintTitles = document.querySelectorAll('.wire-label-group title');
+    expect(hintTitles.length).toBeGreaterThan(0);
+    expect(hintTitles[0]!.textContent).toContain('Flip direction');
+    const connectingLabel = document.querySelector('.wire-label-group-connecting');
+    expect(connectingLabel).not.toBeNull();
+    expect(connectingLabel).toHaveClass('wire-label-group-connecting');
+
+    // Complete the connection — connection mode ends, hint and modifier
+    // class disappear.
+    fireEvent.click(portOf(nodeAt(1), 'top'));
+    expect(document.querySelector('.wire-label-group title')).toBeNull();
+    expect(document.querySelector('.wire-label-group-connecting')).toBeNull();
   });
 });
 

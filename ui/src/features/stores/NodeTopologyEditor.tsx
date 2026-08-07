@@ -1464,13 +1464,16 @@ export default function NodeTopologyEditor({
 
                     <g
                       transform={`translate(${lx}, ${ly})`}
-                      className="wire-label-group"
+                      className={`wire-label-group${connectingFromNodeId ? ' wire-label-group-connecting' : ''}`}
                       onClick={(e) => { e.stopPropagation(); handleToggleWireDirection(wire.id); }}
                       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); handleToggleWireDirection(wire.id); } }}
                       role="button"
                       tabIndex={0}
                       aria-label={l10n.getString('topology-wire-toggle-aria')}
                     >
+                      {connectingFromNodeId && (
+                        <title>{l10n.getString('topology-wire-flip-hint-connecting')}</title>
+                      )}
                       <rect x="-55" y="-12" width="110" height="24" rx="12" className="wire-label-bg" />
                       <text x="0" y="4" textAnchor="middle" className="wire-label-text">
                         {wire.direction === 'two-way' ? '\u2194' : '\u2192'} {wire.label || ''}

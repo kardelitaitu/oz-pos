@@ -81,6 +81,8 @@ topology-ws-type-warehouse = Warehouse
 # ── Aria labels & tooltips ──
 topology-node-drag-hint = Drag to move
 topology-wire-toggle-aria = Toggle wire direction
+topology-wire-flip-hint-connecting =
+    Flip direction? Clicking keeps your connection in progress.
 topology-inspector-close-aria = Close inspector
 topology-inspector-hardware-title = Hardware Device
 topology-ws-type-select-aria = Select workspace type
