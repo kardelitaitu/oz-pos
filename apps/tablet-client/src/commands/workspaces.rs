@@ -600,7 +600,7 @@ mod tests {
 
     #[tokio::test]
     async fn resolve_boot_store_tampered_binding_falls_back_to_primary() {
-        let (state, _dir, keyring) = binding_state();
+        let (state, _dir, _keyring) = binding_state();
         // A DIFFERENT keyring secret — the DB row was not signed by this
         // device's secret, so the HMAC must fail and resolution degrades.
         let other = oz_security::InMemoryKeyring::new();

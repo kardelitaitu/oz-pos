@@ -233,3 +233,5 @@ npm run check:all            # lint → typecheck → test → i18n → E2E (Doc
 - **[`skill-drift-guard`](../skill-drift-guard/SKILL.md)** — run in Phase 6 after any change that touches a path/type/trait a skill describes.
 
 ---
+
+> last audited 07-08-26 by buffy

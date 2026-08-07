@@ -820,7 +820,6 @@ mod tests {
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "unit_cost_minor"));
     }
 
-    #[test]
     /// MONEY-05: the per-line `qty × unit_cost_minor` product comes from
     /// untrusted IPC input (`CreatePoLineInput`) and dev/test builds disable
     /// overflow checks, so an overflowing line silently wraps and the PO is
@@ -891,6 +890,7 @@ mod tests {
         assert_eq!(count, 0, "no PO row may exist when the subtotal overflows");
     }
 
+    #[test]
     fn create_po_with_notes() {
         let conn = fresh();
         seed_supplier(&conn);

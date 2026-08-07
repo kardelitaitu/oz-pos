@@ -3313,7 +3313,6 @@ mod tests {
         assert_eq!(refunds[0].total.minor_units, 770);
     }
 
-    #[test]
     /// MONEY-02 follow-up: a hand-built `Sale` with a negative `line_total`
     /// flows straight into `compute_line_tax` and records a negative tax on
     /// the sale. `Sale::from_cart` only produces non-negative line totals
@@ -3338,6 +3337,7 @@ mod tests {
         ));
     }
 
+    #[test]
     fn void_sale_succeeds_regardless_of_stock() {
         let conn = fresh();
         let s = store(&conn);

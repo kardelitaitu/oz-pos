@@ -45,6 +45,8 @@ pub fn sign_picker_ticket(secret: &[u8], user_id: &str, expiry_ts: i64) -> Strin
 /// fail for the byte slice we hand it (SHA-256 block size is 64 bytes,
 /// far below the 255-byte HMAC limit). The `expect` is provably total.
 fn new_mac(secret: &[u8]) -> HmacSha256 {
+    // SAFETY: HMAC-SHA256 accepts any key length (SHA-256 block is 64 bytes,
+    // far below the 255-byte HMAC limit), so new_from_slice cannot fail.
     HmacSha256::new_from_slice(secret).expect("HMAC-SHA256 accepts any key length")
 }
 
