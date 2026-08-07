@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ComponentProps } from 'react';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
@@ -98,7 +98,12 @@ vi.mock('@/contexts/SettingsContext', () => ({
 const mockLoadTopology = vi.mocked(loadTopology);
 const mockSaveTopology = vi.mocked(saveTopology);
 
-const renderEditor = (props?: { onSave?: (nodes: unknown, wires: unknown) => Promise<Record<string, string> | void> }) =>
+type TopologyTier = Exclude<ComponentProps<typeof NodeTopologyEditor>['currentTier'], undefined>;
+
+const renderEditor = (props?: {
+  onSave?: (nodes: unknown, wires: unknown) => Promise<Record<string, string> | void>;
+  currentTier?: TopologyTier;
+}) =>
   renderWithProvidersSync(<NodeTopologyEditor currentTier="standard" {...props} />, multiStoreFtl, sharedFtl);
 
 /**
@@ -122,6 +127,13 @@ function ReloadingHarness({ next }: { next: WorkspaceInstanceSeed[] }) {
 
 const getNodeCount = () => document.querySelectorAll('.topology-node').length;
 const getWireCount = () => document.querySelectorAll('.wire-group').length;
+
+// Preset renders nodes in array order: [store-1, ws-1, wh-1].
+const nodeAt = (idx: number) =>
+  document.querySelectorAll('.topology-node')[idx] as HTMLElement;
+const portOf = (node: HTMLElement, port: string) =>
+  node.querySelector(`.node-port-socket.port-${port}`) as HTMLElement;
+const previewLine = () => document.querySelector('path.wire-path[opacity="0.5"]');
 
 const selectFirstNode = () => {
   const firstNode = document.querySelector('.topology-node');
@@ -1280,12 +1292,6 @@ describe('NodeTopologyEditor Component', () => {
 // ── Wire creation via port connections ──────────────────────────
 
 describe('NodeTopologyEditor — wire creation', () => {
-  // Preset renders nodes in array order: [store-1, ws-1, wh-1].
-  const nodeAt = (idx: number) =>
-    document.querySelectorAll('.topology-node')[idx] as HTMLElement;
-  const portOf = (node: HTMLElement, port: string) =>
-    node.querySelector(`.node-port-socket.port-${port}`) as HTMLElement;
-
   it('creates a wire when two ports on different nodes are connected', () => {
     renderEditor();
     const baseline = getWireCount();
@@ -1451,5 +1457,91 @@ it('does not toast when the selected node survives a preset load', () => {
     expect(
       (document.querySelector('.inspector-field input[type="text"]') as HTMLInputElement).value,
     ).toBe('Grand Bistro');
+  });
+});
+
+// ── Escape connection-cancel flow ───────────────────────────────
+
+describe('NodeTopologyEditor — Escape connection-cancel flow', () => {
+  it('Escape cancels an in-flight connection before it completes', () => {
+    renderEditor();
+    const baseline = getWireCount();
+
+    // Start a connection from store-1's bottom port — a ghost preview line appears.
+    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    expect(previewLine()).not.toBeNull();
+
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    fireEvent.keyDown(canvas, { key: 'Escape' });
+
+    // Preview gone, and clicking a target port on another node does NOT
+    // complete a wire — the connection was cancelled, not left dangling.
+    expect(previewLine()).toBeNull();
+    fireEvent.click(portOf(nodeAt(1), 'top'));
+    expect(getWireCount()).toBe(baseline);
+  });
+
+  it('Escape during a connection also clears the current selection', () => {
+    renderEditor();
+
+    selectFirstNode();
+    expect(document.querySelector('.topology-node.node-selected')).not.toBeNull();
+
+    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    expect(previewLine()).not.toBeNull();
+
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    fireEvent.keyDown(canvas, { key: 'Escape' });
+
+    expect(document.querySelector('.topology-node.node-selected')).toBeNull();
+    expect(previewLine()).toBeNull();
+  });
+
+  it('Escape typed in a text field does not cancel the connection (input guard)', () => {
+    renderEditor();
+    const baseline = getWireCount();
+
+    // Select a node so the inspector (with its text input) is open.
+    selectFirstNode();
+    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    expect(previewLine()).not.toBeNull();
+
+    const nameInput = document.querySelector(
+      '.inspector-field input[type="text"]',
+    ) as HTMLInputElement;
+    expect(nameInput).not.toBeNull();
+    nameInput.focus();
+    fireEvent.keyDown(nameInput, { key: 'Escape' });
+
+    // The connection is still in flight — completing it creates the wire.
+    expect(previewLine()).not.toBeNull();
+    fireEvent.click(portOf(nodeAt(1), 'top'));
+    expect(getWireCount()).toBe(baseline + 1);
+  });
+});
+
+// ── Pro-tier warehouse fallback wire label ──────────────────────
+
+describe('NodeTopologyEditor — Pro-tier warehouse fallback label', () => {
+  it('allows a second workspace→warehouse wire with the fallback label on Pro', () => {
+    renderEditor({ currentTier: 'pro' });
+    const baseline = getWireCount();
+
+    // ws-1 bottom → wh-1 top: the retail preset already has one warehouse
+    // wire, so the new one is the fallback (priority 2) — allowed on Pro.
+    fireEvent.click(portOf(nodeAt(1), 'bottom'));
+    fireEvent.click(portOf(nodeAt(2), 'top'));
+
+    expect(getWireCount()).toBe(baseline + 1);
+    expect(
+      screen.queryByText(
+        'Multi-warehouse stock deduction fallback wires require a Pro Tier license.',
+      ),
+    ).not.toBeInTheDocument();
+
+    // The new wire carries the fallback label (raw key in the identity-l10n mock).
+    const wires = document.querySelectorAll('.wire-group');
+    const last = wires[wires.length - 1]!;
+    expect(last.textContent).toContain('topology-wire-label-fallback');
   });
 });

@@ -637,3 +637,17 @@ Clean (0 errors).
 **Commits:** (hash below)
 
 **Follow-ups (deliberately NOT done):** the connection-cancel affordance (Escape while connecting) and the wire label priority on multi-warehouse Pro-tier connections remain untested; the dev-mock retail cart/undo reload persistence is still open on the mock side.
+
+
+## 2026-08-07 — Topology editor: Escape connection-cancel flow + Pro-tier fallback labels
+
+### The connection-cancel affordance and the Pro-tier label priority were the last two journaled gaps
+**Problem:** The Escape-while-connecting affordance (clears the in-flight port connection AND the selection in one keystroke) and the Pro-tier wire-label priority (a second workspace→warehouse wire is blocked on standard but allowed with the fallback label on Pro) had zero regression net.
+
+**Solution:** 4 characterization tests + 2 test-infra cleanups. (1) Escape cancels an in-flight connection: the ghost preview (`path.wire-path[opacity="0.5"]` — real wires never set opacity, so the selector can't false-positive) disappears and a subsequent target click starts a NEW connection instead of completing the old one. (2) Escape during a connection also clears `node-selected`. (3) The input guard is pinned positively: Escape typed in the inspector's text field does NOT cancel the connection — the wire completes afterward. (4) Pro-tier: with `currentTier="pro"` (renderEditor gained a derived `TopologyTier` prop override), a second ws→wh wire is allowed with no license toast and carries the `topology-wire-label-fallback` label on the new wire. Reviewer nits applied: `nodeAt`/`portOf`/`previewLine` hoisted to module scope (were triplicated across describes) and the tier union derived from `ComponentProps` (with `Exclude<…, undefined>` for `exactOptionalPropertyTypes`). All pinned existing behavior — no production change needed.
+
+**Validation:** 4 new · editor suite 72 · topology suites 100/100 · full UI suite 262 files / 4053 tests green · typecheck + eslint clean.
+
+**Commits:** (hash below)
+
+**Follow-ups (deliberately NOT done):** Escape with nothing selected is untested (low value); the first-warehouse-wire `stock-deduct` label path is only indirectly covered; the dev-mock retail cart/undo reload persistence is still open on the mock side.
