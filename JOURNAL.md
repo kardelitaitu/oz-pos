@@ -819,3 +819,18 @@ Clean (0 errors).
 **Tests:** editor suite 101 (3 new) · topology suites 129/129 · full UI suite 262 files / 4082 tests · typecheck + eslint clean · drift guard clean.
 
 **Follow-ups:** (1) if the all-shortcuts-inert model ever feels restrictive, narrow the chrome guard to destructive/mutating keys only (Delete/Backspace/arrows); (2) the guard keys off `e.target`, matching the existing INPUT guard — `document.activeElement` would be more robust to programmatic dispatches but diverges from the file's convention.
+
+## 2026-08-07 — TDD decision-pin: wire-label toggle keeps an in-flight connection (topology editor)
+
+### The open UX question
+**Problem:** While a port connection is in flight (source clicked, target pending), clicking a wire label to toggle its direction pushes history and flips the wire — and the connection currently survives. Was that the right contract, or should a canvas mutation cancel the in-flight connection? Nothing pinned the answer.
+
+**Decision — keep the connection in flight.** The editor's rule is to cancel an in-flight connection only when the CANVAS is replaced (preset load, instance reload) — a stale source node could mis-wire a new canvas. A direction toggle is a single-wire mutation: every node and port the pending connection references stays valid, so the source cannot go stale. Cancelling would destroy a deliberate two-step intent (click source, click target) for an unrelated edit, and no other single-element interaction cancels connections either — node drags (`handleNodeMouseDown`) and selection clicks are connection-neutral (verified), and the only cancels are Escape, same-node port click, and canvas replacement.
+
+**Solution:** A decision-pin cycle — no production change (the behavior was already the decided one; the component diff vs HEAD is empty). Two new tests in NodeTopologyEditor.test.tsx lock the contract: (1) start a connection from store-1 bottom → toggle w-1 to two-way → the connection survives (`.node-connecting-source` + ghost preview intact) → complete to ws-1 top → a `topology-wire-label-connected` wire is created; (2) same but undo the toggle (Ctrl+Z) mid-connection → the connection survived both the toggle's history push and its undo → completes normally. Discriminator proven: temporarily reverting the toggle handler to cancel the connection made both tests fail, then restored (component byte-identical to HEAD).
+
+**Validation:** editor suite 103 · topology suites 131/131 · full UI suite 262 files / 4084 tests · typecheck + eslint clean · drift guard clean · reviewer no blockers (drag-path claim verified; wire-label assertion strengthened).
+
+**Commits:** `fix(topology): pin wire-label toggle keeps in-flight connection` (tests only).
+
+**Follow-ups:** The pin only covers the click and keyboard-undo paths; if a future single-wire edit (e.g. a future "reverse wire" button, wire color/weight edits) ever lands, it inherits the same contract — new tests should assert the connection survives it too, or the decision should be revisited deliberately. The label's onClick does not `stopPropagation()` — harmless today (no click-cancel handler on the canvas container) but worth noting if a background-click-cancels-connection behavior is ever added.

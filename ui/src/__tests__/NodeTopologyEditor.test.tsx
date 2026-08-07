@@ -2191,6 +2191,74 @@ describe('NodeTopologyEditor — preset load cancels in-flight connection', () =
   });
 });
 
+// ── Wire-label toggle keeps an in-flight connection ─────────────
+//
+// Decision (pinned): a direction toggle is a SINGLE-WIRE mutation that
+// leaves every node/port an in-flight connection references valid, so it
+// must NOT cancel the connection — the codebase's rule is to cancel only
+// when the CANVAS is replaced (preset load, instance reload), where a
+// stale source node could mis-wire the new canvas. Cancelling on a toggle
+// would destroy a deliberate two-step connection intent for an unrelated
+// edit, and no other single-element interaction (node drag, selection
+// click) cancels connections either. The toggle's history push is
+// orthogonal: connection state is transient UI and is never captured in
+// history, so neither the push nor its undo affects it.
+
+describe('NodeTopologyEditor — wire-label toggle keeps an in-flight connection', () => {
+  it('keeps the connection in flight across a direction toggle and completes it correctly', () => {
+    renderEditor();
+    const baseline = getWireCount();
+
+    // Start a connection from store-1's bottom port — ghost preview + source highlight.
+    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    expect(previewLine()).not.toBeNull();
+    expect(nodeAt(0).className).toContain('node-connecting-source');
+
+    // Toggle the first wire (store right → workspace left) to two-way.
+    const firstLabel = screen.getAllByText(/→|↔/)[0]!;
+    expect(firstLabel.textContent).toContain('→');
+    fireEvent.click(firstLabel);
+    expect(firstLabel.textContent).toContain('↔');
+
+    // The connection SURVIVED the toggle: source highlight + ghost preview intact.
+    expect(nodeAt(0).className).toContain('node-connecting-source');
+    expect(previewLine()).not.toBeNull();
+
+    // Completing the connection still creates the expected store→workspace
+    // wire from the in-flight source — the toggle's history push did not
+    // corrupt the pending state.
+    fireEvent.click(portOf(nodeAt(1), 'top'));
+    expect(getWireCount()).toBe(baseline + 1);
+    const wires = document.querySelectorAll('.wire-group');
+    const created = wires[wires.length - 1]!;
+    expect(created.textContent).toContain('topology-wire-label-connected');
+  });
+
+  it('keeps the connection in flight when the toggle is undone (history push is orthogonal)', () => {
+    renderEditor();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    const baseline = getWireCount();
+
+    fireEvent.click(portOf(nodeAt(0), 'bottom'));
+    expect(previewLine()).not.toBeNull();
+
+    // Toggle to two-way, then undo the toggle mid-connection.
+    const firstLabel = screen.getAllByText(/→|↔/)[0]!;
+    fireEvent.click(firstLabel);
+    expect(firstLabel.textContent).toContain('↔');
+    fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true });
+    expect(firstLabel.textContent).toContain('→');
+
+    // The connection survived BOTH the toggle's history push and its undo.
+    expect(nodeAt(0).className).toContain('node-connecting-source');
+    expect(previewLine()).not.toBeNull();
+
+    // And it still completes normally afterwards.
+    fireEvent.click(portOf(nodeAt(1), 'top'));
+    expect(getWireCount()).toBe(baseline + 1);
+  });
+});
+
 // ── Escape on an open dialog does not touch canvas state ────────
 
 describe('NodeTopologyEditor — dialog Escape isolation', () => {
