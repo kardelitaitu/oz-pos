@@ -1056,3 +1056,15 @@ Clean (0 errors).
 **Validation:** topology module 194/194 · `oz-pos-app` lib 811/811 · fmt clean · clippy clean on changed code (pre-existing `too_many_arguments` in oz-core and the `can be collapsed` at `validate_topology_envelope` line 493 untouched) · drift guard clean.
 
 **Commits:** `topology.rs` gate removal + Reverse variant + 2 tests. Shared-tree note: the UI topology batch stays uncommitted for its owner.
+
+## 2026-08-08 — TDD cycle: load command serves corrupt stored wire directions raw (load boundary stays raw)
+
+**Problem (load-side bricking):** the `load_topology` Tauri command ran `validate_topology_structure` (the closed-union gate) at load, so a single stored wire with a legacy corrupt direction (`"bidirectional"`) made the WHOLE topology unloadable with an Internal error — the frontend's documented load-time healing (`normalizeWireDirection` folds it to one-way) never got a chance to run, and the user could not open the graph to repair the row. This contradicted the free function `load_topology_data`, which is documented raw-by-design ("the load boundary stays raw", pinned by the `preserves_raw_legacy_null_ports` test).
+
+**Red → Green:** New test `tauri_load_topology_serves_corrupt_stored_direction_raw` seeds a stored topology with `direction: "bidirectional"` and asserts `load_topology` returns it raw. Red confirmed (Internal "unknown direction"). Fix: the command keeps envelope validation + semantic ownership (DB-backed) + typed shape parsing, but drops the `validate_topology_structure` call — strictness now lives at the save boundary (`save_topology_json`), where a load→save cycle heals the row. The command's doc comment now states the raw-load contract and warns against re-adding the gate.
+
+**Validation:** topology module 195/195 · `oz-pos-app` lib 812/812 · fmt clean · clippy clean on changed code (pre-existing warnings untouched) · drift guard clean.
+
+**Known limitation (journaled per review):** dropping the load gate means a stored topology with duplicate NODE ids now loads raw — the editor's `savedById` Map silently collapses them (not healable by the frontend), though Apply-time `validateTopologyGraph` (`duplicate-node`) still blocks persistence. Ghost wires and corrupt directions/ports remain frontend-healable. Follow-up slice: dedupe or flag duplicate node ids at load.
+
+**Commits:** `topology.rs` load-gate removal + 1 test. Shared-tree note: the UI topology batch stays uncommitted for its owner.
