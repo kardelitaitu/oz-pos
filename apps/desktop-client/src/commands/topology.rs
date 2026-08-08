@@ -342,7 +342,20 @@ fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), AppErr
             )
         })
         .collect();
-    if branches.len() != 1 {
+    // Frontend parity: validateTopologyGraph reports `missing-branch-location`
+    // for ZERO branches and `multiple-branch-locations` only for MORE than
+    // one — collapsing them made a zero-branch graph surface the wrong
+    // guidance code to the UI.
+    if branches.is_empty() {
+        return Err(topology_validation(
+            "missing-branch-location",
+            None,
+            None,
+            None,
+            "semantic topology requires a Branch Location node".to_string(),
+        ));
+    }
+    if branches.len() > 1 {
         return Err(topology_validation(
             "multiple-branch-locations",
             None,
@@ -1619,6 +1632,49 @@ mod tests {
             err.contains("duplicate node id"),
             "gate should reject duplicate node ids, got: {err}"
         );
+    }
+
+    #[test]
+    fn semantic_validate_reports_missing_branch_when_graph_has_no_branch() {
+        // Frontend contract parity: validateTopologyGraph reports
+        // `missing-branch-location` when the graph has ZERO branch-location
+        // nodes ("Add exactly one Branch Location node.") and
+        // `multiple-branch-locations` only when it has MORE than one. The
+        // Rust validator collapsed both into `multiple-branch-locations`, so
+        // a zero-branch graph rejected by the Apply gate surfaced the wrong
+        // guidance code to the UI.
+        let conn = fresh_conn();
+        let nodes = vec![semantic_node("ws-1", "workspace", None)];
+        // A location wire makes the payload semantic (has_semantic_fields)
+        // even though no branch node exists.
+        let wires = vec![semantic_location_wire("wire-1", "ws-1")];
+        match validate_semantic_ownership(&conn, &nodes, &wires) {
+            Err(AppError::TopologyValidation { code, .. }) => {
+                assert_eq!(code, "missing-branch-location")
+            }
+            other => panic!("expected TopologyValidation(missing-branch-location), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn semantic_validate_reports_multiple_branches_when_graph_has_two() {
+        // The other half of the frontend parity contract: MORE than one
+        // branch-location node keeps the `multiple-branch-locations` code
+        // ("Keep exactly one Branch Location node in this graph.").
+        let conn = fresh_conn();
+        let nodes = vec![
+            semantic_node("branch-1", "branch-location", Some("default")),
+            semantic_node("branch-2", "branch-location", Some("default")),
+        ];
+        let wires = vec![semantic_location_wire("wire-1", "branch-2")];
+        match validate_semantic_ownership(&conn, &nodes, &wires) {
+            Err(AppError::TopologyValidation { code, .. }) => {
+                assert_eq!(code, "multiple-branch-locations")
+            }
+            other => {
+                panic!("expected TopologyValidation(multiple-branch-locations), got {other:?}")
+            }
+        }
     }
 
     #[test]
