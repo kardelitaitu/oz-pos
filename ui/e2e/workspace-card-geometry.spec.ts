@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { loginAs } from './helpers';
 
 /**
@@ -6,7 +7,7 @@ import { loginAs } from './helpers';
  * workspaces are still loading, so `.workspace-card` must be waited on
  * before any geometry measurement.
  */
-async function waitForCards(page: import('@playwright/test').Page): Promise<void> {
+async function waitForCards(page: Page): Promise<void> {
   await page.waitForSelector('.workspace-card', { timeout: 15_000 });
 }
 
