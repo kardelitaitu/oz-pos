@@ -6,6 +6,7 @@
 //! the local cache. The settings commands let the user configure the
 //! server URL and API key.
 
+use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
@@ -87,17 +88,39 @@ pub async fn update_sync_settings(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let db = state.db.lock().await;
+    update_sync_settings_data(&db, &args)?;
+    drop(db);
+    Ok(())
+}
+
+/// Persist sync settings (server URL, API key, enabled flag) atomically.
+///
+/// All three writes execute inside a single SQLite transaction so a
+/// failure on any one rolls back the others — the same atomicity fix the
+/// tablet client landed. Clearing the server URL (passing `null` or an
+/// empty string) writes an EMPTY row rather than deleting it: that
+/// row-presence contract is what `sync_bootstrap::should_auto_provision`
+/// relies on to distinguish a cleared+disabled install from a fresh one.
+///
+/// Extracted as a free function so the atomicity + clearing contract can
+/// be tested without a Tauri runtime
+/// (see `update_sync_settings_data_clear_url_writes_empty_row`).
+pub fn update_sync_settings_data(
+    conn: &Connection,
+    args: &UpdateSyncSettingsArgs,
+) -> Result<(), AppError> {
+    let tx = conn.unchecked_transaction()?;
     // Always update server URL (passing `null` or empty string clears it).
     let url = args.server_url.as_deref().unwrap_or("");
-    Settings::set_sync_server_url(&db, url)?;
+    Settings::set_sync_server_url(&tx, url)?;
     // Only update API key if `Some(key)` was passed from the UI.
     // When `args.api_key` is `None` (the masked API field on the front-end was not modified),
     // preserve the existing key stored in the database.
     if let Some(ref key) = args.api_key {
-        Settings::set_sync_api_key(&db, key)?;
+        Settings::set_sync_api_key(&tx, key)?;
     }
-    Settings::set_sync_enabled(&db, args.enabled)?;
-    drop(db);
+    Settings::set_sync_enabled(&tx, args.enabled)?;
+    tx.commit()?;
     Ok(())
 }
 
@@ -375,6 +398,33 @@ mod tests {
         assert!(args.server_url.is_none());
         assert!(args.api_key.is_none());
         assert!(!args.enabled);
+    }
+
+    #[test]
+    fn update_sync_settings_data_clear_url_writes_empty_row() {
+        // The UI sends server_url: None when the user clears the field.
+        // The command must write an empty row (Some("")) rather than
+        // leaving the stale URL (which would keep auto-provision from ever
+        // repairing a broken URL) or deleting the row (which would make a
+        // cleared + disabled install look like a fresh one and re-trigger
+        // provisioning on the next debug launch). THIS app is where the
+        // should_auto_provision discriminator runs, so the pin belongs
+        // here, not just on the tablet twin.
+        let conn = oz_core::migrations::fresh_db();
+        Settings::set_sync_server_url(&conn, "https://sync.example.com").unwrap();
+        Settings::set_sync_enabled(&conn, false).unwrap();
+
+        let args = UpdateSyncSettingsArgs {
+            server_url: None,
+            api_key: None,
+            enabled: false,
+        };
+        update_sync_settings_data(&conn, &args).unwrap();
+
+        assert_eq!(
+            Settings::get_sync_server_url(&conn).unwrap(),
+            Some("".into())
+        );
     }
 
     #[test]

@@ -396,6 +396,35 @@ fn set_sync_server_url() {
 }
 
 #[test]
+fn set_sync_server_url_empty_keeps_row() {
+    // Clearing the sync URL must write an empty row, never delete it:
+    // get() then returns Some("") (row present) instead of None (row
+    // absent) — the exact discriminator should_auto_provision relies on
+    // to tell "cleared + disabled" from "never configured".
+    let conn = fresh();
+    Settings::set_sync_server_url(&conn, "").unwrap();
+    assert_eq!(
+        Settings::get_sync_server_url(&conn).unwrap(),
+        Some("".into())
+    );
+}
+
+#[test]
+fn clear_sync_server_url_overwrites_not_deletes() {
+    // Row-presence contract for auto-provision: setting a real URL then
+    // clearing it must leave a row with an empty value (Some("")) — never
+    // fall back to None, which would look like a fresh install and
+    // re-trigger provisioning on the next debug launch.
+    let conn = fresh();
+    Settings::set_sync_server_url(&conn, "https://sync.example.com").unwrap();
+    Settings::set_sync_server_url(&conn, "").unwrap();
+    assert_eq!(
+        Settings::get_sync_server_url(&conn).unwrap(),
+        Some("".into())
+    );
+}
+
+#[test]
 fn sync_api_key_default_none() {
     let conn = fresh();
     assert_eq!(Settings::get_sync_api_key(&conn).unwrap(), None);

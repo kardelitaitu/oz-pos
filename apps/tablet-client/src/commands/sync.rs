@@ -511,4 +511,29 @@ mod tests {
         );
         assert!(!Settings::is_sync_enabled(&conn).unwrap());
     }
+
+    #[test]
+    fn update_sync_settings_data_clear_url_writes_empty_row() {
+        // The UI sends server_url: None when the user clears the field.
+        // The command must write an empty row (Some("")) rather than
+        // leaving the stale URL (which would keep auto-provision from ever
+        // repairing a broken URL) or deleting the row (which would make a
+        // cleared + disabled install look like a fresh one and re-trigger
+        // provisioning on the next debug launch).
+        let conn = migrations::fresh_db();
+        Settings::set_sync_server_url(&conn, "https://sync.example.com").unwrap();
+        Settings::set_sync_enabled(&conn, false).unwrap();
+
+        let args = UpdateSyncSettingsArgs {
+            server_url: None,
+            api_key: None,
+            enabled: false,
+        };
+        update_sync_settings_data(&conn, &args).unwrap();
+
+        assert_eq!(
+            Settings::get_sync_server_url(&conn).unwrap(),
+            Some("".into())
+        );
+    }
 }
