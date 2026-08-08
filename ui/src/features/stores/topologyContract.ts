@@ -372,6 +372,23 @@ export function validateTopologyGraph(graph: SemanticTopologyGraph): TopologyVal
     seenNodeIds.add(node.id);
   }
 
+  // Wire ids must be unique across the WHOLE graph, not just the
+  // location-ownership tuples the duplicate-wire 4-tuple check covers. Two
+  // wires sharing an id (UUID collision, stale JSON merge) break the
+  // editor's React keys, click-cycle-by-id, and delete-by-id even when
+  // their endpoints differ — flag it here so it can never reach Apply.
+  const seenWireIds = new Set<string>();
+  for (const wire of graph.wires) {
+    if (seenWireIds.has(wire.id)) {
+      errors.push({
+        code: 'duplicate-wire',
+        messageId: 'topology-validation-duplicate-wire',
+        wireId: wire.id,
+      });
+    }
+    seenWireIds.add(wire.id);
+  }
+
   const branches = graph.nodes.filter((node) => node.kind === 'branch-location');
   if (branches.length === 0) {
     errors.push({ code: 'missing-branch-location', messageId: 'topology-validation-missing-branch' });

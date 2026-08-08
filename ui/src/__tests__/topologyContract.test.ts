@@ -206,6 +206,28 @@ describe('semantic topology contract', () => {
     expect(errors.some((e) => e.code === 'missing-location-input' && e.nodeId === 'kiosk-1')).toBe(true);
   });
 
+  it('rejects duplicate wire ids across the whole graph (mirrors duplicate-node)', () => {
+    // Node ids are guarded (seenNodeIds → duplicate-node) but wire ids
+    // were never checked: the existing duplicate-wire error only fires
+    // for location-ownership tuples sharing the same 4-tuple. Two wires
+    // with the SAME id (UUID collision from a manual edit or a stale JSON
+    // merge) pass validation silently even when their endpoints differ —
+    // breaking the editor's React keys, click-cycle-by-id, and
+    // delete-by-id, and round-tripping to Apply.
+    const errors = validateTopologyGraph(graph(
+      [branch(), workspace('ws-1'), workspace('ws-2')],
+      [
+        ownershipWire('wire-x', 'ws-1'),
+        // Same id, DIFFERENT endpoints — no 4-tuple clash, only an id clash.
+        ownershipWire('wire-x', 'ws-2'),
+      ],
+    ));
+
+    expect(errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'duplicate-wire', wireId: 'wire-x' }),
+    ]));
+  });
+
   it('allows one Branch Location output to fan out to many workspaces', () => {
     const normalized = graph(
       [branch(), workspace('ws-a'), workspace('ws-b')],
