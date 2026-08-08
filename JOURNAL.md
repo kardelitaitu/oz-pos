@@ -1080,3 +1080,15 @@ Clean (0 errors).
 **Validation:** topology module 196/196 · `oz-pos-app` lib 813/813 · fmt clean · clippy clean on changed code (pre-existing warnings untouched) · drift guard clean.
 
 **Commits:** `topology.rs` semantic-gate removal from load + 1 test. Shared-tree note: the UI topology batch stays uncommitted for its owner.
+
+## 2026-08-08 — TDD cycle: Apply pre-mutation gate runs structural checks (duplicate-node brick)
+
+**Problem (ordering gap):** the `apply_topology_diff` pre-mutation gate ran ONLY `validate_semantic_ownership` (semantic contract + DB-backed branch identity). The STRUCTURAL checks (`validate_topology_structure`: duplicate node/wire ids, unknown node types, unknown directions/ports, ghost endpoints) ran only inside `save_topology_json` at the END of the command — AFTER workspace creations/updates/archivals were already mutated. A structurally malformed diagram (exactly the journaled duplicate-node-id limitation — the editor's `savedById` Map silently collapses duplicates at load) passed the gate, mutated workspace rows, then failed at save and forced the full compensation unwind of a partial apply.
+
+**Red → Green:** extracted two seams, then pinned the gap. `validate_apply_gate(conn, nodes, wires)` is the pre-mutation gate, wired into `apply_topology_diff` verbatim where the inline semantic-only block was. `validate_diagram_payloads(nodes, wires)` is the shared typed-parse + structural validator extracted from `save_topology_json` (both call sites use it; save behavior unchanged — same ordering: semantic → parse raw wires → structure-check → port-default → envelope write). New test `apply_gate_rejects_duplicate_node_ids_before_mutation` asserts the gate returns Internal "duplicate node id" for a duplicate-node-id diagram (legacy non-semantic payloads so `validate_semantic_ownership` short-circuits). Red confirmed (gate returned Ok); Green after wiring structural validation in.
+
+**Validation:** topology module 197/197 · `oz-pos-app` lib 814/814 · fmt clean · clippy clean on changed code (pre-existing warnings untouched) · drift guard clean.
+
+**Notes:** (1) The typed parse runs twice per apply (gate + save) — accepted tradeoff; threading the payloads through the workspace-mutation block would add coupling for negligible gain. (2) The test is gate-level, so "before mutation" is a structural property (the command invokes the gate before the workspace block) rather than an observed one — the seam is wired verbatim into the command. (3) No acceptance-set change: the gate runs exactly the checks save always ran, so failures surface before mutation instead of after. (4) The journaled duplicate-node-id-at-load limitation is now closed at the Apply hard boundary — the frontend `duplicate-node` check was already blocking persistence at Apply time, and the gate now rejects before any mutation.
+
+**Commits:** `topology.rs` gate extraction + structural wiring + 1 test. Shared-tree note: the UI topology batch stays uncommitted for its owner.
