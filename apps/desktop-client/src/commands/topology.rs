@@ -525,6 +525,46 @@ fn validate_topology_envelope(value: &Value) -> Result<(&[Value], &[Value]), App
     Ok((nodes.as_slice(), wires.as_slice()))
 }
 
+/// Minimal load-time shape gate.
+///
+/// The load boundary stays raw: stored nodes and wires must carry only the
+/// field the editor cannot operate without — a non-empty `id` (the editor
+/// keys every node and wire by id). Display/geometry fields (`name`,
+/// `subtitle`, `x`, `y`), directions, ports, and unknown node types are all
+/// healed or folded by the frontend load path (normalizeWireDirection,
+/// nodeKind's unknown-type fold, port defaults, ghost-wire filtering). Wire
+/// endpoints are deliberately NOT required here: the editor's ghost-wire
+/// filter drops an endpoint-less wire exactly like a wire with unknown
+/// endpoints (already served raw), so requiring endpoint presence would
+/// brick a whole topology over one legacy wire. Requiring any of these
+/// fields would brick a whole topology over a single legacy row — the same
+/// failure the raw-load fixes for corrupt directions and semantic
+/// violations were about. The strict typed parse (name/x/y required) still
+/// runs at the save/Apply boundary, where the healed value must hold.
+fn validate_load_shape(nodes: &[Value], wires: &[Value]) -> Result<(), AppError> {
+    for node in nodes {
+        require_load_id(node, "node")?;
+    }
+    for wire in wires {
+        require_load_id(wire, "wire")?;
+    }
+    Ok(())
+}
+
+/// A loadable node or wire must be an object with a non-empty id.
+fn require_load_id(value: &Value, what: &str) -> Result<(), AppError> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| AppError::Internal(format!("topology {what} must be an object")))?;
+    let id = object.get("id").and_then(Value::as_str).unwrap_or_default();
+    if id.trim().is_empty() {
+        return Err(AppError::Internal(format!(
+            "topology {what} is missing a valid id"
+        )));
+    }
+    Ok(())
+}
+
 fn save_topology_json(
     conn: &Connection,
     nodes: Vec<Value>,
@@ -1072,23 +1112,20 @@ pub async fn load_topology(state: State<'_, AppState>) -> Result<Option<Value>, 
     let value: Value = serde_json::from_str(&json)
         .map_err(|e| AppError::Internal(format!("invalid topology JSON: {e}")))?;
     let (nodes, wires) = validate_topology_envelope(&value)?;
-    // Shape validation only: every entry must deserialize into the typed
-    // payloads (a malformed node/wire is rejected here). Neither the
-    // closed-union structural gate (validate_topology_structure) NOR the
-    // semantic-ownership gate (validate_semantic_ownership) is run at load:
+    // Minimal shape gate only: stored nodes and wires must carry the id the
+    // editor keys by (see validate_load_shape for the rationale). Neither
+    // the closed-union structural gate (validate_topology_structure) NOR the
+    // semantic-ownership gate (validate_semantic_ownership) runs at load:
     // the frontend contract heals healable corruption at the editor load
     // path (normalizeWireDirection, ghost-wire filtering, port defaults)
     // and surfaces contract violations (missing-location-input etc.) as
     // Apply-time toasts the user repairs in the editor — the free function
     // load_topology_data is documented raw-by-design ("the load boundary
-    // stays raw"). Rejecting a stored row for either reason would brick the
-    // whole topology instead of letting the editor repair it. Both gates run
-    // at the save/Apply boundary (save_topology_json), where the healed
-    // value must hold.
-    serde_json::from_value::<Vec<TopologyNodePayload>>(Value::Array(nodes.to_vec()))
-        .map_err(|e| AppError::Internal(format!("invalid topology nodes: {e}")))?;
-    serde_json::from_value::<Vec<TopologyWirePayload>>(Value::Array(wires.to_vec()))
-        .map_err(|e| AppError::Internal(format!("invalid topology wires: {e}")))?;
+    // stays raw"). Rejecting a stored row for display-level gaps would
+    // brick the whole topology instead of letting the editor repair it.
+    // Both gates run at the save/Apply boundary (save_topology_json), where
+    // the healed value must hold.
+    validate_load_shape(nodes, wires)?;
     Ok(Some(value))
 }
 
@@ -5315,6 +5352,39 @@ mod tests {
         let loaded = load_topology(app.state()).await.unwrap().unwrap();
         assert_eq!(loaded["nodes"].as_array().unwrap().len(), 1);
         assert_eq!(loaded["nodes"][0]["id"], "second");
+    }
+
+    #[tokio::test]
+    async fn tauri_load_topology_serves_stored_node_without_display_name_raw() {
+        // `name` is display-only: normalizeTopologyGraph never reads it, the
+        // editor renders an empty card title, and the user can retype it.
+        // The typed shape gate required it (plus x/y) on every stored node,
+        // so a single legacy row without `name` bricked the ENTIRE topology
+        // at load — the same class of failure the raw-load fixes for corrupt
+        // directions and semantic violations were about. The load boundary
+        // must serve the row raw so the editor can heal it.
+        let state = AppState::for_test();
+        {
+            let mut conn = state.db.lock().await;
+            migrations::run(&mut conn).unwrap();
+            oz_core::Settings::set(
+                &conn,
+                TOPOLOGY_SETTING_KEY,
+                r#"{"nodes":[{"id":"store-1","type":"store","x":0,"y":0},{"id":"ws-1","type":"workspace","x":200,"y":0}],"wires":[]}"#,
+            )
+            .unwrap();
+        }
+
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let loaded = load_topology(app.state()).await.unwrap().unwrap();
+        // Raw passthrough: the nameless node is served intact (the editor
+        // renders the card without a title and heals it on the next edit).
+        assert!(loaded["nodes"][0].get("name").is_none());
+        assert_eq!(loaded["nodes"][1]["id"], "ws-1");
     }
 
     #[tokio::test]
