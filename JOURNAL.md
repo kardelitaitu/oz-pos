@@ -970,3 +970,17 @@ Clean (0 errors).
 **Validation:** contract suite 10/10 · topology suites 175/175 (contract + card + screen + editor) · typecheck clean · eslint 0 errors (changed files clean) · drift guard clean.
 
 **Commits:** `topologyContract.ts` whitelist + 1 contract test. Shared-tree note: the rest of the topology batch (editor polish, connector rail, branch selector, wire tooltips, topologyCard registry) stays uncommitted in the tree for its owner.
+
+## 2026-08-08 — TDD cycle: quarantine corrupt wire port ids at the contract boundary
+
+**Problem:** The previous two cycles normalized `direction` and `relationshipType`, but port ids had the same leak: `inferredWire`'s early-return guarded only `relationshipType` — `fromPortId`/`toPortId` passed through verbatim when truthy (a garbage string from a manual edit or stale JSON flowed into the semantic graph, where the renderer matches wires to sockets by port id and validation switches on 'location-out'/'location-in'). The `workspace → warehouse` branch also still used `??` for both ports AND the type, so corrupt values leaked there too. Evidence: a test feeding `'banana'`/`'cabbage'` observed them surviving normalization with `legacyInferred: false`.
+
+**Red → Green:** New test feeds corrupt ports (+ corrupt type on the warehouse wire) through `normalizeTopologyGraph` across all three identity paths — branch→workspace (re-derives location-out/location-in), workspace→warehouse (stock-out/stock-in/stock-routing), and workspace→workspace (legacy-out/legacy-in/generic) — asserting each lands on the identity-derived legal value with `legacyInferred: true`. Red confirmed. Fix: a `SEMANTIC_PORT_IDS` whitelist typed as `Set<SemanticPortId | 'legacy-out' | 'legacy-in'>` — the `SemanticPortId` union is **imported as a type** from `topologyCard.ts` (single source of truth, no drift possible; type-only import, no runtime cycle) plus the two contract-internal legacy placeholders. The early-return now requires BOTH ports legal AND the type legal; both fallback branches fold non-whitelisted ports to their identity defaults. Refactor: none needed beyond the guard.
+
+**Reviewer-driven hardening:** (1) the whitelist is compile-time coupled to the `SemanticPortId` union via the typed Set — a new union member that's not listed fails typecheck; (2) a second test pins the no-over-fold contract: legal `ticket-out`/`ticket-in` ports on a workspace→warehouse wire survive unchanged (`legacyInferred: false`), proving the guard folds only genuinely-corrupt values.
+
+**Deliberate behavior note (legacyInferred flip):** wires with truthy-but-corrupt ports previously claimed `legacyInferred: false`; they now fall to identity inference and report `legacyInferred: true`. This is the intended fix (the flag is advisory — it drives save-time rewrites), not a regression.
+
+**Validation:** contract suite 12/12 · topology suites 177/177 · typecheck clean · eslint 0 errors on changed files · i18n lint clean · drift guard clean.
+
+**Commits:** `topologyContract.ts` port-id whitelist + 2 contract tests. Shared-tree note: the topology batch (editor polish, connector rail, branch selector, wire tooltips, topologyCard registry) stays uncommitted for its owner.
