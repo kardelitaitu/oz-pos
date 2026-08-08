@@ -1,12 +1,13 @@
 # OZ-POS Architecture
 
-<!-- Audit stamp: 2026-07-31 · Buffy-Agent · status: CORRECTED (7 drifts fixed Jul 31) · F1: 10/10 modules active · F2: 32 ADRs in docs/decisions/ · F3: 11 crates + 4 apps + 10 modules + 4 platform = 29 workspace members · F4: 10/10 modules have README -->
+<!-- Audit stamp: 2026-07-31 · Buffy-Agent · status: CORRECTED (7 drifts fixed Jul 31) · F1: 10/10 modules active · F2: 32 ADRs in docs/decisions/ · F3: 11 crates + 4 apps + 10 modules + 4 platform = 29 workspace members · F4: 10/10 modules have README · re-audited 2026-08-08 by docs-auditor: 34 ADRs; RESTRUCTURING.md refs removed (file no longer exists); Module Structure retitled as target-state (modules are Rust-only today) -->
 
 **Version:** 2.0 (Post-Restructuring)
 **Status:** Active — restructuring complete
 
 This document defines the long-term target architecture for OZ-POS. The 6-phase
-restructuring (tracked in `RESTRUCTURING.md`) has been completed, migrating the
+restructuring has been completed (tracked historically in `CHANGELOG.md`;
+`RESTRUCTURING.md` was removed when the phases closed), migrating the
 codebase from a flat monolith to the modular architecture described below.
 
 ---
@@ -168,21 +169,26 @@ oz-pos/
 
 ## Module Structure
 
-Every module follows the same structure, owning both backend and frontend:
+> ⚠️ **Target state, not current reality.** Today every module is a Rust crate
+> with `Cargo.toml`, `README.md`, `manifest.json`, `src/`, and (where relevant)
+> `tests/` — there are **no** `ui/`, `migrations/`, `services/`, `events/`, or
+> `permissions/` directories inside any module. Module frontends live in
+> `ui/src/features/` and register via the `@/features` barrel (ADR #31). The
+> layout below is the long-term target for a full vertical-slice module:
 
 ```
-modules/inventory/
+modules/inventory/  (today: Cargo.toml · README.md · manifest.json · src/{lib,models,service,repository,handlers}.rs · tests/)
 │
 ├─ manifest.json       Module metadata (id, name, version, dependencies)
-├─ migrations/         SQLite migrations
+├─ migrations/         SQLite migrations            (target)
 ├─ src/                Rust backend
-│   ├─ services/        Business logic
-│   ├─ repositories/    Database access
+│   ├─ services/        Business logic               (target)
+│   ├─ repositories/    Database access              (target)
 │   ├─ models/          Domain entities
-│   ├─ events/          Published event types
-│   ├─ permissions/     Module-specific permission keys
+│   ├─ events/          Published event types        (target)
+│   ├─ permissions/     Module-specific permission keys (target)
 │   └─ lib.rs           Module entry point
-├─ ui/                 Frontend
+├─ ui/                 Frontend                     (target — today in ui/src/features/)
 │   ├─ pages/           Full-page routes
 │   ├─ components/      Module-specific components
 │   ├─ routes/          Route definitions
@@ -390,8 +396,7 @@ oz-pos/
 │   └─ specs/          Module manifest format spec
 │
 ├─ ARCHITECTURE.md    This file
-├─ RESTRUCTURING.md    Phase tracking checklist
-├─ agents.md           AI agent configuration
+├─ AGENTS.md           AI agent configuration
 └─ Cargo.toml          Workspace definition (29 crates)
 ```
 
@@ -399,8 +404,7 @@ oz-pos/
 
 ## Migration Roadmap (Complete ✅)
 
-All 6 restructuring phases have been completed. See `RESTRUCTURING.md` for
-the detailed task checklist.
+All 6 restructuring phases have been completed.
 
 ### Phase 1 — Foundation ✅
 - [x] Rust workspace with crate separation
@@ -454,7 +458,7 @@ Every module must contain:
 - `CHANGELOG.md` — Version history
 
 Every architectural change must create an Architecture Decision Record (ADR).
-As of July 2026 there are 32 ADRs in `docs/decisions/`. Key documents include:
+As of August 2026 there are 34 ADRs in `docs/decisions/`. Key documents include:
 ```
 docs/decisions/2026-01-15-module-system-design.md
 docs/decisions/2026-02-01-event-bus-design.md

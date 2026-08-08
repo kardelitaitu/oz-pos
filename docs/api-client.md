@@ -6,7 +6,7 @@ access to all 20+ endpoints with Bearer token authentication.
 ## Quick Start
 
 ```ts
-import { OZPosClient } from '@/api/client';
+import { OZPosClient } from '@/api/client'; // re-exported via client/index.ts from client/oz-pos-client.ts
 
 // Create a client pointing at your cloud server
 const client = new OZPosClient({ baseUrl: 'http://localhost:3099' });

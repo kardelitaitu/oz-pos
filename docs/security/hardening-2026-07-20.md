@@ -7,13 +7,15 @@ Additional hardening recommendations:
 
 ### Critical Commands (spot-checked)
 
+> Updated 2026-08-08 by docs-auditor: command names below reflect the current IPC surface — `check_login` is now `staff_login`, and `create_sale` became the `start_sale`/`complete_sale` pair.
+
 | Command | Validation | Status |
 |---------|-----------|--------|
-| `check_login` | Username: 1-100 chars, alphanumeric + `._-`. PIN: exactly 4-6 digits | ✅ `auth.rs` |
-| `create_sale` | Cart validation: currency match, qty > 0, price ≥ 0. Payment amount ≤ total | ✅ `pos.rs` |
+| `staff_login` (was `check_login`) | Username: 1-100 chars, alphanumeric + `._-`. PIN: exactly 4-6 digits | ✅ `auth.rs:122` |
+| `start_sale` / `complete_sale` (was `create_sale`) | Cart validation: currency match, qty > 0, price ≥ 0. Payment amount ≤ total | ✅ `pos.rs` |
 | `import_data` | JSON schema validation, foreign key checks, size limit | ✅ `data.rs` |
 | `search_products` | Query length ≤ 200 chars, SQL injection prevented via parameterized queries | ✅ `products.rs` |
-| `build_custom_report` | Column whitelist validation, parameterized date values | ✅ `export/mod.rs` |
+| `build_custom_report` | Column whitelist validation, parameterized date values | ✅ `reports.rs` |
 
 ### Guidelines for Future Commands
 
@@ -29,10 +31,16 @@ Already implemented in `apps/cloud-server/` (P8-1). Token-bucket algorithm with 
 
 | Endpoint | Limit | Status |
 |----------|-------|--------|
-| `/api/v1/sync/push` | 100/min | ✅ |
-| `/api/v1/sync/pull` | 300/min | ✅ |
-| `/api/v1/sync/status` | 300/min | ✅ |
-| `/api/v1/sync/snapshot` | 50/min | ✅ |
+| `/api/sync/push` | 100/min | ✅ |
+| `/api/sync/pull` | 300/min | ✅ |
+| `/api/sync/status` | 300/min | ✅ |
+| `/api/sync/snapshot` | 50/min | ✅ |
 | All other `/api/*` | 300/min (default) | ✅ |
 
+> Updated 2026-08-08 by docs-auditor: routes are `/api/sync/*` (no `v1` segment) — see `apps/cloud-server/src/main.rs` sync router.
+
 Middleware returns `429 Too Many Requests` with `Retry-After` header. Background cleanup (60s interval) removes stale buckets.
+
+---
+
+> Last audited: 2026-08-08 by docs-auditor (repairs applied).

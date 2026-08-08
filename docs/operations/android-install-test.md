@@ -13,13 +13,13 @@ on a physical Android device (phone or tablet).
 
 | Requirement | Version | Check |
 |-------------|---------|-------|
-| Android device | 10+ (API 29) | Settings → About → Software info |
+| Android device | 8.0+ (API 26 — the app's `minSdkVersion`) | Settings → About → Software info |
 | USB cable | Data transfer capable | `adb devices` shows device |
 | USB Debugging | Enabled | Developer Options → USB Debugging |
 | JDK | 17+ | `javac --version` |
 | Android SDK | 34+ | `sdkmanager --list \| grep 'platforms'` |
 | Android NDK | 27.x | `sdkmanager --list \| grep 'ndk'` |
-| Rust toolchain | stable (1.85+) | `rustc --version` |
+| Rust toolchain | stable (1.88+) | `rustc --version` |
 | Node.js | 20+ LTS | `node --version` |
 | cargo-ndk | latest | `cargo install cargo-ndk --locked` |
 | Tauri CLI | ^2 | `cargo install tauri-cli --version "^2" --locked` |
@@ -582,3 +582,7 @@ Notes:
 - [Linux Launch Test](./linux-launch-test.md) — Linux equivalent guide
 - [Tauri Mobile Guide](https://v2.tauri.app/start/mobile/) — Official Tauri mobile docs
 - [Android Developer Docs](https://developer.android.com/docs) — SDK reference
+
+---
+
+> Last audited: 2026-08-08 by docs-auditor (repairs applied).

@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (0 findings) · resolved F1: styles/tokens.css -> ui/src/frontend/themes/ (no ui/src/styles/) · resolved F2: ui/src/locales/en-US.ftl -> per-feature English bundles (*.ftl) · resolved F3: ui/src/i18n/id.ftl -> per-feature Bahasa Indonesia bundles (*.id.ftl) · resolved F4: "25 translation files" -> 24 per-feature bundles × 2 locales = 48 .ftl files · resolved F5: "48 Fluent bundles" -> 24 per-feature bundles, each with en + id variants · verified accurate: oz-reporting implemented (Phase 5 daily/weekly/monthly engines present in src/), oz-payment Square+QRIS/Midtrans (square.rs+qris.rs exist), redis optional dep present (line 375), i18n-gap self-note (line 486: EmailReportSettings.tsx + SettingsPage.tsx still hardcoded English) matches the settings audit finding -->
+<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (0 findings) · resolved F1: styles/tokens.css -> ui/src/frontend/themes/ (no ui/src/styles/) · resolved F2: ui/src/locales/en-US.ftl -> per-feature English bundles (*.ftl) · resolved F3: ui/src/i18n/id.ftl -> per-feature Bahasa Indonesia bundles (*.id.ftl) · resolved F4: "25 translation files" -> 24 per-feature bundles × 2 locales = 48 .ftl files · resolved F5: "48 Fluent bundles" -> 24 per-feature bundles, each with en + id variants · verified accurate: oz-reporting implemented (Phase 5 daily/weekly/monthly engines present in src/), oz-payment Square+QRIS/Midtrans (square.rs+qris.rs exist), redis optional dep present (line 375), i18n-gap self-note (line 486: EmailReportSettings.tsx + SettingsPage.tsx still hardcoded English) matches the settings audit finding · re-audited 2026-08-08 by docs-auditor: 3 stale checkboxes flipped (scheduled email, Android APK CI, CRDT sync), counts refreshed (39 Feature variants, 265 UI test files, 5,800+ Rust tests), rlua->mlua, i18n note narrowed to EmailReportSettings.tsx -->
 
 # OZ-POS — Roadmap
 
@@ -38,7 +38,7 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [x] GitHub repository init, branch policy (`feat/`, `fix/`, `docs/`, `chore/`)
 
 ### Feature Flag System
-- [x] `Feature` enum declared in `oz-core` (all 32 toggleable features)
+- [x] `Feature` enum declared in `oz-core` (32 features at declaration; ~39 variants today)
 - [x] `is_enabled()`, `enable()`, `disable()` helpers in `oz-core`
 - [x] Feature flags stored in `settings` table as `feature.<name>` rows
 - [x] Feature dependency resolution (`dependencies()` fn + auto-enable)
@@ -163,9 +163,9 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [x] UI hides all inactive features (e.g., no loyalty tab in Simple Retail) via `useFeatures()` hook + feature-gated nav
 - [x] Dark mode and light mode both render without visual glitches
 - [x] Design tokens applied consistently — no hardcoded hex colours in components
-- [x] `cargo test` passes across all crates (5,221+ tests, 0 failed)
+- [x] `cargo test` passes across all crates (5,800+ tests, 0 failed)
 - [x] `cargo clippy -- -D warnings` passes with zero warnings
-- [x] 5,221+ unit tests across the `oz-*` crate ecosystem, plus 3,476 UI tests across 228 test files
+- [x] 5,800+ unit tests across the `oz-*` crate ecosystem, plus 3,476+ UI tests across 265 test files
 - [x] Data Management UI wired to real IPC (backup, export/import .ozpkg)
 - [x] `oz-cli import-ozpkg` writes data to DB (products, categories, sales, customers, users, settings)
 - [x] StaffLoginScreen supports hardware keyboard PIN entry (digits, Backspace, Enter, Escape)
@@ -316,7 +316,7 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [x] Tax breakdown on receipt and in order records
 
 ### oz-lua — Scripting Runtime
-- [x] Embed `rlua` Lua VM in `oz-lua`
+- [x] Embed Lua VM in `oz-lua` (rlua initially; **mlua** since 0.0.19)
 - [x] Expose `apply_discount()`, `calc_line_tax()`, `validate_order()` to Lua
 - [x] Merchant Lua scripts loaded from `scripts/` at runtime (`load_dir`)
 - [x] Lua sandbox: no filesystem or network access from scripts
@@ -404,7 +404,7 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
   - Phase 6: All 15 delegated Store methods marked `#[deprecated]`; tests annotated `#[allow(deprecated)]`
 
 ### Mobile Builds
-- [ ] Android tablet build (Tauri mobile → APK, signed)
+- [x] Android tablet build (Tauri mobile → APK, signed) — CI builds a signed `aarch64` APK on tag push (`.github/workflows/android.yml`); physical-device testing still needs infra
 - [ ] iPad build (Tauri mobile → `.ipa`, TestFlight distribution)
 - [x] Touch-optimised UI layout for tablet screen sizes (tablet shell + responsive breakpoints + touch targets)
 - [x] `packaging/mobile/README.md` — Tauri v2 mobile build guide for Android & iOS
@@ -455,7 +455,7 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 
 ### Analytics (Optional On-Feature)
 - [ ] Analytics export to cloud warehouse (BigQuery / Snowflake)
-- [ ] Scheduled report delivery (email PDF)
+- [x] Scheduled report delivery (email PDF) — shipped in 0.0.22 (`apps/desktop-client/src/email_scheduler.rs` + `oz-core` email export)
 - [ ] Custom report builder (drag-and-drop columns)
 
 ### Accessibility & i18n
@@ -491,7 +491,7 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 - [x] Language selector in Settings (dropdown in SettingsPage, 2 locales: en/id)
 - [ ] RTL layout support — planned (no `ui/src/styles/rtl.css` scaffolded yet); future Arabic/Hebrew locales.
 - [x] All number, date, and currency formats respect `Intl.NumberFormat` with currency style (dashboard/report screens)
-- [ ] Full i18n migration: all existing pages use `Localized` instead of hardcoded strings. The original 200+ TSX audit (P15-2) landed, but gaps remain — e.g. `EmailReportSettings.tsx` and several labels in `SettingsPage.tsx` still render hardcoded English (not wrapped in `<Localized>`), violating the AGENTS.md i18n rule. Tracked for cleanup.
+- [ ] Full i18n migration: all existing pages use `Localized` instead of hardcoded strings. The original 200+ TSX audit (P15-2) landed and the 0.0.24 i18n audit closed SettingsPage; `EmailReportSettings.tsx` still renders hardcoded English (verified 2026-08-08), violating the AGENTS.md i18n rule. Tracked for cleanup.
 
 ### Acceptance Criteria
 - [x] Dashboard loads and renders with real SQLite data
@@ -529,7 +529,7 @@ This document defines the phased delivery plan for OZ-POS. Each phase has a clea
 
 ### Future Research
 - [ ] AI-driven product recommendations (demand forecasting)
-- [ ] Offline-first sync with CRDTs for conflict-free replication
+- [x] Offline-first sync with CRDTs for conflict-free replication — ADR #21 resolvers shipped (`resolve_lww`/`resolve_version_lww`/`resolve_sale_lww`/`resolve_stock_crdt` in `platform/sync/src/conflict.rs`); tombstone propagation remains future work
 - [ ] Voice-controlled checkout (accessibility extension)
 
 ### UI / UX — Advanced Screens & Theming
@@ -591,4 +591,4 @@ On-Features can be activated at any phase once the core infrastructure is in pla
 
 ---
 
-*Last updated: 2026-07-25.* (Phases 1–3 ✓. Phase 4 ~96% — R2 currency module extraction complete; mobile build CI exists but physical device testing needs infra. Phase 5 ~95% — analytics export + scheduled report delivery config done; Thai locale removed (not a target market); custom report builder + cloud warehouse remain. Phase 6 ~98% — all features implemented and verified; voice-controlled checkout research deferred.)
+*Last updated: 2026-08-08 (re-audited by docs-auditor).* (Phases 1–3 ✓. Phase 4 ~96% — R2 currency module extraction complete; Android APK CI exists but physical device testing needs infra. Phase 5 ~95% — scheduled report delivery shipped in 0.0.22; Thai locale removed (not a target market); custom report builder + cloud warehouse export remain. Phase 6 ~98% — all features implemented and verified; voice-controlled checkout research deferred.)

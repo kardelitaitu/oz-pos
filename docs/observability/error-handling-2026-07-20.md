@@ -5,18 +5,12 @@
 ### Finding: Production code is clean
 
 - **Tauri commands** (`apps/desktop-client/src/commands/`): 191 `unwrap()` calls, **all in `#[cfg(test)]` blocks**. Production command functions use `Result<_, AppError>` with `?` propagation.
-- **Cloud server** (`apps/cloud-server/src/`): 5 `.expect()` calls in `main.rs` (startup-only — acceptable). Remaining 123 are test code.
+- **Cloud server** (`apps/cloud-server/src/`): **0** `.expect()` calls in `main.rs` — the file was refactored since this audit; DB init now propagates `Result` (startup-only fail-fast remains acceptable). Remaining `expect()`/`unwrap()` are test code.
 - **Sync engine** (`platform/sync/src/`): 123 `unwrap()` calls, **all in tests**. Production functions use `Result` + `?`.
 
 ### Acceptable Production `expect()` Calls
 
-| File | Line | Rationale |
-|------|------|-----------|
-| `cloud-server/src/main.rs:94` | `db::connect().await.expect("failed to initialise database")` | Startup — must fail fast |
-| `cloud-server/src/main.rs:123` | `Db::open_in_memory().expect(...)` | Test-only |
-| `cloud-server/src/main.rs:151` | `axum::serve(...).await.expect("failed to bind port")` | Startup — must fail fast |
-| `cloud-server/src/main.rs:155` | `axum::serve(...).await.expect("server exited with error")` | Startup — must fail fast |
-| `cloud-server/src/metrics.rs` | `REGISTRY.register(...).unwrap()` | Metric init — startup only |
+> Updated 2026-08-08: the 0.0.14-era table referenced `main.rs:94/123/151/155`, but `main.rs` has since been refactored and contains **no** `expect()` calls. The pattern (startup-only fail-fast) remains valid where applied.
 
 **Verdict:** ✅ Zero panics possible in production request-handling code paths.
 
@@ -38,14 +32,16 @@ pub async fn create_sale(...) -> Result<SaleResult, AppError> {
 
 ### Error Categories (existing)
 
-| AppError variant | HTTP equivalent | Frontend handling |
-|-----------------|-----------------|-------------------|
-| `NotFound` | 404 | Toast: "Not found" |
-| `BadRequest(String)` | 400 | Toast with message |
-| `Conflict(String)` | 409 | Toast with message |
-| `Internal(String)` | 500 | Toast: "Something went wrong" |
-| `Unauthorized` | 401 | Redirect to login |
-| `RateLimited` | 429 | Toast with Retry-After |
+> Updated 2026-08-08: the variants below are the **current** `AppError` enum in `apps/desktop-client/src/error.rs:20`. The 0.0.14-era table (`NotFound`/`BadRequest`/`Conflict`/`Internal`/`Unauthorized`/`RateLimited`) described an API that no longer exists.
+
+| AppError variant | Frontend handling |
+|-----------------|-------------------|
+| `Core(#[from] oz_core::Error)` | Toast with message |
+| `Hardware(#[from] oz_hal::HalError)` | Toast: hardware error |
+| `Invalid(String)` | Toast with field message |
+| `PermissionDenied(String)` | Permission-denied screen / toast |
+| `InvalidSession` | Redirect to login / lock |
+| `TopologyValidation(String)` | Topology editor validation toast |
 
 **Verdict:** ✅ Error codes already mapped. No changes needed.
 
@@ -79,11 +75,15 @@ The POS is designed for offline operation:
 | Receipt printing | ✅ | Local ESC/POS driver |
 | Payment processing | ⚠️ | Cash works; card/QRIS needs connectivity |
 | Sync (push/pull) | ⚠️ | Queued locally, retried when online |
-| License validation | ⚠️ | 30-day grace period after last check |
+| License validation | ⚠️ | 14-day grace period after last check |
 
-**Verdict:** ✅ Core POS operations work offline. Payment + sync gracefully degrade. License has 30-day grace period.
+**Verdict:** ✅ Core POS operations work offline. Payment + sync gracefully degrade. License has a 14-day grace period (`OFFLINE_GRACE_DAYS = 14` in `crates/oz-core/src/subscription.rs` — the 0.0.14-era "30-day" figure is stale).
 
 ### Already implemented in UI:
 - `OfflineQueueScreen`: shows pending sync items
 - `ConnectionStatus`: green/yellow/red indicator in status bar
 - `useGatewayStatus` hook: monitors payment gateway connectivity
+
+---
+
+> Last audited: 2026-08-08 by docs-auditor (repairs applied).

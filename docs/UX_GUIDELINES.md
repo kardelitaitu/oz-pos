@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · guideline doc; ZoomContext.tsx with useAppZoom verified present (scales root font-size by window.innerWidth, line 31/96) matching the fluid-scaling mechanism; UI/UX guidance (rem units, 14-28px clamp, box-shadow:inset focus ring, var(--color-accent)) is convention, not a code-claim to judge ACCURATE/STALE · dated 2026-07-11 -->
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · guideline doc; ZoomContext.tsx with useAppZoom verified present (scales root font-size by window.innerWidth, line 31/96) matching the fluid-scaling mechanism; UI/UX guidance (rem units, 14-28px clamp, box-shadow:inset focus ring, var(--color-accent)) is convention, not a code-claim to judge ACCURATE/STALE · dated 2026-07-11 · re-audited 2026-08-08 by docs-auditor: clamp corrected to 14-16px (code never scales above the 16px base), manual override levels now include 200% -->
 
 # UX Guidelines: Adaptive Rendering & Fluid Scaling
 
@@ -26,9 +26,9 @@ Instead of writing dozens of CSS media queries with rigid break points (e.g., ch
    `font-size = 16 * scale`
 
 4. **Clamping (CSS Locks)**:
-   To prevent the UI from becoming unreadably microscopic on tiny screens or comically massive on ultrawide monitors, we apply a mathematical clamp:
+   To prevent the UI from becoming unreadably microscopic on tiny screens, we apply a mathematical clamp:
    - **Minimum size:** `14px` (Ensures legibility on 1366x768 monitors).
-   - **Maximum size:** `28px` (Caps the scaling for 4K monitors).
+   - **Maximum size:** `16px` (the 1920px base — the app scales **down** below 1920px but never up above it; see `ZoomContext.tsx`, which caps `font-size` at 16px by design).
 
 ## 2. Best Practices for Developers
 
@@ -39,7 +39,7 @@ When building UI components for OZ-POS, adhere to these guidelines to ensure the
 - **Minimum sizing (`min-width` / `min-height`):** 1366×768 is the **minimum resolution that must be 100% supported**. Interactive elements (buttons, inputs) that would become unusable below this resolution **must** set a `min-width` and/or `min-height` in `px` or `rem`. This guarantees tappability at the minimum supported scale while still scaling up on larger screens.  
   Example: a square icon button can use `min-width: 64px; min-height: 64px; aspect-ratio: 1` — at 1366×768 (root font ~11.4px) this stays a comfortable tap target, and on 4K it scales up proportionally.
 - **Flexbox and Grid over Absolute Positioning:** Absolute positioning (e.g., pinning something `1.5rem` from the right edge) can cause overlapping on extremely wide or scaled screens. Always prefer robust flexbox or CSS grid layouts for positioning.
-- **Support Manual Overrides:** Users can disable auto-scaling via the General Settings panel and enforce a strict `100%`, `125%`, or `150%` scale. Never assume `window.innerWidth` is the sole source of truth for the active font size.
+- **Support Manual Overrides:** Users can disable auto-scaling via the General Settings panel and enforce a strict `100%`, `125%`, `150%`, or `200%` scale. Never assume `window.innerWidth` is the sole source of truth for the active font size.
 
 ## 3. Focus Indicator Pattern
 

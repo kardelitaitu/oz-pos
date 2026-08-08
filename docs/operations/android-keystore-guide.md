@@ -96,7 +96,11 @@ When the keystore expires (or is compromised):
 ## Security Notes
 
 - **Never** commit `.keystore`, `.jks`, or `.p12` files to git
-- The `.gitignore` already excludes `*.keystore` — verify with `git check-ignore`
+- ⚠️ The project `.gitignore` does **not** currently exclude `*.keystore` (it covers `*.key` and `*.pem` only). Add `*.keystore`, `*.jks`, and `*.p12` to `.gitignore` **before** generating a keystore, then verify with `git check-ignore oz-pos-release.keystore`
 - Rotate the keystore at least 30 days before expiry
 - Store the keystore password and key password in a password manager
 - The base64-encoded secret in GitHub is encrypted at rest and masked in logs
+
+---
+
+> Last audited: 2026-08-08 by docs-auditor (repairs applied).
