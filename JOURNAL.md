@@ -1008,3 +1008,15 @@ Clean (0 errors).
 **Validation:** contract suite 13/13 (incl. the 3-state unit test) · topology suites 179/179 in the working tree · typecheck clean · eslint 0 errors on changed files · drift guard clean.
 
 **Commits:** `refactor(topology): extract normalizeWireDirection as the single direction gate` (contract + unit test). Editor hunks (import, 2 load-path normalizations, regression test) left uncommitted with the batch for its owner.
+
+## 2026-08-08 — TDD cycle: fold unknown node kinds at the contract boundary
+
+**Problem:** The quarantine family covered wires (direction, relationshipType, port ids) but the NODE side still had a verbatim-trust: `nodeKind()` returned `node.type` verbatim after the `'store'` alias, despite `SEMANTIC_NODE_DEFINITIONS` documenting "unknown node kinds are not accepted." A corrupt type (`'kiosk'`) flowed into `SemanticTopologyGraph.nodes[].kind` as an opaque value that `validateTopologyGraph` NEVER checks (it filters only `branch-location` and `workspace`) — so the node silently passed validation AND round-tripped to Apply. Evidence: a test feeding `type: 'kiosk'` observed `kind: 'kiosk'` surviving normalization with zero validation errors.
+
+**Red → Green:** New contract test feeds an unknown-kind node and asserts `kind` folds to `'workspace'` AND a `missing-location-input` error fires for that node — the corrupt data surfaces instead of passing. Red confirmed. Fix: `nodeKind` now whitelists the three legal kinds and folds anything else to `workspace` (the most common kind), so the ownership checks catch it.
+
+**Design tradeoff (reviewer-discussed, deliberate):** folding to `workspace` contradicts the letter of "not accepted" — the honest behavior would be a dedicated `unsupported-node-kind` validation error, but that needs a new `messageId` + FTL keys in both bundles, and the `.ftl` files are entangled with the uncommitted batch. The fold is the committable half: it surfaces the corruption via ownership validation instead of silently passing. **Known limitation:** a FUTURE legitimate node type (scale, label printer per the sprint) persisted by a newer client would be folded to workspace until `nodeKind`'s whitelist is extended — recorded so that follow-up is named, not a silent surprise. `SEMANTIC_NODE_DEFINITIONS` doc updated to state the fold; a NOTE marks the final `return 'workspace'` as a runtime-only path (TypeScript narrows the typed `NodeType` union away).
+
+**Validation:** contract suite 14/14 · topology suites 180/180 · typecheck clean · eslint 0 errors on changed files · drift guard clean.
+
+**Commits:** `topologyContract.ts` nodeKind fold + 1 contract test. Shared-tree note: the topology batch (editor polish, connector rail, branch selector, wire tooltips, topologyCard registry, FTL edits) stays uncommitted for its owner.
