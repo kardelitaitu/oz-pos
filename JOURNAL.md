@@ -1044,3 +1044,15 @@ Clean (0 errors).
 **Validation:** contract suite 16/16 · topology suites 182/182 · typecheck clean · eslint 0 errors on changed files · i18n lint clean · bundle parity 0 missing · drift guard clean.
 
 **Commits:** `topologyContract.ts` unknown-wire-endpoint guard + code + FTL keys (en/id) + 1 contract test. Shared-tree note: the topology batch stays uncommitted for its owner.
+
+## 2026-08-08 — TDD cycle: Rust Apply boundary accepts any legal wire direction on location wires
+
+**Problem (cross-layer contract drift):** the frontend contract (`normalizeWireDirection` in topologyContract.ts) treats wire direction as presentation-only — `one-way | reverse | two-way` are all legal — but the Rust Apply boundary had TWO coupled drifts that rejected a location wire whose direction was cycled in the editor:
+1. `validate_semantic_json` required location wires to be `direction == "one-way"` — a `two-way`/`reverse` location wire was rejected with `invalid-location-connection`.
+2. The `WireDirection` enum had no `Reverse` variant at all — `"reverse"` parsed to `Unknown` and was rejected by `validate_topology_structure` ("unknown direction").
+
+**Red → Green:** Two new tests in `apps/desktop-client/src/commands/topology.rs`: `semantic_save_accepts_two_way_location_wire` (failed at the semantic gate) and `semantic_save_accepts_reverse_location_wire` (failed at the typed-struct gate). Fix: dropped the `direction != Some("one-way")` clause from the location-wire check (with a comment explaining direction is not part of the ownership gate) and added `WireDirection::Reverse` to the enum + `PartialEq<&str>` + `From<&str>`.
+
+**Validation:** topology module 194/194 · `oz-pos-app` lib 811/811 · fmt clean · clippy clean on changed code (pre-existing `too_many_arguments` in oz-core and the `can be collapsed` at `validate_topology_envelope` line 493 untouched) · drift guard clean.
+
+**Commits:** `topology.rs` gate removal + Reverse variant + 2 tests. Shared-tree note: the UI topology batch stays uncommitted for its owner.
