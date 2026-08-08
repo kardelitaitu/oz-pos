@@ -3,7 +3,7 @@ name: docs-auditor
 description: Documentation-code audit and sync — keep technical docs accurate, traceable, and minimal with truth-anchor cross-referencing, drift classification, and repair rules. Use when auditing a doc (README, ARCHITECTURE.md, api-reference, spec, admin guide) against the current codebase, verifying that what a document claims still holds, or stamping a document as audited.
 ---
 
-<!-- Audit stamp: 2026-08-08 · Buffy · status: ACCURATE (0 findings) · verified accurate: all paths referenced in this skill exist on disk (docs/specs/_active/, docs/specs/, docs/decisions/, CONTRIBUTING.md, AGENTS.md, scripts/check.sh, .agents/skills/skill-drift-guard/scripts/detect.sh, crates/oz-core, crates/oz-hal/src/drivers/mock.rs, apps/desktop-client, ui/src/api, ui/src/locales); source-of-truth locations corrected to the repo's actual layout (docs/specs/_approved/ and docs/adr/ do NOT exist in this repo — specs live in docs/specs/ and docs/specs/_active/, decisions in docs/decisions/) · verified accurate: the `> last audited` footer format matches the project convention enforced by skill-drift-guard Check 10 (DD-MM-YY + by-clause) -->
+<!-- Audit stamp: 2026-08-08 · Buffy · status: ACCURATE (0 findings) · verified accurate: all paths referenced in this skill exist on disk (docs/specs/_active/, docs/specs/, docs/decisions/, CONTRIBUTING.md, AGENTS.md, scripts/check.sh, .agents/skills/skill-drift-guard/scripts/detect.sh, .agents/skills/docs-auditor/scripts/check-orphans.py, crates/oz-core, crates/oz-hal/src/drivers/mock.rs, apps/desktop-client, ui/src/api, ui/src/locales); source-of-truth locations corrected to the repo's actual layout (docs/specs/_approved/ and docs/adr/ do NOT exist in this repo — specs live in docs/specs/ and docs/specs/_active/, decisions in docs/decisions/) · verified accurate: the `> last audited` footer format matches the project convention enforced by skill-drift-guard Check 10 (DD-MM-YY + by-clause) · 2026-08-08 §4b: shallow structural orphan check added — scripts/check-orphans.py self-tested against the corpus, reproduces the manual hunt (A: 0 wrappers · B: 1 orphaned h4 desktop-app-audit §10 · C: 1 stale 0.0.5 header desktop-app-audit §7) · follow-up 2026-08-08: check C range-citation semantics refined (top cited version governs — 0.0.22 / 0.0.23 headers stay clean) and both corpus findings repaired (desktop-app-audit h4 demoted to h3, §7 header refreshed) — full corpus scan now returns clean -->
 
 # Skill: docs-auditor
 
@@ -46,6 +46,7 @@ This skill audits **any project document** (`README.md`, `ARCHITECTURE.md`, `doc
 ### Shallow Audit
 - Check only **file existence**: do referenced files, modules, functions still exist?
 - Verify **headline claims**: does the doc say feature X exists? Does `cargo check` pass?
+- **Structural orphan pass** (automatic): run `python3 .agents/skills/docs-auditor/scripts/check-orphans.py` — flags unversioned/orphan wrapper labels, `####` items without their `###` parent, and version headers stale against their own section body (§4b).
 - Duration: ~1-2 minutes. No per-line cross-reference.
 
 ### Full Audit
@@ -55,6 +56,35 @@ This skill audits **any project document** (`README.md`, `ARCHITECTURE.md`, `doc
 - Duration: 5-15 minutes depending on doc size.
 
 **Default is Full Audit.** User can request `--shallow` to skip deep verification.
+
+## 4b. Shallow structural check (orphaned-content detector)
+
+`.agents/skills/docs-auditor/scripts/check-orphans.py` automates the manual orphan-content hunt (the CHANGELOG P80–P251 "Unversioned backfill blocks" incident) into a reusable shallow-mode pass. It scans every `*.md` outside `.git`, `.agents`, `node_modules`, `target`, `dist`, and `graphify-out` (`.agents/skills` content is skill-drift-guard's scope) and reports three classes of structural drift:
+
+| # | Check | Detects | Example |
+|---|-------|---------|---------|
+| A | Wrapper labels | `## Unversioned …` / `### Orphaned …` / `… backfill blocks` section headers — content parked under an unversioned bucket | `## Unversioned backfill blocks (P80–P251…)` |
+| B | Heading orphans | `####`/`#####` items whose nearest lower heading is not their `###`/`####` parent; non-benign level skips (h2→h4, h3→h5) | `#### Re-audit instructions` directly under an `##` |
+| C | Stale version headers | `##`/`###` header whose top cited version (`0.0.X`, or a range like `0.0.22 / 0.0.23`) trails its own section body's highest `0.0.Y` | `## 7. Prioritized 0.0.5 release-blocker order` with 0.0.22/0.0.23 closures in the body |
+
+### Usage
+
+```bash
+python3 .agents/skills/docs-auditor/scripts/check-orphans.py            # all checks, repo-wide
+python3 .agents/skills/docs-auditor/scripts/check-orphans.py --check=b  # one check (a|b|c)
+python3 .agents/skills/docs-auditor/scripts/check-orphans.py --file docs/api-reference.md
+python3 .agents/skills/docs-auditor/scripts/check-orphans.py --quiet    # findings only
+```
+
+Exit codes: `0` clean · `1` findings (triage before stamping) · `2` usage/scan error. Every finding prints `file:line` plus the offending heading, ready to paste into the §11 report.
+
+### Triage rules
+
+- **A — wrapper label**: real orphan wrappers re-parent like the CHANGELOG fix; git history is the evidence source for the original association. `backfill` alone (DB migrations) is NOT flagged — only section headers pairing it with a bucket noun (block/section/entries).
+- **B — heading orphan**: usually cosmetic — demote/promote the heading or add the missing parent. Some are intentional appendices (an `####` under an `##`, like desktop-app-audit §10's re-audit instructions) — judge before "fixing".
+- **C — stale version header**: update the header's version anchor (or drop the version from the header) to match the section's content — the CHANGELOG P-block re-parenting and the desktop-app-audit §7 refresh (`## 7. Prioritized release-blocker order (ALL RESOLVED — 0.0.22 / 0.0.23)`, 2026-08-08) are the done examples. A range citation like `0.0.22 / 0.0.23` is judged by its top version, so it stays clean while the section body is current.
+
+False positives are possible in all three — this is a **detector**, not a verdict. Every hit is a candidate finding for §7/§11 triage; never auto-repair a hit without reading the surrounding section.
 
 ## 5. Golden rules
 
@@ -117,6 +147,7 @@ Before starting any verification:
 | `npm run typecheck` (from `ui/`) | Verify TS/React claims in UI docs |
 | `rg` over `ui/src/locales/*.ftl` | Verify Fluent IDs referenced by docs |
 | `scripts/check.sh` | Full local validation mirroring CI |
+| `python3 .agents/skills/docs-auditor/scripts/check-orphans.py` | Shallow-mode structural pass: unversioned wrappers, heading orphans, stale version headers (§4b) |
 
 Use fast local search and file reads first. Run the narrowest relevant validation step before stamping.
 
@@ -222,6 +253,7 @@ Two anchors verified, one drift found, one-line patch — that is the whole loop
 5. **Inventing behavior for an `Ambiguous` claim.** If you can't verify it, report it as ambiguous and ask — don't guess to make the doc pass.
 6. **Duplicating domain verification.** If the anchor is a Tauri command, React prop, or HAL trait, delegate to `tauri-ipc`, `ui-components`, or `hal-drivers` instead of hand-verifying.
 7. **Forgetting `skill-drift-guard` after a doc patch.** If your patch touches a path, type, or convention that a skill describes, run `.agents/skills/skill-drift-guard/scripts/detect.sh --report` before opening the PR.
+8. **Skipping the structural orphan pass.** Since the CHANGELOG backfill-blocks incident, every shallow audit should start with `.agents/skills/docs-auditor/scripts/check-orphans.py` — it flags unversioned wrappers, orphaned headings, and stale version headers that a prose read alone misses. It is a detector, not a repairer: re-parent/re-head per §4b, re-run to confirm the finding is gone, then stamp.
 
 ---
 
