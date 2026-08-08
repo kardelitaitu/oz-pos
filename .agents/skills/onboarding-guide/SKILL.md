@@ -57,6 +57,7 @@ What do you want to do?
 | Add a new device category or vendor driver (barcode, printer, NFC, payment terminal, cash drawer); write the **mandatory mock** | **`hal-drivers`** |
 | Scaffold the workspace, add a new crate, configure CI, write commit messages, set up the GitHub Actions matrix | **`project-scaffold`** |
 | Detect or patch drift between a skill and the code (broken paths, renamed crates, stale `last audited` dates, outdated dependency versions) | **`skill-drift-guard`** |
+| Audit any project document (README, ARCHITECTURE.md, api-reference, spec, admin guide) against the current codebase — verify claims, classify drift, patch the doc, stamp it audited | **`docs-auditor`** |
 
 If your task touches more than one layer, read each relevant skill in the order shown above (rust-backend → tauri-ipc → ui-components). The skills are designed to be cross-referenced. After making your change, run `skill-drift-guard` to verify the skills still match the code.
 
