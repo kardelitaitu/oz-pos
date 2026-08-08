@@ -105,10 +105,10 @@ test.describe('ADR #22 — Topology canvas', () => {
     await page.waitForTimeout(1_500);
 
     // Topology screen must render (the dedicated editor, not a settings
-    // section — its own header title carries the "Topology" text).
+    // section — its own header with the branch toolbar + tier badge).
     await expect(page.locator('.node-topology-editor')).toBeVisible({ timeout: 8_000 });
-    await expect(page.locator('.node-topology-header-title'))
-      .toContainText(/topology/i);
+    await expect(page.locator('.node-topology-header')).toBeVisible();
+    await expect(page.locator('.topology-tier-badge')).toContainText(/tier/i);
   });
 
   test('topology screen renders interactive element', async ({ page }) => {
@@ -131,6 +131,46 @@ test.describe('ADR #22 — Topology canvas', () => {
     // The TopologyScreen should render an interactive area (canvas, SVG, or layout).
     const interactive = page.locator('.node-topology-editor, canvas, svg, [class*="topology"], [class*="node"]');
     await expect(interactive.first()).toBeVisible({ timeout: 8_000 });
+  });
+
+  test('renaming a branch via the card pencil updates the header selector', async ({ page }) => {
+    // ADR #22 Pillar E + branch rename: the in-canvas card rename must
+    // flow through the store-profile update and show up in the header
+    // branch selector (both derive from the same stores state).
+    const managementHeader = page.locator('.settings-sidebar-section-header')
+      .filter({ hasText: 'Management' });
+    const isExpanded = await managementHeader
+      .getAttribute('aria-expanded')
+      .then((v) => v === 'true')
+      .catch(() => false);
+    if (!isExpanded) {
+      await managementHeader.click();
+      await page.waitForTimeout(300);
+    }
+
+    const topologyNav = page.locator('.settings-nav-item')
+      .filter({ hasText: /topology/i });
+    await topologyNav.click();
+    await page.waitForTimeout(2_000);
+
+    // The header branch selector auto-selects the seeded branch.
+    const selectorTrigger = page.locator('.topology-branch-selector .ssel-trigger');
+    await expect(selectorTrigger).toContainText('TOKO TEST', { timeout: 8_000 });
+
+    // Rename the branch through the store card's pencil (Enter commits).
+    const storeCard = page.locator('.topology-node[data-node-id="store-1"]');
+    await expect(storeCard).toBeVisible({ timeout: 8_000 });
+    await storeCard.getByRole('button', { name: 'Rename branch' }).click();
+
+    const renameInput = storeCard.getByLabel('Branch name');
+    await expect(renameInput).toBeVisible({ timeout: 3_000 });
+    await renameInput.fill('TOKO RENAMED');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(1_000);
+
+    // The persisted rename flows into the header selector's label.
+    await expect(selectorTrigger).toContainText('TOKO RENAMED', { timeout: 5_000 });
+    await expect(selectorTrigger).not.toContainText('TOKO TEST');
   });
 
   test('clicking a topology node shows inspector drawer', async ({ page }) => {
