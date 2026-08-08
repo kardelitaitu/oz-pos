@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, useCallback, memo } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback, memo, type ReactNode } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
@@ -8,9 +8,6 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import { loadTopology } from '@/api/topology';
 import { useSettings } from '@/contexts/SettingsContext';
 import {
-  WorkspaceStorePosSettings,
-  WorkspaceRestaurantPosSettings,
-  WorkspaceKdsSettings,
   WorkspaceInventorySettings,
   StoreInfoCard,
   type WorkspaceCardProps,
@@ -31,13 +28,33 @@ import {
 } from './NodeTopologyIcons';
 import { plainErrorMessage } from '@/utils/app-error';
 import { clampNodeToViewport, NODE_WIDTH, NODE_HEIGHT, NODE_PORT_Y } from './nodeTopologyClamp';
-import { normalizeTopologyGraph, validateTopologyGraph } from './topologyContract';
+import { normalizeTopologyGraph, normalizeWireDirection, validateTopologyGraph } from './topologyContract';
+import {
+  isInventoryNode,
+  leftPortVariants,
+  leftPortLabelId,
+  portLabelId,
+  portAriaLabelId,
+  visiblePortsForNode,
+  semanticPortId as semanticPortIdForNode,
+  NODE_TYPE_ICON,
+  workspaceTypeLabel,
+  settingsCardForTypeKey,
+  topologyUiString,
+} from './topologyCard';
 import './NodeTopologyEditor.css';
 
 // ── Types ──────────────────────────────────────────────────────────
 
 export type NodeType = 'store' | 'workspace' | 'warehouse' | 'hardware';
-export type WireDirection = 'one-way' | 'two-way';
+/** Visual flow state of a wire, cycled by clicking it.
+ *  'one-way' → left-to-right, 'reverse' → right-to-left,
+ *  'two-way' → both. The from/to node ownership is unchanged — this is a
+ *  presentation layer over the same semantic edge. */
+export type WireDirection = 'one-way' | 'reverse' | 'two-way';
+
+/** Click cycle order for wire direction (1 → 2 → 3 → 1). */
+const WIRE_DIRECTION_CYCLE: WireDirection[] = ['one-way', 'reverse', 'two-way'];
 export type PortName = 'top' | 'right' | 'bottom' | 'left';
 
 /** Convert legacy vertical anchors to the UX's canonical left/right sides. */
@@ -81,7 +98,10 @@ export interface TopologyWireData {
   toPort?: PortName;
   /** Semantic source port; geometry remains presentation-only. */
   fromPortId?: string;
-  /** Semantic target port; geometry remains presentation-only. */
+  /** Semantic target port; geometry remains presentation-only. For nodes
+   *  with stacked left inputs (inventory: 'location-in' | 'operation-in'),
+   *  this doubles as the slot discriminator — the renderer resolves the
+   *  vertical socket from it and the backend round-trips it as to_port_id. */
   toPortId?: string;
   /** Typed relationship represented by this wire. */
   relationshipType?: SemanticRelationshipType;
@@ -113,6 +133,13 @@ export interface WorkspaceInstanceSeed {
 export interface NodeTopologyEditorProps {
   currentTier?: 'free' | 'one_time' | 'standard' | 'pro' | 'enterprise';
   /**
+   * Optional toolbar content rendered inside the topology header, above the
+   * title/actions row. The parent screen uses this slot to merge its branch
+   * (graph) selector toolbar into the editor's header instead of rendering a
+   * separate stacked bar.
+   */
+  branchToolbar?: ReactNode;
+  /**
    * Called when the user clicks "Apply Topology Changes". Returns an
    * optional `oldId -> newId` map so the editor can remap its local
    * state when archive+recreate assigns new UUIDs (Critical #1).
@@ -128,6 +155,14 @@ export interface NodeTopologyEditorProps {
   workspaceInstances?: WorkspaceInstanceSeed[];
   /** Branch Locations available to seed the ownership graph. */
   branchLocations?: BranchLocationSeed[];
+  /** Persist a Branch Location (store profile) rename from the node card.
+   *  Resolves true on success so the card can close its inline form;
+   *  false keeps the draft open for a retry (the parent toasts errors). */
+  onRenameBranch?: (id: string, name: string) => Promise<boolean> | boolean | void;
+  /** Persist a workspace instance rename from the node card (the live
+   *  instance row, not just the canvas label). Same contract as
+   *  onRenameBranch: true closes the form, false keeps the draft open. */
+  onRenameWorkspace?: (id: string, name: string) => Promise<boolean> | boolean | void;
   /** Allow Apply before the parent supplies real branch identities. */
   allowLegacyApply?: boolean;
 }
@@ -136,23 +171,16 @@ export interface NodeTopologyEditorProps {
  *  Labels are resolved at render time via l10n.getString for i18n. */
 const WORKSPACE_TYPE_KEYS = ['store-pos', 'restaurant-pos', 'kds', 'warehouse'] as const;
 
-function getWorkspaceTypeLabel(key: string, l10n: ReturnType<typeof useLocalization>['l10n']): string {
-  const map: Record<string, string> = {
-    'store-pos': topologyUiString(l10n, 'topology-ws-type-store-pos'),
-    'restaurant-pos': topologyUiString(l10n, 'topology-ws-type-restaurant-pos'),
-    'kds': topologyUiString(l10n, 'topology-ws-type-kds'),
-    'warehouse': topologyUiString(l10n, 'topology-ws-type-warehouse'),
-  };
-  return map[key] ?? key;
-}
-
 // ── Presets ────────────────────────────────────────────────────────
 
 const PRESET_RETAIL: { nodes: TopologyNodeData[]; wires: TopologyWireData[] } = {
   nodes: [
+    // Cards are 240px tall: workspace rows sit at y 80/320 (240px apart on
+    // the 24px grid) so no cards overlap on first load. The store keeps its
+    // historical (80, 140) position — the geometry tests pin it.
     { id: 'store-1', type: 'store', name: 'Downtown Branch', subtitle: 'Primary Store', x: 80, y: 140, telemetryBadge: 'Online (2 POS)', telemetryStatus: 'online' },
-    { id: 'ws-1', type: 'workspace', name: 'Retail POS #1', subtitle: 'Main Checkout', x: 340, y: 80, telemetryBadge: 'Active', telemetryStatus: 'online' },
-    { id: 'wh-1', type: 'warehouse', name: 'Main Warehouse', subtitle: 'Primary Storage', x: 600, y: 140, telemetryBadge: '1,250 items', telemetryStatus: 'online' },
+    { id: 'ws-1', type: 'workspace', name: 'Retail POS #1', subtitle: 'Main Checkout', x: 380, y: 80, metadata: { typeKey: 'store-pos' }, telemetryBadge: 'Active', telemetryStatus: 'online' },
+    { id: 'wh-1', type: 'warehouse', name: 'Main Warehouse', subtitle: 'Primary Storage', x: 680, y: 140, telemetryBadge: '1,250 items', telemetryStatus: 'online' },
   ],
   wires: [
     // Natural left-to-right flow: store right → workspace left, workspace right → warehouse left
@@ -163,11 +191,14 @@ const PRESET_RETAIL: { nodes: TopologyNodeData[]; wires: TopologyWireData[] } = 
 
 const PRESET_RESTAURANT: { nodes: TopologyNodeData[]; wires: TopologyWireData[] } = {
   nodes: [
+    // 240px cards on a two-row grid (workspace y: 80 / 320, x: 380 / 680)
+    // so nothing overlaps on load. The store keeps its historical
+    // (80, 180) position — geometry tests pin the retail preset only.
     { id: 'store-1', type: 'store', name: 'Grand Bistro', subtitle: 'Main Branch', x: 80, y: 180, telemetryBadge: 'Online (3 Terminals)', telemetryStatus: 'online' },
-    { id: 'ws-1', type: 'workspace', name: 'Resto POS #1', subtitle: 'Dining Room', x: 340, y: 80, telemetryBadge: 'Active', telemetryStatus: 'online' },
-    { id: 'ws-kds', type: 'workspace', name: 'Kitchen KDS', subtitle: 'Line Cook Display', x: 340, y: 260, telemetryBadge: 'Active', telemetryStatus: 'online' },
-    { id: 'wh-kitchen', type: 'warehouse', name: 'Kitchen Pantry', subtitle: 'Cold & Dry Storage', x: 600, y: 180, telemetryBadge: '⚠️ 12 Low Stock', telemetryStatus: 'warning' },
-    { id: 'hw-prn', type: 'hardware', name: 'Kitchen Thermal Printer', subtitle: 'LAN 192.168.1.100', x: 600, y: 320, telemetryBadge: 'Ready', telemetryStatus: 'online' },
+    { id: 'ws-1', type: 'workspace', name: 'Resto POS #1', subtitle: 'Dining Room', x: 380, y: 80, metadata: { typeKey: 'restaurant-pos' }, telemetryBadge: 'Active', telemetryStatus: 'online' },
+    { id: 'ws-kds', type: 'workspace', name: 'Kitchen KDS', subtitle: 'Line Cook Display', x: 380, y: 320, metadata: { typeKey: 'kds' }, telemetryBadge: 'Active', telemetryStatus: 'online' },
+    { id: 'wh-kitchen', type: 'warehouse', name: 'Kitchen Pantry', subtitle: 'Cold & Dry Storage', x: 680, y: 80, telemetryBadge: '⚠️ 12 Low Stock', telemetryStatus: 'warning' },
+    { id: 'hw-prn', type: 'hardware', name: 'Kitchen Thermal Printer', subtitle: 'LAN 192.168.1.100', x: 680, y: 320, telemetryBadge: 'Ready', telemetryStatus: 'online' },
   ],
   wires: [
     // Left-to-right: store right → workspace left; then workspace right → warehouse/printer left
@@ -241,64 +272,10 @@ const PORT_OFFSET: Record<PortName, { dx: number; dy: number }> = {
   left:   { dx: 0,             dy: NODE_PORT_Y },
 };
 
-/** Ports exposed by the frontend-only UX. Top/bottom remain load-compatible. */
-function visiblePortsForNode(node: TopologyNodeData): PortName[] {
-  switch (node.type) {
-    case 'store':
-      return ['right'];
-    case 'workspace':
-    case 'warehouse':
-    case 'hardware':
-      return ['left', 'right'];
-    default:
-      return ['left', 'right'];
-  }
-}
-
-const TOPOLOGY_UI_FALLBACKS: Record<string, string> = {
-  'topology-port-location-out': 'Location Out',
-  'topology-port-location-in': 'Location In',
-  'topology-port-location-out-aria': 'Location Out port',
-  'topology-port-location-in-aria': 'Location In port',
-  'topology-port-workspace-out': 'Operational Out',
-  'topology-port-stock-in': 'Stock In',
-  'topology-port-stock-out': 'Stock Out',
-  'topology-port-ticket-in': 'Ticket In',
-  'topology-port-device-out': 'Device Out',
-  'topology-port-generic-in': 'Input',
-  'topology-port-generic-out': 'Output',
-  'topology-port-aria': 'Topology port',
-  'topology-field-name': 'Name',
-  'topology-field-name-aria': 'Edit name',
-  'topology-field-enabled': 'Enabled',
-  'topology-field-enabled-aria': 'Toggle enabled state',
-};
-
-/** Resolve topology chrome with a safe fallback so a stale or partial locale
- * bundle never exposes a Fluent message id in the node canvas. */
-function topologyUiString(
-  l10n: ReturnType<typeof useLocalization>['l10n'],
-  id: string,
-  vars?: Record<string, string>,
-): string {
-  return l10n.getString(id, vars ?? null, TOPOLOGY_UI_FALLBACKS[id] ?? id);
-}
-
-function portLabelId(node: TopologyNodeData, port: PortName): string {
-  if (node.type === 'store' && port === 'right') return 'topology-port-location-out';
-  if (node.type === 'workspace' && port === 'left') return 'topology-port-location-in';
-  if (node.type === 'workspace' && port === 'right') return 'topology-port-workspace-out';
-  if (node.type === 'warehouse' && port === 'left') return 'topology-port-stock-in';
-  if (node.type === 'warehouse' && port === 'right') return 'topology-port-stock-out';
-  if (node.type === 'hardware' && port === 'left') return 'topology-port-ticket-in';
-  if (node.type === 'hardware' && port === 'right') return 'topology-port-device-out';
-  return port === 'left' ? 'topology-port-generic-in' : 'topology-port-generic-out';
-}
-
-function portAriaLabelId(node: TopologyNodeData, port: PortName): string {
-  if (node.type === 'store' && port === 'right') return 'topology-port-location-out-aria';
-  if (node.type === 'workspace' && port === 'left') return 'topology-port-location-in-aria';
-  return 'topology-port-aria';
+/** Canvas-space dy (top edge) for a left port — all nodes share the rail
+ *  centerline now that stacked inputs are gone. */
+function leftPortDy(_node: TopologyNodeData, _variantIndex: number): number {
+  return NODE_PORT_Y;
 }
 
 /** Evaluate a cubic bezier at parameter t (0-1). */
@@ -327,7 +304,10 @@ export default function NodeTopologyEditor({
   onSave,
   workspaceInstances,
   branchLocations,
+  onRenameBranch,
+  onRenameWorkspace,
   allowLegacyApply = true,
+  branchToolbar,
 }: NodeTopologyEditorProps) {
   const { sessionToken } = useWorkspace();
   const { addToast } = useToast();
@@ -367,8 +347,9 @@ export default function NodeTopologyEditor({
 
   const [connectingFromNodeId, setConnectingFromNodeId] = useState<string | null>(null);
   const [connectingFromPort, setConnectingFromPort] = useState<PortName | null>(null);
+  const [connectingVariantIndex, setConnectingVariantIndex] = useState<number>(0);
   /** Nearest target port while dragging a connection, for snap-to-port preview. */
-  const [hoveredTarget, setHoveredTarget] = useState<{ nodeId: string; port: PortName } | null>(null);
+  const [hoveredTarget, setHoveredTarget] = useState<{ nodeId: string; port: PortName; variantIndex: number } | null>(null);
   const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const [history, setHistory] = useState<HistoryEntry[]>([]);
@@ -382,6 +363,14 @@ export default function NodeTopologyEditor({
 
   /** Skip the next workspaceInstances-triggered reload (set before calling onSave). */
   const skipNextLoadRef = useRef(false);
+  /** Previous prop identities — a branchLocations-only change (profile
+   *  renamed or added while the canvas holds in-flight edits) is a light
+   *  merge into the live canvas, NEVER a rebuild from the saved diagram: a
+   *  rebuild would silently discard unsaved drags and wires. Deletions are
+   *  intentionally not handled here — the full path also keeps saved store
+   *  nodes whose profile is gone. */
+  const prevBranchLocationsRef = useRef<BranchLocationSeed[] | undefined>(branchLocations);
+  const prevInstancesRef = useRef<WorkspaceInstanceSeed[] | undefined>(workspaceInstances);
   /**
    * Exact dirty tracking: the canvas as of the last Apply success, preset
    * load, or authoritative load. Dirty is DERIVED at preset-click time by
@@ -424,7 +413,6 @@ export default function NodeTopologyEditor({
       x1: number; y1: number; x2: number; y2: number;
       dx: number;
       pathD: string;
-      labelX: number; labelY: number;
     }>();
     for (const wire of wires) {
       const fromNode = nodeMap.get(wire.fromNodeId);
@@ -434,16 +422,20 @@ export default function NodeTopologyEditor({
       const toPort = wire.toPort ?? 'left';
       const fromOff = PORT_OFFSET[fromPort];
       const toOff = PORT_OFFSET[toPort];
+      // Wires targeting a left input resolve the vertical slot from their
+      // recorded toPortId ('location-in' | 'operation-in') so they terminate
+      // on the exact socket (inventory nodes stack two left inputs).
+      const toVariantIndex = toPort === 'left'
+        ? leftPortVariants(toNode).indexOf(wire.toPortId ?? 'location-in')
+        : 0;
       const x1 = fromNode.x + fromOff.dx;
       const y1 = fromNode.y + fromOff.dy;
       const x2 = toNode.x + toOff.dx;
-      const y2 = toNode.y + toOff.dy;
+      const y2 = toNode.y + (toPort === 'left' ? leftPortDy(toNode, Math.max(0, toVariantIndex)) : toOff.dy);
       const dx = Math.abs(x2 - x1) * 0.5;
       geo.set(wire.id, {
         x1, y1, x2, y2, dx,
         pathD: `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`,
-        labelX: cubicBezier(0.5, x1, x1 + dx, x2 - dx, x2),
-        labelY: cubicBezier(0.5, y1, y1, y2, y2),
       });
     }
     return geo;
@@ -460,6 +452,83 @@ export default function NodeTopologyEditor({
 
   // Load persisted topology on mount, fall back to retail preset.
   useEffect(() => {
+    // Branch locations changed but workspace instances did not: the parent
+    // renamed, added, or DELETED a store profile. Merge names into the
+    // existing store nodes, seed any new locations, and drop the cards (and
+    // wires) of deleted locations — a removed branch must leave the canvas
+    // cleanly instead of stranding an orphaned card. Positions, history, and
+    // every other in-flight edit stay untouched. The initial mount and
+    // instance-driven reloads take the full rebuild path below.
+    const prevLocations = prevBranchLocationsRef.current;
+    const prevInstances = prevInstancesRef.current;
+    prevBranchLocationsRef.current = branchLocations;
+    prevInstancesRef.current = workspaceInstances;
+    if (prevLocations !== branchLocations && prevInstances === workspaceInstances) {
+      // Store node ids equal location ids (seeding uses loc.id), so the
+      // removed set can be derived from the location delta alone and applied
+      // to BOTH the node and wire states in lockstep.
+      const locationIds = new Set((branchLocations ?? []).map((l) => l.id));
+      const removedLocationIds = new Set(
+        (prevLocations ?? []).map((l) => l.id).filter((id) => !locationIds.has(id)),
+      );
+      setNodes((prev) => {
+        const nameById = new Map((branchLocations ?? []).map((l) => [l.id, l.name]));
+        const next = prev
+          .filter((n) => !(n.type === 'store' && n.storeProfileId && !locationIds.has(n.storeProfileId)))
+          .map((n) => {
+            if (n.type !== 'store' || !n.storeProfileId) return n;
+            const name = nameById.get(n.storeProfileId);
+            return name !== undefined && name !== n.name ? { ...n, name } : n;
+          });
+        for (const loc of branchLocations ?? []) {
+          if (!next.some((n) => n.type === 'store' && n.storeProfileId === loc.id)) {
+            next.push({
+              id: loc.id,
+              type: 'store',
+              name: loc.name,
+              subtitle: 'Branch Location',
+              x: snap(80),
+              y: snap(140),
+              storeProfileId: loc.id,
+            });
+          }
+        }
+        return next;
+      });
+      // Wires to a removed branch card must go with it.
+      setWires((prev) =>
+        prev.filter((w) => !removedLocationIds.has(w.fromNodeId) && !removedLocationIds.has(w.toNodeId)),
+      );
+      if (removedLocationIds.size > 0) {
+        // A removed branch card may host an in-flight wire preview — cancel
+        // it like the rebuild path does, so no stale preview can complete.
+        setConnectingFromNodeId(null);
+        setConnectingFromPort(null);
+        setConnectingVariantIndex(0);
+        setHoveredTarget(null);
+      }
+      return;
+    }
+    // Workspace instances changed but the SET of instances is identical
+    // (same ids, same order) — the parent refreshed names after a card
+    // rename. Merge the new names into the live workspace nodes instead of
+    // rebuilding (a rebuild would discard unsaved drags/wires). Structural
+    // changes (create / archive / reorder) fall through to the full
+    // authoritative rebuild below, and the post-Apply skip guard keeps
+    // precedence so persisted-flag marking still runs.
+    const instancesSameIds =
+      prevInstances !== workspaceInstances
+      && (prevInstances?.length ?? 0) === (workspaceInstances?.length ?? 0)
+      && (prevInstances ?? []).every((i, idx) => (workspaceInstances?.[idx]?.instanceId ?? '') === i.instanceId);
+    if (instancesSameIds && !skipNextLoadRef.current) {
+      const nameById = new Map((workspaceInstances ?? []).map((i) => [i.instanceId, i.name]));
+      setNodes((prev) => prev.map((n) => {
+        if (n.type !== 'workspace') return n;
+        const name = nameById.get(n.id);
+        return name !== undefined && name !== n.name ? { ...n, name } : n;
+      }));
+      return;
+    }
     let cancelled = false;
     loadTopology()
       .then((data) => {
@@ -525,14 +594,35 @@ export default function NodeTopologyEditor({
           // inventing a primary/default store relationship.
           const otherNodes = [...savedById.values()]
             .filter((n) => n.type !== 'workspace')
-            .map((node) => {
-              // Never recover Branch Location identity from a display name.
-              // Legacy nodes without storeProfileId remain unresolved and
-              // are blocked by the strict Apply validator until migrated.
-              if (node.type === 'store' && node.storeProfileId === undefined) {
-                return node;
+            .filter((n) => {
+              // Drop legacy store nodes that carry no storeProfileId when a
+              // real branch location exists: the seeded canonical store is
+              // authoritative, and keeping the unresolved copy would stack a
+              // duplicate Branch Location card over the seeded one (the
+              // strict Apply validator blocks it anyway). Without branch
+              // locations there is nothing to own the graph — keep it as-is
+              // so the legacy diagram still renders.
+              return !(n.type === 'store' && n.storeProfileId === undefined && (branchLocations?.length ?? 0) > 0);
+            })
+            .filter((n) => {
+              // A deleted store profile leaves its Branch Location card (and
+              // wires) behind: when locations are supplied, drop saved store
+              // nodes whose branch no longer exists so a removed branch
+              // leaves the canvas cleanly. Wires to a dropped node are
+              // filtered below by validIds.
+              if (branchLocations === undefined) return true;
+              if (n.type === 'store' && n.storeProfileId) {
+                return (branchLocations ?? []).some((l) => l.id === n.storeProfileId);
               }
-              return node;
+              return true;
+            })
+            // The store profile is the source of truth for a branch's name —
+            // refresh saved store nodes from the live location list so a
+            // rename reaches the card immediately, not on the next Apply.
+            .map((n) => {
+              if (n.type !== 'store' || !n.storeProfileId) return n;
+              const location = (branchLocations ?? []).find((l) => l.id === n.storeProfileId);
+              return location ? { ...n, name: location.name } : n;
             });
           const seededStoreIds = new Set(
             otherNodes.flatMap((node) => node.type === 'store' && node.storeProfileId ? [node.storeProfileId] : []),
@@ -559,7 +649,11 @@ export default function NodeTopologyEditor({
                 id: w.id,
                 fromNodeId: w.from_node_id,
                 toNodeId: w.to_node_id,
-                direction: w.direction as WireDirection,
+                // Same closed-union discipline as the semantic contract: a
+                // corrupt stored direction folds to a legal value here so
+                // the editor model (and the Apply round-trip) never carries
+                // garbage that would render wrong markers.
+                direction: normalizeWireDirection(w.direction),
               };
               if (w.label !== undefined) wire.label = w.label;
               if (w.from_port != null) wire.fromPort = normalizeVisualPort(w.from_port, 'right');
@@ -580,6 +674,7 @@ export default function NodeTopologyEditor({
           // so a later port click cannot complete a wire from a stale source.
           setConnectingFromNodeId(null);
           setConnectingFromPort(null);
+      setConnectingVariantIndex(0);
           setHoveredTarget(null);
           // A reloaded node with a surviving id must start a fresh inspector
           // edit session, or its next edit would silently skip pushHistory.
@@ -598,7 +693,11 @@ export default function NodeTopologyEditor({
             id: w.id,
             fromNodeId: w.from_node_id,
             toNodeId: w.to_node_id,
-            direction: w.direction as WireDirection,
+            // Same closed-union discipline as the semantic contract: a
+            // corrupt stored direction folds to a legal value here so
+            // the editor model (and the Apply round-trip) never carries
+            // garbage that would render wrong markers.
+            direction: normalizeWireDirection(w.direction),
           };
           if (w.label !== undefined) wire.label = w.label;
           if (w.from_port != null) wire.fromPort = normalizeVisualPort(w.from_port, 'right');
@@ -615,6 +714,7 @@ export default function NodeTopologyEditor({
         // Same rule as preset loads: cancel any in-flight port connection.
         setConnectingFromNodeId(null);
         setConnectingFromPort(null);
+      setConnectingVariantIndex(0);
         setHoveredTarget(null);
         // A reloaded node with a surviving id must start a fresh inspector
         // edit session, or its next edit would silently skip pushHistory.
@@ -635,6 +735,85 @@ export default function NodeTopologyEditor({
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceInstances, branchLocations]);
+
+  // ── Inline node rename on the card (Branch Location + workspace) ──
+  const [renamingNodeId, setRenamingNodeId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const [renameSaving, setRenameSaving] = useState(false);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  /** Guards the blur-commit against a concurrent Escape/close. */
+  const renameCancelledRef = useRef(false);
+  /** Focus target when the rename form closes: the node id for keyboard
+   *  closes (Enter/Escape), null for blur-commits — a click-away must not
+   *  steal focus back from wherever the user actually clicked. */
+  const renameFocusReturnRef = useRef<string | null>(null);
+
+  // Move keyboard focus into the card's rename input the moment it opens
+  // (autoFocus is banned by jsx-a11y/no-autofocus).
+  useEffect(() => {
+    if (renamingNodeId) renameInputRef.current?.focus();
+  }, [renamingNodeId]);
+
+  // Return focus to the node card after a keyboard-driven close, so the
+  // keyboard user lands back on the node they just renamed instead of the
+  // canvas body.
+  useEffect(() => {
+    if (renamingNodeId !== null) return;
+    const nodeId = renameFocusReturnRef.current;
+    if (nodeId === null) return;
+    renameFocusReturnRef.current = null;
+    (document.querySelector(`.topology-node[data-node-id="${nodeId}"]`) as HTMLElement | null)?.focus();
+  }, [renamingNodeId]);
+
+  const startNodeRename = (nodeId: string, currentName: string) => {
+    renameCancelledRef.current = false;
+    renameFocusReturnRef.current = null;
+    setRenameDraft(currentName);
+    setRenamingNodeId(nodeId);
+  };
+
+  const cancelNodeRename = () => {
+    renameCancelledRef.current = true;
+    // Escape is a keyboard close — return focus to the card.
+    renameFocusReturnRef.current = renamingNodeId;
+    setRenamingNodeId(null);
+    setRenameDraft('');
+  };
+
+  const commitNodeRename = async (nodeId: string, fromKeyboard = false) => {
+    if (renameSaving || renameCancelledRef.current) return;
+    const node = nodes.find((n) => n.id === nodeId);
+    const name = renameDraft.trim();
+    // Empty or unchanged input is a no-op: close the form silently rather
+    // than round-tripping a redundant update. A false return from the
+    // parent is reserved for genuine errors (it toasts and we keep the
+    // draft open for a retry).
+    if (!node || !name || name === node.name) {
+      renameCancelledRef.current = true;
+      renameFocusReturnRef.current = fromKeyboard ? nodeId : null;
+      setRenamingNodeId(null);
+      setRenameDraft('');
+      return;
+    }
+    setRenameSaving(true);
+    try {
+      const persist = node.type === 'store' ? onRenameBranch : onRenameWorkspace;
+      const ok = await persist?.(nodeId, name);
+      if (ok !== false) {
+        // Belt & suspenders: reflect the new name locally AND let the seed
+        // refresh (profile / instance is authoritative) confirm it on the
+        // next reload.
+        setNodes((prev) => prev.map((n) => (n.id === nodeId ? { ...n, name } : n)));
+        renameCancelledRef.current = true;
+        renameFocusReturnRef.current = fromKeyboard ? nodeId : null;
+        setRenamingNodeId(null);
+        setRenameDraft('');
+      }
+      // ok === false → parent toasts; keep the draft open for a retry.
+    } finally {
+      setRenameSaving(false);
+    }
+  };
 
   const pushHistory = useCallback(() => {
     // Dirty is derived (isCanvasDirty compares against appliedSnapshotRef),
@@ -693,6 +872,7 @@ export default function NodeTopologyEditor({
     // source could otherwise survive and mis-wire the new canvas).
     setConnectingFromNodeId(null);
     setConnectingFromPort(null);
+    setConnectingVariantIndex(0);
     setHoveredTarget(null);
     // Same canvas-replacement rule: the simulation pulse animates the OLD
     // wire geometry, so stop it — a pulse must never animate a "test order"
@@ -815,6 +995,7 @@ export default function NodeTopologyEditor({
       if (e.key === 'Escape') {
         setConnectingFromNodeId(null);
         setConnectingFromPort(null);
+      setConnectingVariantIndex(0);
         setSelectedNodeId(null);
         setSelectedWireId(null);
         return;
@@ -921,6 +1102,7 @@ export default function NodeTopologyEditor({
         ) {
           setConnectingFromNodeId(null);
           setConnectingFromPort(null);
+      setConnectingVariantIndex(0);
         }
         pushHistory();
         setWires((prev) => prev.filter((w) => w.id !== selectedWireId));
@@ -1028,20 +1210,27 @@ export default function NodeTopologyEditor({
       const mx = (e.clientX - rect.left - pan.x) / zoom;
       const my = (e.clientY - rect.top - pan.y) / zoom;
       const SNAP_DIST = 30;
-      let closest: { nodeId: string; port: PortName; dist: number } | null = null;
+      let closest: { nodeId: string; port: PortName; variantIndex: number; dist: number } | null = null;
       for (const n of nodes) {
         if (n.id === connectingFromNodeId) continue;
-        for (const p of ['left', 'right'] as PortName[]) {
-          const off = PORT_OFFSET[p];
-          const px = n.x + off.dx;
-          const py = n.y + off.dy;
+    // Snap candidates mirror the visible sockets: one left input per node
+    // plus a single right output (stores expose output only).
+    const candidates: Array<{ port: PortName; variantIndex: number; off: { dx: number; dy: number } }> = [
+      { port: 'left', variantIndex: 0, off: { dx: PORT_OFFSET.left.dx, dy: leftPortDy(n, 0) } },
+    ];
+    if (n.type !== 'store') {
+      candidates.push({ port: 'right', variantIndex: 0, off: PORT_OFFSET.right });
+    }
+        for (const c of candidates) {
+          const px = n.x + c.off.dx;
+          const py = n.y + c.off.dy;
           const dist = Math.sqrt((mx - px) ** 2 + (my - py) ** 2);
           if (dist < SNAP_DIST && (!closest || dist < closest.dist)) {
-            closest = { nodeId: n.id, port: p, dist };
+            closest = { nodeId: n.id, port: c.port, variantIndex: c.variantIndex, dist };
           }
         }
       }
-      setHoveredTarget(closest ? { nodeId: closest.nodeId, port: closest.port } : null);
+      setHoveredTarget(closest ? { nodeId: closest.nodeId, port: closest.port, variantIndex: closest.variantIndex } : null);
     }
   };
 
@@ -1148,15 +1337,7 @@ export default function NodeTopologyEditor({
     port === 'left' ? 'input' : 'output'
   ), []);
 
-  const semanticPortId = useCallback((node: TopologyNodeData, port: PortName): string | undefined => {
-    // Socket placement is presentation. These explicit mappings are the only
-    // bridge from a rendered socket to the first-slice semantic contract.
-    if (node.type === 'store' && port === 'right') return 'location-out';
-    if (node.type === 'workspace' && port === 'left') return 'location-in';
-    return undefined;
-  }, []);
-
-  const isPortCompatible = useCallback((nodeId: string, port: PortName): boolean => {
+  const isPortCompatible = useCallback((nodeId: string, port: PortName, variantIndex = 0): boolean => {
     if (!connectingFromNodeId || !connectingFromPort) return false;
     if (nodeId === connectingFromNodeId) return false;
     if (portDirection(port) !== 'input') return false;
@@ -1166,13 +1347,15 @@ export default function NodeTopologyEditor({
     // Compatibility is decided by semantic port IDs, not by the visual edge
     // names. Uncontracted legacy sockets remain authorable for compatibility,
     // but the location relationship is strict and typed.
-    const sourcePortId = semanticPortId(source, connectingFromPort);
-    const targetPortId = semanticPortId(target, port);
-    if (sourcePortId === 'location-out') return targetPortId === 'location-in';
+    const sourcePortId = semanticPortIdForNode(source, connectingFromPort);
+    const targetPortId = semanticPortIdForNode(target, port, variantIndex);
+    // Inventory's flexible input accepts BOTH semantics (a store's Location
+    // feed or a POS/inventory's Operation feed), so either is compatible.
+    if (sourcePortId === 'location-out') return targetPortId === 'location-in' || targetPortId === 'operation-in';
     return true;
-  }, [connectingFromNodeId, connectingFromPort, nodeMap, portDirection, semanticPortId]);
+  }, [connectingFromNodeId, connectingFromPort, nodeMap, portDirection]);
 
-  const handlePortClick = (e: React.MouseEvent, nodeId: string, port: PortName) => {
+  const handlePortClick = (e: React.MouseEvent, nodeId: string, port: PortName, variantIndex = 0) => {
     e.stopPropagation();
 
     if (!connectingFromNodeId) {
@@ -1182,25 +1365,33 @@ export default function NodeTopologyEditor({
       }
       setConnectingFromNodeId(nodeId);
       setConnectingFromPort(port);
+      setConnectingVariantIndex(variantIndex);
       return;
     }
 
     if (connectingFromNodeId === nodeId) {
       setConnectingFromNodeId(null);
       setConnectingFromPort(null);
+      setConnectingVariantIndex(0);
       return;
     }
 
-    if (!isPortCompatible(nodeId, port)) {
+    if (!isPortCompatible(nodeId, port, variantIndex)) {
       addToast({ message: l10n.getString('topology-validation-invalid-location'), type: 'warning' });
       setConnectingFromNodeId(null);
       setConnectingFromPort(null);
+      setConnectingVariantIndex(0);
       return;
     }
 
     const fromNode = nodeMap.get(connectingFromNodeId);
     const toNode = nodeMap.get(nodeId);
-    if (!fromNode || !toNode) { setConnectingFromNodeId(null); setConnectingFromPort(null); return; }
+    if (!fromNode || !toNode) {
+      setConnectingFromNodeId(null);
+      setConnectingFromPort(null);
+      setConnectingVariantIndex(0);
+      return;
+    }
 
     // Ports are normalized to the same defaults the renderer uses
     // (fromPort ?? 'right', toPort ?? 'left') because wires loaded from the
@@ -1208,10 +1399,15 @@ export default function NodeTopologyEditor({
     // as None). Comparing raw values against named ports would let a
     // loaded wire that renders right→left escape duplicate detection,
     // silently creating a second overlapping connection.
+    // The forward branch also compares toPortId so the two inventory left
+    // slots count as distinct connections. The reverse branch compares port
+    // names only — acceptable because left inputs are never sources (inven-
+    // tory exposes no output), so no false duplicate can arise today.
     const duplicate = wires.some(
       (w) =>
         (w.fromNodeId === connectingFromNodeId && w.toNodeId === nodeId
-          && (w.fromPort ?? 'right') === connectingFromPort && (w.toPort ?? 'left') === port)
+          && (w.fromPort ?? 'right') === connectingFromPort && (w.toPort ?? 'left') === port
+          && (w.toPortId ?? 'location-in') === (semanticPortIdForNode(toNode, port, variantIndex) ?? 'location-in'))
         || (w.fromNodeId === nodeId && w.toNodeId === connectingFromNodeId
           && (w.fromPort ?? 'right') === port && (w.toPort ?? 'left') === connectingFromPort),
     );
@@ -1219,6 +1415,7 @@ export default function NodeTopologyEditor({
       addToast({ message: l10n.getString('topology-toast-wire-duplicate'), type: 'warning' });
       setConnectingFromNodeId(null);
       setConnectingFromPort(null);
+      setConnectingVariantIndex(0);
       return;
     }
 
@@ -1234,6 +1431,7 @@ export default function NodeTopologyEditor({
       addToast({ message: l10n.getString('topology-toast-fallback-warehouse'), type: 'warning' });
       setConnectingFromNodeId(null);
       setConnectingFromPort(null);
+      setConnectingVariantIndex(0);
       return;
     }
 
@@ -1246,8 +1444,12 @@ export default function NodeTopologyEditor({
         : l10n.getString('topology-wire-label-fallback', { priority })
       : l10n.getString('topology-wire-label-connected');
 
-    const semanticOwnership = semanticPortId(fromNode, connectingFromPort!) === 'location-out'
-      && semanticPortId(toNode, port) === 'location-in';
+    const sourcePortId = semanticPortIdForNode(fromNode, connectingFromPort!);
+    // Inventory's single input is flexible: the wire records the semantic it
+    // carries (location-in | operation-in) via toPortId, defaulting to the
+    // location feed when clicked from a store output.
+    const targetVariantIndex = port === 'left' && isInventoryNode(toNode) ? connectingVariantIndex : 0;
+    const targetPortId = semanticPortIdForNode(toNode, port, targetVariantIndex) ?? (port === 'left' ? 'location-in' : undefined);
     setWires((prev) => [
       ...prev,
       {
@@ -1258,23 +1460,27 @@ export default function NodeTopologyEditor({
         toPort: port,
         direction: 'one-way',
         label,
-        ...(semanticOwnership
-          ? { fromPortId: 'location-out', toPortId: 'location-in', relationshipType: 'location' as const }
+        ...(sourcePortId === 'location-out' && targetPortId
+          ? { fromPortId: sourcePortId, toPortId: targetPortId, relationshipType: 'location' as const }
           : {}),
       },
     ]);
     setConnectingFromNodeId(null);
     setConnectingFromPort(null);
+      setConnectingVariantIndex(0);
   };
 
-  const handleToggleWireDirection = (wireId: string) => {
+  /** Cycle a wire's visual flow: one-way → reverse → two-way → one-way.
+   *  Clicking the wire itself is the affordance; the from/to ownership is
+   *  untouched (only the arrow presentation changes). */
+  const handleCycleWireDirection = (wireId: string) => {
     pushHistory();
     setWires((prev) =>
       prev.map((w) => {
-        if (w.id === wireId) {
-          return { ...w, direction: w.direction === 'one-way' ? 'two-way' : 'one-way' };
-        }
-        return w;
+        if (w.id !== wireId) return w;
+        const current = w.direction === 'reverse' || w.direction === 'two-way' ? w.direction : 'one-way';
+        const next = WIRE_DIRECTION_CYCLE[(WIRE_DIRECTION_CYCLE.indexOf(current) + 1) % WIRE_DIRECTION_CYCLE.length]!;
+        return { ...w, direction: next };
       }),
     );
   };
@@ -1310,8 +1516,9 @@ export default function NodeTopologyEditor({
       const targetNode = nodes.find((n) => n.id === hoveredTarget.nodeId);
       if (targetNode) {
         const targetOff = PORT_OFFSET[hoveredTarget.port];
+        const targetDy = hoveredTarget.port === 'left' ? leftPortDy(targetNode, hoveredTarget.variantIndex) : targetOff.dy;
         mx = targetNode.x + targetOff.dx;
-        my = targetNode.y + targetOff.dy;
+        my = targetNode.y + targetDy;
       } else {
         const canvas = canvasRef.current;
         if (!canvas) return null;
@@ -1335,7 +1542,9 @@ export default function NodeTopologyEditor({
 
   // ── Workspace card adapter (ADR #22 Phase 2) ────────────────
 
-  /** Map a workspace node's typeKey to the correct settings card. */
+  /** Map a workspace node's typeKey to the correct settings card. The
+   *  per-type card registry lives in topologyCard.ts — adding a workspace
+   *  type with its own card is a one-line change there. */
   const renderWorkspaceCard = useCallback((node: TopologyNodeData) => {
     const typeKey = (node.metadata?.['typeKey'] as string) ?? 'store-pos';
     const cardProps: WorkspaceCardProps = {
@@ -1343,15 +1552,8 @@ export default function NodeTopologyEditor({
       terminalId: node.id,
       ...(sessionToken ? { sessionToken } : {}),
     };
-
-    switch (typeKey) {
-      case 'restaurant-pos':
-        return <WorkspaceRestaurantPosSettings key={node.id} {...cardProps} />;
-      case 'kds':
-        return <WorkspaceKdsSettings key={node.id} {...cardProps} />;
-      default:
-        return <WorkspaceStorePosSettings key={node.id} {...cardProps} />;
-    }
+    const Card = settingsCardForTypeKey(typeKey);
+    return <Card key={node.id} {...cardProps} />;
   }, [sessionToken]);
 
   // ── Live telemetry (ADR #22 Phase 2) ─────────────────────────
@@ -1372,10 +1574,12 @@ export default function NodeTopologyEditor({
       };
     }
     if (node.type === 'warehouse') {
-      // Inventory settings are not yet wired into SettingsContext.
-      // When the inventory scope is added (Phase 3+), update this to
-      // show live low-stock counts from settings.inventory.
-      return { badge: 'Inventory: n/a', status: 'online' };
+      // Inventory settings are not yet wired into SettingsContext, so there
+      // is no real status to badge yet. Returning null keeps the header clean
+      // instead of shipping a placeholder chip that reads as "unfinished".
+      // When the inventory scope is added (Phase 3+), show live low-stock
+      // counts from settings.inventory here.
+      return null;
     }
     return node.telemetryBadge
       ? { badge: node.telemetryBadge, status: node.telemetryStatus ?? 'online' }
@@ -1418,16 +1622,18 @@ export default function NodeTopologyEditor({
       )}
 
       <div className="node-topology-header">
-        <div className="node-topology-header-title">
-          <Localized id="topology-builder-title">
-            <h2>Visual Store & Workspace Topology Builder</h2>
+        {/* Visually-hidden heading keeps the topology screen's heading
+            hierarchy (h2 → h3 Palette Tools) intact for assistive tech
+            without occupying header space. */}
+        <Localized id="topology-builder-title">
+          <h2 className="sr-only">Visual Store & Workspace Topology Builder</h2>
+        </Localized>
+        {branchToolbar}
+        <span className={`topology-tier-badge tier-${currentTier}`}>
+          <Localized id="topology-tier-suffix" vars={{ tier: currentTier.toUpperCase() }}>
+            <span>{currentTier.toUpperCase()} TIER</span>
           </Localized>
-          <span className={`topology-tier-badge tier-${currentTier}`}>
-            <Localized id="topology-tier-suffix" vars={{ tier: currentTier.toUpperCase() }}>
-              <span>{currentTier.toUpperCase()} TIER</span>
-            </Localized>
-          </span>
-        </div>
+        </span>
 
         <div className="node-topology-header-actions">
           <Button
@@ -1667,25 +1873,51 @@ export default function NodeTopologyEditor({
                 const geo = wireGeometries.get(wire.id);
                 if (!geo) return null;
 
-                const { x1, y1, x2, y2, dx, pathD, labelX: lx, labelY: ly } = geo;
+                const { x1, y1, x2, y2, dx, pathD } = geo;
                 // Pulse follows the cubic bezier curve, not a straight line
                 const t = simPulseStep / 100;
                 const pulseX = cubicBezier(t, x1, x1 + dx, x2 - dx, x2);
                 const pulseY = cubicBezier(t, y1, y1, y2, y2);
 
                 const isSelected = selectedWireId === wire.id;
+                // Native SVG tooltip: the wire's label surfaces on hover
+                // instead of a permanent canvas pill.
+                const wireTooltip = [
+                  (wire.label || '').trim(),
+                  l10n.getString('topology-wire-toggle-hint'),
+                ].filter(Boolean).join(' — ');
 
                 return (
                   <g key={wire.id} className={`wire-group ${isSelected ? 'wire-selected' : ''}`}>
                     <path
                       d={pathD}
                       className="wire-hitbox"
+                      role="button"
+                      tabIndex={0}
+                      aria-label={l10n.getString('topology-wire-toggle-aria')}
                       onClick={(e) => {
                         e.stopPropagation();
+                        // Clicking a wire selects it AND cycles its flow
+                        // direction — the whole wire is the affordance now
+                        // (no separate label pill).
                         setSelectedWireId(wire.id);
                         setSelectedNodeId(null);
+                        handleCycleWireDirection(wire.id);
                       }}
-                    />
+                      onKeyDown={(e) => {
+                        // Keyboard parity: Enter/Space cycle the direction
+                        // exactly like a click (and select the wire).
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setSelectedWireId(wire.id);
+                          setSelectedNodeId(null);
+                          handleCycleWireDirection(wire.id);
+                        }
+                      }}
+                    >
+                      <title>{wireTooltip}</title>
+                    </path>
 
                     {/* Explicit endpoint dot ensures the wire always starts
                         exactly at the port socket center, regardless of SVG
@@ -1695,27 +1927,16 @@ export default function NodeTopologyEditor({
                     <path
                       d={pathD}
                       className={`wire-path ${wire.direction}`}
-                      markerEnd="url(#arrow-end)"
-                      markerStart={wire.direction === 'two-way' ? 'url(#arrow-start)' : undefined}
+                      data-direction={wire.direction}
+                      markerEnd={wire.direction === 'reverse' ? undefined : 'url(#arrow-end)'}
+                      markerStart={
+                        wire.direction === 'reverse'
+                          ? 'url(#arrow-start)'
+                          : wire.direction === 'two-way'
+                            ? 'url(#arrow-start)'
+                            : undefined
+                      }
                     />
-
-                    <g
-                      transform={`translate(${lx}, ${ly})`}
-                      className={`wire-label-group${connectingFromNodeId ? ' wire-label-group-connecting' : ''}`}
-                      onClick={(e) => { e.stopPropagation(); handleToggleWireDirection(wire.id); }}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); handleToggleWireDirection(wire.id); } }}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={l10n.getString('topology-wire-toggle-aria')}
-                    >
-                      {connectingFromNodeId && (
-                        <title>{l10n.getString('topology-wire-flip-hint-connecting')}</title>
-                      )}
-                      <rect x="-55" y="-12" width="110" height="24" rx="12" className="wire-label-bg" />
-                      <text x="0" y="4" textAnchor="middle" className="wire-label-text">
-                        {wire.direction === 'two-way' ? '\u2194' : '\u2192'} {wire.label || ''}
-                      </text>
-                    </g>
 
                     {isSimulating && <SimulationPulse x={pulseX} y={pulseY} />}
                   </g>
@@ -1730,10 +1951,15 @@ export default function NodeTopologyEditor({
             {nodes.map((node) => {
               const isSelected = selectedNodeId === node.id;
               const isConnectingSource = connectingFromNodeId === node.id;
+              // Branch Location and workspace cards get the inline rename
+              // pencil (persisting via their respective update paths);
+              // warehouse/hardware nodes have no record to rename.
+              const isRenameable = (node.type === 'store' && !!onRenameBranch) || (node.type === 'workspace' && !!onRenameWorkspace);
 
               return (
                 <div
                   key={node.id}
+                  data-node-id={node.id}
                   className={`topology-node node-type-${node.type} ${isSelected ? 'node-selected' : ''} ${isConnectingSource ? 'node-connecting-source' : ''}${freshNodeIds.has(node.id) ? ' node-fresh' : ''}`}
                   style={{ left: `${node.x}px`, top: `${node.y}px` }}
                   role="group"
@@ -1759,10 +1985,49 @@ export default function NodeTopologyEditor({
                     </span>
                     <div className="node-title-wrapper">
                       <span className="node-type-icon">
-                        {node.type === 'store' ? <StoreIcon size={16} /> : node.type === 'workspace' ? <PosIcon size={16} /> : node.type === 'warehouse' ? <WarehouseIcon size={16} /> : <PrinterIcon size={16} />}
+                        {(() => { const Icon = NODE_TYPE_ICON[node.type]; return <Icon size={16} />; })()}
                       </span>
-                      <span className="node-title">{node.name}</span>
+                      {isRenameable && renamingNodeId === node.id ? (
+                        <input
+                          ref={renameInputRef}
+                          className="node-card-rename-input"
+                          value={renameDraft}
+                          onChange={(e) => setRenameDraft(e.target.value)}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') { e.preventDefault(); void commitNodeRename(node.id, true); }
+                            if (e.key === 'Escape') { e.preventDefault(); cancelNodeRename(); }
+                          }}
+                          onBlur={() => void commitNodeRename(node.id)}
+                          aria-label={topologyUiString(l10n, node.type === 'store' ? 'topology-branch-rename-placeholder' : 'topology-workspace-rename-placeholder')}
+                        />
+                      ) : (
+                        <span className="node-title">{node.name}</span>
+                      )}
+                      {isRenameable && renamingNodeId !== node.id && (
+                        <button
+                          type="button"
+                          className="node-card-rename-btn"
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={() => startNodeRename(node.id, node.name)}
+                          aria-label={topologyUiString(l10n, node.type === 'store' ? 'topology-branch-rename-label' : 'topology-workspace-rename-label')}
+                          title={topologyUiString(l10n, node.type === 'store' ? 'topology-branch-rename-label' : 'topology-workspace-rename-label')}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                          </svg>
+                        </button>
+                      )}
                     </div>
+                    {(() => {
+                      const telemetry = getTelemetry(node);
+                      if (!telemetry) return null;
+                      return (
+                        <span className={`node-telemetry-badge telemetry-${telemetry.status}`} aria-hidden="true">
+                          {telemetry.badge}
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   <div className="node-body">
@@ -1805,21 +2070,6 @@ export default function NodeTopologyEditor({
                         />
                       </label>
                     )}
-                    {(() => {
-                      const telemetry = getTelemetry(node);
-                      if (!telemetry) {
-                        return node.telemetryBadge ? (
-                          <span className={`node-telemetry-badge telemetry-${node.telemetryStatus || 'online'}`}>
-                            {node.telemetryBadge}
-                          </span>
-                        ) : null;
-                      }
-                      return (
-                        <span className={`node-telemetry-badge telemetry-${telemetry.status}`}>
-                          {telemetry.badge}
-                        </span>
-                      );
-                    })()}
                   </div>
 
                   <div className="node-port-sockets-group">
@@ -1828,6 +2078,15 @@ export default function NodeTopologyEditor({
                       const isHovered = hoveredTarget?.nodeId === node.id && hoveredTarget?.port === port;
                       const compatible = isPortCompatible(node.id, port);
                       const showHighlight = connectingFromNodeId && connectingFromNodeId !== node.id && isHovered;
+                      // Inventory's single input is flexible: its label follows
+                      // the wire actually attached ('location-in' → Location,
+                      // 'operation-in' → Operation, nothing → Input).
+                      const connectedPortId = port === 'left'
+                        ? wires.find((w) => w.toNodeId === node.id && (w.toPort ?? 'left') === 'left')?.toPortId
+                        : undefined;
+                      const labelId = port === 'left'
+                        ? leftPortLabelId(node, 0, connectedPortId)
+                        : portLabelId(node, port);
                       return (
                         <button
                           key={port}
@@ -1838,11 +2097,11 @@ export default function NodeTopologyEditor({
                             portAriaLabelId(node, port),
                             { name: node.name || '', port },
                           )}
-                          title={topologyUiString(l10n, portLabelId(node, port))}
+                          title={topologyUiString(l10n, labelId)}
 
                         >
                           <span className={`node-port-label node-port-label-${port}`}>
-                            {topologyUiString(l10n, portLabelId(node, port))}
+                            {topologyUiString(l10n, labelId)}
                           </span>
                         </button>
                       );
@@ -1956,7 +2215,7 @@ export default function NodeTopologyEditor({
                   >
                     {WORKSPACE_TYPE_KEYS.filter((k) => k !== 'warehouse').map((k) => (
                       <option key={k} value={k}>
-                        {getWorkspaceTypeLabel(k, l10n)}
+                        {workspaceTypeLabel(k, (id, vars) => topologyUiString(l10n, id, vars ?? null))}
                       </option>
                     ))}
                   </select>

@@ -17,6 +17,8 @@ export interface TopologyNodePayload {
   telemetry_badge?: string;
   telemetry_status?: string;
   metadata?: Record<string, unknown>;
+  /** Canonical store_profiles.id for a Branch Location node. */
+  store_profile_id?: string;
 }
 
 /** A wire connecting two port sockets. */
@@ -28,10 +30,18 @@ export interface TopologyWirePayload {
   label?: string;
   from_port?: string;
   to_port?: string;
+  /** Semantic source port ID; geometric anchors remain presentation data. */
+  from_port_id?: string;
+  /** Semantic target port ID; geometric anchors remain presentation data. */
+  to_port_id?: string;
+  /** Closed semantic relationship type. */
+  relationship_type?: string;
 }
 
 /** Complete topology graph persisted to the backend. */
 export interface TopologyData {
+  /** Version of the semantic graph envelope. Legacy payloads omit this. */
+  schema_version?: number;
   nodes: TopologyNodePayload[];
   wires: TopologyWirePayload[];
 }
@@ -60,6 +70,8 @@ export interface CreateInstanceRequest {
   type_key: string;
   store_id: string;
   name: string;
+  /** Controlled business purpose; independent from type and display label. */
+  purpose_key?: string;
   description?: string;
   colour?: string;
 }
@@ -68,6 +80,7 @@ export interface CreateInstanceRequest {
 export interface UpdateInstanceRequest {
   id: string;
   name: string;
+  purpose_key?: string;
 }
 
 /**

@@ -30,6 +30,7 @@ const FALLBACK_WORKSPACES: WorkspaceDto[] = [
     type_key: "restaurant-pos",
     store_id: "default",
     store_name: "Main Store",
+    purpose_key: "general",
     name: "Restaurant POS",
     description:
       "Cashier terminal for restaurant ordering with menu categories and table management",
@@ -43,6 +44,7 @@ const FALLBACK_WORKSPACES: WorkspaceDto[] = [
     type_key: "store-pos",
     store_id: "default",
     store_name: "Main Store",
+    purpose_key: "general",
     name: "Store POS",
     description:
       "Cashier terminal for retail with product lookup, customer management, and loyalty",
@@ -56,6 +58,7 @@ const FALLBACK_WORKSPACES: WorkspaceDto[] = [
     type_key: "kds",
     store_id: "default",
     store_name: "Main Store",
+    purpose_key: "general",
     name: "Kitchen Display",
     description:
       "Order queue display for the kitchen — tap tickets to advance their status",
@@ -69,6 +72,7 @@ const FALLBACK_WORKSPACES: WorkspaceDto[] = [
     type_key: "inventory",
     store_id: "default",
     store_name: "Main Store",
+    purpose_key: "stock-control",
     name: "Inventory Management",
     description:
       "Manage products, stock levels, bundles, categories, and inventory reports",
@@ -82,6 +86,7 @@ const FALLBACK_WORKSPACES: WorkspaceDto[] = [
     type_key: "admin",
     store_id: "default",
     store_name: "Main Store",
+    purpose_key: "general",
     name: "Admin",
     description:
       "System settings, staff management, reports, audit logs, and configuration",

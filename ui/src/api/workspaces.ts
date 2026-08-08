@@ -11,6 +11,8 @@ export interface WorkspaceDto {
   type_key: string;
   store_id: string;
   store_name: string;
+  /** Controlled business purpose, independent from type, label, and access policy. */
+  purpose_key: string;
   name: string;
   description: string;
   icon: string;
@@ -31,6 +33,8 @@ export interface CreateInstanceRequest {
   type_key: string;
   store_id: string;
   name: string;
+  /** Controlled business purpose; omitted by legacy callers and defaults to `general`. */
+  purpose_key?: string;
   description?: string;
   colour?: string;
 }

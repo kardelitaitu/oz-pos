@@ -1,8 +1,8 @@
 import { useState, type ComponentProps } from 'react';
-import { screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
-import NodeTopologyEditor, { type WorkspaceInstanceSeed } from '../features/stores/NodeTopologyEditor';
+import NodeTopologyEditor, { type WorkspaceInstanceSeed, type BranchLocationSeed } from '../features/stores/NodeTopologyEditor';
 import {
   clampNodeToViewport,
   NODE_HEIGHT,
@@ -58,15 +58,16 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-ws-type-store-pos': 'Retail POS',
   'topology-ws-type-restaurant-pos': 'Restaurant POS',
   'topology-ws-type-kds': 'Kitchen Display (KDS)',
+  'topology-port-operation-in': 'Operation',
   'topology-ws-type-warehouse': 'Warehouse',
-  'topology-port-location-out': 'Location Out',
-  'topology-port-location-in': 'Location In',
-  'topology-port-location-out-aria': 'Location Out port',
-  'topology-port-location-in-aria': 'Location In port',
+  'topology-port-location-out': 'Location',
+  'topology-port-location-in': 'Location',
+  'topology-port-location-out-aria': 'Location port',
+  'topology-port-location-in-aria': 'Location port',
   'topology-port-aria': 'Topology port',
   'topology-wire-flip-hint-connecting':
     'Flip direction? Clicking keeps your connection in progress.',
-  'topology-port-workspace-out': 'Operational Out',
+  'topology-port-workspace-out': 'Operation',
   'topology-port-stock-in': 'Stock In',
   'topology-port-stock-out': 'Stock Out',
   'topology-port-ticket-in': 'Ticket In',
@@ -130,6 +131,10 @@ type TopologyTier = Exclude<ComponentProps<typeof NodeTopologyEditor>['currentTi
 const renderEditor = (props?: {
   onSave?: (nodes: unknown, wires: unknown) => Promise<Record<string, string> | void>;
   currentTier?: TopologyTier;
+  branchLocations?: BranchLocationSeed[];
+  workspaceInstances?: WorkspaceInstanceSeed[];
+  onRenameBranch?: (id: string, name: string) => Promise<boolean> | boolean | void;
+  onRenameWorkspace?: (id: string, name: string) => Promise<boolean> | boolean | void;
 }) =>
   renderWithProvidersSync(<NodeTopologyEditor currentTier="standard" {...props} />, multiStoreFtl, sharedFtl);
 
@@ -148,6 +153,76 @@ function ReloadingHarness({ next }: { next: WorkspaceInstanceSeed[] }) {
       </button>
       {/* exactOptionalPropertyTypes: omit the prop while instances is undefined */}
       <NodeTopologyEditor currentTier="standard" {...(instances ? { workspaceInstances: instances } : {})} />
+    </>
+  );
+}
+
+/** Stable workspace seed — identity never changes, so only the
+ *  branchLocations prop drives the load-effect re-run in the rename flow. */
+const renameWsInstances: WorkspaceInstanceSeed[] = [
+  { instanceId: 'ws-rename', typeKey: 'store-pos', name: 'POS #1' },
+];
+
+/**
+ * Harness simulating the TopologyScreen parent: a successful card rename
+ * swaps the branchLocations identity (the parent's stores-state update),
+ * re-triggering the editor's load effect with ONLY branch locations changed.
+ */
+function BranchRenameHarness() {
+  const [locations, setLocations] = useState<BranchLocationSeed[]>([
+    { id: 'store-1', name: 'Downtown Branch' },
+  ]);
+  return (
+    <NodeTopologyEditor
+      currentTier="standard"
+      workspaceInstances={renameWsInstances}
+      branchLocations={locations}
+      onRenameBranch={async (id, name) => {
+        setLocations((prev) => prev.map((l) => (l.id === id ? { ...l, name } : l)));
+        return true;
+      }}
+    />
+  );
+}
+
+/** Harness simulating the TopologyScreen parent for workspace renames: the
+ *  parent persists via the instance API and refreshes the instances array
+ *  with the SAME ids (only the name changed). */
+function WorkspaceRenameHarness() {
+  const [instances, setInstances] = useState<WorkspaceInstanceSeed[]>([
+    { instanceId: 'ws-rename', typeKey: 'store-pos', name: 'POS #1' },
+  ]);
+  return (
+    <NodeTopologyEditor
+      currentTier="standard"
+      workspaceInstances={instances}
+      branchLocations={[{ id: 'store-1', name: 'Downtown Branch' }]}
+      onRenameWorkspace={async (id, name) => {
+        setInstances((prev) => prev.map((i) => (i.instanceId === id ? { ...i, name } : i)));
+        return true;
+      }}
+    />
+  );
+}
+
+/** Harness that swaps instances AND branch locations in one action — the
+ *  instances-changed-wins case the light-merge guard must NOT intercept. */
+function BothChangeHarness() {
+  const [instances, setInstances] = useState<WorkspaceInstanceSeed[] | undefined>(undefined);
+  const [locations, setLocations] = useState<BranchLocationSeed[] | undefined>(undefined);
+  return (
+    <>
+      <button type="button" onClick={() => {
+        setInstances([{ instanceId: 'ws-both', typeKey: 'store-pos', name: 'Both POS' }]);
+        setLocations([{ id: 'store-9', name: 'Both Branch' }]);
+      }}>
+        both-change
+      </button>
+      <NodeTopologyEditor
+        currentTier="standard"
+        {...(instances ? { workspaceInstances: instances } : {})}
+        {...(locations ? { branchLocations: locations } : {})}
+      />
     </>
   );
 }
@@ -182,10 +257,12 @@ describe('NodeTopologyEditor Component', () => {
     mockSaveTopology.mockResolvedValue(undefined);
   });
 
-  it('renders title and default retail preset nodes', () => {
+  it('renders tier badge and default retail preset nodes', () => {
     renderEditor();
 
-    expect(screen.getByText('Visual Store & Workspace Topology Builder')).toBeInTheDocument();
+    // The header no longer carries a title — the tier badge (default
+    // currentTier = 'standard') marks the header instead.
+    expect(screen.getByText('STANDARD TIER')).toBeInTheDocument();
     expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
     expect(screen.getByText('Retail POS #1')).toBeInTheDocument();
     expect(screen.getByText('Main Warehouse')).toBeInTheDocument();
@@ -205,9 +282,8 @@ describe('NodeTopologyEditor Component', () => {
     renderEditor();
 
     expect(document.querySelectorAll('.node-titlebar')).toHaveLength(3);
-    expect(screen.getAllByText('Location Out').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('Location In').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('Operational Out').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Location').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Operation').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByRole('textbox', { name: /Edit name/ })).toHaveLength(1);
     expect(screen.getAllByRole('checkbox', { name: /Toggle enabled state/ })).toHaveLength(1);
     expect(document.querySelectorAll('.node-port-socket.port-top')).toHaveLength(0);
@@ -224,6 +300,27 @@ describe('NodeTopologyEditor Component', () => {
     expect(workspace.querySelector('.node-port-sockets-group')).not.toBeNull();
     expect(workspace.querySelector('.node-port-label-left')).not.toBeNull();
     expect(workspace.querySelector('.node-port-label-right')).not.toBeNull();
+  });
+
+  it('keeps telemetry badges in the header so they never collide with connector labels', () => {
+    renderEditor();
+
+    // The status badge (e.g. "Receipt ✓" / "KDS Ready" / "Active") is a
+    // header chip. If it ever returns to the body it sits immediately above
+    // the connector rail and visually collides with the left/right port
+    // labels — this test pins the ownership contract.
+    for (let i = 0; i < 3; i += 1) {
+      const card = nodeAt(i);
+      const header = card.querySelector('.node-header');
+      const body = card.querySelector('.node-body');
+      const badge = card.querySelector('.node-telemetry-badge');
+      expect(header, `node ${i} header exists`).not.toBeNull();
+      expect(body, `node ${i} body exists`).not.toBeNull();
+      if (badge) {
+        expect(header?.contains(badge), `node ${i} badge lives in the header`).toBe(true);
+        expect(body?.contains(badge), `node ${i} badge is NOT in the body`).toBe(false);
+      }
+    }
   });
 
   it('keeps connector geometry aligned to the card edge and footer centerline', () => {
@@ -270,7 +367,9 @@ describe('NodeTopologyEditor Component', () => {
 
     expect(screen.getByText('Counter POS')).toBeInTheDocument();
     expect((enabled as HTMLInputElement).checked).toBe(false);
-    expect(workspace.style.left).toBe('340px');
+    // Retail preset spaces workspace cards at x 380 so the 240px-wide cards
+    // never overlap the store column.
+    expect(workspace.style.left).toBe('380px');
   });
 
   it('drags from the titlebar while connector clicks remain interaction-only', () => {
@@ -290,6 +389,67 @@ describe('NodeTopologyEditor Component', () => {
     const afterDrag = workspace.style.left;
     fireEvent.mouseDown(port, { button: 0, clientX: 0, clientY: 0 });
     expect(workspace.style.left).toBe(afterDrag);
+  });
+
+  it('exposes ONE flexible left input on Inventory nodes (Input → Location/Operation by wire)', async () => {
+    // An Inventory Manager takes a single left feed — Location or Operation
+    // (from another store-pos/inventory). Unwired it reads "Input"; once a
+    // wire attaches it adopts that wire's semantic label.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        { id: 'ws-inv', type: 'workspace', name: 'Inventory', x: 380, y: 140, metadata: { typeKey: 'inventory' } },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+
+    await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(2));
+    const inv = nodeAt(1);
+    // Single left socket, neutral label while unwired; one right output.
+    expect(inv.querySelectorAll('.node-port-socket.port-left')).toHaveLength(1);
+    expect(inv.querySelectorAll('.node-port-socket.port-right')).toHaveLength(1);
+    expect(inv.querySelector('.node-port-label-left')?.textContent).toBe('Input');
+  });
+
+  it('labels an Inventory input by the wire attached (Location for location-in)', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        { id: 'ws-inv', type: 'workspace', name: 'Inventory', x: 380, y: 140, metadata: { typeKey: 'inventory' } },
+      ],
+      wires: [
+        { id: 'w-loc', from_node_id: 'store-1', from_port: 'right', to_node_id: 'ws-inv', to_port: 'left', direction: 'one-way', to_port_id: 'location-in' },
+      ],
+    } as never);
+    renderEditor();
+
+    await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(2));
+    const inv = nodeAt(1);
+    expect(inv.querySelectorAll('.node-port-socket.port-left')).toHaveLength(1);
+    expect(inv.querySelector('.node-port-label-left')?.textContent).toBe('Location');
+  });
+
+  it('exposes a single left Operation port on Kitchen Display nodes', async () => {
+    // A KDS is a sink: it consumes one Operation feed and forwards nothing,
+    // so it must expose exactly one left connector labeled "Operation" —
+    // never a Location In pair or a right-side Operational Out.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        { id: 'ws-kds', type: 'workspace', name: 'Kitchen Display', x: 380, y: 80, metadata: { typeKey: 'kds' } },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+
+    await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(2));
+    const kds = nodeAt(1);
+    expect(kds.querySelector('.node-title')?.textContent).toBe('Kitchen Display');
+    expect(kds.querySelectorAll('.node-port-socket.port-left')).toHaveLength(1);
+    expect(kds.querySelectorAll('.node-port-socket.port-right')).toHaveLength(0);
+    expect(kds.querySelector('.node-port-label-left')?.textContent).toBe('Operation');
+    expect(kds.querySelector('.node-port-label-right')).toBeNull();
   });
 
   it('renders legacy vertical wire ports on canonical left/right sides', async () => {
@@ -318,6 +478,24 @@ describe('NodeTopologyEditor Component', () => {
     expect(screen.getByText('Grand Bistro')).toBeInTheDocument();
     expect(screen.getByText('Kitchen KDS')).toBeInTheDocument();
     expect(screen.getByText('Kitchen Thermal Printer')).toBeInTheDocument();
+  });
+
+  it('preset Kitchen KDS exposes only a left Operation port', () => {
+    // The Resto & KDS preset seeds the KDS node WITHOUT metadata.typeKey
+    // unless it is defined on the preset data itself — and without it,
+    // isKdsNode() fails and the sink wrongly renders a Location In pair
+    // plus a right-side output. Pin the preset's own data so the port
+    // contract cannot regress when the preset is edited.
+    renderEditor();
+    fireEvent.click(screen.getByText('Resto & KDS Preset'));
+
+    const nodes = [...document.querySelectorAll('.topology-node')];
+    const kds = nodes.find((n) => n.querySelector('.node-title')?.textContent === 'Kitchen KDS');
+    expect(kds).not.toBeUndefined();
+    expect(kds!.querySelectorAll('.node-port-socket.port-left')).toHaveLength(1);
+    expect(kds!.querySelectorAll('.node-port-socket.port-right')).toHaveLength(0);
+    expect(kds!.querySelector('.node-port-label-left')?.textContent).toBe('Operation');
+    expect(kds!.querySelector('.node-port-label-right')).toBeNull();
   });
 
   it('toggles simulation mode on button click', () => {
@@ -724,6 +902,263 @@ describe('NodeTopologyEditor Component', () => {
     });
   });
 
+  // ── Branch Location rename from the node card ───────────────────
+
+  it('renames the branch from its card and closes the inline form', async () => {
+    const onRenameBranch = vi.fn().mockResolvedValue(true);
+    renderEditor({ onRenameBranch });
+
+    // The retail preset's store card is the first node on canvas.
+    const storeCard = document.querySelectorAll('.topology-node')[0] as HTMLElement;
+    expect(storeCard.className).toContain('node-type-store');
+
+    // Pencil → inline input pre-filled with the current name → Enter.
+    fireEvent.click(within(storeCard).getByRole('button', { name: 'topology-branch-rename-label' }));
+    const input = within(storeCard).getByLabelText('topology-branch-rename-placeholder');
+    expect((input as HTMLInputElement).value).toBe('Downtown Branch');
+    fireEvent.change(input, { target: { value: 'Main Street HQ' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => expect(onRenameBranch).toHaveBeenCalledWith('store-1', 'Main Street HQ'));
+    // On success the form closes and the card title reflects the new name.
+    await waitFor(() => expect(within(storeCard).queryByLabelText('topology-branch-rename-placeholder')).toBeNull());
+    await waitFor(() => expect(within(storeCard).getByText('Main Street HQ')).toBeTruthy());
+    // A keyboard commit returns focus to the store card, not the canvas body.
+    expect(document.activeElement).toBe(storeCard);
+  });
+
+  it('closes the rename form when the name is unchanged (no callback round-trip)', () => {
+    const onRenameBranch = vi.fn();
+    renderEditor({ onRenameBranch });
+
+    const storeCard = document.querySelectorAll('.topology-node')[0] as HTMLElement;
+    fireEvent.click(within(storeCard).getByRole('button', { name: 'topology-branch-rename-label' }));
+    const input = within(storeCard).getByLabelText('topology-branch-rename-placeholder');
+    // Enter without editing — the pre-filled draft equals the current name.
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onRenameBranch).not.toHaveBeenCalled();
+    expect(within(storeCard).queryByLabelText('topology-branch-rename-placeholder')).toBeNull();
+    expect(within(storeCard).getByText('Downtown Branch')).toBeTruthy();
+    // An unchanged-name Enter is still a keyboard close — focus returns to the card.
+    expect(document.activeElement).toBe(storeCard);
+  });
+
+  it('Escape cancels the card rename without calling the callback', () => {
+    const onRenameBranch = vi.fn();
+    renderEditor({ onRenameBranch });
+
+    const storeCard = document.querySelectorAll('.topology-node')[0] as HTMLElement;
+    fireEvent.click(within(storeCard).getByRole('button', { name: 'topology-branch-rename-label' }));
+    const input = within(storeCard).getByLabelText('topology-branch-rename-placeholder');
+    fireEvent.keyDown(input, { key: 'Escape' });
+
+    expect(onRenameBranch).not.toHaveBeenCalled();
+    expect(within(storeCard).queryByLabelText('topology-branch-rename-placeholder')).toBeNull();
+    expect(within(storeCard).getByText('Downtown Branch')).toBeTruthy();
+    // Escape is a keyboard close — focus returns to the store card.
+    expect(document.activeElement).toBe(storeCard);
+  });
+
+  it('does not steal focus back when the rename commits via blur', async () => {
+    // Click-away commits must NOT yank focus back to the card — the user
+    // deliberately clicked elsewhere (e.g. the Apply button).
+    const onRenameBranch = vi.fn().mockResolvedValue(true);
+    renderEditor({ onRenameBranch });
+
+    const storeCard = document.querySelectorAll('.topology-node')[0] as HTMLElement;
+    fireEvent.click(within(storeCard).getByRole('button', { name: 'topology-branch-rename-label' }));
+    const input = within(storeCard).getByLabelText('topology-branch-rename-placeholder');
+    fireEvent.change(input, { target: { value: 'Blur Renamed' } });
+    fireEvent.blur(input);
+
+    await waitFor(() => expect(onRenameBranch).toHaveBeenCalledWith('store-1', 'Blur Renamed'));
+    await waitFor(() => expect(within(storeCard).queryByLabelText('topology-branch-rename-placeholder')).toBeNull());
+    expect(document.activeElement).not.toBe(storeCard);
+  });
+
+  /** Harness simulating the TopologyScreen parent deleting a store profile:
+ *  removing a branch swaps the branchLocations identity (the parent's
+ *  stores-state update) WITHOUT touching workspace instances — the
+ *  light-merge path must drop the deleted branch's card and wires. */
+function BranchDeleteHarness() {
+  const [locations, setLocations] = useState<BranchLocationSeed[]>([
+    { id: 'store-1', name: 'Downtown Branch' },
+    { id: 'store-2', name: 'Uptown Branch' },
+  ]);
+  return (
+    <div>
+      <button onClick={() => setLocations((prev) => prev.filter((l) => l.id !== 'store-1'))}>
+        delete-store-1
+      </button>
+      <NodeTopologyEditor
+        currentTier="standard"
+        workspaceInstances={renameWsInstances}
+        branchLocations={locations}
+      />
+    </div>
+  );
+}
+
+// ── Branch rename must not clobber unsaved canvas edits ─────────
+
+  it('keeps unsaved canvas edits when a branch rename refreshes branch locations', async () => {
+    // The TopologyScreen parent reacts to a successful rename by updating
+    // its stores state, which swaps the branchLocations identity the editor
+    // receives. A full rebuild on that change would discard in-flight drags
+    // and wires — the rename must merge the new name into the live canvas.
+    renderWithProvidersSync(<BranchRenameHarness />, multiStoreFtl, sharedFtl);
+    await waitFor(() => expect(document.querySelector('.node-canvas-container')).not.toBeNull());
+    mockCanvasSize(800, 600);
+
+    await waitFor(() => expect(screen.getByText('POS #1')).toBeInTheDocument());
+
+    // Unsaved edit: drag the workspace node across the canvas.
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    const wsCard = nodeAt(1);
+    fireEvent.mouseDown(wsCard, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 200, clientY: 120 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+    const draggedLeft = wsCard.style.left;
+    const draggedTop = wsCard.style.top;
+    expect(draggedLeft).not.toBe('336px'); // the drag actually moved it
+
+    // Rename the branch through its card (name change → parent refreshes
+    // branchLocations with a new identity).
+    const storeCard = nodeAt(0);
+    fireEvent.click(within(storeCard).getByRole('button', { name: 'topology-branch-rename-label' }));
+    const input = within(storeCard).getByLabelText('topology-branch-rename-placeholder');
+    fireEvent.change(input, { target: { value: 'Renamed HQ' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    // The rename propagated to the card title…
+    await waitFor(() => expect(within(storeCard).getByText('Renamed HQ')).toBeTruthy());
+    // …and the unsaved drag survived the branchLocations refresh.
+    await waitFor(() => expect(wsCard.style.left).toBe(draggedLeft));
+    expect(wsCard.style.top).toBe(draggedTop);
+  });
+
+  // ── Branch deletion: card + wires leave the canvas cleanly ─────
+
+  it('removes a deleted branch location card and its wires (light merge)', async () => {
+    mockLoadTopology.mockResolvedValue({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Downtown Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'store-2', type: 'store', name: 'Uptown Branch', x: 380, y: 140, store_profile_id: 'store-2' },
+      ],
+      wires: [
+        { id: 'w-1', from_node_id: 'store-1', from_port: 'right', to_node_id: 'ws-rename', to_port: 'left', direction: 'one-way' },
+        { id: 'w-2', from_node_id: 'store-2', from_port: 'right', to_node_id: 'ws-rename', to_port: 'left', direction: 'one-way' },
+      ],
+    });
+    renderWithProvidersSync(<BranchDeleteHarness />, multiStoreFtl, sharedFtl);
+    await waitFor(() => expect(document.querySelector('.node-canvas-container')).not.toBeNull());
+    mockCanvasSize(800, 600);
+    await waitFor(() => expect(screen.getByText('POS #1')).toBeInTheDocument());
+    expect(getNodeCount()).toBe(3);
+    expect(getWireCount()).toBe(2);
+
+    // The parent deletes store-1 — the canvas must drop its card and the
+    // wire attached to it, keeping the surviving branch + workspace intact.
+    fireEvent.click(screen.getByRole('button', { name: 'delete-store-1' }));
+
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    expect(getWireCount()).toBe(1);
+    expect(screen.queryByText('Downtown Branch')).not.toBeInTheDocument();
+    expect(screen.getByText('Uptown Branch')).toBeInTheDocument();
+    expect(screen.getByText('POS #1')).toBeInTheDocument();
+  });
+
+  it('drops a saved store node whose branch was deleted (full rebuild)', async () => {
+    // The real delete flow remounts the editor for the next branch: the
+    // saved diagram may still carry the deleted branch's node, but the
+    // rebuild must not resurrect it — its card and wires leave cleanly.
+    mockLoadTopology.mockResolvedValue({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Downtown Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'store-2', type: 'store', name: 'Uptown Branch', x: 380, y: 140, store_profile_id: 'store-2' },
+      ],
+      wires: [
+        { id: 'w-1', from_node_id: 'store-1', from_port: 'right', to_node_id: 'ws-rename', to_port: 'left', direction: 'one-way' },
+        { id: 'w-2', from_node_id: 'store-2', from_port: 'right', to_node_id: 'ws-rename', to_port: 'left', direction: 'one-way' },
+      ],
+    });
+    renderEditor({
+      branchLocations: [{ id: 'store-2', name: 'Uptown Branch' }],
+      workspaceInstances: renameWsInstances,
+    });
+    await waitFor(() => expect(screen.getByText('POS #1')).toBeInTheDocument());
+    expect(getNodeCount()).toBe(2);
+    expect(getWireCount()).toBe(1);
+    expect(screen.queryByText('Downtown Branch')).not.toBeInTheDocument();
+    expect(screen.getByText('Uptown Branch')).toBeInTheDocument();
+  });
+
+  it('renames a workspace node from its card', async () => {
+    const onRenameWorkspace = vi.fn().mockResolvedValue(true);
+    renderEditor({ onRenameWorkspace });
+
+    // The retail preset's workspace card is the second node on canvas.
+    const wsCard = nodeAt(1);
+    expect(wsCard.className).toContain('node-type-workspace');
+
+    // Pencil → inline input pre-filled with the current name → Enter.
+    fireEvent.click(within(wsCard).getByRole('button', { name: 'topology-workspace-rename-label' }));
+    const input = within(wsCard).getByLabelText('topology-workspace-rename-placeholder');
+    expect((input as HTMLInputElement).value).toBe('Retail POS #1');
+    fireEvent.change(input, { target: { value: 'Front Register' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => expect(onRenameWorkspace).toHaveBeenCalledWith('ws-1', 'Front Register'));
+    await waitFor(() => expect(within(wsCard).getByText('Front Register')).toBeTruthy());
+    // Keyboard commit returns focus to the workspace card.
+    expect(document.activeElement).toBe(wsCard);
+  });
+
+  it('keeps unsaved canvas edits when a workspace rename refreshes instances (same ids)', async () => {
+    // The parent persists the rename via the instance API and refreshes the
+    // instances array with the SAME ids — the editor must merge the new
+    // name in place, not rebuild (a rebuild would discard the unsaved drag).
+    renderWithProvidersSync(<WorkspaceRenameHarness />, multiStoreFtl, sharedFtl);
+    await waitFor(() => expect(document.querySelector('.node-canvas-container')).not.toBeNull());
+    mockCanvasSize(800, 600);
+    await waitFor(() => expect(screen.getByText('POS #1')).toBeInTheDocument());
+
+    // Unsaved edit: drag the workspace node across the canvas.
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    const wsCard = nodeAt(1);
+    fireEvent.mouseDown(wsCard, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 200, clientY: 120 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+    const draggedLeft = wsCard.style.left;
+    expect(draggedLeft).not.toBe('336px'); // the drag actually moved it
+
+    // Rename the workspace through its card.
+    fireEvent.click(within(wsCard).getByRole('button', { name: 'topology-workspace-rename-label' }));
+    const input = within(wsCard).getByLabelText('topology-workspace-rename-placeholder');
+    fireEvent.change(input, { target: { value: 'POS #1 (Renamed)' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    // The rename propagated to the card title…
+    await waitFor(() => expect(within(wsCard).getByText('POS #1 (Renamed)')).toBeTruthy());
+    // …and the unsaved drag survived the instances refresh.
+    await waitFor(() => expect(wsCard.style.left).toBe(draggedLeft));
+  });
+
+  it('takes the full reload path when instances AND branch locations change together', async () => {
+    // The light-merge guard must only intercept branchLocations-only
+    // changes: when instances change in the same batch, the full rebuild
+    // (authoritative instances win) still runs.
+    renderWithProvidersSync(<BothChangeHarness />, multiStoreFtl, sharedFtl);
+    await waitFor(() => expect(screen.getByText('Downtown Branch')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('both-change'));
+
+    await waitFor(() => expect(screen.getByText('Both POS')).toBeInTheDocument());
+    expect(screen.getByText('Both Branch')).toBeInTheDocument();
+    expect(screen.queryByText('Downtown Branch')).not.toBeInTheDocument();
+  });
+
   // ── Arrow-key auto-repeat must not flood the undo stack (#14) ────
 
   it('ignores auto-repeated arrow nudges so one nudge is one undo step', () => {
@@ -824,16 +1259,48 @@ describe('NodeTopologyEditor Component', () => {
 
   // ── Wire direction toggle ───────────────────────────────────────
 
-  it('toggles wire direction on label click', () => {
+  it('cycles wire direction through one-way → reverse → two-way on click', () => {
     renderEditor();
 
-    const wireLabels = screen.getAllByText(/→|↔/);
-    const firstLabel = wireLabels[0]!;
-    expect(firstLabel.textContent).toContain('→');
+    // The whole wire is the affordance: clicking the hitbox cycles the
+    // flow. Retail preset wires start one-way.
+    const hitbox = document.querySelector('.wire-hitbox') as Element;
+    const path = () => hitbox.parentElement!.querySelector('path.wire-path') as Element;
+    expect(path().getAttribute('data-direction')).toBe('one-way');
 
-    fireEvent.click(firstLabel);
+    fireEvent.click(hitbox);
+    expect(path().getAttribute('data-direction')).toBe('reverse');
 
-    expect(firstLabel.textContent).toContain('↔');
+    fireEvent.click(hitbox);
+    expect(path().getAttribute('data-direction')).toBe('two-way');
+
+    fireEvent.click(hitbox);
+    expect(path().getAttribute('data-direction')).toBe('one-way');
+  });
+
+  it('renders no visible label pills — the label is a hover tooltip only', async () => {
+    // Wire labels are presentation chrome: they surface as a native SVG
+    // tooltip on hover, never as a permanent canvas pill.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'S', x: 80, y: 80 },
+        { id: 'ws-1', type: 'workspace', name: 'W', x: 380, y: 80, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [
+        { id: 'w-unlabeled', from_node_id: 'store-1', to_node_id: 'ws-1', direction: 'one-way' },
+        { id: 'w-labeled', from_node_id: 'store-1', to_node_id: 'ws-1', direction: 'one-way', label: 'Binds Store' },
+      ],
+    } as never);
+    renderEditor();
+
+    // The load effect resolves async — wait for the two mocked wires first.
+    await waitFor(() => expect(document.querySelectorAll('.wire-path')).toHaveLength(2));
+    // No label group elements anywhere — the old pill chrome is gone.
+    expect(document.querySelectorAll('.wire-label-group')).toHaveLength(0);
+    // The labeled wire's hitbox carries the label as its native tooltip.
+    const titles = [...document.querySelectorAll('.wire-hitbox title')];
+    expect(titles).toHaveLength(2);
+    expect(titles.some((t) => t.textContent?.includes('Binds Store'))).toBe(true);
   });
 
   // ── Zoom controls ───────────────────────────────────────────────
@@ -1371,6 +1838,32 @@ describe('NodeTopologyEditor Component', () => {
     expect(getWireCount()).toBe(1);
   });
 
+  it('normalizes a corrupt wire direction at load instead of keeping it verbatim', async () => {
+    // The load path must apply the same closed-union discipline as the
+    // semantic contract: a garbage direction from the backend (manual
+    // edit, stale JSON) must fold to a legal value in the EDITOR MODEL,
+    // not survive verbatim — otherwise it renders with wrong markers and
+    // round-trips back to the backend on the next Apply.
+    mockLoadTopology.mockResolvedValue({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Store', x: 100, y: 100 },
+        { id: 'ws-1', type: 'workspace', name: 'POS', x: 300, y: 100 },
+      ],
+      wires: [{ id: 'w-bad', from_node_id: 'store-1', to_node_id: 'ws-1', direction: 'bidirectional' }],
+    });
+
+    renderEditor();
+
+    await waitFor(() => {
+      expect(getWireCount()).toBe(1);
+    });
+
+    // data-direction is the live render contract: it must be a legal
+    // WireDirection, not the corrupt stored value.
+    const wirePath = document.querySelector('.wire-path') as SVGPathElement;
+    expect(wirePath.getAttribute('data-direction')).toBe('one-way');
+  });
+
   // ── Inspector edits are undoable and mark the canvas dirty (#12) ──
 
   it('pushes a single undo entry for an inspector rename burst', () => {
@@ -1476,24 +1969,28 @@ describe('NodeTopologyEditor Component', () => {
     expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
   });
 
-  it('preserves a still-valid wire selection when undoing a direction toggle', () => {
+  it('preserves a still-valid wire selection when undoing a direction cycle', () => {
     renderEditor();
 
-    // Select the first retail wire via its hitbox.
+    // Click the first retail wire via its hitbox — selects AND cycles to
+    // reverse in one click (the whole wire is the affordance now).
     const hitbox = document.querySelector('.wire-hitbox') as Element;
     expect(hitbox).not.toBeNull();
+    const path = () => hitbox.parentElement!.querySelector('path.wire-path') as Element;
     fireEvent.click(hitbox);
     expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
+    expect(path().getAttribute('data-direction')).toBe('reverse');
 
-    // Toggle its direction (pushes an undo entry), then undo.
-    const wireLabels = screen.getAllByText(/→|↔/);
-    fireEvent.click(wireLabels[0]!);
-    expect(wireLabels[0]!.textContent).toContain('↔');
-
+    // Cycle again (pushes another undo entry), then undo twice: the first
+    // undo restores reverse, the second restores one-way.
+    fireEvent.click(hitbox);
+    expect(path().getAttribute('data-direction')).toBe('two-way');
     fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    expect(path().getAttribute('data-direction')).toBe('reverse');
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    expect(path().getAttribute('data-direction')).toBe('one-way');
 
     // Direction restored and the wire still exists — selection preserved.
-    expect(screen.getAllByText(/→|↔/)[0]!.textContent).toContain('→');
     expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
   });
 
@@ -1501,17 +1998,21 @@ describe('NodeTopologyEditor Component', () => {
     renderEditor();
 
     // Restaurant preset has 4 wires (w-1..w-4); retail has only 2 (w-1, w-2).
-    // Select w-3 — it exists only in the restaurant preset.
+    // Select w-3 — it exists only in the restaurant preset. (Clicking a
+    // wire also cycles its direction, which dirties the canvas — the next
+    // preset click therefore asks for confirmation, which the test accepts.)
     fireEvent.click(screen.getByText('Resto & KDS Preset'));
     const hitboxes = document.querySelectorAll('.wire-hitbox');
     expect(hitboxes.length).toBe(4);
     fireEvent.click(hitboxes[2]!);
     expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
 
-    // Clean canvas (no edits) → Retail Preset loads directly. w-3 no longer
-    // exists, so its selection must not dangle at a removed wire.
+    // Clicking Retail Preset confirms replacing the (now-dirty) canvas.
     fireEvent.click(screen.getByText('Retail Preset'));
+    const confirm = screen.getAllByText('Load Preset').find((el) => el.tagName === 'BUTTON');
+    fireEvent.click(confirm!);
 
+    // w-3 no longer exists, so its selection must not dangle at a removed wire.
     expect(screen.queryByText('Delete Selected Element')).not.toBeInTheDocument();
   });
 
@@ -1603,8 +2104,11 @@ describe('NodeTopologyEditor Component', () => {
     fireEvent.click(hitboxes[2]!);
     expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
 
-    // Retail preset has only w-1/w-2 — the wire selection is dropped.
+    // Retail preset has only w-1/w-2 — the wire selection is dropped. The
+    // click dirties the canvas (direction cycled), so confirm the load.
     fireEvent.click(screen.getByText('Retail Preset'));
+    const confirm = screen.getAllByText('Load Preset').find((el) => el.tagName === 'BUTTON');
+    fireEvent.click(confirm!);
 
     expect(
       screen.getByText('The selected element is not part of this preset and was deselected.'),
@@ -2150,10 +2654,12 @@ describe('NodeTopologyEditor — Pro-tier warehouse fallback label', () => {
       ),
     ).not.toBeInTheDocument();
 
-    // The new wire carries the fallback label (raw key in the identity-l10n mock).
+    // The new wire carries the fallback label — surfaced as its hover
+    // tooltip (raw key in the identity-l10n mock), never as a canvas pill.
     const wires = document.querySelectorAll('.wire-group');
     const last = wires[wires.length - 1]!;
-    expect(last.textContent).toContain('topology-wire-label-fallback');
+    const title = last.querySelector('.wire-hitbox title');
+    expect(title?.textContent).toContain('topology-wire-label-fallback');
   });
 });
 
@@ -2190,7 +2696,8 @@ describe('NodeTopologyEditor — first warehouse wire stock-deduct label', () =>
 
     const wires = document.querySelectorAll('.wire-group');
     const last = wires[wires.length - 1]!;
-    expect(last.textContent).toContain('topology-wire-label-stock-deduct');
+    const title = last.querySelector('.wire-hitbox title');
+    expect(title?.textContent).toContain('topology-wire-label-stock-deduct');
   });
 });
 
@@ -2515,21 +3022,40 @@ describe('NodeTopologyEditor — Apply failure resilience', () => {
   });
 });
 
-// ── Keyboard wire-direction toggle ──────────────────────────────
+// ── Wire click cycles direction ─────────────────────────────────
 
-describe('NodeTopologyEditor — keyboard wire-direction toggle', () => {
-  it('toggles wire direction with Enter and Space (keyboard parity)', () => {
+describe('NodeTopologyEditor — wire click direction cycle', () => {
+  it('a single click on the wire selects it and cycles the direction', () => {
     renderEditor();
 
-    const wireLabels = screen.getAllByText(/→|↔/);
-    const firstLabel = wireLabels[0]!;
-    expect(firstLabel.textContent).toContain('→');
+    const hitbox = document.querySelector('.wire-hitbox') as Element;
+    const path = () => hitbox.parentElement!.querySelector('path.wire-path') as Element;
+    expect(path().getAttribute('data-direction')).toBe('one-way');
 
-    fireEvent.keyDown(firstLabel, { key: 'Enter' });
-    expect(firstLabel.textContent).toContain('↔');
+    fireEvent.click(hitbox);
+    expect(path().getAttribute('data-direction')).toBe('reverse');
+    // The click also selects the wire (Delete button appears).
+    expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
 
-    fireEvent.keyDown(firstLabel, { key: ' ' });
-    expect(firstLabel.textContent).toContain('→');
+    fireEvent.click(hitbox);
+    expect(path().getAttribute('data-direction')).toBe('two-way');
+
+    fireEvent.click(hitbox);
+    expect(path().getAttribute('data-direction')).toBe('one-way');
+  });
+
+  it('cycles wire direction with Enter and Space (keyboard parity)', () => {
+    renderEditor();
+
+    const hitbox = document.querySelector('.wire-hitbox') as Element;
+    const path = () => hitbox.parentElement!.querySelector('path.wire-path') as Element;
+    expect(path().getAttribute('data-direction')).toBe('one-way');
+
+    fireEvent.keyDown(hitbox, { key: 'Enter' });
+    expect(path().getAttribute('data-direction')).toBe('reverse');
+
+    fireEvent.keyDown(hitbox, { key: ' ' });
+    expect(path().getAttribute('data-direction')).toBe('two-way');
   });
 });
 
@@ -2568,7 +3094,7 @@ describe('NodeTopologyEditor — hover-target preview snap', () => {
 // ── Wire arrow markers ──────────────────────────────────────────
 
 describe('NodeTopologyEditor — wire arrow markers', () => {
-  it('renders two-way markers on a toggled wire and only the end marker on one-way wires', () => {
+  it('renders direction markers for one-way, reverse, and two-way wires', () => {
     renderEditor();
 
     // Retail preset wires are one-way: end marker only, no start marker.
@@ -2577,19 +3103,24 @@ describe('NodeTopologyEditor — wire arrow markers', () => {
     expect(oneWayPath!.getAttribute('marker-start')).toBeNull();
     expect(oneWayPath!.getAttribute('marker-end')).toBe('url(#arrow-end)');
 
-    // Toggle the first wire to two-way via its label.
-    const wireLabels = screen.getAllByText(/→|↔/);
-    const oneWayCount = document.querySelectorAll('path.wire-path.one-way').length;
-    fireEvent.click(wireLabels[0]!);
+    // Click the first wire: one-way → reverse. Reverse renders only the
+    // START marker (pointing back along the path) and no end marker.
+    const hitbox = document.querySelector('.wire-hitbox') as Element;
+    fireEvent.click(hitbox);
+    const reversePath = hitbox.parentElement!.querySelector('path.wire-path') as Element;
+    expect(reversePath.getAttribute('data-direction')).toBe('reverse');
+    expect(reversePath.getAttribute('marker-end')).toBeNull();
+    expect(reversePath.getAttribute('marker-start')).toBe('url(#arrow-start)');
 
-    // The toggled wire now carries the start marker and the ↔ label, and
-    // exactly ONE wire left the one-way set — the others are untouched.
-    expect(document.querySelectorAll('path.wire-path.one-way').length).toBe(oneWayCount - 1);
-    const twoWayPath = document.querySelector('path.wire-path.two-way');
-    expect(twoWayPath).not.toBeNull();
-    expect(twoWayPath!.getAttribute('marker-start')).toBe('url(#arrow-start)');
-    expect(twoWayPath!.getAttribute('marker-end')).toBe('url(#arrow-end)');
-    expect(wireLabels[0]!.textContent).toContain('↔');
+    // reverse → two-way: both markers render.
+    fireEvent.click(hitbox);
+    const twoWayPath = hitbox.parentElement!.querySelector('path.wire-path') as Element;
+    expect(twoWayPath.getAttribute('data-direction')).toBe('two-way');
+    expect(twoWayPath.getAttribute('marker-start')).toBe('url(#arrow-start)');
+    expect(twoWayPath.getAttribute('marker-end')).toBe('url(#arrow-end)');
+
+    // The other one-way wire is untouched.
+    expect(document.querySelectorAll('path.wire-path.one-way').length).toBe(1);
   });
 });
 
@@ -2647,22 +3178,22 @@ describe('NodeTopologyEditor — undo history cap', () => {
 
 // ── Direction toggle undo/redo ──────────────────────────────────
 
-describe('NodeTopologyEditor — direction toggle undo/redo', () => {
-  it('undo restores a toggled wire direction and redo re-applies it', () => {
+describe('NodeTopologyEditor — direction cycle undo/redo', () => {
+  it('undo restores the previous wire direction and redo re-applies it', () => {
     renderEditor();
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
-    const firstLabel = screen.getAllByText(/→|↔/)[0]!;
-    expect(firstLabel.textContent).toContain('→');
+    const hitbox = document.querySelector('.wire-hitbox') as Element;
+    const path = () => hitbox.parentElement!.querySelector('path.wire-path') as Element;
 
-    // Toggle to two-way — handleToggleWireDirection pushes history.
-    fireEvent.click(firstLabel);
-    expect(firstLabel.textContent).toContain('↔');
+    // one-way → reverse: the cycle pushes one history entry.
+    fireEvent.click(hitbox);
+    expect(path().getAttribute('data-direction')).toBe('reverse');
 
-    // One undo returns to one-way; one redo re-applies two-way.
+    // One undo returns to one-way; one redo re-applies reverse.
     fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true });
-    expect(firstLabel.textContent).toContain('→');
+    expect(path().getAttribute('data-direction')).toBe('one-way');
     fireEvent.keyDown(canvas, { key: 'y', ctrlKey: true });
-    expect(firstLabel.textContent).toContain('↔');
+    expect(path().getAttribute('data-direction')).toBe('reverse');
   });
 });
 
@@ -2677,10 +3208,12 @@ describe('NodeTopologyEditor — connected wire label', () => {
     fireEvent.click(portOf(nodeAt(1), 'left'));
     expect(getWireCount()).toBe(baseline + 1);
 
-    // Non-warehouse wires carry the plain connected label (raw identity key).
+    // Non-warehouse wires carry the plain connected label (raw identity key)
+    // — surfaced as the wire's hover tooltip.
     const wires = document.querySelectorAll('.wire-group');
     const last = wires[wires.length - 1]!;
-    expect(last.textContent).toContain('topology-wire-label-connected');
+    const title = last.querySelector('.wire-hitbox title');
+    expect(title?.textContent).toContain('topology-wire-label-connected');
   });
 });
 
@@ -2754,8 +3287,8 @@ describe('NodeTopologyEditor — preset load cancels in-flight connection', () =
 // orthogonal: connection state is transient UI and is never captured in
 // history, so neither the push nor its undo affects it.
 
-describe('NodeTopologyEditor — wire-label toggle keeps an in-flight connection', () => {
-  it('keeps the connection in flight across a direction toggle and completes it correctly', () => {
+describe('NodeTopologyEditor — wire click keeps an in-flight connection', () => {
+  it('keeps the connection in flight across a direction cycle and completes it correctly', () => {
     renderEditor();
     const baseline = getWireCount();
 
@@ -2764,27 +3297,29 @@ describe('NodeTopologyEditor — wire-label toggle keeps an in-flight connection
     expect(previewLine()).not.toBeNull();
     expect(nodeAt(2).className).toContain('node-connecting-source');
 
-    // Toggle the first wire (store right → workspace left) to two-way.
-    const firstLabel = screen.getAllByText(/→|↔/)[0]!;
-    expect(firstLabel.textContent).toContain('→');
-    fireEvent.click(firstLabel);
-    expect(firstLabel.textContent).toContain('↔');
+    // Click the first wire (store right → workspace left): one-way → reverse.
+    const hitbox = document.querySelector('.wire-hitbox') as Element;
+    const path = () => hitbox.parentElement!.querySelector('path.wire-path') as Element;
+    expect(path().getAttribute('data-direction')).toBe('one-way');
+    fireEvent.click(hitbox);
+    expect(path().getAttribute('data-direction')).toBe('reverse');
 
-    // The connection SURVIVED the toggle: source highlight + ghost preview intact.
+    // The connection SURVIVED the cycle: source highlight + ghost preview intact.
     expect(nodeAt(2).className).toContain('node-connecting-source');
     expect(previewLine()).not.toBeNull();
 
     // Completing the connection still creates the expected store→workspace
-    // wire from the in-flight source — the toggle's history push did not
+    // wire from the in-flight source — the cycle's history push did not
     // corrupt the pending state.
     fireEvent.click(portOf(nodeAt(1), 'left'));
     expect(getWireCount()).toBe(baseline + 1);
     const wires = document.querySelectorAll('.wire-group');
     const created = wires[wires.length - 1]!;
-    expect(created.textContent).toContain('topology-wire-label-connected');
+    const title = created.querySelector('.wire-hitbox title');
+    expect(title?.textContent).toContain('topology-wire-label-connected');
   });
 
-  it('keeps the connection in flight when the toggle is undone (history push is orthogonal)', () => {
+  it('keeps the connection in flight when the cycle is undone (history push is orthogonal)', () => {
     renderEditor();
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
     const baseline = getWireCount();
@@ -2792,14 +3327,15 @@ describe('NodeTopologyEditor — wire-label toggle keeps an in-flight connection
     fireEvent.click(portOf(nodeAt(2), 'right'));
     expect(previewLine()).not.toBeNull();
 
-    // Toggle to two-way, then undo the toggle mid-connection.
-    const firstLabel = screen.getAllByText(/→|↔/)[0]!;
-    fireEvent.click(firstLabel);
-    expect(firstLabel.textContent).toContain('↔');
+    // Cycle to reverse, then undo the cycle mid-connection.
+    const hitbox = document.querySelector('.wire-hitbox') as Element;
+    const path = () => hitbox.parentElement!.querySelector('path.wire-path') as Element;
+    fireEvent.click(hitbox);
+    expect(path().getAttribute('data-direction')).toBe('reverse');
     fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true });
-    expect(firstLabel.textContent).toContain('→');
+    expect(path().getAttribute('data-direction')).toBe('one-way');
 
-    // The connection survived BOTH the toggle's history push and its undo.
+    // The connection survived BOTH the cycle's history push and its undo.
     expect(nodeAt(2).className).toContain('node-connecting-source');
     expect(previewLine()).not.toBeNull();
 
@@ -2808,13 +3344,12 @@ describe('NodeTopologyEditor — wire-label toggle keeps an in-flight connection
     expect(getWireCount()).toBe(baseline + 1);
   });
 
-  it('label click does not bubble a cancel to the canvas (stopPropagation contract)', () => {
-    // The wire label's onClick must never reach a canvas-level background
-    // handler (e.g. a future background-click-cancels-connection listener).
-    // The label sits INSIDE the canvas subtree, so without stopPropagation
-    // the toggle click bubbles to a container onClick — where a
-    // background-click cancel would wrongly kill the in-flight connection
-    // the toggle is supposed to leave untouched. The spy is a REACT-level
+  it('wire click does not bubble a cancel to the canvas (stopPropagation contract)', () => {
+    // The wire's onClick must never reach a canvas-level background handler
+    // (e.g. a future background-click-cancels-connection listener). Without
+    // stopPropagation the cycle click bubbles to a container onClick — where
+    // a background-click cancel would wrongly kill the in-flight connection
+    // the cycle is supposed to leave untouched. The spy is a REACT-level
     // onClick on a wrapper container: native listeners on intermediate
     // elements fire regardless of React's synthetic stopPropagation (React
     // 17+ delegates at the root), so only the delegation-level handler
@@ -2822,7 +3357,7 @@ describe('NodeTopologyEditor — wire-label toggle keeps an in-flight connection
     let canvasClicked = false;
     const onCanvasClick = () => { canvasClicked = true; };
     // Native <button> as the wrapper: an interactive element that would
-    // receive the bubbled label click, standing in for a future
+    // receive the bubbled wire click, standing in for a future
     // canvas-level background-click-cancels-connection handler.
     function Wrap() {
       return <button type="button" onClick={onCanvasClick}><NodeTopologyEditor currentTier="standard" /></button>;
@@ -2833,18 +3368,19 @@ describe('NodeTopologyEditor — wire-label toggle keeps an in-flight connection
     fireEvent.click(portOf(nodeAt(2), 'right'));
     expect(nodeAt(2).className).toContain('node-connecting-source');
 
-    // Click the first wire label to toggle direction.
-    const firstLabel = screen.getAllByText(/→|↔/)[0]!;
-    fireEvent.click(firstLabel);
-    expect(firstLabel.textContent).toContain('↔');
+    // Click the first wire to cycle its direction.
+    const hitbox = document.querySelector('.wire-hitbox') as Element;
+    fireEvent.click(hitbox);
+    const path = () => hitbox.parentElement!.querySelector('path.wire-path') as Element;
+    expect(path().getAttribute('data-direction')).toBe('reverse');
 
     // The click must NOT have bubbled to the wrapper's React onClick — a
-    // background-click cancel handler must never fire for a label
+    // background-click cancel handler must never fire for a wire
     // interaction.
     expect(canvasClicked).toBe(false);
 
     // The user's contract: a background mousedown on the canvas AFTER the
-    // label click must not cancel the in-flight connection — the toggle's
+    // wire click must not cancel the in-flight connection — the cycle's
     // click never reached (and cannot arm) a background-click cancel.
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
     fireEvent.mouseDown(canvas, { button: 0 });
@@ -2852,29 +3388,21 @@ describe('NodeTopologyEditor — wire-label toggle keeps an in-flight connection
     expect(previewLine()).not.toBeNull();
   });
 
-  it('shows the flip-direction hint on wire labels while a connection is in flight', () => {
+  it('surfaces the label + cycle hint as the wire hover tooltip', () => {
     renderEditor();
 
-    // Idle: no hint anywhere.
-    expect(document.querySelector('.wire-label-group title')).toBeNull();
+    // Every wire's native tooltip carries its label plus the click-to-cycle
+    // hint (raw FTL key in the identity-l10n mock).
+    const titles = [...document.querySelectorAll('.wire-hitbox title')];
+    expect(titles.length).toBeGreaterThan(0);
+    for (const title of titles) {
+      expect(title.textContent).toContain('topology-wire-toggle-hint');
+    }
+    // The first retail wire's label appears in its tooltip.
+    expect(titles[0]!.textContent).toContain('Binds Store');
 
-    // Start a connection — every wire label now carries the hint, making
-    // the keep-connection decision explicit: flipping direction is safe and
-    // the connection stays in progress. The modifier class (the CSS
-    // accent-ring hover affordance hook) must accompany the title.
-    fireEvent.click(portOf(nodeAt(2), 'right'));
-    const hintTitles = document.querySelectorAll('.wire-label-group title');
-    expect(hintTitles.length).toBeGreaterThan(0);
-    expect(hintTitles[0]!.textContent).toContain('Flip direction');
-    const connectingLabel = document.querySelector('.wire-label-group-connecting');
-    expect(connectingLabel).not.toBeNull();
-    expect(connectingLabel).toHaveClass('wire-label-group-connecting');
-
-    // Complete the connection — connection mode ends, hint and modifier
-    // class disappear.
-    fireEvent.click(portOf(nodeAt(1), 'left'));
-    expect(document.querySelector('.wire-label-group title')).toBeNull();
-    expect(document.querySelector('.wire-label-group-connecting')).toBeNull();
+    // And the tooltip never renders as visible canvas chrome.
+    expect(document.querySelector('.wire-label-group')).toBeNull();
   });
 });
 

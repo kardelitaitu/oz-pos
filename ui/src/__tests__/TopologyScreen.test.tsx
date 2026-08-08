@@ -6,7 +6,7 @@
 // store_id resolution (#5).
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, waitFor } from '@testing-library/react';
+import { render, waitFor, act, screen, fireEvent } from '@testing-library/react';
 import TopologyScreen from '@/features/stores/TopologyScreen';
 
 // ── Mocks ──────────────────────────────────────────────────────────
@@ -16,13 +16,19 @@ vi.mock('@/api/license', () => ({
 }));
 
 const mockListStores = vi.fn();
+const mockUpdateStore = vi.fn();
+const mockDeleteStore = vi.fn();
 vi.mock('@/api/stores', () => ({
   listStores: () => mockListStores(),
+  updateStore: (...args: unknown[]) => mockUpdateStore(...args),
+  deleteStore: (...args: unknown[]) => mockDeleteStore(...args),
 }));
 
 const mockListWorkspacesScoped = vi.fn();
+const mockUpdateWorkspace = vi.fn();
 vi.mock('@/api/workspaces', () => ({
   listWorkspacesScoped: (...args: unknown[]) => mockListWorkspacesScoped(...args),
+  updateWorkspaceInstanceScoped: (...args: unknown[]) => mockUpdateWorkspace(...args),
 }));
 
 const mockApplyTopologyDiff = vi.fn();
@@ -50,13 +56,36 @@ vi.mock('@fluent/react', () => ({
 let capturedEditorProps: {
   onSave?: (nodes: unknown[], wires: unknown[]) => Promise<Record<string, string> | void>;
   workspaceInstances?: unknown[];
+  branchToolbar?: unknown;
+  branchLocations?: unknown[];
+  onRenameBranch?: (id: string, name: string) => Promise<boolean>;
+  onRenameWorkspace?: (id: string, name: string) => Promise<boolean>;
 } = {};
 vi.mock('@/features/stores/NodeTopologyEditor', () => ({
   default: (props: {
     onSave?: (n: unknown[], w: unknown[]) => Promise<Record<string, string> | void>;
     workspaceInstances?: unknown[];
+    branchToolbar?: unknown;
+    branchLocations?: unknown[];
+    onRenameBranch?: (id: string, name: string) => Promise<boolean>;
+    onRenameWorkspace?: (id: string, name: string) => Promise<boolean>;
   }) => {
     capturedEditorProps = props;
+    // The branch (graph) selector toolbar is rendered via the editor's
+    // branchToolbar slot — mount it so the mocked SettingsSelect inside
+    // still registers capturedBranchOnChange for branch-switch tests.
+    return props.branchToolbar ?? null;
+  },
+}));
+
+// Capture the branch selector's onChange so tests can simulate switching
+// the branch (SettingsSelect is a custom combobox, not a native select).
+let capturedBranchOnChange: ((value: string) => void) | null = null;
+let capturedBranchOptions: { value: string; label: string }[] = [];
+vi.mock('@/features/settings/SettingsSelect', () => ({
+  default: (props: { onChange: (value: string) => void; options?: { value: string; label: string }[] }) => {
+    capturedBranchOnChange = props.onChange;
+    capturedBranchOptions = props.options ?? [];
     return null;
   },
 }));
@@ -69,6 +98,7 @@ const loadedInstances = [
     type_key: 'store-pos',
     store_id: 'store-1',
     store_name: 'Main Street',
+    purpose_key: 'checkout',
     name: 'Front Register',
     description: 'Old desc',
     icon: 'pos',
@@ -102,7 +132,7 @@ function wsNode(overrides: Record<string, unknown> = {}) {
     name: 'POS #1',
     x: 0,
     y: 0,
-    metadata: { typeKey: 'store-pos' },
+    metadata: { typeKey: 'store-pos', purposeKey: 'general' },
     ...overrides,
   };
 }
@@ -113,9 +143,28 @@ function storeNode(overrides: Record<string, unknown> = {}) {
     id: 'store-1',
     type: 'store',
     name: 'Main Street',
+    storeProfileId: 'store-1',
     x: 0,
     y: 0,
     ...overrides,
+  };
+}
+
+function locationWire(
+  fromNodeId: string,
+  toNodeId: string,
+  id = 'location-wire',
+) {
+  return {
+    id,
+    fromNodeId,
+    fromPort: 'right',
+    fromPortId: 'location-out',
+    toNodeId,
+    toPort: 'left',
+    toPortId: 'location-in',
+    relationshipType: 'location',
+    direction: 'one-way',
   };
 }
 
@@ -127,7 +176,7 @@ function appliedArgs() {
   return {
     sessionToken: call[0] as string,
     creations: call[1] as { id: string; type_key: string; name: string; store_id: string }[],
-    updates: call[2] as { id: string; name: string }[],
+    updates: call[2] as { id: string; name: string; purpose_key?: string }[],
     archives: call[3] as string[],
     diagramNodes: call[4] as { id: string }[],
     diagramWires: call[5] as { from_node_id: string; to_node_id: string }[],
@@ -140,9 +189,12 @@ describe('TopologyScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     capturedEditorProps = {};
+    capturedBranchOnChange = null;
+    capturedBranchOptions = [];
     mockListStores.mockResolvedValue(sampleStores);
     mockListWorkspacesScoped.mockResolvedValue(loadedInstances);
     mockApplyTopologyDiff.mockResolvedValue(undefined);
+    mockDeleteStore.mockResolvedValue(undefined);
   });
 
   const renderReady = async (expectedInstanceCount = 1) => {
@@ -158,8 +210,135 @@ describe('TopologyScreen', () => {
   it('seeds the editor with loaded workspace instances', async () => {
     await renderReady();
     expect(capturedEditorProps.workspaceInstances).toEqual([
-      { instanceId: 'ws-existing', typeKey: 'store-pos', name: 'Front Register', subtitle: 'Old desc' },
+      {
+        instanceId: 'ws-existing',
+        typeKey: 'store-pos',
+        storeId: 'store-1',
+        storeName: 'Main Street',
+        purposeKey: 'checkout',
+        name: 'Front Register',
+        subtitle: 'Old desc',
+      },
     ]);
+  });
+
+  it('refetches workspace instances when the branch selector changes', async () => {
+    // Branch-scoped graphs: switching the selector must reload that
+    // branch's instances (and the editor remounts, keyed by branch) rather
+    // than showing the previous branch's canvas.
+    mockListWorkspacesScoped
+      .mockResolvedValueOnce(loadedInstances)                                   // initial branch (store-1)
+      .mockResolvedValueOnce([{ ...loadedInstances[0]!, instance_id: 'ws-b1', store_id: 'store-b', name: 'B POS' }]);
+    await renderReady();
+
+    // Simulate the manager picking branch B in the branch selector.
+    act(() => { capturedBranchOnChange?.('store-b'); });
+
+    await waitFor(() => expect(mockListWorkspacesScoped).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(capturedEditorProps.workspaceInstances).toEqual([
+        expect.objectContaining({ instanceId: 'ws-b1', storeId: 'store-b', name: 'B POS' }),
+      ]),
+    );
+  });
+
+  it('renames a branch profile through the card callback and syncs the selector + card seed', async () => {
+    // The editor card drives the rename via the onRenameBranch prop; the
+    // screen persists it through update_store_profile preserving the other
+    // fields, reports success so the card can close its inline form, and —
+    // because both the header selector labels and the editor's branch seed
+    // derive from the SAME stores state — the new name is live everywhere
+    // immediately.
+    mockListStores.mockResolvedValueOnce([
+      { id: 'store-1', name: 'Main Street', is_primary: true, address: 'A St', tax_id: 'T-1', currency: 'USD', timezone: 'UTC', created_at: '', updated_at: '' },
+    ]);
+    mockUpdateStore.mockResolvedValueOnce({
+      id: 'store-1', name: 'Main Street (Flagship)', is_primary: true, address: 'A St', tax_id: 'T-1', currency: 'USD', timezone: 'UTC', created_at: '', updated_at: '',
+    });
+    await renderReady();
+
+    const ok = await capturedEditorProps.onRenameBranch!('store-1', 'Main Street (Flagship)');
+    expect(ok).toBe(true);
+    expect(mockUpdateStore).toHaveBeenCalledWith({
+      id: 'store-1',
+      name: 'Main Street (Flagship)',
+      address: 'A St',
+      tax_id: 'T-1',
+      currency: 'USD',
+      timezone: 'UTC',
+    });
+
+    // Header selector label is live: the branch dropdown now lists the new
+    // name (the stores-state update flushes on a re-render).
+    await waitFor(() =>
+      expect(
+        capturedBranchOptions.some((o) => o.value === 'store-1' && o.label === 'Main Street (Flagship)'),
+      ).toBe(true),
+    );
+    // The editor's branch seed (the card-title source) is live too.
+    await waitFor(() =>
+      expect(capturedEditorProps.branchLocations).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: 'store-1', name: 'Main Street (Flagship)' })]),
+      ),
+    );
+  });
+
+  it('renames a workspace instance through the card callback', async () => {
+    // The workspace card rename persists via update_workspace_instance_scoped
+    // (the live row) and updates the instances state so the seed the editor
+    // receives carries the new name on the next refresh.
+    mockListStores.mockResolvedValueOnce(sampleStores);
+    mockListWorkspacesScoped.mockResolvedValueOnce(loadedInstances);
+    mockUpdateWorkspace.mockResolvedValueOnce(undefined);
+    await renderReady();
+
+    const ok = await capturedEditorProps.onRenameWorkspace!('ws-existing', 'Renamed Register');
+    expect(ok).toBe(true);
+    // The rename must preserve the instance's other editable fields — the
+    // wrapper nulls omitted description/colour, which would wipe the card
+    // subtitle on every rename (reviewer-found bug).
+    expect(mockUpdateWorkspace).toHaveBeenCalledWith(
+      'test-session-token',
+      'ws-existing',
+      expect.objectContaining({ name: 'Renamed Register', description: 'Old desc' }),
+    );
+
+    // The editor's workspace seed carries the new name on the refresh.
+    await waitFor(() =>
+      expect(capturedEditorProps.workspaceInstances).toEqual(
+        expect.arrayContaining([expect.objectContaining({ instanceId: 'ws-existing', name: 'Renamed Register' })]),
+      ),
+    );
+  });
+
+  it('deletes a branch: selector option, editor seed, and selection move to the remaining branch', async () => {
+    // Two branches so deletion has somewhere to land.
+    mockListStores.mockResolvedValue([
+      { id: 'store-1', name: 'Main Street', is_primary: true, address: '', tax_id: '', currency: 'USD', timezone: 'UTC', created_at: '', updated_at: '' },
+      { id: 'store-2', name: 'Second Street', is_primary: false, address: '', tax_id: '', currency: 'USD', timezone: 'UTC', created_at: '', updated_at: '' },
+    ]);
+    await renderReady(1);
+
+    await waitFor(() =>
+      expect(capturedBranchOptions.map((o) => o.value)).toEqual(['store-1', 'store-2']),
+    );
+
+    // Delete Branch → confirm.
+    fireEvent.click(screen.getByRole('button', { name: 'topology-branch-delete' }));
+    fireEvent.click(screen.getByRole('button', { name: 'topology-branch-delete-confirm-btn' }));
+
+    // The profile is deleted through the API.
+    await waitFor(() => expect(mockDeleteStore).toHaveBeenCalledWith('store-1'));
+
+    // The selector option for the deleted branch is gone…
+    await waitFor(() =>
+      expect(capturedBranchOptions.map((o) => o.value)).toEqual(['store-2']),
+    );
+    // …and the editor seed no longer carries the deleted branch (its card
+    // leaves the canvas on the next rebuild/merge).
+    await waitFor(() =>
+      expect(capturedEditorProps.branchLocations).toEqual([{ id: 'store-2', name: 'Second Street' }]),
+    );
   });
 
   // ── #4: Atomic diff — single applyTopologyDiff call ────────────
@@ -168,10 +347,11 @@ describe('TopologyScreen', () => {
     await renderReady();
 
     const nodes = [
+      storeNode(),
       wsNode({ id: 'ws-existing', name: 'Front Register', metadata: { typeKey: 'store-pos', persisted: true } }),
       wsNode({ id: 'ws-new', name: 'New Register', metadata: { typeKey: 'kds', persisted: false } }),
     ];
-    await triggerSave(nodes);
+    await triggerSave(nodes, [locationWire('store-1', 'ws-existing', 'location-existing'), locationWire('store-1', 'ws-new', 'location-new')]);
 
     expect(mockApplyTopologyDiff).toHaveBeenCalledTimes(1);
     const a = appliedArgs();
@@ -182,27 +362,29 @@ describe('TopologyScreen', () => {
     expect(a.creations[0]!.name).toBe('New Register');
     expect(a.updates).toHaveLength(0);
     expect(a.archives).toHaveLength(0);
-    expect(a.diagramNodes.map((n) => n.id).sort()).toEqual(['ws-existing', 'ws-new'].sort());
+    expect(a.diagramNodes.map((n) => n.id).sort()).toEqual(['store-1', 'ws-existing', 'ws-new'].sort());
   });
 
   it('updates a renamed workspace via applyTopologyDiff', async () => {
     await renderReady();
 
     await triggerSave([
+      storeNode(),
       wsNode({ id: 'ws-existing', name: 'Renamed Register', metadata: { typeKey: 'store-pos', persisted: true } }),
-    ]);
+    ], [locationWire('store-1', 'ws-existing')]);
 
     const a = appliedArgs();
     expect(a.creations).toHaveLength(0);
     expect(a.updates).toHaveLength(1);
     expect(a.updates[0]!.id).toBe('ws-existing');
     expect(a.updates[0]!.name).toBe('Renamed Register');
+    expect(a.updates[0]!.purpose_key).toBe('checkout');
   });
 
   it('archives removed instances via applyTopologyDiff', async () => {
     await renderReady();
 
-    await triggerSave([]);
+    await triggerSave([storeNode()]);
 
     const a = appliedArgs();
     expect(a.archives).toHaveLength(1);
@@ -213,8 +395,9 @@ describe('TopologyScreen', () => {
     await renderReady();
 
     await triggerSave([
+      storeNode(),
       wsNode({ id: 'ws-existing', name: 'Front Register', metadata: { typeKey: 'store-pos', persisted: true } }),
-    ]);
+    ], [locationWire('store-1', 'ws-existing')]);
 
     const a = appliedArgs();
     expect(a.creations).toHaveLength(0);
@@ -228,8 +411,9 @@ describe('TopologyScreen', () => {
     await renderReady();
 
     await triggerSave([
+      storeNode(),
       wsNode({ id: 'ws-existing', name: 'Front Register', metadata: { typeKey: 'kds', persisted: true } }),
-    ]);
+    ], [locationWire('store-1', 'ws-existing')]);
 
     const a = appliedArgs();
     expect(a.archives).toHaveLength(1);
@@ -240,16 +424,16 @@ describe('TopologyScreen', () => {
     expect(a.creations[0]!.id).not.toBe('ws-existing');
     expect(a.creations[0]!.id).toMatch(/^ws-[0-9a-f-]+$/);
     expect(a.updates).toHaveLength(0);
-    // Diagram node remapped to new UUID
-    expect(a.diagramNodes[0]!.id).toBe(a.creations[0]!.id);
+    // Diagram workspace node remapped to new UUID
+    expect(a.diagramNodes.map((node) => node.id)).toContain(a.creations[0]!.id);
   });
 
   it('returns idMap so editor can remap canvas state (#1)', async () => {
     await renderReady();
 
     const result = await capturedEditorProps.onSave!(
-      [wsNode({ id: 'ws-existing', name: 'Front Register', metadata: { typeKey: 'restaurant-pos', persisted: true } })],
-      [],
+      [storeNode(), wsNode({ id: 'ws-existing', name: 'Front Register', metadata: { typeKey: 'restaurant-pos', persisted: true } })],
+      [locationWire('store-1', 'ws-existing')],
     );
 
     expect(result).toBeDefined();
@@ -263,9 +447,7 @@ describe('TopologyScreen', () => {
 
     const store = storeNode({ id: 'store-1', name: 'Main Street' });
     const ws = wsNode({ id: 'ws-existing', name: 'Front Register', metadata: { typeKey: 'kds', persisted: true } });
-    const wires = [
-      { id: 'w-1', fromNodeId: 'store-1', fromPort: 'right', toNodeId: 'ws-existing', toPort: 'left', direction: 'one-way', label: 'Binds Store' },
-    ];
+    const wires = [locationWire('store-1', 'ws-existing', 'w-1')];
 
     await capturedEditorProps.onSave!([store, ws], wires);
 
@@ -281,8 +463,9 @@ describe('TopologyScreen', () => {
 
     // User renamed AND changed type in one edit session
     await triggerSave([
+      storeNode(),
       wsNode({ id: 'ws-existing', name: 'Bar POS', metadata: { typeKey: 'restaurant-pos', persisted: true } }),
-    ]);
+    ], [locationWire('store-1', 'ws-existing')]);
 
     const a = appliedArgs();
     // Archive old, create new
@@ -300,8 +483,9 @@ describe('TopologyScreen', () => {
     // Same typeKey as the loaded instance — should be a regular update (name change)
     // or no-op if name also hasn't changed
     await triggerSave([
+      storeNode(),
       wsNode({ id: 'ws-existing', name: 'Front Register', metadata: { typeKey: 'store-pos', persisted: true } }),
-    ]);
+    ], [locationWire('store-1', 'ws-existing')]);
 
     const a = appliedArgs();
     // No archive, no create — just a no-op since name also didn't change
@@ -318,10 +502,11 @@ describe('TopologyScreen', () => {
 
     await capturedEditorProps.onSave!(
       [
+        storeNode(),
         wsNode({ id: 'ws-a', name: 'A', metadata: { typeKey: 'kds', persisted: true } }),
         wsNode({ id: 'ws-b', name: 'B', metadata: { typeKey: 'restaurant-pos', persisted: true } }),
       ],
-      [],
+      [locationWire('store-1', 'ws-a', 'location-a'), locationWire('store-1', 'ws-b', 'location-b')],
     );
 
     const a = appliedArgs();
@@ -333,43 +518,43 @@ describe('TopologyScreen', () => {
     expect(new Set(newIds).size).toBe(2);
   });
 
-  // ── #5: Wire-based store_id resolution ────────────────────────
+  // ── Semantic store_id resolution ─────────────────────────────
 
   it('uses wire-connected store for store_id (Critical #5)', async () => {
+    // The loaded instance belongs to store-1 (the default-selected branch),
+    // so the branch-scoped seed keeps it; the canvas then wires the new
+    // workspace to a DIFFERENT store's node, and that wire must drive the
+    // resolved store_id — never the primary/default branch.
     mockListStores.mockResolvedValue([
-      { ...sampleStores[0]!, id: 'store-a', name: 'Store A', is_primary: true },
+      { ...sampleStores[0]!, id: 'store-1', name: 'Store A', is_primary: true },
       { ...sampleStores[0]!, id: 'store-b', name: 'Store B', is_primary: false },
     ]);
     await renderReady();
 
-    const storeA = storeNode({ id: 'store-a', name: 'Store A' });
-    const storeB = storeNode({ id: 'store-b', name: 'Store B' });
+    const store = storeNode({ id: 'store-b', name: 'Store B', storeProfileId: 'store-b' });
     const ws = wsNode({ id: 'ws-new', name: 'POS', metadata: { typeKey: 'store-pos', persisted: false } });
-    const wires = [
-      { id: 'w-1', fromNodeId: 'store-b', fromPort: 'right', toNodeId: 'ws-new', toPort: 'left', direction: 'one-way' },
-    ];
+    const wires = [locationWire('store-b', 'ws-new', 'w-1')];
 
-    await capturedEditorProps.onSave!([storeA, storeB, ws], wires);
+    await capturedEditorProps.onSave!([store, ws], wires);
 
     const a = appliedArgs();
     expect(a.creations).toHaveLength(1);
     expect(a.creations[0]!.store_id).toBe('store-b');
   });
 
-  it('falls back to primary store when no wire connects workspace to a store (#5)', async () => {
-    mockListStores.mockResolvedValue([
-      { ...sampleStores[0]!, id: 'primary-store', name: 'Primary', is_primary: true },
-      { ...sampleStores[0]!, id: 'other-store', name: 'Other', is_primary: false },
-    ]);
+  it('rejects a workspace without semantic Location In ownership', async () => {
     await renderReady();
 
     await triggerSave([
-      wsNode({ id: 'ws-new', name: 'Standalone POS', metadata: { typeKey: 'store-pos', persisted: false } }),
+      storeNode(),
+      wsNode({ id: 'ws-new', name: 'Unowned POS', metadata: { typeKey: 'store-pos', persisted: false } }),
     ]);
 
-    const a = appliedArgs();
-    expect(a.creations).toHaveLength(1);
-    expect(a.creations[0]!.store_id).toBe('primary-store');
+    expect(mockApplyTopologyDiff).not.toHaveBeenCalled();
+    expect(mockAddToast).toHaveBeenCalledWith({
+      message: 'topology-validation-missing-location',
+      type: 'error',
+    });
   });
 
   // ══ Error handling ═══════════════════════════════════════════
@@ -379,8 +564,8 @@ describe('TopologyScreen', () => {
     await renderReady();
 
     const result = await capturedEditorProps.onSave!(
-      [wsNode({ id: 'ws-new', name: 'POS', metadata: { typeKey: 'store-pos', persisted: false } })],
-      [],
+      [storeNode(), wsNode({ id: 'ws-new', name: 'POS', metadata: { typeKey: 'store-pos', persisted: false } })],
+      [locationWire('store-1', 'ws-new')],
     );
 
     // Returns empty idMap on error (no crash)
@@ -400,8 +585,9 @@ describe('TopologyScreen', () => {
     await renderReady();
 
     await triggerSave([
+      storeNode(),
       wsNode({ id: 'ws-new', name: 'POS', metadata: { typeKey: 'store-pos', persisted: false } }),
-    ]);
+    ], [locationWire('store-1', 'ws-new')]);
 
     // Toast error surfaced with the error message
     expect(mockAddToast).toHaveBeenCalledWith(
@@ -414,30 +600,26 @@ describe('TopologyScreen', () => {
 
   // ══ #5: Wire-based store_id resolution (duplicate names) ═══════
 
-  it('uses wire-connected store node for resolution, first name-match wins when stores collide', async () => {
+  it('uses stable semantic store_profile_id when display names collide', async () => {
+    // Two branches share the display name 'Downtown'; the canvas wires to
+    // the secondary one. The resolved store_id must come from the wire's
+    // branch node storeProfileId — never from display-name matching.
     mockListStores.mockResolvedValue([
-      { ...sampleStores[0]!, id: 'store-downtown-1', name: 'Downtown', is_primary: true },
+      { ...sampleStores[0]!, id: 'store-1', name: 'Downtown', is_primary: true },
       { ...sampleStores[0]!, id: 'store-downtown-2', name: 'Downtown', is_primary: false },
     ]);
     await renderReady();
 
-    const store1 = storeNode({ id: 'store-a', name: 'Downtown' });
-    const store2 = storeNode({ id: 'store-b', name: 'Downtown' });
+    const store = storeNode({ id: 'store-b', name: 'Downtown', storeProfileId: 'store-downtown-2' });
     const ws = wsNode({ id: 'ws-new', name: 'POS', metadata: { typeKey: 'store-pos', persisted: false } });
-    // Wire connects workspace to the SECOND store node (store-b)
-    const wires = [
-      { id: 'w-1', fromNodeId: 'store-b', fromPort: 'right', toNodeId: 'ws-new', toPort: 'left', direction: 'one-way' },
-    ];
+    const wires = [locationWire('store-b', 'ws-new', 'w-1')];
 
-    await capturedEditorProps.onSave!([store1, store2, ws], wires);
+    await capturedEditorProps.onSave!([store, ws], wires);
 
     const a = appliedArgs();
     expect(a.creations).toHaveLength(1);
-    // When store names collide, the first store profile match wins.
-    // Both are 'Downtown', so the first in the array (store-downtown-1) is returned.
-    // This is a known limitation of name-based resolution — documented as a feature
-    // (deterministic first-match behavior).
-    expect(a.creations[0]!.store_id).toBe('store-downtown-1');
+    // Stable semantic store_profile_id wins even when display names collide.
+    expect(a.creations[0]!.store_id).toBe('store-downtown-2');
   });
 
   // ══ #1: Type-change metadata.persisted flag ════════════════════
@@ -446,14 +628,16 @@ describe('TopologyScreen', () => {
     await renderReady();
 
     await triggerSave([
+      storeNode(),
       wsNode({ id: 'ws-existing', name: 'Front Register', metadata: { typeKey: 'kds', persisted: true } }),
-    ]);
+    ], [locationWire('store-1', 'ws-existing')]);
 
     const a = appliedArgs();
-    expect(a.diagramNodes).toHaveLength(1);
-    expect(a.diagramNodes[0]!.id).not.toBe('ws-existing');
+    expect(a.diagramNodes).toHaveLength(2);
+    const changedNode = a.diagramNodes.find((node) => node.id !== 'store-1');
+    expect(changedNode?.id).not.toBe('ws-existing');
     // The recreated node's metadata should have persisted: true
-    const meta = (a.diagramNodes[0] as { metadata?: { persisted?: boolean } }).metadata;
+    const meta = (changedNode as { metadata?: { persisted?: boolean } } | undefined)?.metadata;
     expect(meta).toBeDefined();
     expect(meta!.persisted).toBe(true);
   });
@@ -474,9 +658,10 @@ describe('TopologyScreen', () => {
     await renderReady();
 
     await triggerSave([
+      storeNode(),
       wsNode({ id: 'ws-existing', name: 'Front Register', metadata: { typeKey: 'store-pos', persisted: true } }),
       wsNode({ id: 'ws-new', name: 'New POS', metadata: { typeKey: 'store-pos', persisted: false } }),
-    ]);
+    ], [locationWire('store-1', 'ws-existing', 'location-existing'), locationWire('store-1', 'ws-new', 'location-new')]);
 
     await waitFor(() => {
       expect(mockListWorkspacesScoped).toHaveBeenCalledTimes(2);
