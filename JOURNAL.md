@@ -1020,3 +1020,15 @@ Clean (0 errors).
 **Validation:** contract suite 14/14 · topology suites 180/180 · typecheck clean · eslint 0 errors on changed files · drift guard clean.
 
 **Commits:** `topologyContract.ts` nodeKind fold + 1 contract test. Shared-tree note: the topology batch (editor polish, connector rail, branch selector, wire tooltips, topologyCard registry, FTL edits) stays uncommitted for its owner.
+
+## 2026-08-08 — TDD cycle: reject duplicate wire ids across the whole graph
+
+**Problem:** The quarantine family covered normalization (direction, relationshipType, port ids, node kinds) but a VALIDATION gap remained: wire-id uniqueness was never checked. `validateTopologyGraph`'s existing `duplicate-wire` error only fires for location-ownership wires sharing the same 4-tuple (`fromNodeId|fromPortId|toNodeId|toPortId`) — two wires with the SAME id but different endpoints passed validation silently. That breaks the editor's React keys, click-cycle-by-id, and delete-by-id, and round-trips to Apply. Node ids had a `seenNodeIds → duplicate-node` guard; wire ids had nothing. Evidence: a test with two ownership wires sharing id 'wire-x' but targeting different workspaces produced zero errors.
+
+**Red → Green:** New test feeds two ownership wires with the same id and different endpoints, asserting a `duplicate-wire` error with `wireId: 'wire-x'`. Red confirmed. Fix: a `seenWireIds` guard at the top of `validateTopologyGraph`, mirroring `seenNodeIds`, iterating the WHOLE wire set (not just location wires).
+
+**Semantic widening (deliberate, journaled):** the `duplicate-wire` code now means BOTH "duplicate 4-tuple" and "duplicate id." Reuse avoids new FTL keys (entangled with the batch); a dedicated `duplicate-wire-id` code can come later if consumers need to distinguish. Known edge (not fixed): a wire that is both id-duplicate AND 4-tuple-duplicate gets two identical `duplicate-wire` errors pushed — both problems genuinely exist; a future UI error renderer could dedupe.
+
+**Validation:** contract suite 15/15 · topology suites 181/181 · typecheck clean · eslint 0 errors on changed files · drift guard clean.
+
+**Commits:** `topologyContract.ts` seenWireIds guard + 1 contract test. Shared-tree note: the topology batch stays uncommitted for its owner.
