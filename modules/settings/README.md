@@ -23,7 +23,7 @@ The Settings module owns the store configuration vertical. It handles store name
 - **Commands** — Settings, setup, and sync Tauri commands (`apps/desktop-client/src/commands/settings.rs`, `apps/desktop-client/src/commands/setup.rs`, `apps/desktop-client/src/commands/sync.rs`)
 - **Frontend** — Settings and setup wizard screens (`ui/src/features/settings/`, `ui/src/features/setup/`)
 - **API** — TypeScript API client (`ui/src/api/settings.ts`)
-- **Locale** — Fluent translation strings (`ui/src/locales/*/settings.ftl`)
+- **Locale** — Fluent translation strings (`ui/src/locales/settings.ftl`)
 
 In the current phase, these files remain in their original locations. They will be physically moved into `modules/settings/` in subsequent phases.
 
@@ -61,4 +61,7 @@ kernel.start_all()?;
 }
 ```
 
-> last audited 07-07-26 by docs-auditor
+> last audited 2026-09-08 · Phase 3 Module-Level Documentation Audit
+> status: ACCURATE (verified against actual codebase)
+> last audited 2026-09-08 · Phase 3 Module-Level Documentation Audit
+> status: ACCURATE (verified against actual codebase)

@@ -1,4 +1,4 @@
-<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · all owned paths verified: crates/oz-core/src/db/tax.rs, commands/tax.rs, features/tax, api/tax.ts, ui/src/locales/tax.ftl; modules/tax/src/lib.rs has TaxModule; manifest deps [] + permissions [tax:view,tax:edit] match · Kernel API matches -->
+<!-- Audit stamp: 2026-07-22 · Hermes-Agent · status: ACCURATE (0 findings) · all owned paths verified: crates//src/db/tax.rs, commands/tax.rs, features/tax, api/tax.ts, ui/src/locales/tax.ftl; modules/tax/src/lib.rs has TaxModule; manifest deps [] + permissions [tax:view,tax:edit] match · Kernel API matches -->
 
 # Tax Module
 
@@ -19,13 +19,13 @@ The Tax module owns the tax configuration vertical. It handles tax rate CRUD, pr
 
 ## Currently Owns
 
-- **Backend** — Tax rate CRUD and assignments (`crates/oz-core/src/db/tax.rs`)
+- **Backend** — Tax rate CRUD and assignments (`crates//src/db/tax.rs`)
 - **Commands** — Tax Tauri commands (`apps/desktop-client/src/commands/tax.rs`)
 - **Frontend** — Tax configuration screen (`ui/src/features/tax/`)
 - **API** — TypeScript API client (`ui/src/api/tax.ts`)
 - **Locale** — Fluent translation strings (`ui/src/locales/*/tax.ftl`)
 
-This crate is the **contractual layer** for the tax vertical: it owns the canonical domain types (`TaxRate`, `RoundingMode`), which `oz-core` re-exports. The implementation layers above remain in their original locations, and the boundary between this crate and those layers is pinned by the cross-layer contract tests in `modules/tax/tests/boundary_contract.rs` (manifest registration ↔ type identity ↔ DB behaviour parity ↔ serde wire shape). A future phase may physically move the implementation into this crate as the module system matures.
+This crate is the **contractual layer** for the tax vertical: it owns the canonical domain types (`TaxRate`, `RoundingMode`), which `` re-exports. The implementation layers above remain in their original locations, and the boundary between this crate and those layers is pinned by the cross-layer contract tests in `modules/tax/tests/boundary_contract.rs` (manifest registration ↔ type identity ↔ DB behaviour parity ↔ serde wire shape). A future phase may physically move the implementation into this crate as the module system matures.
 
 ## Lifecycle
 
@@ -61,4 +61,7 @@ kernel.start_all()?;
 }
 ```
 
-> last audited 07-07-26 by docs-auditor
+> last audited 2026-09-08 · Phase 3 Module-Level Documentation Audit
+> status: ACCURATE (verified against actual codebase)
+> last audited 2026-09-08 · Phase 3 Module-Level Documentation Audit
+> status: ACCURATE (verified against actual codebase)

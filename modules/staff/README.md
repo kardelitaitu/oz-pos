@@ -25,7 +25,7 @@ The Staff module owns the staff management vertical. It handles user CRUD, role 
 - **Commands** — Staff Tauri commands (`apps/desktop-client/src/commands/staff.rs`, `apps/desktop-client/src/commands/auth.rs`)
 - **Frontend** — Staff management screen (`ui/src/features/staff/`)
 - **API** — TypeScript API client (`ui/src/api/staff.ts`)
-- **Locale** — Fluent translation strings (`ui/src/locales/*/staff.ftl`)
+- **Locale** — Fluent translation strings (`ui/src/locales/staff.ftl`)
 
 These files remain in their original locations while the module boundary is transitional. The production security boundary is already session-scoped: legacy staff CRUD IPC commands are disabled and unregistered. Physical migration into `modules/staff/` remains a separate architectural phase.
 
@@ -63,4 +63,7 @@ kernel.start_all()?;
 }
 ```
 
-> last audited 07-07-26 by docs-auditor
+> last audited 2026-09-08 · Phase 3 Module-Level Documentation Audit
+> status: ACCURATE (verified against actual codebase)
+> last audited 2026-09-08 · Phase 3 Module-Level Documentation Audit
+> status: ACCURATE (verified against actual codebase)

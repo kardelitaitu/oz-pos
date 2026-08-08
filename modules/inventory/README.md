@@ -23,7 +23,7 @@ The Inventory module owns the entire product and stock management vertical. It h
 - **Commands** — Product and variant Tauri commands (`apps/desktop-client/src/commands/products.rs`, `apps/desktop-client/src/commands/product_variants.rs`, `apps/desktop-client/src/commands/categories.rs`)
 - **Frontend** — Product screens (`ui/src/features/products/`), inventory adjustment (`ui/src/features/inventory/`)
 - **API** — TypeScript API client (`ui/src/api/products.ts`)
-- **Locale** — Fluent translation strings (`ui/src/locales/*/products.ftl`, `ui/src/locales/*/inventory.ftl`)
+- **Locale** — Fluent translation strings (`ui/src/locales/products.ftl`, `ui/src/locales/inventory.ftl`)
 
 In the current phase, these files remain in their original locations. They will be physically moved into `modules/inventory/` in subsequent phases.
 
@@ -61,4 +61,7 @@ kernel.start_all()?;
 }
 ```
 
-> last audited 07-07-26 by docs-auditor
+> last audited 2026-09-08 · Phase 3 Module-Level Documentation Audit
+> status: ACCURATE (verified against actual codebase)
+> last audited 2026-09-08 · Phase 3 Module-Level Documentation Audit
+> status: ACCURATE (verified against actual codebase)

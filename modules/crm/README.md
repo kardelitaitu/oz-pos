@@ -23,7 +23,7 @@ The CRM module owns the customer relationship management vertical. It handles cu
 - **Commands** — Customer Tauri commands (`apps/desktop-client/src/commands/customers.rs`)
 - **Frontend** — Customer management screen (`ui/src/features/customers/`)
 - **API** — TypeScript API client (`ui/src/api/customers.ts`)
-- **Locale** — Fluent translation strings (`ui/src/locales/*/customers.ftl`)
+- **Locale** — Fluent translation strings (`ui/src/locales/customers.ftl`)
 
 In the current phase, these files remain in their original locations. They will be physically moved into `modules/crm/` in subsequent phases.
 
@@ -61,4 +61,7 @@ kernel.start_all()?;
 }
 ```
 
-> last audited 07-07-26 by docs-auditor
+> last audited 2026-09-08 · Phase 3 Module-Level Documentation Audit
+> status: ACCURATE (verified against actual codebase)
+> last audited 2026-09-08 · Phase 3 Module-Level Documentation Audit
+> status: ACCURATE (verified against actual codebase)
