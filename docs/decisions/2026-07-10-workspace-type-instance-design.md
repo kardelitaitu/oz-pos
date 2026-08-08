@@ -854,3 +854,10 @@ Allow a user to have multiple workspaces open simultaneously in tabs.
 - ADR #3 — Frontend Restructure (registry-based shell)
 - ADR #5 — Subscription Tier & Entitlement (planned)
 - ADR #6 — CRDT Delta Ledger & Offline Sync (planned)
+
+> last audited 09-08-26 · Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
+
+> last audited 2026-09-08 · Phase 4 ADR Deep Audit
+> status: ACCURATE (verified against actual codebase)

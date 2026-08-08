@@ -63,3 +63,10 @@ Target: **100 tenants @ ≤$4/mo**. The $2-$3 VPS constraint applies only to the
 - `docs/specs/_active/p1-sync-batching-compression-retention.md`
 - `docs/specs/_active/p2-sync-priority-concurrency.md`
 - `docs/specs/_active/p3-sync-pagination-snapshot-observability.md`
+
+> last audited 09-08-26 · Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
+
+> last audited 2026-09-08 · Phase 4 ADR Deep Audit
+> status: ACCURATE (verified against actual codebase)

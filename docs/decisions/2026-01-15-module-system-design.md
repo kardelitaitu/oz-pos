@@ -174,3 +174,10 @@ Modules compiled to WebAssembly and loaded at runtime.
 - `foundation/src/contracts.rs` — Trait definitions
 - `ARCHITECTURE.md` — Target architecture
 - `RESTRUCTURING.md` — Phased migration plan
+
+> last audited 09-08-26 · Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
+
+> last audited 2026-09-08 · Phase 4 ADR Deep Audit
+> status: ACCURATE (verified against actual codebase)

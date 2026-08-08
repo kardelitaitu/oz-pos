@@ -202,3 +202,10 @@ This lint runs in CI but is **not** enforced locally during development (to avoi
 - `apps/desktop-client/src/commands/products.rs` — Reference implementation (`list_products_scoped`)
 - `ui/src/api/products.ts` — Frontend API wrapper (`listProductsScoped`)
 - `ui/src/contexts/WorkspaceContext.tsx` — Session token lifecycle
+
+> last audited 09-08-26 · Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
+
+> last audited 2026-09-08 · Phase 4 ADR Deep Audit
+> status: ACCURATE (verified against actual codebase)

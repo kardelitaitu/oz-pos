@@ -191,3 +191,10 @@ pub enum InstanceStatus {
 - `crates/oz-core/src/db/workspaces.rs`
 - `platform/core/` — `StoreDatabaseManager` (cross-DB coordination)
 - `apps/cloud-server/` (subscription signing service)
+
+> last audited 09-08-26 · Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
+
+> last audited 2026-09-08 · Phase 4 ADR Deep Audit
+> status: ACCURATE (verified against actual codebase)

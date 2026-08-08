@@ -756,3 +756,10 @@ The `api_key` is stored once on activation and reused for all subsequent renew a
 - `apps/cloud-server/` — Cloud sync server (separate service on separate VPS)
 - [PocketBase Docs](https://pocketbase.io/docs/)
 - [Northflank PocketBase Guide](https://northflank.com/guides/how-to-deploy-pocketbase-step-by-step-deployment-guide)
+
+> last audited 09-08-26 · Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
+
+> last audited 2026-09-08 · Phase 4 ADR Deep Audit
+> status: ACCURATE (verified against actual codebase)

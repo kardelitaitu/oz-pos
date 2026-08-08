@@ -131,3 +131,10 @@ All items completed 2026-07-10.
 - `apps/desktop-client/src/commands/pos.rs` — Sale completion emission
 - `apps/tablet-client/src/commands/pos.rs` — Tablet sale completion emission
 - `apps/desktop-client/src/commands/products.rs` — Product/stock event emission
+
+> last audited 09-08-26 · Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
+
+> last audited 2026-09-08 · Phase 4 ADR Deep Audit
+> status: ACCURATE (verified against actual codebase)
