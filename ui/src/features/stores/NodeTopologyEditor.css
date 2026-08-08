@@ -14,23 +14,24 @@
 /* Header */
 .node-topology-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: var(--space-3);
   padding: var(--space-4) var(--space-6);
   background-color: var(--color-bg-surface);
   border-bottom: 1px solid var(--color-border);
 }
 
-.node-topology-header-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.node-topology-header-title h2 {
-  margin: 0;
-  font-size: var(--text-xl);
-  font-weight: var(--font-weight-bold);
+/* The branch (graph) selector toolbar sits inline as the header's left
+   cluster (the parent passes it via the branchToolbar slot): drop the
+   standalone bar's own chrome so it blends into the header surface, and
+   let it yield space (min-width: 0) instead of forcing overflow when a
+   branch name is long. */
+.node-topology-header .topology-branch-toolbar {
+  flex-shrink: 1;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  border-bottom: none;
 }
 
 .topology-tier-badge {
@@ -45,8 +46,13 @@
 
 .node-topology-header-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3);
+  /* Push the action buttons to the far right of the single-row header;
+     the toolbar cluster + tier badge stay grouped on the left. The
+     cluster may wrap only when the header genuinely runs out of room. */
+  margin-left: auto;
 }
 
 /* Main Layout */
@@ -403,9 +409,9 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
-  margin-right: var(--space-4);
+  margin-right: var(--space-2);
 }
 
 .node-title {
@@ -417,10 +423,52 @@
   text-overflow: ellipsis;
 }
 
+/* Inline Branch Location rename on the node card: a quiet pencil beside
+   the title, swapping the title for a small input while editing. */
+.node-card-rename-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-fg-muted);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.node-card-rename-btn:hover {
+  background: var(--color-bg-subtle);
+  color: var(--color-fg);
+  border-color: var(--color-border);
+}
+
+.node-card-rename-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 1px;
+}
+
+.node-card-rename-input {
+  width: 120px;
+  min-width: 0;
+  padding: 2px var(--space-1);
+  border: 1px solid var(--color-border-focus);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-bold);
+  text-align: center;
+}
+
 .node-body {
   height: 152px;
   box-sizing: border-box;
-  padding: var(--space-3) var(--space-3) 42px;
+  padding: var(--space-3) var(--space-3) 48px;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -487,17 +535,23 @@
   color: var(--color-fg-muted);
 }
 
+/* Compact status chip in the node header — deliberately NOT in the body or
+   connector rail, so telemetry text can never collide with connector labels.
+   The header row owns the badge (right side); the body owns description and
+   inline controls; the bottom rail owns only left/right connectors. */
 .node-telemetry-badge {
   display: inline-flex;
   align-items: center;
-  max-width: 100%;
+  flex: 0 0 auto;
+  max-width: 92px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--text-xs);
+  font-size: 10px;
   font-weight: var(--font-weight-bold);
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-sm);
+  line-height: 1;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
   width: fit-content;
 }
 
@@ -708,6 +762,10 @@
   left: 0;
 }
 
+/* Connector label — plain text beside the marker circle. No pill/box chrome:
+   a boxed label reads as competing chrome against body content and wire
+   labels, which is what made the footer look cluttered. The circle marker
+   is the interactive affordance; the label just names the port. */
 .node-port-label {
   position: absolute;
   top: 50%;
@@ -718,16 +776,17 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   pointer-events: none;
-  color: var(--color-fg);
+  color: var(--color-fg-muted);
   font-size: var(--text-xs);
   font-weight: var(--font-weight-bold);
   line-height: 1.2;
   z-index: 2;
-  padding: 3px 8px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-full);
-  background: var(--color-bg-popover);
-  box-shadow: var(--shadow-sm);
+  transition: color 0.15s ease;
+}
+
+.node-port-socket:hover .node-port-label,
+.node-port-socket:focus-visible .node-port-label {
+  color: var(--color-fg);
 }
 
 .node-port-label-left {

@@ -19,10 +19,11 @@ multi-store-label-timezone = Timezone
 multi-store-label-terminals = Terminals
 multi-store-section-stores-overview = Stores overview
 multi-store-section-terminal-status = Terminal status
-topology-builder-title = Visual Store & Workspace Topology Builder
 multi-store-error-load = Failed to load data
 
 # ── Topology Editor ──
+
+topology-builder-title = Visual Store & Workspace Topology Builder
 
 topology-sim-start = Test Order Simulation
 topology-sim-stop = Stop Simulation
@@ -81,6 +82,9 @@ topology-ws-type-warehouse = Warehouse
 # ── Aria labels & tooltips ──
 topology-node-drag-hint = Drag to move
 topology-wire-toggle-aria = Toggle wire direction
+
+topology-wire-toggle-hint =
+    Click to cycle direction (one-way → reverse → two-way)
 topology-wire-flip-hint-connecting =
     Flip direction? Clicking keeps your connection in progress.
 topology-inspector-close-aria = Close inspector
@@ -88,10 +92,12 @@ topology-inspector-hardware-title = Hardware Device
 topology-ws-type-select-aria = Select workspace type
 # $name (String) — node display name · $port (String) — port position (top/right/bottom/left)
 topology-port-aria = { $name } { $port } port
-topology-port-location-out = Location Out
-topology-port-location-in = Location In
-topology-port-location-out-aria = { $name } Location Out port
-topology-port-workspace-out = Operational Out
+topology-port-location-out = Location
+topology-port-location-in = Location
+topology-port-location-out-aria = { $name } Location port
+topology-port-workspace-out = Operation
+topology-port-operation-in = Operation
+topology-port-operation-in-aria = { $name } Operation port
 topology-port-stock-in = Stock In
 topology-port-stock-out = Stock Out
 topology-port-ticket-in = Ticket In
@@ -103,7 +109,7 @@ topology-field-name = Name
 topology-field-name-aria = Edit { $name } name
 topology-field-enabled = Enabled
 topology-field-enabled-aria = Toggle { $name } enabled state
-topology-port-location-in-aria = { $name } Location In port
+topology-port-location-in-aria = { $name } Location port
 topology-validation-unsupported-schema = This topology schema version is not supported.
 topology-validation-missing-branch = Add exactly one Branch Location node.
 topology-validation-multiple-branches = Keep exactly one Branch Location node in this graph.
@@ -135,6 +141,23 @@ topology-toast-no-session = No active session — cannot save workspaces.
 topology-toast-saved = Topology saved: { $detail }.
 
 # ── Canvas HUD (aria-hidden decorative text) ──
+topology-branch-selector-label = Branch
+topology-branch-selector-aria = Select topology branch
+topology-branch-add = Add Branch
+topology-branch-add-name-placeholder = New branch name
+topology-branch-add-confirm = Create
+topology-branch-add-cancel = Cancel
+topology-branch-add-error = Could not create branch
+topology-branch-delete = Delete Branch
+topology-branch-delete-confirm = Delete { $name }?
+topology-branch-delete-confirm-btn = Delete
+topology-branch-delete-error = Could not delete branch
+topology-branch-rename-label = Rename branch
+topology-branch-rename-placeholder = Branch name
+topology-branch-rename-error = Could not rename branch
+topology-workspace-rename-label = Rename workspace
+topology-workspace-rename-placeholder = Workspace name
+topology-workspace-rename-error = Could not rename workspace
 topology-hud-nodes = { $count } { $count ->
     [one] node
    *[other] nodes

@@ -17,10 +17,11 @@ multi-store-label-timezone = Zona Waktu
 multi-store-label-terminals = Terminal
 multi-store-section-stores-overview = Ikhtisar toko
 multi-store-section-terminal-status = Status terminal
-topology-builder-title = Builder Topologi Visual Toko & Workspace
 multi-store-error-load = Gagal memuat data
 
 # ── Topology Editor ──
+
+topology-builder-title = Builder Topologi Visual Toko & Workspace
 
 topology-sim-start = Uji Simulasi Pesanan
 topology-sim-stop = Hentikan Simulasi
@@ -79,6 +80,9 @@ topology-ws-type-warehouse = Gudang
 # ── Aria labels & tooltips ──
 topology-node-drag-hint = Seret untuk memindahkan
 topology-wire-toggle-aria = Alihkan arah koneksi
+
+topology-wire-toggle-hint =
+    Klik untuk mengganti arah (satu arah → terbalik → dua arah)
 topology-wire-flip-hint-connecting =
     Balik arah? Klik tetap menjaga koneksi Anda tetap berjalan.
 topology-inspector-close-aria = Tutup inspektur
@@ -86,10 +90,12 @@ topology-inspector-hardware-title = Perangkat Keras
 topology-ws-type-select-aria = Pilih tipe workspace
 # $name (String) — node display name · $port (String) — port position (top/right/bottom/left)
 topology-port-aria = Port { $port } { $name }
-topology-port-location-out = Location Out
-topology-port-location-in = Location In
-topology-port-location-out-aria = Port Location Out { $name }
-topology-port-workspace-out = Operasional Keluar
+topology-port-location-out = Lokasi
+topology-port-location-in = Lokasi
+topology-port-location-out-aria = Port Lokasi { $name }
+topology-port-workspace-out = Operasi
+topology-port-operation-in = Operasi
+topology-port-operation-in-aria = Port Operasi { $name }
 topology-port-stock-in = Stok Masuk
 topology-port-stock-out = Stok Keluar
 topology-port-ticket-in = Tiket Masuk
@@ -101,7 +107,7 @@ topology-field-name = Nama
 topology-field-name-aria = Edit nama { $name }
 topology-field-enabled = Aktif
 topology-field-enabled-aria = Ubah status aktif { $name }
-topology-port-location-in-aria = Port Location In { $name }
+topology-port-location-in-aria = Port Lokasi { $name }
 topology-validation-unsupported-schema = Versi skema topologi ini tidak didukung.
 topology-validation-missing-branch = Tambahkan tepat satu node Branch Location.
 topology-validation-multiple-branches = Pertahankan tepat satu node Branch Location dalam grafik ini.
@@ -133,6 +139,23 @@ topology-toast-no-session = Tidak ada sesi aktif — tidak dapat menyimpan works
 topology-toast-saved = Topologi tersimpan: { $detail }.
 
 # ── Canvas HUD (aria-hidden decorative text) ──
+topology-branch-selector-label = Cabang
+topology-branch-selector-aria = Pilih cabang topologi
+topology-branch-add = Tambah Cabang
+topology-branch-add-name-placeholder = Nama cabang baru
+topology-branch-add-confirm = Buat
+topology-branch-add-cancel = Batal
+topology-branch-add-error = Gagal membuat cabang
+topology-branch-delete = Hapus Cabang
+topology-branch-delete-confirm = Hapus { $name }?
+topology-branch-delete-confirm-btn = Hapus
+topology-branch-delete-error = Gagal menghapus cabang
+topology-branch-rename-label = Ubah nama cabang
+topology-branch-rename-placeholder = Nama cabang
+topology-branch-rename-error = Gagal mengubah nama cabang
+topology-workspace-rename-label = Ubah nama workspace
+topology-workspace-rename-placeholder = Nama workspace
+topology-workspace-rename-error = Gagal mengubah nama workspace
 topology-hud-nodes = { $count } { $count ->
     [one] node
    *[other] node
