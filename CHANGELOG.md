@@ -1,6 +1,6 @@
 # Changelog
 
-<!-- Audit stamp: 2026-07-26 · Hermes-Agent · status: ACCURATE (3 noted findings) · F1: top release header [0.0.21] vs Cargo.toml/branch 0.0.22 drift · F2: "27 modules self-register via modules/index.ts" -> 24 feature register.tsx wired via @/features barrel (decentralized self-registration model accurate) · F3: "5,221+ Rust tests" -> actual repo-wide 5,212 · re-verified 2026-07-31 (3,476 UI tests, 14 check.sh steps) · verified accurate: 48 .ftl files, 101 migrations (highest N=106), Node>=22/npm>=11, Vite ^6, 228 UI test files, modules/currency CurrencyRepository, crates/oz-core/src/user_preferences.rs + 038_user_preferences.sql, KDS Kanban/Focus/Metro + Switcher + KdsTicketCard + useKdsPreferences all exist, 10 modules/ · re-audited 2026-08-08 by docs-auditor: restructured (0.0.23/0.0.24 order fixed, orphaned P80-P251 blocks labeled, 0.0.10/0.0.6 gaps noted, 14->15 check.sh steps reconciled); 0.0.23/0.0.25 entries verified accurate (commits 9b7552e7/cc062951, 17 baseline findings) -->
+<!-- Audit stamp: 2026-07-26 · Hermes-Agent · status: ACCURATE (3 noted findings) · F1: top release header [0.0.21] vs Cargo.toml/branch 0.0.22 drift · F2: "27 modules self-register via modules/index.ts" -> 24 feature register.tsx wired via @/features barrel (decentralized self-registration model accurate) · F3: "5,221+ Rust tests" -> actual repo-wide 5,212 · re-verified 2026-07-31 (3,476 UI tests, 14 check.sh steps) · verified accurate: 48 .ftl files, 101 migrations (highest N=106), Node>=22/npm>=11, Vite ^6, 228 UI test files, modules/currency CurrencyRepository, crates/oz-core/src/user_preferences.rs + 038_user_preferences.sql, KDS Kanban/Focus/Metro + Switcher + KdsTicketCard + useKdsPreferences all exist, 10 modules/ · re-audited 2026-08-08 by docs-auditor: restructured (0.0.23/0.0.24 order fixed, 0.0.10/0.0.6 gaps noted, 14->15 check.sh steps reconciled); P80-P251 rescue blocks re-parented to their version sections (git bcd40394 merged 0.0.19-0.0.25 entries into 0.0.18 dropping headers; pre-merge headers restored as of 2026-08-08); 0.0.23/0.0.25 entries verified accurate (commits 9b7552e7/cc062951, 17 baseline findings) -->
 
 All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
@@ -47,6 +47,26 @@ Architecture enforcement and release baseline update for the 0.0.25 cycle.
 - **Pre-session workspace picker bound to the authenticated user (audit/06)** — `staff_login` / `bootstrap_owner` now mint a short-lived HMAC-signed picker ticket, and the pre-session `list_workspaces` / `list_workspace_screens` commands verify it and resolve the caller's real role from the database instead of trusting caller-supplied `role_id` / `user_id`. A forged `role-owner` claim can no longer enumerate workspace instances in any store. The terminal-management screen's cross-store instance picker (previously a hardcoded `role-owner` claim) now uses the session-scoped `list_workspaces_for_store_scoped` command. **Tablet parity**: the tablet client mints the same ticket in `staff_login` and registers the three picker commands, so the shared picker works identically on desktop and tablet.
 - **Tablet first-owner bootstrap + device binding (audit/06 parity)** — the tablet client now registers `bootstrap_owner` (first-owner creation with the same picker-ticket mint as the desktop, gated on "no users exist" and full PIN/field validation) and the full device-binding surface: `set_device_binding` / `set_device_binding_scoped` write an HMAC-SHA256 signature (OS-keyring secret, constant-time verify) over `{terminal_id}:{store_id}:{instance_id}` into the global identity DB, and `resolve_boot_store` auto-boots a bound tablet into its store+instance, falling back to the primary store on a missing/tampered binding or a vanished instance. The shared `WorkspaceContext` now passes the device id into `resolve_boot_store`, so a bound terminal actually resolves its binding on both clients. 24 new tablet tests + 2 new frontend tests.
 
+#### 🎯 Final Code Health Milestone — Zero Pre-existing Issues
+
+After 4 sprints of methodical test rescue and lint/clippy cleanup, all gates are now completely clean.
+
+#### P250 — Remaining Test Failure Rescue (8 tests across 2 files)
+- **PurchaseOrderForm.test.tsx** (4/4): Root cause was async supplier load not waited for before `selectOption()`. Added `await vi.waitFor()` before each of 4 supplier-dependent tests. 17/17 passing.
+- **TerminalStatusPanel.test.tsx** (4/4): Root cause was Fluent `{ $n }` variable interpolation failing in JSDOM. Fixed by mocking `@fluent/react` — `Localized` renders children directly, `useLocalization().l10n.getString()` returns fallback English text with bracket-notation variable access (`args?.['n']`). Stable `l10n` object via `vi.hoisted` prevents extra effect triggers. 16/16 passing, TypeScript clean.
+
+#### P251 — Clippy Error Resolution (4 errors)
+- **topology.rs**: Replaced 2× `3.14` with `std::f64::consts::PI` (approx_constant). Collapsed nested 3-level `if let` chain into single `if let ... && let ... && ...` using Rust let-chains (collapsible_if).
+
+#### 📊 Cumulative Impact (0.0.22 → 0.0.25)
+| Gate | 0.0.22 Start | 0.0.25 End |
+|------|-------------|------------|
+| Vitest failures | 113 | **0** ✅ |
+| ESLint errors+warnings | 4 | **0** ✅ |
+| Clippy errors | 5 | **0** ✅ |
+| TypeScript errors | 0 | **0** ✅ |
+| **Total pre-existing** | **122** | **0** 🎉 |
+
 ### Validation
 
 - Full script test suite: **46/46 passed**.
@@ -72,6 +92,13 @@ Retail + Restaurant (KDS) release: closed the full KDS production-readiness road
 - **KDS + Retail — loading/error UX** — Shimmer loading skeletons and error banners with retry on both screens; KDS keyboard-help overlay, arrival animation, layout independence.
 - **Workspace settings (ADR #22)** — F10 keybinding opens the settings modal (TODO 4b); terminalId wired from AppShell; duplicate F10 removed; `markSettingsUpdated` on all 5 card saves; 6 card audit findings resolved; `setReceiptSettings` migrated to the scoped ADR #7 variant.
 - **E2E infrastructure (Phase B)** — `npm run e2e` + `check:all` commands, E2E PR workflow, `--changed-only` flag, and critical-path specs: POS→KDS flow, KDS lifecycle, sale→history, settings persistence, shift reconciliation.
+
+#### 🟢 P240 — Full Gate Pipeline Verification
+- **Manual gate check**: Ran `cargo fmt --all --check` (clean), `cargo clippy --workspace --all-targets -- -D warnings` (4 pre-existing in test code), `npm run typecheck` (0 errors), `npm run lint` (0/0), `npx vitest run` (8 failed / 2,918 passed — pre-existing Fluent+JSDOM edge cases).
+- **Gate state documented**: 12 total pre-existing issues (4 clippy + 8 vitest), all in test code, 0 in production.
+
+#### 🔴 P241 — CHANGELOG Backfill
+- Added comprehensive 0.0.23 entry documenting 25 tests rescued, 1 clippy error fixed, and cumulative 113→8 vitest failures (93% reduction) across 0.0.22–0.0.23.
 
 ### Fixed
 
@@ -122,6 +149,21 @@ Desktop App Security & Stability Audit closeout: **all 18 findings resolved** ac
 - **L-4 — Release-process runbook (`docs/releases/release-process.md`)** — New 138-line document covering build → sign → notarize → publish → rotate steps. Most critical section: **updater pubkey rotation procedure** (when the `oz-pos-updater.key` keypair is rotated, how to bump the `tauri.conf.json` `updater.pubkey`, how to publish overlapping releases so old clients can still verify, and the 2-maintainer review requirement for the rotation PR).
 
 ---
+
+#### 🟢 P230 — Pre-existing Test Failure Rescue (25 tests across 4 files)
+- **PurchaseOrderForm.test.tsx** (13/17): Added `LocalizationProvider` with `purchasing.ftl` + `shared.ftl` bundles, fixed `selectOption` for JSDOM controlled selects, fixed placeholder casing (`Product Name`).
+- **TerminalStatusPanel.test.tsx** (12/16): Added `LocalizationProvider` with real `terminals.ftl` + `shared.ftl` bundles. 8 inline Fluent keys for missing terminal strings.
+- **themeTokenCompliance.test.ts** (1/1): Fixed hardcoded `#fff` → `var(--color-text-on-danger, #fff)` in `StockAlertBell.css:40`.
+- **screenExtraction.test.ts** (2/2): Added 3 external classes: `settings-topology-container`, `multi-store-view-toggle`, `multi-store-dashboard-topology-view`.
+
+#### 🔴 P231 — Clippy Error Resolution
+- **P231-1**: Removed `use super::*;` from `apps/cloud-server/src/shutdown.rs:52` test module (unused import).
+
+#### 📊 Cumulative Impact (0.0.22 + 0.0.23)
+- **Vitest failures**: 113 → 8 (105 tests rescued, **93% reduction**)
+- **ESLint**: 3 errors + 1 warning → 0/0 (100% resolved)
+- **Clippy**: 5 errors → 0 (100% resolved)
+- **TypeScript**: 0 errors (maintained throughout)
 
 ## [0.0.22] — 2026-07-27
 
@@ -234,6 +276,22 @@ All workspace setting cards migrated from `localStorage` stubs to real Tauri IPC
 
 ---
 
+#### 🟢 P220 — Pre-existing Test Failure Rescue (80 tests across 5 files)
+- **CategoryManagementScreen.test.tsx** (12/12): Added `ToastProvider` wrapper — component uses `useToast` which requires context.
+- **GiftCardsScreen.test.tsx** (22/22): Added `ToastProvider` wrapper — same root cause.
+- **ProductLookupScreen.test.tsx** (20/20): Updated ARIA roles from `list`/`listitem` to `grid`/`row` after P200 a11y fix changed the product grid pattern. Fixed virtualization-aware assertions (text presence over row counts).
+- **PromotionManagementScreen.test.tsx** (17/17): Added `ToastProvider` wrapper.
+- **TransactionLogScreen.test.tsx** (9/9): Added `ToastProvider` wrapper.
+- **Net impact**: Pre-existing test failures reduced from 113 to 33.
+
+#### 🔴 P221 — Lint Warning Resolution (5 issues fixed)
+- **ESLint jsx-a11y/label-has-associated-control (4 errors)**: Added `eslint-disable-next-line` comments on all 4 labels in `PurchaseOrderForm.tsx` that nest inputs/selects inside `<Localized>` wrappers — the Fluent wrapper confuses the lint rule.
+- **ESLint react-refresh/only-export-components (1 warning)**: Removed `export` from `WORKSPACE_TYPE_OPTIONS` in `NodeTopologyEditor.tsx` — the constant is only used internally. Fast refresh now works correctly.
+- **ESLint**: 0 errors, 0 warnings. TypeScript: 0 errors.
+
+#### 🟡 P222 — CHANGELOG Backfill
+- Verified CHANGELOG entries exist for 0.0.19 (Type Safety + CSS Hygiene + Console.warn), 0.0.20 (Error Handling + A11y Bug Fixes), and 0.0.21 (Warning Resolution + API SDK Polish + Codebase Polish).
+
 ## [0.0.21] — 2026-07-25
 
 ### Added
@@ -249,10 +307,23 @@ All workspace setting cards migrated from `localStorage` stubs to real Tauri IPC
 - **Phase 5**: Currency-format settings (`default_currency`, `currency_format`, `symbol_position`, `decimal_separator`, `thousands_separator`) added to `CurrencyRepository` with proper `Platform` error variant on `CurrencyError`.
 - **Phase 6**: Deprecation sweep — all 15 delegated Store methods marked `#[deprecated]`; tests annotated `#[allow(deprecated)]` for backward-compatible coverage.
 
+#### 🟢 P210 — Pre-existing Warning Resolution
+- **P210-1 (Clippy)**: Added `///` doc comments to 19 struct fields in `topology.rs` (TopologyData, TopologyNodePayload, TopologyWirePayload). Clippy clean on `oz-pos-app`.
+- **P210-2 (ESLint)**: Auto-fixed 9 `consistent-type-imports` warnings in API client files. Fixed 3 `react-hooks/exhaustive-deps` warnings (CategoryManagementScreen, TransitAuditScreen, MultiStoreDashboardScreen).
+
+#### 🔴 P201 — Error Handling Polish (continued from 0.0.20)
+- **Security audit**: Verified all 14 migrated `addToast` calls use safe error patterns. No PII leaks, no stack traces exposed. All use `err instanceof Error ? err.message : 'Fallback'` guard.
+
 ### Changed
 
 #### 📚 Documentation
 - Updated `CHANGELOG.md`, `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `modules/currency/README.md`, and ADR #30 with R2 completion status.
+
+#### ⚡ Performance Optimization Sprint (P100-P103)
+- **P100 — Bundle low-hanging fruit**: Scanned all heavy components for large deps. Only `fuse.js` (~10KB) found. Zero dead code or empty comment blocks. ESLint confirmed zero unused imports across all `src/`.
+- **P101 — React render optimization**: Heavy components already well-memoized (10-18 `memo`/`useCallback`/`useMemo` per component). No additional wrapping needed.
+- **P102 — Unused import cleanup**: ESLint across all `src/` — zero unused imports, zero `no-console`, zero `no-debugger` violations.
+- **P103 — CSS selector audit**: No significant CSS duplication across feature files.
 
 ## [0.0.20] — 2026-07-25
 
@@ -278,6 +349,12 @@ All workspace setting cards migrated from `localStorage` stubs to real Tauri IPC
 - **Test helpers extraction**: Moved Windows `CredentialGuard` into `test_helpers` and reused it for macOS/Linux cleanup.
 - **Receipt DTO serde casing**: Aligned receipt DTO serde casing with frontend camelCase expectations.
 
+#### 🔴 P201 — Error Handling Polish
+- **ErrorBoundary enhancement**: Added Try Again button to fallback UI (resets error state, optional `onReset` callback), `role="alert"` for screen reader, Fluent localization (`error-boundary-retry`).
+- **ErrorState component tests** (8 new): Renders title, message, icon, role=alert, retry button with callback, custom labels, children.
+- **ErrorBoundary tests** (10 total, 4 new): Try Again button, role=alert, conditional-throw reset verification, onReset callback firing.
+- **Console.error → toast migration**: Replaced 14 `console.error()` calls across 7 production files with `addToast()`: GiftCardsScreen, PromotionManagementScreen, TransactionLogScreen, TransitAuditScreen, ThresholdConfigScreen, PaymentModal. All use safe `err instanceof Error ? err.message : 'Fallback'` pattern.
+
 ### Fixed
 
 #### 🖥️ UI Quality Gates
@@ -291,6 +368,20 @@ All workspace setting cards migrated from `localStorage` stubs to real Tauri IPC
 
 #### Rust Tooling
 - **Clippy clean**: Fixed `clippy::clone_on_copy` for `ModuleStatus` and resolved other workspace clippy warnings under `cargo clippy --workspace --all-targets -- -D warnings`.
+
+#### 🟢 P200 — A11y Bug Fixes
+- **ProductLookupScreen**: Removed conflicting `role="list"`/`role="listitem"` from react-window virtualized grid (nested DOM breaks list hierarchy). Known remaining: `button-name` (Localized empty span) + `aria-required-children` (radiogroup).
+- **SalesHistoryScreen heading-order**: Added configurable `headingLevel` prop to `EmptyState` (default 3). SalesHistoryScreen passes `headingLevel={2}` for correct h1→h2 hierarchy.
+
+#### 🟡 P202 — Final Cleanup
+- Removed stale `TODO 0.0.18` comment from `foundation/src/validation.rs`.
+- Gate check: `cargo fmt` + `npm run typecheck` clean; 19 pre-existing clippy doc errors + 3 ESLint a11y errors noted (not regressions).
+
+#### 🧪 Bug Bash & Flaky Test Fixes (P90-P93)
+- **P90-1: Flaky `windows_overwrite_existing` test**: Added unique test name via `process::id()` and `std::thread::sleep(10ms)` between rapid Credential Manager writes to prevent race conditions.
+- **P91-1: StaffLoginKeyboard lockout test**: Replaced `it.skip` with real test — verifies lockout message appears and digit buttons are disabled during lockout.
+- **P92-1: Drag-to-reorder test rehomed**: Moved `describe.skip` block from SettingsNavTree.test.tsx to SettingsPage.test.tsx (where the logic actually lives).
+- **P93-1: AppShell skipped tests**: Verified 2 conditionally-skipped tests (KDS kiosk, dev-mode) are intentional.
 
 ### Changed
 
@@ -327,6 +418,16 @@ All workspace setting cards migrated from `localStorage` stubs to real Tauri IPC
 - **vite.config.ts**: Removed `onConsoleLog` suppression block (now in test-setup.ts).
 - **6 typecheck errors**: Resolved across PosScreen, RetailPosScreen, StockCountDetail test files.
 
+#### 🌐 Workspace Topology Editor
+- **Node UI Alignment**: Centered node titles properly using `node-title-wrapper`.
+- **Wire Connectors**: Enforced fixed `width: 200px` on nodes to prevent drift in wire connector anchor points. Removed label offset for true center alignment.
+- **Port Visibility**: Changed `.node-port-socket` to only appear on hover, significantly reducing visual clutter on complex topologies.
+
+#### 🛠️ CI Pipeline — sccache Cache & Deprecation Warnings
+
+- **sccache 0% hit rate fix** — Added `SCCACHE_GHA_ENABLED: "true"` to top-level CI env. sccache was using ephemeral local disk (`/home/runner/.cache/sccache`) on GitHub Actions runners, causing 280/280 cache misses (0% hit rate). Now uses GitHub Actions cache backend, enabling cross-run compilation caching. First run will still be cold; subsequent runs will see ~85% cache hit rate.
+- **save-always deprecation** — Replaced `save-always: true` with `save-if: ${{ github.ref == 'refs/heads/main' }}` across all 6 `Swatinem/rust-cache@v2` usages in `ci.yml` (rust-clippy, rust-test-fast, rust-test-full, coverage, fuzz, e2e). The `save-always` input was removed in rust-cache v2.7+ and replaced with `save-if`. The warning was non-blocking but indicated the option was silently ignored, meaning cache was only saved on cache misses.
+
 ### Changed
 
 - **P7 formalized**: React-only UI architecture decision.
@@ -335,170 +436,6 @@ All workspace setting cards migrated from `localStorage` stubs to real Tauri IPC
 - **Settings engine**: `terminal_profile.rs` (341 lines). Settings page extraction (1,099 lines in platform-core).
 - **RetailPosScreen**: Scoped-API migration, connection indicators, currency context fix.
 - **100+ .md files audited** across 30+ rounds against current codebase.
-
-## [0.0.18] — 2026-07-22
-
-### Added
-
-> _Full-stack sprint: E2E tests, cloud server hardening, Midtrans QRIS, stock alerts, i18n, HAL, loyalty, DTOs, config validation, topology persistence. See git history (0.0.18 commits) for details._
-
-### Fixed
-
-- **CI/docs pipeline**: Added `libglib2.0-dev` and `pkg-config` system dependency step to `.github/workflows/docs.yml` to resolve `glib-sys` build failure on Ubuntu runners.
-
----
-
-## Unversioned backfill blocks (P80–P251 + unnumbered sections)
-
-> ⚠️ **Restructured 2026-08-08 by docs-auditor:** the blocks below were
-> inserted between the 0.0.18 and 0.0.17 entries without version headers,
-> losing their release association in a merge. Their content references the
-> 0.0.19–0.0.25 cycles (see the "Cumulative Impact (0.0.22 → 0.0.25)" tables).
-> Re-parenting them to their correct releases is tracked as cleanup; they are
-> preserved verbatim here so no history is lost.
-
-### Fixed
-
-#### 🎯 Final Code Health Milestone — Zero Pre-existing Issues
-
-After 4 sprints of methodical test rescue and lint/clippy cleanup, all gates are now completely clean.
-
-#### P250 — Remaining Test Failure Rescue (8 tests across 2 files)
-- **PurchaseOrderForm.test.tsx** (4/4): Root cause was async supplier load not waited for before `selectOption()`. Added `await vi.waitFor()` before each of 4 supplier-dependent tests. 17/17 passing.
-- **TerminalStatusPanel.test.tsx** (4/4): Root cause was Fluent `{ $n }` variable interpolation failing in JSDOM. Fixed by mocking `@fluent/react` — `Localized` renders children directly, `useLocalization().l10n.getString()` returns fallback English text with bracket-notation variable access (`args?.['n']`). Stable `l10n` object via `vi.hoisted` prevents extra effect triggers. 16/16 passing, TypeScript clean.
-
-#### P251 — Clippy Error Resolution (4 errors)
-- **topology.rs**: Replaced 2× `3.14` with `std::f64::consts::PI` (approx_constant). Collapsed nested 3-level `if let` chain into single `if let ... && let ... && ...` using Rust let-chains (collapsible_if).
-
-#### 📊 Cumulative Impact (0.0.22 → 0.0.25)
-| Gate | 0.0.22 Start | 0.0.25 End |
-|------|-------------|------------|
-| Vitest failures | 113 | **0** ✅ |
-| ESLint errors+warnings | 4 | **0** ✅ |
-| Clippy errors | 5 | **0** ✅ |
-| TypeScript errors | 0 | **0** ✅ |
-| **Total pre-existing** | **122** | **0** 🎉 |
-
----
-
-
-
-### Added
-
-#### 🟢 P240 — Full Gate Pipeline Verification
-- **Manual gate check**: Ran `cargo fmt --all --check` (clean), `cargo clippy --workspace --all-targets -- -D warnings` (4 pre-existing in test code), `npm run typecheck` (0 errors), `npm run lint` (0/0), `npx vitest run` (8 failed / 2,918 passed — pre-existing Fluent+JSDOM edge cases).
-- **Gate state documented**: 12 total pre-existing issues (4 clippy + 8 vitest), all in test code, 0 in production.
-
-#### 🔴 P241 — CHANGELOG Backfill
-- Added comprehensive 0.0.23 entry documenting 25 tests rescued, 1 clippy error fixed, and cumulative 113→8 vitest failures (93% reduction) across 0.0.22–0.0.23.
-
----
-
-
-
-### Fixed
-
-#### 🟢 P230 — Pre-existing Test Failure Rescue (25 tests across 4 files)
-- **PurchaseOrderForm.test.tsx** (13/17): Added `LocalizationProvider` with `purchasing.ftl` + `shared.ftl` bundles, fixed `selectOption` for JSDOM controlled selects, fixed placeholder casing (`Product Name`).
-- **TerminalStatusPanel.test.tsx** (12/16): Added `LocalizationProvider` with real `terminals.ftl` + `shared.ftl` bundles. 8 inline Fluent keys for missing terminal strings.
-- **themeTokenCompliance.test.ts** (1/1): Fixed hardcoded `#fff` → `var(--color-text-on-danger, #fff)` in `StockAlertBell.css:40`.
-- **screenExtraction.test.ts** (2/2): Added 3 external classes: `settings-topology-container`, `multi-store-view-toggle`, `multi-store-dashboard-topology-view`.
-
-#### 🔴 P231 — Clippy Error Resolution
-- **P231-1**: Removed `use super::*;` from `apps/cloud-server/src/shutdown.rs:52` test module (unused import).
-
-#### 📊 Cumulative Impact (0.0.22 + 0.0.23)
-- **Vitest failures**: 113 → 8 (105 tests rescued, **93% reduction**)
-- **ESLint**: 3 errors + 1 warning → 0/0 (100% resolved)
-- **Clippy**: 5 errors → 0 (100% resolved)
-- **TypeScript**: 0 errors (maintained throughout)
-
----
-
-
-
-### Fixed
-
-#### 🟢 P220 — Pre-existing Test Failure Rescue (80 tests across 5 files)
-- **CategoryManagementScreen.test.tsx** (12/12): Added `ToastProvider` wrapper — component uses `useToast` which requires context.
-- **GiftCardsScreen.test.tsx** (22/22): Added `ToastProvider` wrapper — same root cause.
-- **ProductLookupScreen.test.tsx** (20/20): Updated ARIA roles from `list`/`listitem` to `grid`/`row` after P200 a11y fix changed the product grid pattern. Fixed virtualization-aware assertions (text presence over row counts).
-- **PromotionManagementScreen.test.tsx** (17/17): Added `ToastProvider` wrapper.
-- **TransactionLogScreen.test.tsx** (9/9): Added `ToastProvider` wrapper.
-- **Net impact**: Pre-existing test failures reduced from 113 to 33.
-
-#### 🔴 P221 — Lint Warning Resolution (5 issues fixed)
-- **ESLint jsx-a11y/label-has-associated-control (4 errors)**: Added `eslint-disable-next-line` comments on all 4 labels in `PurchaseOrderForm.tsx` that nest inputs/selects inside `<Localized>` wrappers — the Fluent wrapper confuses the lint rule.
-- **ESLint react-refresh/only-export-components (1 warning)**: Removed `export` from `WORKSPACE_TYPE_OPTIONS` in `NodeTopologyEditor.tsx` — the constant is only used internally. Fast refresh now works correctly.
-- **ESLint**: 0 errors, 0 warnings. TypeScript: 0 errors.
-
-#### 🟡 P222 — CHANGELOG Backfill
-- Verified CHANGELOG entries exist for 0.0.19 (Type Safety + CSS Hygiene + Console.warn), 0.0.20 (Error Handling + A11y Bug Fixes), and 0.0.21 (Warning Resolution + API SDK Polish + Codebase Polish).
-
----
-
-
-
-### Added
-
-#### 🟢 P210 — Pre-existing Warning Resolution
-- **P210-1 (Clippy)**: Added `///` doc comments to 19 struct fields in `topology.rs` (TopologyData, TopologyNodePayload, TopologyWirePayload). Clippy clean on `oz-pos-app`.
-- **P210-2 (ESLint)**: Auto-fixed 9 `consistent-type-imports` warnings in API client files. Fixed 3 `react-hooks/exhaustive-deps` warnings (CategoryManagementScreen, TransitAuditScreen, MultiStoreDashboardScreen).
-
-#### 🔴 P201 — Error Handling Polish (continued from 0.0.20)
-- **Security audit**: Verified all 14 migrated `addToast` calls use safe error patterns. No PII leaks, no stack traces exposed. All use `err instanceof Error ? err.message : 'Fallback'` guard.
-
----
-
-
-
-### Changed
-
-#### ⚡ Performance Optimization Sprint (P100-P103)
-- **P100 — Bundle low-hanging fruit**: Scanned all heavy components for large deps. Only `fuse.js` (~10KB) found. Zero dead code or empty comment blocks. ESLint confirmed zero unused imports across all `src/`.
-- **P101 — React render optimization**: Heavy components already well-memoized (10-18 `memo`/`useCallback`/`useMemo` per component). No additional wrapping needed.
-- **P102 — Unused import cleanup**: ESLint across all `src/` — zero unused imports, zero `no-console`, zero `no-debugger` violations.
-- **P103 — CSS selector audit**: No significant CSS duplication across feature files.
-
----
-
-
-
-### Added
-
-#### 🔴 P201 — Error Handling Polish
-- **ErrorBoundary enhancement**: Added Try Again button to fallback UI (resets error state, optional `onReset` callback), `role="alert"` for screen reader, Fluent localization (`error-boundary-retry`).
-- **ErrorState component tests** (8 new): Renders title, message, icon, role=alert, retry button with callback, custom labels, children.
-- **ErrorBoundary tests** (10 total, 4 new): Try Again button, role=alert, conditional-throw reset verification, onReset callback firing.
-- **Console.error → toast migration**: Replaced 14 `console.error()` calls across 7 production files with `addToast()`: GiftCardsScreen, PromotionManagementScreen, TransactionLogScreen, TransitAuditScreen, ThresholdConfigScreen, PaymentModal. All use safe `err instanceof Error ? err.message : 'Fallback'` pattern.
-
-### Fixed
-
-#### 🟢 P200 — A11y Bug Fixes
-- **ProductLookupScreen**: Removed conflicting `role="list"`/`role="listitem"` from react-window virtualized grid (nested DOM breaks list hierarchy). Known remaining: `button-name` (Localized empty span) + `aria-required-children` (radiogroup).
-- **SalesHistoryScreen heading-order**: Added configurable `headingLevel` prop to `EmptyState` (default 3). SalesHistoryScreen passes `headingLevel={2}` for correct h1→h2 hierarchy.
-
-#### 🟡 P202 — Final Cleanup
-- Removed stale `TODO 0.0.18` comment from `foundation/src/validation.rs`.
-- Gate check: `cargo fmt` + `npm run typecheck` clean; 19 pre-existing clippy doc errors + 3 ESLint a11y errors noted (not regressions).
-
----
-
-
-
-### Fixed
-
-#### 🧪 Bug Bash & Flaky Test Fixes (P90-P93)
-- **P90-1: Flaky `windows_overwrite_existing` test**: Added unique test name via `process::id()` and `std::thread::sleep(10ms)` between rapid Credential Manager writes to prevent race conditions.
-- **P91-1: StaffLoginKeyboard lockout test**: Replaced `it.skip` with real test — verifies lockout message appears and digit buttons are disabled during lockout.
-- **P92-1: Drag-to-reorder test rehomed**: Moved `describe.skip` block from SettingsNavTree.test.tsx to SettingsPage.test.tsx (where the logic actually lives).
-- **P93-1: AppShell skipped tests**: Verified 2 conditionally-skipped tests (KDS kiosk, dev-mode) are intentional.
-
----
-
-
-
-### Changed
 
 #### 🔴 P80 — Type Safety Audit
 - **P80-1: `useOrientation.ts` `as any` → typed interface**: Replaced `(window.screen as any).orientation` with `ScreenOrientationAPI` interface + proper intersection assertion.
@@ -510,8 +447,6 @@ After 4 sprints of methodical test rescue and lint/clippy cleanup, all gates are
 #### 🟢 P82 — Console.warn Consistency
 - **P82-1/2/3**: Audited 8 `console.warn` calls. All use consistent `[Context]` format and include error objects. No PII or secrets logged.
 
-### Changed
-
 #### 🏗️ Settings Sidebar
 - **Accordion logic repaired**: Converted strict accordion to a multi-expandable list, resolving UX issues where categories abruptly closed.
 - **Search Auto-Expand**: Categories now automatically expand when searching, ensuring matched results are visible immediately.
@@ -522,20 +457,15 @@ After 4 sprints of methodical test rescue and lint/clippy cleanup, all gates are
 - **Backend Lockout Sync**: Both `StaffLoginScreen` and `SessionLockScreen` now parse the precise `retry_after` penalty timer directly from backend errors.
 - **Lockout UI Consistency**: Added physical "shake" animations, disabled keypad states, and a red `AlertIcon` countdown box (`Wait Xs.`) to the autolock screen to match the login flow.
 
+## [0.0.18] — 2026-07-22
+
+### Added
+
+> _Full-stack sprint: E2E tests, cloud server hardening, Midtrans QRIS, stock alerts, i18n, HAL, loyalty, DTOs, config validation, topology persistence. See git history (0.0.18 commits) for details._
+
 ### Fixed
 
-#### 🌐 Workspace Topology Editor
-- **Node UI Alignment**: Centered node titles properly using `node-title-wrapper`.
-- **Wire Connectors**: Enforced fixed `width: 200px` on nodes to prevent drift in wire connector anchor points. Removed label offset for true center alignment.
-- **Port Visibility**: Changed `.node-port-socket` to only appear on hover, significantly reducing visual clutter on complex topologies.
-
-#### 🛠️ CI Pipeline — sccache Cache & Deprecation Warnings
-
-- **sccache 0% hit rate fix** — Added `SCCACHE_GHA_ENABLED: "true"` to top-level CI env. sccache was using ephemeral local disk (`/home/runner/.cache/sccache`) on GitHub Actions runners, causing 280/280 cache misses (0% hit rate). Now uses GitHub Actions cache backend, enabling cross-run compilation caching. First run will still be cold; subsequent runs will see ~85% cache hit rate.
-- **save-always deprecation** — Replaced `save-always: true` with `save-if: ${{ github.ref == 'refs/heads/main' }}` across all 6 `Swatinem/rust-cache@v2` usages in `ci.yml` (rust-clippy, rust-test-fast, rust-test-full, coverage, fuzz, e2e). The `save-always` input was removed in rust-cache v2.7+ and replaced with `save-if`. The warning was non-blocking but indicated the option was silently ignored, meaning cache was only saved on cache misses.
-
----
-
+- **CI/docs pipeline**: Added `libglib2.0-dev` and `pkg-config` system dependency step to `.github/workflows/docs.yml` to resolve `glib-sys` build failure on Ubuntu runners.
 ## [0.0.17] — 2026-07-21
 
 ### Added
