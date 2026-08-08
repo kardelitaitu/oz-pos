@@ -409,7 +409,7 @@ Add the result of each grep to the next audit report under a "Closure" column. I
 
 ## 11. C-1 Closure (Epic X-3)
 
-**Status:** CLOSED — merged as part of the C-1 / X-3 PR on branch `0.0.5`. The single highest-impact money-safety defect in the audit foundation crate is fully remediated.
+**Status:** CLOSED — merged via PR #11 (`6b611145`, branch `kardelitaitu/0.0.5`) carrying commit `ac38ab9` (`fix(currency): close C-1 by converting exchange rates to i64 minor units (Epic X-3)`, 2026-07-12); the fix is present in the `0.0.5` → `0.0.25` release lineage and `main`. The single highest-impact money-safety defect in the audit foundation crate is fully remediated.
 
 ### What changed (8 files)
 
