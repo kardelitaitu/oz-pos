@@ -121,7 +121,9 @@ Retail + Restaurant (KDS) release: closed the full KDS production-readiness road
 
 Desktop App Security & Stability Audit closeout: **all 18 findings resolved** across the `apps/desktop-client` Tauri v2 + `platform/*` stack (`5 CRITICAL + 3 HIGH + 6 MEDIUM + 4 LOW`). The release ships hardened sync pull, multi-store authentication, kernel resource cleanup, session security, and code-quality cleanup. Adds `docs/releases/release-process.md` (L-4 runbook) and 9 new unit tests covering the audit guards (`sync_pull` confirm/backup, `PaymentKind::wire_method`, kernel shutdown channel, brand-path validation, lan retry). Per-finding analysis and verification live in [`docs/specs/_active/2026-07-12-desktop-app-audit.md`](docs/specs/_active/2026-07-12-desktop-app-audit.md).
 
-### Fixed#### 🔴 CRITICAL (5 / 5)
+### Fixed
+
+#### 🔴 CRITICAL (5 / 5)
 
 - **C-4 — LAN server loopback-only bind + PSK handshake (`apps/desktop-client/src/lan_server.rs`)** — Committed in `9b7552e7`: server binds `127.0.0.1` only and requires a pre-shared key token before accepting any client connection.
 - **C-2 — Kernel module stop lifecycle** — Drop race fixed by the M-2 kernel shutdown channel (commit `cc062951`); `kernel.stop_all()` aborts running module tasks before retrying the lock.
