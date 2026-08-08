@@ -173,6 +173,57 @@ test.describe('ADR #22 — Topology canvas', () => {
     await expect(selectorTrigger).not.toContainText('TOKO TEST');
   });
 
+  test('deleting a branch leaves the canvas clean (card, wires, selector)', async ({ page }) => {
+    // ADR #22 Pillar E + branch deletion: removing a store profile must
+    // leave the topology canvas cleanly — the store card, its wires, and
+    // the header branch-selector option all go. The editor prunes the node
+    // graph the moment the branch list updates (merge/rebuild drops the
+    // card + wires), and the selector falls back to its placeholder when
+    // no branch remains.
+    const managementHeader = page.locator('.settings-sidebar-section-header')
+      .filter({ hasText: 'Management' });
+    const isExpanded = await managementHeader
+      .getAttribute('aria-expanded')
+      .then((v) => v === 'true')
+      .catch(() => false);
+    if (!isExpanded) {
+      await managementHeader.click();
+      await page.waitForTimeout(300);
+    }
+
+    const topologyNav = page.locator('.settings-nav-item')
+      .filter({ hasText: /topology/i });
+    await topologyNav.click();
+    await page.waitForTimeout(2_000);
+
+    // Baseline: the seeded branch is on canvas, selected, wired, and in
+    // the header selector.
+    const storeCard = page.locator('.topology-node[data-node-id="store-1"]');
+    await expect(storeCard).toBeVisible({ timeout: 8_000 });
+    const selectorTrigger = page.locator('.topology-branch-selector .ssel-trigger');
+    await expect(selectorTrigger).toContainText('TOKO TEST', { timeout: 8_000 });
+    const wiresBefore = await page.locator('.wire-hitbox').count();
+    expect(wiresBefore).toBeGreaterThanOrEqual(2);
+
+    // Delete the selected branch via the toolbar; the inline confirm names
+    // the branch being removed.
+    await page.getByRole('button', { name: 'Delete Branch' }).click();
+    const confirmForm = page.locator('.topology-branch-delete-form');
+    await expect(confirmForm).toBeVisible({ timeout: 3_000 });
+    await expect(confirmForm).toContainText('Delete TOKO TEST?');
+    await confirmForm.getByRole('button', { name: 'Delete' }).click();
+
+    // The canvas must be clean: the store card is gone and every wire
+    // attached to it left with it.
+    await expect(storeCard).not.toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('.wire-hitbox')).toHaveCount(0, { timeout: 5_000 });
+
+    // The selector option is gone too: with no branch left, the trigger
+    // shows its placeholder instead of the deleted name.
+    await expect(selectorTrigger).not.toContainText('TOKO TEST', { timeout: 5_000 });
+    await expect(selectorTrigger).toContainText('Branch', { timeout: 5_000 });
+  });
+
   test('clicking a topology node shows inspector drawer', async ({ page }) => {
     // ADR #22 Pillar E: selecting a node opens inspector with workspace card.
     const managementHeader = page.locator('.settings-sidebar-section-header')
