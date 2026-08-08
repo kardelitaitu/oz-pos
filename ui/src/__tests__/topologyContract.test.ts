@@ -3,6 +3,7 @@ import type { TopologyNodeData, TopologyWireData } from '@/features/stores/NodeT
 import {
   TOPOLOGY_SCHEMA_VERSION,
   normalizeTopologyGraph,
+  normalizeWireDirection,
   validateTopologyGraph,
 } from '@/features/stores/topologyContract';
 
@@ -173,6 +174,16 @@ describe('semantic topology contract', () => {
       relationshipType: 'ticket-routing',
       legacyInferred: false,
     });
+  });
+
+  it('normalizeWireDirection keeps only the three legal flow states', () => {
+    expect(normalizeWireDirection('one-way')).toBe('one-way');
+    expect(normalizeWireDirection('reverse')).toBe('reverse');
+    expect(normalizeWireDirection('two-way')).toBe('two-way');
+    // Corrupt / legacy / missing values fold to the historical default.
+    expect(normalizeWireDirection('bidirectional')).toBe('one-way');
+    expect(normalizeWireDirection('banana')).toBe('one-way');
+    expect(normalizeWireDirection(undefined)).toBe('one-way');
   });
 
   it('allows one Branch Location output to fan out to many workspaces', () => {

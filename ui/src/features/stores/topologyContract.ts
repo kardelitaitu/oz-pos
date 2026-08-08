@@ -307,14 +307,23 @@ export function normalizeTopologyGraph(
       // old persisted JSON, or garbage from manual edits) to a legal
       // value so consumers (renderer, validation) never see an unknown
       // state. one-way is the historical default.
-      direction: wire.direction === 'two-way' || wire.direction === 'reverse'
-        ? wire.direction
-        : 'one-way',
+      direction: normalizeWireDirection(wire.direction),
       legacyInferred: inferred.legacyInferred,
     };
   });
 
   return { schemaVersion, nodes: semanticNodes, wires: semanticWires };
+}
+
+/**
+ * Fold a wire direction to a legal value. Direction is presentation-only,
+ * but the closed union must hold everywhere the value crosses a boundary —
+ * the semantic graph AND the editor load path (where a corrupt stored
+ * value would otherwise render wrong markers and round-trip to the
+ * backend on the next Apply). one-way is the historical default.
+ */
+export function normalizeWireDirection(value: string | undefined): 'one-way' | 'reverse' | 'two-way' {
+  return value === 'two-way' || value === 'reverse' ? value : 'one-way';
 }
 
 /** Return only location-ownership wires for a normalized graph. */
