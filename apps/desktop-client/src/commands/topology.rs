@@ -521,21 +521,7 @@ fn save_topology_json(
     // The legacy typed structs validate geometry and known serialized node
     // kinds. `branch-location` is a semantic alias, so normalize only the
     // temporary validation copy; the raw command payload is persisted intact.
-    let typed_node_values: Vec<Value> = nodes
-        .iter()
-        .map(|node| {
-            let mut node = node.clone();
-            if node.get("type").and_then(Value::as_str) == Some("branch-location") {
-                node["type"] = Value::String("store".into());
-            }
-            node
-        })
-        .collect();
-    let typed_nodes: Vec<TopologyNodePayload> =
-        serde_json::from_value(Value::Array(typed_node_values))
-            .map_err(|e| AppError::Internal(format!("invalid topology nodes: {e}")))?;
-    let typed_wires: Vec<TopologyWirePayload> = serde_json::from_value(Value::Array(wires.clone()))
-        .map_err(|e| AppError::Internal(format!("invalid topology wires: {e}")))?;
+    validate_diagram_payloads(&nodes, &wires)?;
     let wires: Vec<Value> = wires
         .into_iter()
         .map(|mut wire| {
@@ -551,10 +537,8 @@ fn save_topology_json(
         })
         .collect();
 
-    // Reuse the existing structural validator without writing its legacy
-    // representation a second time. The command envelope below is the only
-    // database write, so semantic fields cannot be discarded.
-    validate_topology_structure(&typed_nodes, &typed_wires)?;
+    // The command envelope below is the only database write, so semantic
+    // fields cannot be discarded.
     let envelope = serde_json::json!({
         "schema_version": TOPOLOGY_SCHEMA_VERSION,
         "nodes": nodes,
@@ -772,6 +756,53 @@ fn validate_semantic_ownership(
         ));
     }
     Ok(())
+}
+
+/// Pre-mutation validation gate for a topology Apply.
+///
+/// Rejects malformed diagrams BEFORE any workspace creation, update, or
+/// archival. The semantic ownership checks are DB-backed (branch identity
+/// must exist); the structural checks (duplicate node/wire ids, unknown
+/// node types, unknown directions/ports, ghost endpoints) must also run
+/// here — running them only at the final save would let a malformed
+/// diagram mutate workspace rows and then fail at save, forcing the
+/// compensation cycle to unwind a partial apply.
+fn validate_apply_gate(
+    conn: &Connection,
+    nodes: &[Value],
+    wires: &[Value],
+) -> Result<(), AppError> {
+    // Reject malformed graphs before any workspace mutation. Legacy
+    // geometric payloads remain accepted during the migration window.
+    validate_semantic_ownership(conn, nodes, wires)?;
+    validate_diagram_payloads(nodes, wires)
+}
+
+/// Parse raw diagram values into the legacy typed payloads and run the
+/// structural validator (duplicate ids, unknown types/directions/ports,
+/// ghost endpoints) without persisting them. `branch-location` is a
+/// semantic alias, so normalize it only for the temporary validation copy;
+/// the raw command payload is persisted intact.
+fn validate_diagram_payloads(nodes: &[Value], wires: &[Value]) -> Result<(), AppError> {
+    let typed_node_values: Vec<Value> = nodes
+        .iter()
+        .map(|node| {
+            let mut node = node.clone();
+            if node.get("type").and_then(Value::as_str) == Some("branch-location") {
+                node["type"] = Value::String("store".into());
+            }
+            node
+        })
+        .collect();
+    let typed_nodes: Vec<TopologyNodePayload> =
+        serde_json::from_value(Value::Array(typed_node_values))
+            .map_err(|e| AppError::Internal(format!("invalid topology nodes: {e}")))?;
+    let typed_wires: Vec<TopologyWirePayload> =
+        serde_json::from_value(Value::Array(wires.to_vec()))
+            .map_err(|e| AppError::Internal(format!("invalid topology wires: {e}")))?;
+    // Reuse the existing structural validator without persisting its legacy
+    // representation — the save callers write the raw command payload intact.
+    validate_topology_structure(&typed_nodes, &typed_wires)
 }
 
 /// Validate typed node and wire structure without persisting it.
@@ -1098,11 +1129,11 @@ pub async fn apply_topology_diff(
     let session = state.resolve_session(&session_token)?;
     recover_pending_topology_apply(&state, &session.store_id).await?;
 
-    // Reject malformed semantic graphs before any workspace mutation. Legacy
+    // Reject malformed graphs before any workspace mutation. Legacy
     // geometric payloads remain accepted during the migration window.
     {
         let global_db = state.db.lock().await;
-        validate_semantic_ownership(&global_db, &diagram_nodes, &diagram_wires)?;
+        validate_apply_gate(&global_db, &diagram_nodes, &diagram_wires)?;
     }
 
     // Capture lengths before the workspace block consumes the vectors
@@ -1563,6 +1594,30 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("unknown store_profile_id")
+        );
+    }
+
+    #[test]
+    fn apply_gate_rejects_duplicate_node_ids_before_mutation() {
+        // The Apply pre-mutation gate must reject a structurally malformed
+        // diagram (duplicate node ids) BEFORE any workspace row is mutated.
+        // Structural validation used to run only at the final save — after
+        // workspace creations/updates/archivals — so a malformed diagram
+        // passed the gate, mutated rows, then failed at save and forced the
+        // full compensation unwind. The editor's savedById Map also silently
+        // collapses duplicate ids at load, so the Apply gate is the last
+        // hard boundary that can catch them.
+        let conn = fresh_conn();
+        let nodes = vec![
+            semantic_node("ws-1", "workspace", None),
+            semantic_node("ws-1", "workspace", None),
+        ];
+        let result = validate_apply_gate(&conn, &nodes, &[]);
+        assert!(result.is_err(), "gate must reject duplicate node ids");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("duplicate node id"),
+            "gate should reject duplicate node ids, got: {err}"
         );
     }
 
