@@ -1092,3 +1092,15 @@ Clean (0 errors).
 **Notes:** (1) The typed parse runs twice per apply (gate + save) — accepted tradeoff; threading the payloads through the workspace-mutation block would add coupling for negligible gain. (2) The test is gate-level, so "before mutation" is a structural property (the command invokes the gate before the workspace block) rather than an observed one — the seam is wired verbatim into the command. (3) No acceptance-set change: the gate runs exactly the checks save always ran, so failures surface before mutation instead of after. (4) The journaled duplicate-node-id-at-load limitation is now closed at the Apply hard boundary — the frontend `duplicate-node` check was already blocking persistence at Apply time, and the gate now rejects before any mutation.
 
 **Commits:** `topology.rs` gate extraction + structural wiring + 1 test. Shared-tree note: the UI topology batch stays uncommitted for its owner.
+
+## 2026-08-08 — TDD cycle: semantic validator splits missing-branch from multiple-branch codes (frontend parity)
+
+**Problem (error-code contract drift):** `validate_semantic_json` collapsed the branch-count gate into one error — `if branches.len() != 1 { "multiple-branch-locations" }` — while the frontend contract (`validateTopologyGraph`) distinguishes `missing-branch-location` (ZERO branch-location nodes; FTL "Add exactly one Branch Location node.") from `multiple-branch-locations` (MORE than one; "Keep exactly one Branch Location node in this graph."). A zero-branch semantic graph rejected by the Apply gate therefore surfaced the wrong guidance code to the UI. Evidence: the new Red test got `left: "multiple-branch-locations"` for a graph with no branch node.
+
+**Red → Green:** New tests pin both halves of the contract — `semantic_validate_reports_missing_branch_when_graph_has_no_branch` (semantic payload with a location wire but no branch node → `missing-branch-location`) and `semantic_validate_reports_multiple_branches_when_graph_has_two` (two branch nodes → `multiple-branch-locations`, the previously-only behavior). Red confirmed on the zero-branch case. Fix: split `branches.len() != 1` into `branches.is_empty()` → `missing-branch-location` and `branches.len() > 1` → `multiple-branch-locations`, with a parity-rationale comment.
+
+**Validation:** topology module 199/199 · `oz-pos-app` lib 815/815 · fmt clean · clippy clean on changed code (pre-existing warnings untouched) · drift guard clean.
+
+**Scope note (reviewer-flagged, don't overclaim):** the frontend runs `validateTopologyGraph` BEFORE sending Apply, so a zero-branch graph is normally blocked client-side with the correct message — the Rust gate is defense-in-depth for direct IPC callers, and this change is contract parity on that rarely-hit path rather than a user-visible UI fix. Both code strings now match the frontend exactly.
+
+**Commits:** `topology.rs` branch-count code split + 2 tests. Shared-tree note: the UI topology batch + another agent's `122_workspace_instance_purpose.sql` migration + topology-builder ADR stay uncommitted for their owners.
