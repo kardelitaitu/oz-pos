@@ -1008,6 +1008,16 @@ pub async fn save_topology(
 ///
 /// Returns `None` when no topology has been saved yet (the front-end
 /// should fall back to the built-in retail preset).
+///
+/// # Load boundary stays raw
+///
+/// Stored values are served raw so the frontend's documented load-time
+/// healing (normalizeWireDirection, ghost-wire filtering, port defaults)
+/// can run — mirroring `load_topology_data`. Structure is enforced at the
+/// save boundary (`save_topology_json`), where the healed value must hold.
+/// Do NOT re-add `validate_topology_structure` here: a single stored
+/// corrupt value would brick the whole topology instead of letting the
+/// editor repair it.
 #[tauri::command]
 pub async fn load_topology(state: State<'_, AppState>) -> Result<Option<Value>, AppError> {
     let conn = state.db.lock().await;
@@ -1019,13 +1029,20 @@ pub async fn load_topology(state: State<'_, AppState>) -> Result<Option<Value>, 
         .map_err(|e| AppError::Internal(format!("invalid topology JSON: {e}")))?;
     let (nodes, wires) = validate_topology_envelope(&value)?;
     validate_semantic_ownership(&conn, nodes, wires)?;
-    let typed_nodes: Vec<TopologyNodePayload> =
-        serde_json::from_value(Value::Array(nodes.to_vec()))
-            .map_err(|e| AppError::Internal(format!("invalid topology nodes: {e}")))?;
-    let typed_wires: Vec<TopologyWirePayload> =
-        serde_json::from_value(Value::Array(wires.to_vec()))
-            .map_err(|e| AppError::Internal(format!("invalid topology wires: {e}")))?;
-    validate_topology_structure(&typed_nodes, &typed_wires)?;
+    // Shape validation only: every entry must deserialize into the typed
+    // payloads (a malformed node/wire is rejected here). The closed-union
+    // structural gate (validate_topology_structure) is deliberately NOT run
+    // at load — the frontend contract heals healable corruption at the
+    // editor load path (normalizeWireDirection, ghost-wire filtering, port
+    // defaults), and the free function load_topology_data is documented
+    // raw-by-design ("the load boundary stays raw"). Rejecting a stored row
+    // with e.g. a corrupt direction would brick the whole topology instead
+    // of letting the editor repair it. The strict gate runs at the save
+    // boundary (save_topology_json), where the healed value must hold.
+    serde_json::from_value::<Vec<TopologyNodePayload>>(Value::Array(nodes.to_vec()))
+        .map_err(|e| AppError::Internal(format!("invalid topology nodes: {e}")))?;
+    serde_json::from_value::<Vec<TopologyWirePayload>>(Value::Array(wires.to_vec()))
+        .map_err(|e| AppError::Internal(format!("invalid topology wires: {e}")))?;
     Ok(Some(value))
 }
 
@@ -5235,6 +5252,38 @@ mod tests {
         assert_eq!(loaded["wires"].as_array().unwrap().len(), 1);
         assert_eq!(loaded["wires"][0]["from_node_id"], "store-a");
         assert_eq!(loaded["wires"][0]["to_node_id"], "ws-1");
+    }
+
+    #[tokio::test]
+    async fn tauri_load_topology_serves_corrupt_stored_direction_raw() {
+        // The frontend contract (normalizeWireDirection) explicitly heals a
+        // corrupt stored direction at the editor load path, and the free
+        // function load_topology_data is documented raw-by-design ("the load
+        // boundary stays raw"). The command must therefore serve the stored
+        // value raw so the editor can normalize it — rejecting the whole
+        // topology here would brick it: the user could never open the graph
+        // to heal the row, and the frontend's healing would be unreachable.
+        let state = AppState::for_test();
+        {
+            let mut conn = state.db.lock().await;
+            migrations::run(&mut conn).unwrap();
+            oz_core::Settings::set(
+                &conn,
+                TOPOLOGY_SETTING_KEY,
+                r#"{"nodes":[{"id":"store-1","type":"store","name":"Legacy","x":0,"y":0},{"id":"ws-1","type":"workspace","name":"POS","x":200,"y":0}],"wires":[{"id":"w-legacy","from_node_id":"store-1","to_node_id":"ws-1","direction":"bidirectional"}]}"#,
+            )
+            .unwrap();
+        }
+
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let loaded = load_topology(app.state()).await.unwrap().unwrap();
+        // Raw passthrough: the editor's normalizeWireDirection folds the
+        // corrupt value to one-way and heals the row on the next Apply.
+        assert_eq!(loaded["wires"][0]["direction"], "bidirectional");
     }
     // ── Audit follow-up: node-id uniqueness + enum validation + atomicity ─
     //
