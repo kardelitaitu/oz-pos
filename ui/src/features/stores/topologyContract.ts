@@ -87,7 +87,8 @@ export interface TopologyValidationError {
     | 'missing-location-input'
     | 'multiple-location-inputs'
     | 'invalid-location-connection'
-    | 'duplicate-wire';
+    | 'duplicate-wire'
+    | 'unknown-wire-endpoint';
   messageId: string;
   nodeId?: string;
   wireId?: string;
@@ -387,6 +388,27 @@ export function validateTopologyGraph(graph: SemanticTopologyGraph): TopologyVal
       });
     }
     seenWireIds.add(wire.id);
+  }
+
+  // Every wire must reference nodes that exist in the graph. Location
+  // wires are already guarded by invalid-location-connection, but a
+  // NON-location wire (stock-routing, ticket-routing, generic) pointing
+  // at a ghost id passed silently — inferredWire saw undefined nodes and
+  // the wire round-tripped to Apply referencing nothing. Endpoint
+  // resolution is structural integrity, independent of relationship type.
+  // This guard deliberately runs BEFORE the ownership loop: a missing
+  // node is more fundamental than a wrong connection, so a ghost-targeted
+  // location wire surfaces unknown-wire-endpoint (the first error shown)
+  // rather than invalid-location-connection.
+  const nodeIds = new Set(graph.nodes.map((node) => node.id));
+  for (const wire of graph.wires) {
+    if (!nodeIds.has(wire.fromNodeId) || !nodeIds.has(wire.toNodeId)) {
+      errors.push({
+        code: 'unknown-wire-endpoint',
+        messageId: 'topology-validation-unknown-wire-endpoint',
+        wireId: wire.id,
+      });
+    }
   }
 
   const branches = graph.nodes.filter((node) => node.kind === 'branch-location');

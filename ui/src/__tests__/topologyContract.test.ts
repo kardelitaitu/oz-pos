@@ -228,6 +228,25 @@ describe('semantic topology contract', () => {
     ]));
   });
 
+  it('rejects a non-location wire that references a node missing from the graph', () => {
+    // Endpoint existence is only enforced for LOCATION wires (via
+    // invalid-location-connection). A stock-routing / ticket-routing /
+    // generic wire pointing at a ghost node id passed validation
+    // silently — inferredWire saw undefined nodes, fell to the last-resort
+    // legacy branch, and the wire round-tripped to Apply referencing a
+    // node that does not exist. Every wire endpoint must resolve.
+    const errors = validateTopologyGraph(graph(
+      [branch(), workspace('ws-1')],
+      [
+        { id: 'wire-ghost', fromNodeId: 'ghost-1', toNodeId: 'ws-1', fromPort: 'right', toPort: 'left', fromPortId: 'stock-out', toPortId: 'stock-in', relationshipType: 'stock-routing', direction: 'one-way' },
+      ],
+    ));
+
+    expect(errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'unknown-wire-endpoint', wireId: 'wire-ghost' }),
+    ]));
+  });
+
   it('allows one Branch Location output to fan out to many workspaces', () => {
     const normalized = graph(
       [branch(), workspace('ws-a'), workspace('ws-b')],

@@ -112,6 +112,7 @@ topology-validation-missing-location = Hubungkan workspace ini ke Branch Locatio
 topology-validation-multiple-location = Workspace hanya dapat memiliki satu koneksi Location In.
 topology-validation-invalid-location = Ini bukan koneksi Branch Location ke Workspace yang valid.
 topology-validation-duplicate-wire = Koneksi semantik ini duplikat.
+topology-validation-unknown-wire-endpoint = Koneksi ini merujuk node yang tidak ada dalam grafik.
 topology-workspace-purpose-label = Tujuan
 topology-workspace-technical-type-label = Tipe teknis
 topology-workspace-purpose-selector-label = Tujuan workspace

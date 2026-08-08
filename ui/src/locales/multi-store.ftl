@@ -114,6 +114,7 @@ topology-validation-missing-location = Connect this workspace to a Branch Locati
 topology-validation-multiple-location = A workspace can have only one Location In connection.
 topology-validation-invalid-location = This is not a valid Branch Location to Workspace connection.
 topology-validation-duplicate-wire = This semantic connection is duplicated.
+topology-validation-unknown-wire-endpoint = This connection references a node that is not in the graph.
 topology-workspace-purpose-label = Purpose
 topology-workspace-technical-type-label = Technical type
 topology-workspace-purpose-selector-label = Workspace purpose
