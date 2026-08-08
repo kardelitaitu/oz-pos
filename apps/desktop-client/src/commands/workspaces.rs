@@ -18,7 +18,7 @@ use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
 use oz_core::db::Store;
-use oz_core::db::workspaces::WorkspaceDto;
+use oz_core::db::workspaces::{CreateWorkspaceInstanceArgs, WorkspaceDto};
 use oz_core::permissions;
 use oz_core::subscription::TenantSubscription;
 
@@ -173,15 +173,18 @@ pub async fn create_workspace_instance_scoped(
     require_permission_for_user(&store, &session.user_id, permissions::STAFF_UPDATE)?;
     let effective = sub.effective_tier();
     store.enforce_instance_quota(&effective, &req.type_key, &req.store_id)?;
-    let _row = store.create_workspace_instance_with_purpose(
-        &req.id,
-        &req.type_key,
-        &req.store_id,
-        &req.name,
-        req.description.as_deref().unwrap_or(""),
-        req.colour.as_deref(),
-        req.purpose_key.as_deref().unwrap_or("general"),
-    )?;
+    let _row = store.create_workspace_instance_with_purpose(CreateWorkspaceInstanceArgs {
+        id: req.id.clone(),
+        type_key: req.type_key.clone(),
+        store_id: req.store_id.clone(),
+        name: req.name.clone(),
+        description: req.description.clone().unwrap_or_default(),
+        colour: req.colour.clone(),
+        purpose_key: req
+            .purpose_key
+            .clone()
+            .unwrap_or_else(|| "general".to_string()),
+    })?;
     let dto = store.get_workspace_instance(&req.id, Some(&session.user_id))?;
     drop(db);
     tracing::info!(

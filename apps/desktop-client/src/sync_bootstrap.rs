@@ -13,6 +13,13 @@
 //! Release builds never run this code (the call site in `lib.rs` is
 //! `#[cfg(debug_assertions)]`-gated), so a production install's
 //! configuration can never be touched by a stray local server.
+//!
+//! **Row-presence invariant:** the "deliberately disabled" detection in
+//! [`should_auto_provision`] relies on `Settings::set_sync_server_url`
+//! writing an empty-string row when the URL is cleared (never deleting
+//! the row). Keep it that way — if the write path ever `remove()`s the
+//! row, a disabled install becomes indistinguishable from a fresh one
+//! and would be silently re-provisioned.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -36,13 +43,23 @@ const PROBE_RETRY_DELAY: Duration = Duration::from_secs(2);
 
 /// Decide whether auto-provisioning should run.
 ///
-/// Returns `true` only when no non-empty server URL is configured. Once a
-/// user (or a previous provisioning) has set a URL, auto-provision must
-/// never touch the configuration again.
-fn should_auto_provision(configured_url: Option<&str>) -> bool {
+/// Returns `true` only when the install looks never-configured: no URL
+/// row exists, or a cleared URL row coexists with sync still enabled (a
+/// broken half-configured state provisioning repairs). An explicit
+/// disable — a URL that was set then cleared while sync is off — must be
+/// respected: auto-provision never silently re-enables it.
+fn should_auto_provision(configured_url: Option<&str>, sync_enabled: bool) -> bool {
     match configured_url {
-        Some(url) => url.trim().is_empty(),
+        // No settings row at all — a fresh install that has never been
+        // configured. Provision regardless of the enabled flag (a fresh
+        // DB ships with sync off but no URL row).
         None => true,
+        // The URL row exists but was cleared. Sync off means the user
+        // deliberately disabled it — respect that. Sync on with an empty
+        // URL is a broken half-configured state worth repairing.
+        Some(url) if url.trim().is_empty() => sync_enabled,
+        // A real URL is configured — never touch it.
+        Some(_) => false,
     }
 }
 
@@ -81,18 +98,21 @@ pub async fn auto_provision_local_sync(db: Arc<Mutex<Connection>>) {
     //    provision over an install we couldn't inspect.
     {
         let conn = db.lock().await;
-        let configured = match Settings::get_sync_server_url(&conn) {
-            Ok(url) => url,
-            Err(e) => {
+        let (configured, enabled) = match (
+            Settings::get_sync_server_url(&conn),
+            Settings::is_sync_enabled(&conn),
+        ) {
+            (Ok(url), Ok(enabled)) => (url.map(|u| u.trim().to_string()), enabled),
+            (Err(e), _) | (_, Err(e)) => {
                 tracing::warn!("reading sync settings failed — leaving sync unconfigured: {e}");
                 return;
             }
-        }
-        .map(|u| u.trim().to_string());
-        if !should_auto_provision(configured.as_deref()) {
+        };
+        if !should_auto_provision(configured.as_deref(), enabled) {
             tracing::debug!(
                 server_url = %configured.unwrap_or_default(),
-                "sync already configured — skipping auto-provision"
+                enabled,
+                "sync already configured or deliberately disabled — skipping auto-provision"
             );
             return;
         }
@@ -135,15 +155,35 @@ mod tests {
 
     #[test]
     fn should_provision_when_no_url_is_configured() {
-        assert!(should_auto_provision(None));
-        assert!(should_auto_provision(Some("")));
-        assert!(should_auto_provision(Some("   ")));
+        // Fresh install: no settings row at all, sync off — provision.
+        assert!(should_auto_provision(None, false));
+        assert!(should_auto_provision(None, true));
     }
 
     #[test]
     fn should_not_provision_when_a_url_is_already_configured() {
-        assert!(!should_auto_provision(Some("http://localhost:3099")));
-        assert!(!should_auto_provision(Some("https://cloud.example.com")));
+        assert!(!should_auto_provision(Some("http://localhost:3099"), false));
+        assert!(!should_auto_provision(
+            Some("https://cloud.example.com"),
+            true
+        ));
+    }
+
+    #[test]
+    fn should_not_provision_when_sync_was_deliberately_disabled() {
+        // The URL row exists but was cleared AND sync is off — the user's
+        // "off" switch. Auto-provision must NOT silently re-enable it on
+        // the next debug launch.
+        assert!(!should_auto_provision(Some(""), false));
+        assert!(!should_auto_provision(Some("   "), false));
+    }
+
+    #[test]
+    fn should_provision_when_sync_is_enabled_but_url_was_cleared() {
+        // Sync on but the URL field is empty — a broken half-configured
+        // state. Provisioning repairs it and matches user intent.
+        assert!(should_auto_provision(Some(""), true));
+        assert!(should_auto_provision(Some("   "), true));
     }
 
     #[test]
@@ -190,6 +230,30 @@ mod tests {
         assert_eq!(
             Settings::get_sync_server_url(&conn).unwrap().as_deref(),
             Some("https://prod.example.com")
+        );
+        assert!(!Settings::is_sync_enabled(&conn).unwrap());
+        assert!(Settings::get_sync_api_key(&conn).unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn orchestrator_does_not_reprovision_when_sync_was_disabled() {
+        // The user cleared the URL and turned sync off. The guard must
+        // fire BEFORE any network I/O, so this stays deterministic even
+        // with a live dev server on :3099: sync stays off, no key is
+        // injected, and the cleared URL row is untouched.
+        let db = Arc::new(Mutex::new(migrations::fresh_db()));
+        {
+            let conn = db.try_lock().unwrap();
+            Settings::set_sync_server_url(&conn, "").unwrap();
+            Settings::set_sync_enabled(&conn, false).unwrap();
+        }
+
+        auto_provision_local_sync(db.clone()).await;
+
+        let conn = db.try_lock().unwrap();
+        assert_eq!(
+            Settings::get_sync_server_url(&conn).unwrap().as_deref(),
+            Some("")
         );
         assert!(!Settings::is_sync_enabled(&conn).unwrap());
         assert!(Settings::get_sync_api_key(&conn).unwrap().is_none());

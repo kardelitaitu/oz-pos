@@ -503,16 +503,16 @@ fn validate_topology_envelope(value: &Value) -> Result<(&[Value], &[Value]), App
     let object = value
         .as_object()
         .ok_or_else(|| AppError::Internal("topology payload must be an object".into()))?;
-    if let Some(version) = object.get("schema_version") {
-        if version.as_u64() != Some(TOPOLOGY_SCHEMA_VERSION) {
-            return Err(topology_validation(
-                "unsupported-schema-version",
-                None,
-                None,
-                None,
-                format!("unsupported topology schema version: {}", version),
-            ));
-        }
+    if let Some(version) = object.get("schema_version")
+        && version.as_u64() != Some(TOPOLOGY_SCHEMA_VERSION)
+    {
+        return Err(topology_validation(
+            "unsupported-schema-version",
+            None,
+            None,
+            None,
+            format!("unsupported topology schema version: {}", version),
+        ));
     }
     let nodes = object
         .get("nodes")

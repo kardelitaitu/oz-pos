@@ -116,6 +116,29 @@ pub struct WorkspaceDto {
     pub is_default: bool,
 }
 
+/// Input parameters for [`Store::create_workspace_instance_with_purpose`].
+///
+/// Bundled into a struct so the creator's signature stays under clippy's
+/// `too_many_arguments` threshold as it grows.
+#[derive(Debug, Clone)]
+pub struct CreateWorkspaceInstanceArgs {
+    /// Unique workspace instance id.
+    pub id: String,
+    /// Technical instance type key (e.g. `store-pos`).
+    pub type_key: String,
+    /// Owning store profile id.
+    pub store_id: String,
+    /// Human-readable instance name.
+    pub name: String,
+    /// Optional free-text description.
+    pub description: String,
+    /// Optional accent colour.
+    pub colour: Option<String>,
+    /// Controlled business purpose key, independent from the technical
+    /// type and the label (`general` is the neutral default).
+    pub purpose_key: String,
+}
+
 // ── Legacy Queries (backward compatible) ────────────────────────────────
 
 impl Store<'_> {
@@ -646,15 +669,15 @@ impl Store<'_> {
         description: &str,
         colour: Option<&str>,
     ) -> Result<WorkspaceInstanceRow, CoreError> {
-        self.create_workspace_instance_with_purpose(
-            id,
-            type_key,
-            store_id,
-            name,
-            description,
-            colour,
-            "general",
-        )
+        self.create_workspace_instance_with_purpose(CreateWorkspaceInstanceArgs {
+            id: id.to_string(),
+            type_key: type_key.to_string(),
+            store_id: store_id.to_string(),
+            name: name.to_string(),
+            description: description.to_string(),
+            colour: colour.map(str::to_string),
+            purpose_key: "general".to_string(),
+        })
     }
 
     /// Create a workspace instance with an explicit controlled business purpose.
@@ -664,14 +687,18 @@ impl Store<'_> {
     /// delegates to this method with the neutral `general` purpose.
     pub fn create_workspace_instance_with_purpose(
         &self,
-        id: &str,
-        type_key: &str,
-        store_id: &str,
-        name: &str,
-        description: &str,
-        colour: Option<&str>,
-        purpose_key: &str,
+        args: CreateWorkspaceInstanceArgs,
     ) -> Result<WorkspaceInstanceRow, CoreError> {
+        let CreateWorkspaceInstanceArgs {
+            id,
+            type_key,
+            store_id,
+            name,
+            description,
+            colour,
+            purpose_key,
+        } = args;
+
         if id.trim().is_empty() {
             return Err(CoreError::Validation {
                 field: "id",
@@ -1356,26 +1383,26 @@ mod tests {
     fn purpose_key_is_independent_from_type_and_name() {
         let (store, _) = fresh();
         store
-            .create_workspace_instance_with_purpose(
-                "ws-checkout",
-                "store-pos",
-                "default",
-                "Front Counter",
-                "",
-                None,
-                "checkout",
-            )
+            .create_workspace_instance_with_purpose(CreateWorkspaceInstanceArgs {
+                id: "ws-checkout".into(),
+                type_key: "store-pos".into(),
+                store_id: "default".into(),
+                name: "Front Counter".into(),
+                description: String::new(),
+                colour: None,
+                purpose_key: "checkout".into(),
+            })
             .unwrap();
         store
-            .create_workspace_instance_with_purpose(
-                "ws-returns",
-                "store-pos",
-                "default",
-                "Returns Counter",
-                "",
-                None,
-                "returns",
-            )
+            .create_workspace_instance_with_purpose(CreateWorkspaceInstanceArgs {
+                id: "ws-returns".into(),
+                type_key: "store-pos".into(),
+                store_id: "default".into(),
+                name: "Returns Counter".into(),
+                description: String::new(),
+                colour: None,
+                purpose_key: "returns".into(),
+            })
             .unwrap();
 
         let rows = store.list_all_instances("default").unwrap();
