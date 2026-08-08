@@ -958,3 +958,15 @@ Clean (0 errors).
 **Validation:** editor suite 124/124 · topology suites 152/152 · full UI suite 262 files / 4105 tests · typecheck + eslint clean · i18n lint clean (new FTL key in both bundles) · drift guard clean.
 
 **Commits:** conditional `<title>` + modifier class + CSS hover ring + FTL keys (en/id) + 1 test. Shared-tree note: other thread's clamp refactor (component/css/test hunks, TopologyScreen.tsx, ADR) left uncommitted; staged only my hunks via `git add -p`.
+
+## 2026-08-08 — TDD cycle: quarantine corrupt wire relationshipType at the contract boundary
+
+**Problem:** The previous cycle normalized wire `direction` at the contract boundary, but `relationshipType` had the same leak: `inferredWire`'s early-return accepted any TRUTHY value and passed it through verbatim, and the last-resort return used `??` (only null/undefined). A garbage string (manual edit, stale JSON round-trip) flowed into the semantic graph un-normalized, even though `SemanticRelationshipType` is a closed union and every consumer — `locationWires()` filtering, renderer label priority, the Apply boundary — switches on it. Evidence: a test feeding `'banana'` observed it surviving normalization (Received: "banana").
+
+**Red → Green:** New contract test feeds two corrupt wires through `normalizeTopologyGraph`: a Store→Workspace wire with location ports and a workspace→workspace wire with generic ports, asserting both land on a LEGAL value re-derived from node identity ('location' and 'generic' respectively) with `legacyInferred: true`. Red confirmed (`'banana'` passed through). Fix: a module-level `RELATIONSHIP_TYPES` whitelist (the closed union); the early-return now only trusts whitelisted values, so corrupt ones fall through to legacy inference which re-derives the type from node identity; the last-resort return folds non-whitelisted values to 'generic'. Refactor: hoisted the whitelist to module scope (was rebuilt per wire).
+
+**Why identity re-derivation, not blanket-folding:** a corrupt type on a Store→Workspace wire must NOT become 'generic' — that would silently strip ownership semantics and break location validation downstream. Treating corrupt like missing and re-deriving from node identity preserves the wire's intent.
+
+**Validation:** contract suite 10/10 · topology suites 175/175 (contract + card + screen + editor) · typecheck clean · eslint 0 errors (changed files clean) · drift guard clean.
+
+**Commits:** `topologyContract.ts` whitelist + 1 contract test. Shared-tree note: the rest of the topology batch (editor polish, connector rail, branch selector, wire tooltips, topologyCard registry) stays uncommitted in the tree for its owner.
