@@ -1179,3 +1179,34 @@ Clean (0 errors).
 **Validation:** `cargo clippy --workspace --all-targets --all-features -- -D warnings` CLEAN (was the failing gate) · oz-core workspace tests 71/71 · desktop-client lib topology tests 201/201 · full app lib suite 825/825 (pre-change) · fmt clean · `cargo doc -p oz-core` shows no new broken links (reviewer's `Workspaces::` → `Store::` doc-link nit fixed; the remaining rustdoc warnings are pre-existing). Note: the full `cargo test -p oz-pos-app` bin target is currently blocked by the running app holding `oz-pos-app.exe` — lib-only runs avoid it; the app stays open per the shared-tree rule.
 
 **Notes / remaining risks:** none new. Uncommitted: all three files ride this session's uncommitted batch; journal only.
+
+### 2026-08-08 — E2E deletion spec exposes legacy-store resurrection on branch delete
+
+**Problem:** the new adr22 e2e "deleting a branch leaves the canvas clean" spec failed on its first run: after deleting the only branch (store-1) the card was STILL visible (flickering between "Downtown Branch" and "TOKO TEST"). The unit suite had green coverage of branch deletion, but only through the light-merge path (branchLocations change, instances untouched) and the storeProfileId'd saved-node path — the real-world delete empties BOTH branchLocations AND workspaceInstances in one update, which lands in the full rebuild.
+
+**Root cause:** the editor's rebuild path has two filters for saved store nodes. The storeProfileId'd filter (drops when the branch is gone) works, but the LEGACY filter — store nodes saved WITHOUT `store_profile_id` (the dev-mock seed, and any pre-canonical-identity diagram) — kept the node whenever `branchLocations.length === 0`. The fallback comment assumed an empty list meant "standalone editor with no branch concept" when in fact the topology screen supplies a PROVIDED-but-EMPTY list after the last branch is deleted. The deleted branch's card (and its wires) resurrected from the saved diagram.
+
+**Fix (final):** the rebuild path now ADOPTS the canonical identity for legacy store nodes before filtering — a saved store node without `store_profile_id` whose id matches a branch location gets `storeProfileId` assigned in place (keeping its saved position), then a unified filter drops any store node whose branch no longer exists in a SUPPLIED `branchLocations` (even `[]`). Only `branchLocations === undefined` (true standalone editor) keeps the legacy diagram. A first attempt dropped legacy nodes outright and re-seeded them at the default (80,140) slot — that fixed deletion but moved every legacy store card on load (the review flagged it; a position-pinning unit test caught the snap at `144px` vs saved `260px`). The adoption approach fixes deletion AND preserves positions. Real backend unchanged (topology JSON lives under the global `oz-pos/topology` settings key; `delete_store_profile` intentionally does NOT cascade — the editor's branch-list filter is the sole deletion mechanism, now correct).
+
+**Commits:** none yet — spec + fix + test + journal ride this session's batch.
+
+**Tests:** unit Red reproduced the e2e failure deterministically (legacy saved store node + empty branch list → canvas kept 1 node; now 0). Editor suite 149/149 · TopologyScreen + dev-mock-stores 23/23 · full adr22 e2e file 11/11 (rename + deletion + everything else) · typecheck clean · lint clean.
+
+**Notes / remaining risks:** the e2e deletes the seeded PRIMARY branch, which the real backend rejects (primary-store protection) — the dev-mock is lax there by design (e2e runs against the mock). The non-primary delete path (create → promote → delete) remains a future slice. `git status` is empty before this cycle; the spec + editor fix + unit test + journal are the only changes now.
+
+### 2026-08-08 — Pin the sync URL-clearing contract (auto-provision discriminator)
+
+**Problem:** the sync_bootstrap review's one flagged robustness note was that `should_auto_provision`'s row-presence discriminator (`Some("")` = cleared+disabled vs `None` = fresh install) silently depends on the WRITE path never deleting the URL row — clearing must write `""`, never `remove()`. That invariant was documented in the module doc comment but had zero test coverage: nothing stopped a future "cleanup" from switching the clear path to `Settings::remove`, which would make a deliberately-disabled install look fresh and re-trigger provisioning.
+
+**Solution (contract pins, not a fix — the contract already holds):** three regression tests pin the write side of the discriminator. `Settings::set` is an upsert (`INSERT ... ON CONFLICT(key) DO UPDATE`), so an empty value always leaves the row; the pins guard that against regressions:
+1. `settings::tests::set_sync_server_url_empty_keeps_row` — writing `""` → `get` returns `Some("")`, never `None`.
+2. `settings::tests::clear_sync_server_url_overwrites_not_deletes` — real URL then `""` → `Some("")` (clear overwrites, doesn't fall back to a fresh-install look).
+3. `commands::sync::tests::update_sync_settings_data_clear_url_writes_empty_row` (tablet-client) — the command's `server_url: None` (how the UI sends a cleared field) maps through `unwrap_or("")` and lands as `Some("")`, not a stale URL and not a deleted row.
+
+**Review follow-through (the reviewer's one real gap):** the three pins sat at the settings-API layer (1-2) and the TABLET command (3) — but the auto-provision discriminator actually runs in the DESKTOP app, whose `update_sync_settings` inlined the same `unwrap_or("")` logic untested, and (unlike the tablet) wrote sequentially without a transaction. Extracted the desktop command body into `update_sync_settings_data(conn, args)` mirroring the tablet (transactional, so the atomicity fix now lands on the desktop too) and added the identical clear-URL test there — the 4th pin, on the actual critical path. The extraction is behavior-neutral (same writes, now atomic + row-preserving on partial failure).
+
+**Validation:** platform-core settings 120/120 (2 new) · tablet sync 21/21 (1 new) · desktop lib **826/826** (1 new — the full suite, including sync_bootstrap 8/8 intact) · fmt clean · clippy clean on oz-pos-app + oz-pos-tablet + platform-core.
+
+**Commits:** none yet — tests + the desktop extraction + journal ride the session batch.
+
+**Notes / remaining risks:** none new — the desktop/tablet command duplication now exists only in the trivial command wrapper; the data fn could move to a shared crate (oz-core/platform-core) if a third client ever needs it, but that's speculative. The e2e batch (adr22 spec + editor fix) and this sync batch are separate uncommitted changes in the same tree.
