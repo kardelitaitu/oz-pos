@@ -977,7 +977,30 @@ describe('NodeTopologyEditor Component', () => {
     expect(document.activeElement).not.toBe(storeCard);
   });
 
-  /** Harness simulating the TopologyScreen parent deleting a store profile:
+  /** Harness simulating the TopologyScreen parent deleting the LAST branch:
+ *  both the branch list AND the workspace instances empty in one update —
+ *  the instances-changed-wins case that lands in the full rebuild with a
+ *  provided-but-empty branch list. */
+function DeleteAllHarness() {
+  const [instances, setInstances] = useState<WorkspaceInstanceSeed[]>(renameWsInstances);
+  const [locations, setLocations] = useState<BranchLocationSeed[]>([
+    { id: 'store-1', name: 'Downtown Branch' },
+  ]);
+  return (
+    <>
+      <button type="button" onClick={() => { setInstances([]); setLocations([]); }}>
+        delete-all-branches
+      </button>
+      <NodeTopologyEditor
+        currentTier="standard"
+        workspaceInstances={instances}
+        branchLocations={locations}
+      />
+    </>
+  );
+}
+
+/** Harness simulating the TopologyScreen parent deleting a store profile:
  *  removing a branch swaps the branchLocations identity (the parent's
  *  stores-state update) WITHOUT touching workspace instances — the
  *  light-merge path must drop the deleted branch's card and wires. */
@@ -1092,6 +1115,45 @@ function BranchDeleteHarness() {
     expect(getWireCount()).toBe(1);
     expect(screen.queryByText('Downtown Branch')).not.toBeInTheDocument();
     expect(screen.getByText('Uptown Branch')).toBeInTheDocument();
+  });
+
+  it('drops a legacy saved store node (no store_profile_id) when the last branch is deleted', async () => {
+    // Dev-mock and legacy diagrams store store nodes WITHOUT
+    // store_profile_id. Deleting the last branch empties BOTH the branch
+    // list and the workspace instances, so the full rebuild runs against a
+    // provided-but-empty branchLocations — the legacy fallback must not
+    // resurrect the deleted branch's card (or its wires) just because the
+    // saved node lacks a store_profile_id.
+    // The saved store node sits at a NON-default position (y 260, not the
+    // 140 seed slot) so the test also pins that a legacy node keeps its
+    // saved position after adopting its canonical branch identity — it
+    // must not be dropped and re-seeded at the default slot.
+    mockLoadTopology.mockResolvedValue({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Downtown Branch', x: 80, y: 260 },
+        { id: 'ws-rename', type: 'workspace', name: 'Store POS', x: 380, y: 140, metadata: { typeKey: 'store-pos', persisted: true } },
+      ],
+      wires: [
+        { id: 'w-1', from_node_id: 'store-1', from_port: 'right', to_node_id: 'ws-rename', to_port: 'left', direction: 'one-way' },
+      ],
+    });
+    renderWithProvidersSync(<DeleteAllHarness />, multiStoreFtl, sharedFtl);
+    await waitFor(() => expect(document.querySelector('.node-canvas-container')).not.toBeNull());
+    // Mount: the legacy store card keeps its saved position (260px, not the
+    // 140px seed slot) and the saved wire binds it to the workspace
+    // instance.
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    expect(getWireCount()).toBe(1);
+    expect((nodeAt(0) as HTMLElement).style.top).toBe('260px');
+
+    // Delete the last branch — instances AND locations empty in one update.
+    fireEvent.click(screen.getByRole('button', { name: 'delete-all-branches' }));
+
+    // The deleted branch's card and wire leave the canvas cleanly even
+    // though the saved diagram still holds them.
+    await waitFor(() => expect(getNodeCount()).toBe(0));
+    expect(getWireCount()).toBe(0);
+    expect(screen.queryByText('Downtown Branch')).not.toBeInTheDocument();
   });
 
   it('renames a workspace node from its card', async () => {

@@ -594,25 +594,33 @@ export default function NodeTopologyEditor({
           // inventing a primary/default store relationship.
           const otherNodes = [...savedById.values()]
             .filter((n) => n.type !== 'workspace')
-            .filter((n) => {
-              // Drop legacy store nodes that carry no storeProfileId when a
-              // real branch location exists: the seeded canonical store is
-              // authoritative, and keeping the unresolved copy would stack a
-              // duplicate Branch Location card over the seeded one (the
-              // strict Apply validator blocks it anyway). Without branch
-              // locations there is nothing to own the graph — keep it as-is
-              // so the legacy diagram still renders.
-              return !(n.type === 'store' && n.storeProfileId === undefined && (branchLocations?.length ?? 0) > 0);
+            .map((n) => {
+              // Legacy store nodes carry no store_profile_id (dev-mock seed
+              // and pre-canonical diagrams). When branch locations are
+              // supplied, the node id IS the location id — adopt the
+              // canonical identity so the deletion filter below can drop it
+              // when its branch is gone, and so the node keeps its saved
+              // position instead of being dropped and re-seeded at the
+              // default slot.
+              if (n.type !== 'store' || n.storeProfileId) return n;
+              const location = (branchLocations ?? []).find((l) => l.id === n.id);
+              return location ? { ...n, storeProfileId: location.id } : n;
             })
             .filter((n) => {
               // A deleted store profile leaves its Branch Location card (and
-              // wires) behind: when locations are supplied, drop saved store
-              // nodes whose branch no longer exists so a removed branch
-              // leaves the canvas cleanly. Wires to a dropped node are
-              // filtered below by validIds.
+              // wires) behind: when branch locations are supplied (even an
+              // empty list) they own the graph, so drop saved store nodes
+              // whose branch no longer exists — whether the node carried a
+              // store_profile_id or is a legacy node that just failed to
+              // adopt one. A provided-but-empty list means the last branch
+              // was deleted — the saved diagram must not resurrect it. Only
+              // branchLocations === undefined (standalone editor with no
+              // branch concept) keeps the legacy diagram so it still
+              // renders. Wires to a dropped node are filtered below by
+              // validIds.
               if (branchLocations === undefined) return true;
-              if (n.type === 'store' && n.storeProfileId) {
-                return (branchLocations ?? []).some((l) => l.id === n.storeProfileId);
+              if (n.type === 'store') {
+                return (branchLocations ?? []).some((l) => l.id === (n.storeProfileId ?? n.id));
               }
               return true;
             })
