@@ -148,7 +148,8 @@ export const HARDWARE_DEFINITION: SemanticNodeDefinition = {
   ports: [],
 };
 
-/** Closed first-slice registry. Unknown node kinds are not accepted. */
+/** Closed first-slice registry. Unknown node kinds are not accepted: they
+ *  fold to workspace in nodeKind so ownership validation surfaces them. */
 export const SEMANTIC_NODE_DEFINITIONS: Readonly<Record<SemanticNodeKind, SemanticNodeDefinition>> = {
   'branch-location': BRANCH_LOCATION_DEFINITION,
   workspace: WORKSPACE_DEFINITION,
@@ -159,7 +160,18 @@ export const SEMANTIC_NODE_DEFINITIONS: Readonly<Record<SemanticNodeKind, Semant
 function nodeKind(node: TopologyNodeInput): SemanticNodeKind {
   // `store` is deliberately accepted only as a serialized compatibility alias.
   if (node.type === 'store') return 'branch-location';
-  return node.type;
+  // Closed registry: an unknown type (manual edit, stale JSON) must not
+  // flow into the semantic graph as an opaque kind — validateTopologyGraph
+  // only checks branch-location and workspace, so an unknown kind would
+  // silently pass AND round-trip to Apply. Folding to the most common kind
+  // makes the ownership checks surface it (missing-location-input) instead.
+  // NOTE: the final return below is a runtime-only path — node.type is
+  // typed as the closed NodeType union, so TypeScript narrows the three
+  // legal kinds away; only corrupt runtime data reaches the fold.
+  if (node.type === 'workspace' || node.type === 'warehouse' || node.type === 'hardware') {
+    return node.type;
+  }
+  return 'workspace';
 }
 
 function metadataString(node: TopologyNodeInput, key: string): string | undefined {

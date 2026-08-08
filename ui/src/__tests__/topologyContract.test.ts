@@ -186,6 +186,26 @@ describe('semantic topology contract', () => {
     expect(normalizeWireDirection(undefined)).toBe('one-way');
   });
 
+  it('normalizes an unknown node kind to a legal value instead of passing it through', () => {
+    // SEMANTIC_NODE_DEFINITIONS documents "unknown node kinds are not
+    // accepted", but nodeKind returned node.type verbatim — a corrupt
+    // type (manual edit, stale JSON) flowed into the semantic graph as an
+    // opaque kind that validateTopologyGraph never sees (it filters only
+    // branch-location and workspace), so the node silently passed
+    // validation AND could round-trip to Apply. Fold it to a legal kind
+    // so the ownership checks surface it (missing-location-input).
+    const normalized = graph(
+      [{ id: 'kiosk-1', type: 'kiosk' as never, name: 'Kiosk', x: 0, y: 0 }],
+      [],
+    );
+
+    expect(normalized.nodes[0]!.kind).toBe('workspace');
+    // The unknown-kind node is now a workspace with no Location In — the
+    // corrupt data surfaces as a real validation error instead of passing.
+    const errors = validateTopologyGraph(normalized);
+    expect(errors.some((e) => e.code === 'missing-location-input' && e.nodeId === 'kiosk-1')).toBe(true);
+  });
+
   it('allows one Branch Location output to fan out to many workspaces', () => {
     const normalized = graph(
       [branch(), workspace('ws-a'), workspace('ws-b')],
