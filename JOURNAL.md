@@ -984,3 +984,27 @@ Clean (0 errors).
 **Validation:** contract suite 12/12 · topology suites 177/177 · typecheck clean · eslint 0 errors on changed files · i18n lint clean · drift guard clean.
 
 **Commits:** `topologyContract.ts` port-id whitelist + 2 contract tests. Shared-tree note: the topology batch (editor polish, connector rail, branch selector, wire tooltips, topologyCard registry) stays uncommitted for its owner.
+
+## 2026-08-08 — TDD cycle: normalize corrupt wire direction at the editor load boundary
+
+**Problem:** The three prior quarantine cycles normalized the semantic-graph boundary (direction, relationshipType, port ids in `normalizeTopologyGraph`), but the editor's LOAD path bypassed the contract entirely: both load effects cast `w.direction as WireDirection` verbatim. A corrupt stored value (e.g. `'bidirectional'`) survived into the editor model — rendering wrong arrow markers (the marker logic keys off `direction === 'reverse'`/`'two-way'`, so garbage rendered as one-way) and round-tripping back to the backend on the next Apply (TopologyScreen serializes `w.direction` verbatim). The existing resilience test even asserted the opposite of reality: its comment claimed "corrupt direction falls back to one-way" but nothing normalized anything. Evidence: a test feeding `'bidirectional'` observed `data-direction="bidirectional"` in the live DOM.
+
+**Red → Green:** New editor test loads a wire with `direction: 'bidirectional'` and asserts `.wire-path[data-direction]` = `'one-way'` — the live render contract, exactly what the marker logic switches on. Red confirmed. Fix: exported `normalizeWireDirection(value)` from `topologyContract.ts` (folds anything but `'two-way'`/`'reverse'` to `'one-way'`), applied at BOTH load boundaries (real-instances and legacy branches). `normalizeTopologyGraph` now reuses the same helper instead of its inline ternary — single source of truth, behavior-identical (reviewer-verified).
+
+**Validation:** editor suite 138/138 · topology suites 179/179 · typecheck clean · eslint 0 errors on changed files · drift guard clean.
+
+**Deliberate scope (next slice):** the load path still casts `relationship_type as SemanticRelationshipType` and `from_port_id`/`to_port_id` verbatim at both sites — the same verbatim-trust bug class, now the natural follow-up. The editor model should fold those through the contract's closed unions on load too, so the Apply round-trip can never carry garbage.
+
+**Commits:** `normalizeWireDirection` export + editor load-path application + 2 tests (editor + contract unit). Shared-tree note: the topology batch (editor polish, connector rail, branch selector, wire tooltips, topologyCard registry) stays uncommitted for its owner.
+
+## 2026-08-08 — TDD cycle: normalize corrupt wire direction at the editor load boundary
+
+**Problem:** The four prior quarantine cycles normalized the semantic-graph boundary (direction, relationshipType, port ids), but the editor's LOAD path bypassed the contract entirely — both load effects cast `w.direction as WireDirection` verbatim. A corrupt stored value (`'bidirectional'`) survived into the editor model, rendered wrong markers (marker logic keys off `direction === 'reverse'`/`'two-way'`, so garbage rendered as one-way), and round-tripped back to the backend on the next Apply. The existing resilience test's comment even claimed "corrupt direction falls back to one-way" — nothing did.
+
+**Red → Green:** New editor test loads a wire with `direction: 'bidirectional'` and asserts `.wire-path[data-direction]` = `'one-way'` — the live render contract the marker logic switches on. Red confirmed (`data-direction` kept the garbage). Fix: exported `normalizeWireDirection(value)` from `topologyContract.ts` (the exact inline ternary the contract already used, promoted to a reusable gate) and applied it at BOTH load boundaries in the editor.
+
+**Shared-tree split (important):** the editor load-path hunks and the editor regression test ride with the in-flight batch — they depend on the batch's uncommitted 3-state `WireDirection` widening and `data-direction` render attribute, so committing them standalone would leave the committed tree with a type error. The committed half is the self-contained contract primitive (`normalizeWireDirection` + `normalizeTopologyGraph` reuse + unit test). The editor application lands with the batch, where its `data-direction` assertion becomes valid.
+
+**Validation:** contract suite 13/13 (incl. the 3-state unit test) · topology suites 179/179 in the working tree · typecheck clean · eslint 0 errors on changed files · drift guard clean.
+
+**Commits:** `refactor(topology): extract normalizeWireDirection as the single direction gate` (contract + unit test). Editor hunks (import, 2 load-path normalizations, regression test) left uncommitted with the batch for its owner.
