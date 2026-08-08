@@ -1032,3 +1032,15 @@ Clean (0 errors).
 **Validation:** contract suite 15/15 · topology suites 181/181 · typecheck clean · eslint 0 errors on changed files · drift guard clean.
 
 **Commits:** `topologyContract.ts` seenWireIds guard + 1 contract test. Shared-tree note: the topology batch stays uncommitted for its owner.
+
+## 2026-08-08 — TDD cycle: reject wires with endpoints missing from the graph
+
+**Problem:** Endpoint existence was only enforced for LOCATION wires (via `invalid-location-connection`). A NON-location wire (stock-routing, ticket-routing, generic) pointing at a ghost node id passed validation silently — `nodeById.get()` returned `undefined`, `inferredWire` fell to the last-resort legacy branch, and the wire round-tripped to Apply referencing a node that does not exist. Evidence: a test feeding a stock-routing wire from 'ghost-1' produced zero errors.
+
+**Red → Green:** New test: branch + ws-1 with a stock-routing wire from 'ghost-1' → 'ws-1' asserts a new `unknown-wire-endpoint` error with `wireId`. Red confirmed. Fix: a `nodeIds` set from `graph.nodes` (the normalized graph — IDs are authoritative, kind-folding doesn't change them) plus a whole-graph loop checking both `fromNodeId` and `toNodeId` for every wire, with a new `unknown-wire-endpoint` code + `messageId` + FTL keys in both en/id bundles.
+
+**Deliberate ordering (journaled per review):** the guard runs BEFORE the ownership loop — a missing node is more fundamental than a wrong connection, so a ghost-targeted LOCATION wire now surfaces `unknown-wire-endpoint` (first error shown) rather than `invalid-location-connection`, and emits both errors. `unknown-wire-endpoint` joins the closed `TopologyValidationError.code` union; the ADR's future Rust Apply boundary must handle it.
+
+**Validation:** contract suite 16/16 · topology suites 182/182 · typecheck clean · eslint 0 errors on changed files · i18n lint clean · bundle parity 0 missing · drift guard clean.
+
+**Commits:** `topologyContract.ts` unknown-wire-endpoint guard + code + FTL keys (en/id) + 1 contract test. Shared-tree note: the topology batch stays uncommitted for its owner.
