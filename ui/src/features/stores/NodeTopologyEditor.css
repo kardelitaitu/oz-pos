@@ -932,3 +932,16 @@
   font-weight: var(--font-weight-medium);
 }
 
+/* ── Marquee box selection ──────────────────────────────────────
+   A screen-space drag rect on the empty canvas (left button). Drawn as a
+   fixed sibling of the pannable viewport so it never moves with the
+   canvas; pointer-events none lets the pointer reach the canvas below. */
+.topology-marquee {
+  position: absolute;
+  z-index: 4;
+  border: 1px dashed var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+}
+

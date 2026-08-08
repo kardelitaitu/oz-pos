@@ -345,13 +345,43 @@ export default function NodeTopologyEditor({
   const [wires, setWires] = useState<TopologyWireData[]>(PRESET_RETAIL.wires);
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  /** Full multi-selection set; selectedNodeId is the primary (inspector
+   *  target / last-picked). All selection writes go through selectOnly /
+   *  clearSelection so the two can never disagree. */
+  const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
   const [selectedWireId, setSelectedWireId] = useState<string | null>(null);
+
+  /** Replace the whole node selection with a single primary node. */
+  const selectOnly = (id: string) => {
+    setSelectedNodeIds(new Set([id]));
+    setSelectedNodeId(id);
+  };
+  /** Clear the node selection entirely (wire selection untouched). */
+  const clearSelection = () => {
+    setSelectedNodeIds(new Set());
+    setSelectedNodeId(null);
+  };
 
   const [isSimulating, setIsSimulating] = useState(false);
   const [simPulseStep, setSimPulseStep] = useState(0);
 
-  const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
-  const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  /** Set of node ids being dragged together (a multi-selection drags as
+   *  one group; each node keeps its own pointer offset). */
+  const [draggingNodeIds, setDraggingNodeIds] = useState<Set<string>>(new Set());
+  const dragOffsetsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  /** Marquee box selection: null while idle, a rect in container-relative
+   *  screen px while left-dragging on empty background. */
+  const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  /** Mirror of the rendered marquee rect so the document-level finalizer
+   *  (armed at mousedown) always reads the LATEST box — refs never go
+   *  stale across renders, and a release event may carry no pointer coords. */
+  const marqueeRef = useRef<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const marqueeStartRef = useRef<{ x: number; y: number } | null>(null);
+  /** Cancels an in-flight marquee when the pointer is released outside the
+   *  canvas — the canvas onMouseUp never fires there, so without a
+   *  document-level listener the box would linger and the next mousemove
+   *  would re-open it. Mirrors dragCleanupRef for node drags. */
+  const marqueeCleanupRef = useRef<(() => void) | null>(null);
   /** Set once a drag has actually moved the node — history is pushed on the
    *  first movement, not on mousedown, so a plain click-to-select never
    *  creates a no-op undo entry or marks the canvas dirty. */
@@ -385,6 +415,9 @@ export default function NodeTopologyEditor({
   const [redo, setRedo] = useState<HistoryEntry[]>([]);
 
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  /** Batch delete confirmation (2+ nodes). Single nodes keep confirmDelete
+   *  so the established single-node dialog text stays untouched. */
+  const [confirmDeleteMany, setConfirmDeleteMany] = useState<string[] | null>(null);
   const [confirmPreset, setConfirmPreset] = useState<'retail' | 'restaurant' | null>(null);
 
   /** Skip the next workspaceInstances-triggered reload (set before calling onSave). */
@@ -888,7 +921,15 @@ export default function NodeTopologyEditor({
    */
   useEffect(() => {
     if (selectedNodeId && !nodeMap.has(selectedNodeId)) {
+      setSelectedNodeIds(new Set());
       setSelectedNodeId(null);
+    } else {
+      // Prune any multi-selection members that no longer exist.
+      setSelectedNodeIds((prev) => {
+        if (prev.size === 0) return prev;
+        const next = new Set([...prev].filter((id) => nodeMap.has(id)));
+        return next.size === prev.size ? prev : next;
+      });
     }
     if (selectedWireId && !wires.some((w) => w.id === selectedWireId)) {
       setSelectedWireId(null);
@@ -960,7 +1001,7 @@ export default function NodeTopologyEditor({
     const currentIds = new Set(nodes.map((n) => n.id));
     const restoredNodes = entry.nodes.filter((n) => !currentIds.has(n.id));
     if (restoredNodes.length === 1) {
-      setSelectedNodeId(restoredNodes[0]!.id);
+      selectOnly(restoredNodes[0]!.id);
     }
   }, [nodes, wires]);
 
@@ -997,6 +1038,18 @@ export default function NodeTopologyEditor({
     return () => clearInterval(interval);
   }, [isSimulating]);
 
+  /** Delete a set of nodes in one history entry — every wire touching any
+   *  of them goes too. Single-node and batch deletes share this path. */
+  const deleteNodes = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+    const doomed = new Set(ids);
+    pushHistory();
+    setNodes((prev) => prev.filter((n) => !doomed.has(n.id)));
+    setWires((prev) => prev.filter((w) => !doomed.has(w.fromNodeId) && !doomed.has(w.toNodeId)));
+    setSelectedNodeIds(new Set());
+    setSelectedNodeId(null);
+  }, [pushHistory]);
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       // Guard: don't handle canvas shortcuts while the user is typing in a text field.
@@ -1023,28 +1076,30 @@ export default function NodeTopologyEditor({
       // closes the dialog itself (bubble order: document listener first).
       // NOTE: every editor-owned confirm dialog must be added to this
       // condition, or its Escape/shortcut handling will leak into the canvas.
-      if (confirmDelete || confirmPreset) {
+      if (confirmDelete || confirmDeleteMany || confirmPreset) {
         return;
       }
       if (e.key === 'Escape') {
         setConnectingFromNodeId(null);
         setConnectingFromPort(null);
       setConnectingVariantIndex(0);
-        setSelectedNodeId(null);
+        clearSelection();
         setSelectedWireId(null);
         return;
       }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && (selectedNodeId || selectedWireId)) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && (selectedNodeIds.size > 0 || selectedWireId)) {
         e.preventDefault();
-        if (selectedNodeId) {
-          const hasWires = wires.some((w) => w.fromNodeId === selectedNodeId || w.toNodeId === selectedNodeId);
+        if (selectedNodeIds.size > 0) {
+          const targets = [...selectedNodeIds];
+          const hasWires = wires.some((w) => targets.includes(w.fromNodeId) || targets.includes(w.toNodeId));
           if (hasWires) {
-            setConfirmDelete(selectedNodeId);
+            // A single wired node keeps the established dialog; 2+ use the
+            // count-aware batch dialog.
+            if (targets.length === 1) setConfirmDelete(targets[0]!);
+            else setConfirmDeleteMany(targets);
           } else {
             // No connected wires — delete immediately without dialog.
-            pushHistory();
-            setNodes((prev) => prev.filter((n) => n.id !== selectedNodeId));
-            setSelectedNodeId(null);
+            deleteNodes(targets);
           }
         } else {
           setConfirmDelete('');
@@ -1066,7 +1121,7 @@ export default function NodeTopologyEditor({
         return;
       }
       // Ctrl+I — jump focus to the first inspector input when a node is selected
-      if ((e.ctrlKey || e.metaKey) && e.key === 'i' && selectedNodeId) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'i' && selectedNodeIds.size > 0) {
         e.preventDefault();
         const firstInput = document.querySelector('.inspector-content input');
         if (firstInput instanceof HTMLElement) {
@@ -1074,16 +1129,17 @@ export default function NodeTopologyEditor({
         }
         return;
       }
-      if (selectedNodeId && !e.repeat && (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      if (selectedNodeIds.size > 0 && !e.repeat && (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
         e.preventDefault();
         pushHistory();
         const step = e.shiftKey ? GRID_SIZE : 8;
         // Arrow nudges share the SAME dynamic edge clamp as mouse dragging,
         // so keyboard and pointer movement agree on the reachable bounds.
+        // The whole multi-selection nudges together.
         const canvas = canvasRef.current;
         setNodes((prev) =>
           prev.map((n) => {
-            if (n.id !== selectedNodeId) return n;
+            if (!selectedNodeIds.has(n.id)) return n;
             const rawX = n.x + (e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0);
             const rawY = n.y + (e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0);
             const clamped = clampNodeToViewport(rawX, rawY, {
@@ -1100,7 +1156,7 @@ export default function NodeTopologyEditor({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedNodeId, selectedWireId, wires, pushHistory, popUndo, popRedo, confirmDelete, confirmPreset, pan, zoom]);
+  }, [selectedNodeIds, selectedWireId, wires, pushHistory, popUndo, popRedo, confirmDelete, confirmDeleteMany, confirmPreset, pan, zoom, deleteNodes]);
 
   const executePresetLoad = useCallback(() => {
     if (confirmPreset) {
@@ -1110,6 +1166,11 @@ export default function NodeTopologyEditor({
   }, [confirmPreset, loadPreset]);
 
   const executeDelete = useCallback(() => {
+    if (confirmDeleteMany) {
+      deleteNodes(confirmDeleteMany);
+      setConfirmDeleteMany(null);
+      return;
+    }
     if (confirmDelete === '') {
       if (selectedWireId) {
         // Deleting a wire is a single-wire mutation — it must NOT cancel a
@@ -1143,13 +1204,10 @@ export default function NodeTopologyEditor({
         setSelectedWireId(null);
       }
     } else if (confirmDelete) {
-      pushHistory();
-      setNodes((prev) => prev.filter((n) => n.id !== confirmDelete));
-      setWires((prev) => prev.filter((w) => w.fromNodeId !== confirmDelete && w.toNodeId !== confirmDelete));
-      setSelectedNodeId(null);
+      deleteNodes([confirmDelete]);
     }
     setConfirmDelete(null);
-  }, [confirmDelete, selectedWireId, connectingFromNodeId, connectingFromPort, wires, pushHistory]);
+  }, [confirmDelete, confirmDeleteMany, selectedWireId, connectingFromNodeId, connectingFromPort, wires, pushHistory, deleteNodes]);
 
   const zoomToFit = useCallback(() => {
     if (nodes.length === 0) return;
@@ -1173,9 +1231,27 @@ export default function NodeTopologyEditor({
   const handleNodeMouseDown = (e: React.MouseEvent, nodeId: string) => {
     e.stopPropagation();
     if (e.button !== 0) return;
-    setSelectedNodeId(nodeId);
+    // Multi-select rules: shift+mousedown ADDS the node to the selection;
+    // a plain mousedown on an unselected node collapses to just it; a
+    // mousedown on a node already inside a multi-selection keeps the group
+    // so it can be dragged as a whole.
+    const wasSelected = selectedNodeIds.has(nodeId);
+    let selection: Set<string>;
+    if (e.shiftKey && !wasSelected) {
+      selection = new Set(selectedNodeIds);
+      selection.add(nodeId);
+      setSelectedNodeIds(selection);
+      setSelectedNodeId(nodeId);
+    } else if (!wasSelected) {
+      selection = new Set([nodeId]);
+      selectOnly(nodeId);
+    } else {
+      selection = new Set(selectedNodeIds);
+    }
     setSelectedWireId(null);
-    setDraggingNodeId(nodeId);
+    // Copy: the drag set must never share identity with the live selection
+    // state (a future mutation of one would corrupt the other).
+    setDraggingNodeIds(new Set(selection));
     dragHasMovedRef.current = false;
 
     // Cancel any in-flight drag listener from a previous drag, then arm a
@@ -1183,8 +1259,9 @@ export default function NodeTopologyEditor({
     // still ends the drag (the canvas onMouseUp is unreachable there).
     dragCleanupRef.current?.();
     const handleDocumentMouseUp = () => {
-      setDraggingNodeId(null);
+      setDraggingNodeIds(new Set());
       dragHasMovedRef.current = false;
+      dragOffsetsRef.current.clear();
       document.removeEventListener('mouseup', handleDocumentMouseUp);
       dragCleanupRef.current = null;
     };
@@ -1194,49 +1271,61 @@ export default function NodeTopologyEditor({
       dragCleanupRef.current = null;
     };
 
-    const node = nodeMap.get(nodeId);
-    if (node) {
-      const rect = canvasRef.current?.getBoundingClientRect();
-      const canvasX = (e.clientX - (rect?.left ?? 0) - pan.x) / zoom;
-      const canvasY = (e.clientY - (rect?.top ?? 0) - pan.y) / zoom;
-      dragOffsetRef.current = {
-        x: canvasX - node.x,
-        y: canvasY - node.y,
-      };
+    const rect = canvasRef.current?.getBoundingClientRect();
+    const canvasX = (e.clientX - (rect?.left ?? 0) - pan.x) / zoom;
+    const canvasY = (e.clientY - (rect?.top ?? 0) - pan.y) / zoom;
+    dragOffsetsRef.current.clear();
+    for (const id of selection) {
+      const n = nodeMap.get(id);
+      if (n) dragOffsetsRef.current.set(id, { x: canvasX - n.x, y: canvasY - n.y });
     }
   };
 
   const handleCanvasMouseMove = (e: React.MouseEvent) => {
     mousePosRef.current = { x: e.clientX, y: e.clientY };
 
-    if (draggingNodeId) {
+    if (draggingNodeIds.size > 0) {
       // Push history once, on the first real movement — a plain click that
       // never moves must not create a no-op undo entry.
       if (!dragHasMovedRef.current) {
         dragHasMovedRef.current = true;
         pushHistory();
       }
-      // Dynamic edge clamp (replaces the old hard 20px floor): the node
-      // may travel north/west until its box nearly leaves the visible
-      // canvas, but can never be pushed off-screen and lost. Pan/zoom
-      // aware, so the reachable edge follows the current view.
+      // Dynamic edge clamp (replaces the old hard 20px floor): every node
+      // in the dragged group may travel north/west until its box nearly
+      // leaves the visible canvas, but can never be pushed off-screen and
+      // lost. Pan/zoom aware, so the reachable edge follows the current
+      // view. Each node clamps independently; the group delta is otherwise
+      // identical (same raw cursor → same per-node offset).
       const canvas = canvasRef.current;
       const rect = canvas?.getBoundingClientRect();
-      const rawX = (e.clientX - (rect?.left ?? 0) - pan.x) / zoom - dragOffsetRef.current.x;
-      const rawY = (e.clientY - (rect?.top ?? 0) - pan.y) / zoom - dragOffsetRef.current.y;
-      const clamped = clampNodeToViewport(rawX, rawY, {
-        panX: pan.x,
-        panY: pan.y,
-        zoom,
-        canvasW: canvas?.clientWidth ?? 0,
-        canvasH: canvas?.clientHeight ?? 0,
-      });
-      const newX = snap(clamped.x);
-      const newY = snap(clamped.y);
-
+      const rawX = (e.clientX - (rect?.left ?? 0) - pan.x) / zoom;
+      const rawY = (e.clientY - (rect?.top ?? 0) - pan.y) / zoom;
       setNodes((prev) =>
-        prev.map((n) => (n.id === draggingNodeId ? { ...n, x: newX, y: newY } : n)),
+        prev.map((n) => {
+          const off = dragOffsetsRef.current.get(n.id);
+          if (!off) return n;
+          const clamped = clampNodeToViewport(rawX - off.x, rawY - off.y, {
+            panX: pan.x,
+            panY: pan.y,
+            zoom,
+            canvasW: canvas?.clientWidth ?? 0,
+            canvasH: canvas?.clientHeight ?? 0,
+          });
+          return { ...n, x: snap(clamped.x), y: snap(clamped.y) };
+        }),
       );
+    } else if (marqueeStartRef.current) {
+      // Marquee: track the drag rect in container-relative screen px.
+      const rect = canvasRef.current?.getBoundingClientRect();
+      const next = {
+        x0: marqueeStartRef.current.x,
+        y0: marqueeStartRef.current.y,
+        x1: e.clientX - (rect?.left ?? 0),
+        y1: e.clientY - (rect?.top ?? 0),
+      };
+      setMarquee(next);
+      marqueeRef.current = next;
     } else if (connectingFromNodeId) {
       // Find nearest target port when dragging a connection
       const rect = canvasRef.current?.getBoundingClientRect();
@@ -1269,8 +1358,14 @@ export default function NodeTopologyEditor({
   };
 
   const handleCanvasMouseUp = () => {
-    setDraggingNodeId(null);
+    setDraggingNodeIds(new Set());
     dragHasMovedRef.current = false;
+    dragOffsetsRef.current.clear();
+    // The marquee is finalized by its own document-level mouseup listener
+    // (armed at marquee start), which also fires when the pointer is
+    // released OUTSIDE the canvas — the canvas onMouseUp is unreachable
+    // there, and without it the box would linger and re-open on the next
+    // mousemove.
   };
 
   // Clear hoveredTarget when connection mode ends
@@ -1280,12 +1375,77 @@ export default function NodeTopologyEditor({
     }
   }, [connectingFromNodeId]);
 
+  /** Commit the marquee at its release point: select every node whose card
+   *  box intersects the drag rect (screen space at identity pan/zoom), or
+   *  leave the selection cleared if the box captured nothing (a background
+   *  click). The rect is derived from the START ref + release coords, so a
+   *  document listener armed at mousedown never reads a stale rect. */
+  const finalizeMarquee = () => {
+    const start = marqueeStartRef.current;
+    marqueeStartRef.current = null;
+    if (!start) return;
+    // Only a marquee that actually RENDERED (the pointer moved) commits — a
+    // mousedown+mouseup without movement is a plain background click, and
+    // the selection was already cleared when it started. The ref mirror
+    // also keeps this document-armed listener free of stale-closure risk.
+    const box = marqueeRef.current;
+    marqueeRef.current = null;
+    setMarquee(null);
+    if (!box) return;
+    const mx0 = Math.min(box.x0, box.x1);
+    const mx1 = Math.max(box.x0, box.x1);
+    const my0 = Math.min(box.y0, box.y1);
+    const my1 = Math.max(box.y0, box.y1);
+    // A degenerate (click-sized) box selects nothing.
+    if (mx1 - mx0 < 1 || my1 - my0 < 1) return;
+    const hit = nodes.filter((n) => {
+      const nx = n.x * zoom + pan.x;
+      const ny = n.y * zoom + pan.y;
+      return nx + NODE_WIDTH * zoom >= mx0 && nx <= mx1
+        && ny + NODE_HEIGHT * zoom >= my0 && ny <= my1;
+    });
+    if (hit.length > 0) {
+      setSelectedNodeIds(new Set(hit.map((n) => n.id)));
+      // The primary (inspector target) is the last node in render order.
+      setSelectedNodeId(hit[hit.length - 1]!.id);
+      setSelectedWireId(null);
+    } else {
+      clearSelection();
+    }
+  };
+
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
     const targetEl = e.target as HTMLElement;
     if (targetEl === e.currentTarget || targetEl.classList.contains('node-canvas-viewport') || targetEl.tagName === 'svg') {
-      setSelectedNodeId(null);
       setSelectedWireId(null);
-      if (e.button === 0 || e.button === 1) {
+      if (e.button === 0) {
+        // Left-drag on empty background is the marquee selector; a plain
+        // click (no movement) clears the selection on mouseup. The marquee
+        // coords are container-relative screen px (the viewport inside is
+        // panned/zoomed, so node boxes are compared in screen space too).
+        // A document-level mouseup finalizes the box, so releasing outside
+        // the canvas still commits the selection instead of leaking a
+        // half-open marquee.
+        clearSelection();
+        const rect = canvasRef.current?.getBoundingClientRect();
+        marqueeStartRef.current = {
+          x: e.clientX - (rect?.left ?? 0),
+          y: e.clientY - (rect?.top ?? 0),
+        };
+        marqueeRef.current = null;
+        marqueeCleanupRef.current?.();
+        const handleMarqueeMouseUp = () => {
+          finalizeMarquee();
+          marqueeCleanupRef.current?.();
+        };
+        document.addEventListener('mouseup', handleMarqueeMouseUp);
+        marqueeCleanupRef.current = () => {
+          document.removeEventListener('mouseup', handleMarqueeMouseUp);
+          marqueeCleanupRef.current = null;
+        };
+      } else if (e.button === 1 || e.button === 2) {
+        // Middle/right-button drag pans the canvas.
+        clearSelection();
         isPanningRef.current = true;
         panStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
 
@@ -1364,7 +1524,7 @@ export default function NodeTopologyEditor({
       freshTimersRef.current.delete(freshTimer);
     }, 400);
     freshTimersRef.current.add(freshTimer);
-    setSelectedNodeId(id);
+    selectOnly(id);
   };
 
   const portDirection = useCallback((port: PortName): 'input' | 'output' => (
@@ -1542,15 +1702,15 @@ export default function NodeTopologyEditor({
   };
 
   const handleDeleteRequest = () => {
-    if (selectedNodeId) {
-      const hasWires = wires.some((w) => w.fromNodeId === selectedNodeId || w.toNodeId === selectedNodeId);
+    if (selectedNodeIds.size > 0) {
+      const targets = [...selectedNodeIds];
+      const hasWires = wires.some((w) => targets.includes(w.fromNodeId) || targets.includes(w.toNodeId));
       if (hasWires) {
-        setConfirmDelete(selectedNodeId);
+        if (targets.length === 1) setConfirmDelete(targets[0]!);
+        else setConfirmDeleteMany(targets);
       } else {
         // No connected wires — delete immediately without dialog.
-        pushHistory();
-        setNodes((prev) => prev.filter((n) => n.id !== selectedNodeId));
-        setSelectedNodeId(null);
+        deleteNodes(targets);
       }
     } else if (selectedWireId) {
       setConfirmDelete('');
@@ -1664,6 +1824,19 @@ export default function NodeTopologyEditor({
         />
       )}
 
+      {/* ── Confirm batch delete dialog (2+ nodes) ── */}
+      {confirmDeleteMany !== null && (
+        <ConfirmDialog
+          open
+          onCancel={() => setConfirmDeleteMany(null)}
+          onConfirm={executeDelete}
+          title={l10n.getString('topology-confirm-delete-many-title', { count: confirmDeleteMany.length })}
+          message={l10n.getString('topology-confirm-delete-many-msg', { count: confirmDeleteMany.length })}
+          variant="danger"
+          confirmLabel={l10n.getString('topology-confirm-delete-label')}
+        />
+      )}
+
       {/* ── Confirm preset overwrite dialog ── */}
       {confirmPreset !== null && (
         <ConfirmDialog
@@ -1745,7 +1918,7 @@ export default function NodeTopologyEditor({
                     // and drop the undo/redo stacks — every pre-save entry
                     // holds the OLD ids, which no longer exist on the canvas
                     // or in the DB. Undo must not restore dangling ids.
-                    setSelectedNodeId(null);
+                    clearSelection();
                     setSelectedWireId(null);
                     setHistory([]);
                     setRedo([]);
@@ -1841,7 +2014,7 @@ export default function NodeTopologyEditor({
 
           <hr className="tool-rack-divider" />
 
-          {selectedNodeId || selectedWireId ? (
+          {selectedNodeIds.size > 0 || selectedWireId ? (
             <Button variant="secondary" onClick={handleDeleteRequest} className="delete-btn" icon={<TrashIcon size={16} />}>
               <Localized id="topology-delete-selected">Delete Selected Element</Localized>
             </Button>
@@ -1895,6 +2068,19 @@ export default function NodeTopologyEditor({
                 </span>
               ))}
             </div>
+          )}
+          {marquee && (
+            <div
+              className="topology-marquee"
+              aria-hidden="true"
+              onMouseDown={(e) => e.stopPropagation()}
+              style={{
+                left: Math.min(marquee.x0, marquee.x1),
+                top: Math.min(marquee.y0, marquee.y1),
+                width: Math.abs(marquee.x1 - marquee.x0),
+                height: Math.abs(marquee.y1 - marquee.y0),
+              }}
+            />
           )}
           <div
             className="node-canvas-viewport"
@@ -1962,7 +2148,7 @@ export default function NodeTopologyEditor({
                         // direction — the whole wire is the affordance now
                         // (no separate label pill).
                         setSelectedWireId(wire.id);
-                        setSelectedNodeId(null);
+                        clearSelection();
                         handleCycleWireDirection(wire.id);
                       }}
                       onKeyDown={(e) => {
@@ -1972,7 +2158,7 @@ export default function NodeTopologyEditor({
                           e.preventDefault();
                           e.stopPropagation();
                           setSelectedWireId(wire.id);
-                          setSelectedNodeId(null);
+                          clearSelection();
                           handleCycleWireDirection(wire.id);
                         }
                       }}
@@ -2010,7 +2196,7 @@ export default function NodeTopologyEditor({
             </svg>
 
             {nodes.map((node) => {
-              const isSelected = selectedNodeId === node.id;
+              const isSelected = selectedNodeIds.has(node.id);
               const isConnectingSource = connectingFromNodeId === node.id;
               // Branch Location and workspace cards get the inline rename
               // pencil (persisting via their respective update paths);
@@ -2027,7 +2213,7 @@ export default function NodeTopologyEditor({
                   role="group"
                   tabIndex={0}
                   aria-label={node.name}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setSelectedNodeId(node.id); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') selectOnly(node.id); }}
                   // Keep the body selectable/draggable for existing canvas
                   // workflows, while nested controls explicitly opt out.
                   onMouseDown={(e) => {
@@ -2202,7 +2388,7 @@ export default function NodeTopologyEditor({
           <div className="node-inspector-drawer">
             <div className="inspector-header">
               <h3><Localized id="topology-inspector-title">Node Inspector</Localized></h3>
-              <Button variant="secondary" onClick={() => setSelectedNodeId(null)} icon={<CloseIcon size={14} />} aria-label={l10n.getString('topology-inspector-close-aria')}>{null}</Button>
+              <Button variant="secondary" onClick={clearSelection} icon={<CloseIcon size={14} />} aria-label={l10n.getString('topology-inspector-close-aria')}>{null}</Button>
             </div>
 
             <div className="inspector-content">

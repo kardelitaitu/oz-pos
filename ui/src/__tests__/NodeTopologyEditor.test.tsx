@@ -50,6 +50,8 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-confirm-delete-node-msg':
     'This node has connected wires. Deleting it will remove all its wires too. This action cannot be undone.',
   'topology-confirm-delete-wire-msg': 'Delete this wire connection? This action cannot be undone.',
+  'topology-confirm-delete-many-title': 'Delete {count} Nodes',
+  'topology-confirm-delete-many-msg': 'Delete these {count} nodes and all of their wires? This action cannot be undone.',
   'topology-confirm-delete-label': 'Delete',
   'topology-confirm-preset-title': 'Load Preset',
   'topology-confirm-preset-msg':
@@ -94,7 +96,12 @@ vi.mock('@fluent/react', async () => {
     ...actual,
     Localized: ({ children }: { id: string; children: React.ReactNode }) => <>{children}</>,
     useLocalization: () => ({
-      l10n: { getString: (id: string) => TOPOLOGY_EN[id] ?? id },
+      l10n: {
+        getString: (id: string, vars?: { count?: number } | null) => {
+          const value = TOPOLOGY_EN[id] ?? id;
+          return typeof vars?.count === 'number' ? value.replace('{count}', String(vars.count)) : value;
+        },
+      },
     }),
   };
 });
@@ -3069,17 +3076,18 @@ describe('NodeTopologyEditor — zoom controls behavior', () => {
 // ── Canvas pan ──────────────────────────────────────────────────
 
 describe('NodeTopologyEditor — canvas pan', () => {
-  it('pans the viewport when dragging on empty canvas background', () => {
+  it('pans the viewport when middle-button dragging on empty canvas background', () => {
     renderEditor();
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
     const viewport = document.querySelector('.node-canvas-viewport') as HTMLElement;
     expect(viewport.style.transform).toContain('translate(0px, 0px)');
 
-    // mousedown at (100,100) on the background, drag to (150,130): the
-    // viewport must translate by the pointer delta (50, 30).
-    fireEvent.mouseDown(canvas, { button: 0, clientX: 100, clientY: 100 });
+    // Left-button empty-background drag is the marquee selector now, so pan
+    // lives on the middle (or right) button. mousedown at (100,100), drag
+    // to (150,130): the viewport must translate by the pointer delta (50, 30).
+    fireEvent.mouseDown(canvas, { button: 1, clientX: 100, clientY: 100 });
     fireEvent.mouseMove(document, { clientX: 150, clientY: 130 });
-    fireEvent.mouseUp(document, { button: 0 });
+    fireEvent.mouseUp(document, { button: 1 });
 
     expect(viewport.style.transform).toContain('translate(50px, 30px)');
   });
@@ -3099,6 +3107,179 @@ describe('NodeTopologyEditor — canvas pan', () => {
 
     expect(firstNode.style.left).not.toBe(beforeLeft);
     expect(viewport.style.transform).toContain('translate(0px, 0px)');
+  });
+});
+
+// ── Multi-select, marquee, group drag, batch delete ────────────
+
+describe('NodeTopologyEditor — multi-select & marquee', () => {
+  it('marquee drag selects the nodes inside the box and clears on release', () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    // Preset geometry (identity zoom/pan): store-1 80–320 × 140–380,
+    // ws-1 380–620 × 80–320, wh-1 680–920 × 140–380. A marquee from the
+    // top-left to (650, 420) covers the first two but not the warehouse.
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 650, clientY: 420 });
+    expect(document.querySelector('.topology-marquee')).not.toBeNull();
+    fireEvent.mouseUp(canvas, { button: 0 });
+
+    expect(document.querySelector('.topology-marquee')).toBeNull();
+    const selected = document.querySelectorAll('.topology-node.node-selected');
+    expect(selected).toHaveLength(2);
+    expect(selected[0]?.getAttribute('data-node-id')).toBe('store-1');
+    expect(selected[1]?.getAttribute('data-node-id')).toBe('ws-1');
+  });
+
+  it('commits the marquee even when released outside the canvas (no leaked box)', () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    // Start the marquee over the canvas, then release OUTSIDE it — the
+    // canvas onMouseUp never fires there, so the document-level finalizer
+    // must commit the selection and disarm the box.
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 650, clientY: 420 });
+    fireEvent.mouseUp(document, { button: 0 });
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(2);
+
+    // A subsequent mousemove must NOT re-open the marquee.
+    fireEvent.mouseMove(canvas, { clientX: 800, clientY: 600 });
+    expect(document.querySelector('.topology-marquee')).toBeNull();
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(2);
+  });
+
+  it('a plain click on empty canvas clears the multi-selection', () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 650, clientY: 420 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(2);
+
+    // Click (no drag) on empty background below the warehouse card.
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 700, clientY: 500 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(0);
+  });
+
+  it('dragging one selected node moves the whole group by the same delta', async () => {
+    // Grid-aligned positions (multiples of 24) so the snapped delta is exact.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 96, y: 144 },
+        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 384, y: 144, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    mockCanvasSize(1200, 800);
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    // Marquee-select both, then drag the workspace by (48, 48).
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 700, clientY: 500 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(2);
+
+    fireEvent.mouseDown(nodeAt(1), { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 48, clientY: 48 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+
+    // Both nodes travelled exactly +48 on each axis (48 is grid-aligned).
+    expect(nodeAt(0).style.left).toBe('144px');
+    expect(nodeAt(0).style.top).toBe('192px');
+    expect(nodeAt(1).style.left).toBe('432px');
+    expect(nodeAt(1).style.top).toBe('192px');
+  });
+
+  it('shift+click adds to the selection; a plain click collapses it', () => {
+    renderEditor();
+    const store = nodeAt(0);
+    const ws = nodeAt(1);
+    const wh = nodeAt(2);
+
+    fireEvent.mouseDown(store, { button: 0 });
+    fireEvent.mouseUp(store);
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(1);
+
+    // Shift+click adds the second node without dropping the first.
+    fireEvent.mouseDown(ws, { button: 0, shiftKey: true });
+    fireEvent.mouseUp(ws);
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(2);
+
+    // A plain click on a third node collapses to just it.
+    fireEvent.mouseDown(wh, { button: 0 });
+    fireEvent.mouseUp(wh);
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(1);
+    expect(wh.classList.contains('node-selected')).toBe(true);
+  });
+
+  it('batch deletes selected nodes and their wires after confirmation, and undo restores them', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [
+        { id: 'w-1', from_node_id: 'store-1', from_port: 'right', to_node_id: 'ws-a', to_port: 'left', direction: 'one-way' },
+      ],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    mockCanvasSize(1200, 800);
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    // Select the wired pair together.
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 700, clientY: 500 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(2);
+
+    // Batch delete: the pair has wires, so the count-aware dialog appears.
+    fireEvent.click(screen.getByText('Delete Selected Element'));
+    expect(screen.getByText('Delete 2 Nodes')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Delete'));
+    await waitFor(() => expect(getNodeCount()).toBe(0));
+    expect(getWireCount()).toBe(0);
+
+    // One undo restores the whole batch.
+    fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true });
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    expect(getWireCount()).toBe(1);
+  });
+
+  it('Delete key removes an unwired multi-selection immediately, no dialog', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-1', type: 'warehouse', name: 'WH', x: 680, y: 140 },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+    mockCanvasSize(1200, 800);
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    // Select store + workspace, leave the warehouse out of the box.
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 650, clientY: 420 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(2);
+
+    fireEvent.keyDown(canvas, { key: 'Delete' });
+
+    expect(getNodeCount()).toBe(1);
+    expect(screen.queryByText('Delete 2 Nodes')).not.toBeInTheDocument();
+    expect(document.querySelector('.topology-node[data-node-id="wh-1"]')).not.toBeNull();
   });
 });
 
