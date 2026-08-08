@@ -24,6 +24,12 @@ pub mod lan_server;
 /// Global application state (DB, kernel, sync daemon, registry).
 pub mod state;
 
+/// Debug-only bootstrap that connects the desktop client to the local
+/// dev sync server (`scripts/start-local-sync.bat` → `:3099`) without
+/// manual Settings configuration. Excluded from release builds.
+#[cfg(debug_assertions)]
+mod sync_bootstrap;
+
 /// Embed `Microsoft.Windows.Common-Controls` v6 dependency into the
 /// test binary's manifest via an MSVC `.drectve` linker directive
 /// section.  Required by `WebView2Loader.dll` at startup, which the
@@ -104,6 +110,23 @@ pub fn run() {
             // is not found (e.g. headless/CI), this is a no-op.
             if let Some(main_window) = app.get_webview_window("main") {
                 let _ = main_window.show();
+            }
+
+            // ── Auto-provision local sync (debug builds only) ────────
+            // A fresh dev DB ships with an empty `sync_server_url` and sync
+            // disabled, so the background daemon silently no-ops until the
+            // user manually configures Settings → Sync. If the local dev
+            // server (`start-local-sync.bat` → :3099) is up, request a JWT
+            // and persist the connection. Spawned BEFORE the sync daemon
+            // so the daemon's first tick (60–120s out) sees the fresh
+            // config. Never runs in release builds — an existing
+            // configuration is never touched.
+            #[cfg(debug_assertions)]
+            {
+                let bootstrap_db = app.state::<AppState>().db.clone();
+                platform_startup::spawn_daemon("sync auto-provision", async move {
+                    crate::sync_bootstrap::auto_provision_local_sync(bootstrap_db).await;
+                });
             }
 
             // ── Background sync daemon ────────────────────────────────
