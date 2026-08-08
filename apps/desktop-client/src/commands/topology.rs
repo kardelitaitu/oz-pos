@@ -1028,17 +1028,19 @@ pub async fn load_topology(state: State<'_, AppState>) -> Result<Option<Value>, 
     let value: Value = serde_json::from_str(&json)
         .map_err(|e| AppError::Internal(format!("invalid topology JSON: {e}")))?;
     let (nodes, wires) = validate_topology_envelope(&value)?;
-    validate_semantic_ownership(&conn, nodes, wires)?;
     // Shape validation only: every entry must deserialize into the typed
-    // payloads (a malformed node/wire is rejected here). The closed-union
-    // structural gate (validate_topology_structure) is deliberately NOT run
-    // at load — the frontend contract heals healable corruption at the
-    // editor load path (normalizeWireDirection, ghost-wire filtering, port
-    // defaults), and the free function load_topology_data is documented
-    // raw-by-design ("the load boundary stays raw"). Rejecting a stored row
-    // with e.g. a corrupt direction would brick the whole topology instead
-    // of letting the editor repair it. The strict gate runs at the save
-    // boundary (save_topology_json), where the healed value must hold.
+    // payloads (a malformed node/wire is rejected here). Neither the
+    // closed-union structural gate (validate_topology_structure) NOR the
+    // semantic-ownership gate (validate_semantic_ownership) is run at load:
+    // the frontend contract heals healable corruption at the editor load
+    // path (normalizeWireDirection, ghost-wire filtering, port defaults)
+    // and surfaces contract violations (missing-location-input etc.) as
+    // Apply-time toasts the user repairs in the editor — the free function
+    // load_topology_data is documented raw-by-design ("the load boundary
+    // stays raw"). Rejecting a stored row for either reason would brick the
+    // whole topology instead of letting the editor repair it. Both gates run
+    // at the save/Apply boundary (save_topology_json), where the healed
+    // value must hold.
     serde_json::from_value::<Vec<TopologyNodePayload>>(Value::Array(nodes.to_vec()))
         .map_err(|e| AppError::Internal(format!("invalid topology nodes: {e}")))?;
     serde_json::from_value::<Vec<TopologyWirePayload>>(Value::Array(wires.to_vec()))
@@ -5284,6 +5286,39 @@ mod tests {
         // Raw passthrough: the editor's normalizeWireDirection folds the
         // corrupt value to one-way and heals the row on the next Apply.
         assert_eq!(loaded["wires"][0]["direction"], "bidirectional");
+    }
+
+    #[tokio::test]
+    async fn tauri_load_topology_serves_semantic_contract_violation_raw() {
+        // validate_semantic_ownership at load would brick the whole topology
+        // when a stored SEMANTIC graph violates the contract (here: a
+        // workspace with no location-in wire -> missing-location-input). The
+        // frontend loads raw and surfaces these errors at Apply time
+        // (validateTopologyGraph toast in TopologyScreen / NodeTopologyEditor)
+        // so the user can repair the graph — load must serve it raw, matching
+        // load_topology_data's documented raw-by-design contract.
+        let state = AppState::for_test();
+        {
+            let mut conn = state.db.lock().await;
+            migrations::run(&mut conn).unwrap();
+            // Semantic fields present (store_profile_id on the branch) but
+            // ws-1 has no location-in wire — a missing-location-input
+            // violation the editor would surface as a repair prompt.
+            oz_core::Settings::set(
+                &conn,
+                TOPOLOGY_SETTING_KEY,
+                r#"{"nodes":[{"id":"branch","type":"branch-location","name":"HQ","x":0,"y":0,"store_profile_id":"default"},{"id":"ws-1","type":"workspace","name":"POS","x":200,"y":0}],"wires":[]}"#,
+            )
+            .unwrap();
+        }
+
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let loaded = load_topology(app.state()).await.unwrap().unwrap();
+        assert_eq!(loaded["nodes"].as_array().unwrap().len(), 2);
     }
     // ── Audit follow-up: node-id uniqueness + enum validation + atomicity ─
     //
