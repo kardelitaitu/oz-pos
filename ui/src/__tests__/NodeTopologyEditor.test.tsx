@@ -41,6 +41,7 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-new-ready': 'Ready',
   'topology-toast-multi-warehouse': 'Multi-Warehouse storage locations require a Pro Tier license.',
   'topology-toast-wire-duplicate': 'A wire already connects these ports.',
+  'topology-wire-incompatible': 'These connectors cannot be connected.',
   'topology-toast-fallback-warehouse': 'Multi-warehouse stock deduction fallback wires require a Pro Tier license.',
   'topology-toast-load-error': 'Failed to load topology',
   'topology-toast-selection-dropped': 'The selected element is not part of this preset and was deselected.',
@@ -75,6 +76,12 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-port-generic-in': 'Input',
   'topology-port-generic-out': 'Output',
   'topology-port-input-only': 'Input connectors receive connections; choose an output connector first.',
+  'topology-validation-missing-location': 'Connect this workspace to a Branch Location using Location In.',
+  'topology-validation-multiple-location': 'A workspace can have only one Location In connection.',
+  'topology-validation-missing-branch': 'Add exactly one Branch Location node.',
+  'topology-validation-multiple-branches': 'Keep exactly one Branch Location node in this graph.',
+  'topology-validation-invalid-purpose': 'This workspace purpose is not supported by its technical type.',
+  'topology-validation-unknown-wire-endpoint': 'This connection references a node that is not in the graph.',
   'topology-field-name': 'Name',
   'topology-field-name-aria': 'Edit name',
   'topology-field-enabled': 'Enabled',
@@ -135,6 +142,7 @@ const renderEditor = (props?: {
   workspaceInstances?: WorkspaceInstanceSeed[];
   onRenameBranch?: (id: string, name: string) => Promise<boolean> | boolean | void;
   onRenameWorkspace?: (id: string, name: string) => Promise<boolean> | boolean | void;
+  allowLegacyApply?: boolean;
 }) =>
   renderWithProvidersSync(<NodeTopologyEditor currentTier="standard" {...props} />, multiStoreFtl, sharedFtl);
 
@@ -450,6 +458,235 @@ describe('NodeTopologyEditor Component', () => {
     expect(kds.querySelectorAll('.node-port-socket.port-right')).toHaveLength(0);
     expect(kds.querySelector('.node-port-label-left')?.textContent).toBe('Operation');
     expect(kds.querySelector('.node-port-label-right')).toBeNull();
+  });
+
+  // ── Typed connection gating (ADR #34 first slice) ────────────────────
+  it('creates a Location wire from a store output to a workspace input', async () => {
+    // Clean canvas (no preset wires): a store's Location output must still
+    // author a location wire into a workspace input under typed gating.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    fireEvent.click(portOf(nodeAt(0), 'right'));
+    fireEvent.click(portOf(nodeAt(1), 'left'));
+    expect(getWireCount()).toBe(1);
+  });
+
+  it('creates a Stock wire from a workspace output to a warehouse input', async () => {
+    // Clean canvas: a POS's Stock output must still author a stock-routing
+    // wire into a warehouse input under typed gating.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-1', type: 'warehouse', name: 'WH', x: 680, y: 140 },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+    fireEvent.click(portOf(nodeAt(1), 'right'));
+    fireEvent.click(portOf(nodeAt(2), 'left'));
+    expect(getWireCount()).toBe(1);
+  });
+
+  it('rejects a workspace-to-workspace connection (untyped pair) with an incompatible toast', () => {
+    renderEditor();
+    // Add a second workspace via the tool rack so a workspace output can
+    // target a workspace input.
+    fireEvent.click(screen.getByText('+ Workspace Node'));
+    const newWs = nodeAt(3);
+    fireEvent.click(portOf(nodeAt(1), 'right'));
+    fireEvent.click(portOf(newWs, 'left'));
+    // The drop was rejected: no wire was created and a toast explains why.
+    expect(getWireCount()).toBe(2);
+    expect(screen.getByText('These connectors cannot be connected.')).toBeInTheDocument();
+  });
+
+  it('rejects a store-to-warehouse connection (location-out vs stock-in) with a toast', () => {
+    renderEditor();
+    fireEvent.click(portOf(nodeAt(0), 'right'));
+    fireEvent.click(portOf(nodeAt(2), 'left'));
+    expect(getWireCount()).toBe(2);
+    expect(screen.getByText('These connectors cannot be connected.')).toBeInTheDocument();
+  });
+
+  it('highlights only compatible target sockets while connecting', () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    fireEvent.click(portOf(nodeAt(0), 'right'));
+    // Hover the workspace's left socket (location-in): compatible → highlighted.
+    fireEvent.mouseMove(canvas, { clientX: 383, clientY: 304 });
+    expect(portOf(nodeAt(1), 'left').className).toContain('port-highlight');
+    // Hover the warehouse's left socket (stock-in): incompatible → no highlight.
+    fireEvent.mouseMove(canvas, { clientX: 683, clientY: 364 });
+    expect(portOf(nodeAt(2), 'left').className).not.toContain('port-highlight');
+  });
+
+  // ── Live validation badges (ADR #34 slice 2) ───────────────────
+  // The Apply gate already runs validateTopologyGraph; these badges
+  // surface the SAME semantic errors live on the canvas — per-node notes
+  // on the offending cards and a banner for graph-level problems — so a
+  // user sees what is wrong while editing, not only when Apply toasts.
+  // Canonical store identities (store_profile_id) opt the canvas into the
+  // strict validation the real topology screen uses.
+
+  it('badges a workspace that is missing its Location In connection', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+
+    // The offending workspace card carries the note; the store card is clean.
+    expect(within(nodeAt(1)).getByText('Connect this workspace to a Branch Location using Location In.')).toBeInTheDocument();
+    expect(nodeAt(0).querySelector('.node-validation-note')).toBeNull();
+    // No graph-level problem → no banner.
+    expect(document.querySelector('.topology-validation-banner')).toBeNull();
+  });
+
+  it('clears the badge live once the Location In wire is created', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    expect(within(nodeAt(1)).getByText('Connect this workspace to a Branch Location using Location In.')).toBeInTheDocument();
+
+    // Author the missing location wire — the badge must vanish without Apply.
+    fireEvent.click(portOf(nodeAt(0), 'right'));
+    fireEvent.click(portOf(nodeAt(1), 'left'));
+    expect(getWireCount()).toBe(1);
+    await waitFor(() => expect(nodeAt(1).querySelector('.node-validation-note')).toBeNull());
+  });
+
+  it('shows a canvas banner when multiple Branch Location roots exist', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch A', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'store-2', type: 'store', name: 'Branch B', x: 80, y: 400, store_profile_id: 'store-2' },
+        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [
+        { id: 'w-1', from_node_id: 'store-1', from_port: 'right', to_node_id: 'ws-a', to_port: 'left', direction: 'one-way' },
+      ],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+    expect(screen.getByText('Keep exactly one Branch Location node in this graph.')).toBeInTheDocument();
+  });
+
+  it('shows a canvas banner when no Branch Location root exists', async () => {
+    // The real topology screen runs strict validation (allowLegacyApply=false),
+    // so a branch-less canvas is a genuine error there, not a legacy demo.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [],
+    } as never);
+    renderEditor({ allowLegacyApply: false });
+    await waitFor(() => expect(getNodeCount()).toBe(1));
+    // Graph-level error → banner; the orphaned workspace also gets its
+    // own missing-Location badge.
+    expect(screen.getByText('Add exactly one Branch Location node.')).toBeInTheDocument();
+    expect(within(nodeAt(0)).getByText('Connect this workspace to a Branch Location using Location In.')).toBeInTheDocument();
+  });
+
+  it('clears the multiple-branch banner live when the extra branch is deleted', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch A', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'store-2', type: 'store', name: 'Branch B', x: 80, y: 400, store_profile_id: 'store-2' },
+        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [
+        { id: 'w-1', from_node_id: 'store-1', from_port: 'right', to_node_id: 'ws-a', to_port: 'left', direction: 'one-way' },
+      ],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+    expect(screen.getByText('Keep exactly one Branch Location node in this graph.')).toBeInTheDocument();
+
+    // Delete the second branch (it has no wires → deletes immediately).
+    fireEvent.mouseDown(nodeAt(1), { button: 0 });
+    fireEvent.click(screen.getByText('Delete Selected Element'));
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+
+    // The banner cleared live — no Apply round-trip.
+    await waitFor(() => expect(screen.queryByText('Keep exactly one Branch Location node in this graph.')).toBeNull());
+  });
+
+  it('shows a canvas banner for a wire referencing a ghost node', async () => {
+    // The legacy load path keeps wires verbatim, so a corrupt saved wire
+    // pointing at a missing node survives into the canvas — the banner
+    // surfaces the integrity error live instead of only blocking Apply.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [
+        { id: 'w-ghost', from_node_id: 'store-1', from_port: 'right', to_node_id: 'nope-ghost', to_port: 'left', direction: 'one-way' },
+      ],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    expect(screen.getByText('This connection references a node that is not in the graph.')).toBeInTheDocument();
+  });
+
+  it('badges a workspace fed by two Location wires (multiple inputs)', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch A', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'store-2', type: 'store', name: 'Branch B', x: 80, y: 400, store_profile_id: 'store-2' },
+        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [
+        { id: 'w-1', from_node_id: 'store-1', from_port: 'right', to_node_id: 'ws-a', to_port: 'left', direction: 'one-way' },
+        { id: 'w-2', from_node_id: 'store-2', from_port: 'right', to_node_id: 'ws-a', to_port: 'left', direction: 'one-way' },
+      ],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+    expect(within(nodeAt(2)).getByText('A workspace can have only one Location In connection.')).toBeInTheDocument();
+  });
+
+  it('badges a workspace whose purpose does not match its type', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-kds', type: 'workspace', name: 'KDS', x: 380, y: 140, metadata: { typeKey: 'kds', purposeKey: 'checkout' } },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    expect(within(nodeAt(1)).getByText('This workspace purpose is not supported by its technical type.')).toBeInTheDocument();
+  });
+
+  it('leaves legacy (non-canonical) canvases badge-free, mirroring the Apply gate', () => {
+    // The retail preset's store node carries no store_profile_id, so the
+    // editor treats it like the legacy/demo path: strict validation is
+    // gated off at Apply, and the live badges must agree.
+    renderEditor();
+    expect(document.querySelector('.node-validation-note')).toBeNull();
+    expect(document.querySelector('.topology-validation-banner')).toBeNull();
   });
 
   it('renders legacy vertical wire ports on canonical left/right sides', async () => {
@@ -2182,26 +2419,29 @@ function BranchDeleteHarness() {
 describe('NodeTopologyEditor — wire creation', () => {
   it('creates a wire when two ports on different nodes are connected', () => {
     renderEditor();
+    // A fresh workspace gives the canvas a non-duplicate authorable pair
+    // (store Location out → new workspace Location in) under typed gating.
+    fireEvent.click(screen.getByText('+ Workspace Node'));
     const baseline = getWireCount();
 
-    // warehouse output → workspace input (not an existing connection).
-    fireEvent.click(portOf(nodeAt(2), 'right'));
-    fireEvent.click(portOf(nodeAt(1), 'left'));
+    fireEvent.click(portOf(nodeAt(0), 'right'));
+    fireEvent.click(portOf(nodeAt(3), 'left'));
 
     expect(getWireCount()).toBe(baseline + 1);
   });
 
   it('rejects a duplicate connection with a toast and no new wire', () => {
     renderEditor();
+    fireEvent.click(screen.getByText('+ Workspace Node'));
     const baseline = getWireCount();
 
-    fireEvent.click(portOf(nodeAt(2), 'right'));
-    fireEvent.click(portOf(nodeAt(1), 'left'));
+    fireEvent.click(portOf(nodeAt(0), 'right'));
+    fireEvent.click(portOf(nodeAt(3), 'left'));
     expect(getWireCount()).toBe(baseline + 1);
 
     // Same two ports again — duplicate.
-    fireEvent.click(portOf(nodeAt(2), 'right'));
-    fireEvent.click(portOf(nodeAt(1), 'left'));
+    fireEvent.click(portOf(nodeAt(0), 'right'));
+    fireEvent.click(portOf(nodeAt(3), 'left'));
 
     expect(getWireCount()).toBe(baseline + 1);
     expect(screen.getByText('A wire already connects these ports.')).toBeInTheDocument();
@@ -2219,11 +2459,12 @@ describe('NodeTopologyEditor — wire creation', () => {
 
   it('undoes a created wire in a single undo step', () => {
     renderEditor();
+    fireEvent.click(screen.getByText('+ Workspace Node'));
     const baseline = getWireCount();
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
 
-    fireEvent.click(portOf(nodeAt(2), 'right'));
-    fireEvent.click(portOf(nodeAt(1), 'left'));
+    fireEvent.click(portOf(nodeAt(0), 'right'));
+    fireEvent.click(portOf(nodeAt(3), 'left'));
     expect(getWireCount()).toBe(baseline + 1);
 
     fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true });
@@ -2561,13 +2802,15 @@ describe('NodeTopologyEditor — wire deletion keeps an in-flight connection', (
     renderEditor();
     const baseline = getWireCount();
 
-    // Start a connection from the warehouse output.
-    fireEvent.click(portOf(nodeAt(2), 'right'));
-    expect(nodeAt(2).className).toContain('node-connecting-source');
+    // Start a connection from the store output — a fresh workspace gives
+    // the canvas a non-duplicate authorable target under typed gating.
+    fireEvent.click(screen.getByText('+ Workspace Node'));
+    fireEvent.click(portOf(nodeAt(0), 'right'));
+    expect(nodeAt(0).className).toContain('node-connecting-source');
     expect(previewLine()).not.toBeNull();
 
     // Select and delete w-2 (workspace right -> warehouse left) — unrelated
-    // to the store-1 -> ws-1 connection being built.
+    // to the store-1 -> new-workspace connection being built.
     const hitboxes = document.querySelectorAll('.wire-hitbox');
     fireEvent.click(hitboxes[1] as Element);
     expect(screen.getByText('Delete Selected Element')).toBeInTheDocument();
@@ -2577,11 +2820,11 @@ describe('NodeTopologyEditor — wire deletion keeps an in-flight connection', (
     expect(getWireCount()).toBe(baseline - 1);
 
     // The connection SURVIVED the unrelated wire delete.
-    expect(nodeAt(2).className).toContain('node-connecting-source');
+    expect(nodeAt(0).className).toContain('node-connecting-source');
     expect(previewLine()).not.toBeNull();
 
     // And it still completes normally.
-    fireEvent.click(portOf(nodeAt(1), 'left'));
+    fireEvent.click(portOf(nodeAt(3), 'left'));
     expect(getWireCount()).toBe(baseline);
   });
 
@@ -2679,7 +2922,8 @@ describe('NodeTopologyEditor — Escape connection-cancel flow', () => {
 
     // Select a node so the inspector (with its text input) is open.
     selectFirstNode();
-    fireEvent.click(portOf(nodeAt(2), 'right'));
+    fireEvent.click(screen.getByText('+ Workspace Node'));
+    fireEvent.click(portOf(nodeAt(0), 'right'));
     expect(previewLine()).not.toBeNull();
 
     const nameInput = document.querySelector(
@@ -2691,7 +2935,7 @@ describe('NodeTopologyEditor — Escape connection-cancel flow', () => {
 
     // The connection is still in flight — completing it creates the wire.
     expect(previewLine()).not.toBeNull();
-    fireEvent.click(portOf(nodeAt(1), 'left'));
+    fireEvent.click(portOf(nodeAt(3), 'left'));
     expect(getWireCount()).toBe(baseline + 1);
   });
 });
@@ -2945,9 +3189,11 @@ describe('NodeTopologyEditor — simulation pulse vs canvas mutations', () => {
     fireEvent.click(screen.getByText('Test Order Simulation'));
     expect(pulseCount()).toBe(2);
 
-    // Create a third wire, then undo it mid-simulation.
-    fireEvent.click(portOf(nodeAt(2), 'right'));
-    fireEvent.click(portOf(nodeAt(1), 'left'));
+    // Create a third wire (store → new workspace), then undo it
+    // mid-simulation.
+    fireEvent.click(screen.getByText('+ Workspace Node'));
+    fireEvent.click(portOf(nodeAt(0), 'right'));
+    fireEvent.click(portOf(nodeAt(3), 'left'));
     expect(getWireCount()).toBe(3);
     expect(pulseCount()).toBe(3);
 
@@ -3264,10 +3510,11 @@ describe('NodeTopologyEditor — direction cycle undo/redo', () => {
 describe('NodeTopologyEditor — connected wire label', () => {
   it('labels a regular store→workspace wire as connected', () => {
     renderEditor();
+    fireEvent.click(screen.getByText('+ Workspace Node'));
     const baseline = getWireCount();
 
-    fireEvent.click(portOf(nodeAt(2), 'right'));
-    fireEvent.click(portOf(nodeAt(1), 'left'));
+    fireEvent.click(portOf(nodeAt(0), 'right'));
+    fireEvent.click(portOf(nodeAt(3), 'left'));
     expect(getWireCount()).toBe(baseline + 1);
 
     // Non-warehouse wires carry the plain connected label (raw identity key)
@@ -3354,10 +3601,12 @@ describe('NodeTopologyEditor — wire click keeps an in-flight connection', () =
     renderEditor();
     const baseline = getWireCount();
 
-    // Start a connection from warehouse's output — ghost preview + source highlight.
-    fireEvent.click(portOf(nodeAt(2), 'right'));
+    // Start a connection from the store's output — ghost preview + source
+    // highlight. A fresh workspace gives a non-duplicate authorable target.
+    fireEvent.click(screen.getByText('+ Workspace Node'));
+    fireEvent.click(portOf(nodeAt(0), 'right'));
     expect(previewLine()).not.toBeNull();
-    expect(nodeAt(2).className).toContain('node-connecting-source');
+    expect(nodeAt(0).className).toContain('node-connecting-source');
 
     // Click the first wire (store right → workspace left): one-way → reverse.
     const hitbox = document.querySelector('.wire-hitbox') as Element;
@@ -3367,13 +3616,13 @@ describe('NodeTopologyEditor — wire click keeps an in-flight connection', () =
     expect(path().getAttribute('data-direction')).toBe('reverse');
 
     // The connection SURVIVED the cycle: source highlight + ghost preview intact.
-    expect(nodeAt(2).className).toContain('node-connecting-source');
+    expect(nodeAt(0).className).toContain('node-connecting-source');
     expect(previewLine()).not.toBeNull();
 
     // Completing the connection still creates the expected store→workspace
     // wire from the in-flight source — the cycle's history push did not
     // corrupt the pending state.
-    fireEvent.click(portOf(nodeAt(1), 'left'));
+    fireEvent.click(portOf(nodeAt(3), 'left'));
     expect(getWireCount()).toBe(baseline + 1);
     const wires = document.querySelectorAll('.wire-group');
     const created = wires[wires.length - 1]!;
@@ -3386,7 +3635,8 @@ describe('NodeTopologyEditor — wire click keeps an in-flight connection', () =
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
     const baseline = getWireCount();
 
-    fireEvent.click(portOf(nodeAt(2), 'right'));
+    fireEvent.click(screen.getByText('+ Workspace Node'));
+    fireEvent.click(portOf(nodeAt(0), 'right'));
     expect(previewLine()).not.toBeNull();
 
     // Cycle to reverse, then undo the cycle mid-connection.
@@ -3398,11 +3648,11 @@ describe('NodeTopologyEditor — wire click keeps an in-flight connection', () =
     expect(path().getAttribute('data-direction')).toBe('one-way');
 
     // The connection survived BOTH the cycle's history push and its undo.
-    expect(nodeAt(2).className).toContain('node-connecting-source');
+    expect(nodeAt(0).className).toContain('node-connecting-source');
     expect(previewLine()).not.toBeNull();
 
     // And it still completes normally afterwards.
-    fireEvent.click(portOf(nodeAt(1), 'left'));
+    fireEvent.click(portOf(nodeAt(3), 'left'));
     expect(getWireCount()).toBe(baseline + 1);
   });
 

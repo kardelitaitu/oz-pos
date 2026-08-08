@@ -28,7 +28,12 @@ import {
 } from './NodeTopologyIcons';
 import { plainErrorMessage } from '@/utils/app-error';
 import { clampNodeToViewport, NODE_WIDTH, NODE_HEIGHT, NODE_PORT_Y } from './nodeTopologyClamp';
-import { normalizeTopologyGraph, normalizeWireDirection, validateTopologyGraph } from './topologyContract';
+import {
+  normalizeTopologyGraph,
+  normalizeWireDirection,
+  validateTopologyGraph,
+  type TopologyValidationError,
+} from './topologyContract';
 import {
   isInventoryNode,
   leftPortVariants,
@@ -37,6 +42,8 @@ import {
   portAriaLabelId,
   visiblePortsForNode,
   semanticPortId as semanticPortIdForNode,
+  gatingSemanticId,
+  canSemanticPortsConnect,
   NODE_TYPE_ICON,
   workspaceTypeLabel,
   settingsCardForTypeKey,
@@ -298,6 +305,25 @@ type HistoryEntry = { nodes: TopologyNodeData[]; wires: TopologyWireData[] };
 const SimulationPulse = memo(function SimulationPulse({ x, y }: { x: number; y: number }) {
   return <circle cx={x} cy={y} r="6" className="wire-simulation-pulse" />;
 });
+
+/** Validate the editor's RAW canvas under the Apply gate. Legacy/demo
+ *  canvases (no canonical branch identity) keep their non-blocking path
+ *  unless the real topology screen opts into strict validation
+ *  (allowLegacyApply=false). Shared by the live badge surface AND the
+ *  Apply handler so the two can never drift apart. */
+function validateEditorGraph(
+  nodes: TopologyNodeData[],
+  wires: TopologyWireData[],
+  allowLegacyApply: boolean,
+): TopologyValidationError[] {
+  const semanticGraph = normalizeTopologyGraph(nodes, wires);
+  const hasCanonicalBranchIdentity = semanticGraph.nodes.some(
+    (node) => node.kind === 'branch-location' && node.storeProfileId !== undefined,
+  );
+  return hasCanonicalBranchIdentity || !allowLegacyApply
+    ? validateTopologyGraph(semanticGraph)
+    : [];
+}
 
 export default function NodeTopologyEditor({
   currentTier = 'standard',
@@ -1352,16 +1378,38 @@ export default function NodeTopologyEditor({
     const source = nodeMap.get(connectingFromNodeId);
     const target = nodeMap.get(nodeId);
     if (!source || !target) return false;
-    // Compatibility is decided by semantic port IDs, not by the visual edge
-    // names. Uncontracted legacy sockets remain authorable for compatibility,
-    // but the location relationship is strict and typed.
-    const sourcePortId = semanticPortIdForNode(source, connectingFromPort);
-    const targetPortId = semanticPortIdForNode(target, port, variantIndex);
-    // Inventory's flexible input accepts BOTH semantics (a store's Location
-    // feed or a POS/inventory's Operation feed), so either is compatible.
-    if (sourcePortId === 'location-out') return targetPortId === 'location-in' || targetPortId === 'operation-in';
-    return true;
+    // Compatibility is decided by semantic port IDs, not by the visual
+    // edge names. The typed pairing table (ADR #34) gates every authorable
+    // connection, so a drag can only ever complete into a semantically
+    // valid target socket. Untyped sockets gate closed — no valid pair, no
+    // connection.
+    const sourcePortId = gatingSemanticId(source, connectingFromPort);
+    const targetPortId = gatingSemanticId(target, port, variantIndex);
+    if (!sourcePortId || !targetPortId) return false;
+    return canSemanticPortsConnect(sourcePortId, targetPortId);
   }, [connectingFromNodeId, connectingFromPort, nodeMap, portDirection]);
+
+  /** Live semantic validation of the CURRENT canvas (ADR #34 slice 2).
+   *  Mirrors the Apply gate exactly — same normalize + validate, same
+   *  canonical-identity condition — so the on-canvas badges and the Apply
+   *  toast can never disagree. Errors carrying a nodeId pin to that card as
+   *  a note; graph-level errors (branch roots, wire integrity) surface as
+   *  the canvas banner. */
+  const liveValidation = useMemo(() => {
+    const errors = validateEditorGraph(nodes, wires, allowLegacyApply);
+    const byNode = new Map<string, TopologyValidationError[]>();
+    const graphLevel: TopologyValidationError[] = [];
+    for (const err of errors) {
+      if (err.nodeId) {
+        const list = byNode.get(err.nodeId);
+        if (list) list.push(err);
+        else byNode.set(err.nodeId, [err]);
+      } else {
+        graphLevel.push(err);
+      }
+    }
+    return { byNode, graphLevel };
+  }, [nodes, wires, allowLegacyApply]);
 
   const handlePortClick = (e: React.MouseEvent, nodeId: string, port: PortName, variantIndex = 0) => {
     e.stopPropagation();
@@ -1385,7 +1433,7 @@ export default function NodeTopologyEditor({
     }
 
     if (!isPortCompatible(nodeId, port, variantIndex)) {
-      addToast({ message: l10n.getString('topology-validation-invalid-location'), type: 'warning' });
+      addToast({ message: l10n.getString('topology-wire-incompatible'), type: 'warning' });
       setConnectingFromNodeId(null);
       setConnectingFromPort(null);
       setConnectingVariantIndex(0);
@@ -1672,17 +1720,9 @@ export default function NodeTopologyEditor({
           </Button>            <Button
               variant="primary"
               onClick={async () => {
-                const semanticGraph = normalizeTopologyGraph(nodes, wires);
-                // Legacy/demo canvases may still use a geometric `store`
-                // node without a canonical store profile identity. Keep that
-                // compatibility path non-blocking; the real topology screen
-                // opts into strict validation with allowLegacyApply=false.
-                const hasCanonicalBranchIdentity = semanticGraph.nodes.some(
-                  (node) => node.kind === 'branch-location' && node.storeProfileId !== undefined,
-                );
-                const validationErrors = hasCanonicalBranchIdentity || !allowLegacyApply
-                  ? validateTopologyGraph(semanticGraph)
-                  : [];
+                // Same gate as the live badge surface — shared helper keeps
+                // the Apply toast and the on-canvas badges in lockstep.
+                const validationErrors = validateEditorGraph(nodes, wires, allowLegacyApply);
                 if (validationErrors.length > 0) {
                   addToast({
                     message: l10n.getString(validationErrors[0]!.messageId),
@@ -1843,6 +1883,19 @@ export default function NodeTopologyEditor({
           onMouseDown={handleCanvasMouseDown}
           onWheel={handleWheel}
         >
+          {liveValidation.graphLevel.length > 0 && (
+            <div
+              className="topology-validation-banner"
+              role="alert"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              {liveValidation.graphLevel.map((err) => (
+                <span key={err.messageId} className="topology-validation-banner-item">
+                  {l10n.getString(err.messageId)}
+                </span>
+              ))}
+            </div>
+          )}
           <div
             className="node-canvas-viewport"
             style={{
@@ -1963,6 +2016,7 @@ export default function NodeTopologyEditor({
               // pencil (persisting via their respective update paths);
               // warehouse/hardware nodes have no record to rename.
               const isRenameable = (node.type === 'store' && !!onRenameBranch) || (node.type === 'workspace' && !!onRenameWorkspace);
+              const nodeErrors = liveValidation.byNode.get(node.id);
 
               return (
                 <div
@@ -2080,12 +2134,26 @@ export default function NodeTopologyEditor({
                     )}
                   </div>
 
+                  {nodeErrors && nodeErrors.length > 0 && (
+                    <div
+                      className="node-validation-note"
+                      role="status"
+                      title={nodeErrors.map((e) => l10n.getString(e.messageId)).join('\n')}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
+                      <span className="node-validation-icon" aria-hidden="true">!</span>
+                      <span className="node-validation-text">
+                        {l10n.getString(nodeErrors[0]!.messageId)}
+                      </span>
+                    </div>
+                  )}
+
                   <div className="node-port-sockets-group">
                     {visiblePortsForNode(node).map((port) => {
                       const isActive = connectingFromNodeId === node.id && connectingFromPort === port;
                       const isHovered = hoveredTarget?.nodeId === node.id && hoveredTarget?.port === port;
                       const compatible = isPortCompatible(node.id, port);
-                      const showHighlight = connectingFromNodeId && connectingFromNodeId !== node.id && isHovered;
+                      const showHighlight = connectingFromNodeId && connectingFromNodeId !== node.id && isHovered && compatible;
                       // Inventory's single input is flexible: its label follows
                       // the wire actually attached ('location-in' → Location,
                       // 'operation-in' → Operation, nothing → Input).

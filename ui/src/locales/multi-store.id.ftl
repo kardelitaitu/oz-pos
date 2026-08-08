@@ -62,6 +62,7 @@ topology-toast-selection-dropped = Elemen yang dipilih tidak ada di preset ini d
 topology-toast-wire-duplicate = Koneksi sudah ada di antara port ini.
 topology-toast-fallback-warehouse = Koneksi fallback multi-gudang memerlukan lisensi Pro Tier.
 topology-toast-load-error = Gagal memuat topologi
+topology-wire-incompatible = Konektor ini tidak dapat dihubungkan.
 topology-canvas-aria-label = Kanvas editor topologi. Gunakan tombol panah untuk menggeser node, Ctrl+Z untuk undo.
 topology-new-store = Toko Baru
 topology-new-store-subtitle = Cabang

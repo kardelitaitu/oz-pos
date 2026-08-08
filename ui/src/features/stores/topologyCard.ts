@@ -30,6 +30,7 @@ import {
 export type SemanticPortId =
   | 'location-out'
   | 'location-in'
+  | 'operation-out'
   | 'operation-in'
   | 'stock-out'
   | 'stock-in'
@@ -163,6 +164,79 @@ export function semanticPortId(node: TopologyNodeData, port: PortName, variantIn
     return 'location-in';
   }
   return undefined;
+}
+
+/** The full typed socket map used by connection gating (ADR #34). Unlike
+ *  the recording-side semanticPortId (which deliberately stays minimal so
+ *  persisted wire semantics and duplicate detection are stable), this
+ *  resolves EVERY socket's semantic — outputs (POS/warehouse stock-out,
+ *  KDS ticket-out, hardware device-out) and non-workspace inputs
+ *  (warehouse stock-in, hardware generic-in) included — so a drag in
+ *  progress can tell compatible targets from incompatible ones before any
+ *  wire is drawn. Name chosen to avoid colliding with semanticPortId. */
+export function gatingSemanticId(
+  node: TopologyNodeData,
+  port: PortName,
+  variantIndex = 0,
+): SemanticPortId | undefined {
+  if (port === 'left') {
+    // Inputs.
+    if (node.type === 'store') return undefined;
+    if (node.type === 'warehouse') return 'stock-in';
+    if (node.type === 'hardware') return 'generic-in';
+    // Workspace left: inventory's flexible input accepts Location or
+    // Operation (variant 1); KDS takes the Operation feed; everything
+    // else takes Location.
+    if (isInventoryNode(node)) return variantIndex === 1 ? 'operation-in' : 'location-in';
+    if (isKdsNode(node)) return 'operation-in';
+    return 'location-in';
+  }
+  // Outputs.
+  if (node.type === 'store') return 'location-out';
+  if (node.type === 'warehouse') return 'stock-out';
+  if (node.type === 'hardware') return 'device-out';
+  // Workspace right: a KDS forwards ticket feeds; every other workspace
+  // (store-pos, restaurant-pos, inventory) outputs stock-routing feeds.
+  if (isKdsNode(node)) return 'ticket-out';
+  return 'stock-out';
+}
+
+/** The ADR #34 pairing table: which source semantic may feed which target
+ *  semantic. Inputs are never sources, and mismatched semantics (a
+ *  Location feed into a stock rack, a stock feed into a Location input)
+ *  gate closed. Kept as a plain record of sets so a future slice (e.g. a
+ *  relationship picker for multi-semantic pairs) can extend it in one
+ *  place.
+ *
+ *  Reachability note: `operation-out` (reserved for a future dedicated
+ *  operation feed) and `ticket-in` (the Resto preset's loaded kds→printer
+ *  wire records ticket-out/ticket-in, but hardware inputs gate as
+ *  generic-in) are contract-level members no current node PRODUCES, so
+ *  their rows are load-compatible / future-facing rather than authorable
+ *  today. */
+const SEMANTIC_PORT_PAIRINGS: Readonly<Record<SemanticPortId, ReadonlySet<SemanticPortId>>> = {
+  'location-out': new Set(['location-in', 'operation-in']),
+  'stock-out': new Set(['stock-in']),
+  'ticket-out': new Set(['ticket-in']),
+  'operation-out': new Set(['operation-in']),
+  'device-out': new Set(['generic-in']),
+  'generic-out': new Set(['generic-in']),
+  // Inputs are never sources.
+  'location-in': new Set(),
+  'operation-in': new Set(),
+  'stock-in': new Set(),
+  'ticket-in': new Set(),
+  'generic-in': new Set(),
+};
+
+/** True when the source semantic may feed the target semantic under the
+ *  typed pairing table. Unknown or input-side sources always return false
+ *  — the gate fails closed. */
+export function canSemanticPortsConnect(
+  source: SemanticPortId,
+  target: SemanticPortId,
+): boolean {
+  return SEMANTIC_PORT_PAIRINGS[source]?.has(target) ?? false;
 }
 
 // ── Header chrome ─────────────────────────────────────────────────

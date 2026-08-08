@@ -872,3 +872,63 @@
   color: var(--color-fg);
   cursor: pointer;
 }
+
+/* ── Live validation surface (ADR #34 slice 2) ───────────────────
+   Semantic errors rendered straight on the canvas while editing: a
+   per-card note floating in the reserved port-rail padding (never
+   disturbing the fixed card geometry) and a fixed banner overlaying the
+   canvas top for graph-level problems (branch roots, wire integrity).
+   The banner is a sibling of the pannable viewport, so it stays put. */
+.node-validation-note {
+  position: absolute;
+  bottom: 44px;
+  left: 8px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-warning-subtle);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 45%, transparent);
+  color: var(--color-warning);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.node-validation-icon {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  background: var(--color-warning);
+  color: var(--color-bg-elevated);
+  font-weight: var(--font-weight-bold);
+  font-size: 10px;
+}
+
+.topology-validation-banner {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  max-width: 90%;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-warning-subtle);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 50%, transparent);
+  box-shadow: var(--shadow-md);
+  color: var(--color-warning);
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+}
+

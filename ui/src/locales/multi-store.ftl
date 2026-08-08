@@ -64,6 +64,7 @@ topology-toast-selection-dropped = The selected element is not part of this pres
 topology-toast-wire-duplicate = A wire already connects these ports.
 topology-toast-fallback-warehouse = Multi-warehouse stock deduction fallback wires require a Pro Tier license.
 topology-toast-load-error = Failed to load topology
+topology-wire-incompatible = These connectors cannot be connected.
 topology-canvas-aria-label = Topology editor canvas. Use arrow keys to nudge selected nodes, Ctrl+Z to undo.
 topology-new-store = New Store
 topology-new-store-subtitle = Branch

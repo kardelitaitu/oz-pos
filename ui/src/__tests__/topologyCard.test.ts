@@ -9,6 +9,8 @@ import {
   portLabelId,
   portAriaLabelId,
   semanticPortId,
+  gatingSemanticId,
+  canSemanticPortsConnect,
   settingsCardForTypeKey,
   topologyUiString,
   workspaceTypeLabel,
@@ -88,5 +90,64 @@ describe('topologyCard registry — per-node-type behavior', () => {
     }
     // Unknown typeKeys fall back to the store-pos card.
     expect(settingsCardForTypeKey('mystery')).toBe(settingsCardForTypeKey('store-pos'));
+  });
+});
+
+describe('typed connection pairing (ADR #34 first slice)', () => {
+  it('pairs only the legal semantic port combinations', () => {
+    // Ownership: a Branch Location output feeds any workspace input
+    // (KDS and inventory inputs are flexible and accept the Operation feed).
+    expect(canSemanticPortsConnect('location-out', 'location-in')).toBe(true);
+    expect(canSemanticPortsConnect('location-out', 'operation-in')).toBe(true);
+    // Stock routing, ticket routing, operation feeds, hardware + generic.
+    expect(canSemanticPortsConnect('stock-out', 'stock-in')).toBe(true);
+    expect(canSemanticPortsConnect('ticket-out', 'ticket-in')).toBe(true);
+    expect(canSemanticPortsConnect('operation-out', 'operation-in')).toBe(true);
+    expect(canSemanticPortsConnect('device-out', 'generic-in')).toBe(true);
+    expect(canSemanticPortsConnect('generic-out', 'generic-in')).toBe(true);
+  });
+
+  it('rejects mismatched and reversed pairings', () => {
+    expect(canSemanticPortsConnect('location-out', 'stock-in')).toBe(false);
+    expect(canSemanticPortsConnect('stock-out', 'location-in')).toBe(false);
+    expect(canSemanticPortsConnect('ticket-out', 'stock-in')).toBe(false);
+    expect(canSemanticPortsConnect('operation-out', 'stock-in')).toBe(false);
+    expect(canSemanticPortsConnect('device-out', 'location-in')).toBe(false);
+    // Inputs are never sources.
+    expect(canSemanticPortsConnect('location-in', 'location-in')).toBe(false);
+    expect(canSemanticPortsConnect('stock-in', 'stock-out')).toBe(false);
+  });
+
+  it('resolves the full typed socket map for gating (outputs + non-workspace inputs)', () => {
+    // Outputs.
+    expect(gatingSemanticId(node({ type: 'store' }), 'right')).toBe('location-out');
+    expect(gatingSemanticId(node({ metadata: { typeKey: 'store-pos' } }), 'right')).toBe('stock-out');
+    expect(gatingSemanticId(node({ metadata: { typeKey: 'restaurant-pos' } }), 'right')).toBe('stock-out');
+    expect(gatingSemanticId(node({ metadata: { typeKey: 'inventory' } }), 'right')).toBe('stock-out');
+    expect(gatingSemanticId(node({ metadata: { typeKey: 'kds' } }), 'right')).toBe('ticket-out');
+    expect(gatingSemanticId(node({ type: 'warehouse' }), 'right')).toBe('stock-out');
+    expect(gatingSemanticId(node({ type: 'hardware' }), 'right')).toBe('device-out');
+    // Inputs: warehouses take stock, hardware takes generic, workspaces take
+    // location (KDS takes the operation feed, inventory is flexible).
+    expect(gatingSemanticId(node({ type: 'warehouse' }), 'left')).toBe('stock-in');
+    expect(gatingSemanticId(node({ type: 'hardware' }), 'left')).toBe('generic-in');
+    expect(gatingSemanticId(node({ metadata: { typeKey: 'store-pos' } }), 'left')).toBe('location-in');
+    expect(gatingSemanticId(node({ metadata: { typeKey: 'kds' } }), 'left')).toBe('operation-in');
+    // Sockets that carry no typed meaning stay untyped.
+    expect(gatingSemanticId(node({ type: 'store' }), 'left')).toBeUndefined();
+  });
+
+  it('keeps the recording-side semanticPortId contract stable (wire creation unaffected)', () => {
+    // semanticPortId (the wire-RECORDING resolver) is deliberately unchanged
+    // by the gating map: outputs and non-workspace inputs that are not
+    // recorded today stay undefined there, so persisted wire semantics and
+    // the duplicate-detection fallbacks are untouched.
+    expect(semanticPortId(node({ metadata: { typeKey: 'store-pos' } }), 'right')).toBeUndefined();
+    expect(semanticPortId(node({ type: 'warehouse' }), 'left')).toBeUndefined();
+    expect(semanticPortId(node({ type: 'hardware' }), 'left')).toBeUndefined();
+    // The cases the recording side DOES resolve are unchanged.
+    expect(semanticPortId(node({ type: 'store' }), 'right')).toBe('location-out');
+    expect(semanticPortId(node({ metadata: { typeKey: 'kds' } }), 'left')).toBe('operation-in');
+    expect(semanticPortId(node({ metadata: { typeKey: 'store-pos' } }), 'left')).toBe('location-in');
   });
 });
