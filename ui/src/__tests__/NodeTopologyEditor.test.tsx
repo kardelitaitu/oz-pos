@@ -42,6 +42,16 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-toast-multi-warehouse': 'Multi-Warehouse storage locations require a Pro Tier license.',
   'topology-toast-wire-duplicate': 'A wire already connects these ports.',
   'topology-wire-incompatible': 'These connectors cannot be connected.',
+  'topology-relationship-picker-title': 'Choose connection type',
+  'topology-relationship-picker-cancel': 'Cancel',
+  'topology-relationship-stock-routing': 'Stock routing',
+  'topology-relationship-inventory-transfer': 'Transfer',
+  'topology-relationship-location': 'Location',
+  'topology-relationship-ticket-routing': 'Ticket routing',
+  'topology-relationship-hardware-connection': 'Device connection',
+  'topology-relationship-operation': 'Operation',
+  'topology-relationship-generic': 'Generic',
+  'topology-wire-label-transfer': 'Transfer',
   'topology-toast-fallback-warehouse': 'Multi-warehouse stock deduction fallback wires require a Pro Tier license.',
   'topology-toast-load-error': 'Failed to load topology',
   'topology-toast-selection-dropped': 'The selected element is not part of this preset and was deselected.',
@@ -74,6 +84,9 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-port-stock-in': 'Stock In',
   'topology-port-stock-out': 'Stock Out',
   'topology-port-ticket-in': 'Ticket In',
+  'topology-port-ticket-out': 'Ticket Out',
+  'topology-port-ticket-out-aria': 'Ticket port',
+  'topology-wire-label-ticket': 'Ticket Print',
   'topology-port-device-out': 'Device Out',
   'topology-port-generic-in': 'Input',
   'topology-port-generic-out': 'Output',
@@ -445,10 +458,11 @@ describe('NodeTopologyEditor Component', () => {
     expect(inv.querySelector('.node-port-label-left')?.textContent).toBe('Location');
   });
 
-  it('exposes a single left Operation port on Kitchen Display nodes', async () => {
-    // A KDS is a sink: it consumes one Operation feed and forwards nothing,
-    // so it must expose exactly one left connector labeled "Operation" —
-    // never a Location In pair or a right-side Operational Out.
+  it('exposes a left Operation input and a right Ticket Out output on Kitchen Display nodes', async () => {
+    // A KDS consumes one Operation feed from the left and forwards ticket
+    // feeds to a printer from the right — so it exposes exactly one left
+    // connector labeled "Operation" (never a Location In pair) plus one
+    // right connector labeled "Ticket Out".
     mockLoadTopology.mockResolvedValueOnce({
       nodes: [
         { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
@@ -462,9 +476,9 @@ describe('NodeTopologyEditor Component', () => {
     const kds = nodeAt(1);
     expect(kds.querySelector('.node-title')?.textContent).toBe('Kitchen Display');
     expect(kds.querySelectorAll('.node-port-socket.port-left')).toHaveLength(1);
-    expect(kds.querySelectorAll('.node-port-socket.port-right')).toHaveLength(0);
+    expect(kds.querySelectorAll('.node-port-socket.port-right')).toHaveLength(1);
     expect(kds.querySelector('.node-port-label-left')?.textContent).toBe('Operation');
-    expect(kds.querySelector('.node-port-label-right')).toBeNull();
+    expect(kds.querySelector('.node-port-label-right')?.textContent).toBe('Ticket Out');
   });
 
   // ── Typed connection gating (ADR #34 first slice) ────────────────────
@@ -483,11 +497,14 @@ describe('NodeTopologyEditor Component', () => {
     fireEvent.click(portOf(nodeAt(0), 'right'));
     fireEvent.click(portOf(nodeAt(1), 'left'));
     expect(getWireCount()).toBe(1);
+    // A single-semantic drop authors the wire directly — no picker.
+    expect(document.querySelector('.topology-relationship-picker')).toBeNull();
   });
 
-  it('creates a Stock wire from a workspace output to a warehouse input', async () => {
-    // Clean canvas: a POS's Stock output must still author a stock-routing
-    // wire into a warehouse input under typed gating.
+  it('offers a relationship picker for a workspace→warehouse drop and authors the chosen stock-routing wire', async () => {
+    // A POS output can feed a warehouse as STOCK ROUTING or TRANSFER — the
+    // drop admits both semantics, so the relationship picker appears
+    // instead of a wire being drawn blindly.
     mockLoadTopology.mockResolvedValueOnce({
       nodes: [
         { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
@@ -498,9 +515,243 @@ describe('NodeTopologyEditor Component', () => {
     } as never);
     renderEditor();
     await waitFor(() => expect(getNodeCount()).toBe(3));
+
     fireEvent.click(portOf(nodeAt(1), 'right'));
     fireEvent.click(portOf(nodeAt(2), 'left'));
+
+    // No wire yet — the picker asks which relationship this wire means.
+    expect(getWireCount()).toBe(0);
+    const picker = document.querySelector('.topology-relationship-picker');
+    expect(picker).not.toBeNull();
+    expect(within(picker as HTMLElement).getByText('Stock routing')).toBeInTheDocument();
+    expect(within(picker as HTMLElement).getByText('Transfer')).toBeInTheDocument();
+
+    fireEvent.click(within(picker as HTMLElement).getByText('Stock routing'));
     expect(getWireCount()).toBe(1);
+    expect(document.querySelector('.topology-relationship-picker')).toBeNull();
+  });
+
+  it('authors an inventory-transfer wire when Transfer is chosen from the picker', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-1', type: 'warehouse', name: 'WH', x: 680, y: 140 },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+
+    fireEvent.click(portOf(nodeAt(1), 'right'));
+    fireEvent.click(portOf(nodeAt(2), 'left'));
+    fireEvent.click(within(document.querySelector('.topology-relationship-picker') as HTMLElement).getByText('Transfer'));
+
+    expect(getWireCount()).toBe(1);
+    // The transfer wire carries its own label (surfaced as the hitbox
+    // title, translated by the mock to 'Transfer').
+    const wires = document.querySelectorAll('.wire-group');
+    const title = wires[0]!.querySelector('.wire-hitbox title');
+    expect(title?.textContent).toContain('Transfer');
+  });
+
+  it('allows a transfer and a stock wire to coexist on the same socket pair', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-1', type: 'warehouse', name: 'WH', x: 680, y: 140 },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+
+    // Transfer first.
+    fireEvent.click(portOf(nodeAt(1), 'right'));
+    fireEvent.click(portOf(nodeAt(2), 'left'));
+    fireEvent.click(within(document.querySelector('.topology-relationship-picker') as HTMLElement).getByText('Transfer'));
+    expect(getWireCount()).toBe(1);
+
+    // Stock routing second — a DIFFERENT relationship on the same pair is
+    // not a duplicate (distinct toPortId), so both wires exist.
+    fireEvent.click(portOf(nodeAt(1), 'right'));
+    fireEvent.click(portOf(nodeAt(2), 'left'));
+    fireEvent.click(within(document.querySelector('.topology-relationship-picker') as HTMLElement).getByText('Stock routing'));
+    expect(getWireCount()).toBe(2);
+  });
+
+  it('rejects a duplicate of the SAME relationship with a duplicate toast', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-1', type: 'warehouse', name: 'WH', x: 680, y: 140 },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+
+    fireEvent.click(portOf(nodeAt(1), 'right'));
+    fireEvent.click(portOf(nodeAt(2), 'left'));
+    fireEvent.click(within(document.querySelector('.topology-relationship-picker') as HTMLElement).getByText('Stock routing'));
+    expect(getWireCount()).toBe(1);
+
+    // The same relationship again on the same pair is a duplicate.
+    fireEvent.click(portOf(nodeAt(1), 'right'));
+    fireEvent.click(portOf(nodeAt(2), 'left'));
+    fireEvent.click(within(document.querySelector('.topology-relationship-picker') as HTMLElement).getByText('Stock routing'));
+    expect(getWireCount()).toBe(1);
+    expect(screen.getByText('A wire already connects these ports.')).toBeInTheDocument();
+  });
+
+  it('authors a ticket-routing wire from a KDS ticket-out to a hardware input (single option, no picker)', async () => {
+    // The load-only gap is closed: a KDS output is now visible and the
+    // hardware input admits the ticket-in semantic, so the drop resolves
+    // to exactly one ticket-routing option and authors directly.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        { id: 'ws-kds', type: 'workspace', name: 'Kitchen Display', x: 380, y: 140, metadata: { typeKey: 'kds' } },
+        { id: 'hw-prn', type: 'hardware', name: 'Thermal Printer', x: 680, y: 140 },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+
+    fireEvent.click(portOf(nodeAt(1), 'right'));
+    fireEvent.click(portOf(nodeAt(2), 'left'));
+
+    // No picker (single semantic) and the ticket-routing wire exists.
+    expect(document.querySelector('.topology-relationship-picker')).toBeNull();
+    expect(getWireCount()).toBe(1);
+    const wire = document.querySelector('.wire-group');
+    expect(wire?.querySelector('.wire-hitbox title')?.textContent).toContain('Ticket Print');
+  });
+
+  it('rejects a second KDS→printer wire against the preset-loaded one as a duplicate', async () => {
+    // The Resto preset ships w-4 (kds→printer, ticket-out/ticket-in). The
+    // re-authorable pair must record the SAME toPortId the preset persists,
+    // so a second drop is caught by duplicate detection — not silently
+    // stacked as a second wire.
+    renderEditor();
+    fireEvent.click(screen.getByText('Resto & KDS Preset'));
+    await waitFor(() => expect(getWireCount()).toBe(4));
+
+    const nodes = [...document.querySelectorAll('.topology-node')];
+    const kds = nodes.find((n) => n.querySelector('.node-title')?.textContent === 'Kitchen KDS');
+    const printer = nodes.find((n) => n.querySelector('.node-title')?.textContent === 'Kitchen Thermal Printer');
+    expect(kds).not.toBeUndefined();
+    expect(printer).not.toBeUndefined();
+
+    fireEvent.click(portOf(kds as HTMLElement, 'right'));
+    fireEvent.click(portOf(printer as HTMLElement, 'left'));
+    expect(getWireCount()).toBe(4);
+    expect(screen.getByText('A wire already connects these ports.')).toBeInTheDocument();
+  });
+
+  it('clicking the canvas outside the picker dismisses it without creating a wire', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-1', type: 'warehouse', name: 'WH', x: 680, y: 140 },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+    mockCanvasSize(1200, 800);
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    fireEvent.click(portOf(nodeAt(1), 'right'));
+    fireEvent.click(portOf(nodeAt(2), 'left'));
+    expect(document.querySelector('.topology-relationship-picker')).not.toBeNull();
+
+    // A plain background click (no drag) away from the popover dismisses it.
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 900, clientY: 700 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+    expect(document.querySelector('.topology-relationship-picker')).toBeNull();
+    expect(getWireCount()).toBe(0);
+  });
+
+  it('the Cancel button dismisses the picker and cancels the connection', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-1', type: 'warehouse', name: 'WH', x: 680, y: 140 },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+
+    fireEvent.click(portOf(nodeAt(1), 'right'));
+    fireEvent.click(portOf(nodeAt(2), 'left'));
+    const picker = document.querySelector('.topology-relationship-picker') as HTMLElement;
+    expect(picker).not.toBeNull();
+
+    fireEvent.click(within(picker).getByText('Cancel'));
+    expect(document.querySelector('.topology-relationship-picker')).toBeNull();
+    expect(getWireCount()).toBe(0);
+    // The in-flight connection was cancelled with it — no ghost preview.
+    expect(previewLine()).toBeNull();
+  });
+
+  it('a preset load while the picker is open closes it (no keyboard deadlock)', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-1', type: 'warehouse', name: 'WH', x: 680, y: 140 },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+
+    fireEvent.click(portOf(nodeAt(1), 'right'));
+    fireEvent.click(portOf(nodeAt(2), 'left'));
+    expect(document.querySelector('.topology-relationship-picker')).not.toBeNull();
+
+    // Clean canvas → the preset loads directly (no confirm dialog) and must
+    // close the picker; the keyboard guard then releases.
+    fireEvent.click(screen.getByText('Retail Preset'));
+    await waitFor(() => expect(document.querySelector('.topology-relationship-picker')).toBeNull());
+
+    // The canvas keyboard is responsive again: select a node and nudge it
+    // (the nudge lands on the 24px grid, so just assert it MOVED).
+    fireEvent.mouseDown(nodeAt(0), { button: 0 });
+    fireEvent.mouseUp(nodeAt(0));
+    const before = parseFloat(nodeAt(0).style.left);
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(parseFloat(nodeAt(0).style.left)).toBeGreaterThan(before);
+  });
+
+  it('Escape closes the relationship picker without creating a wire', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-1', type: 'warehouse', name: 'WH', x: 680, y: 140 },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+
+    fireEvent.click(portOf(nodeAt(1), 'right'));
+    fireEvent.click(portOf(nodeAt(2), 'left'));
+    expect(document.querySelector('.topology-relationship-picker')).not.toBeNull();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(document.querySelector('.topology-relationship-picker')).toBeNull();
+    expect(getWireCount()).toBe(0);
+    // The in-flight connection was cancelled too — the ghost is gone.
+    expect(previewLine()).toBeNull();
   });
 
   it('rejects a workspace-to-workspace connection (untyped pair) with an incompatible toast', () => {
@@ -724,12 +975,11 @@ describe('NodeTopologyEditor Component', () => {
     expect(screen.getByText('Kitchen Thermal Printer')).toBeInTheDocument();
   });
 
-  it('preset Kitchen KDS exposes only a left Operation port', () => {
-    // The Resto & KDS preset seeds the KDS node WITHOUT metadata.typeKey
-    // unless it is defined on the preset data itself — and without it,
-    // isKdsNode() fails and the sink wrongly renders a Location In pair
-    // plus a right-side output. Pin the preset's own data so the port
-    // contract cannot regress when the preset is edited.
+  it('preset Kitchen KDS exposes the left Operation input and right Ticket Out output', () => {
+    // The Resto & KDS preset seeds the KDS node WITH metadata.typeKey so
+    // isKdsNode() resolves: left Operation input + right Ticket Out
+    // output. Pin the preset's own data so the port contract cannot
+    // regress when the preset is edited.
     renderEditor();
     fireEvent.click(screen.getByText('Resto & KDS Preset'));
 
@@ -737,9 +987,9 @@ describe('NodeTopologyEditor Component', () => {
     const kds = nodes.find((n) => n.querySelector('.node-title')?.textContent === 'Kitchen KDS');
     expect(kds).not.toBeUndefined();
     expect(kds!.querySelectorAll('.node-port-socket.port-left')).toHaveLength(1);
-    expect(kds!.querySelectorAll('.node-port-socket.port-right')).toHaveLength(0);
+    expect(kds!.querySelectorAll('.node-port-socket.port-right')).toHaveLength(1);
     expect(kds!.querySelector('.node-port-label-left')?.textContent).toBe('Operation');
-    expect(kds!.querySelector('.node-port-label-right')).toBeNull();
+    expect(kds!.querySelector('.node-port-label-right')?.textContent).toBe('Ticket Out');
   });
 
   it('toggles simulation mode on button click', () => {
@@ -2487,6 +2737,10 @@ describe('NodeTopologyEditor — wire creation', () => {
     fireEvent.click(portOf(nodeAt(3), 'right'));
     fireEvent.click(portOf(nodeAt(2), 'left'));
 
+    // The drop admits stock-routing AND transfer — the picker asks first,
+    // and choosing the restricted relationship is what trips the gate.
+    fireEvent.click(within(document.querySelector('.topology-relationship-picker') as HTMLElement).getByText('Stock routing'));
+
     expect(getWireCount()).toBe(baseline);
     expect(
       screen.getByText(
@@ -2959,6 +3213,8 @@ describe('NodeTopologyEditor — Pro-tier warehouse fallback label', () => {
     fireEvent.click(screen.getByText('+ Warehouse Node'));
     fireEvent.click(portOf(nodeAt(1), 'right'));
     fireEvent.click(portOf(nodeAt(3), 'left'));
+    // Both stock-routing and transfer are admissible — choose the stock one.
+    fireEvent.click(within(document.querySelector('.topology-relationship-picker') as HTMLElement).getByText('Stock routing'));
 
     expect(getWireCount()).toBe(baseline + 1);
     expect(
@@ -2996,9 +3252,11 @@ describe('NodeTopologyEditor — first warehouse wire stock-deduct label', () =>
     const baseline = getWireCount();
 
     // ws-1 bottom → wh-1 top: workspace→warehouse, first one — allowed on
-    // the standard tier, labelled as the primary stock-deduction path.
+    // the standard tier, labelled as the primary stock-deduction path. The
+    // drop admits stock-routing AND transfer, so the picker asks first.
     fireEvent.click(portOf(nodeAt(1), 'right'));
     fireEvent.click(portOf(nodeAt(2), 'left'));
+    fireEvent.click(within(document.querySelector('.topology-relationship-picker') as HTMLElement).getByText('Stock routing'));
 
     expect(getWireCount()).toBe(baseline + 1);
     expect(

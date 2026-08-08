@@ -541,8 +541,72 @@ pairs, missing Branch Location identity, and duplicate wires use localized
 validation messages and prevent Apply. Node title remains the editable instance
 label, while purpose and technical type are separate inspector fields.
 
+## Slice 1+2 (DONE)
+
+**Implementation date:** 2026-08-08
+
+Two frontend slices of the typed-port contract are implemented and committed,
+extending the first ownership slice above. Both live in the React editor
+(`ui/src/features/stores/topologyCard.ts` + `NodeTopologyEditor.tsx`) with unit
+coverage in `topologyCard.test.ts` and `NodeTopologyEditor.test.tsx`.
+
+### Slice 1 — typed connection gating
+
+The editor now enforces the pairing table live instead of letting any drop
+through:
+
+- **`gatingSemanticId(node, port)`** resolves EVERY authorable socket to a
+  semantic port id — outputs (store `location-out`, POS/warehouse `stock-out`,
+  KDS `ticket-out`, hardware `device-out`) and non-workspace inputs (warehouse
+  `stock-in`, hardware `generic-in`) included. It is deliberately distinct
+  from the recording-side `semanticPortId`, which stays minimal so persisted
+  wire semantics and duplicate detection are stable.
+- **`SEMANTIC_PORT_PAIRINGS` + `canSemanticPortsConnect`** is the closed pairing
+  table: `location-out → location-in`/`operation-in`,
+  `stock-out → stock-in`, `ticket-out → ticket-in`,
+  `operation-out → operation-in`, `device-out → generic-in`,
+  `generic-out → generic-in`. Inputs are never sources; unknown combinations
+  fail closed.
+- `isPortCompatible` delegates to the table, so while a wire is being dragged
+  only compatible target sockets highlight, and an invalid drop is rejected
+  with the `topology-wire-incompatible` toast **before** any wire is drawn.
+- Nine pre-existing wire-mechanics tests were repointed from the
+  `warehouse → workspace` pair (which the old permissive gate allowed but the
+  typed table correctly rejects) to a valid store → fresh-workspace pair.
+
+### Slice 2 — live validation badges
+
+The same validation the Apply gate runs now surfaces on the canvas while
+editing, so a user sees what is wrong without applying:
+
+- **`validateEditorGraph(nodes, wires, allowLegacyApply)`** is a shared helper
+  that runs `normalizeTopologyGraph` + `validateTopologyGraph` under the exact
+  Apply gate (canonical Branch Location identity, or strict mode when
+  `allowLegacyApply` is false). Both the live badge surface AND the Apply
+  handler call it, so the on-canvas badges and the Apply toast can never drift
+  apart.
+- Per-node errors (a workspace missing its `Location In`, a second Location
+  feed, an invalid purpose/type pair) render as a `.node-validation-note` on
+  the offending card — `role="status"`, floating in the card's reserved
+  port-rail padding so the fixed card geometry is untouched.
+- Graph-level errors (missing or multiple Branch Location roots, a wire
+  referencing a ghost node) render as a fixed `.topology-validation-banner` at
+  the top of the canvas — `role="alert"`, a sibling of the pannable viewport.
+- Both surfaces clear live as the canvas is edited (no Apply round-trip), and
+  legacy non-canonical canvases stay badge-free, mirroring the Apply gate.### Ticket routing is authorable (load-only gap closed 2026-08-08)
+
+The Resto preset ships a loaded `ticket-out → ticket-in` KDS → printer wire,
+and the pairing table admits that pair. A later slice closed the load-only
+gap: KDS nodes now expose a visible right **Ticket Out** socket, and hardware
+inputs admit the `ticket-in` semantic alongside `generic-in`, so a KDS →
+printer drop resolves to exactly one `ticket-routing` option and authors the
+wire in the preset's exact recorded format. See the implementation ADR
+([2026-08-08-adr34-typed-connection-gating.md](2026-08-08-adr34-typed-connection-gating.md)).
+`operation-out` remains load-compatible / future-facing only.
+
 ## Related decisions
 
+- [ADR #34 Implementation: Typed Connection Gating & Live Validation](2026-08-08-adr34-typed-connection-gating.md)
 - [ADR #22: Visual Node-Based Store & Workspace Topology Builder](2026-07-20-node-based-store-topology-builder.md)
 - [ADR #4: Store-First Tenancy & Workspace Type/Instance Architecture](2026-07-10-workspace-type-instance-design.md)
 - [ADR #7: Data Scope Guard](2026-07-10-data-scope-guard.md)

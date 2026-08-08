@@ -204,6 +204,8 @@ const SEMANTIC_PORT_IDS: ReadonlySet<string> = new Set<SemanticPortId | 'legacy-
   'operation-in',
   'stock-out',
   'stock-in',
+  'transfer-out',
+  'transfer-in',
   'ticket-out',
   'ticket-in',
   'device-out',

@@ -10,7 +10,9 @@ import {
   portAriaLabelId,
   semanticPortId,
   gatingSemanticId,
+  socketSemanticIds,
   canSemanticPortsConnect,
+  wireRelationshipOptions,
   settingsCardForTypeKey,
   topologyUiString,
   workspaceTypeLabel,
@@ -39,9 +41,9 @@ describe('topologyCard registry — per-node-type behavior', () => {
     expect(isKdsNode(node({ type: 'store' }))).toBe(false);
   });
 
-  it('exposes only an output on stores, only an input on KDS, both on others', () => {
+  it('exposes only an output on stores, left+right on KDS and others', () => {
     expect(visiblePortsForNode(node({ type: 'store' }))).toEqual(['right']);
-    expect(visiblePortsForNode(node({ type: 'workspace', metadata: { typeKey: 'kds' } }))).toEqual(['left']);
+    expect(visiblePortsForNode(node({ type: 'workspace', metadata: { typeKey: 'kds' } }))).toEqual(['left', 'right']);
     expect(visiblePortsForNode(node({ type: 'workspace', metadata: { typeKey: 'store-pos' } }))).toEqual(['left', 'right']);
     expect(visiblePortsForNode(node({ type: 'warehouse' }))).toEqual(['left', 'right']);
     expect(visiblePortsForNode(node({ type: 'hardware' }))).toEqual(['left', 'right']);
@@ -149,5 +151,143 @@ describe('typed connection pairing (ADR #34 first slice)', () => {
     expect(semanticPortId(node({ type: 'store' }), 'right')).toBe('location-out');
     expect(semanticPortId(node({ metadata: { typeKey: 'kds' } }), 'left')).toBe('operation-in');
     expect(semanticPortId(node({ metadata: { typeKey: 'store-pos' } }), 'left')).toBe('location-in');
+  });
+});
+
+describe('relationship options (ADR #34 multi-semantic slice)', () => {
+  it('resolves the multi-semantic socket map: workspaces output stock OR transfer', () => {
+    // A plain workspace (store-pos / restaurant-pos / inventory) can emit
+    // either a stock-routing feed or a transfer feed — the two relationships
+    // share the SAME output socket, so a drop must choose between them.
+    expect(socketSemanticIds(node({ type: 'workspace', metadata: { typeKey: 'store-pos' } }), 'right')).toEqual(['stock-out', 'transfer-out']);
+    expect(socketSemanticIds(node({ metadata: { typeKey: 'restaurant-pos' } }), 'right')).toEqual(['stock-out', 'transfer-out']);
+    expect(socketSemanticIds(node({ metadata: { typeKey: 'inventory' } }), 'right')).toEqual(['stock-out', 'transfer-out']);
+    // A warehouse INPUT likewise accepts both: stock-in or transfer-in.
+    expect(socketSemanticIds(node({ type: 'warehouse' }), 'left')).toEqual(['stock-in', 'transfer-in']);
+    // Every other socket keeps its single semantic.
+    expect(socketSemanticIds(node({ type: 'store' }), 'right')).toEqual(['location-out']);
+    expect(socketSemanticIds(node({ type: 'warehouse' }), 'right')).toEqual(['stock-out']);
+    expect(socketSemanticIds(node({ type: 'hardware' }), 'right')).toEqual(['device-out']);
+    expect(socketSemanticIds(node({ metadata: { typeKey: 'kds' } }), 'right')).toEqual(['ticket-out']);
+    expect(socketSemanticIds(node({ type: 'hardware' }), 'left')).toEqual(['generic-in', 'ticket-in']);
+    expect(socketSemanticIds(node({ metadata: { typeKey: 'store-pos' } }), 'left')).toEqual(['location-in']);
+    expect(socketSemanticIds(node({ metadata: { typeKey: 'kds' } }), 'left')).toEqual(['operation-in']);
+    expect(socketSemanticIds(node({ type: 'store' }), 'left')).toEqual([]);
+  });
+
+  it('gatingSemanticId stays the PRIMARY semantic of each socket', () => {
+    expect(gatingSemanticId(node({ metadata: { typeKey: 'store-pos' } }), 'right')).toBe('stock-out');
+    expect(gatingSemanticId(node({ type: 'warehouse' }), 'left')).toBe('stock-in');
+    expect(gatingSemanticId(node({ type: 'store' }), 'right')).toBe('location-out');
+  });
+
+  it('extends the pairing table with the transfer relationship', () => {
+    expect(canSemanticPortsConnect('transfer-out', 'transfer-in')).toBe(true);
+    // Cross-pairing between stock and transfer is still rejected.
+    expect(canSemanticPortsConnect('transfer-out', 'stock-in')).toBe(false);
+    expect(canSemanticPortsConnect('stock-out', 'transfer-in')).toBe(false);
+  });
+
+  it('admits BOTH relationships for a workspace→warehouse drop, stock first', () => {
+    const ws = node({ type: 'workspace', metadata: { typeKey: 'store-pos' } });
+    const wh = node({ type: 'warehouse' });
+    expect(wireRelationshipOptions(ws, 'right', wh, 'left')).toEqual([
+      {
+        fromPortId: 'stock-out',
+        toPortId: 'stock-in',
+        relationshipType: 'stock-routing',
+        labelId: 'topology-relationship-stock-routing',
+      },
+      {
+        fromPortId: 'transfer-out',
+        toPortId: 'transfer-in',
+        relationshipType: 'inventory-transfer',
+        labelId: 'topology-relationship-inventory-transfer',
+      },
+    ]);
+  });
+
+  it('yields exactly one option for single-semantic drops', () => {
+    const store = node({ type: 'store' });
+    const ws = node({ type: 'workspace', metadata: { typeKey: 'store-pos' } });
+    const wh = node({ type: 'warehouse' });
+    expect(wireRelationshipOptions(store, 'right', ws, 'left')).toEqual([
+      {
+        fromPortId: 'location-out',
+        toPortId: 'location-in',
+        relationshipType: 'location',
+        labelId: 'topology-relationship-location',
+      },
+    ]);
+    expect(wireRelationshipOptions(wh, 'right', wh, 'left')).toEqual([
+      {
+        fromPortId: 'stock-out',
+        toPortId: 'stock-in',
+        relationshipType: 'stock-routing',
+        labelId: 'topology-relationship-stock-routing',
+      },
+    ]);
+  });
+
+  it('labels a warehouse input by its attached relationship (Stock In / Transfer In)', () => {
+    const wh = node({ type: 'warehouse' });
+    expect(leftPortVariants(wh)).toEqual(['stock-in']);
+    // Unwired (or stock-wired): Stock In. Transfer-wired: Transfer In.
+    expect(leftPortLabelId(wh, 0)).toBe('topology-port-stock-in');
+    expect(leftPortLabelId(wh, 0, 'stock-in')).toBe('topology-port-stock-in');
+    expect(leftPortLabelId(wh, 0, 'transfer-in')).toBe('topology-port-transfer-in');
+  });
+
+  it('yields zero options for pairs outside the pairing table', () => {
+    const ws = node({ type: 'workspace', metadata: { typeKey: 'store-pos' } });
+    const wh = node({ type: 'warehouse' });
+    const hw = node({ type: 'hardware' });
+    // Workspace → workspace (no location/stock combination), store →
+    // warehouse (location vs stock), and a workspace → hardware all have
+    // no admissible pairing. KDS → hardware is authorable (ticket) and is
+    // covered by its own test below.
+    expect(wireRelationshipOptions(ws, 'right', ws, 'left')).toEqual([]);
+    expect(wireRelationshipOptions(node({ type: 'store' }), 'right', wh, 'left')).toEqual([]);
+    expect(wireRelationshipOptions(ws, 'right', hw, 'left')).toEqual([]);
+  });
+
+  it('authorizes a KDS ticket-out to a hardware ticket-in feed (load-only gap closed)', () => {
+    // The Resto preset's kds→printer wire records ticket-out/ticket-in.
+    // Hardware inputs now admit the ticket-in semantic alongside
+    // generic-in, so the pair resolves to exactly one ticket-routing
+    // option — authorable without a picker, and recorded in the exact
+    // format the preset persists.
+    const kds = node({ metadata: { typeKey: 'kds' } });
+    const hw = node({ type: 'hardware' });
+    expect(wireRelationshipOptions(kds, 'right', hw, 'left')).toEqual([
+      {
+        fromPortId: 'ticket-out',
+        toPortId: 'ticket-in',
+        relationshipType: 'ticket-routing',
+        labelId: 'topology-relationship-ticket-routing',
+      },
+    ]);
+    expect(canSemanticPortsConnect('ticket-out', 'ticket-in')).toBe(true);
+    // A workspace stock/transfer feed must NOT leak into a hardware input
+    // — only the ticket semantic is admissible there.
+    expect(wireRelationshipOptions(node({ metadata: { typeKey: 'store-pos' } }), 'right', hw, 'left')).toEqual([]);
+  });
+
+  it('labels a KDS right socket as Ticket Out with a dedicated aria', () => {
+    const kds = node({ metadata: { typeKey: 'kds' } });
+    expect(portLabelId(kds, 'right')).toBe('topology-port-ticket-out');
+    expect(portAriaLabelId(kds, 'right')).toBe('topology-port-ticket-out-aria');
+  });
+
+  it('labels a hardware left input by its attached wire: Ticket In for a ticket feed, Input otherwise', () => {
+    const hw = node({ type: 'hardware' });
+    // A ticket wire attached → the input reads Ticket In (matching the
+    // preset format); unwired / generic feeds keep the neutral Input. The
+    // aria is the generic port aria — never a Location label (a hardware
+    // input is not a branch location).
+    expect(leftPortLabelId(hw, 0, 'ticket-in')).toBe('topology-port-ticket-in');
+    expect(leftPortLabelId(hw, 0)).toBe('topology-port-generic-in');
+    expect(leftPortVariants(hw)).toEqual(['generic-in']);
+    expect(portAriaLabelId(hw, 'left')).toBe('topology-port-aria');
   });
 });

@@ -1,7 +1,7 @@
 import type { ComponentType } from 'react';
 import type { ReactLocalization } from '@fluent/react';
 import type { FluentVariable } from '@fluent/bundle';
-import type { PortName, TopologyNodeData } from './NodeTopologyEditor';
+import type { PortName, SemanticRelationshipType, TopologyNodeData } from './NodeTopologyEditor';
 import {
   WorkspaceStorePosSettings,
   WorkspaceRestaurantPosSettings,
@@ -34,6 +34,8 @@ export type SemanticPortId =
   | 'operation-in'
   | 'stock-out'
   | 'stock-in'
+  | 'transfer-out'
+  | 'transfer-in'
   | 'ticket-out'
   | 'ticket-in'
   | 'device-out'
@@ -95,14 +97,17 @@ export function workspaceTypeLabel(
 export function leftPortVariants(node: TopologyNodeData): string[] {
   if (isKdsNode(node)) return ['operation-in'];
   if (node.type === 'store') return [];
+  if (node.type === 'warehouse') return ['stock-in'];
+  if (node.type === 'hardware') return ['generic-in'];
   return ['location-in'];
 }
 
 /** Ports exposed by the frontend-only UX. Top/bottom remain load-compatible. */
 export function visiblePortsForNode(node: TopologyNodeData): PortName[] {
-  // A Kitchen Display is a sink: it consumes a single Operation feed from
-  // the left and forwards nothing — it has no output port of its own.
-  if (isKdsNode(node)) return ['left'];
+  // A Kitchen Display consumes a single Operation feed from the left and
+  // forwards ticket feeds to a printer from the right — one left input and
+  // one right ticket-out output.
+  if (isKdsNode(node)) return ['left', 'right'];
   switch (node.type) {
     case 'store':
       return ['right'];
@@ -128,12 +133,25 @@ export function leftPortLabelId(node: TopologyNodeData, variantIndex: number, co
   }
   if (variant === 'operation-in') return 'topology-port-operation-in';
   if (variant === 'location-in') return 'topology-port-location-in';
+  // A warehouse input receives stock OR transfer — the label follows the
+  // wire actually attached (the relationship picker makes both authorable).
+  if (node.type === 'warehouse') {
+    return connectedPortId === 'transfer-in' ? 'topology-port-transfer-in' : 'topology-port-stock-in';
+  }
+  // A hardware input receives device or ticket feeds — the label follows
+  // the wire: Ticket In for a KDS ticket feed, neutral Input otherwise.
+  if (node.type === 'hardware') {
+    return connectedPortId === 'ticket-in' ? 'topology-port-ticket-in' : 'topology-port-generic-in';
+  }
   return variant === 'stock-in' ? 'topology-port-stock-in' : 'topology-port-generic-in';
 }
 
 export function portLabelId(node: TopologyNodeData, port: PortName): string {
   if (port === 'left') return leftPortLabelId(node, 0);
   if (node.type === 'store' && port === 'right') return 'topology-port-location-out';
+  // A KDS right socket is the ticket feed to a printer, not a generic
+  // Operation output.
+  if (isKdsNode(node) && port === 'right') return 'topology-port-ticket-out';
   if (node.type === 'workspace' && port === 'right') return 'topology-port-workspace-out';
   if (node.type === 'warehouse' && port === 'right') return 'topology-port-stock-out';
   if (node.type === 'hardware' && port === 'right') return 'topology-port-device-out';
@@ -147,6 +165,7 @@ export function portAriaLabelId(node: TopologyNodeData, port: PortName, variantI
     if (variant === 'location-in') return 'topology-port-location-in-aria';
   }
   if (node.type === 'store' && port === 'right') return 'topology-port-location-out-aria';
+  if (isKdsNode(node) && port === 'right') return 'topology-port-ticket-out-aria';
   return 'topology-port-aria';
 }
 
@@ -166,6 +185,43 @@ export function semanticPortId(node: TopologyNodeData, port: PortName, variantIn
   return undefined;
 }
 
+/** ALL semantic ids a socket can represent, in canonical order. The first
+ *  entry is the socket's PRIMARY semantic (what gatingSemanticId resolves);
+ *  extra entries exist when one socket admits multiple relationships — a
+ *  plain workspace output is either a stock-routing feed OR a transfer
+ *  feed, and a warehouse input receives either. The relationship picker
+ *  (ADR #34) is what disambiguates multi-entry sockets at drop time. */
+export function socketSemanticIds(
+  node: TopologyNodeData,
+  port: PortName,
+  variantIndex = 0,
+): SemanticPortId[] {
+  if (port === 'left') {
+    // Inputs.
+    if (node.type === 'store') return [];
+    if (node.type === 'warehouse') return ['stock-in', 'transfer-in'];
+    // A hardware input receives device feeds AND KDS ticket feeds — the
+    // ticket-in semantic is what the Resto preset's kds→printer wire
+    // records, so the pairing row ticket-out → ticket-in is authorable.
+    if (node.type === 'hardware') return ['generic-in', 'ticket-in'];
+    // Workspace left: inventory's flexible input accepts Location or
+    // Operation (variant 1); KDS takes the Operation feed; everything
+    // else takes Location.
+    if (isInventoryNode(node)) return variantIndex === 1 ? ['operation-in'] : ['location-in'];
+    if (isKdsNode(node)) return ['operation-in'];
+    return ['location-in'];
+  }
+  // Outputs.
+  if (node.type === 'store') return ['location-out'];
+  if (node.type === 'warehouse') return ['stock-out'];
+  if (node.type === 'hardware') return ['device-out'];
+  // Workspace right: a KDS forwards ticket feeds; every other workspace
+  // (store-pos, restaurant-pos, inventory) can emit a stock-routing feed
+  // OR a transfer feed — the two relationships share this socket.
+  if (isKdsNode(node)) return ['ticket-out'];
+  return ['stock-out', 'transfer-out'];
+}
+
 /** The full typed socket map used by connection gating (ADR #34). Unlike
  *  the recording-side semanticPortId (which deliberately stays minimal so
  *  persisted wire semantics and duplicate detection are stable), this
@@ -173,40 +229,34 @@ export function semanticPortId(node: TopologyNodeData, port: PortName, variantIn
  *  KDS ticket-out, hardware device-out) and non-workspace inputs
  *  (warehouse stock-in, hardware generic-in) included — so a drag in
  *  progress can tell compatible targets from incompatible ones before any
- *  wire is drawn. Name chosen to avoid colliding with semanticPortId. */
+ *  wire is drawn. Name chosen to avoid colliding with semanticPortId.
+ *  Defined as the socket's PRIMARY semantic so it can never disagree with
+ *  the multi-semantic resolution used by the picker. */
 export function gatingSemanticId(
   node: TopologyNodeData,
   port: PortName,
   variantIndex = 0,
 ): SemanticPortId | undefined {
-  if (port === 'left') {
-    // Inputs.
-    if (node.type === 'store') return undefined;
-    if (node.type === 'warehouse') return 'stock-in';
-    if (node.type === 'hardware') return 'generic-in';
-    // Workspace left: inventory's flexible input accepts Location or
-    // Operation (variant 1); KDS takes the Operation feed; everything
-    // else takes Location.
-    if (isInventoryNode(node)) return variantIndex === 1 ? 'operation-in' : 'location-in';
-    if (isKdsNode(node)) return 'operation-in';
-    return 'location-in';
-  }
-  // Outputs.
-  if (node.type === 'store') return 'location-out';
-  if (node.type === 'warehouse') return 'stock-out';
-  if (node.type === 'hardware') return 'device-out';
-  // Workspace right: a KDS forwards ticket feeds; every other workspace
-  // (store-pos, restaurant-pos, inventory) outputs stock-routing feeds.
-  if (isKdsNode(node)) return 'ticket-out';
-  return 'stock-out';
+  return socketSemanticIds(node, port, variantIndex)[0];
 }
 
-/** The ADR #34 pairing table: which source semantic may feed which target
- *  semantic. Inputs are never sources, and mismatched semantics (a
- *  Location feed into a stock rack, a stock feed into a Location input)
- *  gate closed. Kept as a plain record of sets so a future slice (e.g. a
- *  relationship picker for multi-semantic pairs) can extend it in one
- *  place.
+/** One row of the ADR #34 pairing table: a source semantic that may feed a
+ *  target semantic, the typed relationship that combination represents,
+ *  and the Fluent id for its human-readable label. Kept as an ordered row
+ *  list so (a) the gate and the relationship picker share ONE source of
+ *  truth and (b) picker options render in the order the rows appear — the
+ *  PRIMARY relationship of a pair always comes first. */
+interface SemanticPairingRow {
+  source: SemanticPortId;
+  target: SemanticPortId;
+  relationshipType: SemanticRelationshipType;
+  labelId: string;
+}
+
+/** The pairing table: which source semantic may feed which target
+ *  semantic, and what relationship that wire then represents. Inputs are
+ *  never sources, and mismatched semantics (a Location feed into a stock
+ *  rack, a stock feed into a Location input) gate closed.
  *
  *  Reachability note: `operation-out` (reserved for a future dedicated
  *  operation feed) and `ticket-in` (the Resto preset's loaded kds→printer
@@ -214,20 +264,16 @@ export function gatingSemanticId(
  *  generic-in) are contract-level members no current node PRODUCES, so
  *  their rows are load-compatible / future-facing rather than authorable
  *  today. */
-const SEMANTIC_PORT_PAIRINGS: Readonly<Record<SemanticPortId, ReadonlySet<SemanticPortId>>> = {
-  'location-out': new Set(['location-in', 'operation-in']),
-  'stock-out': new Set(['stock-in']),
-  'ticket-out': new Set(['ticket-in']),
-  'operation-out': new Set(['operation-in']),
-  'device-out': new Set(['generic-in']),
-  'generic-out': new Set(['generic-in']),
-  // Inputs are never sources.
-  'location-in': new Set(),
-  'operation-in': new Set(),
-  'stock-in': new Set(),
-  'ticket-in': new Set(),
-  'generic-in': new Set(),
-};
+const SEMANTIC_PORT_PAIRINGS: readonly SemanticPairingRow[] = [
+  { source: 'location-out', target: 'location-in', relationshipType: 'location', labelId: 'topology-relationship-location' },
+  { source: 'location-out', target: 'operation-in', relationshipType: 'location', labelId: 'topology-relationship-location' },
+  { source: 'stock-out', target: 'stock-in', relationshipType: 'stock-routing', labelId: 'topology-relationship-stock-routing' },
+  { source: 'transfer-out', target: 'transfer-in', relationshipType: 'inventory-transfer', labelId: 'topology-relationship-inventory-transfer' },
+  { source: 'ticket-out', target: 'ticket-in', relationshipType: 'ticket-routing', labelId: 'topology-relationship-ticket-routing' },
+  { source: 'operation-out', target: 'operation-in', relationshipType: 'generic', labelId: 'topology-relationship-operation' },
+  { source: 'device-out', target: 'generic-in', relationshipType: 'hardware-connection', labelId: 'topology-relationship-hardware-connection' },
+  { source: 'generic-out', target: 'generic-in', relationshipType: 'generic', labelId: 'topology-relationship-generic' },
+];
 
 /** True when the source semantic may feed the target semantic under the
  *  typed pairing table. Unknown or input-side sources always return false
@@ -236,7 +282,46 @@ export function canSemanticPortsConnect(
   source: SemanticPortId,
   target: SemanticPortId,
 ): boolean {
-  return SEMANTIC_PORT_PAIRINGS[source]?.has(target) ?? false;
+  return SEMANTIC_PORT_PAIRINGS.some((r) => r.source === source && r.target === target);
+}
+
+/** One admissible relationship for a specific socket pair — the semantic
+ *  ids to RECORD on the wire (fromPortId/toPortId round-trip through the
+ *  backend), the typed relationship, and its label. */
+export interface WireRelationshipOption {
+  fromPortId: SemanticPortId;
+  toPortId: SemanticPortId;
+  relationshipType: SemanticRelationshipType;
+  labelId: string;
+}
+
+/** All relationships a drop between a source socket and a target socket
+ *  may create, in pairing-table order (primary first). Zero options means
+ *  the pair is incompatible; one option means the drop creates that wire
+ *  directly; TWO OR MORE means the drop is ambiguous and the UI must ask
+ *  the user which relationship they mean (the picker). */
+export function wireRelationshipOptions(
+  source: TopologyNodeData,
+  sourcePort: PortName,
+  target: TopologyNodeData,
+  targetPort: PortName,
+  targetVariantIndex = 0,
+): WireRelationshipOption[] {
+  const options: WireRelationshipOption[] = [];
+  for (const src of socketSemanticIds(source, sourcePort)) {
+    for (const tgt of socketSemanticIds(target, targetPort, targetVariantIndex)) {
+      const row = SEMANTIC_PORT_PAIRINGS.find((r) => r.source === src && r.target === tgt);
+      if (row) {
+        options.push({
+          fromPortId: src,
+          toPortId: tgt,
+          relationshipType: row.relationshipType,
+          labelId: row.labelId,
+        });
+      }
+    }
+  }
+  return options;
 }
 
 // ── Header chrome ─────────────────────────────────────────────────
@@ -263,11 +348,25 @@ export const TOPOLOGY_UI_FALLBACKS: Readonly<Record<string, string>> = {
   'topology-port-operation-in-aria': 'Operation port',
   'topology-port-stock-in': 'Stock In',
   'topology-port-stock-out': 'Stock Out',
+  'topology-port-transfer-in': 'Transfer In',
   'topology-port-ticket-in': 'Ticket In',
+  'topology-port-ticket-out': 'Ticket Out',
+  'topology-port-ticket-out-aria': 'Ticket port',
   'topology-port-device-out': 'Device Out',
   'topology-port-generic-in': 'Input',
   'topology-port-generic-out': 'Output',
   'topology-port-aria': 'Topology port',
+  'topology-relationship-location': 'Location',
+  'topology-relationship-stock-routing': 'Stock routing',
+  'topology-relationship-inventory-transfer': 'Transfer',
+  'topology-relationship-ticket-routing': 'Ticket routing',
+  'topology-relationship-hardware-connection': 'Device connection',
+  'topology-relationship-operation': 'Operation',
+  'topology-relationship-generic': 'Generic',
+  'topology-relationship-picker-title': 'Choose connection type',
+  'topology-relationship-picker-cancel': 'Cancel',
+  'topology-wire-label-transfer': 'Transfer',
+  'topology-wire-label-ticket': 'Ticket Print',
   'topology-field-name': 'Name',
   'topology-field-name-aria': 'Edit name',
   'topology-field-enabled': 'Enabled',

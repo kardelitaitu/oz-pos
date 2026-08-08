@@ -945,3 +945,71 @@
   pointer-events: none;
 }
 
+/* ── Relationship picker (ADR #34) ───────────────────────────────
+   A floating menu at the target socket when a drop admits multiple
+   relationships (workspace→warehouse: stock-routing vs transfer).
+   Anchored to the node's left edge in canvas-container screen space
+   (node position × zoom + pan); a sibling of the pannable viewport so
+   it never pans with the canvas. */
+.topology-relationship-picker {
+  position: absolute;
+  z-index: 6;
+  transform: translate(-100%, -50%);
+  min-width: 172px;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.topology-relationship-picker-title {
+  font-size: 11px;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0 4px 4px;
+}
+
+.topology-relationship-option {
+  text-align: left;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--color-fg);
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.topology-relationship-option:hover,
+.topology-relationship-option:focus-visible {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  color: var(--color-accent);
+}
+
+.topology-relationship-cancel {
+  margin-top: 2px;
+  text-align: left;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--color-fg-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.topology-relationship-cancel:hover,
+.topology-relationship-cancel:focus-visible {
+  background: color-mix(in srgb, var(--color-fg) 8%, transparent);
+  color: var(--color-fg);
+}
+
