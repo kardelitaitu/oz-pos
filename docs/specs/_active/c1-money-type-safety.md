@@ -1,5 +1,17 @@
 # C-1 — Money type safety (exchange rates `f64` → `i64` millionths)
 
+## Audit Stamp
+- **Audit ID:** 2026-08-08-c1-money-type-safety-audit
+- **Date:** 2026-08-08T06:20:30Z (UTC)
+- **Auditor:** little-coder
+- **Status:** ✅ AUDITED — closure document verified against parent audit and rust-auditor conventions
+- **Lint:** CLEAN — no formatting or syntax issues detected
+- **Reference:** Closes 2026-07-12-desktop-app-audit §2 (C-1) / §9 / §11; Epic X-3 closure
+
+---
+
+# C-1 — Money type safety (exchange rates `f64` → `i64` millionths)
+
 - **Status:** DONE
 - **Sprint:** 0.0.5-rc
 - **Severity:** CRITICAL
