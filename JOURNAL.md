@@ -1068,3 +1068,15 @@ Clean (0 errors).
 **Known limitation (journaled per review):** dropping the load gate means a stored topology with duplicate NODE ids now loads raw — the editor's `savedById` Map silently collapses them (not healable by the frontend), though Apply-time `validateTopologyGraph` (`duplicate-node`) still blocks persistence. Ghost wires and corrupt directions/ports remain frontend-healable. Follow-up slice: dedupe or flag duplicate node ids at load.
 
 **Commits:** `topology.rs` load-gate removal + 1 test. Shared-tree note: the UI topology batch stays uncommitted for its owner.
+
+## 2026-08-08 — TDD cycle: load command serves semantic-contract-violating stored topologies raw
+
+**Problem (load-side bricking, semantic level):** the previous raw-load cycle removed the closed-union STRUCTURAL gate from `load_topology`, but the command still ran `validate_semantic_ownership` — so a stored SEMANTIC topology that violates the ownership contract (e.g., a workspace with no location-in wire → `missing-location-input`, or invalid-purpose, multiple-branch-locations, duplicate location wires) made the whole topology unloadable with a TopologyValidation error. The frontend is designed to load raw and surface those exact errors at Apply time (`validateTopologyGraph` toast in TopologyScreen ~207 and NodeTopologyEditor ~1471), where the user repairs the graph in the editor. `load_topology_data` (free fn) is documented raw-by-design and never ran semantic validation. Evidence: a seeded semantic topology with ws-1 missing its location-in wire returned `missing-location-input` and load failed.
+
+**Red → Green:** New test `tauri_load_topology_serves_semantic_contract_violation_raw` seeds that exact topology and asserts load returns it raw. Red confirmed (`missing-location-input`). Fix: removed the `validate_semantic_ownership` call from `load_topology`, keeping envelope validation + typed shape parsing. The inline comment now documents that BOTH gates (structural + semantic) are deferred to the save/Apply boundary.
+
+**Deliberate consequence (journaled per review):** `validate_semantic_ownership` bundles the pure-contract checks with the DB-backed `unknown-branch-location` check (store_profile_id must exist). Removing the whole call from load also drops that DB check from load — enforcement now lives exclusively at `save_topology_json` (line 520) and the `apply_topology_diff` pre-mutation gate (line 1105), so it is not a correctness hole, and the editor overrides stored branch identity from real `branchLocations` anyway. Named here so a future reader does not treat it as an accidental omission.
+
+**Validation:** topology module 196/196 · `oz-pos-app` lib 813/813 · fmt clean · clippy clean on changed code (pre-existing warnings untouched) · drift guard clean.
+
+**Commits:** `topology.rs` semantic-gate removal from load + 1 test. Shared-tree note: the UI topology batch stays uncommitted for its owner.
