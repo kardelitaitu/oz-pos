@@ -79,6 +79,34 @@ describe('semantic topology contract', () => {
     expect(validateTopologyGraph(normalized)).toEqual([]);
   });
 
+  it('re-derives a legal relationship type when the stored value is corrupt', () => {
+    // relationshipType is a closed union (SemanticRelationshipType) and
+    // every consumer — locationWires() filtering, the renderer's label
+    // priority, the Apply boundary — assumes a well-formed value. The
+    // early-return path of inferredWire accepted any truthy value, so a
+    // garbage string (manual edit, stale JSON) flowed into the semantic
+    // graph un-normalized. Corrupt values must be treated like missing
+    // ones: fall through to legacy inference, which re-derives the legal
+    // type from node identity (branch → workspace = location, else
+    // generic) instead of trusting the stored value.
+    const normalized = graph(
+      [branch(), workspace('ws-1'), workspace('ws-2')],
+      [
+        // Corrupt type on a Store → Workspace wire with location ports:
+        // identity re-derives 'location', the ownership is preserved.
+        { id: 'wire-bad', fromNodeId: 'branch-1', toNodeId: 'ws-1', fromPort: 'right', toPort: 'left', fromPortId: 'location-out', toPortId: 'location-in', relationshipType: 'banana' as never, direction: 'one-way' },
+        // Corrupt type on a workspace → workspace wire (no identity rule):
+        // falls to the last-resort generic default.
+        { id: 'wire-generic', fromNodeId: 'ws-1', toNodeId: 'ws-2', fromPort: 'right', toPort: 'left', fromPortId: 'legacy-out', toPortId: 'legacy-in', relationshipType: 'banana' as never, direction: 'one-way' },
+      ],
+    );
+
+    expect(normalized.wires[0]!.relationshipType).toBe('location');
+    expect(normalized.wires[0]!.legacyInferred).toBe(true);
+    expect(normalized.wires[1]!.relationshipType).toBe('generic');
+    expect(normalized.wires[1]!.legacyInferred).toBe(true);
+  });
+
   it('allows one Branch Location output to fan out to many workspaces', () => {
     const normalized = graph(
       [branch(), workspace('ws-a'), workspace('ws-b')],

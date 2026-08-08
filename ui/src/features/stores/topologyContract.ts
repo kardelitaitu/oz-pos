@@ -166,12 +166,29 @@ function metadataString(node: TopologyNodeInput, key: string): string | undefine
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+/** The closed set of legal relationship types (mirrors SemanticRelationshipType).
+ *  Used to quarantine corrupt values at the contract boundary — a garbage
+ *  string (manual edit, stale JSON) must never flow into the semantic graph. */
+const RELATIONSHIP_TYPES = new Set<SemanticRelationshipType>([
+  'location',
+  'stock-routing',
+  'ticket-routing',
+  'hardware-connection',
+  'inventory-transfer',
+  'generic',
+]);
+
 function inferredWire(
   wire: TopologyWireInput,
   fromNode: SemanticTopologyNode | undefined,
   toNode: SemanticTopologyNode | undefined,
 ): Pick<SemanticTopologyWire, 'fromPortId' | 'toPortId' | 'relationshipType' | 'legacyInferred'> {
-  if (wire.fromPortId && wire.toPortId && wire.relationshipType) {
+  // The early-return only trusts a relationshipType that is a member of
+  // the closed SemanticRelationshipType union. Corrupt values (manual
+  // edits, stale JSON) are treated like missing ones: fall through to
+  // legacy inference, which re-derives the legal type from node identity
+  // instead of letting a garbage string flow into the semantic graph.
+  if (wire.fromPortId && wire.toPortId && wire.relationshipType && RELATIONSHIP_TYPES.has(wire.relationshipType as SemanticRelationshipType)) {
     return {
       fromPortId: wire.fromPortId,
       toPortId: wire.toPortId,
@@ -203,7 +220,11 @@ function inferredWire(
   return {
     fromPortId: wire.fromPortId ?? 'legacy-out',
     toPortId: wire.toPortId ?? 'legacy-in',
-    relationshipType: wire.relationshipType ?? 'generic',
+    // Same closed-union discipline as the early return: a truthy but
+    // corrupt type still folds to the last-resort default.
+    relationshipType: RELATIONSHIP_TYPES.has(wire.relationshipType as SemanticRelationshipType)
+      ? wire.relationshipType!
+      : 'generic',
     legacyInferred: true,
   };
 }
