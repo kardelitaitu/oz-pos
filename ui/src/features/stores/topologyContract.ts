@@ -1,4 +1,5 @@
 import type { TopologyNodeData, TopologyWireData } from './NodeTopologyEditor';
+import type { SemanticPortId } from './topologyCard';
 
 type TopologyNodeInput = TopologyNodeData & { storeProfileId?: string };
 type TopologyWireInput = TopologyWireData & {
@@ -178,21 +179,52 @@ const RELATIONSHIP_TYPES = new Set<SemanticRelationshipType>([
   'generic',
 ]);
 
+/** The closed set of legal semantic port ids — the SemanticPortId union
+ *  from topologyCard.ts (the single source of truth, imported as a type so
+ *  the whitelist cannot drift) plus two contract-internal placeholders for
+ *  fully-unknown legacy wires. Corrupt ids must never reach consumers — the
+ *  renderer matches wires to sockets by port id, and validation switches on
+ *  'location-out'/'location-in'. */
+const SEMANTIC_PORT_IDS: ReadonlySet<string> = new Set<SemanticPortId | 'legacy-out' | 'legacy-in'>([
+  'location-out',
+  'location-in',
+  'operation-in',
+  'stock-out',
+  'stock-in',
+  'ticket-out',
+  'ticket-in',
+  'device-out',
+  'generic-in',
+  'generic-out',
+  // Contract-internal placeholders for fully-unknown legacy wires.
+  'legacy-out',
+  'legacy-in',
+]);
+
+function isLegalPortId(value: string | undefined): value is string {
+  return value !== undefined && SEMANTIC_PORT_IDS.has(value);
+}
+
 function inferredWire(
   wire: TopologyWireInput,
   fromNode: SemanticTopologyNode | undefined,
   toNode: SemanticTopologyNode | undefined,
 ): Pick<SemanticTopologyWire, 'fromPortId' | 'toPortId' | 'relationshipType' | 'legacyInferred'> {
-  // The early-return only trusts a relationshipType that is a member of
-  // the closed SemanticRelationshipType union. Corrupt values (manual
-  // edits, stale JSON) are treated like missing ones: fall through to
-  // legacy inference, which re-derives the legal type from node identity
+  // The early-return only trusts well-formed semantic fields: port ids
+  // must be members of the closed SemanticPortId union and the type a
+  // member of SemanticRelationshipType. Corrupt values (manual edits,
+  // stale JSON) are treated like missing ones: fall through to legacy
+  // inference, which re-derives the legal fields from node identity
   // instead of letting a garbage string flow into the semantic graph.
-  if (wire.fromPortId && wire.toPortId && wire.relationshipType && RELATIONSHIP_TYPES.has(wire.relationshipType as SemanticRelationshipType)) {
+  if (
+    isLegalPortId(wire.fromPortId)
+    && isLegalPortId(wire.toPortId)
+    && RELATIONSHIP_TYPES.has(wire.relationshipType as SemanticRelationshipType)
+  ) {
     return {
       fromPortId: wire.fromPortId,
       toPortId: wire.toPortId,
-      relationshipType: wire.relationshipType,
+      relationshipType: wire.relationshipType!,
       legacyInferred: false,
     };
   }
@@ -210,16 +242,20 @@ function inferredWire(
 
   if (fromNode?.kind === 'workspace' && toNode?.kind === 'warehouse') {
     return {
-      fromPortId: wire.fromPortId ?? 'stock-out',
-      toPortId: wire.toPortId ?? 'stock-in',
-      relationshipType: wire.relationshipType ?? 'stock-routing',
+      // Same closed-union discipline: a truthy-but-corrupt port or type
+      // folds to the identity-derived default, never the garbage value.
+      fromPortId: isLegalPortId(wire.fromPortId) ? wire.fromPortId : 'stock-out',
+      toPortId: isLegalPortId(wire.toPortId) ? wire.toPortId : 'stock-in',
+      relationshipType: RELATIONSHIP_TYPES.has(wire.relationshipType as SemanticRelationshipType)
+        ? wire.relationshipType!
+        : 'stock-routing',
       legacyInferred: true,
     };
   }
 
   return {
-    fromPortId: wire.fromPortId ?? 'legacy-out',
-    toPortId: wire.toPortId ?? 'legacy-in',
+    fromPortId: isLegalPortId(wire.fromPortId) ? wire.fromPortId : 'legacy-out',
+    toPortId: isLegalPortId(wire.toPortId) ? wire.toPortId : 'legacy-in',
     // Same closed-union discipline as the early return: a truthy but
     // corrupt type still folds to the last-resort default.
     relationshipType: RELATIONSHIP_TYPES.has(wire.relationshipType as SemanticRelationshipType)

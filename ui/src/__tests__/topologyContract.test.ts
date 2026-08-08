@@ -23,6 +23,14 @@ const workspace = (id: string): TopologyNodeData => ({
   y: 100,
 });
 
+const warehouse = (id: string): TopologyNodeData => ({
+  id,
+  type: 'warehouse',
+  name: id,
+  x: 200,
+  y: 200,
+});
+
 const ownershipWire = (id: string, workspaceId: string): TopologyWireData => ({
   id,
   fromNodeId: 'branch-1',
@@ -105,6 +113,66 @@ describe('semantic topology contract', () => {
     expect(normalized.wires[0]!.legacyInferred).toBe(true);
     expect(normalized.wires[1]!.relationshipType).toBe('generic');
     expect(normalized.wires[1]!.legacyInferred).toBe(true);
+  });
+
+  it('re-derives legal port ids and types when stored wire fields are corrupt', () => {
+    // The early-return of inferredWire guards only relationshipType —
+    // fromPortId/toPortId pass through verbatim when truthy, and the
+    // workspace → warehouse branch still uses ?? for the type. Port ids
+    // are a closed union too (SemanticPortId), so corrupt values must
+    // fall through to identity inference just like types do.
+    const normalized = graph(
+      [branch(), workspace('ws-1'), workspace('ws-2'), warehouse('wh-1')],
+      [
+        // Corrupt ports on a Store → Workspace wire with location ports:
+        // identity re-derives location-out/location-in, ownership kept.
+        { id: 'wire-bad', fromNodeId: 'branch-1', toNodeId: 'ws-1', fromPort: 'right', toPort: 'left', fromPortId: 'banana' as never, toPortId: 'cabbage' as never, relationshipType: 'location', direction: 'one-way' },
+        // Corrupt ports + corrupt type on a workspace → warehouse wire:
+        // identity re-derives stock-out/stock-in/stock-routing.
+        { id: 'wire-wh', fromNodeId: 'ws-1', toNodeId: 'wh-1', fromPort: 'right', toPort: 'left', fromPortId: 'banana' as never, toPortId: 'cabbage' as never, relationshipType: 'banana' as never, direction: 'one-way' },
+        // Corrupt ports on a workspace → workspace wire (no identity rule):
+        // falls to the last-resort legacy placeholders + generic type.
+        { id: 'wire-generic', fromNodeId: 'ws-1', toNodeId: 'ws-2', fromPort: 'right', toPort: 'left', fromPortId: 'banana' as never, toPortId: 'cabbage' as never, relationshipType: 'banana' as never, direction: 'one-way' },
+      ],
+    );
+
+    expect(normalized.wires[0]).toMatchObject({
+      fromPortId: 'location-out',
+      toPortId: 'location-in',
+      relationshipType: 'location',
+      legacyInferred: true,
+    });
+    expect(normalized.wires[1]).toMatchObject({
+      fromPortId: 'stock-out',
+      toPortId: 'stock-in',
+      relationshipType: 'stock-routing',
+      legacyInferred: true,
+    });
+    expect(normalized.wires[2]).toMatchObject({
+      fromPortId: 'legacy-out',
+      toPortId: 'legacy-in',
+      relationshipType: 'generic',
+      legacyInferred: true,
+    });
+  });
+
+  it('keeps legal non-stock ports on a workspace → warehouse wire (no over-fold)', () => {
+    // The warehouse branch folds corrupt ports to stock, but a LEGAL
+    // port (ticket-out/ticket-in, device-out, …) must survive unchanged —
+    // the whitelist is the SemanticPortId union, not a stock-only list.
+    const normalized = graph(
+      [branch(), workspace('ws-1'), warehouse('wh-1')],
+      [
+        { id: 'wire-ticket', fromNodeId: 'ws-1', toNodeId: 'wh-1', fromPort: 'right', toPort: 'left', fromPortId: 'ticket-out', toPortId: 'ticket-in', relationshipType: 'ticket-routing', direction: 'one-way' },
+      ],
+    );
+
+    expect(normalized.wires[0]).toMatchObject({
+      fromPortId: 'ticket-out',
+      toPortId: 'ticket-in',
+      relationshipType: 'ticket-routing',
+      legacyInferred: false,
+    });
   });
 
   it('allows one Branch Location output to fan out to many workspaces', () => {
