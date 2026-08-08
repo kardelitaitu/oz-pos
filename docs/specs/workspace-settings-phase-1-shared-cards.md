@@ -1,6 +1,6 @@
 # Phase 1 — Shared Cards & Local Profile
 
-- **Status:** PENDING
+- **Status:** IMPLEMENTED (ADR #22 unified workspace settings shipped in 0.0.19; re-audited 2026-08-08 by docs-auditor)
 - **Phase:** 1 of 11 (Workspace Settings Architecture — ADR #22)
 - **Parent:** `docs/decisions/2026-07-23-unified-2tier-workspace-settings-architecture.md`
 - **Severity:** CORE
@@ -109,3 +109,5 @@ export interface WorkspaceCardProps {
 - `ui/src/features/settings/AppearanceSettings.tsx` (existing embedded card pattern)
 - `ui/src/components/Card.tsx` (Card component used by settings)
 - `ui/src/features/kds/KdsSettingsPanel.tsx` (existing KDS settings — source of truth for KDS fields)
+
+> Last audited: 2026-08-08 by docs-auditor (status corrected to IMPLEMENTED).

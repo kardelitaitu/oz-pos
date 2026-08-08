@@ -1,6 +1,6 @@
 # Phase 0c — `terminal_profile.json` Schema + `useTerminalProfile` Hook
 
-- **Status:** PENDING
+- **Status:** IMPLEMENTED (ADR #22 unified workspace settings shipped in 0.0.19; re-audited 2026-08-08 by docs-auditor)
 - **Phase:** 0c of 11 (Workspace Settings Architecture — ADR #22)
 - **Parent:** `docs/decisions/2026-07-23-unified-2tier-workspace-settings-architecture.md`
 - **Severity:** PREREQUISITE (blocks Phase 1)
@@ -124,3 +124,5 @@ Define a JSON file format for register-local hardware bindings (`terminal_profil
 
 - `docs/decisions/2026-07-23-unified-2tier-workspace-settings-architecture.md` §Pillar B, §Edge Case #1, #10, §Phase 0c
 - `ui/src/features/terminals/TerminalManagementScreen.tsx`
+
+> Last audited: 2026-08-08 by docs-auditor (status corrected to IMPLEMENTED).

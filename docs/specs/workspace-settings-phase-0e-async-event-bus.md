@@ -1,6 +1,6 @@
 # Phase 0e — Async Event Bus Handler Support
 
-- **Status:** PENDING
+- **Status:** IMPLEMENTED (ADR #22 unified workspace settings shipped in 0.0.19; re-audited 2026-08-08 by docs-auditor)
 - **Phase:** 0e of 11 (Workspace Settings Architecture — ADR #22)
 - **Parent:** `docs/decisions/2026-07-23-unified-2tier-workspace-settings-architecture.md`
 - **Severity:** PREREQUISITE (blocks Phase 3)
@@ -78,3 +78,5 @@ Simplest change. No API changes to `EventBus`. The handler itself is responsible
 - `platform/kernel/src/event_bus.rs`
 - `platform/core/src/settings.rs`
 - ADR #2 (`docs/decisions/2026-02-01-event-bus-design.md`)
+
+> Last audited: 2026-08-08 by docs-auditor (status corrected to IMPLEMENTED).

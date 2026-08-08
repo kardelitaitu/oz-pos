@@ -28,6 +28,9 @@
 .env.production
 *.key
 *.pem
+*.keystore
+*.jks
+*.p12
 secrets/
 
 # Editor

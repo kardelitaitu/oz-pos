@@ -323,3 +323,7 @@ All E2E tests must use `locale: 'en-US'` (already configured in `ui/e2e/playwrig
 | Phase 4: Tier 2 Modal | ⬜ Not Started | |
 | Phase 5: Workspace Wiring | ⬜ Not Started | |
 | Phase 6: Deprecation | ⬜ Not Started | |
+
+---
+
+> Last audited: 2026-08-08 by docs-auditor (repairs applied).

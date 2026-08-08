@@ -1,6 +1,6 @@
 # Phase 2 — Topology Integration
 
-- **Status:** PENDING
+- **Status:** IMPLEMENTED (ADR #22 unified workspace settings shipped in 0.0.19; re-audited 2026-08-08 by docs-auditor)
 - **Phase:** 2 of 11 (Workspace Settings Architecture — ADR #22)
 - **Parent:** `docs/decisions/2026-07-23-unified-2tier-workspace-settings-architecture.md`
 - **Severity:** CORE
@@ -76,3 +76,5 @@ Wire the shared workspace cards into `NodeTopologyEditor.tsx`'s existing right I
 - `ui/src/features/stores/NodeTopologyEditor.tsx`
 - `ui/src/features/stores/TopologyScreen.tsx`
 - `ui/src/features/stores/NodeTopologyIcons.tsx`
+
+> Last audited: 2026-08-08 by docs-auditor (status corrected to IMPLEMENTED).

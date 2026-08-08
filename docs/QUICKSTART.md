@@ -1,6 +1,6 @@
 # Quickstart
 
-<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (1 finding) · resolved F1: prerequisites table and troubleshooting updated to Node.js >=22 and npm >=11 · F2 (minor): payment drivers listed "Stripe, Square" (line 122) — actual drivers are stripe, square, qris, mock (omits qris + mock; subset still valid) · verified accurate: scripts/setup-dev.ps1 + scripts/check.sh exist, edition="2024", rust-version="1.88", ui/src/api/pos.ts exists, Stripe+Square drivers present -->
+<!-- Audit stamp: 2026-07-25 · Hermes-Agent · status: ACCURATE (1 finding) · resolved F1: prerequisites table and troubleshooting updated to Node.js >=22 and npm >=11 · F2 (minor): payment drivers listed "Stripe, Square" (line 122) — actual drivers are stripe, square, qris, mock (omits qris + mock; subset still valid) · verified accurate: scripts/setup-dev.ps1 + scripts/check.sh exist, edition="2024", rust-version="1.88", ui/src/api/pos.ts exists, Stripe+Square drivers present · re-audited 2026-08-08 by docs-auditor: structure diagram rlua->mlua, crate list completed to 11 (oz-api/oz-notification/oz-plugin), payment drivers row corrected -->
 
 This guide gets OZ-POS building and running on your machine in under 15 minutes. It's aimed at first-time contributors — for the deeper project conventions, see [`CONTRIBUTING.md`](../CONTRIBUTING.md), [`AGENTS.md`](../AGENTS.md), and the skills under `.agents/skills/`.
 
@@ -122,11 +122,14 @@ oz-pos/
 ├── crates/                     # Rust workspace members (one per oz-* responsibility)
 │   ├── oz-core/                # money, currency, cart, sale, inventory
 │   ├── oz-hal/                 # hardware abstraction + drivers
-│   ├── oz-lua/                 # rlua runtime + script bindings
+│   ├── oz-lua/                 # mlua runtime + script bindings
 │   ├── oz-security/            # encryption, secrets, PCI helpers
-│   ├── oz-payment/             # Stripe, Square, EMV abstraction
+│   ├── oz-payment/             # Stripe, Square, QRIS, mock
 │   ├── oz-reporting/           # analytics + CSV export
 │   ├── oz-logging/             # structured logging
+│   ├── oz-api/                 # HTTP API server (axum)
+│   ├── oz-notification/        # email & push notification dispatching
+│   ├── oz-plugin/              # plugin sandbox & lifecycle
 │   └── oz-cli/                 # migrations, backup, export CLI
 ├── apps/desktop-client/        # the desktop Tauri shell
 │   └── src/commands/           # Tauri commands (one folder per feature)

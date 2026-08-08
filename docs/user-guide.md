@@ -6,7 +6,7 @@
 2. Tap your **PIN** on the number pad
 3. Select your **workspace** (Store POS, KDS, Inventory, etc.)
 
-> If you enter the wrong PIN 5 times, your account locks for 30 seconds.
+> If you enter the wrong PIN 3 times within 60 seconds, your account is temporarily locked with a backoff timer (retry-after shown on screen; backoff can grow up to an hour).
 
 ## Point of Sale (POS)
 
@@ -50,7 +50,7 @@ For kitchen staff:
 2. View incoming orders as **ticket cards**
 3. Tap a ticket to **acknowledge** (mark as in progress)
 4. Tap again to **complete** the order
-5. Ticket colors indicate age: 🟢 fresh, 🟡 5-10min, 🔴 10-15min, ⚠ urgent
+5. Ticket colors indicate age: 🟢 fresh (<5min), 🟡 5-10min, 🔴 ≥15min (overdue/urgent)
 
 ## Tablet Usage
 
@@ -65,3 +65,7 @@ The tablet interface is optimized for touch:
 - The screen locks after 5 minutes of inactivity
 - Enter your PIN to unlock and resume where you left off
 - Lock screen shows your name and workspace
+
+---
+
+> Last audited: 2026-08-08 by docs-auditor (repairs applied).
