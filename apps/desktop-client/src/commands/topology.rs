@@ -130,6 +130,8 @@ pub enum WireDirection {
     OneWay,
     /// Bidirectional flow (arrows on both ends).
     TwoWay,
+    /// Right-to-left flow (arrow on the from end).
+    Reverse,
     /// Catch-all for unknown/corrupt directions — rejected on save.
     #[serde(other)]
     Unknown,
@@ -140,6 +142,7 @@ impl PartialEq<&str> for WireDirection {
         match self {
             WireDirection::OneWay => *other == "one-way",
             WireDirection::TwoWay => *other == "two-way",
+            WireDirection::Reverse => *other == "reverse",
             WireDirection::Unknown => false,
         }
     }
@@ -150,6 +153,7 @@ impl From<&str> for WireDirection {
         match s {
             "one-way" => WireDirection::OneWay,
             "two-way" => WireDirection::TwoWay,
+            "reverse" => WireDirection::Reverse,
             _ => WireDirection::Unknown,
         }
     }
@@ -238,7 +242,7 @@ pub struct TopologyWirePayload {
     pub from_node_id: String,
     /// Node ID that the wire connects to.
     pub to_node_id: String,
-    /// Direction: one-way (default) or two-way.
+    /// Direction: one-way (default), two-way, or reverse.
     #[serde(default = "default_direction")]
     #[serde(deserialize_with = "de_direction_or_null")]
     pub direction: WireDirection,
@@ -400,7 +404,11 @@ fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), AppErr
         if value_string(wire, "from_node_id") != Some(branch_id)
             || value_string(wire, "from_port_id") != Some("location-out")
             || value_string(wire, "to_port_id") != Some("location-in")
-            || value_string(wire, "direction") != Some("one-way")
+            // Direction is deliberately NOT part of this gate: the frontend
+            // contract treats it as presentation-only (one-way | reverse |
+            // two-way are all legal — normalizeWireDirection). Rejecting a
+            // location wire whose direction was cycled in the editor would
+            // be a frontend/backend contract drift.
             || !workspace_ids.contains(&value_string(wire, "to_node_id").unwrap_or_default())
         {
             return Err(topology_validation(
@@ -1465,6 +1473,48 @@ mod tests {
         assert_eq!(value["wires"][0]["from_port_id"], "location-out");
         assert_eq!(value["wires"][0]["to_port_id"], "location-in");
         assert_eq!(value["wires"][0]["relationship_type"], "location");
+    }
+
+    #[test]
+    fn semantic_save_accepts_two_way_location_wire() {
+        // Direction is presentation-only: the frontend contract keeps
+        // one-way | reverse | two-way all legal (normalizeWireDirection),
+        // so the Apply boundary must NOT reject a location wire whose
+        // direction was cycled to two-way in the editor.
+        let conn = fresh_conn();
+        let nodes = vec![
+            semantic_node("branch", "branch-location", Some("default")),
+            semantic_node("ws-1", "workspace", None),
+        ];
+        let mut wire = semantic_location_wire("wire-1", "ws-1");
+        wire["direction"] = Value::String("two-way".into());
+        save_topology_json(&conn, nodes, vec![wire]).unwrap();
+
+        let raw = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)
+            .unwrap()
+            .unwrap();
+        let value: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(value["wires"][0]["direction"], "two-way");
+    }
+
+    #[test]
+    fn semantic_save_accepts_reverse_location_wire() {
+        // The editor cycles direction left-to-right -> right-to-left -> both;
+        // reverse must round-trip through Apply like the other legal states.
+        let conn = fresh_conn();
+        let nodes = vec![
+            semantic_node("branch", "branch-location", Some("default")),
+            semantic_node("ws-1", "workspace", None),
+        ];
+        let mut wire = semantic_location_wire("wire-1", "ws-1");
+        wire["direction"] = Value::String("reverse".into());
+        save_topology_json(&conn, nodes, vec![wire]).unwrap();
+
+        let raw = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)
+            .unwrap()
+            .unwrap();
+        let value: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(value["wires"][0]["direction"], "reverse");
     }
 
     #[test]
