@@ -81,6 +81,18 @@ const MOCK_STORE = {
   updated_at: new Date().toISOString(),
 };
 
+/** Mutable store-profile list backing the mock — renames/creates persist
+ *  for the session exactly like the real DB (dev preview parity). */
+let mockStores: Array<typeof MOCK_STORE> = [{ ...MOCK_STORE }];
+
+/** Unwrap the `{ args }` envelope the API wrappers send, tolerating a
+ *  bare payload for direct calls. The real commands take a named `args`
+ *  argument, so the envelope is the wire shape. */
+function unwrapArgs<T extends Record<string, unknown> = Record<string, unknown>>(args: unknown): T {
+  const boxed = (args ?? {}) as { args?: T };
+  return boxed.args ?? ((args as T | undefined) ?? ({} as T));
+}
+
 const MOCK_CURRENCIES = [
   { code: 'IDR', name: 'Indonesian Rupiah', minor_exponent: 0, symbol: 'Rp' },
   { code: 'USD', name: 'US Dollar', minor_exponent: 2, symbol: '$' },
@@ -108,13 +120,35 @@ const MOCK_INVENTORY_LOCATIONS = [
   { id: 'loc-2', name: 'Warehouse', type: 'warehouse' as const, description: 'Central warehouse', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
 ];
 
-const MOCK_WORKSPACES = [
+// Stateful workspace instances — the real backend persists
+// workspace_instances rows, and apply_topology_diff mutates them. Seed
+// from localStorage so previews round-trip instance creates/archives the
+// same way the real store DB does.
+const MOCK_WORKSPACES_SEED = [
   { instance_id: 'ws-1', type_key: 'store-pos', store_id: 'store-1', store_name: 'TOKO TEST', name: 'Store POS', description: 'Point of Sale', icon: 'shopping-cart', layout_mode: 'default', colour: '#10b981', is_default: true },
   { instance_id: 'ws-2', type_key: 'restaurant-pos', store_id: 'store-1', store_name: 'TOKO TEST', name: 'Restaurant POS', description: 'Table service', icon: 'restaurant', layout_mode: 'fullscreen', colour: '#ef4444', is_default: false },
   { instance_id: 'ws-3', type_key: 'kds', store_id: 'store-1', store_name: 'TOKO TEST', name: 'Kitchen Display', description: 'Order display', icon: 'utensils', layout_mode: 'kds', colour: '#f59e0b', is_default: false },
   { instance_id: 'ws-4', type_key: 'inventory', store_id: 'store-1', store_name: 'TOKO TEST', name: 'Inventory Management', description: 'Stock management', icon: 'package', layout_mode: 'default', colour: '#3b82f6', is_default: false },
   { instance_id: 'ws-5', type_key: 'admin', store_id: 'store-1', store_name: 'TOKO TEST', name: 'Admin', description: 'Settings & management', icon: 'settings', layout_mode: 'default', colour: '#8b5cf6', is_default: false },
 ];
+const MOCK_WORKSPACES_KEY = 'oz-dev-mock:workspaces';
+function loadMockWorkspaces(): typeof MOCK_WORKSPACES_SEED {
+  try {
+    const raw = localStorage.getItem(MOCK_WORKSPACES_KEY);
+    if (raw) return JSON.parse(raw) as typeof MOCK_WORKSPACES_SEED;
+  } catch {
+    // storage unavailable — start from seed
+  }
+  return MOCK_WORKSPACES_SEED;
+}
+function saveMockWorkspaces(): void {
+  try {
+    localStorage.setItem(MOCK_WORKSPACES_KEY, JSON.stringify(mockWorkspaces));
+  } catch {
+    // storage unavailable — keep in-memory copy for this session
+  }
+}
+const mockWorkspaces: typeof MOCK_WORKSPACES_SEED = loadMockWorkspaces();
 
 // ── Mock KDS orders ──────────────────────────────────────────────
 // ── Mock KDS orders ──────────────────────────────────────────────
@@ -553,6 +587,76 @@ function saveMockUserPrefs(prefs: Record<string, string>): void {
 }
 const mockUserPrefs: Record<string, string> = loadMockUserPrefs();
 
+// ── Topology diagram (stateful mock) ─────────────────────────────
+// The real backend persists the node/wire diagram as JSON under the
+// `oz-pos/topology` settings key. The mock previously returned hardcoded
+// positions (and used the wrong payload shape: `label` instead of `name`,
+// `from`/`to` instead of `from_node_id`/`to_node_id` — so wires never even
+// loaded in the preview) while discarding saves, which made node locations
+// revert on every reload. Seed from localStorage so previews round-trip
+// positions exactly like a real store DB.
+interface MockTopologyNode {
+  id: string;
+  type: string;
+  name: string;
+  subtitle?: string;
+  x: number;
+  y: number;
+  tier_requirement?: string;
+  telemetry_badge?: string;
+  telemetry_status?: string;
+  metadata?: Record<string, unknown>;
+}
+interface MockTopologyWire {
+  id: string;
+  from_node_id: string;
+  to_node_id: string;
+  direction: string;
+  label?: string;
+  from_port?: string;
+  to_port?: string;
+}
+interface MockTopology {
+  nodes: MockTopologyNode[];
+  wires: MockTopologyWire[];
+}
+
+const MOCK_TOPOLOGY_KEY = 'oz-dev-mock:topology';
+
+/** First-run canvas: matches the current preview's starting topology.
+ *  Cards are 240px wide/tall, so positions sit on a spread grid (rows 80/320,
+ *  columns 80/380) that never overlaps on load. Wires carry labels so the
+ *  first-run canvas demonstrates the labeled-wire UX instead of empty pills. */
+const MOCK_TOPOLOGY_SEED: MockTopology = {
+  nodes: [
+    { id: 'store-1', type: 'store', name: 'TOKO TEST', subtitle: 'Primary Store', x: 80, y: 80 },
+    { id: 'ws-1', type: 'workspace', name: 'Store POS', subtitle: 'Point of Sale', x: 380, y: 80, metadata: { typeKey: 'store-pos', persisted: true } },
+    { id: 'ws-2', type: 'workspace', name: 'Restaurant', subtitle: 'Table service', x: 380, y: 320, metadata: { typeKey: 'restaurant-pos', persisted: true } },
+  ],
+  wires: [
+    { id: 'wire-1', from_node_id: 'store-1', from_port: 'right', to_node_id: 'ws-1', to_port: 'left', direction: 'one-way', label: 'Binds Store' },
+    { id: 'wire-2', from_node_id: 'store-1', from_port: 'right', to_node_id: 'ws-2', to_port: 'left', direction: 'one-way', label: 'Binds Store' },
+  ],
+};
+
+function loadMockTopology(): MockTopology {
+  try {
+    const raw = localStorage.getItem(MOCK_TOPOLOGY_KEY);
+    if (raw) return JSON.parse(raw) as MockTopology;
+  } catch {
+    // storage unavailable — start from seed
+  }
+  return MOCK_TOPOLOGY_SEED;
+}
+function saveMockTopology(topology: MockTopology): void {
+  try {
+    localStorage.setItem(MOCK_TOPOLOGY_KEY, JSON.stringify(topology));
+  } catch {
+    // storage unavailable — keep in-memory copy for this session
+  }
+}
+const mockTopology: MockTopology = loadMockTopology();
+
 const handlers: Record<string, (args: unknown) => unknown> = {
   // ═══════════════════════════════════════════════════════════════
   // AUTH / STAFF
@@ -668,31 +772,73 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // STORES
   // ═══════════════════════════════════════════════════════════════
 
-  'list_store_profiles': () => [MOCK_STORE],
-  'get_store_profile': () => MOCK_STORE,
-  'get_primary_store': () => MOCK_STORE,
-  'create_store_profile': (args) => ({ ...MOCK_STORE, ...(args as Record<string, unknown>) }),
-  'update_store_profile': (args) => ({ ...MOCK_STORE, ...(args as Record<string, unknown>) }),
-  'set_primary_store': () => MOCK_STORE,
-  'delete_store_profile': () => null,
+  'list_store_profiles': () => mockStores.map((s) => ({ ...s })),
+  'get_store_profile': (args) => {
+    const { id } = unwrapArgs<{ id?: string }>(args);
+    return mockStores.find((s) => s.id === id) ?? MOCK_STORE;
+  },
+  'get_primary_store': () => mockStores.find((s) => s.is_primary) ?? mockStores[0] ?? MOCK_STORE,
+  'create_store_profile': (args) => {
+    const payload = unwrapArgs<Partial<typeof MOCK_STORE>>(args);
+    const created = {
+      ...MOCK_STORE,
+      ...payload,
+      id: (payload.id as string | undefined) ?? `store-${Date.now()}`,
+      is_primary: mockStores.length === 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    mockStores.push(created);
+    return { ...created };
+  },
+  'update_store_profile': (args) => {
+    const { id, ...rest } = unwrapArgs<Partial<typeof MOCK_STORE> & { id?: string }>(args);
+    // id-mismatch falls back to the first profile (mock laxness — the real
+    // backend returns an error for unknown ids).
+    const existing = mockStores.find((s) => s.id === id) ?? mockStores[0] ?? MOCK_STORE;
+    const updated = { ...existing, ...rest, id: existing.id, updated_at: new Date().toISOString() };
+    mockStores = mockStores.map((s) => (s.id === updated.id ? updated : s));
+    if (!mockStores.some((s) => s.id === updated.id)) mockStores.push(updated);
+    return { ...updated };
+  },
+  'set_primary_store': (args) => {
+    const { id } = unwrapArgs<{ id?: string }>(args);
+    mockStores = mockStores.map((s) => ({ ...s, is_primary: s.id === id }));
+    return { ...(mockStores.find((s) => s.id === id) ?? mockStores[0] ?? MOCK_STORE) };
+  },
+  // Deletes mutate the stateful store list so a reload (or the topology
+  // editor's branch seed) no longer sees the removed branch — same
+  // persistence contract as the real store_profiles row.
+  'delete_store_profile': (args) => {
+    const { id } = unwrapArgs<{ id?: string }>(args);
+    mockStores = mockStores.filter((s) => s.id !== id);
+    return null;
+  },
 
   // ═══════════════════════════════════════════════════════════════
   // WORKSPACES (ADR #4 / #7)
   // ═══════════════════════════════════════════════════════════════
 
-  'list_workspaces': () => MOCK_WORKSPACES,
-  'list_workspaces_scoped': () => MOCK_WORKSPACES,
+  'list_workspaces': () => mockWorkspaces,
+  'list_workspaces_scoped': () => mockWorkspaces,
   'list_workspace_screens': () => [],
   'list_workspace_screens_scoped': () => [],
   'get_workspace_instance_scoped': (args) => {
     const { instanceId } = args as { instanceId: string };
-    return MOCK_WORKSPACES.find(w => w.instance_id === instanceId) ?? MOCK_WORKSPACES[0];
+    return mockWorkspaces.find(w => w.instance_id === instanceId) ?? mockWorkspaces[0];
   },
   'create_workspace_instance_scoped': (args) => {
     const req = (args as { req: Record<string, unknown> }).req;
     return { instance_id: `ws-${Date.now()}`, ...req };
   },
-  'update_workspace_instance_scoped': (args) => args,
+  // Renames mutate the stateful workspace list so a reload keeps the new
+  // name — same persistence contract as the real workspace_instances row.
+  'update_workspace_instance_scoped': (args) => {
+    const { instanceId, name } = (args ?? {}) as { instanceId?: string; name?: string };
+    const existing = mockWorkspaces.find((w) => w.instance_id === instanceId) ?? mockWorkspaces[0];
+    if (existing && name !== undefined) existing.name = name;
+    return existing ?? null;
+  },
   'delete_workspace_instance_scoped': () => null,
   'archive_workspace_instance_scoped': () => null,
   'set_default_instance_scoped': () => null,
@@ -783,18 +929,58 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'send_test_report': () => 'Email sent',
 
   'load_topology': () => ({
-    nodes: [
-      { id: 'store-1', label: 'TOKO TEST', type: 'store', x: 100, y: 100, storeProfileId: 'store-1', licenseTier: 'pro', nodeColor: null },
-      { id: 'ws-1', label: 'Store POS', type: 'workspace', x: 300, y: 50, storeProfileId: 'store-1', licenseTier: 'pro', nodeColor: null },
-      { id: 'ws-2', label: 'Restaurant', type: 'workspace', x: 300, y: 180, storeProfileId: 'store-1', licenseTier: 'pro', nodeColor: null },
-    ],
-    wires: [
-      { id: 'wire-1', from: 'store-1', fromPort: 'right', to: 'ws-1', toPort: 'left' },
-      { id: 'wire-2', from: 'store-1', fromPort: 'bottom', to: 'ws-2', toPort: 'left' },
-    ],
+    nodes: mockTopology.nodes.map((n) => ({ ...n })),
+    wires: mockTopology.wires.map((w) => ({ ...w })),
   }),
-  'save_topology': () => null,
-  'apply_topology_diff': () => null,
+  'save_topology': (args) => {
+    const { nodes, wires } = (args as { nodes?: MockTopologyNode[]; wires?: MockTopologyWire[] }) ?? {};
+    if (nodes) mockTopology.nodes = nodes.map((n) => ({ ...n }));
+    if (wires) mockTopology.wires = wires.map((w) => ({ ...w }));
+    saveMockTopology(mockTopology);
+    return null;
+  },
+  // The editor's Apply button saves through this command. Mirror the real
+  // backend's atomic diff: apply instance creates/updates/archives AND
+  // persist the diagram (node positions included) so reloads keep both the
+  // node layout and the workspace instances.
+  'apply_topology_diff': (args) => {
+    const { workspaceCreations, workspaceUpdates, workspaceArchives, diagramNodes, diagramWires } = (args as {
+      workspaceCreations?: Array<{ id: string; type_key: string; store_id: string; name: string; description?: string; colour?: string }>;
+      workspaceUpdates?: Array<{ id: string; name: string }>;
+      workspaceArchives?: string[];
+      diagramNodes?: MockTopologyNode[];
+      diagramWires?: MockTopologyWire[];
+    }) ?? {};
+    for (const c of workspaceCreations ?? []) {
+      mockWorkspaces.push({
+        instance_id: c.id,
+        type_key: c.type_key,
+        store_id: c.store_id,
+        store_name: 'TOKO TEST',
+        name: c.name,
+        description: c.description ?? '',
+        icon: 'shopping-cart',
+        layout_mode: 'default',
+        colour: c.colour ?? '#10b981',
+        is_default: false,
+      });
+    }
+    for (const u of workspaceUpdates ?? []) {
+      const inst = mockWorkspaces.find((w) => w.instance_id === u.id);
+      if (inst) inst.name = u.name;
+    }
+    for (const id of workspaceArchives ?? []) {
+      const idx = mockWorkspaces.findIndex((w) => w.instance_id === id);
+      if (idx >= 0) mockWorkspaces.splice(idx, 1);
+    }
+    if (workspaceCreations?.length || workspaceUpdates?.length || workspaceArchives?.length) {
+      saveMockWorkspaces();
+    }
+    if (diagramNodes) mockTopology.nodes = diagramNodes.map((n) => ({ ...n }));
+    if (diagramWires) mockTopology.wires = diagramWires.map((w) => ({ ...w }));
+    saveMockTopology(mockTopology);
+    return null;
+  },
 
   'set_receipt_settings_scoped': () => null,
 
