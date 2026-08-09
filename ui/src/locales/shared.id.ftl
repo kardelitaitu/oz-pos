@@ -107,7 +107,7 @@ app-error-subscription = Tindakan ini tidak termasuk dalam paket Anda saat ini.
 app-error-global = Terjadi hal yang tidak terduga. Jika ini terus berlanjut, mulai ulang aplikasi.
 
 # Theme toggle
-theme-toggle-label = Alihkan tema
+theme-toggle-label = Aktifkan/nonaktifkan tema
 theme-toggle-aria =
     .aria-label = Beralih ke mode { $mode ->
         [dark] gelap
@@ -284,7 +284,7 @@ audit-log-outcome-unknown = Tidak Diketahui
 spinner-label = Memuat…
 
 # ── Workspace Home ──
-workspace-home-fullscreen-aria = Alihkan layar penuh
+workspace-home-fullscreen-aria = Aktifkan/nonaktifkan layar penuh
 workspace-home-fullscreen-hint = F11
 fullscreen-enabled = Mode layar penuh aktif
 fullscreen-disabled = Mode layar penuh nonaktif

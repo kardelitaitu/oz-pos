@@ -2526,3 +2526,21 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 97 — extended id pass)
 
 **Risks / follow-ups:** the 10 fixed values are not yet in the rounds-90-92 pin table — extending `nativeSpeakerPins` in i18nBundle.test.tsx would CI-guard them; "Batal" for Cancelled vs "Dibatalkan" for Voided is a judgment call a native speaker could re-tune; the products bundle was clean on this pass but remains un-audited at the same depth as sales.
+
+### 2026-08-09 — bundle-wide 'Alihkan' toggle term resolved (round 98)
+
+**Problem (rounds-92/97 non-change, revisited by request):** "Alihkan" was kept twice as the "established" toggle term, but it is the wrong word — the transitive -kan form means *redirect/divert/move something*, not flip a switch. Every round-92/97 audit flagged it; consistency was preserving an error.
+
+**Decision:** replace the wrong verb with the sense-accurate Indonesian, applied to all 14 toggle-sense instances across 6 bundles (en untouched — "Toggle" is correct English):
+- **Bidirectional feature switches (9 keys)** → "Aktifkan/nonaktifkan X": theme-toggle-label, workspace-home-fullscreen-aria, restaurant-toggle-fullscreen, retail-shortcut-fullscreen, pos-cart-service-toggle-aria, setup-features-toggle-aria, settings-sync-enabled-aria, appearance-hw-accel-aria, feature-toggle-toggle-aria. The slash form is the standard static rendering of an on/off toggle (the keys carry no state, so "Aktifkan" alone would lie when flipping off — the round-89 dedupe lesson applied to labels).
+- **Mode switch (2 keys)** → "Beralih ke mode gelap/terang": the *intransitive* "Beralih" (switch over) is correct Indonesian for "Switch to dark/light mode" — it's the same root as the bad -kan form, which is exactly why the -kan was wrong.
+- **Failure toasts (2 keys)** → "Gagal mengubah status promosi/fitur": the failure is direction-agnostic.
+- **Direction cycle (1 key)** → "Balik arah koneksi": topology-wire-toggle-aria *cycles* source↔target (verified handleCycleWireDirection — Enter/Space "cycle the direction"), not on/off, so neither family applied; "flip the connection direction" is the accurate verb, and it keeps the round-91 "koneksi" term.
+
+**Deliberately KEPT (the correct -kan sense):** `topology-validation-warehouse-at-capacity` ("alihkan stok ke tempat lain") and `topology-validation-warehouse-missing-stock-routing` ("stok yang dialihkan ke sini") — here alihkan means *route/move stock*, the legitimate transitive sense, verified against the en ("route stock elsewhere", "no stock routed in").
+
+**Verified:** i18n lint (parity + FTL dedupe) clean, typecheck clean, full UI 4565/4565 unchanged (value-only, no key-set change). Nothing pins the old values (the editor TOPOLOGY_EN stub pins the en string; i18nBundle pins cover rounds 90-92 keys only, none of the 14).
+
+**Commits:** (round 98 — Alihkan resolution)
+
+**Risks / follow-ups:** "Aktifkan/nonaktifkan" is longer than the en "Toggle" — acceptable for aria labels, but a native speaker could prefer "Toggle" as a loanword for the compact fullscreen labels; the 14 new values are unpinned (extending nativeSpeakerPins would CI-guard them, as with rounds 93-95).

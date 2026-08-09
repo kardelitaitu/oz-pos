@@ -178,7 +178,7 @@ topology-ws-type-warehouse = Gudang Stok
 
 # ── Aria labels & tooltips ──
 topology-node-drag-hint = Seret untuk memindahkan
-topology-wire-toggle-aria = Alihkan arah koneksi
+topology-wire-toggle-aria = Balik arah koneksi
 
 topology-wire-toggle-hint =
     Klik untuk mengganti arah (satu arah → terbalik → dua arah)
