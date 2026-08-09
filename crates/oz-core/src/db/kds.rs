@@ -43,7 +43,31 @@ impl Store<'_> {
         input: CreateKdsOrderInput,
         target_instance_id: Option<&str>,
     ) -> Result<KdsOrder, CoreError> {
-        self.create_kds_order_with_target(input, target_instance_id)
+        let targets = target_instance_id
+            .map(str::to_owned)
+            .into_iter()
+            .collect::<Vec<_>>();
+        self.create_kds_order_fanout(input, &targets)
+    }
+
+    /// Create one KDS order and attach zero or more delivery targets.
+    ///
+    /// The order remains unique per sale/zone; fan-out is represented by the
+    /// normalized `kds_order_targets` table rather than duplicate orders.
+    pub fn create_kds_order_fanout(
+        &self,
+        input: CreateKdsOrderInput,
+        target_instance_ids: &[String],
+    ) -> Result<KdsOrder, CoreError> {
+        let primary_target = target_instance_ids.first().map(String::as_str);
+        let order = self.create_kds_order_with_target(input, primary_target)?;
+        for target_instance_id in target_instance_ids {
+            self.conn.execute(
+                "INSERT OR IGNORE INTO kds_order_targets (kds_order_id, target_instance_id) VALUES (?1, ?2)",
+                params![order.id, target_instance_id],
+            )?;
+        }
+        Ok(order)
     }
 
     fn create_kds_order_with_target(
@@ -141,6 +165,58 @@ impl Store<'_> {
             params.iter().map(|p| p.as_ref()).collect();
         let rows = stmt.query_map(param_refs.as_slice(), Self::row_to_kds_order)?;
         rows.map(|r| Ok(r?)).collect()
+    }
+
+    /// List orders visible to one KDS workspace instance.
+    ///
+    /// Legacy orders without a target remain visible to every instance.
+    pub fn list_kds_orders_for_instance(
+        &self,
+        status_filter: Option<&str>,
+        instance_id: &str,
+    ) -> Result<Vec<KdsOrder>, CoreError> {
+        let orders = self.list_kds_orders(status_filter)?;
+        self.filter_orders_for_instance(orders, instance_id)
+    }
+
+    fn filter_orders_for_instance(
+        &self,
+        orders: Vec<KdsOrder>,
+        instance_id: &str,
+    ) -> Result<Vec<KdsOrder>, CoreError> {
+        orders
+            .into_iter()
+            .map(|order| {
+                Ok(self
+                    .order_visible_to_instance(&order, instance_id)?
+                    .then_some(order))
+            })
+            .filter_map(|result| result.transpose())
+            .collect()
+    }
+
+    fn order_visible_to_instance(
+        &self,
+        order: &KdsOrder,
+        instance_id: &str,
+    ) -> Result<bool, CoreError> {
+        let target_count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM kds_order_targets WHERE kds_order_id = ?1",
+            params![order.id],
+            |row| row.get(0),
+        )?;
+        if target_count > 0 {
+            let matching_target: i64 = self.conn.query_row(
+                "SELECT COUNT(*) FROM kds_order_targets WHERE kds_order_id = ?1 AND target_instance_id = ?2",
+                params![order.id, instance_id],
+                |row| row.get(0),
+            )?;
+            return Ok(matching_target > 0);
+        }
+        Ok(order
+            .target_instance_id
+            .as_deref()
+            .is_none_or(|target| target == instance_id))
     }
 
     /// Get a single KDS order by its id.
@@ -320,6 +396,16 @@ impl Store<'_> {
         rows.map(|r| Ok(r?)).collect()
     }
 
+    /// Get the active queue visible to one KDS workspace instance.
+    pub fn get_kds_queue_for_instance(
+        &self,
+        zone_filter: Option<&str>,
+        instance_id: &str,
+    ) -> Result<Vec<KdsOrder>, CoreError> {
+        let orders = self.get_kds_queue(zone_filter)?;
+        self.filter_orders_for_instance(orders, instance_id)
+    }
+
     /// Complete a sale to KDS orders: creates one KDS ticket per kitchen zone
     /// from a completed sale for items whose product type is `restaurant` or `both`.
     ///
@@ -336,12 +422,29 @@ impl Store<'_> {
         self.complete_sale_to_kds_routed(sale_id, store_id, None)
     }
 
-    /// Complete a sale to KDS orders routed to a topology-selected instance.
+    /// Complete a sale to KDS orders routed to one topology-selected instance.
     pub fn complete_sale_to_kds_routed(
         &self,
         sale_id: &str,
         store_id: Option<&str>,
         target_instance_id: Option<&str>,
+    ) -> Result<Vec<KdsOrder>, CoreError> {
+        let targets = target_instance_id
+            .map(str::to_owned)
+            .into_iter()
+            .collect::<Vec<_>>();
+        self.complete_sale_to_kds_fanout(sale_id, store_id, &targets)
+    }
+
+    /// Complete a sale and deliver each zone ticket to every target instance.
+    ///
+    /// One `kds_orders` row is created per sale/zone. The normalized target
+    /// table carries fan-out delivery without violating `sale_id` uniqueness.
+    pub fn complete_sale_to_kds_fanout(
+        &self,
+        sale_id: &str,
+        store_id: Option<&str>,
+        target_instance_ids: &[String],
     ) -> Result<Vec<KdsOrder>, CoreError> {
         let sale = self.get_sale(sale_id)?.ok_or_else(|| CoreError::NotFound {
             entity: "sale",
@@ -420,7 +523,7 @@ impl Store<'_> {
 
             let (items_summary, item_count) = Store::derive_kds_summary(&structured_items);
 
-            let order = self.create_kds_order_routed(
+            let order = self.create_kds_order_fanout(
                 CreateKdsOrderInput {
                     sale_id: sale_id.to_owned(),
                     store_id: store_id.map(|s| s.to_owned()),
@@ -431,7 +534,7 @@ impl Store<'_> {
                     table_number: table_number.clone(),
                     priority: false,
                 },
-                target_instance_id,
+                target_instance_ids,
             )?;
 
             // Create the structured line items in the new kds_line_items table.
@@ -1521,6 +1624,52 @@ mod tests {
     }
 
     #[test]
+    fn complete_sale_to_kds_fanout_targets_one_order_to_multiple_instances() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_product(&conn, "BURGER", "Burger");
+
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("BURGER"), 1, price(500)))
+            .unwrap();
+        let sale = Sale::from_cart(&cart).unwrap();
+        s.create_sale(&sale).unwrap();
+
+        let targets = vec!["kds-main".to_owned(), "kds-expediter".to_owned()];
+        let orders = s
+            .complete_sale_to_kds_fanout(&sale.id, Some("store-1"), &targets)
+            .unwrap();
+        assert_eq!(orders.len(), 1, "fan-out must not duplicate the sale order");
+        assert_eq!(orders[0].target_instance_id.as_deref(), Some("kds-main"));
+
+        let target_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM kds_order_targets WHERE kds_order_id = ?1",
+                params![orders[0].id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(target_count, 2);
+        assert_eq!(
+            s.get_kds_queue_for_instance(None, "kds-main")
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            s.get_kds_queue_for_instance(None, "kds-expediter")
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(
+            s.get_kds_queue_for_instance(None, "kds-other")
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
     fn kds_order_has_runtime_target_instance_column() {
         let conn = fresh();
         let s = store(&conn);
@@ -1552,6 +1701,19 @@ mod tests {
             )
             .unwrap();
         assert_eq!(target, None);
+    }
+
+    #[test]
+    fn kds_order_targets_support_multiple_instances() {
+        let conn = fresh();
+        let exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'kds_order_targets'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(exists, 1);
     }
 
     #[test]

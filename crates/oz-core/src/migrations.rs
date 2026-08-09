@@ -731,6 +731,11 @@ pub const ALL: &[Migration] = &[
         id: "123_kds_target_instance.sql",
         sql: include_str!("../migrations/123_kds_target_instance.sql"),
     },
+    // ── Topology runtime consumer: normalized KDS fan-out targets ─────
+    Migration {
+        id: "124_kds_order_targets.sql",
+        sql: include_str!("../migrations/124_kds_order_targets.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.
