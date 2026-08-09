@@ -49,6 +49,9 @@ import {
   listTemplates,
   deleteTemplate,
 } from './topologyExport';
+import { TopologyNodeCard } from './topologyNodeCard';
+import { TopologyWireGroup } from './topologyWireGroup';
+import { cubicBezier, polylinePoint } from './topologyWireGeometry';
 import {
   normalizeTopologyGraph,
   normalizeWireDirection,
@@ -57,10 +60,6 @@ import {
 } from './topologyContract';
 import {
   leftPortVariants,
-  leftPortLabelId,
-  portLabelId,
-  portAriaLabelId,
-  visiblePortsForNode,
   wireRelationshipOptions,
   type WireRelationshipOption,
   NODE_TYPE_ICON,
@@ -72,6 +71,10 @@ import {
 import './NodeTopologyEditor.css';
 
 // ── Types ──────────────────────────────────────────────────────────
+
+/** Shared stable empty array for cards with no visible validation errors
+ *  (a fresh [] per card per render would defeat the card memo). */
+const EMPTY_ERRORS: TopologyValidationError[] = [];
 
 export type NodeType = 'store' | 'workspace' | 'warehouse' | 'hardware';
 /** Visual flow state of a wire, cycled by clicking it.
@@ -160,29 +163,6 @@ function polylineD(pts: Array<[number, number]>): string {
 
 /** Point at parameter t (0..1) along an axis-aligned polyline — drives the
  *  simulation pulse so it rides the elbow instead of a phantom curve. */
-function polylinePoint(pts: Array<[number, number]>, t: number): { x: number; y: number } {
-  if (pts.length < 2) return { x: pts[0]?.[0] ?? 0, y: pts[0]?.[1] ?? 0 };
-  let total = 0;
-  for (let i = 1; i < pts.length; i++) {
-    total += Math.abs(pts[i]![0] - pts[i - 1]![0]) + Math.abs(pts[i]![1] - pts[i - 1]![1]);
-  }
-  if (total <= 0) return { x: pts[0]![0], y: pts[0]![1] };
-  const target = t * total;
-  let acc = 0;
-  for (let i = 1; i < pts.length; i++) {
-    const seg = Math.abs(pts[i]![0] - pts[i - 1]![0]) + Math.abs(pts[i]![1] - pts[i - 1]![1]);
-    if (acc + seg >= target || i === pts.length - 1) {
-      const frac = seg === 0 ? 0 : (target - acc) / seg;
-      return {
-        x: pts[i - 1]![0] + (pts[i]![0] - pts[i - 1]![0]) * frac,
-        y: pts[i - 1]![1] + (pts[i]![1] - pts[i - 1]![1]) * frac,
-      };
-    }
-    acc += seg;
-  }
-  return { x: pts[pts.length - 1]![0], y: pts[pts.length - 1]![1] };
-}
-
 /** Compact alignment glyphs — three bars whose arrangement encodes the
  *  mode (edges, centers, or even spacing), matching the standard diagram-
  *  tool icon language. */
@@ -543,17 +523,6 @@ function leftPortDy(_node: TopologyNodeData, _variantIndex: number): number {
 }
 
 /** Evaluate a cubic bezier at parameter t (0-1). */
-function cubicBezier(
-  t: number,
-  p0: number,
-  p1: number,
-  p2: number,
-  p3: number,
-): number {
-  const u = 1 - t;
-  return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
-}
-
 const GRID_SIZE = 24;
 const snap = (v: number) => Math.round(v / GRID_SIZE) * GRID_SIZE;
 type HistoryEntry = { nodes: TopologyNodeData[]; wires: TopologyWireData[] };
@@ -661,11 +630,6 @@ const ValidationIssuesLabel = memo(function ValidationIssuesLabel({ count }: { c
   );
 });
 
-/** Isolated simulation pulse circle so the 30ms tick doesn't re-render the whole canvas. */
-const SimulationPulse = memo(function SimulationPulse({ x, y }: { x: number; y: number }) {
-  return <circle cx={x} cy={y} r="6" className="wire-simulation-pulse" />;
-});
-
 /** An ambiguous wire drop in flight: the source socket and the target
  *  socket admit MULTIPLE relationships (ADR #34), so the editor asks the
  *  user which one the wire means before drawing anything. */
@@ -746,6 +710,12 @@ export default function NodeTopologyEditor({
    *  target / last-picked). All selection writes go through selectOnly /
    *  clearSelection so the two can never disagree. */
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
+  /** Render-time mirror so the memoized card handlers read the CURRENT
+   *  selection without taking it as a useCallback dep (a dep would churn
+   *  the handler identity on every selection change and defeat the card
+   *  memo for unrelated cards). */
+  const selectedNodeIdsRef = useRef<Set<string>>(selectedNodeIds);
+  selectedNodeIdsRef.current = selectedNodeIds;
   const [selectedWireId, setSelectedWireId] = useState<string | null>(null);
 
   /** Replace the whole node selection with a single primary node. */
@@ -753,11 +723,12 @@ export default function NodeTopologyEditor({
     setSelectedNodeIds(new Set([id]));
     setSelectedNodeId(id);
   }, []);
-  /** Clear the node selection entirely (wire selection untouched). */
-  const clearSelection = () => {
+  /** Clear the node selection entirely (wire selection untouched). Stable
+   *  so the memoized wire/card layers can receive it as a prop. */
+  const clearSelection = useCallback(() => {
     setSelectedNodeIds(new Set());
     setSelectedNodeId(null);
-  };
+  }, []);
 
   const [isSimulating, setIsSimulating] = useState(false);
   const [simPulseStep, setSimPulseStep] = useState(0);
@@ -1767,6 +1738,8 @@ export default function NodeTopologyEditor({
 
   // ── Inline node rename on the card (Branch Location + workspace) ──
   const [renamingNodeId, setRenamingNodeId] = useState<string | null>(null);
+  const renamingNodeIdRef = useRef<string | null>(renamingNodeId);
+  renamingNodeIdRef.current = renamingNodeId;
   const [renameDraft, setRenameDraft] = useState('');
   const [renameSaving, setRenameSaving] = useState(false);
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -1798,20 +1771,22 @@ export default function NodeTopologyEditor({
     (document.querySelector(`.topology-node[data-node-id="${nodeId}"]`) as HTMLElement | null)?.focus();
   }, [renamingNodeId]);
 
-  const startNodeRename = (nodeId: string, currentName: string) => {
+  const startNodeRename = useCallback((nodeId: string, currentName: string) => {
     renameCancelledRef.current = false;
     renameFocusReturnRef.current = null;
     setRenameDraft(currentName);
     setRenamingNodeId(nodeId);
-  };
+  }, []);
 
-  const cancelNodeRename = () => {
+  const cancelNodeRename = useCallback(() => {
     renameCancelledRef.current = true;
-    // Escape is a keyboard close — return focus to the card.
-    renameFocusReturnRef.current = renamingNodeId;
+    // Escape is a keyboard close — return focus to the card. Reads the
+    // current renaming node via the ref so the callback stays stable (the
+    // memoized cards all receive it as a prop).
+    renameFocusReturnRef.current = renamingNodeIdRef.current;
     setRenamingNodeId(null);
     setRenameDraft('');
-  };
+  }, []);
 
   /** Persist a live-bound rename (the body config input / inspector Node
    *  Name field) through the same parent callback the titlebar F2 rename
@@ -1845,7 +1820,7 @@ export default function NodeTopologyEditor({
     renameBaselineRef.current = trimmed;
   }, [nodes, onRenameBranch, onRenameWorkspace]);
 
-  const commitNodeRename = async (nodeId: string, fromKeyboard = false) => {
+  const commitNodeRename = useCallback(async (nodeId: string, fromKeyboard = false) => {
     if (renameSaving || renameCancelledRef.current) return;
     const node = nodes.find((n) => n.id === nodeId);
     const name = renameDraft.trim();
@@ -1878,7 +1853,7 @@ export default function NodeTopologyEditor({
     } finally {
       setRenameSaving(false);
     }
-  };
+  }, [renameSaving, renameDraft, nodes, onRenameBranch, onRenameWorkspace]);
 
   // ── Inline wire rename: floating input at the wire's midpoint ──
   const [renamingWireId, setRenamingWireId] = useState<string | null>(null);
@@ -1953,17 +1928,29 @@ export default function NodeTopologyEditor({
     setWireRenameDraft('');
   };
 
-  const pushHistory = useCallback(() => {
+  const pushHistory = useCallback((snapshot?: { nodes: TopologyNodeData[]; wires: TopologyWireData[] }) => {
     // Dirty is derived (isCanvasDirty compares against appliedSnapshotRef),
     // so no flag needs arming here — the mutation itself is the dirty signal.
     setRedo([]); // new edit invalidates the redo branch
     setHistory((prev) => {
-      const entry: HistoryEntry = { nodes: nodes.map((n) => ({ ...n })), wires: wires.map((w) => ({ ...w })) };
+      // An explicit snapshot wins (bend drags capture the pre-gesture wires
+      // at mousedown so a ghost-created bend undoes away completely); the
+      // default snapshots the refs — identical to the latest render's
+      // closure state, but keeps pushHistory referentially STABLE so the
+      // memoized card/wire layers don't churn on every nodes/wires change.
+      const src = snapshot ?? { nodes: nodesRef.current, wires: wiresRef.current };
+      const entry: HistoryEntry = { nodes: src.nodes.map((n) => ({ ...n })), wires: src.wires.map((w) => ({ ...w })) };
       const next = [...prev, entry];
       if (next.length > 50) next.shift();
       return next;
     });
-  }, [nodes, wires]);
+  }, []);
+  /** Mirror so the memoized wire handlers (cycle/bends) can call pushHistory
+   *  without taking it as a dep — pushHistory re-keys whenever nodes/wires
+   *  change, which would churn the handler identity and re-render every wire
+   *  on any unrelated edit. The ref reads the latest snapshot at call time. */
+  const pushHistoryRef = useRef(pushHistory);
+  pushHistoryRef.current = pushHistory;
 
   /** One-click organize (see computeAutoLayout): a thin wrapper that
    *  pushes ONE undo entry, applies the engine's placements, clears authored
@@ -2962,7 +2949,7 @@ export default function NodeTopologyEditor({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedNodeIds, selectedWireId, wires, pushHistory, popUndo, popRedo, confirmDelete, confirmDeleteMany, confirmPreset, pan, zoom, deleteNodes, relationshipPicker, cancelRelationshipPicker, selectAllNodes, duplicateSelection, copySelection, pasteClipboard, nodes, onRenameBranch, onRenameWorkspace, zoomToFit, zoomBy, resetView, snapEnabled, cancelDuplicateDrag, cancelNodeMove, convertDragToDuplicate, cancelBendDrag, finderOpen]);
+  }, [selectedNodeIds, selectedWireId, wires, pushHistory, popUndo, popRedo, confirmDelete, confirmDeleteMany, confirmPreset, pan, zoom, deleteNodes, relationshipPicker, cancelRelationshipPicker, selectAllNodes, duplicateSelection, copySelection, pasteClipboard, nodes, onRenameBranch, onRenameWorkspace, zoomToFit, zoomBy, resetView, snapEnabled, cancelDuplicateDrag, cancelNodeMove, convertDragToDuplicate, cancelBendDrag, finderOpen, clearSelection]);
 
   const executePresetLoad = useCallback(() => {
     if (confirmPreset) {
@@ -3018,7 +3005,7 @@ export default function NodeTopologyEditor({
    *  commit any Alt-drag copies, clear the drag set and offsets, and drop
    *  the alignment guide. Shared by the mouse document listener, the canvas
    *  onMouseUp, and the touch gesture loop. */
-  const finalizeNodeDrag = () => {
+  const finalizeNodeDrag = useCallback(() => {
     commitDuplicateDrag();
     setDraggingNodeIds(new Set());
     draggingNodeIdsRef.current = new Set();
@@ -3027,7 +3014,7 @@ export default function NodeTopologyEditor({
     dragStartRef.current.clear();
     setAlignmentGuide(null);
     lastDragMovePosRef.current = null;
-  };
+  }, [commitDuplicateDrag]);
 
   /** Arm a node drag (mouse mousedown or the touch gesture loop): set the
    *  dragging set, compute each node's grip offset from the pointer, and —
@@ -3036,7 +3023,7 @@ export default function NodeTopologyEditor({
    *  lives here so every creation path shares one gate and one history
    *  contract. Touch passes gesture='touch': the touch loop owns its own
    *  pointermove/pointerup listeners, so only the drag STATE is armed. */
-  const beginNodeDrag = (
+  const beginNodeDrag = useCallback((
     clientX: number,
     clientY: number,
     selection: Set<string>,
@@ -3054,8 +3041,15 @@ export default function NodeTopologyEditor({
     // The creation-path gates apply to the duplicate paths too: an Alt+drag
     // that would copy a Branch Location or a warehouse past the tier cap is
     // refused up front (no copies, no drag, no history entry).
+    // All reads go through refs so this handler stays referentially stable
+    // across nodes/wires/pan/zoom changes — the memoized cards receive it as
+    // a prop, and a churn here would re-render every card on any edit or
+    // viewport move. The refs mirror the latest committed state, which is
+    // exactly what a mousedown needs.
+    const currentNodes = nodesRef.current;
+    const currentWires = wiresRef.current;
     if (isDuplicateDrag) {
-      const refusal = duplicateRefusal(nodes.filter((n) => selection.has(n.id)));
+      const refusal = duplicateRefusal(currentNodes.filter((n) => selection.has(n.id)));
       if (refusal) {
         addToast({ message: l10n.getString(refusal), type: 'warning' });
         return;
@@ -3065,7 +3059,7 @@ export default function NodeTopologyEditor({
     const originalToCopy = new Map<string, string>();
     let dragIds: string[];
     if (isDuplicateDrag) {
-      const copies = nodes
+      const copies = currentNodes
         .filter((n) => selection.has(n.id))
         .map((n) => {
           const newId = `${n.type}-${crypto.randomUUID()}`;
@@ -3075,7 +3069,7 @@ export default function NodeTopologyEditor({
           // branch impersonating the original.
           return { ...sanitizeCopiedNode(n), id: newId };
         });
-      const wireCopies = wires
+      const wireCopies = currentWires
         .filter((w) => selection.has(w.fromNodeId) && selection.has(w.toNodeId))
         .map((w) => ({
           ...w,
@@ -3125,36 +3119,43 @@ export default function NodeTopologyEditor({
     // moves and the finalize — nothing to arm here beyond the drag state.
 
     const rect = canvasRef.current?.getBoundingClientRect();
-    const canvasX = (clientX - (rect?.left ?? 0) - pan.x) / zoom;
-    const canvasY = (clientY - (rect?.top ?? 0) - pan.y) / zoom;
+    const canvasX = (clientX - (rect?.left ?? 0) - panRef.current.x) / zoomRef.current;
+    const canvasY = (clientY - (rect?.top ?? 0) - panRef.current.y) / zoomRef.current;
     dragOffsetsRef.current.clear();
     dragStartRef.current.clear();
     const copyToOriginal = new Map([...originalToCopy].map(([k, v]) => [v, k]));
+    // Position lookup via a fresh map from the ref — `nodeMap`'s identity
+    // tracks nodes, and taking it as a dep would re-key this handler (and
+    // every card prop) on any node edit.
+    const nodeMapNow = new Map(currentNodes.map((n) => [n.id, n]));
     for (const id of dragIds) {
       // Duplicate-drag offsets come from the ORIGINALS (the copies start at
-      // their positions and aren't in `nodeMap` until the state flush), but
+      // their positions and aren't in the map until the state flush), but
       // are keyed by the copy ids the drag actually moves.
       const srcId = isDuplicateDrag ? copyToOriginal.get(id) : id;
-      const n = srcId ? nodeMap.get(srcId) : null;
+      const n = srcId ? nodeMapNow.get(srcId) : null;
       if (n) {
         dragOffsetsRef.current.set(id, { x: canvasX - n.x, y: canvasY - n.y });
         dragStartRef.current.set(id, { x: n.x, y: n.y });
       }
     }
-  };
+  }, [duplicateRefusal, addToast, l10n, finalizeNodeDrag]);
 
-  const handleNodeMouseDown = (e: React.MouseEvent, nodeId: string) => {
+  const handleNodeMouseDown = useCallback((e: React.MouseEvent, nodeId: string) => {
     e.stopPropagation();
     setRelationshipPicker(null);
     if (e.button !== 0) return;
     // Multi-select rules: shift+mousedown ADDS the node to the selection;
     // a plain mousedown on an unselected node collapses to just it; a
     // mousedown on a node already inside a multi-selection keeps the group
-    // so it can be dragged as a whole.
-    const wasSelected = selectedNodeIds.has(nodeId);
+    // so it can be dragged as a whole. The selection is read via the ref so
+    // this handler stays stable across selection changes (the memoized
+    // cards all receive it as a prop).
+    const currentSelection = selectedNodeIdsRef.current;
+    const wasSelected = currentSelection.has(nodeId);
     let selection: Set<string>;
     if (e.shiftKey && !wasSelected) {
-      selection = new Set(selectedNodeIds);
+      selection = new Set(currentSelection);
       selection.add(nodeId);
       setSelectedNodeIds(selection);
       setSelectedNodeId(nodeId);
@@ -3162,10 +3163,10 @@ export default function NodeTopologyEditor({
       selection = new Set([nodeId]);
       selectOnly(nodeId);
     } else {
-      selection = new Set(selectedNodeIds);
+      selection = new Set(currentSelection);
     }
     beginNodeDrag(e.clientX, e.clientY, selection, e.altKey, 'mouse');
-  };
+  }, [selectOnly, beginNodeDrag]);
 
   /** Apply one drag-move to the dragged group (mouse canvas mousemove and
    *  the touch gesture loop share this). Reads the dragging set and nodes
@@ -3945,6 +3946,32 @@ export default function NodeTopologyEditor({
   );
   const totalIssues = visibleNodeIssues.length + visibleGraphLevel.length;
 
+  /** Per-card visible errors, memoized so the memoized node cards receive a
+   *  STABLE nodeErrors prop (a per-render `.filter()` would defeat the memo
+   *  for every card carrying an issue). */
+  const nodeErrorsByNode = useMemo(() => {
+    const m = new Map<string, TopologyValidationError[]>();
+    for (const n of nodes) {
+      const errs = liveValidation.byNode
+        .get(n.id)
+        ?.filter((e) => !resolvedIssues.has(issueKey(n.id, e.messageId)));
+      if (errs && errs.length > 0) m.set(n.id, errs);
+    }
+    return m;
+  }, [nodes, liveValidation, resolvedIssues]);
+
+  /** First-match 'left' input port wiring per node (the flexible inventory
+   *  label). Stable across hover/selection so the card memo holds. */
+  const connectedPortIdByNode = useMemo(() => {
+    const m = new Map<string, string | undefined>();
+    for (const w of wires) {
+      if ((w.toPort ?? 'left') === 'left' && w.toNodeId && !m.has(w.toNodeId)) {
+        m.set(w.toNodeId, w.toPortId);
+      }
+    }
+    return m;
+  }, [wires]);
+
   /** Forget a dismissal once its issue is genuinely gone. Gated on
    *  topologyLoaded so the preset placeholder shown during the async load
    *  can never wipe restored dismissals (see the load effect's finally). */
@@ -3978,14 +4005,15 @@ export default function NodeTopologyEditor({
    *  may share a socket pair, and a fully-untyped legacy wire occupies the
    *  pair regardless), and the Pro-tier fallback limit applies only to
    *  stock-routing wires — a transfer is a different relationship. */
-  const commitWire = (
+  const commitWire = useCallback((
     source: TopologyNodeData,
     sourcePort: PortName,
     target: TopologyNodeData,
     targetPort: PortName,
     option: WireRelationshipOption,
   ) => {
-    const duplicate = wires.some(
+    const currentWires = wiresRef.current;
+    const duplicate = currentWires.some(
       (w) =>
         (w.fromNodeId === source.id && w.toNodeId === target.id
           && (w.fromPort ?? 'right') === sourcePort && (w.toPort ?? 'left') === targetPort
@@ -4004,7 +4032,7 @@ export default function NodeTopologyEditor({
     // transfer wire on the same pair is a different relationship and is
     // always authorable. Legacy untyped workspace→warehouse wires count
     // as stock-routing (that is what the pair defaults to).
-    const existingStockWires = wires.filter((w) => {
+    const existingStockWires = currentWires.filter((w) => {
       const fn = nodeMap.get(w.fromNodeId);
       const tn = nodeMap.get(w.toNodeId);
       return fn?.type === 'workspace' && tn?.type === 'warehouse'
@@ -4016,7 +4044,7 @@ export default function NodeTopologyEditor({
       return;
     }
 
-    pushHistory();
+    pushHistoryRef.current();
 
     const newWireId = `wire-${crypto.randomUUID()}`;
     const isWarehouseWire = source.type === 'workspace' && target.type === 'warehouse';
@@ -4047,9 +4075,9 @@ export default function NodeTopologyEditor({
       },
     ]);
     cancelRelationshipPicker();
-  };
+  }, [nodeMap, addToast, l10n, isProAllowed, cancelRelationshipPicker, setWires]);
 
-  const handlePortClick = (e: React.MouseEvent, nodeId: string, port: PortName, variantIndex = 0) => {
+  const handlePortClick = useCallback((e: React.MouseEvent, nodeId: string, port: PortName, variantIndex = 0) => {
     e.stopPropagation();
     setRelationshipPicker(null);
 
@@ -4109,13 +4137,13 @@ export default function NodeTopologyEditor({
     }
 
     commitWire(fromNode, connectingFromPort!, toNode, port, options[0]!);
-  };
+  }, [connectingFromNodeId, connectingFromPort, nodeMap, isPortCompatible, commitWire, addToast, l10n, setRelationshipPicker, setConnectingFromNodeId, setConnectingFromPort, setPreviewCursor, portDirection]);
 
   /** Cycle a wire's visual flow: one-way → reverse → two-way → one-way.
    *  Clicking the wire itself is the affordance; the from/to ownership is
    *  untouched (only the arrow presentation changes). */
-  const handleCycleWireDirection = (wireId: string) => {
-    pushHistory();
+  const handleCycleWireDirection = useCallback((wireId: string) => {
+    pushHistoryRef.current();
     setWires((prev) =>
       prev.map((w) => {
         if (w.id !== wireId) return w;
@@ -4124,13 +4152,13 @@ export default function NodeTopologyEditor({
         return { ...w, direction: next };
       }),
     );
-  };
+  }, [setWires]);
 
   /** Arm a document-level drag that moves bend `index` on `wireId`.
    *  Canvas coords are derived from client coords with the same pan/zoom
    *  transform as node drags, so bends stay glued to the cursor while
    *  panning/zoomed. History is pushed once, on the first movement. */
-  const startBendDrag = (e: React.MouseEvent, wireId: string, index: number, startX: number, startY: number, created = false) => {
+  const startBendDrag = useCallback((e: React.MouseEvent, wireId: string, index: number, startX: number, startY: number, created = false) => {
     if (e.button !== 0) return;
     e.stopPropagation();
     e.preventDefault();
@@ -4139,6 +4167,12 @@ export default function NodeTopologyEditor({
     bendDragCleanupRef.current?.();
     const drag = { wireId, index, moved: false, startX, startY, created };
     bendDragRef.current = drag;
+    // Pre-gesture snapshot captured at mousedown: for a ghost-created bend
+    // the insertion setWires above hasn't flushed yet, so the refs still
+    // hold the UNBENT wires — the exact undo target (one entry, restores
+    // the pre-gesture state). Immutable discipline: each setWires replaces
+    // the bends array, so the history entry keeps the old array reference.
+    const snapshot = { nodes: nodesRef.current, wires: wiresRef.current };
     const handleMove = (ev: MouseEvent) => {
       const rect = canvasRef.current?.getBoundingClientRect();
       const bx = (ev.clientX - (rect?.left ?? 0) - pan.x) / zoom;
@@ -4147,11 +4181,7 @@ export default function NodeTopologyEditor({
       if (!d) return;
       if (!d.moved) {
         d.moved = true;
-        // The mousedown-render closure holds the PRE-drag wires — exactly
-        // the undo snapshot a drag needs (one entry, restores the unbent
-        // state). Immutable discipline: each setWires replaces the bends
-        // array, so the history entry keeps the old array reference.
-        pushHistory();
+        pushHistoryRef.current(snapshot);
       }
       setWires((prev) =>
         prev.map((w) =>
@@ -4168,18 +4198,17 @@ export default function NodeTopologyEditor({
       bendDragRef.current = null;
     };
     document.addEventListener('mousemove', handleMove);
-    document.addEventListener('mouseup', handleUp);
-    bendDragCleanupRef.current = () => {
+    document.addEventListener('mouseup', handleUp);      bendDragCleanupRef.current = () => {
       document.removeEventListener('mousemove', handleMove);
       document.removeEventListener('mouseup', handleUp);
       bendDragCleanupRef.current = null;
       bendDragRef.current = null;
     };
-  };
+  }, [clearSelection, pan, zoom, setSelectedWireId, canvasRef, setWires]);
 
   /** Drag on a midpoint ghost: insert a bend there, then drag the new
    *  bend — one gesture creates and positions it. */
-  const startGhostBendDrag = (e: React.MouseEvent, wireId: string, segmentIndex: number, mx: number, my: number) => {
+  const startGhostBendDrag = useCallback((e: React.MouseEvent, wireId: string, segmentIndex: number, mx: number, my: number) => {
     if (e.button !== 0) return;
     e.stopPropagation();
     e.preventDefault();
@@ -4195,11 +4224,12 @@ export default function NodeTopologyEditor({
       }),
     );
     startBendDrag(e, wireId, segmentIndex, mx, my, true);
-  };
+  }, [setSelectedWireId, clearSelection, setWires, startBendDrag]);
 
-  /** Double-click a bend handle to remove it (one undo entry). */
-  const removeBend = (wireId: string, index: number) => {
-    pushHistory();
+  /** Double-click a bend handle to remove it (one undo entry). Stable so
+   *  the memoized wire groups can receive it as a prop. */
+  const removeBend = useCallback((wireId: string, index: number) => {
+    pushHistoryRef.current();
     setWires((prev) =>
       prev.map((w) =>
         w.id !== wireId
@@ -4207,7 +4237,52 @@ export default function NodeTopologyEditor({
           : { ...w, bends: (w.bends ?? []).filter((_, i) => i !== index) },
       ),
     );
-  };
+  }, [setWires]);
+
+  /** Node card context menu (right-click): select the object and open the
+   *  NODE menu (rename/duplicate/delete) instead of the canvas menu.
+   *  Stable so the memoized cards can receive it as a prop. */
+  const openNodeMenu = useCallback((e: React.MouseEvent, nodeId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!e.shiftKey) selectOnly(nodeId);
+    const rect = canvasRef.current?.getBoundingClientRect();
+    setContextMenu({ x: e.clientX - (rect?.left ?? 0), y: e.clientY - (rect?.top ?? 0), nodeId });
+  }, [selectOnly, canvasRef, setContextMenu]);
+
+  /** Wire click: select the wire AND cycle its flow direction — the whole
+   *  wire is the affordance now (no separate label pill). Stable so the
+   *  memoized wire groups can receive it as a prop. */
+  const handleWireClick = useCallback((e: { stopPropagation(): void }, wireId: string) => {
+    e.stopPropagation();
+    setSelectedWireId(wireId);
+    clearSelection();
+    handleCycleWireDirection(wireId);
+  }, [setSelectedWireId, clearSelection, handleCycleWireDirection]);
+
+  /** Wire context menu (right-click): object-scoped wire menu (direction +
+   *  delete) instead of the canvas menu. Stable. */
+  const openWireMenu = useCallback((e: React.MouseEvent, wireId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = canvasRef.current?.getBoundingClientRect();
+    setSelectedWireId(wireId);
+    clearSelection();
+    setContextMenu({ x: e.clientX - (rect?.left ?? 0), y: e.clientY - (rect?.top ?? 0), wireId });
+  }, [setSelectedWireId, clearSelection, canvasRef, setContextMenu]);
+
+  /** Stable name/enabled writers for the memoized workspace cards. */
+  const handleSetNodeName = useCallback((nodeId: string, name: string) => {
+    beginInspectorEdit(nodeId);
+    setNodes((prev) => prev.map((n) => (n.id === nodeId ? { ...n, name } : n)));
+  }, [beginInspectorEdit]);
+
+  const handleSetNodeEnabled = useCallback((nodeId: string, enabled: boolean) => {
+    beginInspectorEdit(nodeId);
+    setNodes((prev) => prev.map((n) => (n.id === nodeId
+      ? { ...n, metadata: { ...n.metadata, enabled } }
+      : n)));
+  }, [beginInspectorEdit]);
 
   const handleDeleteRequest = () => {
     if (selectedNodeIds.size > 0) {
@@ -5145,156 +5220,42 @@ export default function NodeTopologyEditor({
               </defs>
 
               {wires.map((wire) => {
-                // Wire geometry precomputed in wireGeometries useMemo — O(1) lookup vs O(n) find
                 const geo = wireGeometries.get(wire.id);
                 if (!geo) return null;
-
-                const { x1, y1, x2, y2, dx, pathD, polyline } = geo;
-                // Pulse rides the wire's actual geometry: the cubic bezier by
-                // default, or the elbow polyline when orthogonal routing is on.
+                // Pulse rides the wire's actual geometry: the cubic bezier
+                // by default, or the elbow polyline when orthogonal routing
+                // is on. Computed here (not inside the memoized wire group)
+                // so `pulse` is a plain {x, y} prop — null while the
+                // simulation is idle keeps the memo boundary effective.
                 const t = simPulseStep / 100;
-                const pulsePoint = polyline
-                  ? polylinePoint(polyline, t)
-                  : { x: cubicBezier(t, x1, x1 + dx, x2 - dx, x2), y: cubicBezier(t, y1, y1, y2, y2) };
-                const pulseX = pulsePoint.x;
-                const pulseY = pulsePoint.y;
-
-                const isSelected = selectedWireId === wire.id;
-                // Native SVG tooltip: the wire's label surfaces on hover
-                // instead of a permanent canvas pill.
-                const wireTooltip = [
-                  (wire.label || '').trim(),
-                  l10n.getString('topology-wire-toggle-hint'),
-                ].filter(Boolean).join(' — ');
-
-                const isHoverDimmed = hoverConnections !== null
-                  && wire.fromNodeId !== hoveredNodeId
-                  && wire.toNodeId !== hoveredNodeId;
-
+                const pulsePoint = geo.polyline
+                  ? polylinePoint(geo.polyline, t)
+                  : { x: cubicBezier(t, geo.x1, geo.x1 + geo.dx, geo.x2 - geo.dx, geo.x2), y: cubicBezier(t, geo.y1, geo.y1, geo.y2, geo.y2) };
                 return (
-                  <g
+                  <TopologyWireGroup
                     key={wire.id}
-                    className={`wire-group ${isSelected ? 'wire-selected' : ''}${isHoverDimmed ? ' wire-dimmed' : ''}`}
-                    onMouseEnter={() => setHoveredWireId(wire.id)}
-                    onMouseLeave={() => setHoveredWireId((prev) => (prev === wire.id ? null : prev))}
-                  >
-                    <path
-                      d={pathD}
-                      className="wire-hitbox"
-                      data-wire-id={wire.id}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={l10n.getString('topology-wire-toggle-aria')}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // Clicking a wire selects it AND cycles its flow
-                        // direction — the whole wire is the affordance now
-                        // (no separate label pill).
-                        setSelectedWireId(wire.id);
-                        clearSelection();
-                        handleCycleWireDirection(wire.id);
-                      }}
-                      onContextMenu={(e) => {
-                        // Right-click opens an object-scoped wire menu
-                        // (direction + delete) instead of the canvas menu.
-                        e.preventDefault();
-                        e.stopPropagation();
-                        const rect = canvasRef.current?.getBoundingClientRect();
-                        setSelectedWireId(wire.id);
-                        clearSelection();
-                        setContextMenu({
-                          x: e.clientX - (rect?.left ?? 0),
-                          y: e.clientY - (rect?.top ?? 0),
-                          wireId: wire.id,
-                        });
-                      }}
-                      onKeyDown={(e) => {
-                        // Keyboard parity: Enter/Space cycle the direction
-                        // exactly like a click (and select the wire).
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setSelectedWireId(wire.id);
-                          clearSelection();
-                          handleCycleWireDirection(wire.id);
-                        }
-                      }}
-                    >
-                      <title>{wireTooltip}</title>
-                    </path>
-
-                    {/* Explicit endpoint dot ensures the wire always starts
-                        exactly at the port socket center, regardless of SVG
-                        renderer quirks with stroke-dasharray at path boundaries. */}
-                    <circle cx={x1} cy={y1} r="1.5" className="wire-end-dot" />
-
-                    <path
-                      d={pathD}
-                      className={`wire-path ${wire.direction}`}
-                      data-direction={wire.direction}
-                      markerEnd={wire.direction === 'reverse' ? undefined : 'url(#arrow-end)'}
-                      markerStart={
-                        wire.direction === 'reverse'
-                          ? 'url(#arrow-start)'
-                          : wire.direction === 'two-way'
-                            ? 'url(#arrow-start)'
-                            : undefined
-                      }
-                    />
-
-                    {isSimulating && <SimulationPulse x={pulseX} y={pulseY} />}
-
-                    {/* Bend editing affordances: a midpoint ghost per
-                        segment that creates a bend when dragged — revealed
-                        on hover (discoverability) and selection; plus a
-                        draggable handle per EXISTING bend, which renders
-                        on selection only so hover stays light. The ghost
-                        set derives from the drawn geometry (polyline when
-                        bent, else the two endpoints). */}
-                    {(isSelected || hoveredWireId === wire.id) && (() => {
-                      const pts: Array<[number, number]> = geo.polyline ?? [[x1, y1], [x2, y2]];
-                      const ghosts: Array<{ x: number; y: number; seg: number }> = [];
-                      for (let i = 0; i < pts.length - 1; i++) {
-                        ghosts.push({
-                          x: (pts[i]![0] + pts[i + 1]![0]) / 2,
-                          y: (pts[i]![1] + pts[i + 1]![1]) / 2,
-                          seg: i,
-                        });
-                      }
-                      return (
-                        <>
-                          {ghosts.map((g) => (
-                            <circle
-                              key={`g${g.seg}`}
-                              className="wire-bend-ghost"
-                              data-wire-id={wire.id}
-                              data-segment-index={g.seg}
-                              cx={g.x}
-                              cy={g.y}
-                              r={5}
-                              onMouseDown={(e) => startGhostBendDrag(e, wire.id, g.seg, g.x, g.y)}
-                            />
-                          ))}
-                        </>
-                      );
-                    })()}
-                    {isSelected && (wire.bends ?? []).map((b, i) => (
-                      <circle
-                        key={`b${i}`}
-                        className="wire-bend-handle"
-                        data-wire-id={wire.id}
-                        data-bend-index={i}
-                        cx={b.x}
-                        cy={b.y}
-                        r={6}
-                        onMouseDown={(e) => startBendDrag(e, wire.id, i, b.x, b.y)}
-                        onDoubleClick={(e) => {
-                          e.stopPropagation();
-                          removeBend(wire.id, i);
-                        }}
-                      />
-                    ))}
-                  </g>
+                    wire={wire}
+                    x1={geo.x1}
+                    y1={geo.y1}
+                    x2={geo.x2}
+                    y2={geo.y2}
+                    dx={geo.dx}
+                    pathD={geo.pathD}
+                    polyline={geo.polyline}
+                    selected={selectedWireId === wire.id}
+                    dimmed={hoverConnections !== null
+                      && wire.fromNodeId !== hoveredNodeId
+                      && wire.toNodeId !== hoveredNodeId}
+                    hovered={hoveredWireId === wire.id}
+                    pulse={isSimulating ? pulsePoint : null}
+                    l10n={l10n}
+                    onHoverWire={setHoveredWireId}
+                    onWireClick={handleWireClick}
+                    onOpenWireMenu={openWireMenu}
+                    onStartGhostBend={startGhostBendDrag}
+                    onStartBendDrag={startBendDrag}
+                    onRemoveBend={removeBend}
+                  />
                 );
               })}
 
@@ -5378,211 +5339,41 @@ export default function NodeTopologyEditor({
               );
             })}
 
-            {nodes.map((node) => {
-              const isSelected = selectedNodeIds.has(node.id);
-              const isConnectingSource = connectingFromNodeId === node.id;
-              // Branch Location and workspace cards get the inline rename
-              // pencil (persisting via their respective update paths);
-              // warehouse/hardware nodes have no record to rename.
-              const isRenameable = (node.type === 'store' && !!onRenameBranch) || (node.type === 'workspace' && !!onRenameWorkspace);
-              const nodeErrors = liveValidation.byNode
-                .get(node.id)
-                ?.filter((e) => !resolvedIssues.has(issueKey(node.id, e.messageId)));
-
-              return (
-                // eslint-disable-next-line jsx-a11y/role-supports-aria-props -- the selectable node card exposes selection via aria-selected
-                <div
-                  key={node.id}
-                  onContextMenu={(e) => {
-                    // Right-click selects the object and opens the NODE menu
-                    // (rename/duplicate/delete) instead of the canvas menu.
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (!e.shiftKey) selectOnly(node.id);
-                    const rect = canvasRef.current?.getBoundingClientRect();
-                    setContextMenu({ x: e.clientX - (rect?.left ?? 0), y: e.clientY - (rect?.top ?? 0), nodeId: node.id });
-                  }}
-                  onDoubleClick={() => {
-                    if (isRenameable) startNodeRename(node.id, node.name);
-                  }}
-                  data-node-id={node.id}
-                  className={`topology-node node-type-${node.type} ${isSelected ? 'node-selected' : ''} ${isConnectingSource ? 'node-connecting-source' : ''}${freshNodeIds.has(node.id) ? ' node-fresh' : ''}${hoverConnections && !hoverConnections.has(node.id) ? ' node-dimmed' : ''}`}
-                  style={{ left: `${node.x}px`, top: `${node.y}px` }}
-                  role="group"
-                  tabIndex={0}
-                  aria-label={node.name}
-                  // role=group doesn't formally list aria-selected, but the
-                  // card is the selectable unit of the canvas — exposing
-                  // selection to ATs outweighs the schema pedantry.
-                  aria-selected={isSelected}
-                  onMouseEnter={() => setHoveredNodeId(node.id)}
-                  onMouseLeave={() => setHoveredNodeId((prev) => (prev === node.id ? null : prev))}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectOnly(node.id); } }}
-                  // Keep the body selectable/draggable for existing canvas
-                  // workflows, while nested controls explicitly opt out.
-                  onMouseDown={(e) => {
-                    const target = e.target as Element;
-                    if (target.closest('input, button, select, textarea, [data-no-node-drag]')) return;
-                    handleNodeMouseDown(e, node.id);
-                  }}
-                >
-                  <div className="node-header node-titlebar">
-                    <div className="node-title-wrapper">
-                      <span className="node-type-icon">
-                        {(() => { const Icon = NODE_TYPE_ICON[node.type]; return <Icon size={16} />; })()}
-                      </span>
-                      {isRenameable && renamingNodeId === node.id ? (
-                        <input
-                          ref={renameInputRef}
-                          className="node-card-rename-input"
-                          value={renameDraft}
-                          onChange={(e) => setRenameDraft(e.target.value)}
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') { e.preventDefault(); void commitNodeRename(node.id, true); }
-                            if (e.key === 'Escape') { e.preventDefault(); cancelNodeRename(); }
-                          }}
-                          onBlur={() => void commitNodeRename(node.id)}
-                          aria-label={topologyUiString(l10n, node.type === 'store' ? 'topology-branch-rename-placeholder' : 'topology-workspace-rename-placeholder')}
-                        />
-                      ) : (
-                        <span className="node-title">{node.name}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="node-body">
-                    <div className="node-body-meta">
-                      <span className="node-type-accent node-body-accent" aria-hidden="true" />
-                      <span className="node-grip" aria-hidden="true" title={l10n.getString('topology-node-drag-hint')}>
-                        <svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true">
-                          <circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" />
-                          <circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" />
-                          <circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" />
-                        </svg>
-                      </span>
-                      <span className="node-subtitle">{node.subtitle}</span>
-                    </div>
-                    <div className="node-body-status">
-                      {(() => {
-                        const telemetry = getTelemetry(node);
-                        if (!telemetry) return null;
-                        return (
-                          <span className={`node-telemetry-badge telemetry-${telemetry.status}`} aria-hidden="true">
-                            {telemetry.badge}
-                          </span>
-                        );
-                      })()}
-                      {isRenameable && renamingNodeId !== node.id && (
-                        <button
-                          type="button"
-                          className="node-card-rename-btn"
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onClick={() => startNodeRename(node.id, node.name)}
-                          aria-label={topologyUiString(l10n, node.type === 'store' ? 'topology-branch-rename-label' : 'topology-workspace-rename-label')}
-                          title={topologyUiString(l10n, node.type === 'store' ? 'topology-branch-rename-label' : 'topology-workspace-rename-label')}
-                        >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                    {node.type === 'workspace' && (
-                      <div className="node-config-row">
-                        <label htmlFor={`node-name-${node.id}`} className="node-config-label">
-                          {topologyUiString(l10n, 'topology-field-name')}
-                        </label>
-                        <input
-                          id={`node-name-${node.id}`}
-                          className="node-config-input"
-                          onMouseDown={(e) => e.stopPropagation()}
-                          type="text"
-                          value={node.name}
-                          aria-label={topologyUiString(l10n, 'topology-field-name-aria', { name: node.name })}
-                          onChange={(e) => {
-                            beginInspectorEdit(node.id);
-                            const name = e.target.value;
-                            setNodes((prev) => prev.map((n) => (n.id === node.id ? { ...n, name } : n)));
-                          }}
-                          onFocus={() => { renameBaselineRef.current = node.name; }}
-                          onBlur={() => void persistNodeRename(node.id, node.name)}
-                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void persistNodeRename(node.id, node.name); } }}
-                        />
-                      </div>
-                    )}
-                    {node.type === 'workspace' && (
-                      <label className="node-config-row node-config-toggle">
-                        <span className="node-config-label">{topologyUiString(l10n, 'topology-field-enabled')}</span>
-                        <input
-                          type="checkbox"
-                          onMouseDown={(e) => e.stopPropagation()}
-                          checked={node.metadata?.['enabled'] !== false}
-                          aria-label={topologyUiString(l10n, 'topology-field-enabled-aria', { name: node.name })}
-                          onChange={(e) => {
-                            beginInspectorEdit(node.id);
-                            const enabled = e.target.checked;
-                            setNodes((prev) => prev.map((n) => (n.id === node.id
-                              ? { ...n, metadata: { ...n.metadata, enabled } }
-                              : n)));
-                          }}
-                        />
-                      </label>
-                    )}
-                  </div>
-
-                  {nodeErrors && nodeErrors.length > 0 && (
-                    <div
-                      className="node-validation-note"
-                      role="status"
-                      title={nodeErrors.map((e) => l10n.getString(e.messageId)).join('\n')}
-                      onMouseDown={(e) => e.stopPropagation()}
-                    >
-                      <span className="node-validation-icon" aria-hidden="true">!</span>
-                      <span className="node-validation-text">
-                        {l10n.getString(nodeErrors[0]!.messageId)}
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="node-port-sockets-group">
-                    {visiblePortsForNode(node).map((port) => {
-                      const isActive = connectingFromNodeId === node.id && connectingFromPort === port;
-                      const isHovered = hoveredTarget?.nodeId === node.id && hoveredTarget?.port === port;
-                      const compatible = isPortCompatible(node.id, port);
-                      const showHighlight = connectingFromNodeId && connectingFromNodeId !== node.id && isHovered && compatible;
-                      // Inventory's single input is flexible: its label follows
-                      // the wire actually attached ('location-in' → Location,
-                      // 'operation-in' → Operation, nothing → Input).
-                      const connectedPortId = port === 'left'
-                        ? wires.find((w) => w.toNodeId === node.id && (w.toPort ?? 'left') === 'left')?.toPortId
-                        : undefined;
-                      const labelId = port === 'left'
-                        ? leftPortLabelId(node, 0, connectedPortId)
-                        : portLabelId(node, port);
-                      return (
-                        <button
-                          key={port}
-                          className={`node-port-socket port-${port} ${isActive ? 'port-active' : ''} ${showHighlight ? 'port-highlight' : ''} ${compatible ? 'port-compatible' : ''} ${connectingFromNodeId && !compatible ? 'port-incompatible' : ''}`}
-                          onClick={(e) => handlePortClick(e, node.id, port)}
-                          aria-label={topologyUiString(
-                            l10n,
-                            portAriaLabelId(node, port),
-                            { name: node.name || '', port },
-                          )}
-                          title={topologyUiString(l10n, labelId)}
-
-                        >
-                          <span className={`node-port-label node-port-label-${port}`}>
-                            {topologyUiString(l10n, labelId)}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
+                        {nodes.map((node) => (
+              <TopologyNodeCard
+                key={node.id}
+                node={node}
+                isSelected={selectedNodeIds.has(node.id)}
+                isConnectingSource={connectingFromNodeId === node.id}
+                connectingFromNodeId={connectingFromNodeId}
+                connectingFromPort={connectingFromPort}
+                hoveredTarget={hoveredTarget}
+                nodeErrors={nodeErrorsByNode.get(node.id) ?? EMPTY_ERRORS}
+                isFresh={freshNodeIds.has(node.id)}
+                isDimmed={hoverConnections !== null && !hoverConnections.has(node.id)}
+                isRenameable={(node.type === 'store' && !!onRenameBranch) || (node.type === 'workspace' && !!onRenameWorkspace)}
+                renaming={renamingNodeId === node.id}
+                renameDraft={renameDraft}
+                connectedPortId={connectedPortIdByNode.get(node.id)}
+                l10n={l10n}
+                renameInputRef={renameInputRef}
+                renameBaselineRef={renameBaselineRef}
+                onSelect={selectOnly}
+                onOpenNodeMenu={openNodeMenu}
+                onCardMouseDown={handleNodeMouseDown}
+                onStartRename={startNodeRename}
+                onCommitRename={commitNodeRename}
+                onCancelRename={cancelNodeRename}
+                onRenameDraftChange={setRenameDraft}
+                onPersistRename={persistNodeRename}
+                onSetNodeName={handleSetNodeName}
+                onSetNodeEnabled={handleSetNodeEnabled}
+                onPortClick={handlePortClick}
+                onHoverNode={setHoveredNodeId}
+                getTelemetry={getTelemetry}
+                isPortCompatible={isPortCompatible}
+              />
+            ))}
           </div>
 
           {/* ── Canvas HUD — status readouts only; the zoom readout
