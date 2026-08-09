@@ -766,6 +766,15 @@ pub fn sync_pending(store: &Store, config: &SyncConfig) -> Result<SyncAttemptRes
     // non-async contexts. The Tauri commands use the split async path instead.
     match send_items_to_server_blocking(config, &pending) {
         Ok(outcomes) => apply_sync_outcomes(store, &pending, &outcomes),
+        // ADR sync-plan-gating: a free tenant is gated, not broken. Do NOT
+        // mark the items failed — they stay `pending` and sync automatically
+        // once the tenant upgrades.
+        Err(SyncHttpError::PlanRequired) => Ok(SyncAttemptResult {
+            synced: 0,
+            failed: 0,
+            error: Some("cloud sync requires a paid plan".into()),
+            plan_required: true,
+        }),
         Err(e) => mark_all_failed(store, &pending, &e.to_string()),
     }
 }
@@ -775,13 +784,13 @@ pub fn sync_pending(store: &Store, config: &SyncConfig) -> Result<SyncAttemptRes
 fn send_items_to_server_blocking(
     config: &SyncConfig,
     items: &[OfflineQueueItem],
-) -> Result<Vec<PushOutcome>, Box<dyn std::error::Error>> {
+) -> Result<Vec<PushOutcome>, SyncHttpError> {
     let url = format!("{}/api/sync/push", config.server_url.trim_end_matches('/'));
 
     let mut request = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
-        .map_err(|e| format!("failed to build HTTP client: {e}"))?
+        .map_err(|e| SyncHttpError::Client(format!("failed to build HTTP client: {e}")))?
         .post(&url)
         .header("Content-Type", "application/json");
 
@@ -792,17 +801,17 @@ fn send_items_to_server_blocking(
     let resp = request
         .json(items)
         .send()
-        .map_err(|e| format!("sync HTTP request failed: {e}"))?;
+        .map_err(|e| SyncHttpError::Network(format!("sync HTTP request failed: {e}")))?;
 
     if !resp.status().is_success() {
         let status = resp.status();
         let body = resp.text().unwrap_or_default();
-        return Err(format!("sync server returned {status}: {body}").into());
+        return Err(classify_http_status(status.as_u16(), &body));
     }
 
     let push_resp: PushResponse = resp
         .json()
-        .map_err(|e| format!("sync response parse failed: {e}"))?;
+        .map_err(|e| SyncHttpError::Parse(format!("sync response parse failed: {e}")))?;
 
     tracing::info!(
         item_count = items.len(),
@@ -816,7 +825,7 @@ fn send_items_to_server_blocking(
 fn send_items_to_server_blocking(
     config: &SyncConfig,
     items: &[OfflineQueueItem],
-) -> Result<Vec<PushOutcome>, Box<dyn std::error::Error>> {
+) -> Result<Vec<PushOutcome>, SyncHttpError> {
     tracing::info!(
         item_count = items.len(),
         server = %config.server_url,
@@ -1263,6 +1272,58 @@ mod tests {
         let all = store.list_all_offline().unwrap();
         assert_eq!(all.len(), 1, "item still in queue with failed status");
         assert_eq!(all[0].status, crate::offline::OfflineQueueStatus::Failed);
+    }
+
+    /// ADR sync-plan-gating: the legacy blocking path must ALSO treat a
+    /// 403 plan_required as a gated state — items stay `pending` (never
+    /// marked failed) so they sync automatically after an upgrade.
+    #[cfg(feature = "sync-http")]
+    #[test]
+    fn sync_pending_plan_required_keeps_items_pending() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buffer = [0_u8; 8192];
+            let _ = stream.read(&mut buffer).unwrap();
+            let body = r#"{"error":"plan_required"}"#;
+            let response = format!(
+                "HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let _ = stream.write_all(response.as_bytes());
+        });
+
+        let store = setup();
+        store
+            .enqueue_offline("complete_sale", r#"{"id":"blocking-plan-gate"}"#)
+            .unwrap();
+        let config = SyncConfig {
+            server_url: format!("http://127.0.0.1:{port}"),
+            api_key: Some("test-jwt".into()),
+        };
+
+        let result = sync_pending(&store, &config).unwrap();
+        server.join().unwrap();
+
+        assert!(result.plan_required, "must flag plan_required");
+        assert_eq!(result.synced, 0);
+        assert_eq!(result.failed, 0, "a plan gate is not a failure");
+
+        // The item stays pending — no mark_all_failed.
+        let pending = store.list_pending_offline().unwrap();
+        assert_eq!(pending.len(), 1, "plan-gated item must stay pending");
+        let all = store.list_all_offline().unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(
+            all[0].status,
+            crate::offline::OfflineQueueStatus::Pending,
+            "never marked failed on a plan gate"
+        );
     }
 
     #[test]
