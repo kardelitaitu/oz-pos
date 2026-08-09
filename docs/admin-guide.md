@@ -77,6 +77,21 @@ The POS continues operating without internet:
 - Check **Admin → Offline Queue** to see pending sync items
 - Status bar indicator: 🟢 online / 🟡 reconnecting / 🔴 offline
 
+### Cloud sync plans
+
+Cloud sync is a paid feature (ADR sync-plan-gating). When the server has
+`OZ_ENFORCE_PLANS=1`:
+
+- A tenant on the **free** plan runs the POS fully locally but cannot
+  push/pull to the cloud server — the server returns `403
+  plan_required`, and **Settings → Cloud Sync** shows an upgrade prompt
+  instead of a generic sync error.
+- Queued items on a free tenant stay `pending` — they are valid, just
+  gated, and sync automatically once the tenant is upgraded.
+- Upgrade the tenant via `PUT /api/v1/tenants/{tenant_id}/plan` (with the
+  `X-Admin-Key` header when `OZ_ADMIN_KEY` is configured) or automatically
+  via a paid Stripe subscription.
+
 > last audited 09-08-26 by buffy
 > audit: Phase 1 Core Architecture & API Docs Audit
 

@@ -658,19 +658,28 @@ Returns counts by status, conflict count, and timing info. |
 | `pending_offline_count` | Get the count of pending offline items. |
 | `pending_sync_count` | Get the pending sync count. |
 | `request_sync_token` | Request a new JWT API token from the cloud server's
-`POST /api/v1/tokens` endpoint.
+`POST /api/v1/tokens` endpoint. When the server is configured with an
+`OZ_ADMIN_KEY` (production), the mint requires the matching `X-Admin-Key`
+header (ADR sync-auth-hardening P2).
  |
 | `requeue_remote_failure` | Requeue a dead-lettered remote item so the next sync cycle retries it.
 
 Operators call this after remediating the item's source (e.g. creating |
 | `retry_offline_sync` | Attempt to sync all pending offline items through the real cloud sync
-pipeline.
+pipeline. Returns a `SyncAttemptResult`; when the tenant is on the `free`
+plan (server has `OZ_ENFORCE_PLANS=1`) the result carries `plan_required:
+true` and items stay `pending` — they are never marked failed or
+quarantined (ADR sync-plan-gating).
  |
 | `sync_pull` | Pull a server snapshot and overwrite the local cache for products,
 tax rates, and users.
  |
 | `sync_run` | Immediately run a sync cycle that pushes pending sales, credit, and
-other queued offline transactions to the configured cloud server.
+other queued offline transactions to the configured cloud server. Returns a
+`SyncAttemptResult`; a `403 plan_required` from the server (free tenant,
+`OZ_ENFORCE_PLANS=1`) sets `plan_required: true` instead of marking items
+failed — queued items stay pending and sync automatically after an upgrade
+(ADR sync-plan-gating).
  |
 | `test_sync_connection` | Test the cloud sync connection by pinging the configured server's
 `/health` endpoint.
