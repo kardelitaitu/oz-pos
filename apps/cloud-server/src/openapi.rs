@@ -610,7 +610,7 @@ fn build_paths() -> Value {
             "post": {
                 "tags": ["Webhooks"],
                 "summary": "Stripe webhook receiver",
-                "description": "Receives Stripe webhook events. Payloads are verified using HMAC-SHA256 with the STRIPE_WEBHOOK_SECRET signing secret. Unauthenticated — verification is via the Stripe-Signature header.",
+                "description": "Receives Stripe webhook events. Payloads are verified using HMAC-SHA256 with the STRIPE_WEBHOOK_SECRET signing secret. Unauthenticated — verification is via the Stripe-Signature header. Subscription lifecycle events (customer.subscription.*, checkout.session.completed, invoice.paid) update the tenant's sync plan; payment events queue a finalize_sale action.",
                 "operationId": "stripeWebhook",
                 "requestBody": {
                     "content": { "application/json": { "schema": { "type": "object", "description": "Raw Stripe webhook event" } } }

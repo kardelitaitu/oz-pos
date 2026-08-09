@@ -1,10 +1,18 @@
 //! Webhook receiver — accepts payment events from Stripe and Square,
-//! verifies their signatures, and writes corresponding actions to the
-//! `offline_queue` for the local POS terminal to pick up via sync.
+//! verifies their signatures, and routes them:
+//!
+//! - **Stripe subscription lifecycle events** (`customer.subscription.*`,
+//!   `checkout.session.completed`, `invoice.paid`) update the tenant's
+//!   sync plan via `set_tenant_plan` (ADR sync-plan-gating) — a paid
+//!   subscription upgrades the tenant to `pro`, cancellation downgrades
+//!   to `free`.
+//! - **Payment events** (`payment_intent.*`, `charge.*`, Square
+//!   payments) write a `finalize_sale` action to the `offline_queue` for
+//!   the local POS terminal to pick up via sync.
 //!
 //! # Endpoints
 //!
-//! - `POST /api/webhooks/stripe` — Stripe payment_intent events
+//! - `POST /api/webhooks/stripe` — Stripe events (subscriptions + payments)
 //! - `POST /api/webhooks/square` — Square charge/Payment events
 //!
 //! # Configuration
@@ -18,10 +26,12 @@
 //! # Flow
 //!
 //! 1. Gateway sends event → server verifies HMAC signature
-//! 2. Parses event to extract `payment_intent_id` or `charge_id`
-//! 3. Looks up matching payment record via `gateway_reference`
-//! 4. Creates `offline_queue` item with action `finalize_sale`
-//!    so the next sync cycle finalizes the pending sale
+//! 2. Routes by event type (subscription → plan update, else payment)
+//! 3. Subscription: resolves the tenant (metadata or `stripe_customers`
+//!    mapping) and calls `Store::set_tenant_plan`
+//! 4. Payment: looks up matching payment record via `gateway_reference`
+//!    and creates an `offline_queue` `finalize_sale` action so the next
+//!    sync cycle finalizes the pending sale
 
 use axum::{Router, extract::State, http::StatusCode, routing::post};
 use hmac::{Hmac, Mac};
@@ -102,6 +112,144 @@ fn extract_stripe_payment_id(object: &serde_json::Value) -> Option<String> {
         return Some(pi.to_owned());
     }
     None
+}
+
+/// Stripe event types that carry subscription lifecycle state.
+///
+/// These update the tenant's sync plan (ADR sync-plan-gating); all other
+/// events (payment_intent.*, charge.*, …) finalise a sale.
+fn is_subscription_event(event_type: &str) -> bool {
+    matches!(
+        event_type,
+        "customer.subscription.created"
+            | "customer.subscription.updated"
+            | "customer.subscription.deleted"
+            | "checkout.session.completed"
+            | "invoice.paid"
+    )
+}
+
+/// The sync plan a subscription event implies, from the subscription status.
+///
+/// - `active` / `trialing` / `past_due` → `Pro` (paid or in grace)
+/// - `canceled` / `unpaid` / `incomplete_expired` → `Free` (no access)
+/// - anything else (e.g. `incomplete`) → `None`, meaning "leave the plan
+///   unchanged" — the tenant keeps its current plan until a clearer state.
+fn plan_for_subscription_status(status: Option<&str>) -> Option<oz_core::TenantPlan> {
+    match status {
+        Some("active" | "trialing" | "past_due") => Some(oz_core::TenantPlan::Pro),
+        Some("canceled" | "unpaid" | "incomplete_expired") => Some(oz_core::TenantPlan::Free),
+        _ => None,
+    }
+}
+
+/// Resolve the OZ-POS tenant for a subscription event.
+///
+/// Prefers the `tenant_id` metadata set on the Checkout Session / subscription
+/// (Stripe forwards object metadata onto the subscription). Falls back to the
+/// `stripe_customers` mapping for events that carry only a customer id
+/// (`invoice.paid`, `customer.subscription.deleted`, …). Returns `None` when
+/// the tenant cannot be determined.
+async fn resolve_subscription_tenant(
+    state: &CloudServerState,
+    object: &serde_json::Value,
+) -> Result<Option<String>, (StatusCode, String)> {
+    // 1. Metadata: data.object.metadata.tenant_id
+    if let Some(tenant) = object
+        .get("metadata")
+        .and_then(|m| m.get("tenant_id"))
+        .and_then(|v| v.as_str())
+    {
+        // Also (re)record the customer mapping while we have it — later
+        // events (invoice.paid, deleted) carry only the customer id.
+        if let Some(customer) = object.get("customer").and_then(|v| v.as_str()) {
+            let conn = state.db.lock().await;
+            oz_core::Store::new(&conn)
+                .set_stripe_customer(customer, tenant)
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("failed to record stripe customer mapping: {e}"),
+                    )
+                })?;
+        }
+        return Ok(Some(tenant.to_owned()));
+    }
+
+    // 2. Mapping table via the customer id.
+    if let Some(customer) = object.get("customer").and_then(|v| v.as_str()) {
+        let conn = state.db.lock().await;
+        let tenant = oz_core::Store::new(&conn)
+            .get_tenant_for_stripe_customer(customer)
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to look up stripe customer mapping: {e}"),
+                )
+            })?;
+        return Ok(tenant);
+    }
+
+    Ok(None)
+}
+
+/// Handle a subscription lifecycle event by setting the tenant's sync plan.
+///
+/// Returns `{"status":"ignored"}` (200) when the tenant cannot be resolved
+/// so Stripe stops retrying, and `{"status":"accepted","plan":…}` on
+/// success.
+async fn handle_subscription_event(
+    state: &CloudServerState,
+    event: &StripeEvent,
+) -> Result<axum::Json<serde_json::Value>, (StatusCode, String)> {
+    let tenant_id = match resolve_subscription_tenant(state, &event.data.object).await? {
+        Some(t) => t,
+        None => {
+            tracing::warn!(event_type = %event.r#type, "subscription event with unresolvable tenant — ignoring");
+            return Ok(axum::Json(serde_json::json!({
+                "status": "ignored",
+                "event_type": event.r#type,
+            })));
+        }
+    };
+
+    // checkout.session.completed and invoice.paid imply an active
+    // subscription even though their object carries no status field.
+    let plan = match event.r#type.as_str() {
+        "checkout.session.completed" | "invoice.paid" => Some(oz_core::TenantPlan::Pro),
+        "customer.subscription.deleted" => Some(oz_core::TenantPlan::Free),
+        _ => plan_for_subscription_status(event.data.object.get("status").and_then(|v| v.as_str())),
+    };
+
+    let Some(plan) = plan else {
+        tracing::debug!(event_type = %event.r#type, tenant_id, "subscription status leaves plan unchanged");
+        return Ok(axum::Json(serde_json::json!({
+            "status": "accepted",
+            "tenant_id": tenant_id,
+            "plan": "unchanged",
+            "event_type": event.r#type,
+        })));
+    };
+
+    let conn = state.db.lock().await;
+    oz_core::Store::new(&conn)
+        .set_tenant_plan(&tenant_id, plan)
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to set tenant plan: {e}"),
+            )
+        })?;
+    drop(conn);
+
+    tracing::info!(tenant_id, plan = plan.as_db_str(), event_type = %event.r#type, "stripe subscription updated tenant plan");
+
+    Ok(axum::Json(serde_json::json!({
+        "status": "accepted",
+        "tenant_id": tenant_id,
+        "plan": plan.as_db_str(),
+        "event_type": event.r#type,
+    })))
 }
 
 /// Verify a Stripe webhook signature.
@@ -207,7 +355,13 @@ async fn stripe_webhook_handler(
     let event: StripeEvent = serde_json::from_slice(&body_bytes)
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("invalid event body: {e}")))?;
 
-    // 5. Extract payment intent ID
+    // 5. Subscription lifecycle events update the tenant's sync plan
+    //    (ADR sync-plan-gating) instead of finalising a sale.
+    if is_subscription_event(&event.r#type) {
+        return handle_subscription_event(&state, &event).await;
+    }
+
+    // 6. Extract payment intent ID
     let payment_id = extract_stripe_payment_id(&event.data.object).ok_or_else(|| {
         (
             StatusCode::BAD_REQUEST,
@@ -215,10 +369,10 @@ async fn stripe_webhook_handler(
         )
     })?;
 
-    // 6. Look up the sale by gateway_reference
+    // 7. Look up the sale by gateway_reference
     let sale_id = lookup_sale_by_gateway_reference(&state, &payment_id).await?;
 
-    // 7. Queue a finalize_sale action
+    // 8. Queue a finalize_sale action
     enqueue_finalize_sale(&state, &sale_id).await?;
 
     tracing::info!(payment_id, sale_id, event_type = %event.r#type, "stripe webhook processed");
@@ -660,6 +814,215 @@ mod tests {
                 .unwrap();
             assert_eq!(count, 1, "should have enqueued one finalize_sale action");
         }
+    }
+
+    // ── Subscription lifecycle → tenant plan (ADR sync-plan-gating) ──
+
+    /// Send a signed Stripe subscription event through the router.
+    async fn post_stripe_subscription(
+        state: &CloudServerState,
+        event_type: &str,
+        object: serde_json::Value,
+    ) -> (StatusCode, serde_json::Value) {
+        let app = webhooks_router(state.clone());
+        let secret = state.stripe_webhook_secret.clone().unwrap();
+        let payload = serde_json::json!({
+            "type": event_type,
+            "data": { "object": object },
+        });
+        let bytes = serde_json::to_vec(&payload).unwrap();
+        let signature = stripe_signature(&bytes, &secret);
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/webhooks/stripe")
+            .header("Content-Type", "application/json")
+            .header("Stripe-Signature", &signature)
+            .body(Body::from(bytes))
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        let status = resp.status();
+        let body_bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value =
+            serde_json::from_slice(&body_bytes).unwrap_or(serde_json::json!({}));
+        (status, json)
+    }
+
+    fn tenant_plan(state: &CloudServerState, tenant_id: &str) -> Option<oz_core::TenantPlan> {
+        let conn = state.db.try_lock().unwrap();
+        oz_core::Store::new(&conn)
+            .get_tenant_plan(tenant_id)
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn subscription_created_upgrades_tenant_to_pro() {
+        let state = test_state_with_stripe("whsec_sub_test");
+        let (status, json) = post_stripe_subscription(
+            &state,
+            "customer.subscription.created",
+            serde_json::json!({
+                "id": "sub_abc",
+                "customer": "cus_123",
+                "status": "active",
+                "metadata": { "tenant_id": "tenant-a" },
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["status"], "accepted");
+        assert_eq!(json["plan"], "pro");
+        assert_eq!(
+            tenant_plan(&state, "tenant-a"),
+            Some(oz_core::TenantPlan::Pro),
+            "paid subscription must upgrade the tenant's sync plan"
+        );
+    }
+
+    #[tokio::test]
+    async fn subscription_created_records_customer_mapping() {
+        let state = test_state_with_stripe("whsec_sub_test");
+        post_stripe_subscription(
+            &state,
+            "customer.subscription.created",
+            serde_json::json!({
+                "id": "sub_abc",
+                "customer": "cus_123",
+                "status": "active",
+                "metadata": { "tenant_id": "tenant-a" },
+            }),
+        )
+        .await;
+        let conn = state.db.try_lock().unwrap();
+        let tenant = oz_core::Store::new(&conn)
+            .get_tenant_for_stripe_customer("cus_123")
+            .unwrap();
+        assert_eq!(tenant, Some("tenant-a".to_string()));
+    }
+
+    #[tokio::test]
+    async fn subscription_deleted_downgrades_tenant_to_free_via_mapping() {
+        let state = test_state_with_stripe("whsec_sub_test");
+        // Seed: tenant-a is pro, and we know the customer mapping from the
+        // original checkout (deleted events carry only the customer id).
+        {
+            let conn = state.db.try_lock().unwrap();
+            let store = oz_core::Store::new(&conn);
+            store
+                .set_tenant_plan("tenant-a", oz_core::TenantPlan::Pro)
+                .unwrap();
+            store.set_stripe_customer("cus_123", "tenant-a").unwrap();
+        }
+        let (status, json) = post_stripe_subscription(
+            &state,
+            "customer.subscription.deleted",
+            serde_json::json!({ "id": "sub_abc", "customer": "cus_123" }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["status"], "accepted");
+        assert_eq!(json["plan"], "free");
+        assert_eq!(
+            tenant_plan(&state, "tenant-a"),
+            Some(oz_core::TenantPlan::Free),
+            "cancelled subscription must downgrade the tenant's sync plan"
+        );
+    }
+
+    #[tokio::test]
+    async fn checkout_completed_upgrades_tenant_to_pro() {
+        let state = test_state_with_stripe("whsec_sub_test");
+        let (status, json) = post_stripe_subscription(
+            &state,
+            "checkout.session.completed",
+            serde_json::json!({
+                "id": "cs_abc",
+                "customer": "cus_456",
+                "subscription": "sub_abc",
+                "metadata": { "tenant_id": "tenant-b" },
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["plan"], "pro");
+        assert_eq!(
+            tenant_plan(&state, "tenant-b"),
+            Some(oz_core::TenantPlan::Pro)
+        );
+    }
+
+    #[tokio::test]
+    async fn invoice_paid_renews_pro_via_customer_mapping() {
+        let state = test_state_with_stripe("whsec_sub_test");
+        {
+            let conn = state.db.try_lock().unwrap();
+            oz_core::Store::new(&conn)
+                .set_stripe_customer("cus_789", "tenant-c")
+                .unwrap();
+        }
+        // invoice.paid carries only the customer id — resolve via mapping.
+        let (status, json) = post_stripe_subscription(
+            &state,
+            "invoice.paid",
+            serde_json::json!({ "id": "in_abc", "customer": "cus_789", "subscription": "sub_abc" }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["plan"], "pro");
+        assert_eq!(
+            tenant_plan(&state, "tenant-c"),
+            Some(oz_core::TenantPlan::Pro)
+        );
+    }
+
+    #[tokio::test]
+    async fn subscription_updated_canceled_downgrades_tenant() {
+        let state = test_state_with_stripe("whsec_sub_test");
+        {
+            let conn = state.db.try_lock().unwrap();
+            oz_core::Store::new(&conn)
+                .set_tenant_plan("tenant-a", oz_core::TenantPlan::Pro)
+                .unwrap();
+        }
+        let (status, _) = post_stripe_subscription(
+            &state,
+            "customer.subscription.updated",
+            serde_json::json!({
+                "id": "sub_abc",
+                "customer": "cus_123",
+                "status": "canceled",
+                "metadata": { "tenant_id": "tenant-a" },
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            tenant_plan(&state, "tenant-a"),
+            Some(oz_core::TenantPlan::Free),
+            "a canceled subscription must downgrade the plan"
+        );
+    }
+
+    #[tokio::test]
+    async fn subscription_event_unknown_tenant_is_ignored_with_200() {
+        let state = test_state_with_stripe("whsec_sub_test");
+        let (status, json) = post_stripe_subscription(
+            &state,
+            "customer.subscription.created",
+            serde_json::json!({
+                "id": "sub_abc",
+                "customer": "cus_unknown",
+                "status": "active",
+                "metadata": {},
+            }),
+        )
+        .await;
+        assert_eq!(
+            status,
+            StatusCode::OK,
+            "unresolvable events must 200 so Stripe stops retrying"
+        );
+        assert_eq!(json["status"], "ignored");
     }
 
     #[tokio::test]

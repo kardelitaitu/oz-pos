@@ -80,3 +80,30 @@ keep working, instead of a generic sync error.
 - E3: client `PlanRequired` classification, daemon no-retry/no-quarantine.
 - E4: UI status state + upgrade CTA.
 - Stripe webhook → `set_tenant_plan` wiring (scaffolding exists).
+
+## Completed follow-up: Stripe subscription webhook wiring
+
+The Stripe webhook (`apps/cloud-server/src/webhooks.rs`) now turns
+subscription lifecycle events into plan changes:
+
+- **Event routing.** `customer.subscription.created` / `.updated` /
+  `.deleted`, `checkout.session.completed`, and `invoice.paid` are routed
+  to a plan-update path; all other events keep the existing
+  finalise-sale flow.
+- **Tenant resolution.** The `tenant_id` metadata set on the Checkout
+  Session (forwarded onto the subscription) is used when present; for
+  events that carry only a customer id (`invoice.paid`, deleted), the
+  `stripe_customers` table (`127_stripe_customers.sql`) resolves the
+  tenant. Unresolvable events are acknowledged with 200 `ignored` so
+  Stripe stops retrying.
+- **Plan mapping.** `active`/`trialing`/`past_due` → `Pro`,
+  `canceled`/`unpaid`/`incomplete_expired` and `customer.subscription
+  .deleted` → `Free`, `checkout.session.completed`/`invoice.paid` → `Pro`.
+  Unknown statuses leave the plan unchanged.
+- **Wiring.** The webhook calls `Store::set_tenant_plan` directly — the
+  same function the admin endpoint uses — so a paid subscription
+  upgrades the tenant's sync plan with no operator action.
+
+To adopt: set `tenant_id` metadata on Stripe Checkout Sessions
+(`subscription_data.metadata` / `metadata`) so the first event can learn
+and persist the customer → tenant mapping.
