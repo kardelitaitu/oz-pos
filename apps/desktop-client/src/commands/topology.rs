@@ -6341,15 +6341,36 @@ mod tests {
             .build(tauri::generate_context!())
             .unwrap();
 
+        // The fixture must satisfy the semantic contract (674e41bb): the
+        // branch node carries its seeded `default` store_profile_id, ws-1 is a
+        // workspace, and the wire declares its deterministic `location`
+        // relationship — a bare legacy store→store wire is ambiguous and
+        // correctly rejected at the save boundary.
         let nodes = vec![
-            serde_json::to_value(make_node_cmd("store-a")).unwrap(),
-            serde_json::to_value(make_node_cmd("ws-1")).unwrap(),
+            serde_json::json!({
+                "id": "store-a",
+                "type": "store",
+                "name": "Store A",
+                "x": 0.0,
+                "y": 0.0,
+                "store_profile_id": "default",
+            }),
+            serde_json::json!({
+                "id": "ws-1",
+                "type": "workspace",
+                "name": "POS",
+                "x": 200.0,
+                "y": 0.0,
+            }),
         ];
         let wires = vec![serde_json::json!({
             "id": "cmd-w-1",
             "from_node_id": "store-a",
             "to_node_id": "ws-1",
             "direction": "one-way",
+            "from_port_id": "location-out",
+            "to_port_id": "location-in",
+            "relationship_type": "location",
         })];
 
         save_topology(nodes, wires, None, app.state())
