@@ -367,6 +367,40 @@ pub async fn request_sync_token(
     }
 }
 
+/// Resolve the URL used by the status-bar health probe.
+///
+/// Explicitly supplied and persisted URLs always win. The debug-only local
+/// fallback is intentionally added here rather than in the frontend so the
+/// status indicator can recover even while auto-provisioning is still writing
+/// the persisted settings row.
+#[cfg(debug_assertions)]
+const LOCAL_DEV_SYNC_URL: &str = "http://localhost:3099";
+
+fn resolve_sync_probe_url(
+    candidate: Option<String>,
+    saved: Option<String>,
+    allow_local_fallback: bool,
+) -> Option<String> {
+    if let Some(url) = candidate.filter(|url| !url.trim().is_empty()) {
+        return Some(url);
+    }
+    if let Some(url) = saved.filter(|url| !url.trim().is_empty()) {
+        return Some(url);
+    }
+
+    // The health indicator must be able to probe the local Docker server
+    // before the asynchronous bootstrap has persisted URL/key settings.
+    // Keep this fallback debug-only so production never probes localhost
+    // behind the operator's back. A cleared URL with a retained key and
+    // sync disabled is an explicit opt-out and must not be overridden.
+    #[cfg(debug_assertions)]
+    if allow_local_fallback {
+        return Some(LOCAL_DEV_SYNC_URL.to_string());
+    }
+
+    None
+}
+
 /// Test the cloud sync connection by pinging the configured server's
 /// `/health` endpoint.
 ///
@@ -380,13 +414,18 @@ pub async fn test_sync_connection(
 ) -> Result<sync_client::PingResult, AppError> {
     // Resolve the URL first (may briefly lock DB), then drop the lock
     // before making the async HTTP call.
-    let resolved = match url.filter(|u| !u.is_empty()) {
-        Some(u) => Some(u),
-        None => {
+    let (saved, allow_local_fallback) =
+        if url.as_ref().is_some_and(|value| !value.trim().is_empty()) {
+            (None, true)
+        } else {
             let db = state.db.lock().await;
-            Settings::get_sync_server_url(&db)?.filter(|s| !s.is_empty())
-        }
-    };
+            let saved = Settings::get_sync_server_url(&db)?;
+            let enabled = Settings::is_sync_enabled(&db)?;
+            let has_api_key =
+                Settings::get_sync_api_key(&db)?.is_some_and(|key| !key.trim().is_empty());
+            (saved, enabled || !has_api_key)
+        };
+    let resolved = resolve_sync_probe_url(url, saved, allow_local_fallback);
     match resolved {
         Some(u) => Ok(sync_client::ping_server(&u).await),
         None => Ok(sync_client::PingResult {
@@ -525,6 +564,14 @@ mod tests {
         assert!(json["serverUrl"].is_null());
         assert_eq!(json["hasApiKey"], false);
         assert_eq!(json["enabled"], false);
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn sync_probe_uses_local_dev_server_before_bootstrap_persists_settings() {
+        let resolved = resolve_sync_probe_url(None, None, true);
+        assert_eq!(resolved.as_deref(), Some("http://localhost:3099"));
+        assert_eq!(resolve_sync_probe_url(None, None, false), None);
     }
 
     #[test]

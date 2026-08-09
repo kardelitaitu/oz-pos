@@ -17,9 +17,10 @@
 //! **Row-presence invariant:** the "deliberately disabled" detection in
 //! [`should_auto_provision`] relies on `Settings::set_sync_server_url`
 //! writing an empty-string row when the URL is cleared (never deleting
-//! the row). Keep it that way — if the write path ever `remove()`s the
-//! row, a disabled install becomes indistinguishable from a fresh one
-//! and would be silently re-provisioned.
+//! the row), together with retaining an existing API key. Keep both
+//! contracts intact — a cleared row with no key is treated as an
+//! unconfigured fresh install, while a cleared row with a key and sync
+//! disabled is a deliberate opt-out.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -44,20 +45,25 @@ const PROBE_RETRY_DELAY: Duration = Duration::from_secs(2);
 /// Decide whether auto-provisioning should run.
 ///
 /// Returns `true` only when the install looks never-configured: no URL
-/// row exists, or a cleared URL row coexists with sync still enabled (a
-/// broken half-configured state provisioning repairs). An explicit
-/// disable — a URL that was set then cleared while sync is off — must be
-/// respected: auto-provision never silently re-enables it.
-fn should_auto_provision(configured_url: Option<&str>, sync_enabled: bool) -> bool {
+/// row exists, or a cleared URL row has no API key, or sync is still
+/// enabled (a broken half-configured state provisioning repairs). An
+/// explicit disable — a URL that was set then cleared while sync is off
+/// while retaining its API key — is respected.
+fn should_auto_provision(
+    configured_url: Option<&str>,
+    sync_enabled: bool,
+    has_api_key: bool,
+) -> bool {
     match configured_url {
         // No settings row at all — a fresh install that has never been
         // configured. Provision regardless of the enabled flag (a fresh
         // DB ships with sync off but no URL row).
         None => true,
-        // The URL row exists but was cleared. Sync off means the user
-        // deliberately disabled it — respect that. Sync on with an empty
-        // URL is a broken half-configured state worth repairing.
-        Some(url) if url.trim().is_empty() => sync_enabled,
+        // The URL row exists but was cleared. A retained API key plus sync
+        // off means the user deliberately disabled it — respect that. No
+        // key means the install is still unconfigured; sync on is a broken
+        // half-configured state worth repairing.
+        Some(url) if url.trim().is_empty() => sync_enabled || !has_api_key,
         // A real URL is configured — never touch it.
         Some(_) => false,
     }
@@ -98,20 +104,26 @@ pub async fn auto_provision_local_sync(db: Arc<Mutex<Connection>>) {
     //    provision over an install we couldn't inspect.
     {
         let conn = db.lock().await;
-        let (configured, enabled) = match (
+        let (configured, enabled, has_api_key) = match (
             Settings::get_sync_server_url(&conn),
             Settings::is_sync_enabled(&conn),
+            Settings::get_sync_api_key(&conn),
         ) {
-            (Ok(url), Ok(enabled)) => (url.map(|u| u.trim().to_string()), enabled),
-            (Err(e), _) | (_, Err(e)) => {
+            (Ok(url), Ok(enabled), Ok(api_key)) => (
+                url.map(|u| u.trim().to_string()),
+                enabled,
+                api_key.is_some_and(|key| !key.trim().is_empty()),
+            ),
+            (Err(e), _, _) | (_, Err(e), _) | (_, _, Err(e)) => {
                 tracing::warn!("reading sync settings failed — leaving sync unconfigured: {e}");
                 return;
             }
         };
-        if !should_auto_provision(configured.as_deref(), enabled) {
+        if !should_auto_provision(configured.as_deref(), enabled, has_api_key) {
             tracing::debug!(
                 server_url = %configured.unwrap_or_default(),
                 enabled,
+                has_api_key,
                 "sync already configured or deliberately disabled — skipping auto-provision"
             );
             return;
@@ -156,15 +168,20 @@ mod tests {
     #[test]
     fn should_provision_when_no_url_is_configured() {
         // Fresh install: no settings row at all, sync off — provision.
-        assert!(should_auto_provision(None, false));
-        assert!(should_auto_provision(None, true));
+        assert!(should_auto_provision(None, false, false));
+        assert!(should_auto_provision(None, true, false));
     }
 
     #[test]
     fn should_not_provision_when_a_url_is_already_configured() {
-        assert!(!should_auto_provision(Some("http://localhost:3099"), false));
+        assert!(!should_auto_provision(
+            Some("http://localhost:3099"),
+            false,
+            true
+        ));
         assert!(!should_auto_provision(
             Some("https://cloud.example.com"),
+            true,
             true
         ));
     }
@@ -174,16 +191,25 @@ mod tests {
         // The URL row exists but was cleared AND sync is off — the user's
         // "off" switch. Auto-provision must NOT silently re-enable it on
         // the next debug launch.
-        assert!(!should_auto_provision(Some(""), false));
-        assert!(!should_auto_provision(Some("   "), false));
+        assert!(!should_auto_provision(Some(""), false, true));
+        assert!(!should_auto_provision(Some("   "), false, true));
     }
 
     #[test]
     fn should_provision_when_sync_is_enabled_but_url_was_cleared() {
         // Sync on but the URL field is empty — a broken half-configured
         // state. Provisioning repairs it and matches user intent.
-        assert!(should_auto_provision(Some(""), true));
-        assert!(should_auto_provision(Some("   "), true));
+        assert!(should_auto_provision(Some(""), true, true));
+        assert!(should_auto_provision(Some("   "), true, true));
+    }
+
+    #[test]
+    fn should_provision_when_empty_url_has_never_had_a_key() {
+        // A fresh settings table may contain an empty URL row with sync
+        // disabled. Without an API key this is still an unconfigured local
+        // install, not an explicit opt-out, so debug bootstrap should heal it.
+        assert!(should_auto_provision(Some(""), false, false));
+        assert!(should_auto_provision(Some("   "), false, false));
     }
 
     #[test]
@@ -245,6 +271,7 @@ mod tests {
         {
             let conn = db.try_lock().unwrap();
             Settings::set_sync_server_url(&conn, "").unwrap();
+            Settings::set_sync_api_key(&conn, "existing-token").unwrap();
             Settings::set_sync_enabled(&conn, false).unwrap();
         }
 
@@ -256,6 +283,9 @@ mod tests {
             Some("")
         );
         assert!(!Settings::is_sync_enabled(&conn).unwrap());
-        assert!(Settings::get_sync_api_key(&conn).unwrap().is_none());
+        assert_eq!(
+            Settings::get_sync_api_key(&conn).unwrap().as_deref(),
+            Some("existing-token")
+        );
     }
 }
