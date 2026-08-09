@@ -693,6 +693,89 @@ mod tests {
         assert!(result.error.is_none());
     }
 
+    async fn spawn_push_test_server() -> (
+        String,
+        Arc<tokio::sync::Mutex<Option<String>>>,
+        tokio::task::JoinHandle<()>,
+    ) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let captured = Arc::new(tokio::sync::Mutex::new(None));
+        let captured_by_server = captured.clone();
+        let task = tokio::spawn(async move {
+            let Ok((mut socket, _)) = listener.accept().await else {
+                return;
+            };
+            let mut buffer = vec![0_u8; 16 * 1024];
+            let bytes_read = socket.read(&mut buffer).await.unwrap_or(0);
+            *captured_by_server.lock().await =
+                Some(String::from_utf8_lossy(&buffer[..bytes_read]).into_owned());
+            let body = r#"{"results":[{"outcome":"accepted"}]}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let _ = socket.write_all(response.as_bytes()).await;
+        });
+        (url, captured, task)
+    }
+
+    #[tokio::test]
+    async fn sync_run_enqueues_one_item_and_observes_server_acceptance() {
+        // Full isolated harness: a temporary AppState owns the queue, the
+        // real command performs the HTTP push, and the test server captures
+        // the authenticated request and returns an accepted outcome.
+        let (server_url, captured, server_task) = spawn_push_test_server().await;
+        let conn = oz_core::migrations::fresh_db();
+        update_sync_settings_data(
+            &conn,
+            &UpdateSyncSettingsArgs {
+                server_url: Some(server_url),
+                api_key: Some("test-jwt".into()),
+                enabled: true,
+            },
+        )
+        .unwrap();
+        {
+            let store = Store::new(&conn);
+            store
+                .enqueue_offline("phase4.e2e", r#"{"probe":true}"#)
+                .unwrap();
+        }
+        let app = tauri::test::mock_builder()
+            .manage(AppState::for_test_with_conn(conn))
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result = sync_run(app.state()).await.unwrap();
+        server_task.await.unwrap();
+
+        assert_eq!(result.synced, 1);
+        assert_eq!(result.failed, 0);
+        assert!(result.error.is_none());
+        let request = captured.lock().await.clone().unwrap();
+        assert!(request.starts_with("POST /api/sync/push HTTP/1.1"));
+        assert!(
+            request
+                .to_ascii_lowercase()
+                .contains("authorization: bearer test-jwt"),
+            "request did not carry the configured bearer token: {request}"
+        );
+
+        let state = app.state::<AppState>();
+        let db = state.db.lock().await;
+        let items = Store::new(&db).list_all_offline().unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            items[0].status,
+            oz_core::offline::OfflineQueueStatus::Synced
+        );
+    }
+
     // ── PostgreSQL sync settings & daemon commands ────────────────
 
     #[test]
