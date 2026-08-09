@@ -1,6 +1,6 @@
 # ADR: Gate cloud sync behind a paid plan
 
-**Date:** 2026-08-09 · **Status:** In progress (E1–E2 done) · **Owner:** buffy
+**Date:** 2026-08-09 · **Status:** In progress (E1–E3 done) · **Owner:** buffy
 
 ## Problem
 
@@ -39,6 +39,14 @@ retry spin, and critically **no quarantine** — queued items stay `pending`
 (they are valid, just unsendable on a free plan). The daemon backs off and
 surfaces the reason; the UI shows "Sync requires a paid plan" rather than
 "disconnected" (E4).
+
+Implemented: `SyncError::PlanRequired` (platform-sync) and
+`SyncHttpError::PlanRequired` (oz-core) are classified from a structured
+`403 {"error":"plan_required"}` in push/pull/snapshot, and the daemon
+treats the variant as terminal — no refresh (the refresh path matches only
+`AuthExpired`), no in-tick retry, and queued items stay `pending`. A
+daemon regression test asserts the error surfaces, the item is untouched,
+and each endpoint is hit exactly once per tick.
 
 ## Alternatives considered
 

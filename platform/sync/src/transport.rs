@@ -276,16 +276,22 @@ impl SyncTransport {
             .map_err(|e| SyncError::Transport(classify_transport_error(&e, &url)))?;
 
         if !resp.status().is_success() {
+            // Read the body once; 401/403 classification, the migration
+            // redirect, and the generic Transport error all need it, and
+            // `text()` consumes the response.
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
             // ADR sync-auth-hardening P1/P4: a 401 with `token_expired` means
             // stale auth — the caller refreshes and retries once; a genuinely
             // invalid token is a config problem that must not be masked.
-            if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
-                let body = resp.text().await.unwrap_or_default();
+            if status == reqwest::StatusCode::UNAUTHORIZED {
                 return Err(classify_auth_401(&body));
             }
-
-            let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            // ADR sync-plan-gating: a 403 plan_required is terminal — no
+            // refresh, no retry, no quarantine.
+            if status == reqwest::StatusCode::FORBIDDEN && body.contains("plan_required") {
+                return Err(SyncError::PlanRequired);
+            }
 
             // ADR #11: Detect server migration redirect.
             if let Some(new_url) = parse_server_migrated(&body) {
@@ -343,14 +349,18 @@ impl SyncTransport {
         }
 
         if !resp.status().is_success() {
-            // ADR sync-auth-hardening P1/P4: same stale-auth contract as push.
-            if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
-                let body = resp.text().await.unwrap_or_default();
-                return Err(classify_auth_401(&body));
-            }
-
+            // Read the body once; 401/403 classification, the migration
+            // redirect, and the generic Transport error all need it.
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
+            // ADR sync-auth-hardening P1/P4: same stale-auth contract as push.
+            if status == reqwest::StatusCode::UNAUTHORIZED {
+                return Err(classify_auth_401(&body));
+            }
+            // ADR sync-plan-gating: a 403 plan_required is terminal.
+            if status == reqwest::StatusCode::FORBIDDEN && body.contains("plan_required") {
+                return Err(SyncError::PlanRequired);
+            }
 
             // ADR #11: Detect server migration redirect.
             if let Some(new_url) = parse_server_migrated(&body) {
@@ -423,14 +433,18 @@ impl SyncTransport {
             .map_err(|e| SyncError::Transport(classify_transport_error(&e, &url)))?;
 
         if !resp.status().is_success() {
-            // ADR sync-auth-hardening P1/P4: same stale-auth contract as push.
-            if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
-                let body = resp.text().await.unwrap_or_default();
-                return Err(classify_auth_401(&body));
-            }
-
+            // Read the body once; 401/403 classification, the migration
+            // redirect, and the generic Transport error all need it.
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
+            // ADR sync-auth-hardening P1/P4: same stale-auth contract as push.
+            if status == reqwest::StatusCode::UNAUTHORIZED {
+                return Err(classify_auth_401(&body));
+            }
+            // ADR sync-plan-gating: a 403 plan_required is terminal.
+            if status == reqwest::StatusCode::FORBIDDEN && body.contains("plan_required") {
+                return Err(SyncError::PlanRequired);
+            }
 
             // ADR #11: Detect server migration redirect.
             if let Some(new_url) = parse_server_migrated(&body) {
@@ -1108,6 +1122,37 @@ mod tests {
         assert!(
             matches!(err, SyncError::AuthInvalid),
             "an explicit invalid_token 401 must surface as AuthInvalid, got: {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn push_items_maps_403_plan_required() {
+        use axum::{Json, Router, http::StatusCode, response::IntoResponse, routing::post};
+
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        async fn reject_push() -> impl IntoResponse {
+            (
+                StatusCode::FORBIDDEN,
+                Json(serde_json::json!({"error": "plan_required"})),
+            )
+        }
+
+        let app = Router::new().route("/api/sync/push", post(reject_push));
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+
+        let transport = SyncTransport::new(
+            &format!("http://localhost:{port}"),
+            Some("free-tenant-token"),
+        );
+        let item = OfflineQueueItem::new("complete_sale", r#"{"id":5}"#);
+        let err = transport.push_items(&[item]).await.unwrap_err();
+
+        assert!(
+            matches!(err, SyncError::PlanRequired),
+            "a 403 plan_required must surface as PlanRequired (ADR sync-plan-gating), got: {err:?}"
         );
     }
 

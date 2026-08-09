@@ -106,6 +106,12 @@ pub enum SyncError {
     #[error("sync server rejected authentication: invalid token (HTTP 401)")]
     AuthInvalid,
 
+    /// The tenant is on the `free` plan and cloud sync is gated
+    /// (HTTP 403 + `plan_required`, ADR sync-plan-gating). Terminal: do
+    /// NOT refresh, retry, or quarantine — surface the upgrade prompt.
+    #[error("cloud sync requires a paid plan (HTTP 403 plan_required)")]
+    PlanRequired,
+
     /// Database error from the underlying oz-core store.
     #[error("database error: {0}")]
     Database(#[from] oz_core::error::CoreError),

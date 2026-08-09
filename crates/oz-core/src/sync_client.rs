@@ -77,6 +77,12 @@ pub enum SyncHttpError {
     #[error("sync server rejected authentication: invalid token (HTTP 401)")]
     AuthInvalid,
 
+    /// The tenant is on the `free` plan and cloud sync is gated
+    /// (HTTP 403 + `plan_required`, ADR sync-plan-gating). Terminal: do
+    /// NOT refresh, retry, or quarantine — surface the upgrade prompt.
+    #[error("cloud sync requires a paid plan (HTTP 403 plan_required)")]
+    PlanRequired,
+
     /// The server returned a non-2xx status other than 401.
     #[error("sync server returned {status}: {body}")]
     Server {
@@ -815,15 +821,21 @@ pub async fn send_items_to_server(
         .map_err(|e| SyncHttpError::Network(e.to_string()))?;
 
     if !resp.status().is_success() {
+        // Read the body once; both 401/403 classification and the generic
+        // Server error need it, and `text()` consumes the response.
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
         // ADR sync-auth-hardening P1/P4: a 401 with `token_expired` means
         // stale auth — the caller refreshes and retries once; `invalid_token`
         // is a config problem that must not be masked.
-        if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
-            let body = resp.text().await.unwrap_or_default();
+        if status == reqwest::StatusCode::UNAUTHORIZED {
             return Err(classify_401(&body));
         }
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
+        // ADR sync-plan-gating: a 403 plan_required is terminal — no
+        // refresh, no retry, no quarantine.
+        if status == reqwest::StatusCode::FORBIDDEN && body.contains("plan_required") {
+            return Err(SyncHttpError::PlanRequired);
+        }
         return Err(SyncHttpError::Server {
             status: status.as_u16(),
             body,

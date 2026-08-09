@@ -1314,6 +1314,122 @@ mod tests {
         assert!(status.read().await.last_error.is_none());
     }
 
+    // ── ADR sync-plan-gating: PlanRequired is terminal ─────────────
+
+    /// Spawn a mock sync server whose push endpoint ALWAYS returns
+    /// `403 {"error":"plan_required"}` and counts how many times it was
+    /// hit. The daemon must treat this as terminal: surface the error,
+    /// keep queued items `pending` (no quarantine), and NOT retry within
+    /// the tick (the refresh path is auth-only).
+    async fn spawn_plan_required_mock_sync_server() -> (String, Arc<std::sync::atomic::AtomicUsize>)
+    {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let hits = Arc::new(AtomicUsize::new(0));
+        let hits_for_server = hits.clone();
+
+        async fn handle_push(
+            State(hits): State<Arc<AtomicUsize>>,
+            Json(_items): Json<Vec<serde_json::Value>>,
+        ) -> impl IntoResponse {
+            hits.fetch_add(1, Ordering::SeqCst);
+            (
+                StatusCode::FORBIDDEN,
+                axum::Json(serde_json::json!({"error": "plan_required"})),
+            )
+        }
+        async fn handle_pull(
+            State(hits): State<Arc<AtomicUsize>>,
+            Json(_req): Json<serde_json::Value>,
+        ) -> impl IntoResponse {
+            hits.fetch_add(1, Ordering::SeqCst);
+            (
+                StatusCode::FORBIDDEN,
+                axum::Json(serde_json::json!({"error": "plan_required"})),
+            )
+        }
+
+        let app = Router::new()
+            .route("/api/sync/push", post(handle_push))
+            .route("/api/sync/pull", post(handle_pull))
+            .with_state(hits_for_server);
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        (format!("http://localhost:{port}"), hits)
+    }
+
+    /// A free tenant's push must surface `plan_required`, keep the queued
+    /// item `pending` (never quarantined), and hit the server exactly once
+    /// per endpoint per tick — no refresh-driven retry loop.
+    #[tokio::test]
+    async fn daemon_surfaces_plan_required_without_retry_or_quarantine() {
+        let (server_url, hits) = spawn_plan_required_mock_sync_server().await;
+        let db = setup_db();
+
+        let db_setup = db.clone();
+        let url = server_url.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db_setup.blocking_lock();
+            let store = Store::new(&conn);
+            Settings::set_sync_enabled(&conn, true).unwrap();
+            Settings::set_sync_server_url(&conn, &url).unwrap();
+            store
+                .enqueue_offline("complete_sale", r#"{"id":"plan-gate-1"}"#)
+                .unwrap();
+        })
+        .await
+        .unwrap();
+
+        let status = Arc::new(RwLock::new(DaemonStatus::default()));
+        SyncDaemon::run_tick(&db, &status, &noop_settings_sink()).await;
+
+        // The error surfaced with the plan message.
+        {
+            let status_guard = status.read().await;
+            let err = status_guard
+                .last_error
+                .as_deref()
+                .expect("run_tick must surface the plan_required error");
+            assert!(
+                err.contains("paid plan") || err.contains("plan"),
+                "last_error should mention the plan gate, got: {err}"
+            );
+        }
+
+        // The item stays pending — no quarantine, no mark_all_failed.
+        let (_, pending) = tokio::task::spawn_blocking({
+            let db = db.clone();
+            move || {
+                let conn = db.blocking_lock();
+                read_config_and_pending(&conn)
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            pending.len(),
+            1,
+            "a plan-gated push must keep the item pending (never quarantined)"
+        );
+        assert_eq!(
+            pending[0].action, "complete_sale",
+            "the queued item must be untouched"
+        );
+
+        // Each endpoint hit exactly once — no refresh-driven retry.
+        assert_eq!(
+            hits.load(std::sync::atomic::Ordering::SeqCst),
+            2,
+            "push + pull should each be attempted exactly once (no retry loop)"
+        );
+    }
+
     // ── TDD Bug #1: spawn_blocking panic is not silently swallowed ─
 
     /// Verify that `read_config_and_pending` propagates errors from a
