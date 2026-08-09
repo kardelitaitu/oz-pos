@@ -539,6 +539,13 @@ const GRID_SIZE = 24;
 const snap = (v: number) => Math.round(v / GRID_SIZE) * GRID_SIZE;
 type HistoryEntry = { nodes: TopologyNodeData[]; wires: TopologyWireData[] };
 
+/** Stable keys identifying a validation issue for mark-issue-resolved
+ *  persistence: a node issue is scoped by its card + message, a graph-level
+ *  issue by its message alone. Module-scope so every surface (panel, banner,
+ *  card notes) derives the same key from the same error. */
+const issueKey = (nodeId: string, messageId: string) => `node:${nodeId}:${messageId}`;
+const graphIssueKey = (messageId: string) => `graph:${messageId}`;
+
 /** Isolated simulation pulse circle so the 30ms tick doesn't re-render the whole canvas. */
 const SimulationPulse = memo(function SimulationPulse({ x, y }: { x: number; y: number }) {
   return <circle cx={x} cy={y} r="6" className="wire-simulation-pulse" />;
@@ -597,6 +604,12 @@ export default function NodeTopologyEditor({
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const [nodes, setNodes] = useState<TopologyNodeData[]>(PRESET_RETAIL.nodes);
+  /** True once the first authoritative topology load has settled. The editor
+   *  mounts on the retail preset while the async load is in flight, and the
+   *  validation-issue dismissal forget-effect must not treat that placeholder
+   *  graph as the real diagram (it would drop restored dismissals on every
+   *  reload). Set in the load chain's finally, after every branch settles. */
+  const [topologyLoaded, setTopologyLoaded] = useState(false);
   const [wires, setWires] = useState<TopologyWireData[]>(PRESET_RETAIL.wires);
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -1556,6 +1569,12 @@ export default function NodeTopologyEditor({
           message: `${l10n.getString('topology-toast-load-error')}: ${plainErrorMessage(err)}`,
           type: 'error',
         });
+      })
+      .finally(() => {
+        // Every .then branch returns, so this runs once the first
+        // authoritative load (saved diagram, empty graph, or preset fallback)
+        // has been applied — the gate for the dismissal forget-effect.
+        if (!cancelled) setTopologyLoaded(true);
       });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3269,7 +3288,73 @@ export default function NodeTopologyEditor({
     }
     return out;
   }, [liveValidation, nodeMap]);
-  const totalIssues = nodeIssues.length + liveValidation.graphLevel.length;
+
+  /** Mark-issue-resolved: dismissals of validation issues, persisted per
+   *  diagram (branch) so a dismissal survives reloads and branch switches.
+   *  Dismissals are OCCURRENCE-scoped — the forget effect below drops a
+   *  stored key once the issue leaves the live set, so a genuinely NEW
+   *  occurrence later surfaces again instead of staying hidden forever.
+   *  Cosmetic only: the Apply gate validates the raw graph and is never
+   *  bypassed by a dismissal. */
+  const resolvedIssuesKey = `oz-topology-resolved-issues:${branchId ?? 'unassigned'}`;
+  const [resolvedIssues, setResolvedIssues] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem(resolvedIssuesKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as unknown;
+        if (Array.isArray(parsed)) {
+          return new Set(parsed.filter((k): k is string => typeof k === 'string'));
+        }
+      }
+    } catch { /* corrupted — start empty */ }
+    return new Set();
+  });
+  const dismissIssue = (key: string) =>
+    setResolvedIssues((prev) => {
+      if (prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
+  /** Visible (non-dismissed) issues drive the button count, the panel, the
+   *  banner, and the card notes — every surface reads the same filtered
+   *  lists so they can never disagree. */
+  const visibleNodeIssues = useMemo(
+    () => nodeIssues.filter((i) => !resolvedIssues.has(issueKey(i.nodeId, i.messageId))),
+    [nodeIssues, resolvedIssues],
+  );
+  const visibleGraphLevel = useMemo(
+    () => liveValidation.graphLevel.filter((e) => !resolvedIssues.has(graphIssueKey(e.messageId))),
+    [liveValidation, resolvedIssues],
+  );
+  const totalIssues = visibleNodeIssues.length + visibleGraphLevel.length;
+
+  /** Forget a dismissal once its issue is genuinely gone. Gated on
+   *  topologyLoaded so the preset placeholder shown during the async load
+   *  can never wipe restored dismissals (see the load effect's finally). */
+  useEffect(() => {
+    if (!topologyLoaded) return;
+    const live = new Set<string>();
+    for (const [nodeId, errs] of liveValidation.byNode) {
+      for (const e of errs) live.add(issueKey(nodeId, e.messageId));
+    }
+    for (const e of liveValidation.graphLevel) live.add(graphIssueKey(e.messageId));
+    setResolvedIssues((prev) => {
+      const kept = new Set<string>();
+      let changed = false;
+      for (const k of prev) {
+        if (live.has(k)) kept.add(k);
+        else changed = true;
+      }
+      return changed ? kept : prev;
+    });
+  }, [liveValidation, topologyLoaded]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(resolvedIssuesKey, JSON.stringify([...resolvedIssues]));
+    } catch { /* storage unavailable — dismissal is session-only */ }
+  }, [resolvedIssuesKey, resolvedIssues]);
 
   /** Create one wire from an ADR #34 relationship option — the single path
    *  for both unambiguous drops (auto-commit) and picker choices.
@@ -3961,13 +4046,13 @@ export default function NodeTopologyEditor({
             setContextMenu({ x: e.clientX - (rect?.left ?? 0), y: e.clientY - (rect?.top ?? 0) });
           }}
         >
-          {liveValidation.graphLevel.length > 0 && (
+          {visibleGraphLevel.length > 0 && (
             <div
               className="topology-validation-banner"
               role="alert"
               onMouseDown={(e) => e.stopPropagation()}
             >
-              {liveValidation.graphLevel.map((err) => (
+              {visibleGraphLevel.map((err) => (
                 <span key={err.messageId} className="topology-validation-banner-item">
                   {l10n.getString(err.messageId)}
                 </span>
@@ -3993,23 +4078,42 @@ export default function NodeTopologyEditor({
                   aria-label={l10n.getString('topology-validation-panel-aria')}
                   onMouseDown={(e) => e.stopPropagation()}
                 >
-                  {nodeIssues.map((issue) => (
-                    <button
-                      key={`${issue.nodeId}-${issue.messageId}`}
-                      type="button"
-                      className="topology-validation-item"
-                      onClick={() => {
-                        setValidationPanelOpen(false);
-                        selectOnly(issue.nodeId);
-                      }}
-                    >
-                      <span className="topology-validation-item-node">{issue.nodeName}</span>
-                      <span className="topology-validation-item-msg">{l10n.getString(issue.messageId)}</span>
-                    </button>
+                  {visibleNodeIssues.map((issue) => (
+                    <div key={`${issue.nodeId}-${issue.messageId}`} className="topology-validation-item">
+                      <button
+                        type="button"
+                        className="topology-validation-item-select"
+                        onClick={() => {
+                          setValidationPanelOpen(false);
+                          selectOnly(issue.nodeId);
+                        }}
+                      >
+                        <span className="topology-validation-item-node">{issue.nodeName}</span>
+                        <span className="topology-validation-item-msg">{l10n.getString(issue.messageId)}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="topology-validation-item-dismiss"
+                        aria-label={l10n.getString('topology-validation-dismiss')}
+                        title={l10n.getString('topology-validation-dismiss')}
+                        onClick={() => dismissIssue(issueKey(issue.nodeId, issue.messageId))}
+                      >
+                        <CloseIcon size={12} />
+                      </button>
+                    </div>
                   ))}
-                  {liveValidation.graphLevel.map((err) => (
+                  {visibleGraphLevel.map((err) => (
                     <div key={err.messageId} className="topology-validation-item topology-validation-item-static">
                       <span className="topology-validation-item-msg">{l10n.getString(err.messageId)}</span>
+                      <button
+                        type="button"
+                        className="topology-validation-item-dismiss"
+                        aria-label={l10n.getString('topology-validation-dismiss')}
+                        title={l10n.getString('topology-validation-dismiss')}
+                        onClick={() => dismissIssue(graphIssueKey(err.messageId))}
+                      >
+                        <CloseIcon size={12} />
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -4574,7 +4678,9 @@ export default function NodeTopologyEditor({
               // pencil (persisting via their respective update paths);
               // warehouse/hardware nodes have no record to rename.
               const isRenameable = (node.type === 'store' && !!onRenameBranch) || (node.type === 'workspace' && !!onRenameWorkspace);
-              const nodeErrors = liveValidation.byNode.get(node.id);
+              const nodeErrors = liveValidation.byNode
+                .get(node.id)
+                ?.filter((e) => !resolvedIssues.has(issueKey(node.id, e.messageId)));
 
               return (
                 <div

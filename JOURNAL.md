@@ -1903,3 +1903,15 @@ Solution: Red→Green, same pattern as round 46. Red: updated the two existing p
 Test counts: +5 (editor 338). Full UI 4374 (265 files). Gates: typecheck, eslint, i18n parity clean (no new FTL keys).
 
 Commits: this round, scoped to NodeTopologyEditor.tsx/.test.tsx + JOURNAL.md.
+
+### 2026-08-09 — Round 48: mark-issue-resolved persistence (round-11 follow-up)
+
+Problem: The round-11 journaled follow-up — validation issues could only be read, never dismissed, and the issues button/count were canvas-local. A user who knew about a problem (e.g. an intentionally-unwired workspace) had no way to clear it from the panel, and dismissal was listed as a possible follow-up with persisted state.
+
+Solution: Red→Green. Red: six tests in the view-prefs describe — dismissing removes the item and decrements the count (2-issue fixture), the dismissal key persists to localStorage, a dismissed issue stays dismissed across a remount, dismissals are scoped per branch, a dismissal is forgotten once the problem is fixed, and a corrupted stored value starts empty. 5 failed (no dismiss button existed); the corruption test passed as a spec guard. Green: per-diagram `oz-topology-resolved-issues:<branchId|unassigned>` holding an issue-key array; keys are `node:<nodeId>:<messageId>` / `graph:<messageId>`; every surface (button count, panel, banner, card notes) reads the same filtered lists. Panel items restructured (select button + ghost dismiss button — shadow-free so the noise-dither registry needs no entry), FTL key ×2 bundles, CSS in NodeTopologyEditor.css.
+
+Key design decision — OCCURRENCE-scoped dismissals: the forget effect drops a stored key once the issue leaves the live set, so a genuinely new occurrence later surfaces again instead of staying hidden forever. That effect is gated on a `topologyLoaded` flag (set in the load chain's finally) because the editor mounts on the retail preset while the async load is in flight — without the gate, every reload would wipe restored dismissals before the real diagram loads (caught during design, not by the tests). Dismissal is cosmetic only: the Apply gate validates the raw graph and is never bypassed.
+
+Test counts: +6 (editor 344). Full UI 4380 (265 files). Compliance (noise-dither + popover) 11/11. Gates: typecheck, eslint, i18n parity clean.
+
+Commits: this round, scoped to NodeTopologyEditor.tsx/.css/.test.tsx + both FTL bundles + JOURNAL.md.

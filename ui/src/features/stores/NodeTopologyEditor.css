@@ -1335,19 +1335,53 @@
 
 .topology-validation-item {
   display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-fg);
+  text-align: left;
+}
+
+.topology-validation-item:hover {
+  background: var(--color-bg-subtle);
+}
+
+.topology-validation-item-select {
+  flex: 1;
+  display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-sm);
+  padding: 0;
   border: none;
   background: transparent;
   color: var(--color-fg);
   text-align: left;
   cursor: pointer;
+  border-radius: var(--radius-sm);
 }
 
-.topology-validation-item:hover {
-  background: var(--color-bg-subtle);
+/* Ghost dismiss button — deliberately shadow-free so the noise-dither
+   registry (which covers shadowed surfaces) needs no new entry. */
+.topology-validation-item-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-fg-muted);
+  cursor: pointer;
+}
+
+.topology-validation-item-dismiss:hover {
+  color: var(--color-danger);
+  background: var(--color-danger-subtle);
 }
 
 .topology-validation-item-node {
@@ -1362,10 +1396,6 @@
 
 .topology-validation-item-static {
   cursor: default;
-}
-
-.topology-validation-item-static:hover {
-  background: transparent;
 }
 
 .topology-validation-banner {

@@ -6169,6 +6169,114 @@ describe('NodeTopologyEditor — validation panel & view prefs', () => {
     expect(document.querySelector('.topology-issues-btn')).toBeNull();
   });
 
+  describe('mark-issue-resolved persistence', () => {
+    // Two unwired workspaces → two per-node "connect this workspace" issues.
+    const twoIssueFixture = {
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-1', type: 'workspace', name: 'Retail POS #1', x: 380, y: 80, metadata: { typeKey: 'store-pos' } },
+        { id: 'ws-2', type: 'workspace', name: 'KDS #1', x: 380, y: 240, metadata: { typeKey: 'kds' } },
+      ],
+      wires: [],
+    } as never;
+    const openPanel = async () => {
+      fireEvent.click(screen.getByText(/Issues \(2\)/));
+      return document.querySelector('.topology-validation-panel') as HTMLElement;
+    };
+    // The parent describe clears localStorage before each test; scrub after
+    // too so a leftover resolved key can't hide issues in later describes.
+    afterEach(() => localStorage.clear());
+
+    it('dismissing an issue removes it from the panel and decrements the count', async () => {
+      mockLoadTopology.mockResolvedValue(twoIssueFixture);
+      renderEditor();
+      await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
+
+      const panel = await openPanel();
+      const dismissBtns = panel.querySelectorAll('.topology-validation-item-dismiss');
+      expect(dismissBtns).toHaveLength(2);
+
+      fireEvent.click(dismissBtns[0] as HTMLElement);
+      expect(panel.querySelectorAll('.topology-validation-item')).toHaveLength(1);
+      expect(screen.getByText(/Issues \(1\)/)).toBeInTheDocument();
+      // The dismissed issue's card note badge is gone too.
+      expect(document.querySelectorAll('.node-validation-note')).toHaveLength(1);
+    });
+
+    it('persists the dismissal key to localStorage', async () => {
+      mockLoadTopology.mockResolvedValue(twoIssueFixture);
+      renderEditor();
+      await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
+
+      const panel = await openPanel();
+      fireEvent.click(panel.querySelectorAll('.topology-validation-item-dismiss')[0] as HTMLElement);
+
+      const stored = JSON.parse(localStorage.getItem('oz-topology-resolved-issues:unassigned') ?? '[]') as string[];
+      expect(stored).toHaveLength(1);
+      expect(stored[0]).toMatch(/^node:ws-[12]:/);
+    });
+
+    it('keeps a dismissed issue dismissed across a remount', async () => {
+      mockLoadTopology.mockResolvedValue(twoIssueFixture);
+      const { unmount } = renderEditor();
+      await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
+
+      const panel = await openPanel();
+      fireEvent.click(panel.querySelectorAll('.topology-validation-item-dismiss')[0] as HTMLElement);
+      expect(screen.getByText(/Issues \(1\)/)).toBeInTheDocument();
+
+      unmount();
+      renderEditor();
+      await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
+      expect(screen.getByText(/Issues \(1\)/)).toBeInTheDocument();
+    });
+
+    it('scopes dismissals per branch', async () => {
+      mockLoadTopology.mockResolvedValue(twoIssueFixture);
+      const { unmount } = renderEditor({ branchId: 'branch-a' });
+      await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
+
+      const panel = await openPanel();
+      fireEvent.click(panel.querySelectorAll('.topology-validation-item-dismiss')[0] as HTMLElement);
+      expect(screen.getByText(/Issues \(1\)/)).toBeInTheDocument();
+
+      unmount();
+      renderEditor({ branchId: 'branch-b' });
+      await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
+      expect(screen.getByText(/Issues \(2\)/)).toBeInTheDocument();
+    });
+
+    it('forgets a dismissal once the underlying problem is fixed', async () => {
+      mockLoadTopology.mockResolvedValue(twoIssueFixture);
+      const { unmount } = renderEditor();
+      await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
+
+      const panel = await openPanel();
+      fireEvent.click(panel.querySelectorAll('.topology-validation-item-dismiss')[0] as HTMLElement);
+      expect(
+        JSON.parse(localStorage.getItem('oz-topology-resolved-issues:unassigned') ?? '[]'),
+      ).toHaveLength(1);
+
+      // A clean diagram (no issues) drops the dismissal — a genuine
+      // recurrence later will surface again instead of staying hidden.
+      unmount();
+      mockLoadTopology.mockResolvedValue(null);
+      renderEditor();
+      await waitFor(() => expect(document.querySelector('.topology-issues-btn')).toBeNull());
+      expect(
+        JSON.parse(localStorage.getItem('oz-topology-resolved-issues:unassigned') ?? '[]'),
+      ).toHaveLength(0);
+    });
+
+    it('starts empty when the stored value is corrupted', async () => {
+      localStorage.setItem('oz-topology-resolved-issues:unassigned', 'garbage');
+      mockLoadTopology.mockResolvedValue(twoIssueFixture);
+      renderEditor();
+      await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
+      expect(screen.getByText(/Issues \(2\)/)).toBeInTheDocument();
+    });
+  });
+
   it('persists the elbow routing preference to the branch-scoped key', () => {
     renderEditor();
     fireEvent.click(screen.getByText('Elbow wires'));

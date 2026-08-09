@@ -98,6 +98,7 @@ topology-wire-rename-placeholder = Wire label
 topology-snap-toggle = Snap to grid
 topology-validation-details = Issues ({ $count })
 topology-validation-panel-aria = Diagram issues
+topology-validation-dismiss = Dismiss issue
 topology-context-add-title = Add Node
 topology-context-select-all = Select All
 topology-context-selection-title = { $count } selected

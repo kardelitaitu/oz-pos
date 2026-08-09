@@ -96,6 +96,7 @@ topology-wire-rename-placeholder = Label kabel
 topology-snap-toggle = Kunci ke kisi
 topology-validation-details = Masalah ({ $count })
 topology-validation-panel-aria = Masalah diagram
+topology-validation-dismiss = Abaikan masalah
 topology-context-add-title = Tambah Node
 topology-context-select-all = Pilih Semua
 topology-context-selection-title = { $count } dipilih
