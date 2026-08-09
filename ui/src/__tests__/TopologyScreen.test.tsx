@@ -241,6 +241,25 @@ describe('TopologyScreen', () => {
     ]);
   });
 
+  it('excludes Inventory Management instances — the warehouse node is the single storage card', async () => {
+    // Two storage-flavored cards on one canvas confused users: the
+    // Warehouse node (the topology's stock-routing target) and the
+    // Inventory Management workspace. Only the warehouse survives — an
+    // inventory instance must never seed the canvas (its workspace row
+    // still exists outside the topology; the sweep just never sees it).
+    mockListWorkspacesScoped.mockResolvedValue([
+      { ...loadedInstances[0]!, instance_id: 'ws-pos', type_key: 'store-pos', name: 'Store POS' },
+      { ...loadedInstances[0]!, instance_id: 'ws-inv', type_key: 'inventory', name: 'Inventory Management' },
+    ]);
+    render(<TopologyScreen />);
+    await waitFor(() => expect(capturedEditorProps.onSave).toBeDefined());
+    await waitFor(() => expect(capturedEditorProps.workspaceInstances).toHaveLength(1));
+
+    const seeded = capturedEditorProps.workspaceInstances as Array<{ instanceId: string; typeKey: string }>;
+    expect(seeded.map((s) => s.instanceId)).toEqual(['ws-pos']);
+    expect(seeded[0]!.typeKey).toBe('store-pos');
+  });
+
   it('refetches workspace instances when the branch selector changes', async () => {
     // Branch-scoped graphs: switching the selector must reload that
     // branch's instances (and the editor remounts, keyed by branch) rather

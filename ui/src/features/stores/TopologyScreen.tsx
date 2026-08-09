@@ -40,7 +40,14 @@ import {
  * either: the sweep archives any instance missing from the canvas, so an
  * unseeded admin instance would be archived on every save.
  */
-const isTopologyInstance = (w: Pick<WorkspaceDto, 'type_key'>) => w.type_key !== 'admin';
+const isTopologyInstance = (w: Pick<WorkspaceDto, 'type_key'>) =>
+  // Admin workspaces are app management, not routing endpoints. Inventory
+  // Management workspaces are likewise excluded: the topology's storage
+  // concept is the Warehouse node (the stock-routing target), and two
+  // storage-flavored cards on one canvas confused users. The instance row
+  // itself still exists — it just never seeds the canvas (and the save
+  // sweep never sees it, so it is never archived).
+  w.type_key !== 'admin' && w.type_key !== 'inventory';
 
 /**
  * Dedicated topology screen — the single home for the node-based store
