@@ -2658,3 +2658,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 106 — multi-excess tier-limit)
 
 **Risks / follow-ups:** the multi-error panel rendering (3-warehouse editor render) is not individually pinned — the round-105 single-case pin plus the generic node-scoped mapping cover it; a future editor test could pin the two-item panel directly.
+
+### 2026-08-10 — pinned the two-item tier-limit panel (round 107)
+
+**Problem (round-106 follow-up, journaled):** the multi-excess contract shape (one warehouse-tier-limit error per warehouse beyond the first) shipped with only the single-case editor pin from round 105 — nothing proved the editor renders ONE jumpable panel item per excess node, so a regression to single-error emission would silently leave a third Stock Room unflagged.
+
+**Solution (test-only pin):** a second test in the round-105 describe renders a 3-warehouse diagram on standard tier and asserts: no graph-level banner; exactly TWO panel items carrying the tier-limit message with node names WH 2 and WH 3; and the second item's jump button selects the WH 3 card and closes the panel. Mechanism proven live: temporarily reverting the contract emission to the single-error shape (`warehouses[1]` only) failed the new test with `expected [ <div> ] to have a length of 2 but got 1`, then restored byte-exact (the file is CRLF — the first mutation attempt missed on LF anchors).
+
+**Verified:** editor 453/453 (+1), topology suites 532/532, full UI 4569/4569, tsc, eslint clean.
+
+**Commits:** (round 107 — two-item tier-limit panel pin)
+
+**Risks / follow-ups:** the tier-limit UX is now pinned end to end (contract shape → panel items → jump). The remaining banner-only error audit (which codes still render graph-level and why) is the natural next analysis slice.

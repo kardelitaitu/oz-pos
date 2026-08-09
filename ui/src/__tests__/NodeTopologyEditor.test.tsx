@@ -8755,4 +8755,62 @@ describe('NodeTopologyEditor — tier-limit error node scoping', () => {
     expect(wh2Card.className).toContain('node-selected');
     expect(document.querySelector('.topology-validation-panel')).toBeNull();
   });
+
+  it('renders one jumpable panel item per excess warehouse (three Stock Rooms)', async () => {
+    // Round 106: the cap flags every warehouse beyond the first, so three
+    // Stock Rooms on standard tier must produce TWO panel items — one per
+    // excess node — each jumping to its own card. A regression to
+    // single-error emission would leave WH 3 silently unflagged.
+    const threeWarehouseDiagram = {
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-1', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-1', type: 'warehouse', name: 'WH 1', x: 680, y: 140 },
+        { id: 'wh-2', type: 'warehouse', name: 'WH 2', x: 680, y: 400 },
+        { id: 'wh-3', type: 'warehouse', name: 'WH 3', x: 980, y: 400 },
+      ],
+      wires: [
+        {
+          id: 'w-1',
+          from_node_id: 'store-1',
+          to_node_id: 'ws-1',
+          from_port_id: 'location-out',
+          to_port_id: 'location-in',
+          relationship_type: 'location',
+          direction: 'one-way',
+        },
+      ],
+    } as never;
+
+    mockLoadTopology.mockResolvedValueOnce(threeWarehouseDiagram);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(5));
+
+    // Still no graph-level banner — every tier-limit error is node-scoped.
+    expect(document.querySelector('.topology-validation-banner')).toBeNull();
+
+    fireEvent.click(document.querySelector('.topology-issues-btn')!);
+    const panel = document.querySelector('.topology-validation-panel');
+    expect(panel).not.toBeNull();
+
+    const matching = Array.from(panel!.querySelectorAll('.topology-validation-item')).filter((el) =>
+      el.textContent?.includes('Multiple Stock Rooms require a Pro Tier license.'),
+    );
+    expect(matching).toHaveLength(2);
+    expect(matching.map((el) => el.querySelector('.topology-validation-item-node')?.textContent)).toEqual([
+      'WH 2',
+      'WH 3',
+    ]);
+
+    // The second item jumps to WH 3's card and closes the panel.
+    const wh3Card = Array.from(document.querySelectorAll('.topology-node')).find((el) =>
+      el.textContent?.includes('WH 3'),
+    )!;
+    expect(wh3Card.className).not.toContain('node-selected');
+
+    fireEvent.click(matching[1]!.querySelector('.topology-validation-item-select')!);
+
+    expect(wh3Card.className).toContain('node-selected');
+    expect(document.querySelector('.topology-validation-panel')).toBeNull();
+  });
 });
