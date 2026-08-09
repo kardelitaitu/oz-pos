@@ -596,4 +596,38 @@ describe('semantic topology contract', () => {
 
     expect(validateTopologyGraph(normalized)).toEqual([]);
   });
+
+  it('flags a warehouse with room but no stock-routing wire, prompting the user to route stock in', () => {
+    const normalized = graph(
+      [branch(), workspace('ws-1'), warehouseWith('wh-1', { stock: 500, capacity: 1000 })],
+      [ownershipWire('w-owner', 'ws-1')],
+    );
+
+    expect(validateTopologyGraph(normalized)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: 'warehouse-missing-stock-routing',
+        nodeId: 'wh-1',
+      }),
+    ]));
+  });
+
+  it('skips the missing-wire guard when the warehouse is at or over capacity', () => {
+    const normalized = graph(
+      [branch(), workspace('ws-1'), warehouseWith('wh-1', { stock: 1000, capacity: 1000 })],
+      [ownershipWire('w-owner', 'ws-1')],
+    );
+
+    const errors = validateTopologyGraph(normalized);
+    expect(errors.filter((e) => e.code === 'warehouse-missing-stock-routing')).toHaveLength(0);
+  });
+
+  it('skips the missing-wire guard when the warehouse has no capacity metadata', () => {
+    const normalized = graph(
+      [branch(), workspace('ws-1'), warehouse('wh-1')],
+      [ownershipWire('w-owner', 'ws-1')],
+    );
+
+    const errors = validateTopologyGraph(normalized);
+    expect(errors.filter((e) => e.code === 'warehouse-missing-stock-routing')).toHaveLength(0);
+  });
 });

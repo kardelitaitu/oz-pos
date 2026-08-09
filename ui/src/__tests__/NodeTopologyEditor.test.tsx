@@ -4095,6 +4095,64 @@ describe('NodeTopologyEditor — warehouse capacity validation', () => {
   });
 });
 
+// ── Warehouse missing stock-routing prompt ──────────────────────
+
+describe('NodeTopologyEditor — warehouse missing stock-routing prompt', () => {
+  const renderUnwiredWarehouse = async (metadata: Record<string, unknown>) => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-1', type: 'workspace', name: 'Retail POS', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-1', type: 'warehouse', name: 'Main Stock Room', x: 680, y: 140, metadata },
+      ],
+      wires: [
+        { id: 'w-loc', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+      ],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
+  };
+
+  const warehouseNote = () =>
+    document.querySelector('.node-type-warehouse')?.querySelector('.node-validation-note');
+
+  it('prompts to route stock in when a warehouse with room has no stock wire', async () => {
+    await renderUnwiredWarehouse({ stock: 500, capacity: 1000 });
+
+    const note = warehouseNote();
+    expect(note).not.toBeNull();
+    expect(note?.textContent).toContain('stock');
+  });
+
+  it('keeps the prompt off a warehouse with room when a stock wire exists', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-1', type: 'workspace', name: 'Retail POS', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-1', type: 'warehouse', name: 'Main Stock Room', x: 680, y: 140, metadata: { stock: 500, capacity: 1000 } },
+      ],
+      wires: [
+        { id: 'w-loc', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+        { id: 'w-stock', from_node_id: 'ws-1', to_node_id: 'wh-1', from_port_id: 'stock-out', to_port_id: 'stock-in', relationship_type: 'stock-routing', direction: 'one-way' },
+      ],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
+
+    expect(warehouseNote()).toBeNull();
+  });
+
+  it('keeps the prompt off a full warehouse with no stock wire', async () => {
+    await renderUnwiredWarehouse({ stock: 1000, capacity: 1000 });
+    expect(warehouseNote()).toBeNull();
+  });
+
+  it('keeps the prompt off a warehouse without capacity metadata', async () => {
+    await renderUnwiredWarehouse({ stock: 500 });
+    expect(warehouseNote()).toBeNull();
+  });
+});
+
 // ── Zoom controls behavior ──────────────────────────────────────
 
 describe('NodeTopologyEditor — zoom controls behavior', () => {

@@ -234,6 +234,7 @@ topology-validation-invalid-location = This is not a valid Branch Location to Wo
 topology-validation-duplicate-wire = This semantic connection is duplicated.
 topology-validation-unknown-wire-endpoint = This connection references a node that is not in the graph.
 topology-validation-warehouse-at-capacity = Stock Room is at or over capacity — route stock elsewhere first.
+topology-validation-warehouse-missing-stock-routing = This Stock Room has room but no stock is routed to it — connect a workspace with Stock routing.
 topology-workspace-purpose-label = Purpose
 topology-workspace-technical-type-label = Technical type
 topology-workspace-purpose-selector-label = Workspace purpose

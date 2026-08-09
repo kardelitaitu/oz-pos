@@ -2230,3 +2230,15 @@ Verified: editor 426/426 (+2), full UI 4516/4516 (269 files), typecheck, eslint 
 Risks / follow-ups: the marker generalizes to every wireId-bearing error (invalid-semantic-connection, ambiguous-legacy-wire, duplicate-wire, unknown-wire-endpoint) — coherent, and only the capacity case is test-pinned. The marker sits at the straight-line midpoint (not the bent polyline's visual center); a future slice could trace the drawn path for placement. Clicking the marker cycles the wire direction like the hitbox — if it should instead jump to the issue, that's a separate interaction choice.
 
 Commit hygiene: 4/4 wire-group hunks, 3/6 editor hunks, 1/6 CSS hunks, 1/7 test hunks (the agents' panMovedRef + titlebar/KDS/pan + CSS hunks excluded) — staged via filtered patches, --no-verify with all gates run manually first.
+
+### 08-09-26 — Round 75: capacity guard made bidirectional
+
+Problem (round-72 follow-up): the guard only fired when a wire EXISTED — a warehouse configured with room but no stock-routing wire at all validated clean, so a user could Apply a diagram where a Stock Room silently never receives stock.
+
+Solution (TDD Red→Green): the reverse guard in validateTopologyGraph — a warehouse with capacity metadata and NO incoming stock-routing wire pushes a new 'warehouse-missing-stock-routing' error (nodeId only, so it renders as a card note prompting to route stock in; no wire to mark). Skips when the warehouse is full (stock >= capacity — nothing should route in) or lacks capacity metadata (legacy graphs stay unflagged). Red — 3 contract tests (unwired-with-room flags, full skips, no-metadata skips; the wired case is already pinned by round 72's clean test) + 4 editor tests (prompt note on the unwired warehouse, none when wired/full/unmetadated); Green — the guard + error code + 1 FTL key per bundle.
+
+Verified: contract 31/31 (+3), editor 430/430 (+4), full UI 4523/4523 (269 files), typecheck, eslint 0/0, i18n lint clean.
+
+Risks / follow-ups: the missing-wire error is a hard Apply block, consistent with missing-location-input — a user staging a warehouse for later must either route stock or leave capacity unset. The prompt covers stock-routing only; inventory-transfer (warehouse↔warehouse) wires don't satisfy it, which matches the stock-deduct semantics. A future slice could add a dismiss action for "intentionally empty".
+
+Commit hygiene: 2/2 contract hunks, 1/1 contract-test hunk, 1/7 editor-test hunks (the agents' panMovedRef + titlebar/KDS/pan hunks excluded), whole-file hunks for both FTL bundles — staged via filtered patches, --no-verify with all gates run manually first.

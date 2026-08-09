@@ -232,6 +232,7 @@ topology-validation-invalid-location = Ini bukan koneksi Branch Location ke Work
 topology-validation-duplicate-wire = Koneksi semantik ini duplikat.
 topology-validation-unknown-wire-endpoint = Koneksi ini merujuk node yang tidak ada dalam grafik.
 topology-validation-warehouse-at-capacity = Gudang Stok sudah mencapai atau melebihi kapasitas — alihkan stok ke tempat lain terlebih dahulu.
+topology-validation-warehouse-missing-stock-routing = Gudang Stok ini masih memiliki ruang tetapi tidak ada stok yang dialihkan ke sini — hubungkan workspace dengan routing stok.
 topology-workspace-purpose-label = Tujuan
 topology-workspace-technical-type-label = Tipe teknis
 topology-workspace-purpose-selector-label = Tujuan workspace

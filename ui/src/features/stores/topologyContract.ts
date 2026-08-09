@@ -103,7 +103,8 @@ export interface TopologyValidationError {
     | 'invalid-location-connection'
     | 'duplicate-wire'
     | 'unknown-wire-endpoint'
-    | 'warehouse-at-capacity';
+    | 'warehouse-at-capacity'
+    | 'warehouse-missing-stock-routing';
   messageId: string;
   nodeId?: string;
   wireId?: string;
@@ -594,6 +595,26 @@ export function validateTopologyGraph(graph: SemanticTopologyGraph): TopologyVal
         wireId: wire.id,
       });
     }
+  }
+
+  // Reverse guard: a warehouse configured with room but NO incoming
+  // stock-deduct wire is an unserviced Stock Room — prompt the user to
+  // route stock in. Skipped when the warehouse is full (stock >= capacity;
+  // nothing should route in then) or has no capacity metadata (legacy
+  // graphs with no design-time numbers stay unflagged).
+  for (const node of graph.nodes) {
+    if (node.kind !== 'warehouse') continue;
+    if (node.capacity === undefined) continue;
+    if (node.stock !== undefined && node.stock >= node.capacity) continue;
+    const hasStockRouting = graph.wires.some(
+      (wire) => wire.relationshipType === 'stock-routing' && wire.toNodeId === node.id,
+    );
+    if (hasStockRouting) continue;
+    errors.push({
+      code: 'warehouse-missing-stock-routing',
+      messageId: 'topology-validation-warehouse-missing-stock-routing',
+      nodeId: node.id,
+    });
   }
 
   const branches = graph.nodes.filter((node) => node.kind === 'branch-location');
