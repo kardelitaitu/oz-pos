@@ -79,6 +79,7 @@ export interface SemanticTopologyGraph {
 export interface TopologyValidationError {
   code:
     | 'unsupported-schema-version'
+    | 'warehouse-tier-limit'
     | 'multiple-branch-locations'
     | 'missing-branch-location'
     | 'branch-location-missing-identity'

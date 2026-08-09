@@ -1240,6 +1240,171 @@ describe('NodeTopologyEditor Component', () => {
     });
   });
 
+  // ── Node-card a11y (P3): selection state + Space activation ─────
+
+  it('exposes selection state via aria-selected on node cards', () => {
+    renderEditor();
+
+    const cards = document.querySelectorAll('.topology-node');
+    expect(cards[0]!.getAttribute('aria-selected')).toBe('false');
+    expect(cards[1]!.getAttribute('aria-selected')).toBe('false');
+
+    selectFirstNode();
+    expect(cards[0]!.getAttribute('aria-selected')).toBe('true');
+    expect(cards[1]!.getAttribute('aria-selected')).toBe('false');
+  });
+
+  it('Space selects the focused card and prevents page scroll', () => {
+    renderEditor();
+
+    const card = document.querySelector('.topology-node') as HTMLElement;
+    card.focus();
+    const preventDefault = vi.spyOn(KeyboardEvent.prototype, 'preventDefault');
+    try {
+      fireEvent.keyDown(card, { key: ' ' });
+    } finally {
+      preventDefault.mockRestore();
+    }
+    expect(card.className).toContain('node-selected');
+    expect(card.getAttribute('aria-selected')).toBe('true');
+  });
+
+  // ── Workspace rename persistence (P3): body + inspector commit ──
+
+  describe('rename persistence via the parent callbacks (body + inspector)', () => {
+    it('commits a body-config rename through onRenameWorkspace on blur', async () => {
+      const onRenameWorkspace = vi.fn().mockResolvedValue(true);
+      renderEditor({ onRenameWorkspace });
+
+      const input = document.querySelector('.node-config-input') as HTMLInputElement;
+      fireEvent.change(input, { target: { value: 'Body Renamed POS' } });
+      fireEvent.blur(input);
+
+      await waitFor(() => expect(onRenameWorkspace).toHaveBeenCalledWith('ws-1', 'Body Renamed POS'));
+    });
+
+    it('commits a body-config rename on Enter', async () => {
+      const onRenameWorkspace = vi.fn().mockResolvedValue(true);
+      renderEditor({ onRenameWorkspace });
+
+      const input = document.querySelector('.node-config-input') as HTMLInputElement;
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: 'Enter Renamed POS' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+
+      await waitFor(() => expect(onRenameWorkspace).toHaveBeenCalledWith('ws-1', 'Enter Renamed POS'));
+    });
+
+    it('commits an inspector rename of a workspace through onRenameWorkspace on blur', async () => {
+      const onRenameWorkspace = vi.fn().mockResolvedValue(true);
+      renderEditor({ onRenameWorkspace });
+
+      // The retail preset's workspace card is the second node on canvas.
+      fireEvent.mouseDown(nodeAt(1), { button: 0 });
+      const nameInput = document.querySelector('.inspector-field input[type="text"]') as HTMLInputElement;
+      expect(nameInput.value).toBe('Retail POS #1');
+      fireEvent.change(nameInput, { target: { value: 'Inspector Renamed POS' } });
+      fireEvent.blur(nameInput);
+
+      await waitFor(() => expect(onRenameWorkspace).toHaveBeenCalledWith('ws-1', 'Inspector Renamed POS'));
+    });
+
+    it('commits an inspector rename of the branch through onRenameBranch on blur', async () => {
+      const onRenameBranch = vi.fn().mockResolvedValue(true);
+      renderEditor({ onRenameBranch });
+
+      fireEvent.mouseDown(nodeAt(0), { button: 0 });
+      const nameInput = document.querySelector('.inspector-field input[type="text"]') as HTMLInputElement;
+      expect(nameInput.value).toBe('Downtown Branch');
+      fireEvent.change(nameInput, { target: { value: 'Inspector Renamed Branch' } });
+      fireEvent.blur(nameInput);
+
+      await waitFor(() => expect(onRenameBranch).toHaveBeenCalledWith('store-1', 'Inspector Renamed Branch'));
+    });
+  });
+
+  // ── Warehouse tier Apply gate (P1 slice 2) ─────────────────────
+
+  describe('warehouse tier Apply gate', () => {
+    const twoWarehouseDiagram = {
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-1', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-1', type: 'warehouse', name: 'WH 1', x: 680, y: 140 },
+        { id: 'wh-2', type: 'warehouse', name: 'WH 2', x: 680, y: 400 },
+      ],
+      wires: [
+        { id: 'w-1', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+      ],
+    } as never;
+
+    it('flags two warehouses on a standard-tier diagram via the live banner', async () => {
+      mockLoadTopology.mockResolvedValueOnce(twoWarehouseDiagram);
+      renderEditor();
+      await waitFor(() => expect(getNodeCount()).toBe(4));
+
+      expect(screen.getByText('Multi-Warehouse storage locations require a Pro Tier license.')).toBeInTheDocument();
+    });
+
+    it('blocks Apply for two warehouses on standard tier without calling onSave', async () => {
+      mockLoadTopology.mockResolvedValueOnce(twoWarehouseDiagram);
+      const onSave = vi.fn();
+      renderEditor({ onSave });
+      await waitFor(() => expect(getNodeCount()).toBe(4));
+
+      fireEvent.click(screen.getByText('Apply Topology Changes'));
+
+      // The live banner already carries the message; the Apply toast adds a
+      // second copy — getAllByText pins that the error surfaced (≥1).
+      await waitFor(() =>
+        expect(screen.getAllByText('Multi-Warehouse storage locations require a Pro Tier license.').length).toBeGreaterThanOrEqual(1));
+      expect(onSave).not.toHaveBeenCalled();
+    });
+
+    it('allows two warehouses on a Pro-tier diagram', async () => {
+      mockLoadTopology.mockResolvedValueOnce(twoWarehouseDiagram);
+      const onSave = vi.fn();
+      renderEditor({ currentTier: 'pro', onSave });
+      await waitFor(() => expect(getNodeCount()).toBe(4));
+
+      fireEvent.click(screen.getByText('Apply Topology Changes'));
+      await waitFor(() => expect(onSave).toHaveBeenCalled());
+    });
+  });
+
+  // ── Store spawn in strict mode (P1/P2) ─────────────────────────
+
+  describe('store spawn in strict mode', () => {
+    it('hides the Store palette slot in strict mode', () => {
+      renderEditor({ allowLegacyApply: false });
+
+      expect(screen.queryByText('+ Store Node')).toBeNull();
+      expect(screen.getByText('+ Workspace Node')).toBeInTheDocument();
+    });
+
+    it('keeps the Store palette slot in legacy mode', () => {
+      renderEditor();
+
+      expect(screen.getByText('+ Store Node')).toBeInTheDocument();
+    });
+
+    it('omits the store entry from the strict-mode context menu', () => {
+      renderEditor({ allowLegacyApply: false });
+
+      fireEvent.contextMenu(document.querySelector('.node-canvas-container')!, { clientX: 100, clientY: 100 });
+      expect(screen.queryByText('New Store')).toBeNull();
+      expect(screen.getByText('New Workspace')).toBeInTheDocument();
+    });
+
+    it('ignores the 1 key in strict mode', () => {
+      renderEditor({ allowLegacyApply: false });
+
+      const before = getNodeCount();
+      fireEvent.keyDown(window, { key: '1' });
+      expect(getNodeCount()).toBe(before);
+    });
+  });
+
   it('prevents adding second warehouse on standard tier', () => {
     renderEditor();
 

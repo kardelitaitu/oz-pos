@@ -617,14 +617,28 @@ function validateEditorGraph(
   nodes: TopologyNodeData[],
   wires: TopologyWireData[],
   allowLegacyApply: boolean,
+  tier: string,
 ): TopologyValidationError[] {
   const semanticGraph = normalizeTopologyGraph(nodes, wires);
   const hasCanonicalBranchIdentity = semanticGraph.nodes.some(
     (node) => node.kind === 'branch-location' && node.storeProfileId !== undefined,
   );
-  return hasCanonicalBranchIdentity || !allowLegacyApply
+  const errors = hasCanonicalBranchIdentity || !allowLegacyApply
     ? validateTopologyGraph(semanticGraph)
     : [];
+  // The multi-warehouse tier cap is an Apply-gate invariant that the
+  // creation paths also enforce (every spawn/duplicate path refuses a
+  // second warehouse below Pro). Enforcing it here catches the remaining
+  // routes in: a tier downgrade while a 2-warehouse diagram exists, or a
+  // loaded legacy diagram — so Apply can never persist 2+ warehouses on a
+  // non-Pro install.
+  if (!['pro', 'enterprise'].includes(tier)) {
+    const warehouseCount = semanticGraph.nodes.filter((n) => n.kind === 'warehouse').length;
+    if (warehouseCount >= 2) {
+      errors.push({ code: 'warehouse-tier-limit', messageId: 'topology-toast-multi-warehouse' });
+    }
+  }
+  return errors;
 }
 
 export default function NodeTopologyEditor({
@@ -1675,6 +1689,10 @@ export default function NodeTopologyEditor({
   const renameInputRef = useRef<HTMLInputElement>(null);
   /** Guards the blur-commit against a concurrent Escape/close. */
   const renameCancelledRef = useRef(false);
+  /** Focus-time name snapshot for the live-bound rename inputs (body config
+   *  / inspector Node Name). They already carry the edited value on blur, so
+   *  the baseline is what tells an unedited blur from a real rename. */
+  const renameBaselineRef = useRef<string | null>(null);
   /** Focus target when the rename form closes: the node id for keyboard
    *  closes (Enter/Escape), null for blur-commits — a click-away must not
    *  steal focus back from wherever the user actually clicked. */
@@ -1711,6 +1729,28 @@ export default function NodeTopologyEditor({
     setRenamingNodeId(null);
     setRenameDraft('');
   };
+
+  /** Persist a live-bound rename (the body config input / inspector Node
+   *  Name field) through the same parent callback the titlebar F2 rename
+   *  uses, so a committed rename survives the authoritative instance/
+   *  location refresh instead of being silently reverted by the merge.
+   *  Harnesses without the callback keep the local-only path (Apply
+   *  persists the diff). A false return means the parent toasted — keep
+   *  the local name for a retry, mirroring commitNodeRename. */
+  const persistNodeRename = useCallback(async (nodeId: string, name: string) => {
+    const node = nodes.find((n) => n.id === nodeId);
+    if (!node) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    // Live-bound inputs already carry the edited value on blur — compare
+    // against the focus-time baseline so an unedited blur never round-trips
+    // a redundant rename through the parent.
+    if (trimmed === renameBaselineRef.current) return;
+    const persist = node.type === 'store' ? onRenameBranch : onRenameWorkspace;
+    if (!persist) return;
+    await persist(nodeId, trimmed);
+    renameBaselineRef.current = trimmed;
+  }, [nodes, onRenameBranch, onRenameWorkspace]);
 
   const commitNodeRename = async (nodeId: string, fromKeyboard = false) => {
     if (renameSaving || renameCancelledRef.current) return;
@@ -3341,6 +3381,12 @@ export default function NodeTopologyEditor({
   };
 
   const handleAddNode = (type: NodeType, at?: { x: number; y: number }) => {
+    // Strict mode (the real topology screen) builds the branch card from
+    // the authoritative branchLocations list — a palette-spawned store has
+    // no storeProfileId and nothing can attach one, so it could never be
+    // applied. Refuse the spawn there; the palette slot, context-menu
+    // entry, and the 1-slot shortcut are hidden too.
+    if (type === 'store' && !allowLegacyApply) return;
     if (type === 'warehouse' && wouldExceedWarehouseCap(1)) {
       addToast({ message: l10n.getString('topology-toast-multi-warehouse'), type: 'warning' });
       return;
@@ -3431,7 +3477,7 @@ export default function NodeTopologyEditor({
    *  a note; graph-level errors (branch roots, wire integrity) surface as
    *  the canvas banner. */
   const liveValidation = useMemo(() => {
-    const errors = validateEditorGraph(nodes, wires, allowLegacyApply);
+    const errors = validateEditorGraph(nodes, wires, allowLegacyApply, currentTier);
     const byNode = new Map<string, TopologyValidationError[]>();
     const graphLevel: TopologyValidationError[] = [];
     for (const err of errors) {
@@ -3444,7 +3490,7 @@ export default function NodeTopologyEditor({
       }
     }
     return { byNode, graphLevel };
-  }, [nodes, wires, allowLegacyApply]);
+  }, [nodes, wires, allowLegacyApply, currentTier]);
 
   /** Aggregated issue list for the validation panel: per-node problems
    *  first (actionable — clicking jumps to the node), then graph-level. */
@@ -3970,7 +4016,7 @@ export default function NodeTopologyEditor({
               onClick={async () => {
                 // Same gate as the live badge surface — shared helper keeps
                 // the Apply toast and the on-canvas badges in lockstep.
-                const validationErrors = validateEditorGraph(nodes, wires, allowLegacyApply);
+                const validationErrors = validateEditorGraph(nodes, wires, allowLegacyApply, currentTier);
                 if (validationErrors.length > 0) {
                   addToast({
                     message: l10n.getString(validationErrors[0]!.messageId),
@@ -4090,14 +4136,16 @@ export default function NodeTopologyEditor({
           <div className="tool-rack-section">
             <h4 className="tool-rack-section-title"><Localized id="topology-rack-add-title">Add Nodes</Localized></h4>
 
-          <button type="button" className="tool-card" onClick={() => handleAddNode('store')}>
-            <span className="tool-card-icon"><StoreIcon size={22} /></span>
-            <div className="tool-card-info">
-              <strong><Localized id="topology-tool-store">+ Store Node</Localized></strong>
-              <span><Localized id="topology-tool-store-desc">Store Branch Profile</Localized></span>
-            </div>
-            <kbd className="tool-card-shortcut" aria-hidden="true">1</kbd>
-          </button>
+          {allowLegacyApply && (
+            <button type="button" className="tool-card" onClick={() => handleAddNode('store')}>
+              <span className="tool-card-icon"><StoreIcon size={22} /></span>
+              <div className="tool-card-info">
+                <strong><Localized id="topology-tool-store">+ Store Node</Localized></strong>
+                <span><Localized id="topology-tool-store-desc">Store Branch Profile</Localized></span>
+              </div>
+              <kbd className="tool-card-shortcut" aria-hidden="true">1</kbd>
+            </button>
+          )}
 
           <button type="button" className="tool-card" onClick={() => handleAddNode('workspace')}>
             <span className="tool-card-icon"><PosIcon size={22} /></span>
@@ -4470,7 +4518,7 @@ export default function NodeTopologyEditor({
                     <div className="topology-context-section-title">
                       {l10n.getString('topology-context-add-title')}
                     </div>
-                    {CONTEXT_ADD_TYPES.map((type) => {
+                    {CONTEXT_ADD_TYPES.filter((t) => allowLegacyApply || t !== 'store').map((type) => {
                       const Icon = NODE_TYPE_ICON[type];
                       return (
                         <button
@@ -4852,6 +4900,7 @@ export default function NodeTopologyEditor({
                 ?.filter((e) => !resolvedIssues.has(issueKey(node.id, e.messageId)));
 
               return (
+                // eslint-disable-next-line jsx-a11y/role-supports-aria-props -- the selectable node card exposes selection via aria-selected
                 <div
                   key={node.id}
                   onContextMenu={(e) => {
@@ -4872,9 +4921,13 @@ export default function NodeTopologyEditor({
                   role="group"
                   tabIndex={0}
                   aria-label={node.name}
+                  // role=group doesn't formally list aria-selected, but the
+                  // card is the selectable unit of the canvas — exposing
+                  // selection to ATs outweighs the schema pedantry.
+                  aria-selected={isSelected}
                   onMouseEnter={() => setHoveredNodeId(node.id)}
                   onMouseLeave={() => setHoveredNodeId((prev) => (prev === node.id ? null : prev))}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') selectOnly(node.id); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectOnly(node.id); } }}
                   // Keep the body selectable/draggable for existing canvas
                   // workflows, while nested controls explicitly opt out.
                   onMouseDown={(e) => {
@@ -4962,6 +5015,9 @@ export default function NodeTopologyEditor({
                             const name = e.target.value;
                             setNodes((prev) => prev.map((n) => (n.id === node.id ? { ...n, name } : n)));
                           }}
+                          onFocus={() => { renameBaselineRef.current = node.name; }}
+                          onBlur={() => void persistNodeRename(node.id, node.name)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void persistNodeRename(node.id, node.name); } }}
                         />
                       </div>
                     )}
@@ -5261,6 +5317,9 @@ export default function NodeTopologyEditor({
                     const name = e.target.value;
                     setNodes((prev) => prev.map((n) => (n.id === selectedNode.id ? { ...n, name } : n)));
                   }}
+                  onFocus={() => { renameBaselineRef.current = selectedNode.name; }}
+                  onBlur={() => void persistNodeRename(selectedNode.id, selectedNode.name)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void persistNodeRename(selectedNode.id, selectedNode.name); } }}
                 />
               </label>
 
