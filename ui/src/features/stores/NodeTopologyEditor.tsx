@@ -3988,6 +3988,27 @@ export default function NodeTopologyEditor({
     setAddStockWireHintId(nodeId);
   };
 
+  /** Wire-scoped jump (round 109 follow-up): a wireId-only validation item
+   *  (invalid-semantic-connection, duplicate-wire, ambiguous-legacy-wire,
+   *  invalid-location-connection, unknown-wire-endpoint) selects + centers
+   *  the offending wire instead of leaving the user to hunt for it.
+   *  Mirrors handleAddStockWireHint's close/center/select shape, but on
+   *  the wire model — the midpoint of the two endpoint node centers.
+   *  Plain function like handleAddStockWireHint: recenterViewOn is not
+   *  memoized, so a useCallback here would churn its deps every render. */
+  const handleJumpToWire = (wireId: string) => {
+    setValidationPanelOpen(false);
+    const wire = wires.find((w) => w.id === wireId);
+    if (!wire) return;
+    const from = nodeMap.get(wire.fromNodeId);
+    const to = nodeMap.get(wire.toNodeId);
+    if (from && to) {
+      recenterViewOn((from.x + to.x) / 2 + NODE_WIDTH / 2, (from.y + to.y) / 2 + NODE_HEIGHT / 2);
+    }
+    setSelectedWireId(wireId);
+    clearSelection();
+  };
+
   /** Per-card visible errors, memoized so the memoized node cards receive a
    *  STABLE nodeErrors prop (a per-render `.filter()` would defeat the memo
    *  for every card carrying an issue). */
@@ -4970,20 +4991,46 @@ export default function NodeTopologyEditor({
                       </button>
                     </div>
                   ))}
-                  {visibleGraphLevel.map((err) => (
-                    <div key={err.messageId} className="topology-validation-item topology-validation-item-static">
-                      <span className="topology-validation-item-msg">{l10n.getString(err.messageId)}</span>
-                      <button
-                        type="button"
-                        className="topology-validation-item-dismiss"
-                        aria-label={l10n.getString('topology-validation-dismiss')}
-                        title={l10n.getString('topology-validation-dismiss')}
-                        onClick={() => dismissIssue(graphIssueKey(err.messageId))}
-                      >
-                        <CloseIcon size={12} />
-                      </button>
-                    </div>
-                  ))}
+                  {visibleGraphLevel.map((err) =>
+                    err.wireId ? (
+                      // Round 109 follow-up: wireId-only errors are
+                      // JUMPABLE — the row selects + centers the wire. The
+                      // key is wire-scoped so two errors of the same class
+                      // (e.g. duplicate-wire on two wires) stay distinct;
+                      // dismissal remains messageId-scoped as before.
+                      <div key={`${err.wireId}-${err.messageId}`} className="topology-validation-item">
+                        <button
+                          type="button"
+                          className="topology-validation-item-select"
+                          onClick={() => handleJumpToWire(err.wireId!)}
+                        >
+                          <span className="topology-validation-item-msg">{l10n.getString(err.messageId)}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="topology-validation-item-dismiss"
+                          aria-label={l10n.getString('topology-validation-dismiss')}
+                          title={l10n.getString('topology-validation-dismiss')}
+                          onClick={() => dismissIssue(graphIssueKey(err.messageId))}
+                        >
+                          <CloseIcon size={12} />
+                        </button>
+                      </div>
+                    ) : (
+                      <div key={err.messageId} className="topology-validation-item topology-validation-item-static">
+                        <span className="topology-validation-item-msg">{l10n.getString(err.messageId)}</span>
+                        <button
+                          type="button"
+                          className="topology-validation-item-dismiss"
+                          aria-label={l10n.getString('topology-validation-dismiss')}
+                          title={l10n.getString('topology-validation-dismiss')}
+                          onClick={() => dismissIssue(graphIssueKey(err.messageId))}
+                        >
+                          <CloseIcon size={12} />
+                        </button>
+                      </div>
+                    ),
+                  )}
                 </div>
               )}
             </div>

@@ -106,6 +106,7 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-validation-invalid-purpose': 'This workspace purpose is not supported by its technical type.',
   'topology-node-stock-wire-hint': "Connect a workspace's Stock Out or another Stock Room's output to this Stock Room's Stock In.",
   'topology-validation-unknown-wire-endpoint': 'This wire references a node that is not in the graph.',
+  'topology-validation-invalid-semantic-connection': 'This wire uses an incompatible port and relationship type.',
   'topology-field-name': 'Name',
   'topology-field-name-aria': 'Edit name',
   'topology-field-enabled': 'Enabled',
@@ -8872,6 +8873,81 @@ describe('NodeTopologyEditor — extra-branch error node scoping', () => {
     fireEvent.click(item.querySelector('.topology-validation-item-select')!);
 
     expect(branchBCard.className).toContain('node-selected');
+    expect(document.querySelector('.topology-validation-panel')).toBeNull();
+  });
+});
+
+// ── Wire-level validation items are jumpable (round 109 follow-up) ──
+
+describe('NodeTopologyEditor — wire-level validation panel jump', () => {
+  it('turns a wireId-only validation item into a jump that selects the wire', async () => {
+    // Round 109 follow-up: wireId-only errors (invalid-semantic-connection,
+    // duplicate-wire, ambiguous-legacy-wire, invalid-location-connection,
+    // unknown-wire-endpoint) rendered as STATIC panel rows — the user saw
+    // the message but had no way to find the offending wire. They now
+    // render as jumpable items that select the wire.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'ws-b', type: 'workspace', name: 'POS B', x: 380, y: 400, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [
+        {
+          id: 'w-loc-a',
+          from_node_id: 'store-1',
+          to_node_id: 'ws-a',
+          from_port_id: 'location-out',
+          to_port_id: 'location-in',
+          relationship_type: 'location',
+          direction: 'one-way',
+        },
+        {
+          id: 'w-loc-b',
+          from_node_id: 'store-1',
+          to_node_id: 'ws-b',
+          from_port_id: 'location-out',
+          to_port_id: 'location-in',
+          relationship_type: 'location',
+          direction: 'one-way',
+        },
+        // Workspace-to-workspace stock routing is semantically invalid: the
+        // contract flags w-bad with invalid-semantic-connection (wireId-only).
+        {
+          id: 'w-bad',
+          from_node_id: 'ws-a',
+          to_node_id: 'ws-b',
+          from_port_id: 'stock-out',
+          to_port_id: 'stock-in',
+          relationship_type: 'stock-routing',
+          direction: 'one-way',
+        },
+      ],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+
+    fireEvent.click(document.querySelector('.topology-issues-btn')!);
+    const panel = document.querySelector('.topology-validation-panel');
+    expect(panel).not.toBeNull();
+
+    // The wire error renders as a JUMPABLE item (a select button), not a
+    // static row.
+    const wireItem = Array.from(panel!.querySelectorAll('.topology-validation-item')).find((el) =>
+      el.textContent?.includes('This wire uses an incompatible port and relationship type.'),
+    )!;
+    expect(wireItem.querySelector('.topology-validation-item-static')).toBeNull();
+    const jump = wireItem.querySelector('.topology-validation-item-select');
+    expect(jump).not.toBeNull();
+
+    fireEvent.click(jump!);
+
+    // The offending wire is selected (wire-selected on its group) and the
+    // panel closes — the wire is now front and center.
+    const badGroup = Array.from(document.querySelectorAll('.wire-group')).find((g) =>
+      g.querySelector('.wire-hitbox')?.getAttribute('data-wire-id') === 'w-bad',
+    )!;
+    expect(badGroup.classList.contains('wire-selected')).toBe(true);
     expect(document.querySelector('.topology-validation-panel')).toBeNull();
   });
 });

@@ -2694,3 +2694,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 109 — extra-branch node-scoping pin)
 
 **Risks / follow-ups:** the two UX dead-ends found by the banner-only audit (rounds 108-109) are now pinned end to end. Remaining: the five wireId-only codes' panel rows are static — a jump-to-wire panel action is a possible future slice; the agents' CloudSyncSettings conflict is theirs to close.
+
+### 2026-08-10 — wire-level validation items are jumpable (round 110)
+
+**Problem (round-109 follow-up, journaled):** the five wireId-only validation codes (invalid-semantic-connection, duplicate-wire, ambiguous-legacy-wire, invalid-location-connection, unknown-wire-endpoint) rendered as STATIC panel rows — the user saw the message but had no way to find the offending wire. The node-scoped errors all gained jump buttons in rounds 103-109; the wire class was the last dead end.
+
+**Solution (TDD Red→Green):** Red — a new editor test renders a workspace-to-workspace stock-routing wire (exactly one invalid-semantic-connection, wireId-only) and asserts the panel item is NOT static, has a select button, and clicking it selects the wire (`wire-selected` on its group) and closes the panel. Failed for the right reason (`expected null not to be null` — no select button). Green — `handleJumpToWire` (close panel, center on the wire's midpoint via recenterViewOn, setSelectedWireId, clearSelection; a plain function like handleAddStockWireHint because recenterViewOn isn't memoized — the eslint exhaustive-deps warning confirmed the useCallback churn) plus a panel branch on `err.wireId`: wire errors render as jumpable items, pure graph-level errors stay static. The panel key is wire-scoped (`${wireId}-${messageId}`) so two errors of the same class stay distinct; dismissal stays messageId-scoped as before.
+
+**Verified:** editor 455/455 (+1), topology suites 534/534, full UI **4573/4573 — fully green** (the round-109 CloudSyncSettings conflict cleared when the sync agents landed `cf82215d`, which pins the plan-required prompt), tsc, eslint clean.
+
+**Commits:** (round 110 — wire validation jump)
+
+**Risks / follow-ups:** the wire marker (byWire) still renders on the canvas AND the banner still carries wire errors — the jump now gives the panel row the same affordance the marker has; a future slice could drop wireId-only errors from the banner since the panel row is now actionable (the round-108 audit kept them there when rows were static).
