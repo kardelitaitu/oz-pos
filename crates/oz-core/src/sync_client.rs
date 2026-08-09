@@ -232,6 +232,95 @@ pub struct TokenResult {
     pub expires_at: Option<String>,
 }
 
+/// Result of reading the caller's own sync plan (ADR sync-plan-gating).
+///
+/// The plan string is `free` | `pro`, or `None` when the read failed or the
+/// server is unreachable — the UI falls back to showing nothing rather than
+/// guessing.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TenantPlanResult {
+    /// Whether the server responded successfully.
+    pub ok: bool,
+    /// Effective plan (`free` | `pro`), when the read succeeded.
+    pub plan: Option<String>,
+    /// Human-readable status or error message.
+    pub status: String,
+}
+
+/// Read the caller's own sync plan from `GET /api/v1/tenants/me/plan`.
+///
+/// Uses the stored API key (JWT) so the server resolves the tenant from the
+/// token claims. Unlike the sync endpoints this route is NOT plan-gated, so a
+/// free tenant can read its own plan to render the upgrade prompt.
+#[cfg(feature = "sync-http")]
+pub async fn fetch_tenant_plan(url: &str, api_key: &str) -> TenantPlanResult {
+    let plan_url = format!("{}/api/v1/tenants/me/plan", url.trim_end_matches('/'));
+
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return TenantPlanResult {
+                ok: false,
+                plan: None,
+                status: format!("Failed to build HTTP client: {e}"),
+            };
+        }
+    };
+
+    match client
+        .get(&plan_url)
+        .header("Authorization", format!("Bearer {api_key}"))
+        .send()
+        .await
+    {
+        Ok(resp) => {
+            if resp.status().is_success() {
+                #[derive(Deserialize)]
+                struct PlanPayload {
+                    plan: String,
+                }
+                match resp.json::<PlanPayload>().await {
+                    Ok(payload) => TenantPlanResult {
+                        ok: true,
+                        plan: Some(payload.plan),
+                        status: "ok".into(),
+                    },
+                    Err(e) => TenantPlanResult {
+                        ok: false,
+                        plan: None,
+                        status: format!("Failed to parse plan response: {e}"),
+                    },
+                }
+            } else {
+                TenantPlanResult {
+                    ok: false,
+                    plan: None,
+                    status: format!("Server returned {}", resp.status()),
+                }
+            }
+        }
+        Err(e) => TenantPlanResult {
+            ok: false,
+            plan: None,
+            status: format!("Connection failed: {e}"),
+        },
+    }
+}
+
+/// Stub when sync-http is disabled.
+#[cfg(not(feature = "sync-http"))]
+pub async fn fetch_tenant_plan(_url: &str, _api_key: &str) -> TenantPlanResult {
+    TenantPlanResult {
+        ok: false,
+        plan: None,
+        status: "sync-http feature is disabled".into(),
+    }
+}
+
 /// Read the admin key that gates token minting (ADR sync-auth-hardening P2).
 ///
 /// Comes from the `OZ_ADMIN_KEY` environment variable; the client sends it as
@@ -1324,6 +1413,78 @@ mod tests {
             crate::offline::OfflineQueueStatus::Pending,
             "never marked failed on a plan gate"
         );
+    }
+
+    /// ADR sync-plan-gating: fetch_tenant_plan reads the caller's own plan
+    /// (free/pro) from the non-gated self-serve endpoint.
+    #[cfg(feature = "sync-http")]
+    #[test]
+    fn fetch_tenant_plan_returns_plan_from_server() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buffer = [0_u8; 8192];
+            let _ = stream.read(&mut buffer).unwrap();
+            let body = r#"{"tenant_id":"tenant-a","plan":"pro"}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let _ = stream.write_all(response.as_bytes());
+        });
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let result = rt.block_on(fetch_tenant_plan(
+            &format!("http://127.0.0.1:{port}"),
+            "test-jwt",
+        ));
+        server.join().unwrap();
+
+        assert!(result.ok);
+        assert_eq!(result.plan.as_deref(), Some("pro"));
+    }
+
+    #[cfg(feature = "sync-http")]
+    #[test]
+    fn fetch_tenant_plan_reports_server_error() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buffer = [0_u8; 8192];
+            let _ = stream.read(&mut buffer).unwrap();
+            let body = r#"{"error":"invalid_token"}"#;
+            let response = format!(
+                "HTTP/1.1 401 Unauthorized\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let _ = stream.write_all(response.as_bytes());
+        });
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let result = rt.block_on(fetch_tenant_plan(
+            &format!("http://127.0.0.1:{port}"),
+            "bad-jwt",
+        ));
+        server.join().unwrap();
+
+        assert!(!result.ok);
+        assert_eq!(result.plan, None);
     }
 
     #[test]

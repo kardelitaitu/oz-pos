@@ -200,6 +200,37 @@ pub async fn request_sync_token(
     }
 }
 
+/// Read the caller's own sync plan from the server (ADR sync-plan-gating).
+///
+/// Resolves URL + API key from settings, then calls `GET
+/// /api/v1/tenants/me/plan`. The endpoint is not plan-gated, so a free
+/// tenant can read its own plan to render the upgrade prompt without
+/// running a sync.
+#[command]
+pub async fn get_sync_plan(
+    state: State<'_, AppState>,
+) -> Result<sync_client::TenantPlanResult, AppError> {
+    // Resolve URL + API key first (brief DB lock), then drop the lock
+    // before the async HTTP call.
+    let (url, api_key) = {
+        let db = state.db.lock().await;
+        let store = Store::new(&db);
+        let config = SyncConfig::from_settings(&store)?;
+        match config {
+            Some(c) => (Some(c.server_url), c.api_key),
+            None => (None, None),
+        }
+    };
+    match (url, api_key) {
+        (Some(u), Some(key)) => Ok(sync_client::fetch_tenant_plan(&u, &key).await),
+        _ => Ok(sync_client::TenantPlanResult {
+            ok: false,
+            plan: None,
+            status: "Sync is not configured".into(),
+        }),
+    }
+}
+
 /// Test the cloud sync connection by pinging the configured server.
 /// If `url` is provided from the front-end, it is used directly.
 #[command]

@@ -606,6 +606,7 @@ pub fn run() {
             commands::sync::pending_sync_count,
             commands::sync::test_sync_connection,
             commands::sync::request_sync_token,
+            commands::sync::get_sync_plan,
             commands::sync::get_pg_sync_settings,
             commands::sync::update_pg_sync_settings,
             commands::sync::pg_sync_status,
