@@ -2180,3 +2180,17 @@ Verified: editor 416/416 (+3), integration 9/9, full UI 4500/4500 (269 files), t
 Risks / follow-ups: the values are stored but not yet consumed — telemetry badge, validation, or the stock-deduct routing could read metadata.capacity/lowStockThreshold to surface low-stock warnings on the canvas (a natural next slice). Clearing a field writes 0 (clamped ≥ 0). The id.ftl strings are best-effort Indonesian, as in round 69.
 
 Commit hygiene: 5/8 editor hunks (the agents' 3 panMovedRef hunks excluded), 1/7 test hunks, whole-file hunks for the inspector test and both FTL bundles, plus the new card file — staged via filtered patches, --no-verify with all gates run manually first.
+
+### 08-09-26 — Round 71: warehouse low-stock warning wired to the canvas
+
+Problem (round-70 follow-up): the capacity / low-stock threshold values were stored but unused — getTelemetry's warehouse branch still returned null (its comment even promised this Phase-3 slice), so the Stock Room card showed no badge and the threshold never surfaced.
+
+Solution (TDD Red→Green): added a Current Stock field to the settings card (metadata.stock) — the missing third number that makes the threshold evaluable — and the warehouse branch of getTelemetry now computes the card badge from metadata: "X items" (or "X / Y items" when capacity is set), flipping to the telemetry-warning state when stock is at or below lowStockThreshold. Without stock the badge stays hidden (a placeholder chip would read as unfinished). canvasStateEqual projects stock alongside capacity/threshold so edits dirty the diagram and persist. 2 new FTL keys in both bundles.
+
+Red tests: warning badge at/below threshold, online badge above, stock/capacity formatting, badge hidden until stock is entered, Current Stock input renders, and a Current Stock edit survives Apply in the onSave payload.
+
+Verified: editor + integration 430/430, full UI 4505/4505 (269 files), typecheck, eslint 0/0, i18n lint clean.
+
+Risks / follow-ups: stock/capacity/threshold are design-time metadata; a live inventory feed (settings.inventory) can supersede them in getTelemetry when the backend exposes per-warehouse stock — the branch is isolated for that swap. Badge text is plain numbers ("5 / 1000 items"), matching the existing demo badges; localization of the unit word is a future pass.
+
+Commit hygiene: 2/5 editor hunks, 2/8 test hunks (the agents' panMovedRef + titlebar/KDS/pan hunks excluded), whole-file hunks for the card and both FTL bundles — staged via filtered patches, --no-verify with all gates run manually first.

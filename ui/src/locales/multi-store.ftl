@@ -190,6 +190,8 @@ topology-warehouse-capacity = Capacity
 topology-warehouse-capacity-desc = Max items this Stock Room can hold
 topology-warehouse-low-stock-threshold = Low-Stock Threshold
 topology-warehouse-low-stock-desc = Alert when stored stock drops to or below this count
+topology-warehouse-stock = Current Stock
+topology-warehouse-stock-desc = Items currently stored in this Stock Room
 topology-ws-type-select-aria = Select workspace type
 # $name (String) — node display name · $port (String) — port position (top/right/bottom/left)
 topology-port-aria = { $name } { $port } port

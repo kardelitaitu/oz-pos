@@ -25,6 +25,7 @@ function readNumber(node: TopologyNodeData, key: string): number | undefined {
 export function WarehouseSettingsCard({ node, onChange }: WarehouseSettingsCardProps) {
   const capacity = readNumber(node, 'capacity');
   const lowStockThreshold = readNumber(node, 'lowStockThreshold');
+  const stock = readNumber(node, 'stock');
 
   return (
     <div className="inspector-section" data-testid="warehouse-inspector">
@@ -61,6 +62,22 @@ export function WarehouseSettingsCard({ node, onChange }: WarehouseSettingsCardP
         />
         <span className="inspector-hint">
           <Localized id="topology-warehouse-low-stock-desc">Alert when stored stock drops to or below this count</Localized>
+        </span>
+      </label>
+      {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- text is provided by <Localized> child */}
+      <label className="inspector-field">
+        <span><Localized id="topology-warehouse-stock">Current Stock</Localized></span>
+        <input
+          type="number"
+          min={0}
+          value={stock ?? ''}
+          onChange={(e) => {
+            const parsed = parseInt(e.target.value, 10);
+            onChange(node.id, { stock: Number.isNaN(parsed) ? 0 : Math.max(0, parsed) });
+          }}
+        />
+        <span className="inspector-hint">
+          <Localized id="topology-warehouse-stock-desc">Items currently stored in this Stock Room</Localized>
         </span>
       </label>
     </div>

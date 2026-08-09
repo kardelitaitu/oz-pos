@@ -397,6 +397,7 @@ function canvasStateEqual(
           enabled: n.metadata['enabled'],
           capacity: n.metadata['capacity'],
           lowStockThreshold: n.metadata['lowStockThreshold'],
+          stock: n.metadata['stock'],
         },
       } : {}),
     }));
@@ -4383,12 +4384,22 @@ export default function NodeTopologyEditor({
       };
     }
     if (node.type === 'warehouse') {
-      // Inventory settings are not yet wired into SettingsContext, so there
-      // is no real status to badge yet. Returning null keeps the header clean
-      // instead of shipping a placeholder chip that reads as "unfinished".
-      // When the inventory scope is added (Phase 3+), show live low-stock
-      // counts from settings.inventory here.
-      return null;
+      // Per-node diagram metadata drives the badge (round 70+): once the
+      // user enters a Current Stock, show stock / capacity and flip to the
+      // warning state when stock is at or below the low-stock threshold.
+      // Without stock the badge stays hidden — a placeholder chip would
+      // read as "unfinished". Live inventory telemetry (settings.inventory)
+      // can supersede the metadata numbers when that scope lands.
+      const meta = node.metadata;
+      const stock = typeof meta?.['stock'] === 'number' ? (meta['stock'] as number) : undefined;
+      const capacity = typeof meta?.['capacity'] === 'number' ? (meta['capacity'] as number) : undefined;
+      const threshold = typeof meta?.['lowStockThreshold'] === 'number' ? (meta['lowStockThreshold'] as number) : undefined;
+      if (stock === undefined) return null;
+      const low = threshold !== undefined && stock <= threshold;
+      const badge = capacity !== undefined
+        ? `${stock} / ${capacity} items`
+        : `${stock} items`;
+      return { badge, status: low ? 'warning' : 'online' };
     }
     return node.telemetryBadge
       ? { badge: node.telemetryBadge, status: node.telemetryStatus ?? 'online' }

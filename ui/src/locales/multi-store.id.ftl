@@ -188,6 +188,8 @@ topology-warehouse-capacity = Kapasitas
 topology-warehouse-capacity-desc = Jumlah maksimal item yang dapat ditampung Gudang Stok ini
 topology-warehouse-low-stock-threshold = Ambang Stok Menipis
 topology-warehouse-low-stock-desc = Beri tahu saat stok tersimpan turun ke angka ini atau di bawahnya
+topology-warehouse-stock = Stok Saat Ini
+topology-warehouse-stock-desc = Item yang saat ini tersimpan di Gudang Stok ini
 topology-ws-type-select-aria = Pilih tipe workspace
 # $name (String) — node display name · $port (String) — port position (top/right/bottom/left)
 topology-port-aria = Port { $port } { $name }

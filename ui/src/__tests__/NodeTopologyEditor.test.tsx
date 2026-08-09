@@ -3935,6 +3935,7 @@ describe('NodeTopologyEditor — warehouse inspector settings card', () => {
     expect(screen.getByText('Stock Room Settings')).toBeInTheDocument();
     expect(screen.getByLabelText(/Capacity/)).toBeInTheDocument();
     expect(screen.getByLabelText(/Low-Stock Threshold/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Current Stock/)).toBeInTheDocument();
   });
 
   it('marks the diagram dirty when capacity is edited', async () => {
@@ -3966,6 +3967,72 @@ describe('NodeTopologyEditor — warehouse inspector settings card', () => {
     expect(wh).toBeDefined();
     expect(wh.metadata.capacity).toBe(500);
     expect(wh.metadata.lowStockThreshold).toBe(25);
+  });
+
+  it('persists a Current Stock edit through Apply', async () => {
+    const onSave = vi.fn();
+    renderEditor({ onSave });
+    selectWarehouse();
+
+    fireEvent.change(screen.getByLabelText(/Current Stock/), { target: { value: '5' } });
+
+    fireEvent.click(screen.getByText('Apply Topology Changes'));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+
+    const [nodes] = onSave.mock.calls[0]!;
+    const wh = nodes.find((n: { id: string }) => n.id === 'wh-1');
+    expect(wh).toBeDefined();
+    expect(wh.metadata.stock).toBe(5);
+  });
+});
+
+// ── Warehouse low-stock telemetry ───────────────────────────────
+
+describe('NodeTopologyEditor — warehouse low-stock telemetry', () => {
+  const renderWarehouse = async (metadata: Record<string, unknown>) => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        { id: 'wh-1', type: 'warehouse', name: 'Main Stock Room', x: 380, y: 140, metadata },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(2));
+  };
+
+  const badgeOf = () => {
+    const wh = document.querySelector('.node-type-warehouse') as HTMLElement;
+    return wh?.querySelector('.node-telemetry-badge');
+  };
+
+  it('shows a warning badge when stored stock is at or below the threshold', async () => {
+    await renderWarehouse({ stock: 5, lowStockThreshold: 10 });
+
+    const badge = badgeOf();
+    expect(badge).not.toBeNull();
+    expect(badge?.textContent).toBe('5 items');
+    expect(badge?.className).toContain('telemetry-warning');
+  });
+
+  it('shows an online badge when stored stock is above the threshold', async () => {
+    await renderWarehouse({ stock: 50, lowStockThreshold: 10 });
+
+    const badge = badgeOf();
+    expect(badge).not.toBeNull();
+    expect(badge?.textContent).toBe('50 items');
+    expect(badge?.className).toContain('telemetry-online');
+  });
+
+  it('formats stock against capacity when both are set', async () => {
+    await renderWarehouse({ stock: 5, capacity: 1000, lowStockThreshold: 10 });
+    expect(badgeOf()?.textContent).toBe('5 / 1000 items');
+  });
+
+  it('keeps the card badge hidden until stock is entered', async () => {
+    await renderWarehouse({ capacity: 1000, lowStockThreshold: 10 });
+    expect(badgeOf()).toBeNull();
   });
 });
 
