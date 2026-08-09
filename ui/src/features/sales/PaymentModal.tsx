@@ -930,7 +930,8 @@ export default function PaymentModal({
   const modalStateClass = leaving ? 'payment-modal--exit' : 'payment-modal--enter';
 
   return (
-      <div className={`payment-overlay ${stateClass}`} role="dialog" aria-modal="true" aria-label={l10n.getString('payment-dialog-aria', null, 'Payment')} {...paymentSwipe}>
+      <Localized id="payment-dialog-aria" attrs={{ 'aria-label': true }}>
+        <div className={`payment-overlay ${stateClass}`} role="dialog" aria-modal="true" {...paymentSwipe}>
       <QrisQrDisplay
         amount={total.minor_units}
         currency={total.currency}
@@ -1019,14 +1020,15 @@ export default function PaymentModal({
               <Localized id="payment-title">
                 <h2 className="payment-title">Complete Sale</h2>
               </Localized>
-              <button
-                type="button"
-                className="payment-close"
-                onClick={() => animateLeave(onClose)}
-                aria-label={l10n.getString('payment-close-aria', null, 'Cancel payment')}
-              >
-                &times;
-              </button>
+              <Localized id="payment-close-aria" attrs={{ 'aria-label': true }}>
+                <button
+                  type="button"
+                  className="payment-close"
+                  onClick={() => animateLeave(onClose)}
+                >
+                  &times;
+                </button>
+              </Localized>
             </div>
 
             {tableNumber && (
@@ -1048,16 +1050,18 @@ export default function PaymentModal({
 
             {multiCurrency && (
               <div className="payment-currency-selector">
-                  <label htmlFor="payment-currency-select" aria-label={l10n.getString('payment-currency-aria', null, 'Charge currency')}>
+                  <Localized id="payment-currency-aria" attrs={{ 'aria-label': true }}>
+                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- accessible text via Localized span at runtime */}
+                  <label htmlFor="payment-currency-select">
                     <Localized id="payment-currency-label">
                       <span className="payment-currency-label">Charge Currency</span>
                     </Localized>
+                      <Localized id="payment-currency-select-aria" attrs={{ 'aria-label': true }}>
                       <select
                         id="payment-currency-select"
                         className="payment-currency-select"
                         value={selectedCurrency}
                         onChange={(e) => setSelectedCurrency(e.target.value)}
-                        aria-label={l10n.getString('payment-currency-select-aria', null, 'Select charge currency')}
                       >
                         {currencies.length === 0 && (
                           <option value={total.currency}>{total.currency}</option>
@@ -1068,12 +1072,15 @@ export default function PaymentModal({
                           </option>
                         ))}
                       </select>
+                      </Localized>
                   </label>
+                  </Localized>
               </div>
             )}
 
             {selectedCurrency !== total.currency && exchangeRateInfo && (
-              <div className="payment-exchange-notice" aria-label={l10n.getString('payment-exchange-aria', null, 'Exchange rate information')}>
+              <Localized id="payment-exchange-aria" attrs={{ 'aria-label': true }}>
+              <div className="payment-exchange-notice">
                 <div className="payment-exchange-row">
                   <Localized id="payment-exchange-rate">
                     <span>Exchange rate</span>
@@ -1095,10 +1102,12 @@ export default function PaymentModal({
                   <span>{exchangeRateInfo.effective_date}</span>
                 </div>
               </div>
+              </Localized>
             )}
 
             {selectedCurrency !== total.currency && (
-              <div className="payment-receipt-currency" aria-label={l10n.getString('payment-receipt-currency-aria', null, 'Receipt currency information')}>
+              <Localized id="payment-receipt-currency-aria" attrs={{ 'aria-label': true }}>
+              <div className="payment-receipt-currency">
                 <div className="payment-receipt-currency-row">
                   <Localized id="payment-charged-in">
                     <span>Charged in</span>
@@ -1129,6 +1138,7 @@ export default function PaymentModal({
                   </span>
                 </div>
               </div>
+              </Localized>
             )}
 
             {!splitMode && (
@@ -1160,11 +1170,10 @@ export default function PaymentModal({
                         checked={method === 'other'}
                         onChange={() => setMethod('other')}
                       />
+                        <Localized id="payment-other-placeholder" attrs={{ 'aria-label': true, placeholder: true }}>
                         <input
                           type="text"
                           className="payment-other-input"
-                          aria-label={l10n.getString('payment-other-aria', null, 'Other payment method name')}
-                          placeholder={l10n.getString('payment-other-placeholder', null, 'Other...')}
                           value={otherLabel}
                           onChange={(e) => {
                             setMethod('other');
@@ -1172,6 +1181,7 @@ export default function PaymentModal({
                           }}
                           disabled={method !== 'other'}
                         />
+                        </Localized>
                     </div>
                     <>
                       {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
@@ -1196,19 +1206,21 @@ export default function PaymentModal({
                   <div className="payment-open-bill-section">
                     <>
                       { }
+                      {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- accessible text via Localized span + input aria-label at runtime */}
                       <label className="payment-customer-label" htmlFor="payment-customer-input">
                         <Localized id="payment-customer-name">
                           <span>Customer Name</span>
                         </Localized>
+                          <Localized id="payment-customer-name-aria" attrs={{ 'aria-label': true }}>
                           <input
                             id="payment-customer-input"
                             type="text"
                             className="payment-customer-input"
-                            aria-label={l10n.getString('payment-customer-name-aria', null, 'Customer name for open bill')}
                             placeholder={l10n.getString('payment-customer-placeholder')}
                             value={customerName}
                             onChange={(e) => setCustomerName(e.target.value)}
                           />
+                          </Localized>
                       </label>
                     </>
                   </div>
@@ -1220,15 +1232,15 @@ export default function PaymentModal({
                       <Localized id="payment-amount-tendered">
                         <span>Amount Tendered</span>
                       </Localized>
+                        <Localized id="payment-tendered-input" attrs={{ 'aria-label': true, placeholder: true }}>
                         <input
                           type="text"
                           className="payment-tendered-input"
                           inputMode="decimal"
-                          aria-label={l10n.getString('payment-tendered-input', null, 'Amount tendered')}
-                          placeholder={l10n.getString('payment-tendered-input', null, '0.00')}
                           value={tendered}
                           onChange={(e) => setTendered(e.target.value)}
                         />
+                        </Localized>
                     </div>
 
                     <div className="payment-quick-cash">
@@ -1251,10 +1263,10 @@ export default function PaymentModal({
                           </button>
                         );
                       })}
+                      <Localized id="payment-tender-exact-aria" attrs={{ 'aria-label': true }}>
                       <button
                         type="button"
                         className="payment-quick-btn"
-                        aria-label={l10n.getString('payment-tender-exact-aria', null, 'Tend exact amount')}
                         onClick={() => {
                           const exp = minorUnitExponent(total.currency);
                           setTendered((Number(total.minor_units) / 10 ** exp).toFixed(exp));
@@ -1264,6 +1276,7 @@ export default function PaymentModal({
                           <span>Exact</span>
                         </Localized>
                       </button>
+                      </Localized>
                     </div>
 
                     {tendered.length > 0 && (
@@ -1360,15 +1373,15 @@ export default function PaymentModal({
                             checked={s.method === 'other'}
                             onChange={() => updateSplit(s.id, { method: 'other' })}
                           />
+                            <Localized id="payment-split-other-placeholder" attrs={{ 'aria-label': true, placeholder: true }}>
                             <input
                               type="text"
                               className="payment-split-other-input"
-                              aria-label={l10n.getString('payment-split-other-aria', null, 'Other payment method name')}
-                              placeholder={l10n.getString('payment-split-other-placeholder', null, 'Other')}
                               value={s.otherLabel}
                               onChange={(e) => updateSplit(s.id, { otherLabel: e.target.value })}
                               disabled={s.method !== 'other'}
                             />
+                            </Localized>
                         </div>
                       </div>
                       <div className="payment-split-amount-group">
@@ -1545,6 +1558,7 @@ export default function PaymentModal({
                 </svg>
                 <span className="payment-error-text">{paymentError.message}</span>
                 {paymentError.retryable && (
+                  <Localized id="payment-retry-aria" attrs={{ 'aria-label': true }}>
                   <button
                     type="button"
                     className="payment-error-retry-btn"
@@ -1552,12 +1566,12 @@ export default function PaymentModal({
                       setPaymentError(null);
                       complete();
                     }}
-                    aria-label={l10n.getString('payment-retry-aria', null, 'Retry payment')}
                   >
                     <Localized id="payment-retry">
                       <span>Retry</span>
                     </Localized>
                   </button>
+                  </Localized>
                 )}
               </div>
             )}
@@ -1668,5 +1682,6 @@ export default function PaymentModal({
       </div>
       )}
     </div>
+      </Localized>
   );
 }

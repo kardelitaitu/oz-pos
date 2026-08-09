@@ -2593,3 +2593,20 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 101 — PaymentModal dead attributes)
 
 **Risks / follow-ups:** the same getString-on-attribute-only pattern may exist elsewhere — a repo-wide scan for `getString\([^)]*-aria'|getString\([^)]*-placeholder'` with attribute-only messages would find remaining dead attributes; the sr-only "Toggle" spans across settings toggles remain a separate consistency slice.
+
+### 2026-08-09 — repo-wide dead-attribute scan: 0 remaining (round 102)
+
+**Problem (round-101 follow-up):** the round-101 fix proved the getString-never-reads-attributes failure mode, but only for the split-amount input. A repo-wide scan (all 177 attribute-only messages in the en bundles × every getString call site in ui/src) found **15 more call sites across 14 keys — all in PaymentModal.tsx**: the dialog/close/currency-selector/exchange/receipt/customer/tendered/exact/other/split-other/retry attributes, all rendering English fallbacks in the id locale.
+
+**Solution (all 15 fixed with <Localized attrs>, scan now 0):**
+- **Single-key wraps (10)** — dialog aria, close aria, currency aria (label), currency-select aria, exchange aria, receipt-currency aria, customer-name aria, tender-exact aria, retry aria; plus payment-tendered-input, the one key carrying BOTH .placeholder and .aria-label, wrapped once with `attrs={{ 'aria-label': true, placeholder: true }}`.
+- **Two-key merges (2)** — the other-method input and the split-other input each read TWO attribute-only keys via getString. Following the round-101 precedent (and the bundles-item-field pattern), `.aria-label` was merged into `payment-other-placeholder` and `payment-split-other-placeholder` in both bundles; the now-unused `payment-other-aria` and `payment-split-other-aria` keys were dropped (verified zero other consumers).
+- **Two eslint-disable comments** — the currency and customer `<label htmlFor>`s are flagged by jsx-a11y/label-has-associated-control because their accessible text sits at recursion depth 3 (label → Localized → span → text) and the runtime aria-label via Localized attrs is invisible to the analyzer. Both labels were passing pre-change only because the nested control carried a STATIC aria-label prop (which getString made dead). The disable comments follow the repo convention (8+ existing instances, CreatePinScreen documents "text via Localized span").
+
+**Test:** the round-101 id-locale render test was extended into a comprehensive pin: dialog + close aria, tendered placeholder/aria, other placeholder/aria, exact-tender aria (default cash state), then split mode for split-amount + split-other placeholder/aria — all asserted to the exact id bundle values via the REAL sales.id.ftl.
+
+**Verified:** PaymentModal 23/23, i18nBundle 14/14, tsc, eslint, i18n lint clean. Definitive re-scan: **0 remaining getString-on-attribute-only sites**. Full UI 4566 with ONE unrelated failure — `screenExtraction.test.ts` flags `settings-sync-plan-required` (className used in the agents' unstaged SyncSection.tsx hunk with no CSS rule); passed at round 101's run, so it is the agents' in-flight work, not mine — left for them.
+
+**Commits:** (round 102 — dead-attribute sweep)
+
+**Risks / follow-ups:** the multi-currency-gated (currency-selector/exchange/receipt) and error-gated (retry) attributes are fixed and pattern-consistent but not individually render-pinned (feature/error state needed); the agents' SyncSection CSS gap is theirs to close.
