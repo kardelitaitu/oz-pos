@@ -95,17 +95,15 @@ async fn run_prune_cycle(db: &Arc<Mutex<Connection>>) {
                 break;
             }
 
-            let batch_count = ids.len();
-
-            // Delete the batch. IDs are UUIDv7 — safe for string
-            // interpolation (no single quotes). Each DELETE runs in
-            // its own implicit transaction, so a failure won't leave
-            // a dangling transaction on the shared connection.
-            let deleted = match conn.execute_batch(&format!(
-                "DELETE FROM offline_queue WHERE id IN ('{}');",
-                ids.join("','")
-            )) {
-                Ok(()) => batch_count,
+            // Delete the batch. The ids are bound as parameters — never
+            // interpolated — because they originate from unvalidated client
+            // pushes (push_handler accepts any id string). Each DELETE runs
+            // in its own implicit transaction, so a failure won't leave a
+            // dangling transaction on the shared connection.
+            let placeholders = vec!["?"; ids.len()].join(", ");
+            let sql = format!("DELETE FROM offline_queue WHERE id IN ({placeholders})");
+            let deleted = match conn.execute(&sql, rusqlite::params_from_iter(ids.iter())) {
+                Ok(count) => count,
                 Err(e) => {
                     error!(error = %e, "prune: batch delete failed");
                     break;
@@ -137,5 +135,48 @@ async fn run_prune_cycle(db: &Arc<Mutex<Connection>>) {
         Err(e) => {
             error!(error = %e, "prune spawn_blocking panicked");
         }
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusqlite::params;
+
+    /// The prune DELETE must treat ids as data, never as SQL. The cloud
+    /// server accepts client-supplied ids verbatim in `push_handler` (no
+    /// UUID validation), so a hostile id sitting in an old synced row must
+    /// not execute arbitrary statements when the hourly prune runs — the
+    /// "IDs are UUIDv7 — safe" comment is an assumption, not an invariant.
+    #[test]
+    fn prune_delete_treats_hostile_id_as_data() {
+        let conn = oz_core::migrations::fresh_db();
+        // An old synced row whose id carries a statement terminator plus a
+        // destructive CREATE. If the DELETE interpolates the id, `hacked`
+        // appears in the schema.
+        let hostile_id = "x'); CREATE TABLE hacked(id TEXT);--";
+        conn.execute(
+            "INSERT INTO offline_queue (id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id, priority)
+             VALUES (?1, 'act', '{}', 'synced', 0, NULL, '2025-01-01T00:00:00Z', '2025-01-02T00:00:00Z', 't1', 1)",
+            params![hostile_id],
+        )
+        .unwrap();
+
+        let db = Arc::new(Mutex::new(conn));
+        tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(run_prune_cycle(&db));
+
+        let conn = db.blocking_lock();
+        let hacked: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'hacked'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            hacked, 0,
+            "hostile id must never execute SQL in the prune DELETE"
+        );
     }
 }
