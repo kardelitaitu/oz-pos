@@ -28,6 +28,15 @@ pub struct CreateTokenRequest {
     pub expiry_hours: Option<i64>,
     /// Optional tenant / store ID for multi-tenant cloud isolation.
     pub tenant_id: Option<String>,
+    /// Client credentials from a registered terminal (ADR sync-auth-hardening
+    /// P3). When both are present the token is minted for that terminal
+    /// without requiring the admin key; the tenant is taken from the
+    /// terminal's registration, never from the request body.
+    #[serde(default)]
+    pub client_id: Option<String>,
+    /// Device secret paired with `client_id` (ADR sync-auth-hardening P3).
+    #[serde(default)]
+    pub client_secret: Option<String>,
 }
 
 /// Response body containing the newly created token.
@@ -45,7 +54,7 @@ const ADMIN_KEY_HEADER: &str = "x-admin-key";
 ///
 /// Returns `true` when the server has no admin key configured (dev mode),
 /// or when the `X-Admin-Key` header matches the configured key.
-fn admin_key_authorised(headers: &HeaderMap, configured: Option<&str>) -> bool {
+pub fn admin_key_authorised(headers: &HeaderMap, configured: Option<&str>) -> bool {
     let Some(key) = configured else {
         return true; // dev mode — no admin key configured
     };
@@ -65,6 +74,51 @@ pub async fn create_token_handler(
     headers: HeaderMap,
     Json(body): Json<CreateTokenRequest>,
 ) -> impl IntoResponse {
+    // ADR sync-auth-hardening P3: terminal client-credentials path. A
+    // registered terminal mints its own scoped token — no admin key needed.
+    if let (Some(client_id), Some(client_secret)) =
+        (body.client_id.as_deref(), body.client_secret.as_deref())
+    {
+        let db = state.db.lock().await;
+        let verified =
+            crate::routes::terminals::verify_terminal_credentials(&db, client_id, client_secret);
+        drop(db);
+        return match verified {
+            Ok(Some(terminal)) => {
+                match crate::auth::create_token_scoped(
+                    &body.label,
+                    body.expiry_hours,
+                    terminal.tenant_id.as_deref(),
+                    Some(&terminal.terminal_id),
+                ) {
+                    Ok(resp) => Json(CreateTokenResponse { token: resp }).into_response(),
+                    Err(e) => {
+                        tracing::error!(?e, "JWT encoding failed");
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(serde_json::json!({"error": "token generation failed"})),
+                        )
+                            .into_response()
+                    }
+                }
+            }
+            Ok(None) => (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({"error": "invalid_credentials"})),
+            )
+                .into_response(),
+            Err(e) => {
+                tracing::error!(error = %e, "verifying terminal credentials failed");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": "token generation failed"})),
+                )
+                    .into_response()
+            }
+        };
+    }
+
+    // Admin-gated label mint (P2).
     if !admin_key_authorised(&headers, state.admin_key.as_deref()) {
         return (
             StatusCode::UNAUTHORIZED,
@@ -106,6 +160,32 @@ mod tests {
             label: "test-client".into(),
             expiry_hours: Some(24),
             tenant_id: None,
+            client_id: None,
+            client_secret: None,
+        }
+    }
+
+    fn register_terminal(conn: &rusqlite::Connection, id: &str, secret: &str) {
+        conn.execute(
+            "INSERT INTO sync_terminals (terminal_id, secret_hash, label)
+             VALUES (?1, ?2, 'front')
+             ON CONFLICT(terminal_id) DO UPDATE SET secret_hash = excluded.secret_hash",
+            rusqlite::params![id, crate::routes::terminals::hash_secret(secret)],
+        )
+        .unwrap();
+    }
+
+    fn body_with_credentials(
+        label: &str,
+        client_id: &str,
+        client_secret: &str,
+    ) -> CreateTokenRequest {
+        CreateTokenRequest {
+            label: label.into(),
+            expiry_hours: Some(24),
+            tenant_id: None,
+            client_id: Some(client_id.into()),
+            client_secret: Some(client_secret.into()),
         }
     }
 
@@ -190,11 +270,76 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn terminal_credentials_mint_token_without_admin_key() {
+        // ADR sync-auth-hardening P3: a registered terminal mints its own
+        // scoped token with client credentials — even when the server is
+        // gated with an admin key and none is presented.
+        let state = state_with_admin_key(Some("sekret"));
+        {
+            let conn = state.db.lock().await;
+            register_terminal(&conn, "term-1", "device-secret-abc");
+        }
+
+        let response = create_token_handler(
+            State(state),
+            HeaderMap::new(), // no admin key
+            Json(body_with_credentials(
+                "pos-terminal",
+                "term-1",
+                "device-secret-abc",
+            )),
+        )
+        .await
+        .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert!(json["token"]["token"].as_str().unwrap().len() > 20);
+    }
+
+    #[tokio::test]
+    async fn terminal_credentials_rejected_when_secret_wrong() {
+        let state = state_with_admin_key(None);
+        {
+            let conn = state.db.lock().await;
+            register_terminal(&conn, "term-1", "device-secret-abc");
+        }
+
+        let response = create_token_handler(
+            State(state),
+            HeaderMap::new(),
+            Json(body_with_credentials(
+                "pos-terminal",
+                "term-1",
+                "wrong-secret",
+            )),
+        )
+        .await
+        .into_response();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn terminal_credentials_rejected_for_unknown_terminal() {
+        let response = create_token_handler(
+            State(state_with_admin_key(None)),
+            HeaderMap::new(),
+            Json(body_with_credentials("pos-terminal", "ghost", "any-secret")),
+        )
+        .await
+        .into_response();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
     async fn create_token_defaults_expiry() {
         let body = CreateTokenRequest {
             label: "default-expiry".into(),
             expiry_hours: None,
             tenant_id: None,
+            client_id: None,
+            client_secret: None,
         };
         let response = create_token_handler(
             State(state_with_admin_key(None)),

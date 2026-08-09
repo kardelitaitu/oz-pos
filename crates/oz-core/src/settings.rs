@@ -450,6 +450,34 @@ impl Settings {
         )?)
     }
 
+    /// Get the registered sync terminal identifier (ADR sync-auth-hardening P3).
+    pub fn get_sync_terminal_id(conn: &Connection) -> Result<Option<String>, CoreError> {
+        Ok(platform_core::settings::Settings::get_sync_terminal_id(
+            conn,
+        )?)
+    }
+
+    /// Set the registered sync terminal identifier (ADR sync-auth-hardening P3).
+    pub fn set_sync_terminal_id(conn: &Connection, id: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_sync_terminal_id(
+            conn, id,
+        )?)
+    }
+
+    /// Get the registered sync terminal device secret (ADR sync-auth-hardening P3).
+    pub fn get_sync_terminal_secret(conn: &Connection) -> Result<Option<String>, CoreError> {
+        Ok(platform_core::settings::Settings::get_sync_terminal_secret(
+            conn,
+        )?)
+    }
+
+    /// Set the registered sync terminal device secret (ADR sync-auth-hardening P3).
+    pub fn set_sync_terminal_secret(conn: &Connection, secret: &str) -> Result<(), CoreError> {
+        Ok(platform_core::settings::Settings::set_sync_terminal_secret(
+            conn, secret,
+        )?)
+    }
+
     // ── Exchange Rate Auto-Sync ─────────────────────────────────
 
     /// Check if exchange rate auto-sync is enabled.

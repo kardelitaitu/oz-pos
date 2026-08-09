@@ -314,7 +314,25 @@ pub async fn sync_run(state: State<'_, AppState>) -> Result<SyncAttemptResult, A
     if matches!(outcomes, Err(sync_client::SyncHttpError::AuthRejected)) {
         // ADR sync-auth-hardening P1: request a fresh token (async, no DB
         // lock), persist it under a brief lock, then retry exactly once.
-        if let Some(fresh_key) = sync_client::request_refresh_token(&config.server_url).await {
+        // P3: prefer terminal client credentials when the device is paired.
+        let client_credentials = {
+            let db = state.db.lock().await;
+            match (
+                Settings::get_sync_terminal_id(&db)?,
+                Settings::get_sync_terminal_secret(&db)?,
+            ) {
+                (Some(id), Some(secret)) => Some((id, secret)),
+                _ => None,
+            }
+        };
+        let fresh_key = sync_client::request_refresh_token(
+            &config.server_url,
+            client_credentials
+                .as_ref()
+                .map(|(id, secret)| (id.as_str(), secret.as_str())),
+        )
+        .await;
+        if let Some(fresh_key) = fresh_key {
             {
                 let db = state.db.lock().await;
                 sync_client::persist_refreshed_api_key(&db, &fresh_key)?;
@@ -530,7 +548,25 @@ pub async fn sync_pull(
     if matches!(snapshot, Err(sync_client::SyncHttpError::AuthRejected)) {
         // ADR sync-auth-hardening P1: request a fresh token (async, no DB
         // lock), persist it under a brief lock, then retry exactly once.
-        if let Some(fresh_key) = sync_client::request_refresh_token(&config.server_url).await {
+        // P3: prefer terminal client credentials when the device is paired.
+        let client_credentials = {
+            let db = state.db.lock().await;
+            match (
+                Settings::get_sync_terminal_id(&db)?,
+                Settings::get_sync_terminal_secret(&db)?,
+            ) {
+                (Some(id), Some(secret)) => Some((id, secret)),
+                _ => None,
+            }
+        };
+        let fresh_key = sync_client::request_refresh_token(
+            &config.server_url,
+            client_credentials
+                .as_ref()
+                .map(|(id, secret)| (id.as_str(), secret.as_str())),
+        )
+        .await;
+        if let Some(fresh_key) = fresh_key {
             {
                 let db = state.db.lock().await;
                 sync_client::persist_refreshed_api_key(&db, &fresh_key)?;

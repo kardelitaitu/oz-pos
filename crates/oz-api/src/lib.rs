@@ -90,7 +90,11 @@ pub fn router(state: AppState) -> Router {
 
     let public = Router::new()
         .route("/api/v1/health", get(routes::health::health))
-        .route("/api/v1/tokens", post(routes::tokens::create_token_handler));
+        .route("/api/v1/tokens", post(routes::tokens::create_token_handler))
+        .route(
+            "/api/v1/terminals",
+            post(routes::terminals::register_terminal_handler),
+        );
 
     let protected = Router::new()
         .route(

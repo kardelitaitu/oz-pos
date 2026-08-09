@@ -36,6 +36,11 @@ pub struct ApiTokenClaims {
     /// `None` for single-store deployments (backward compatible).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tenant_id: Option<String>,
+
+    /// Registered terminal that minted this token (ADR sync-auth-hardening
+    /// P3). `None` for admin-minted or legacy tokens.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub terminal_id: Option<String>,
 }
 
 /// Response body returned when a new token is created.
@@ -74,6 +79,18 @@ pub fn create_token(
     expiry_hours: Option<i64>,
     tenant_id: Option<&str>,
 ) -> Result<TokenResponse, jsonwebtoken::errors::Error> {
+    create_token_scoped(subject, expiry_hours, tenant_id, None)
+}
+
+/// Mint a token scoped to a registered terminal (ADR sync-auth-hardening
+/// P3). `terminal_id` is embedded in the claims so the server knows which
+/// device the token belongs to.
+pub fn create_token_scoped(
+    subject: &str,
+    expiry_hours: Option<i64>,
+    tenant_id: Option<&str>,
+    terminal_id: Option<&str>,
+) -> Result<TokenResponse, jsonwebtoken::errors::Error> {
     let hours = expiry_hours.unwrap_or(DEFAULT_EXPIRY_HOURS);
     let now = Utc::now();
     let exp_time = now + Duration::hours(hours);
@@ -85,6 +102,7 @@ pub fn create_token(
         exp: exp_time.timestamp() as usize,
         iat: now.timestamp() as usize,
         tenant_id: tenant_id.map(|s| s.to_owned()),
+        terminal_id: terminal_id.map(|s| s.to_owned()),
     };
 
     let secret = signing_secret();

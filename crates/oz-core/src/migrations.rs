@@ -736,6 +736,11 @@ pub const ALL: &[Migration] = &[
         id: "124_kds_order_targets.sql",
         sql: include_str!("../migrations/124_kds_order_targets.sql"),
     },
+    // ── Sync auth: registered sync terminals (ADR sync-auth-hardening P3) ──
+    Migration {
+        id: "125_sync_terminals.sql",
+        sql: include_str!("../migrations/125_sync_terminals.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.

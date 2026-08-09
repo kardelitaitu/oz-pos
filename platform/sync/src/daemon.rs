@@ -109,11 +109,33 @@ pub(crate) fn read_config_and_pending(
 /// API key. Returns `true` when a new key was stored. Callers invoke this
 /// once after an `AuthRejected` and never loop on it.
 async fn refresh_persisted_api_key(db: &DbConnection, server_url: &str) -> bool {
-    let token = oz_core::sync_client::request_token(
-        server_url,
-        oz_core::sync_client::admin_key_from_env().as_deref(),
-    )
-    .await;
+    // ADR sync-auth-hardening P3: prefer terminal client credentials when
+    // the device is paired; fall back to the admin key / open mint.
+    let (terminal_id, terminal_secret) = {
+        let db_clone = db.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db_clone.blocking_lock();
+            let store = Store::new(&conn);
+            (
+                Settings::get_sync_terminal_id(store.conn()).unwrap_or(None),
+                Settings::get_sync_terminal_secret(store.conn()).unwrap_or(None),
+            )
+        })
+        .await
+        .unwrap_or((None, None))
+    };
+    let token = match (terminal_id, terminal_secret) {
+        (Some(id), Some(secret)) => {
+            oz_core::sync_client::request_token_client_credentials(server_url, &id, &secret).await
+        }
+        _ => {
+            oz_core::sync_client::request_token(
+                server_url,
+                oz_core::sync_client::admin_key_from_env().as_deref(),
+            )
+            .await
+        }
+    };
     let Some(key) = token.token.filter(|_| token.ok) else {
         tracing::warn!(
             status = %token.status,

@@ -226,10 +226,11 @@ pub use store_profile::StoreProfile;
 pub use subscription::{InstanceStatus, SubscriptionTier, TenantSubscription};
 pub use supplier::Supplier;
 pub use sync_client::{
-    PingResult, PullResult, Snapshot, SyncAttemptResult, SyncConfig, SyncHttpError, TokenResult,
-    apply_snapshot, apply_sync_outcomes, fetch_snapshot_from_server, mark_all_failed,
-    persist_refreshed_api_key, ping_server, request_refresh_token, request_token,
-    send_items_to_server, sync_pending,
+    PingResult, PullResult, Snapshot, SyncAttemptResult, SyncConfig, SyncHttpError,
+    TerminalRegistrationResult, TokenResult, admin_key_from_env, apply_snapshot,
+    apply_sync_outcomes, fetch_snapshot_from_server, mark_all_failed, mint_token,
+    persist_refreshed_api_key, ping_server, register_terminal, request_refresh_token,
+    request_token, request_token_client_credentials, send_items_to_server, sync_pending,
 };
 pub use table::{Table, TableStatus};
 pub use terminal::Terminal;

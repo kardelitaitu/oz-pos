@@ -332,6 +332,28 @@ impl Settings {
         Self::set(conn, keys::SYNC_API_KEY, key)
     }
 
+    /// Get the registered sync terminal identifier (ADR sync-auth-hardening
+    /// P3). `None` when the terminal has not been paired yet.
+    pub fn get_sync_terminal_id(conn: &Connection) -> Result<Option<String>, PlatformError> {
+        Ok(Self::get(conn, keys::SYNC_TERMINAL_ID)?.filter(|s| !s.is_empty()))
+    }
+
+    /// Set the registered sync terminal identifier (ADR sync-auth-hardening P3).
+    pub fn set_sync_terminal_id(conn: &Connection, id: &str) -> Result<(), PlatformError> {
+        Self::set(conn, keys::SYNC_TERMINAL_ID, id)
+    }
+
+    /// Get the registered sync terminal device secret (ADR sync-auth-hardening
+    /// P3). `None` when the terminal has not been paired yet.
+    pub fn get_sync_terminal_secret(conn: &Connection) -> Result<Option<String>, PlatformError> {
+        Ok(Self::get(conn, keys::SYNC_TERMINAL_SECRET)?.filter(|s| !s.is_empty()))
+    }
+
+    /// Set the registered sync terminal device secret (ADR sync-auth-hardening P3).
+    pub fn set_sync_terminal_secret(conn: &Connection, secret: &str) -> Result<(), PlatformError> {
+        Self::set(conn, keys::SYNC_TERMINAL_SECRET, secret)
+    }
+
     /// Check if sync is enabled.
     pub fn is_sync_enabled(conn: &Connection) -> Result<bool, PlatformError> {
         Ok(Self::get(conn, keys::SYNC_ENABLED)?.as_deref() == Some("1"))
