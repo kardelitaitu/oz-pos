@@ -665,6 +665,34 @@ mod tests {
         assert!(r.error.is_none());
     }
 
+    #[tokio::test]
+    async fn sync_run_uses_persisted_settings_and_reports_empty_queue_success() {
+        // Phase 4 bootstrap contract: once the Tauri settings database has
+        // the URL, API key, and enabled flag written by auto-provisioning,
+        // the real command must read that persisted state and return an
+        // explicit successful result when there is nothing to push.
+        let conn = oz_core::migrations::fresh_db();
+        update_sync_settings_data(
+            &conn,
+            &UpdateSyncSettingsArgs {
+                server_url: Some("http://localhost:3099".into()),
+                api_key: Some("test-jwt".into()),
+                enabled: true,
+            },
+        )
+        .unwrap();
+        let app = tauri::test::mock_builder()
+            .manage(AppState::for_test_with_conn(conn))
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result = sync_run(app.state()).await.unwrap();
+
+        assert_eq!(result.synced, 0);
+        assert_eq!(result.failed, 0);
+        assert!(result.error.is_none());
+    }
+
     // ── PostgreSQL sync settings & daemon commands ────────────────
 
     #[test]
