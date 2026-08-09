@@ -203,6 +203,7 @@ topology-validation-missing-operation = Hubungkan KDS ini ke Restaurant POS meng
 topology-validation-invalid-operation-source = Operation In harus menerima operation-out dari Restaurant POS.
 topology-validation-invalid-semantic-connection = Koneksi ini menggunakan port dan tipe relasi yang tidak kompatibel.
 topology-validation-cycle = Topologi berisi siklus terarah. Hapus satu koneksi operasional.
+topology-validation-ambiguous-legacy-wire = Koneksi lama ini tidak dapat diidentifikasi dengan aman. Hapus lalu hubungkan kembali menggunakan port berlabel.
 topology-validation-multiple-operation = KDS hanya dapat memiliki satu koneksi Operation In.
 topology-validation-invalid-location = Ini bukan koneksi Branch Location ke Workspace yang valid.
 topology-validation-duplicate-wire = Koneksi semantik ini duplikat.

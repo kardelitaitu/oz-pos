@@ -92,6 +92,7 @@ export interface TopologyValidationError {
     | 'multiple-operation-inputs'
     | 'invalid-operation-source'
     | 'invalid-semantic-connection'
+    | 'ambiguous-legacy-wire'
     | 'cycle-detected'
     | 'invalid-location-connection'
     | 'duplicate-wire'
@@ -524,6 +525,14 @@ export function validateTopologyGraph(graph: SemanticTopologyGraph): TopologyVal
   // below, and KDS operation wires have a source-node rule in the workspace
   // loop, so those checks remain specialized rather than duplicated here.
   for (const wire of graph.wires) {
+    if (wire.legacyInferred && wire.fromPortId === 'legacy-out' && wire.toPortId === 'legacy-in') {
+      errors.push({
+        code: 'ambiguous-legacy-wire',
+        messageId: 'topology-validation-ambiguous-legacy-wire',
+        wireId: wire.id,
+      });
+      continue;
+    }
     if (wire.relationshipType === 'location') continue;
     const fromNode = graph.nodes.find((node) => node.id === wire.fromNodeId);
     const toNode = graph.nodes.find((node) => node.id === wire.toNodeId);

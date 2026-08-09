@@ -205,6 +205,7 @@ topology-validation-missing-operation = Connect this KDS to a Restaurant POS usi
 topology-validation-invalid-operation-source = Operation In must receive operation-out from a Restaurant POS.
 topology-validation-invalid-semantic-connection = This connection uses an incompatible port and relationship type.
 topology-validation-cycle = Topology contains a directed cycle. Remove one operational connection.
+topology-validation-ambiguous-legacy-wire = This older connection cannot be identified safely. Delete and reconnect it using the labeled ports.
 topology-validation-multiple-operation = A KDS can have only one Operation In connection.
 topology-validation-invalid-location = This is not a valid Branch Location to Workspace connection.
 topology-validation-duplicate-wire = This semantic connection is duplicated.

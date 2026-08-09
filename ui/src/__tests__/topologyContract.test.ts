@@ -65,6 +65,23 @@ describe('semantic topology contract', () => {
     expect(validateTopologyGraph(normalized)).toEqual([]);
   });
 
+  it('rejects ambiguous legacy workspace-to-workspace wires with a repairable error', () => {
+    const normalized = graph(
+      [branch(), workspace('ws-1'), workspace('ws-2')],
+      [
+        { id: 'wire-owner', fromNodeId: 'branch-1', toNodeId: 'ws-1', fromPort: 'right', toPort: 'left', direction: 'one-way' },
+        { id: 'wire-ambiguous', fromNodeId: 'ws-1', toNodeId: 'ws-2', fromPort: 'right', toPort: 'left', direction: 'one-way' },
+      ],
+    );
+
+    expect(validateTopologyGraph(normalized)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: 'ambiguous-legacy-wire',
+        wireId: 'wire-ambiguous',
+      }),
+    ]));
+  });
+
   it('normalizes corrupt or missing wire directions to one-way', () => {
     // Direction is presentation-only, but a corrupt/undefined value must
     // still normalize to a legal value at the contract boundary — the

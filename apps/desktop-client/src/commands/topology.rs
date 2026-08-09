@@ -432,6 +432,49 @@ fn semantic_node_type(node: &Value) -> Option<&str> {
     value_string(node, "type")
 }
 
+/// Return true when a geometric wire has no deterministic semantic migration.
+/// Known legacy identities remain readable; ambiguous workspace relationships
+/// must be repaired in the editor before Apply can persist or compile them.
+fn ambiguous_legacy_wire(nodes: &[Value], wire: &Value) -> bool {
+    if ["from_port_id", "to_port_id", "relationship_type"]
+        .iter()
+        .any(|key| wire.get(*key).is_some())
+    {
+        return false;
+    }
+    let Some(from_node) = value_string(wire, "from_node_id").and_then(|id| {
+        nodes
+            .iter()
+            .find(|node| value_string(node, "id") == Some(id))
+    }) else {
+        return false;
+    };
+    let Some(to_node) = value_string(wire, "to_node_id").and_then(|id| {
+        nodes
+            .iter()
+            .find(|node| value_string(node, "id") == Some(id))
+    }) else {
+        return false;
+    };
+    let from_type = semantic_node_type(from_node);
+    let to_type = semantic_node_type(to_node);
+    let from_type_key = semantic_type_key(from_node);
+    let to_type_key = semantic_type_key(to_node);
+
+    !matches!(
+        (from_type, from_type_key, to_type, to_type_key),
+        (Some("store" | "branch-location"), _, Some("workspace"), _)
+            | (Some("workspace"), _, Some("warehouse"), _)
+            | (
+                Some("workspace"),
+                "restaurant-pos",
+                Some("workspace"),
+                "kds"
+            )
+            | (Some("workspace"), "kds", Some("hardware"), _)
+    )
+}
+
 /// Mirror the frontend's closed semantic pairing matrix at the IPC boundary.
 /// Node kinds are checked as well as port ids because callers can invoke the
 /// command without going through the canvas drag gate.
@@ -543,6 +586,18 @@ fn semantic_wire_matches_contract(wire: &Value, from_node: &Value, to_node: &Val
 /// one Restaurant POS operation feed. Geometry and display names are never
 /// used to infer ownership here.
 fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), AppError> {
+    if let Some(wire) = wires.iter().find(|wire| ambiguous_legacy_wire(nodes, wire)) {
+        return Err(topology_validation(
+            "ambiguous-legacy-wire",
+            None,
+            value_string(wire, "id"),
+            None,
+            format!(
+                "legacy wire {} has no deterministic semantic relationship; repair it in the topology editor",
+                value_string(wire, "id").unwrap_or("<unknown>")
+            ),
+        ));
+    }
     if !has_semantic_fields(nodes, wires) {
         return Ok(());
     }
@@ -1957,6 +2012,41 @@ mod tests {
         assert_eq!(value["wires"][0]["from_port_id"], "location-out");
         assert_eq!(value["wires"][0]["to_port_id"], "location-in");
         assert_eq!(value["wires"][0]["relationship_type"], "location");
+    }
+
+    #[test]
+    fn semantic_save_rejects_ambiguous_legacy_workspace_wire() {
+        let conn = fresh_conn();
+        let result = save_topology_json(
+            &conn,
+            vec![
+                semantic_node("branch", "store", None),
+                semantic_node("ws-1", "workspace", None),
+                semantic_node("ws-2", "workspace", None),
+            ],
+            vec![
+                serde_json::json!({
+                    "id": "wire-owner",
+                    "from_node_id": "branch",
+                    "to_node_id": "ws-1",
+                    "direction": "one-way",
+                }),
+                serde_json::json!({
+                    "id": "wire-ambiguous",
+                    "from_node_id": "ws-1",
+                    "to_node_id": "ws-2",
+                    "direction": "one-way",
+                }),
+            ],
+        );
+
+        match result {
+            Err(AppError::TopologyValidation { code, wire_id, .. }) => {
+                assert_eq!(code, "ambiguous-legacy-wire");
+                assert_eq!(wire_id.as_deref(), Some("wire-ambiguous"));
+            }
+            other => panic!("expected ambiguous-legacy-wire, got {other:?}"),
+        }
     }
 
     #[test]
