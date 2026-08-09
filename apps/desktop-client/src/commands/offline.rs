@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use oz_core::sync_client::{self, SyncConfig};
+use oz_core::sync_client::{self, SyncAttemptResult, SyncConfig};
 use oz_core::{OfflineQueueItem, RemoteSyncFailure, Store, SyncPriority};
 
 use foundation::validate_not_empty;
@@ -105,6 +105,11 @@ pub struct SyncResult {
     pub failed_count: i64,
     /// Total number of items that were attempted.
     pub total_count: i64,
+    /// The server rejected the attempt because this tenant is on the
+    /// `free` plan (ADR sync-plan-gating). Items stay `pending` and sync
+    /// automatically after an upgrade.
+    #[serde(default)]
+    pub plan_required: bool,
 }
 
 /// Arguments for enqueuing an offline transaction.
@@ -272,6 +277,7 @@ pub async fn retry_offline_sync(state: State<'_, AppState>) -> Result<SyncResult
             synced_count: 0,
             failed_count: 0,
             total_count: 0,
+            plan_required: false,
         });
     }
 
@@ -289,6 +295,15 @@ pub async fn retry_offline_sync(state: State<'_, AppState>) -> Result<SyncResult
     let store = Store::new(&db);
     let attempt = match outcomes {
         Ok(outcomes) => sync_client::apply_sync_outcomes(&store, &pending_items, &outcomes)?,
+        // ADR sync-plan-gating: a free tenant is gated, not broken. Do NOT
+        // mark the items failed — they stay `pending` and sync automatically
+        // once the tenant upgrades. The UI shows an upgrade prompt instead.
+        Err(sync_client::SyncHttpError::PlanRequired) => SyncAttemptResult {
+            synced: 0,
+            failed: 0,
+            error: Some("cloud sync requires a paid plan".into()),
+            plan_required: true,
+        },
         Err(e) => sync_client::mark_all_failed(&store, &pending_items, &e.to_string())?,
     };
     drop(db);
@@ -297,6 +312,7 @@ pub async fn retry_offline_sync(state: State<'_, AppState>) -> Result<SyncResult
         synced_count: attempt.synced as i64,
         failed_count: attempt.failed as i64,
         total_count,
+        plan_required: attempt.plan_required,
     })
 }
 
@@ -392,6 +408,7 @@ mod tests {
     use oz_core::OfflineQueueStatus;
     use oz_core::migrations;
     use rusqlite::Connection;
+    use tauri::Manager as _;
 
     fn fresh_conn() -> Connection {
         migrations::fresh_db()
@@ -458,6 +475,76 @@ mod tests {
         assert_eq!(store.pending_offline_count().unwrap(), 0);
         store.enqueue_offline("test", "{}").unwrap();
         assert_eq!(store.pending_offline_count().unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn retry_offline_sync_plan_required_keeps_items_pending() {
+        // ADR sync-plan-gating: a 403 plan_required from the server must
+        // keep queued items `pending` (never mark them failed) and flag
+        // plan_required so the UI can show an upgrade prompt.
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let server_url = format!("http://{}", listener.local_addr().unwrap());
+        let task = tokio::spawn(async move {
+            let Ok((mut socket, _)) = listener.accept().await else {
+                return;
+            };
+            let mut buffer = vec![0_u8; 16 * 1024];
+            let _ = socket.read(&mut buffer).await;
+            let body = r#"{"error":"plan_required"}"#;
+            let response = format!(
+                "HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let _ = socket.write_all(response.as_bytes()).await;
+        });
+
+        let conn = fresh_conn();
+        {
+            let store = Store::new(&conn);
+            store
+                .enqueue_offline("complete_sale", r#"{"id":"retry-plan-gate"}"#)
+                .unwrap();
+        }
+        let app = tauri::test::mock_builder()
+            .manage(AppState::for_test_with_conn(conn))
+            .build(tauri::generate_context!())
+            .unwrap();
+        {
+            // Configure sync AFTER building the app: the mock builder owns
+            // the connection, so write settings through the app's state.
+            let state = app.state::<AppState>();
+            let db = state.db.lock().await;
+            crate::commands::sync::update_sync_settings_data(
+                &db,
+                &crate::commands::sync::UpdateSyncSettingsArgs {
+                    server_url: Some(server_url),
+                    api_key: Some("test-jwt".into()),
+                    enabled: true,
+                },
+            )
+            .unwrap();
+        }
+
+        let result = retry_offline_sync(app.state()).await.unwrap();
+        task.await.unwrap();
+
+        assert!(result.plan_required, "must flag plan_required for the UI");
+        assert_eq!(result.failed_count, 0, "a plan gate is not a failure");
+        assert_eq!(result.total_count, 1);
+
+        let state = app.state::<AppState>();
+        let db = state.db.lock().await;
+        let items = Store::new(&db).list_all_offline().unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            items[0].status,
+            OfflineQueueStatus::Pending,
+            "plan-gated items must stay pending so they sync after upgrade"
+        );
     }
 
     #[test]
@@ -672,6 +759,7 @@ mod tests {
             synced_count: 5,
             failed_count: 2,
             total_count: 7,
+            plan_required: false,
         };
         let d = format!("{sr:?}");
         assert!(d.contains("5"));
@@ -684,6 +772,7 @@ mod tests {
             synced_count: 10,
             failed_count: 0,
             total_count: 10,
+            plan_required: false,
         };
         let json = serde_json::to_value(&sr).unwrap();
         assert_eq!(json["syncedCount"], 10);

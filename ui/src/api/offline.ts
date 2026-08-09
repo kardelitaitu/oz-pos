@@ -47,6 +47,9 @@ export interface SyncResult {
   failedCount: number;
   /** Total number of items that were attempted. */
   totalCount: number;
+  /** The server rejected the attempt because this tenant is on the free
+   *  plan (ADR sync-plan-gating) — show an upgrade prompt. */
+  planRequired?: boolean;
 }
 
 /** Summary of offline queue status (P1-6 sync observability). */
