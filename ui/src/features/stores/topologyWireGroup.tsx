@@ -16,6 +16,7 @@
 import { memo, type ReactNode, type Dispatch, type SetStateAction } from 'react';
 import type { ReactLocalization } from '@fluent/react';
 import type { TopologyWireData } from './NodeTopologyEditor';
+import type { TopologyValidationError } from './topologyContract';
 
 /** Isolated simulation pulse circle so the 30ms tick doesn't re-render the whole canvas. */
 export const SimulationPulse = memo(function SimulationPulse({ x, y }: { x: number; y: number }) {
@@ -36,6 +37,9 @@ export interface TopologyWireGroupProps {
   dimmed: boolean;
   hovered: boolean;
   pulse: { x: number; y: number } | null;
+  /** Wire-scoped validation errors (e.g. warehouse-at-capacity). Must be a
+   *  referentially stable array per wire — the editor passes a Map lookup. */
+  errors: TopologyValidationError[];
   l10n: Pick<ReactLocalization, 'getString'>;
   onHoverWire: Dispatch<SetStateAction<string | null>>;
   onWireClick: (e: { stopPropagation(): void }, wireId: string) => void;
@@ -57,6 +61,7 @@ function TopologyWireGroupImpl({
   dimmed,
   hovered,
   pulse,
+  errors,
   l10n,
   onHoverWire,
   onWireClick,
@@ -120,6 +125,37 @@ function TopologyWireGroupImpl({
       />
 
       {pulse && <SimulationPulse x={pulse.x} y={pulse.y} />}
+
+      {/* Wire-scoped validation marker: a warning badge at the wire's
+          midpoint when this wire carries an error (warehouse-at-capacity
+          and friends). Click/keyboard parity matches the hitbox so the
+          marker never blocks wire interaction — it selects/cycles the wire
+          exactly like a click on the line. The message surfaces as a native
+          SVG tooltip. */}
+      {errors.length > 0 && (() => {
+        const mx = (x1 + x2) / 2;
+        const my = (y1 + y2) / 2;
+        return (
+          <g
+            className="wire-validation-marker"
+            role="button"
+            tabIndex={0}
+            aria-label={l10n.getString(errors[0]!.messageId)}
+            onClick={(e) => onWireClick(e, wire.id)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                onWireClick(e, wire.id);
+              }
+            }}
+          >
+            <title>{l10n.getString(errors[0]!.messageId)}</title>
+            <circle cx={mx} cy={my} r="7" />
+            <text x={mx} y={my} className="wire-validation-marker-text">!</text>
+          </g>
+        );
+      })()}
 
       {/* Bend editing affordances: a midpoint ghost per segment that creates
           a bend when dragged — revealed on hover (discoverability) and

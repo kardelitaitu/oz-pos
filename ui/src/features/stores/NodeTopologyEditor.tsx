@@ -3884,8 +3884,17 @@ export default function NodeTopologyEditor({
   const liveValidation = useMemo(() => {
     const errors = validateEditorGraph(nodes, wires, allowLegacyApply, currentTier);
     const byNode = new Map<string, TopologyValidationError[]>();
+    const byWire = new Map<string, TopologyValidationError[]>();
     const graphLevel: TopologyValidationError[] = [];
     for (const err of errors) {
+      // byWire is additive — the original nodeId/graphLevel bucketing is
+      // unchanged so wireId-only errors (invalid-semantic-connection etc.)
+      // still surface in the canvas banner as before.
+      if (err.wireId) {
+        const list = byWire.get(err.wireId);
+        if (list) list.push(err);
+        else byWire.set(err.wireId, [err]);
+      }
       if (err.nodeId) {
         const list = byNode.get(err.nodeId);
         if (list) list.push(err);
@@ -3894,7 +3903,7 @@ export default function NodeTopologyEditor({
         graphLevel.push(err);
       }
     }
-    return { byNode, graphLevel };
+    return { byNode, byWire, graphLevel };
   }, [nodes, wires, allowLegacyApply, currentTier]);
 
   /** Aggregated issue list for the validation panel: per-node problems
@@ -5265,6 +5274,7 @@ export default function NodeTopologyEditor({
                     dx={geo.dx}
                     pathD={geo.pathD}
                     polyline={geo.polyline}
+                    errors={liveValidation.byWire.get(wire.id) ?? EMPTY_ERRORS}
                     selected={selectedWireId === wire.id}
                     dimmed={hoverConnections !== null
                       && wire.fromNodeId !== hoveredNodeId

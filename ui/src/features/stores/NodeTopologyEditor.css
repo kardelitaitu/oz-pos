@@ -925,6 +925,28 @@
   color: var(--color-danger);
 }
 
+/* Wire-scoped validation marker — a warning badge at the midpoint of a
+   flagged wire (warehouse-at-capacity and other wire-level errors). */
+.wire-validation-marker {
+  cursor: pointer;
+}
+
+.wire-validation-marker > circle {
+  fill: var(--color-danger);
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+
+.wire-validation-marker-text {
+  fill: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+  user-select: none;
+}
+
 /* ── Node add animation — scale-in ────────────────────── */
 
 @keyframes node-scale-in {

@@ -4075,6 +4075,24 @@ describe('NodeTopologyEditor — warehouse capacity validation', () => {
     await renderStockedGraph(500, 1000);
     expect(warehouseNote()).toBeNull();
   });
+
+  it('renders a wire-scoped warning marker on the at-capacity stock wire', async () => {
+    await renderStockedGraph(1000, 1000);
+
+    const marker = document.querySelector('.wire-validation-marker');
+    expect(marker).not.toBeNull();
+    // The marker sits inside the flagged wire's group, whose hitbox carries
+    // the wire id — it cannot belong to a different wire.
+    const group = marker?.closest('.wire-group');
+    expect(group?.querySelector('.wire-hitbox')?.getAttribute('data-wire-id')).toBe('w-stock');
+    // The marker's tooltip carries the localizable capacity message.
+    expect(marker?.textContent).toContain('capacity');
+  });
+
+  it('keeps the wire marker hidden while stock is below capacity', async () => {
+    await renderStockedGraph(500, 1000);
+    expect(document.querySelector('.wire-validation-marker')).toBeNull();
+  });
 });
 
 // ── Zoom controls behavior ──────────────────────────────────────

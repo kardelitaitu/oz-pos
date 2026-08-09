@@ -2218,3 +2218,15 @@ Verified: export 10/10 (+2), contract 28/28, full UI 4514/4514 (269 files), type
 Risks / follow-ups: the validator covers only the numeric trio — typeKey/purposeKey/enabled shapes are still unchecked (a future slice can extend it the same way). Templates (localStorage) ride the same serialize/deserialize path, so the pin covers them transitively.
 
 Commit hygiene: both files 100% mine (no agents' work in topologyExport) — staged directly, journal via index surgery, --no-verify with all gates run manually first.
+
+### 08-09-26 — Round 74: warehouse-at-capacity surfaces on the wire
+
+Problem (round-72 follow-up): the capacity error rendered only as a card note — the user had to open the warehouse's inspector context to see why Apply was blocked, with no signal on the offending wire itself.
+
+Solution (TDD Red→Green): liveValidation now also buckets errors by wireId (byWire, additive — the nodeId/graphLevel bucketing is untouched, so wireId-only errors like invalid-semantic-connection still reach the canvas banner), and TopologyWireGroup renders a wire-scoped warning marker when the wire carries errors: a red "!" badge at the wire's midpoint with the localizable message as a native SVG tooltip. The marker is interactive with click/keyboard parity matching the hitbox (clicking it selects/cycles the wire — it can never block wire interaction), and the errors prop is a referentially-stable Map lookup so the round-66 memo boundary holds. Red — two editor tests: the at-capacity wire renders the marker inside ITS OWN group (asserted via the hitbox's data-wire-id) with the message in the tooltip, and below capacity no marker renders; Green — byWire + the marker + 22 lines of CSS (danger badge).
+
+Verified: editor 426/426 (+2), full UI 4516/4516 (269 files), typecheck, eslint 0/0. No FTL changes.
+
+Risks / follow-ups: the marker generalizes to every wireId-bearing error (invalid-semantic-connection, ambiguous-legacy-wire, duplicate-wire, unknown-wire-endpoint) — coherent, and only the capacity case is test-pinned. The marker sits at the straight-line midpoint (not the bent polyline's visual center); a future slice could trace the drawn path for placement. Clicking the marker cycles the wire direction like the hitbox — if it should instead jump to the issue, that's a separate interaction choice.
+
+Commit hygiene: 4/4 wire-group hunks, 3/6 editor hunks, 1/6 CSS hunks, 1/7 test hunks (the agents' panMovedRef + titlebar/KDS/pan + CSS hunks excluded) — staged via filtered patches, --no-verify with all gates run manually first.
