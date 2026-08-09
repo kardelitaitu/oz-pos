@@ -1827,3 +1827,15 @@ Solution: Red→Green. PostgreSQL pulls now compare the first-page anchor with `
 Verification: Red first failed because the anchor classifier was absent; the focused classifier and recovery tests then passed. `bash scripts/test-tdd.sh -p platform/sync`: **267/267 passed, 19 skipped**. `cargo test -p platform-sync --all-targets`: **267 passed, 19 ignored**. `cargo clippy -p platform-sync --all-targets -- -D warnings`, `cargo fmt --all -- --check`, and `cargo check -p platform-sync --all-targets` passed.
 
 Deliberately NOT done: direct PostgreSQL snapshot queries currently assume a dedicated sync database and do not add a separate tenant setting to the PG daemon; multi-tenant PG routing and recovery backoff remain follow-up slices. Snapshot import and anchor reset are still separate commits, so a crash can repeat an idempotent snapshot import but cannot advance a stale anchor before a successful import.
+
+### 2026-08-09 — Round 42: P0 — dirty branch-switch guard (data loss)
+
+Problem: The journaled P0 from the UX plan — switching branches silently discarded unsaved topology edits. TopologyScreen keys the editor by branch (`key={selectedBranchId}`) and the branch selector called `setSelectedBranchId` directly, so a dirty canvas was lost on switch with no confirm. The editor cannot veto its own remount, so the guard had to live in the parent, driven by the editor's dirty state.
+
+Solution: `onDirtyChange` prop on NodeTopologyEditor (fires from the reactive isDirty memo; a stable parent callback makes the effect fire only on real transitions, including post-load clean on mount). TopologyScreen keeps `editorDirtyRef`; the branch selector's onChange intercepts a dirty switch, stashes the target in `discardPendingBranchId`, and opens a ConfirmDialog (variant=warning, FTL keys en/id). Cancel leaves the controlled selector untouched; confirm applies the stashed target. The refetch-on-branch-change effect then runs normally — no new load path.
+
+TDD finding: the confirm test failed only in the full file run — `vi.clearAllMocks()` does NOT drain the `mockResolvedValueOnce` queue, and my cancel test queued a second Once it never consumed, polluting the next test (which then also broke the pre-existing workspace-rename test downstream). The fix was deleting the dead Once from the cancel test — a real harness hygiene lesson (queue exactly what a test will consume).
+
+Test counts: +4 (1 editor dirty-transition unit test; 3 screen: cancel keeps branch, confirm switches, clean switch stays dialog-free). Editor 326 / screen 27 / full UI 4360 (265 files). Gates: typecheck, eslint, i18n parity clean.
+
+Commits: rides the round-41-42 commits; this round committed separately below.

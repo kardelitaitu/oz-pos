@@ -214,6 +214,7 @@ const renderEditor = (props?: {
   onRenameWorkspace?: (id: string, name: string) => Promise<boolean> | boolean | void;
   allowLegacyApply?: boolean;
   branchId?: string;
+  onDirtyChange?: (dirty: boolean) => void;
 }) =>
   renderWithProvidersSync(<NodeTopologyEditor currentTier="standard" {...props} />, multiStoreFtl, sharedFtl);
 
@@ -2670,6 +2671,21 @@ function BranchDeleteHarness() {
     // button — either is proof the confirm dialog opened.
     expect(screen.getAllByText('Load Preset').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('reports dirty transitions through onDirtyChange', async () => {
+    const onDirtyChange = vi.fn();
+    renderEditor({ onDirtyChange });
+    // After the load commits its snapshot, the canvas is clean.
+    await waitFor(() => expect(onDirtyChange).toHaveBeenCalledWith(false));
+
+    // A real edit flips the signal true.
+    fireEvent.click(screen.getByText('+ Store Node'));
+    await waitFor(() => expect(onDirtyChange).toHaveBeenCalledWith(true));
+
+    // Undo back to the applied snapshot flips it false again.
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false));
   });
 
   it('pushes an undo entry when the workspace type select changes', () => {

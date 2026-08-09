@@ -18,6 +18,7 @@ import { checkLicenseStatus } from '@/api/license';
 import { plainErrorMessage } from '@/utils/app-error';
 import SettingsSelect from '@/features/settings/SettingsSelect';
 import { Button } from '@/components/Button';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import './TopologyScreen.css';
 import NodeTopologyEditor, {
   type TopologyNodeData,
@@ -60,6 +61,18 @@ export default function TopologyScreen() {
   const [stores, setStores] = useState<StoreProfile[]>([]);
   /** Branch (store profile) whose topology graph is on canvas. */
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
+  /** Latest dirty flag from the editor (a ref: the branch selector's
+   *  onChange is not a render path, and the flag changes on every edit).
+   *  The editor reports it via onDirtyChange — the guard for a dirty
+   *  branch switch must live HERE because the editor cannot veto its own
+   *  keyed remount. */
+  const editorDirtyRef = useRef(false);
+  /** Branch id stashed when a dirty switch is intercepted — the confirm
+   *  dialog's target. Null while no discard prompt is pending. */
+  const [discardPendingBranchId, setDiscardPendingBranchId] = useState<string | null>(null);
+  const handleEditorDirtyChange = useCallback((dirty: boolean) => {
+    editorDirtyRef.current = dirty;
+  }, []);
   const [addingBranch, setAddingBranch] = useState(false);
   const [newBranchName, setNewBranchName] = useState('');
   /** Two-step branch deletion: armed state + in-flight guard. The target
@@ -559,6 +572,7 @@ export default function TopologyScreen() {
         onRenameWorkspace={handleRenameWorkspace}
         allowLegacyApply={false}
         onSave={handleTopologySave}
+        onDirtyChange={handleEditorDirtyChange}
         branchToolbar={(
           /* ── Branch (graph) selector toolbar, merged into the editor header ── */
           <div className="topology-branch-toolbar">
@@ -569,7 +583,17 @@ export default function TopologyScreen() {
               <SettingsSelect
                 id="topology-branch-select"
                 value={selectedBranchId ?? ''}
-                onChange={setSelectedBranchId}
+                onChange={(id) => {
+                  if (id === selectedBranchId) return;
+                  if (editorDirtyRef.current) {
+                    // The canvas holds unsaved edits — switching would
+                    // silently discard them (the editor remounts keyed by
+                    // branch). Intercept and ask first.
+                    setDiscardPendingBranchId(id);
+                  } else {
+                    setSelectedBranchId(id);
+                  }
+                }}
                 options={stores.map((s) => ({ value: s.id, label: s.name }))}
                 ariaLabel={l10n.getString('topology-branch-selector-aria')}
                 placeholder={l10n.getString('topology-branch-selector-label')}
@@ -621,6 +645,26 @@ export default function TopologyScreen() {
             ) : null}
           </div>
         )}
+      />
+
+      {/* ── Dirty branch-switch guard: confirm before discarding unsaved
+             edits. The controlled selector never changed — cancel leaves
+             the current branch; confirm applies the stashed target. ── */}
+      <ConfirmDialog
+        open={discardPendingBranchId !== null}
+        variant="warning"
+        onCancel={() => setDiscardPendingBranchId(null)}
+        onConfirm={() => {
+          if (discardPendingBranchId !== null) {
+            setSelectedBranchId(discardPendingBranchId);
+          }
+          setDiscardPendingBranchId(null);
+        }}
+        title={l10n.getString('topology-discard-changes-title')}
+        message={l10n.getString('topology-discard-changes-msg', {
+          name: stores.find((s) => s.id === discardPendingBranchId)?.name ?? discardPendingBranchId ?? '',
+        })}
+        confirmLabel={l10n.getString('topology-discard-changes-confirm')}
       />
     </div>
   );

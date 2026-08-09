@@ -6,7 +6,7 @@
 // store_id resolution (#5).
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, waitFor, act, screen, fireEvent } from '@testing-library/react';
+import { render, waitFor, act, screen, fireEvent, within } from '@testing-library/react';
 import TopologyScreen from '@/features/stores/TopologyScreen';
 
 // ── Mocks ──────────────────────────────────────────────────────────
@@ -60,6 +60,7 @@ let capturedEditorProps: {
   branchLocations?: unknown[];
   onRenameBranch?: (id: string, name: string) => Promise<boolean>;
   onRenameWorkspace?: (id: string, name: string) => Promise<boolean>;
+  onDirtyChange?: (dirty: boolean) => void;
 } = {};
 vi.mock('@/features/stores/NodeTopologyEditor', () => ({
   default: (props: {
@@ -69,6 +70,7 @@ vi.mock('@/features/stores/NodeTopologyEditor', () => ({
     branchLocations?: unknown[];
     onRenameBranch?: (id: string, name: string) => Promise<boolean>;
     onRenameWorkspace?: (id: string, name: string) => Promise<boolean>;
+    onDirtyChange?: (dirty: boolean) => void;
   }) => {
     capturedEditorProps = props;
     // The branch (graph) selector toolbar is rendered via the editor's
@@ -191,7 +193,7 @@ function appliedArgs() {
 
 describe('TopologyScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     capturedEditorProps = {};
     capturedBranchOnChange = null;
     capturedBranchOptions = [];
@@ -239,6 +241,71 @@ describe('TopologyScreen', () => {
     act(() => { capturedBranchOnChange?.('store-b'); });
 
     await waitFor(() => expect(mockListWorkspacesScoped).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(capturedEditorProps.workspaceInstances).toEqual([
+        expect.objectContaining({ instanceId: 'ws-b1', storeId: 'store-b', name: 'B POS' }),
+      ]),
+    );
+  });
+
+  it('blocks a dirty branch switch until the user confirms discarding, and cancel keeps the branch', async () => {
+    // Only ONE load happens here (the switch is cancelled) — queue exactly
+    // one Once value so no unconsumed mockResolvedValueOnce leaks into the
+    // next test (vi.clearAllMocks does not drain the once-queue).
+    mockListWorkspacesScoped.mockResolvedValueOnce(loadedInstances);           // initial branch (store-1)
+    await renderReady();
+
+    // The editor reports unsaved edits (e.g. an in-flight drag or rename).
+    act(() => { capturedEditorProps.onDirtyChange?.(true); });
+
+    // Switching branches now must NOT refetch — the discard-confirm dialog
+    // intercepts before the selection changes.
+    act(() => { capturedBranchOnChange?.('store-b'); });
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toBeInTheDocument();
+
+    act(() => { fireEvent.click(within(dialog).getByRole('button', { name: 'cancel' })); });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(mockListWorkspacesScoped).toHaveBeenCalledTimes(1);
+    expect(capturedEditorProps.workspaceInstances).toEqual([
+      expect.objectContaining({ instanceId: 'ws-existing' }),
+    ]);
+  });
+
+  it('switches branches after the user confirms discarding unsaved edits', async () => {
+    mockListWorkspacesScoped
+      .mockResolvedValueOnce(loadedInstances)                                   // initial branch (store-1)
+      .mockResolvedValueOnce([{ ...loadedInstances[0]!, instance_id: 'ws-b1', store_id: 'store-b', name: 'B POS' }]);
+    await renderReady();
+
+    act(() => { capturedEditorProps.onDirtyChange?.(true); });
+    act(() => { capturedBranchOnChange?.('store-b'); });
+
+    const dialog = screen.getByRole('dialog');
+    act(() => {
+      fireEvent.click(within(dialog).getByRole('button', { name: 'topology-discard-changes-confirm' }));
+    });
+
+    // The branch refetch now proceeds and the new branch's instances load.
+    await waitFor(() => expect(mockListWorkspacesScoped).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(capturedEditorProps.workspaceInstances).toEqual([
+        expect.objectContaining({ instanceId: 'ws-b1', storeId: 'store-b', name: 'B POS' }),
+      ]),
+    );
+  });
+
+  it('switches branches immediately when the canvas is clean (no dialog)', async () => {
+    mockListWorkspacesScoped
+      .mockResolvedValueOnce(loadedInstances)                                   // initial branch (store-1)
+      .mockResolvedValueOnce([{ ...loadedInstances[0]!, instance_id: 'ws-b1', store_id: 'store-b', name: 'B POS' }]);
+    await renderReady();
+
+    act(() => { capturedBranchOnChange?.('store-b'); });
+
+    await waitFor(() => expect(mockListWorkspacesScoped).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     await waitFor(() =>
       expect(capturedEditorProps.workspaceInstances).toEqual([
         expect.objectContaining({ instanceId: 'ws-b1', storeId: 'store-b', name: 'B POS' }),

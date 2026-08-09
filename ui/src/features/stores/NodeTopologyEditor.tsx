@@ -313,6 +313,11 @@ export interface NodeTopologyEditorProps {
    *  where the user left off instead of resetting to identity. The parent
    *  passes the same value it uses to key the remount. */
   branchId?: string;
+  /** Reports the canvas dirty state upward (true after any edit, false after
+   *  Apply/undo-to-snapshot). The parent uses it to guard branch switches
+   *  against silently discarding unsaved edits — the editor cannot veto its
+   *  own remount, so the guard must live in the parent. */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 /** Valid workspace type keys selectable when creating a workspace node.
@@ -579,6 +584,7 @@ export default function NodeTopologyEditor({
   allowLegacyApply = true,
   branchToolbar,
   branchId,
+  onDirtyChange,
 }: NodeTopologyEditorProps) {
   const { sessionToken } = useWorkspace();
   const { addToast } = useToast();
@@ -994,6 +1000,13 @@ export default function NodeTopologyEditor({
     void snapshotVersion;
     return !canvasStateEqual(snap.nodes, snap.wires, nodes, wires);
   }, [nodes, wires, snapshotVersion]);
+
+  /** Surface the dirty flag upward for the parent's branch-switch guard.
+   *  Fires on mount (post-load clean) and on every dirty transition; a
+   *  stable parent callback makes this effect fire only on real changes. */
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
 
   /** Hover-focus mode: while a node card is hovered, non-connected nodes
    *  and wires dim so the neighbourhood reads at a glance (Figma-style
