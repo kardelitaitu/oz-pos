@@ -61,7 +61,6 @@ kernel.start_all()?;
 }
 ```
 
-> last audited 2026-09-08 · Phase 3 Module-Level Documentation Audit
-> status: ACCURATE (verified against actual codebase)
-> last audited 2026-09-08 · Phase 3 Module-Level Documentation Audit
+> last audited 09-08-26 by buffy
+> audit: Phase 3 Module-Level Documentation Audit
 > status: ACCURATE (verified against actual codebase)

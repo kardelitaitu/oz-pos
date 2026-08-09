@@ -409,9 +409,7 @@ A Tauri build script that reads the manifest and patches configs at compile time
 - `ui/src/frontend/shell/ThemeProvider.tsx` — Runtime palette derivation (alternative mechanism)
 - `docs/decisions/2026-03-01-frontend-restructure.md` — ADR #3: Frontend structure (consumer of branded assets)
 
-> last audited 09-08-26 · Phase 1 Core Architecture & API Docs Audit
-
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit; Phase 4 ADR Deep Audit
 > status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
-
-> last audited 2026-09-08 · Phase 4 ADR Deep Audit
 > status: ACCURATE (verified against actual codebase)
