@@ -1373,15 +1373,15 @@ export default function PaymentModal({
                       </div>
                       <div className="payment-split-amount-group">
                         <span className="payment-split-currency">{total.currency}</span>
-                          <input
-                            type="text"
-                            className="payment-split-amount-input"
-                            inputMode="decimal"
-                            aria-label={l10n.getString('payment-split-amount-aria', null, 'Split amount')}
-                            placeholder={l10n.getString('payment-split-amount-placeholder', null, '0.00')}
-                            value={s.amountMinor}
-                            onChange={(e) => updateSplit(s.id, { amountMinor: e.target.value })}
-                          />
+                          <Localized id="payment-split-amount-placeholder" attrs={{ placeholder: true, 'aria-label': true }}>
+                            <input
+                              type="text"
+                              className="payment-split-amount-input"
+                              inputMode="decimal"
+                              value={s.amountMinor}
+                              onChange={(e) => updateSplit(s.id, { amountMinor: e.target.value })}
+                            />
+                          </Localized>
                       </div>
                       <button
                         type="button"

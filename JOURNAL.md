@@ -2579,3 +2579,17 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 100 — hw-accel aria wired)
 
 **Risks / follow-ups:** the PaymentModal dead-attribute fix (round-99 finding) remains open — the split-amount placeholder and aria-label still render English fallbacks; same <Localized attrs> treatment applies there.
+
+### 2026-08-09 — PaymentModal dead attributes fixed (round 101)
+
+**Problem (round-99 finding):** the split-amount input read two attribute-only Fluent messages via `l10n.getString` — `payment-split-amount-placeholder` (fallback '0.00') and `payment-split-amount-aria` (fallback 'Split amount'). `getString` NEVER reads attributes (returns fallback||id when msg.value is null), so the round-97 0,00 fix and the "Jumlah pembagian" aria never reached the UI — Indonesian users always saw English, and the bug was invisible in en because the fallbacks coincidentally equaled the en attribute values.
+
+**Solution (TDD Red→Green):**
+- **Red** — a new id-locale render test (renderWithFluentId + the real sales.id.ftl bundle) opens the modal, toggles split mode, and asserts the amount input's placeholder is '0,00' and its aria-label 'Jumlah pembagian'. Failed for the right reason: `expected '0.00' to be '0,00'` — the getString fallback won even in the id locale.
+- **Green** — the two attributes now live in ONE message: `payment-split-amount-placeholder` gained `.aria-label` (both bundles) and `payment-split-amount-aria` was dropped from both (it had zero other consumers — verified). The input is wrapped in a single `<Localized id="payment-split-amount-placeholder" attrs={{ placeholder: true, 'aria-label': true }}>`, the exact multi-attribute pattern `bundles-item-field` already uses (nested <Localized> cannot work here: fluent-react's getElement cloneElement applies the outer message's props to the inner element, not to the input).
+
+**Verified:** PaymentModal 13/13 + EdgeCases + SaleFlow + i18nBundle 14/14 (the round-99 placeholder pin is unaffected by the added attribute), full UI 4566/4566 (+1), typecheck, eslint, i18n lint clean (parity holds after the key removal).
+
+**Commits:** (round 101 — PaymentModal dead attributes)
+
+**Risks / follow-ups:** the same getString-on-attribute-only pattern may exist elsewhere — a repo-wide scan for `getString\([^)]*-aria'|getString\([^)]*-placeholder'` with attribute-only messages would find remaining dead attributes; the sr-only "Toggle" spans across settings toggles remain a separate consistency slice.

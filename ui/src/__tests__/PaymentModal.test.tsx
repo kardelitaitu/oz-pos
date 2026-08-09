@@ -2,14 +2,20 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import { renderInAct } from '@/test-utils/renderInAct';
 import userEvent from '@testing-library/user-event';
-import { withFluent } from '@/locales/test-utils';
+import { withFluent, withFluentLocale } from '@/locales/test-utils';
 import { ToastProvider } from '@/frontend/shared/Toast';
 import salesFtl from '@/locales/sales.ftl?raw';
+import salesIdFtl from '@/locales/sales.id.ftl?raw';
 import PaymentModal from '@/features/sales/PaymentModal';
 import type { Money, CartLine, Sku, LineId } from '@/types/domain';
 
 async function renderWithFluent(ui: React.ReactElement) {
   const wrapped = withFluent(<ToastProvider>{ui}</ToastProvider>, salesFtl);
+  await renderInAct(wrapped);
+}
+
+async function renderWithFluentId(ui: React.ReactElement) {
+  const wrapped = withFluentLocale('id', <ToastProvider>{ui}</ToastProvider>, salesIdFtl);
   await renderInAct(wrapped);
 }
 
@@ -88,6 +94,31 @@ describe('PaymentModal — rendering & fast interaction', () => {
     );
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('renders the split amount input with the Indonesian placeholder and aria-label (round-99 dead-attribute fix)', async () => {
+    await renderWithFluentId(
+      <PaymentModal
+        open
+        lineItems={[lineItem()]}
+        total={usd(700)}
+        userId="test-user-id"
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    // Enter split mode: the split rows (with the amount input) only render then.
+    const user = userEvent.setup();
+    await user.click(screen.getByLabelText('Bagi pembayaran antar metode'));
+
+    const amountInput = document.querySelector('.payment-split-amount-input') as HTMLInputElement | null;
+    expect(amountInput, 'split amount input should render in split mode').not.toBeNull();
+    // The attributes come from the payment-split-amount-placeholder message
+    // (.placeholder / .aria-label), rendered via <Localized attrs> — not from
+    // getString fallbacks, which never read Fluent attributes.
+    expect(amountInput!.getAttribute('placeholder')).toBe('0,00');
+    expect(amountInput!.getAttribute('aria-label')).toBe('Jumlah pembagian');
   });
 
   it('shows change preview for cash payment', async () => {
