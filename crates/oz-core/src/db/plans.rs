@@ -16,10 +16,11 @@ use crate::error::CoreError;
 use super::Store;
 
 /// Cloud sync plan for a tenant.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TenantPlan {
     /// Local-only operation — cloud sync is blocked.
+    #[default]
     Free,
     /// Full cloud sync enabled.
     Pro,
@@ -42,12 +43,6 @@ impl TenantPlan {
             TenantPlan::Free => "free",
             TenantPlan::Pro => "pro",
         }
-    }
-}
-
-impl Default for TenantPlan {
-    fn default() -> Self {
-        TenantPlan::Free
     }
 }
 

@@ -1,5 +1,6 @@
 pub mod categories;
 pub mod health;
+pub mod plans;
 pub mod products;
 pub mod sales;
 pub mod tax_rates;

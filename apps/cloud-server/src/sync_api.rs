@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use axum::{
     Router,
-    extract::{Extension, State},
+    extract::{Extension, Request, State},
     middleware,
     routing::{get, post},
 };
@@ -60,20 +60,34 @@ impl From<super::CloudServerState> for SyncState {
     }
 }
 
-/// Build the sync router with all four endpoints, protected by JWT auth
-/// and per-tenant rate limiting (P8-1).
+/// Build the sync router with all four endpoints, protected by JWT auth,
+/// per-tenant rate limiting (P8-1), and optional plan enforcement
+/// (ADR sync-plan-gating).
 ///
 /// Middleware order (axum: first `.layer()` = outermost, runs FIRST):
 ///
 ///   `.layer(axum::Extension(rate_limiter.clone()))` — makes RateLimiterState available
+///   `.layer(axum::Extension(db.clone()))`             — makes the DB available to plan_middleware
+///   `.layer(axum::Extension(enforce_plans))`          — plan gate on/off
 ///   `.layer(middleware::from_fn(auth_middleware))`        ← outermost (injects ApiTokenClaims)
+///   `.layer(middleware::from_fn(plan_middleware))`        ← reads claims, gates free tenants
 ///   `.layer(middleware::from_fn(rate_limit_middleware))`  ← innermost (reads claims)
 ///
-/// Execution order: auth_middleware → rate_limit_middleware → handler
+/// Execution order: auth_middleware → plan_middleware → rate_limit_middleware → handler
 /// Axum layers are applied from outside to inside, so the LAST .layer() is the
 /// innermost (closest to the handler).
 pub fn sync_router(state: SyncState) -> Router {
+    let enforce_plans = std::env::var("OZ_ENFORCE_PLANS")
+        .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "on"))
+        .unwrap_or(false);
+    sync_router_with_plan_enforcement(state, enforce_plans)
+}
+
+/// Build the sync router with an explicit plan-enforcement flag (used by
+/// tests and by [`sync_router`], which reads `OZ_ENFORCE_PLANS`).
+pub fn sync_router_with_plan_enforcement(state: SyncState, enforce_plans: bool) -> Router {
     let rate_limiter = state.rate_limiter.clone();
+    let db = state.db.clone();
     Router::new()
         .route("/api/sync/push", post(push_handler))
         .route("/api/sync/pull", post(pull_handler))
@@ -81,8 +95,58 @@ pub fn sync_router(state: SyncState) -> Router {
         .route("/api/sync/snapshot", get(snapshot_handler))
         .with_state(state)
         .layer(middleware::from_fn(rate_limit_middleware))
+        .layer(middleware::from_fn(plan_middleware))
         .layer(middleware::from_fn(auth_middleware))
         .layer(axum::Extension(rate_limiter))
+        .layer(axum::Extension(db))
+        .layer(axum::Extension(enforce_plans))
+}
+
+/// Plan gate (ADR sync-plan-gating): when enforcement is enabled, a tenant
+/// on the `free` plan (or with no assigned plan — fail closed) is rejected
+/// with a structured 403 `{"error":"plan_required"}`. Runs after auth so
+/// claims are available, before the handler.
+pub async fn plan_middleware(
+    Extension(enforce_plans): Extension<bool>,
+    Extension(db): Extension<Arc<Mutex<Connection>>>,
+    request: Request,
+    next: middleware::Next,
+) -> Result<axum::response::Response, axum::response::Response> {
+    use axum::response::IntoResponse;
+    use oz_core::TenantPlan;
+
+    if !enforce_plans {
+        return Ok(next.run(request).await);
+    }
+
+    let tenant_id = request
+        .extensions()
+        .get::<oz_api::auth::ApiTokenClaims>()
+        .and_then(|claims| claims.tenant_id.as_deref())
+        .unwrap_or("default");
+
+    let plan = {
+        let conn = db.lock().await;
+        oz_core::Store::new(&conn)
+            .get_tenant_plan(tenant_id)
+            .map_err(|_| {
+                (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    axum::Json(serde_json::json!({ "error": "internal" })),
+                )
+                    .into_response()
+            })?
+    };
+
+    if plan.unwrap_or(TenantPlan::Free) == TenantPlan::Free {
+        return Err((
+            axum::http::StatusCode::FORBIDDEN,
+            axum::Json(serde_json::json!({ "error": "plan_required" })),
+        )
+            .into_response());
+    }
+
+    Ok(next.run(request).await)
 }
 
 /// `POST /api/sync/push` — receive and persist offline queue items.
@@ -610,6 +674,46 @@ mod tests {
 
     fn test_router_with_state(state: SyncState) -> Router {
         sync_router(state)
+    }
+
+    /// Build a router with plan enforcement explicitly enabled/disabled,
+    /// avoiding the `OZ_ENFORCE_PLANS` env var (ADR sync-plan-gating).
+    fn test_router_with_plan_enforcement(enforce: bool) -> Router {
+        let state = SyncState {
+            db: Arc::new(Mutex::new(fresh_db())),
+            snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+            rate_limiter: RateLimiterState::new(),
+        };
+        sync_router_with_plan_enforcement(state, enforce)
+    }
+
+    /// Seed a tenant plan in the test DB shared by the given router.
+    /// The router owns its DB, so this writes via the same migrations
+    /// connection the router was built from is not reachable; instead we
+    /// build the state first, seed it, then build the router around it.
+    /// Build a router whose test DB already has a plan row for `tenant`,
+    /// with enforcement explicitly enabled/disabled. Seeding happens before
+    /// the router is built so the handler sees the row.
+    async fn test_router_with_plan(tenant: &str, plan: &str, enforce: bool) -> Router {
+        let state = SyncState {
+            db: Arc::new(Mutex::new(fresh_db())),
+            snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+            rate_limiter: RateLimiterState::new(),
+        };
+        {
+            let conn = state.db.lock().await;
+            oz_core::Store::new(&conn)
+                .set_tenant_plan(
+                    tenant,
+                    if plan == "pro" {
+                        oz_core::TenantPlan::Pro
+                    } else {
+                        oz_core::TenantPlan::Free
+                    },
+                )
+                .unwrap();
+        }
+        sync_router_with_plan_enforcement(state, enforce)
     }
 
     // ── Auth enforcement ─────────────────────────────────────────────
@@ -1242,6 +1346,82 @@ mod tests {
         let body_bytes = resp.into_body().collect().await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
         assert_eq!(json["pending_count"], 0);
+    }
+
+    // ── Plan enforcement (ADR sync-plan-gating) ─────────────────────
+
+    #[tokio::test]
+    async fn free_tenant_push_rejected_when_enforced() {
+        let app = test_router_with_plan_enforcement(true);
+        // No plan row → fail closed to free.
+        let req = authed_post("/api/sync/push", r#"[]"#, Some("tenant-free-no-row"));
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            json["error"], "plan_required",
+            "a free tenant must get a structured plan_required rejection"
+        );
+    }
+
+    #[tokio::test]
+    async fn explicitly_free_tenant_push_rejected_when_enforced() {
+        let app = test_router_with_plan("tenant-free", "free", true).await;
+        let req = authed_post("/api/sync/push", r#"[]"#, Some("tenant-free"));
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["error"], "plan_required");
+    }
+
+    #[tokio::test]
+    async fn pro_tenant_push_accepted_when_enforced() {
+        let app = test_router_with_plan("tenant-pro", "pro", true).await;
+        let req = authed_post(
+            "/api/sync/push",
+            r#"[{"id":"plan-pro-1","action":"complete_sale","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}]"#,
+            Some("tenant-pro"),
+        );
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::OK,
+            "a pro tenant must be able to push when enforcement is on"
+        );
+    }
+
+    #[tokio::test]
+    async fn free_tenant_push_allowed_when_not_enforced() {
+        // Dev mode: OZ_ENFORCE_PLANS unset — everything works as before.
+        let app = test_router_with_plan("tenant-free", "free", false).await;
+        let req = authed_post(
+            "/api/sync/push",
+            r#"[{"id":"plan-off-1","action":"complete_sale","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}]"#,
+            Some("tenant-free"),
+        );
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::OK,
+            "dev mode must not gate free tenants"
+        );
+    }
+
+    #[tokio::test]
+    async fn status_endpoint_also_gated_by_plan() {
+        let app = test_router_with_plan_enforcement(true);
+        let req = authed(
+            axum::http::Method::GET,
+            "/api/sync/status",
+            Some("tenant-gated"),
+        );
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["error"], "plan_required");
     }
 
     // ── Transport type compatibility ─────────────────────────────────

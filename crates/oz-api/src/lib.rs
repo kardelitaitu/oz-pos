@@ -46,7 +46,7 @@ use std::sync::Arc;
 
 use axum::{
     Router, middleware,
-    routing::{get, patch, post},
+    routing::{get, patch, post, put},
 };
 use rusqlite::Connection;
 use tokio::sync::Mutex;
@@ -94,6 +94,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/v1/terminals",
             post(routes::terminals::register_terminal_handler),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/plan",
+            put(routes::plans::set_tenant_plan_handler),
         );
 
     let protected = Router::new()
