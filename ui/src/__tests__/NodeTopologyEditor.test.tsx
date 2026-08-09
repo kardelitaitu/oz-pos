@@ -4251,6 +4251,38 @@ describe('NodeTopologyEditor — warehouse missing stock-routing prompt', () => 
     expect(marker).not.toBeNull();
     expect(marker?.closest('.wire-group')?.querySelector('.wire-hitbox')?.getAttribute('data-wire-id')).toBe('w-transfer');
   });
+
+  it('flags a full warehouse once even when two inbound stock-bearing wires feed it', async () => {
+    // Round 89: the at-capacity error is once per TARGET warehouse, not once
+    // per inbound wire — a satellite fed by both a stock wire and a transfer
+    // wire shows exactly one card note and exactly one wire marker (on the
+    // first inbound wire).
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-1', type: 'workspace', name: 'Retail POS', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-hub', type: 'warehouse', name: 'Hub Stock Room', x: 680, y: 80, metadata: { stock: 500, capacity: 1000 } },
+        { id: 'wh-sat', type: 'warehouse', name: 'Satellite Stock Room', x: 980, y: 80, metadata: { stock: 500, capacity: 500 } },
+      ],
+      wires: [
+        { id: 'w-loc', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+        { id: 'w-stock', from_node_id: 'ws-1', to_node_id: 'wh-hub', from_port_id: 'stock-out', to_port_id: 'stock-in', relationship_type: 'stock-routing', direction: 'one-way' },
+        { id: 'w-stock-sat', from_node_id: 'ws-1', to_node_id: 'wh-sat', from_port_id: 'stock-out', to_port_id: 'stock-in', relationship_type: 'stock-routing', direction: 'one-way' },
+        { id: 'w-transfer', from_node_id: 'wh-hub', to_node_id: 'wh-sat', from_port_id: 'transfer-out', to_port_id: 'transfer-in', relationship_type: 'inventory-transfer', direction: 'one-way' },
+      ],
+    } as never);
+    renderEditor({ currentTier: 'pro' });
+    await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(4));
+
+    const satellite = [...document.querySelectorAll('.topology-node')].find((n) =>
+      n.textContent?.includes('Satellite Stock Room'),
+    );
+    expect(satellite?.querySelectorAll('.node-validation-note')).toHaveLength(1);
+
+    const markers = document.querySelectorAll('.wire-validation-marker');
+    expect(markers).toHaveLength(1);
+    expect(markers[0]?.closest('.wire-group')?.querySelector('.wire-hitbox')?.getAttribute('data-wire-id')).toBe('w-stock-sat');
+  });
 });
 
 // ── Validation panel stock-wire action ──────────────────────────

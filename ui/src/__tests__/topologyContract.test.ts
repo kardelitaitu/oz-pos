@@ -604,6 +604,36 @@ describe('semantic topology contract', () => {
     ]));
   });
 
+  it('reports a full warehouse once even with two inbound stock-bearing wires', () => {
+    // Round 89: the at-capacity error is a property of the TARGET warehouse,
+    // not of each inbound wire — a full satellite fed by BOTH a stock-routing
+    // wire and an inventory-transfer wire must produce exactly ONE
+    // warehouse-at-capacity error, keyed to the first inbound wire (the
+    // marker renders on that wire only).
+    const normalized = graph(
+      [
+        branch(),
+        workspace('ws-1'),
+        warehouseWith('wh-hub', { stock: 500, capacity: 1000 }),
+        warehouseWith('wh-sat', { stock: 500, capacity: 500 }),
+      ],
+      [
+        ownershipWire('w-owner', 'ws-1'),
+        stockWire('w-stock', 'ws-1', 'wh-hub'),
+        stockWire('w-stock-sat', 'ws-1', 'wh-sat'),
+        transferWire('w-transfer', 'wh-hub', 'wh-sat'),
+      ],
+    );
+
+    const errors = validateTopologyGraph(normalized, 'pro');
+    const capacityErrors = errors.filter((e) => e.code === 'warehouse-at-capacity');
+    expect(capacityErrors).toHaveLength(1);
+    expect(capacityErrors[0]).toEqual(expect.objectContaining({
+      nodeId: 'wh-sat',
+      wireId: 'w-stock-sat',
+    }));
+  });
+
   it('keeps a three-warehouse transfer chain clean end to end (deep hub-and-spoke)', () => {
     // Round 85: hub ← workspace (stock), mid ← hub (transfer), leaf ← mid
     // (transfer). Every warehouse has an inbound stock-bearing wire and

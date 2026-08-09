@@ -2410,3 +2410,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 88 — ADR hub-and-spoke rules)
 
 **Risks / follow-ups:** the user guide (`docs/user-guide.md`) still has NO topology section at all — the rules are documented architecturally but not user-facing; `docs/user-guide.md` is 71 lines with zero topology content, so a topology user-guide section is a separate larger slice. The working tree carried a pre-existing agent edit to the same section-2 paragraph (KDS scope-inheritance clarification); my commit stages only my hunks and the agent's edit stays unstaged.
+
+### 2026-08-09 — at-capacity deduped per target warehouse (round 89)
+
+**Problem (round-83 journaled follow-up):** the capacity guard iterated per WIRE — a full warehouse fed by two inbound stock-bearing wires (stock-routing AND inventory-transfer) pushed TWO `warehouse-at-capacity` errors, one per wire, each carrying a different wireId. The capacity problem is a property of the TARGET room, not of each inbound wire; the duplication double-rendered the card note and put a marker on every inbound wire.
+
+**Solution (TDD Red→Green):** Red — a contract test feeds a full satellite by both a stock-routing wire and an inventory-transfer wire and asserts exactly ONE `warehouse-at-capacity` error, keyed to the FIRST inbound wire (w-stock-sat); an editor test renders the same diagram at Pro and asserts one card note and one `.wire-validation-marker` on that wire. Both failed (2 errors / 2 notes / 2 markers). Green — the guard now tracks `flaggedTargets` (Set of node ids) and skips already-flagged rooms, so the first inbound wire's id wins and later wires are silent. Single-wire cases (rounds 74/83) unchanged.
+
+**Verified:** contract 44/44 (+1), editor 451/451 (+1), full UI 4563/4563 (+2), typecheck, eslint 0/0. No FTL changes.
+
+**Commits:** (round 89 — capacity dedupe)
+
+**Risks / follow-ups:** first-wire-wins is deterministic but means the marker renders on one of several inbound wires — the round-74 marker affordance already shows the "don't route in" story, so acceptable; the reverse (missing-stock-routing) guard already dedupes structurally (one error per node by construction). Editor test hunks split from the agents' panMovedRef/zoom/pan/shortcuts/clipboard hunks.

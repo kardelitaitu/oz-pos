@@ -622,6 +622,11 @@ export function validateTopologyGraph(
   // numbers (rounds 70-71) drive it — no capacity metadata means no
   // check, so legacy graphs with no numbers stay unflagged.
   if (capacityEnforced) {
+    // Round 89: the at-capacity error is a property of the TARGET warehouse,
+    // not of each inbound wire — a full room fed by two stock-bearing wires
+    // (stock-routing AND inventory-transfer) reports ONCE, keyed to the
+    // first inbound wire so the marker renders on that wire only.
+    const flaggedTargets = new Set<string>();
     for (const wire of graph.wires) {
       if (wire.relationshipType !== 'stock-routing'
         && wire.relationshipType !== 'inventory-transfer') continue;
@@ -629,6 +634,8 @@ export function validateTopologyGraph(
       if (!target || target.kind !== 'warehouse') continue;
       if (target.capacity === undefined || target.stock === undefined) continue;
       if (target.stock >= target.capacity) {
+        if (flaggedTargets.has(target.id)) continue;
+        flaggedTargets.add(target.id);
         errors.push({
           code: 'warehouse-at-capacity',
           messageId: 'topology-validation-warehouse-at-capacity',
