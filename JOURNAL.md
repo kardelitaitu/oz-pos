@@ -2282,3 +2282,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 78 — capacity input tier lock)
 
 **Risks / follow-ups:** a standard-tier user with a Pro-authored warehouse sees the values read-only — coherent with the round-77 notice, and an upgrade re-enables editing with no data loss; the `free`/`one_time` tiers lock too (consistent with `isProAllowed`); the badge split (stock editable, threshold locked) is worth a user-facing note if it confuses.
+
+### 2026-08-09 — parent-gate capacity parity pinned at the screen level
+
+**Problem:** round 76 threaded the tier through BOTH gates (the editor's live validateEditorGraph and TopologyScreen's strict Apply boundary), but only the editor-level suppression was test-pinned. Nothing proved the two gates agree at the parent boundary — a future drift could block a standard-tier user behind a Pro check (or let Pro silently bypass).
+
+**Solution (TDD pin, no production change):** two TopologyScreen tests on the same at-capacity fixture (store → workspace location wire + workspace → warehouse stock-routing wire, stock 1000 = capacity 1000): standard tier applies cleanly (applyTopologyDiff called once, success toast only, never the capacity-error toast); Pro tier blocks with `topology-validation-warehouse-at-capacity` error toast and no apply. The license mock became tier-switchable (`mockLicenseTier`), reset in beforeEach. Red phase was the over-strict assertion — the first draft asserted NO toast at all, but a success toast legitimately fires after apply; corrected to assert success-toast-only. Both behaviors already held, confirming the round-76 parity — the tests now pin it against future regressions.
+
+**Verified:** screen suite 31/31 (+2), full UI 4538/4538, typecheck, eslint 0/0. No FTL changes.
+
+**Commits:** (round 79 — parent-gate parity pin)
+
+**Risks / follow-ups:** the pin covers only the at-capacity guard — the missing-stock-routing guard (round 75) and the invalid-semantic-connection class have no screen-level parity tests; the success toast is asserted by type only, so a future copy change won't break the pin.

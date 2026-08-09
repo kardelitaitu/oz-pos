@@ -11,8 +11,11 @@ import TopologyScreen from '@/features/stores/TopologyScreen';
 
 // ── Mocks ──────────────────────────────────────────────────────────
 
+// Tier is switchable per test — the capacity guards are Pro-gated, and
+// the screen's Apply gate must agree with the editor's live gate.
+let mockLicenseTier: string = 'standard';
 vi.mock('@/api/license', () => ({
-  checkLicenseStatus: () => Promise.resolve({ tier: 'standard' }),
+  checkLicenseStatus: () => Promise.resolve({ tier: mockLicenseTier }),
 }));
 
 const mockListStores = vi.fn();
@@ -207,6 +210,7 @@ function appliedArgs() {
 describe('TopologyScreen', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    mockLicenseTier = 'standard';
     capturedEditorProps = {};
     capturedBranchOnChange = null;
     capturedBranchOptions = [];
@@ -656,6 +660,86 @@ describe('TopologyScreen', () => {
     expect(mockApplyTopologyDiff).not.toHaveBeenCalled();
     expect(mockAddToast).toHaveBeenCalledWith({
       message: 'topology-validation-missing-location',
+      type: 'error',
+    });
+  });
+
+  // ══ Capacity gate parity (editor gate vs parent Apply gate) ════
+
+  it('applies an at-capacity warehouse diagram on standard tier', async () => {
+    // The capacity guards are Pro-gated (rounds 72/75/76) — on standard
+    // the same diagram that Pro blocks must save cleanly. This pins the
+    // parent Apply gate agreeing with the editor's live gate so they
+    // cannot drift (a user on standard is never stuck behind a Pro check).
+    await renderReady();
+
+    await triggerSave([
+      storeNode(),
+      wsNode({ id: 'ws-pos', name: 'Retail POS', metadata: { typeKey: 'store-pos' } }),
+      {
+        id: 'wh-1',
+        type: 'warehouse',
+        name: 'Main Stock Room',
+        x: 0,
+        y: 0,
+        metadata: { stock: 1000, capacity: 1000 },
+      },
+    ], [
+      locationWire('store-1', 'ws-pos', 'w-loc'),
+      {
+        id: 'w-stock',
+        fromNodeId: 'ws-pos',
+        fromPortId: 'stock-out',
+        toNodeId: 'wh-1',
+        toPortId: 'stock-in',
+        relationshipType: 'stock-routing',
+        direction: 'one-way',
+      },
+    ]);
+
+    expect(mockApplyTopologyDiff).toHaveBeenCalledTimes(1);
+    // The save went through — the only toast is the success one, never the
+    // capacity error that Pro would have raised.
+    expect(mockAddToast).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
+    expect(mockAddToast).not.toHaveBeenCalledWith({
+      message: 'topology-validation-warehouse-at-capacity',
+      type: 'error',
+    });
+  });
+
+  it('blocks the same at-capacity diagram on Pro tier', async () => {
+    // Pro enforces the capacity guard at the parent gate too — the editor's
+    // live marker and the Apply block must never disagree.
+    mockLicenseTier = 'pro';
+    await renderReady();
+
+    await triggerSave([
+      storeNode(),
+      wsNode({ id: 'ws-pos', name: 'Retail POS', metadata: { typeKey: 'store-pos' } }),
+      {
+        id: 'wh-1',
+        type: 'warehouse',
+        name: 'Main Stock Room',
+        x: 0,
+        y: 0,
+        metadata: { stock: 1000, capacity: 1000 },
+      },
+    ], [
+      locationWire('store-1', 'ws-pos', 'w-loc'),
+      {
+        id: 'w-stock',
+        fromNodeId: 'ws-pos',
+        fromPortId: 'stock-out',
+        toNodeId: 'wh-1',
+        toPortId: 'stock-in',
+        relationshipType: 'stock-routing',
+        direction: 'one-way',
+      },
+    ]);
+
+    expect(mockApplyTopologyDiff).not.toHaveBeenCalled();
+    expect(mockAddToast).toHaveBeenCalledWith({
+      message: 'topology-validation-warehouse-at-capacity',
       type: 'error',
     });
   });
