@@ -121,13 +121,17 @@ export const BRANCH_LOCATION_DEFINITION: SemanticNodeDefinition = {
 /** Every workspace type shares this required ownership input. */
 /** Controlled business purposes. Keys are persisted; labels are localized. */
 export const WORKSPACE_PURPOSES = {
-  general: { typeKeys: ['store-pos', 'restaurant-pos', 'kds', 'inventory', 'warehouse'] as const, labelId: 'topology-purpose-general' },
+  // Inventory Management workspaces were removed from the topology (round
+  // 67) — the warehouse node is the single storage concept — so 'inventory'
+  // is no longer a legal typeKey for any purpose. A legacy inventory node
+  // now fails the invalid-purpose check until it is dropped/cleaned.
+  general: { typeKeys: ['store-pos', 'restaurant-pos', 'kds', 'warehouse'] as const, labelId: 'topology-purpose-general' },
   checkout: { typeKeys: ['store-pos'] as const, labelId: 'topology-purpose-checkout' },
   returns: { typeKeys: ['store-pos'] as const, labelId: 'topology-purpose-returns' },
   'dining-room': { typeKeys: ['restaurant-pos'] as const, labelId: 'topology-purpose-dining-room' },
   'kitchen-hot-line': { typeKeys: ['kds'] as const, labelId: 'topology-purpose-kitchen-hot-line' },
-  'stock-control': { typeKeys: ['inventory', 'warehouse'] as const, labelId: 'topology-purpose-stock-control' },
-  receiving: { typeKeys: ['inventory', 'warehouse'] as const, labelId: 'topology-purpose-receiving' },
+  'stock-control': { typeKeys: ['warehouse'] as const, labelId: 'topology-purpose-stock-control' },
+  receiving: { typeKeys: ['warehouse'] as const, labelId: 'topology-purpose-receiving' },
 } as const;
 
 /** Every workspace type shares this required ownership input. */
@@ -145,7 +149,7 @@ export const WORKSPACE_DEFINITION: SemanticNodeDefinition = {
   ],
 };
 
-/** Operational inventory node definition; ownership is not implied. */
+/** Operational storage node definition; ownership is not implied. */
 export const WAREHOUSE_DEFINITION: SemanticNodeDefinition = {
   kind: 'warehouse',
   ports: [],

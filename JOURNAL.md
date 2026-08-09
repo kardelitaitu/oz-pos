@@ -2140,3 +2140,17 @@ Verified: TopologyScreen 29/29 (+1), full UI 4498/4498 (269 files), typecheck, e
 Risks / follow-ups: the editor-side inventory special-casing (isInventoryNode, WORKSPACE_SETTINGS_CARD entry, purpose typeKeys) is now unreachable from real seeds — a future cleanup slice can strip it once legacy diagrams are known-clean, but removing it while saved diagrams may still carry inventory nodes would break their one last render. The backend purpose whitelist still lists 'inventory' — harmless (frontend never sends it).
 
 Commit hygiene: staged exactly 1 hunk per file (my filter + my test) out of the agents' 4 + 7 hunks in the same files; committed with --no-verify (their dirty Rust re-stage hook), all gates run manually first.
+
+### 08-09-26 — Round 68: inventory-node special-casing stripped from the topology contract
+
+Problem (round-67 follow-up): the canvas-level exclusion left the editor-side inventory machinery unreachable-but-present: `isInventoryNode`, the flexible Input/Operation label, the inventory settings card, and 'inventory' in the purpose typeKeys. Dead code, but it kept the confusion one import away.
+
+Solution (TDD Red→Green): Red — the unit suite pins the NEW contract: a legacy inventory-typeKey workspace renders as a plain workspace (fixed location-in label, store-pos settings card, generic workspace semantics) and the editor test pins the unwired label "Location" (was the flexible "Input"). Both failed against the old code. Green — stripped `isInventoryNode` and its three branches (leftPortLabelId, semanticPortId, socketSemanticIds), removed the inventory entry from WORKSPACE_SETTINGS_CARD and its import, removed 'inventory' from the general/stock-control/receiving purpose typeKeys (a legacy inventory node now fails the invalid-purpose check — the honest signal, since round 67 already dropped it from seeds), and reworded the warehouse definition comment.
+
+Deliberately kept: the warehouse inspector still renders WorkspaceInventorySettings (that card IS the warehouse's inventory-location UI); 'inventory' stays in the backend purpose whitelist (topology.rs — the frontend never sends it) and in the relationship-rule FROM lists (a legacy transfer wire stays readable). `variantIndex` params on semanticPortId/socketSemanticIds renamed to `_variantIndex` (the inventory flexible-input was their only reader; gatingSemanticId still forwards it).
+
+Verified: topologyCard 19/19, contract suite, editor 413/413 (two flexible-input tests consolidated into one legacy-tolerance test), full UI 4497/4497 (269 files), typecheck, eslint, i18n parity, drift guard clean — no FTL key changes.
+
+Risks / follow-ups: a legacy diagram that still contains an inventory node now shows an invalid-purpose validation error until the node is dropped (the instance-authoritative reload does that automatically); the backend Apply whitelist still accepts 'inventory' — harmless, but a future slice could tighten it in sync.
+
+Commit hygiene: all hunks mine in 4 files (the editor test hunks 2-3 of 10; the rest are the agents' concurrent KDS/pan work). card68 was partially staged by an aborted heredoc run — verified staged == working tree for that file before proceeding.

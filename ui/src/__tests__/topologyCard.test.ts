@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import type { TopologyNodeData } from '@/features/stores/NodeTopologyEditor';
 import {
   isKdsNode,
-  isInventoryNode,
   leftPortVariants,
   visiblePortsForNode,
   leftPortLabelId,
@@ -35,11 +34,9 @@ const identityL10n = {
 };
 
 describe('topologyCard registry — per-node-type behavior', () => {
-  it('detects KDS and inventory workspace variants by typeKey', () => {
+  it('detects KDS workspace variants by typeKey', () => {
     expect(isKdsNode(node({ metadata: { typeKey: 'kds' } }))).toBe(true);
     expect(isKdsNode(node({ metadata: { typeKey: 'store-pos' } }))).toBe(false);
-    expect(isInventoryNode(node({ metadata: { typeKey: 'inventory' } }))).toBe(true);
-    expect(isInventoryNode(node({ metadata: { typeKey: 'kds' } }))).toBe(false);
     expect(isKdsNode(node({ type: 'store' }))).toBe(false);
   });
 
@@ -63,11 +60,19 @@ describe('topologyCard registry — per-node-type behavior', () => {
     expect(semanticPortId(node({ metadata: { typeKey: 'store-pos' } }), 'left')).toBe('location-in');
   });
 
-  it('labels inventory input by its connected wire semantic', () => {
-    const inv = node({ metadata: { typeKey: 'inventory' } });
-    expect(leftPortLabelId(inv, 0)).toBe('topology-port-generic-in');
-    expect(leftPortLabelId(inv, 0, 'location-in')).toBe('topology-port-location-in');
-    expect(leftPortLabelId(inv, 0, 'operation-in')).toBe('topology-port-operation-in');
+  it('treats a legacy Inventory workspace like a plain workspace — no flexible input', () => {
+    // Inventory Management was removed from the topology (round 67); an
+    // inventory node left over in a saved diagram degrades to the generic
+    // workspace card: fixed Location input, store-pos settings card, and
+    // ordinary workspace semantics.
+    const legacy = node({ metadata: { typeKey: 'inventory' } });
+    expect(leftPortLabelId(legacy, 0)).toBe('topology-port-location-in');
+    // A wire never changes the label — the flexible Input/Operation
+    // behavior is gone with the inventory card.
+    expect(leftPortLabelId(legacy, 0, 'operation-in')).toBe('topology-port-location-in');
+    expect(settingsCardForTypeKey('inventory')).toBe(settingsCardForTypeKey('store-pos'));
+    expect(gatingSemanticId(legacy, 'right')).toBe('stock-out');
+    expect(socketSemanticIds(legacy, 'right')).toEqual(['stock-out', 'transfer-out']);
   });
 
   it('labels right ports by node type', () => {
@@ -88,8 +93,8 @@ describe('topologyCard registry — per-node-type behavior', () => {
   it('resolves workspace type labels and settings cards by typeKey', () => {
     expect(workspaceTypeLabel('kds', identityL10n.getString.bind(identityL10n))).toBe('topology-ws-type-kds');
     expect(workspaceTypeLabel('unknown', identityL10n.getString.bind(identityL10n))).toBe('unknown');
-    // Every workspace card type resolves to a concrete component.
-    for (const key of ['store-pos', 'restaurant-pos', 'kds', 'inventory']) {
+    // Every remaining workspace card type resolves to a concrete component.
+    for (const key of ['store-pos', 'restaurant-pos', 'kds']) {
       expect(typeof settingsCardForTypeKey(key)).toBe('function');
     }
     // Unknown typeKeys fall back to the store-pos card.
@@ -135,12 +140,11 @@ describe('typed connection pairing (ADR #34 first slice)', () => {
     expect(gatingSemanticId(node({ type: 'store' }), 'right')).toBe('location-out');
     expect(gatingSemanticId(node({ metadata: { typeKey: 'store-pos' } }), 'right')).toBe('stock-out');
     expect(gatingSemanticId(node({ metadata: { typeKey: 'restaurant-pos' } }), 'right')).toBe('operation-out');
-    expect(gatingSemanticId(node({ metadata: { typeKey: 'inventory' } }), 'right')).toBe('stock-out');
     expect(gatingSemanticId(node({ metadata: { typeKey: 'kds' } }), 'right')).toBe('ticket-out');
     expect(gatingSemanticId(node({ type: 'warehouse' }), 'right')).toBe('stock-out');
     expect(gatingSemanticId(node({ type: 'hardware' }), 'right')).toBe('device-out');
     // Inputs: warehouses take stock, hardware takes generic, workspaces take
-    // location (KDS takes the operation feed, inventory is flexible).
+    // location (KDS takes the operation feed).
     expect(gatingSemanticId(node({ type: 'warehouse' }), 'left')).toBe('stock-in');
     expect(gatingSemanticId(node({ type: 'hardware' }), 'left')).toBe('generic-in');
     expect(gatingSemanticId(node({ metadata: { typeKey: 'store-pos' } }), 'left')).toBe('location-in');
@@ -166,12 +170,11 @@ describe('typed connection pairing (ADR #34 first slice)', () => {
 
 describe('relationship options (ADR #34 multi-semantic slice)', () => {
   it('resolves the multi-semantic socket map: workspaces output stock OR transfer', () => {
-    // Store POS and inventory can emit either a stock-routing feed or a
-    // transfer feed. Restaurant POS additionally emits an operational feed
-    // for KDS on the same output socket.
+    // Workspaces can emit either a stock-routing feed or a transfer feed.
+    // Restaurant POS additionally emits an operational feed for KDS on the
+    // same output socket.
     expect(socketSemanticIds(node({ type: 'workspace', metadata: { typeKey: 'store-pos' } }), 'right')).toEqual(['stock-out', 'transfer-out']);
     expect(socketSemanticIds(node({ metadata: { typeKey: 'restaurant-pos' } }), 'right')).toEqual(['operation-out', 'stock-out', 'transfer-out']);
-    expect(socketSemanticIds(node({ metadata: { typeKey: 'inventory' } }), 'right')).toEqual(['stock-out', 'transfer-out']);
     // A warehouse INPUT likewise accepts both: stock-in or transfer-in.
     expect(socketSemanticIds(node({ type: 'warehouse' }), 'left')).toEqual(['stock-in', 'transfer-in']);
     // Every other socket keeps its single semantic.

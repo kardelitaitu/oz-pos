@@ -495,10 +495,12 @@ describe('NodeTopologyEditor Component', () => {
     expect(workspace.style.left).toBe(afterDrag);
   });
 
-  it('exposes ONE flexible left input on Inventory nodes (Input → Location/Operation by wire)', async () => {
-    // An Inventory Manager takes a single left feed — Location or Operation
-    // (from another store-pos/inventory). Unwired it reads "Input"; once a
-    // wire attaches it adopts that wire's semantic label.
+  it('renders a legacy Inventory workspace as a plain workspace — fixed Location input', async () => {
+    // Inventory Management was removed from the topology (round 67): an
+    // inventory node left over in a saved diagram degrades to the generic
+    // workspace card. Unwired, its single left input reads the fixed
+    // "Location" label — the flexible "Input"/Operation behavior of the
+    // old inventory card is gone.
     mockLoadTopology.mockResolvedValueOnce({
       nodes: [
         { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
@@ -510,27 +512,9 @@ describe('NodeTopologyEditor Component', () => {
 
     await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(2));
     const inv = nodeAt(1);
-    // Single left socket, neutral label while unwired; one right output.
+    // Single left socket with the plain workspace label; one right output.
     expect(inv.querySelectorAll('.node-port-socket.port-left')).toHaveLength(1);
     expect(inv.querySelectorAll('.node-port-socket.port-right')).toHaveLength(1);
-    expect(inv.querySelector('.node-port-label-left')?.textContent).toBe('Input');
-  });
-
-  it('labels an Inventory input by the wire attached (Location for location-in)', async () => {
-    mockLoadTopology.mockResolvedValueOnce({
-      nodes: [
-        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
-        { id: 'ws-inv', type: 'workspace', name: 'Inventory', x: 380, y: 140, metadata: { typeKey: 'inventory' } },
-      ],
-      wires: [
-        { id: 'w-loc', from_node_id: 'store-1', from_port: 'right', to_node_id: 'ws-inv', to_port: 'left', direction: 'one-way', to_port_id: 'location-in' },
-      ],
-    } as never);
-    renderEditor();
-
-    await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(2));
-    const inv = nodeAt(1);
-    expect(inv.querySelectorAll('.node-port-socket.port-left')).toHaveLength(1);
     expect(inv.querySelector('.node-port-label-left')?.textContent).toBe('Location');
   });
 

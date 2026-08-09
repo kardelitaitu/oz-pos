@@ -6,7 +6,6 @@ import {
   WorkspaceStorePosSettings,
   WorkspaceRestaurantPosSettings,
   WorkspaceKdsSettings,
-  WorkspaceInventorySettings,
 } from '@/features/settings/workspace-cards';
 import {
   StoreIcon,
@@ -53,11 +52,6 @@ export function isRestaurantPosNode(node: TopologyNodeData): boolean {
   return node.type === 'workspace' && node.metadata?.['typeKey'] === 'restaurant-pos';
 }
 
-/** True for Inventory Management workspace instances (metadata typeKey 'inventory'). */
-export function isInventoryNode(node: TopologyNodeData): boolean {
-  return node.type === 'workspace' && node.metadata?.['typeKey'] === 'inventory';
-}
-
 /** The workspace settings card the inspector renders for a typeKey. The
  *  default (store-pos) is the baseline card; per-type cards are the
  *  exception list, so adding a workspace type with its own card is a
@@ -66,7 +60,6 @@ export const WORKSPACE_SETTINGS_CARD: Readonly<Record<string, ComponentType<Reco
   'store-pos': WorkspaceStorePosSettings,
   'restaurant-pos': WorkspaceRestaurantPosSettings,
   'kds': WorkspaceKdsSettings,
-  'inventory': WorkspaceInventorySettings,
 };
 
 /** The settings card for a workspace node, keyed by its typeKey. */
@@ -108,10 +101,8 @@ export function workspaceTypeLabel(
 // ── Port model ────────────────────────────────────────────────────
 
 /** Semantic variant for the left input connector of a node. Every node
- *  exposes exactly ONE left input slot; inventory's slot is flexible and
- *  takes its label from the wire actually attached to it (Location or
- *  Operation). Returns plain strings because callers index it against
- *  wire.toPortId (a free-form string). */
+ *  exposes exactly ONE left input slot. Returns plain strings because
+ *  callers index it against wire.toPortId (a free-form string). */
 export function leftPortVariants(node: TopologyNodeData): string[] {
   if (isKdsNode(node)) return ['operation-in'];
   if (node.type === 'store') return [];
@@ -139,16 +130,10 @@ export function visiblePortsForNode(node: TopologyNodeData): PortName[] {
 }
 
 /** Fluent id for the label of a node's left input. `connectedPortId` is the
- *  wire's recorded toPortId — inventory's flexible input shows Location or
- *  Operation based on what is actually attached, and a neutral "Input" while
- *  unwired. All other nodes keep their fixed label. */
+ *  wire's recorded toPortId — a warehouse input shows Stock or Transfer
+ *  based on what is attached; every other node keeps its fixed label. */
 export function leftPortLabelId(node: TopologyNodeData, variantIndex: number, connectedPortId?: string): string {
   const variant = leftPortVariants(node)[variantIndex];
-  if (isInventoryNode(node)) {
-    if (connectedPortId === 'operation-in') return 'topology-port-operation-in';
-    if (connectedPortId === 'location-in') return 'topology-port-location-in';
-    return 'topology-port-generic-in';
-  }
   if (variant === 'operation-in') return 'topology-port-operation-in';
   if (variant === 'location-in') return 'topology-port-location-in';
   // A warehouse input receives stock OR transfer — the label follows the
@@ -190,13 +175,11 @@ export function portAriaLabelId(node: TopologyNodeData, port: PortName, variantI
 /** Canonical semantic port id for a socket — the only bridge from a
  *  rendered socket to the semantic wire contract. Returns undefined for
  *  ports that carry no semantic (presentation-only sockets). */
-export function semanticPortId(node: TopologyNodeData, port: PortName, variantIndex = 0): SemanticPortId | undefined {
+export function semanticPortId(node: TopologyNodeData, port: PortName, _variantIndex = 0): SemanticPortId | undefined {
   if (node.type === 'store' && port === 'right') return 'location-out';
   if (node.type === 'workspace' && port === 'left') {
-    // Inventory's single input accepts either Location or Operation; the
-    // wire records which semantic it carries via toPortId. Everything
-    // else keeps its fixed left-in semantic.
-    if (isInventoryNode(node)) return variantIndex === 1 ? 'operation-in' : 'location-in';
+    // A KDS consumes the Operation feed; every other workspace keeps its
+    // fixed Location-in semantic.
     if (isKdsNode(node)) return 'operation-in';
     return 'location-in';
   }
@@ -213,7 +196,7 @@ export function semanticPortId(node: TopologyNodeData, port: PortName, variantIn
 export function socketSemanticIds(
   node: TopologyNodeData,
   port: PortName,
-  variantIndex = 0,
+  _variantIndex = 0,
 ): SemanticPortId[] {
   if (port === 'left') {
     // Inputs.
@@ -223,10 +206,8 @@ export function socketSemanticIds(
     // ticket-in semantic is what the Resto preset's kds→printer wire
     // records, so the pairing row ticket-out → ticket-in is authorable.
     if (node.type === 'hardware') return ['generic-in', 'ticket-in'];
-    // Workspace left: inventory's flexible input accepts Location or
-    // Operation (variant 1); KDS takes the Operation feed; everything
-    // else takes Location.
-    if (isInventoryNode(node)) return variantIndex === 1 ? ['operation-in'] : ['location-in'];
+    // Workspace left: a KDS takes the Operation feed; every other
+    // workspace takes Location.
     if (isKdsNode(node)) return ['operation-in'];
     return ['location-in'];
   }
