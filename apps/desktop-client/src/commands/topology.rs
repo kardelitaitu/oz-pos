@@ -986,7 +986,15 @@ fn save_topology_json_at_key(
 
 #[cfg(test)]
 /// Test convenience wrapper: unscoped save used only by the unit tests.
-/// Production callers use `save_topology_json_at_key` directly.
+///
+/// Production's unscoped save is the `save_topology` command with
+/// `branch_id: None`, which resolves the same key through
+/// `topology_setting_key(None)` and calls `save_topology_json_at_key`
+/// directly — this wrapper is a byte-equivalent alias of that exact path
+/// (same `TOPOLOGY_SETTING_KEY` constant, same keyed function), kept as a
+/// concise abbreviation for the test call sites. Do NOT wire it into
+/// production: the command's single key-resolution + single save is the
+/// cleaner expression of the unscoped case.
 fn save_topology_json(
     conn: &Connection,
     nodes: Vec<Value>,
