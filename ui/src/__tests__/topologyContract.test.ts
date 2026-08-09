@@ -466,6 +466,38 @@ describe('semantic topology contract', () => {
     ]));
   });
 
+  it('rejects directed operational cycles', () => {
+    const normalized = graph(
+      [branch(), workspace('ws-1'), workspace('ws-2')],
+      [
+        ownershipWire('wire-owner-1', 'ws-1'),
+        ownershipWire('wire-owner-2', 'ws-2'),
+        {
+          id: 'wire-cycle-a',
+          fromNodeId: 'ws-1',
+          fromPortId: 'generic-out',
+          toNodeId: 'ws-2',
+          toPortId: 'generic-in',
+          relationshipType: 'generic',
+          direction: 'one-way',
+        },
+        {
+          id: 'wire-cycle-b',
+          fromNodeId: 'ws-2',
+          fromPortId: 'generic-out',
+          toNodeId: 'ws-1',
+          toPortId: 'generic-in',
+          relationshipType: 'generic',
+          direction: 'one-way',
+        },
+      ],
+    );
+
+    expect(validateTopologyGraph(normalized)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'cycle-detected' }),
+    ]));
+  });
+
   it('rejects duplicate node IDs', () => {
     const normalized = graph([branch(), branch(), workspace('ws-1')], []);
 

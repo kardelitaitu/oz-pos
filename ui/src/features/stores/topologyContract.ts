@@ -92,6 +92,7 @@ export interface TopologyValidationError {
     | 'multiple-operation-inputs'
     | 'invalid-operation-source'
     | 'invalid-semantic-connection'
+    | 'cycle-detected'
     | 'invalid-location-connection'
     | 'duplicate-wire'
     | 'unknown-wire-endpoint';
@@ -409,6 +410,37 @@ function semanticNodesMatchWire(
   }
 }
 
+/** Return one node in a directed cycle, if the graph contains one. */
+function findDirectedCycleNode(graph: SemanticTopologyGraph): string | undefined {
+  const adjacency = new Map<string, string[]>();
+  for (const node of graph.nodes) adjacency.set(node.id, []);
+  for (const wire of graph.wires) {
+    const targets = adjacency.get(wire.fromNodeId);
+    if (targets && adjacency.has(wire.toNodeId)) targets.push(wire.toNodeId);
+  }
+
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const visit = (nodeId: string): string | undefined => {
+    if (visiting.has(nodeId)) return nodeId;
+    if (visited.has(nodeId)) return undefined;
+    visiting.add(nodeId);
+    for (const target of adjacency.get(nodeId) ?? []) {
+      const cycleNode = visit(target);
+      if (cycleNode) return cycleNode;
+    }
+    visiting.delete(nodeId);
+    visited.add(nodeId);
+    return undefined;
+  };
+
+  for (const node of graph.nodes) {
+    const cycleNode = visit(node.id);
+    if (cycleNode) return cycleNode;
+  }
+  return undefined;
+}
+
 /**
  * Validate the first vertical slice: one Branch Location owns ordinary
  * workspaces, while a KDS inherits its store scope through exactly one
@@ -476,6 +508,15 @@ export function validateTopologyGraph(graph: SemanticTopologyGraph): TopologyVal
         wireId: wire.id,
       });
     }
+  }
+
+  const cycleNode = findDirectedCycleNode(graph);
+  if (cycleNode) {
+    errors.push({
+      code: 'cycle-detected',
+      messageId: 'topology-validation-cycle',
+      nodeId: cycleNode,
+    });
   }
 
   // Every non-location wire must match the same closed pairing matrix used

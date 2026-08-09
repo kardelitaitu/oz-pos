@@ -435,6 +435,64 @@ fn semantic_node_type(node: &Value) -> Option<&str> {
 /// Mirror the frontend's closed semantic pairing matrix at the IPC boundary.
 /// Node kinds are checked as well as port ids because callers can invoke the
 /// command without going through the canvas drag gate.
+fn find_directed_cycle_node(nodes: &[Value], wires: &[Value]) -> Option<String> {
+    let mut adjacency: std::collections::HashMap<String, Vec<String>> = nodes
+        .iter()
+        .filter_map(|node| value_string(node, "id").map(|id| (id.to_owned(), Vec::new())))
+        .collect();
+    let mut indegree: std::collections::HashMap<String, usize> =
+        adjacency.keys().cloned().map(|id| (id, 0)).collect();
+
+    for wire in wires {
+        let Some(from_id) = value_string(wire, "from_node_id") else {
+            continue;
+        };
+        let Some(to_id) = value_string(wire, "to_node_id") else {
+            continue;
+        };
+        if !adjacency.contains_key(from_id) || !adjacency.contains_key(to_id) {
+            continue;
+        }
+        let Some(targets) = adjacency.get_mut(from_id) else {
+            continue;
+        };
+        let Some(degree) = indegree.get_mut(to_id) else {
+            continue;
+        };
+        targets.push(to_id.to_owned());
+        *degree += 1;
+    }
+
+    let mut queue: std::collections::VecDeque<String> = indegree
+        .iter()
+        .filter(|(_, degree)| **degree == 0)
+        .map(|(id, _)| id.clone())
+        .collect();
+    let mut visited = 0usize;
+    while let Some(node_id) = queue.pop_front() {
+        visited += 1;
+        for target_id in adjacency.get(&node_id).into_iter().flatten() {
+            let Some(degree) = indegree.get_mut(target_id) else {
+                continue;
+            };
+            *degree -= 1;
+            if *degree == 0 {
+                queue.push_back(target_id.clone());
+            }
+        }
+    }
+
+    if visited == indegree.len() {
+        None
+    } else {
+        indegree
+            .into_iter()
+            .find(|(_, degree)| *degree > 0)
+            .map(|(id, _)| id)
+    }
+}
+
+/// Mirror the frontend's cycle gate at the IPC boundary.
 fn semantic_wire_matches_contract(wire: &Value, from_node: &Value, to_node: &Value) -> bool {
     let from_port = value_string(wire, "from_port_id");
     let to_port = value_string(wire, "to_port_id");
@@ -591,6 +649,16 @@ fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), AppErr
                 ),
             ));
         }
+    }
+
+    if let Some(cycle_node) = find_directed_cycle_node(nodes, wires) {
+        return Err(topology_validation(
+            "cycle-detected",
+            Some(&cycle_node),
+            None,
+            None,
+            format!("topology contains a directed cycle involving node {cycle_node}"),
+        ));
     }
 
     let node_by_id = |node_id: Option<&str>| {
@@ -2283,6 +2351,49 @@ mod tests {
         );
 
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn semantic_save_rejects_directed_operational_cycle() {
+        let conn = fresh_conn();
+        let cycle_wires = vec![
+            semantic_location_wire("wire-owner-1", "ws-1"),
+            semantic_location_wire("wire-owner-2", "ws-2"),
+            serde_json::json!({
+                "id": "wire-cycle-a",
+                "from_node_id": "ws-1",
+                "to_node_id": "ws-2",
+                "direction": "one-way",
+                "from_port_id": "generic-out",
+                "to_port_id": "generic-in",
+                "relationship_type": "generic",
+            }),
+            serde_json::json!({
+                "id": "wire-cycle-b",
+                "from_node_id": "ws-2",
+                "to_node_id": "ws-1",
+                "direction": "one-way",
+                "from_port_id": "generic-out",
+                "to_port_id": "generic-in",
+                "relationship_type": "generic",
+            }),
+        ];
+        let result = save_topology_json(
+            &conn,
+            vec![
+                semantic_node("branch", "branch-location", Some("default")),
+                semantic_node("ws-1", "workspace", None),
+                semantic_node("ws-2", "workspace", None),
+            ],
+            cycle_wires,
+        );
+
+        match result {
+            Err(AppError::TopologyValidation { code, .. }) => {
+                assert_eq!(code, "cycle-detected");
+            }
+            other => panic!("expected cycle-detected, got {other:?}"),
+        }
     }
 
     #[test]
