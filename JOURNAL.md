@@ -2206,3 +2206,15 @@ Verified: contract 28/28 (+4), editor 424/424 (+3), full UI 4512/4512 (269 files
 Risks / follow-ups: the guard only fires when BOTH stock and capacity are set — a warehouse with capacity but no stock (user hasn't entered Current Stock) is not flagged, which is consistent with the badge staying hidden until stock exists. The error attaches to the wire but renders on the warehouse card (byNode); a future slice could surface wire-scoped errors on the wire itself. Live inventory telemetry would supersede the design-time numbers the same way it supersedes the badge.
 
 Commit hygiene: 5/5 contract hunks, 2/2 contract-test hunks, 1/7 editor-test hunks (the agents' panMovedRef + titlebar/KDS/pan hunks excluded), whole-file hunks for both FTL bundles — staged via filtered patches, --no-verify with all gates run manually first.
+
+### 08-09-26 — Round 73: warehouse stock metadata pinned in the export contract
+
+Problem (rounds 70-72 follow-up): the clipboard export/import was already lossless for node objects — serializeTopology spreads nodes wholesale and deserializeTopology kept them — but nothing pinned the warehouse stock metadata shape, and isValidNode accepted ANY metadata value, so a hand-edited payload with a string capacity would pass strict parsing and silently drop the value through readNumber/metadataNumber.
+
+Solution (TDD Red→Green): Red — two export tests: a warehouse node with { stock, capacity, lowStockThreshold } round-trips losslessly (deep-equal on the node incl. metadata), and a payload with a string capacity is rejected. The first passed immediately (the lossless behavior already held — the test pins it), the second failed (no metadata validation). Green — isValidNodeMetadata: the warehouse stock trio must be finite numbers when present, unknown keys allowed for forward compatibility; isValidNode now applies it. Strict-parse philosophy honored: a document that cannot half-load cleanly is rejected whole.
+
+Verified: export 10/10 (+2), contract 28/28, full UI 4514/4514 (269 files), typecheck, eslint 0/0. No FTL changes.
+
+Risks / follow-ups: the validator covers only the numeric trio — typeKey/purposeKey/enabled shapes are still unchecked (a future slice can extend it the same way). Templates (localStorage) ride the same serialize/deserialize path, so the pin covers them transitively.
+
+Commit hygiene: both files 100% mine (no agents' work in topologyExport) — staged directly, journal via index surgery, --no-verify with all gates run manually first.

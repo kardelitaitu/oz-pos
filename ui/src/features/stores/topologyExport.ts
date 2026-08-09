@@ -27,6 +27,21 @@ const WIRE_DIRECTIONS = new Set(['one-way', 'reverse', 'two-way']);
 
 const isFiniteNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
+/** Strict metadata check: the warehouse stock trio (rounds 70-72) must be
+ *  finite numbers when present. A string value would otherwise pass the
+ *  shape check and silently drop through readNumber/metadataNumber — the
+ *  strict contract exists precisely to reject documents that cannot
+ *  half-load cleanly. Unknown keys are allowed (forward compatibility). */
+function isValidNodeMetadata(meta: unknown): boolean {
+  if (meta === undefined || meta === null) return true;
+  if (typeof meta !== 'object' || Array.isArray(meta)) return false;
+  const m = meta as Record<string, unknown>;
+  for (const key of ['stock', 'capacity', 'lowStockThreshold']) {
+    if (m[key] !== undefined && !isFiniteNumber(m[key])) return false;
+  }
+  return true;
+}
+
 function isValidNode(n: unknown): n is TopologyNodeData {
   if (!n || typeof n !== 'object') return false;
   const node = n as Record<string, unknown>;
@@ -35,6 +50,7 @@ function isValidNode(n: unknown): n is TopologyNodeData {
     && typeof node['type'] === 'string' && NODE_TYPES.has(node['type'])
     && typeof node['name'] === 'string'
     && isFiniteNumber(node['x']) && isFiniteNumber(node['y'])
+    && isValidNodeMetadata(node['metadata'])
   );
 }
 

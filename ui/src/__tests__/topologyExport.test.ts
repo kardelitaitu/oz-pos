@@ -40,6 +40,46 @@ describe('serializeTopology / deserializeTopology (versioned export envelope)', 
     expect(out!.wires).toEqual(bent);
   });
 
+  it('round-trips the warehouse stock metadata shape losslessly', () => {
+    const stocked = [
+      ...nodes,
+      {
+        id: 'wh-1',
+        type: 'warehouse' as const,
+        name: 'Main Stock Room',
+        x: 680,
+        y: 140,
+        metadata: { stock: 250, capacity: 1000, lowStockThreshold: 25 },
+      },
+    ];
+    const out = deserializeTopology(serializeTopology(stocked, wires));
+    expect(out).not.toBeNull();
+    expect(out!.nodes).toHaveLength(3);
+    expect(out!.nodes[2]).toMatchObject({
+      id: 'wh-1',
+      type: 'warehouse',
+      name: 'Main Stock Room',
+      metadata: { stock: 250, capacity: 1000, lowStockThreshold: 25 },
+    });
+  });
+
+  it('rejects a warehouse whose stock metadata is not a finite number', () => {
+    const malformed = [
+      ...nodes,
+      {
+        id: 'wh-1',
+        type: 'warehouse' as const,
+        name: 'Main Stock Room',
+        x: 680,
+        y: 140,
+        metadata: { capacity: '1000' as unknown as number, lowStockThreshold: 25 },
+      },
+    ];
+    // A hand-edited or drifted document must not half-load: the string
+    // capacity would silently drop through readNumber/metadataNumber.
+    expect(deserializeTopology(serializeTopology(malformed, wires))).toBeNull();
+  });
+
   it('rejects garbage, wrong format, and wrong version', () => {
     expect(deserializeTopology('not json')).toBeNull();
     expect(deserializeTopology('42')).toBeNull();
