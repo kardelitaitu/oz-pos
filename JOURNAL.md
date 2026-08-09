@@ -2544,3 +2544,21 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 98 — Alihkan resolution)
 
 **Risks / follow-ups:** "Aktifkan/nonaktifkan" is longer than the en "Toggle" — acceptable for aria labels, but a native speaker could prefer "Toggle" as a loanword for the compact fullscreen labels; the 14 new values are unpinned (extending nativeSpeakerPins would CI-guard them, as with rounds 93-95).
+
+### 2026-08-09 — native-speaker pin table extended to rounds 97-98 (round 99)
+
+**Problem (rounds-97/98 follow-up):** the rounds-90-92 pin table guarded only 14 keys; the 24 values fixed by the extended passes (10 in round 97, 14 in round 98) were still protected by review alone. Three of the 24 are attribute-only Fluent messages (.aria-label/.placeholder, no value), which the value-only pin mechanism could not resolve.
+
+**Solution (test-infra, table-driven):**
+- 24 rows added to `nativeSpeakerPins` with BOTH en and id expectations: round 97 (Lisensi Proprietary, Kesalahan timbangan, Batal, stok menipis ×4 + Ambang Stok Menipis, 0,00, kedaluwarsa) and round 98 (Aktifkan/nonaktifkan ×9, Beralih ke mode ×2, mengubah status ×2, Balik arah koneksi). Args-driven rows use count: 3 / label: 'Payments' / name: 'Cloud Sync'.
+- Pin type gained `attr?: string`. The resolution test formats `msg.attributes[attr]` (a Record, not a Map — caught the first run) when the pin declares an attribute, so both message shapes are guarded in both directions.
+- The render-path test was refactored from a hardcoded 14-element <Localized> list to a table-driven render of every pin, asserting value text or DOM attribute per pin. Attribute-only keys render through the production `attrs={{ 'aria-label': true }}` pattern (exactly what SetupWizard uses — fluent-react 0.15.2 only applies message attributes when the `attrs` prop whitelists them; without it the attribute is silently dropped, the second run's failure). Future pin additions now auto-cover the render path.
+- Mechanism proven live in both directions: mutating an id value (Balik arah koneksi → Alihkan), an id attribute (Aktifkan/nonaktifkan akselerasi → Alihkan akselerasi), and an en value (License → Licence) each went red with the exact drift message; reverted green, files restored byte-exact (the sed mutations left LF-only artifacts, restored via git checkout).
+
+**Verified:** i18nBundle 14/14 (table lives inside the same two tests), full UI 4565/4565, typecheck, eslint, i18n lint clean.
+
+**FINDING (follow-up, not fixed here):** PaymentModal reads two attribute-only messages via `l10n.getString` — `payment-split-amount-placeholder` (fallback '0.00') and `payment-split-amount-aria` (fallback 'Split amount') — and `getString` NEVER reads attributes (confirmed in @fluent/react 0.15.2: returns fallback||id when msg.value is null). So the round-97 0,00 fix and the Indonesian "Jumlah pembagian" aria never reach the UI; both always render English. Fix: wrap the split-amount input in <Localized attrs={{ placeholder: true, 'aria-label': true }}> with a combined message, or use two attribute messages. Also `appearance-hw-accel-aria` has no production usage (orphan key) — the pin guards the bundle regardless.
+
+**Commits:** (round 99 — pin extension)
+
+**Risks / follow-ups:** the PaymentModal dead-attribute fix is the immediate next slice (it makes the pinned 0,00 value real in production); `appearance-hw-accel-aria` orphan should be wired to the settings switch or dropped.

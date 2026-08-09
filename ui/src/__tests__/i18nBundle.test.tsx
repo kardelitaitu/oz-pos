@@ -94,12 +94,14 @@ describe('i18n bundle loader', () => {
   });
 });
 
-// ── Native-speaker pin (rounds 90-92) ───────────────────────────
+// ── Native-speaker pin (rounds 90-98) ───────────────────────────
 //
 // The values fixed by the native-speaker passes:
 //   - round 90: dismiss aria, stock-wire hint, fallback toast;
 //   - round 91: the kabel → koneksi terminology unification;
-//   - round 92: settings/sync fixes (tarif pajak, Aktif, Hidangan).
+//   - round 92: settings/sync fixes (tarif pajak, Aktif, Hidangan);
+//   - round 97: extended pass (shared/sales/inventory fixes);
+//   - round 98: the Alihkan → Aktifkan/nonaktifkan toggle verbs.
 // Each row carries BOTH the English and the Indonesian expectation, and
 // the test resolves both from the REAL production bundles
 // (getBundle('en') / getBundle('id')). A drift in either direction — an
@@ -107,7 +109,7 @@ describe('i18n bundle loader', () => {
 // Unlike the TOPOLOGY_EN stub used by the editor tests (which pins en
 // only and never touches the .ftl files), these assertions exercise
 // the actual shipped bundle content.
-type Pin = { key: string; args?: Record<string, string | number>; en: string; id: string };
+type Pin = { key: string; args?: Record<string, string | number>; attr?: string; en: string; id: string };
 
 const nativeSpeakerPins: Pin[] = [
   // Round 90 — dismiss aria/title shortened to match en "Dismiss".
@@ -152,23 +154,77 @@ const nativeSpeakerPins: Pin[] = [
   { key: 'settings-license-live-online', en: 'Live', id: 'Aktif' },
   { key: 'workspace-resto-courses-heading', en: 'Course Firing', id: 'Pengiriman Hidangan' },
   { key: 'workspace-resto-courses-enable', en: 'Enable Course Firing', id: 'Aktifkan Pengiriman Hidangan' },
+  // Round 97 — extended pass: shared/sales/inventory fixes.
+  { key: 'statusbar-license', en: 'Proprietary License', id: 'Lisensi Proprietary' },
+  { key: 'scale-read-error', en: 'Scale error', id: 'Kesalahan timbangan' },
+  { key: 'sales-history-status-cancelled', en: 'Cancelled', id: 'Batal' },
+  {
+    key: 'retail-reminder-low-stock-aria',
+    args: { count: 3 },
+    en: 'View 3 low-stock products',
+    id: 'Lihat 3 produk stok menipis',
+  },
+  { key: 'retail-shortcut-low-stock', en: 'Filter low-stock products', id: 'Filter produk stok menipis' },
+  {
+    key: 'retail-filtered-low-stock',
+    args: { count: 3 },
+    en: 'Filtered: 3 low-stock products',
+    id: 'Difilter: 3 produk stok menipis',
+  },
+  { key: 'retail-filter-indicator-aria', en: 'Low-stock filter active', id: 'Filter stok menipis aktif' },
+  { key: 'retail-edit-field-low-stock', en: 'Low Stock Threshold', id: 'Ambang Stok Menipis' },
+  { key: 'payment-split-amount-placeholder', attr: 'placeholder', en: '0.00', id: '0,00' },
+  { key: 'inv-reason-damaged', en: 'Damaged / spoiled', id: 'Rusak / kedaluwarsa' },
+  // Round 98 — 'Alihkan' → sense-accurate toggle verbs.
+  { key: 'theme-toggle-label', en: 'Toggle theme', id: 'Aktifkan/nonaktifkan tema' },
+  { key: 'workspace-home-fullscreen-aria', en: 'Toggle fullscreen', id: 'Aktifkan/nonaktifkan layar penuh' },
+  { key: 'restaurant-toggle-fullscreen', en: 'Toggle Fullscreen', id: 'Aktifkan/nonaktifkan layar penuh' },
+  { key: 'retail-shortcut-fullscreen', en: 'Toggle Fullscreen', id: 'Aktifkan/nonaktifkan layar penuh' },
+  { key: 'pos-cart-service-toggle-aria', en: 'Toggle service charge', id: 'Aktifkan/nonaktifkan biaya layanan' },
+  {
+    key: 'setup-features-toggle-aria',
+    attr: 'aria-label',
+    args: { label: 'Payments' },
+    en: 'Toggle Payments',
+    id: 'Aktifkan/nonaktifkan Payments',
+  },
+  { key: 'settings-sync-enabled-aria', en: 'Toggle cloud sync', id: 'Aktifkan/nonaktifkan sinkronisasi cloud' },
+  { key: 'appearance-hw-accel-aria', attr: 'aria-label', en: 'Toggle hardware acceleration', id: 'Aktifkan/nonaktifkan akselerasi perangkat keras' },
+  {
+    key: 'feature-toggle-toggle-aria',
+    args: { name: 'Cloud Sync' },
+    en: 'Toggle Cloud Sync',
+    id: 'Aktifkan/nonaktifkan Cloud Sync',
+  },
+  { key: 'settings-theme-toggle-dark-aria', en: 'Switch to dark mode', id: 'Beralih ke mode gelap' },
+  { key: 'settings-theme-toggle-light-aria', en: 'Switch to light mode', id: 'Beralih ke mode terang' },
+  { key: 'promotions-error-toggle', en: 'Failed to toggle promotion', id: 'Gagal mengubah status promosi' },
+  { key: 'feature-toggle-error-toggle', en: 'Failed to toggle feature', id: 'Gagal mengubah status fitur' },
+  { key: 'topology-wire-toggle-aria', en: 'Toggle wire direction', id: 'Balik arah koneksi' },
 ];
 
-describe('i18n native-speaker pin (rounds 90-92)', () => {
+describe('i18n native-speaker pin (rounds 90-98)', () => {
   it('resolves every pinned value exactly in BOTH the en and id production bundles', () => {
     const en = getBundle('en');
     const id = getBundle('id');
-    for (const { key, args, en: enExpected, id: idExpected } of nativeSpeakerPins) {
+    for (const { key, args, attr, en: enExpected, id: idExpected } of nativeSpeakerPins) {
       const enMsg = en.getMessage(key);
-      expect(enMsg?.value, `key "${key}" must exist in the en bundle`).toBeDefined();
+      expect(enMsg, `key "${key}" must exist in the en bundle`).toBeDefined();
+      // Attribute-only messages (.aria-label / .placeholder) have no
+      // value; their text lives in `attributes[attr]`. Format whichever
+      // the pin declares, so both shapes are guarded in both directions.
+      const enPattern = attr ? enMsg!.attributes[attr]! : enMsg!.value;
+      expect(enPattern, `key "${key}" must resolve in the en bundle`).toBeDefined();
       expect(
-        en.formatPattern(enMsg!.value!, args ?? null),
+        en.formatPattern(enPattern!, args ?? null),
         `en "${key}" drifted from its pinned value`,
       ).toBe(enExpected);
       const idMsg = id.getMessage(key);
-      expect(idMsg?.value, `key "${key}" must exist in the id bundle`).toBeDefined();
+      expect(idMsg, `key "${key}" must exist in the id bundle`).toBeDefined();
+      const idPattern = attr ? idMsg!.attributes[attr]! : idMsg!.value;
+      expect(idPattern, `key "${key}" must resolve in the id bundle`).toBeDefined();
       expect(
-        id.formatPattern(idMsg!.value!, args ?? null),
+        id.formatPattern(idPattern!, args ?? null),
         `id "${key}" drifted from its pinned value`,
       ).toBe(idExpected);
     }
@@ -186,34 +242,41 @@ describe('i18n native-speaker pin (rounds 90-92)', () => {
 // broken provider, a wrong locale name, a dropped import), these
 // would fall back to the English placeholder children instead.
 describe('i18n native-speaker pin — production render path', () => {
-  it('renders every pinned Indonesian value through getBundle + ReactLocalization + <Localized>', async () => {
+  it('renders every pinned Indonesian value/attribute through getBundle + ReactLocalization + <Localized>', async () => {
     const l10n = new ReactLocalization([getBundle('id')]);
+    let container: HTMLElement | undefined;
     await renderInAct(
       <LocalizationProvider l10n={l10n}>
-        <Localized id="topology-validation-dismiss"><span>Dismiss</span></Localized>
-        <Localized id="topology-node-stock-wire-hint"><span>Connect…</span></Localized>
-        <Localized id="topology-toast-fallback-warehouse"><span>Multi-warehouse…</span></Localized>
-        <Localized id="topology-wire-routing-toggle"><span>Elbow wires</span></Localized>
-        <Localized id="topology-bends-override-note"><span>Bends…</span></Localized>
-        <Localized id="topology-wire-labels-toggle"><span>Wire labels</span></Localized>
-        <Localized id="topology-context-delete-wire"><span>Delete wire</span></Localized>
-        <Localized id="topology-context-rename-wire"><span>Rename wire</span></Localized>
-        <Localized id="topology-wire-rename-placeholder"><span>Wire label</span></Localized>
-        <Localized id="topology-confirm-delete-many-msg" vars={{ count: 2 }}><span>Delete these 2 nodes…</span></Localized>
-        <Localized id="settings-sync-pull-result" vars={{ products: 3, tax_rates: 2, users: 1 }}><span>Last pull…</span></Localized>
-        <Localized id="settings-license-live-online"><span>Live</span></Localized>
-        <Localized id="workspace-resto-courses-heading"><span>Course Firing</span></Localized>
-        <Localized id="workspace-resto-courses-enable"><span>Enable Course Firing</span></Localized>
+        <div ref={(el) => { container = el ?? undefined; }}>
+          {nativeSpeakerPins.map(({ key, args, attr }) => (
+            // <Localized> renders the message VALUE as the children and
+            // applies message ATTRIBUTES (.aria-label / .placeholder) to
+            // the wrapped element — both are asserted per-pin below, so
+            // the render path is guarded for every pinned key in the table.
+            <Localized key={key} id={key} vars={args ?? {}} attrs={attr ? { [attr]: true } : {}}>
+              <span data-pin={key}>Fallback</span>
+            </Localized>
+          ))}
+        </div>
       </LocalizationProvider>,
     );
 
-    for (const { id: idExpected } of nativeSpeakerPins) {
-      // getAllByText (not getByText): two pinned keys share the value
-      // "Label koneksi", so a single-match query would throw.
-      expect(
-        screen.getAllByText(idExpected).length,
-        `expected Indonesian "${idExpected}" in the rendered DOM`,
-      ).toBeGreaterThan(0);
+    for (const { key, attr, id: idExpected } of nativeSpeakerPins) {
+      const el = container!.querySelector(`[data-pin="${key}"]`);
+      expect(el, `expected a rendered <Localized> for pin "${key}"`).not.toBeNull();
+      if (attr) {
+        expect(
+          el!.getAttribute(attr),
+          `id "${key}" attribute drifted from its pinned value`,
+        ).toBe(idExpected);
+      } else {
+        // Two pinned keys share the value "Label koneksi"; per-element
+        // textContent assertions keep them distinct (getByText would throw).
+        expect(
+          el!.textContent,
+          `id "${key}" drifted from its pinned value`,
+        ).toBe(idExpected);
+      }
     }
   });
 });
