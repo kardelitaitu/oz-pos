@@ -122,8 +122,15 @@ const { invokeMock, defaultImpl, failCommands, lastCallArgs } = vi.hoisted(() =>
     if (cmd === 'check_license_status') {
       return Promise.resolve({ tier: 'pro', tenantId: 'tenant-1', status: 'active', active: true, expiresAt: null, maxStores: 5 });
     }
-    if (cmd === 'pending_sync_count') {
-      return Promise.resolve(0);
+    if (cmd === 'offline_queue_status_summary') {
+      return Promise.resolve({
+        pendingCount: 0,
+        syncedCount: 0,
+        failedCount: 0,
+        conflictCount: 0,
+        lastSyncedAt: null,
+        oldestPendingAt: null,
+      });
     }
     return Promise.resolve(undefined);
   };

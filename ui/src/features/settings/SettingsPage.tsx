@@ -20,13 +20,14 @@ import {
   updateSyncSettings,
   syncRun,
   syncPull,
-  pendingSyncCount,
+  getOfflineQueueStatusSummary,
   testSyncConnection,
   requestSyncToken,
   type SyncSettingsDto,
   type SyncAttemptResult,
   type PullResult,
   type PingResult,
+  type OfflineQueueSummaryDto,
 } from '@/api/offline';
 
 import {
@@ -247,7 +248,7 @@ function SettingsPageContent() {
   const [pulling, setPulling] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncAttemptResult | null>(null);
   const [pullResult, setPullResult] = useState<PullResult | null>(null);
-  const [pendingCount, setPendingCount] = useState<number | null>(null);
+  const [queueSummary, setQueueSummary] = useState<OfflineQueueSummaryDto | null>(null);
   const [testing, setTesting] = useState(false);
   const [pingResult, setPingResult] = useState<PingResult | null>(null);
   const [requesting, setRequesting] = useState(false);
@@ -559,21 +560,23 @@ function SettingsPageContent() {
 
   // ── Cloud Sync diagnostics ──────────────────────────────────
 
-  // Load pending offline count when sync section is active
-  const refreshPendingCount = useCallback(async () => {
+  // Load the full offline queue summary (pending/synced/failed/conflict
+  // counts + last-synced/oldest-pending timestamps) when the sync section
+  // is active, so the Cloud Sync panel can show detailed status.
+  const refreshQueueSummary = useCallback(async () => {
     try {
-      const count = await pendingSyncCount();
-      setPendingCount(count);
+      const summary = await getOfflineQueueStatusSummary();
+      setQueueSummary(summary);
     } catch {
-      setPendingCount(null);
+      setQueueSummary(null);
     }
   }, []);
 
   useEffect(() => {
     if (activeSection === 'sync') {
-      refreshPendingCount();
+      refreshQueueSummary();
     }
-  }, [activeSection, refreshPendingCount]);
+  }, [activeSection, refreshQueueSummary]);
 
   // ── Keyboard shortcuts ────────────────────────────────────
 
@@ -725,7 +728,7 @@ function SettingsPageContent() {
             setSyncResult={setSyncResult}
             pullResult={pullResult}
             setPullResult={setPullResult}
-            pendingCount={pendingCount}
+            queueSummary={queueSummary}
             testing={testing}
             setTesting={setTesting}
             pingResult={pingResult}
@@ -736,7 +739,7 @@ function SettingsPageContent() {
             setTokenExpiresAt={setTokenExpiresAt}
             cmInput={cmInput}
             markDirty={markDirty}
-            refreshPendingCount={refreshPendingCount}
+            refreshQueueSummary={refreshQueueSummary}
             testSyncConnection={testSyncConnection}
             syncRun={syncRun}
             syncPull={syncPull}

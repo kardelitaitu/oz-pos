@@ -31,6 +31,18 @@ const testL10n = {
       'settings-sync-status-idle': 'Idle',
       'settings-sync-status-ok': 'Sync OK',
       'settings-sync-pending-count': '{count} pending',
+      'settings-sync-summary-pending': 'pending',
+      'settings-sync-summary-synced': 'synced',
+      'settings-sync-summary-failed': 'failed',
+      'settings-sync-summary-conflicts': 'conflicts',
+      'settings-sync-last-synced': 'Last synced {time}',
+      'settings-sync-last-synced-never': 'Never synced',
+      'settings-sync-oldest-pending': 'Oldest pending {time}',
+      'settings-sync-oldest-pending-none': 'Queue empty',
+      'settings-sync-time-just-now': 'just now',
+      'settings-sync-time-minutes-ago': '{count}m ago',
+      'settings-sync-time-hours-ago': '{count}h ago',
+      'settings-sync-time-days-ago': '{count}d ago',
       'settings-sync-test-connection': 'Test Connection',
       'settings-sync-testing': 'Testing…',
       'settings-sync-test-failed': 'Test failed',
@@ -134,7 +146,7 @@ function renderSection(overrides: Record<string, unknown> = {}) {
     setSyncResult: vi.fn(),
     pullResult: null,
     setPullResult: vi.fn(),
-    pendingCount: null,
+    queueSummary: null,
     testing: false,
     setTesting: vi.fn(),
     pingResult: null,
@@ -145,7 +157,7 @@ function renderSection(overrides: Record<string, unknown> = {}) {
     setTokenExpiresAt: vi.fn(),
     cmInput: {} as React.HTMLAttributes<HTMLInputElement>,
     markDirty: vi.fn(),
-    refreshPendingCount: vi.fn(),
+    refreshQueueSummary: vi.fn(),
     testSyncConnection: vi.fn(),
     syncRun: vi.fn(),
     syncPull: vi.fn(),
@@ -268,12 +280,58 @@ describe('SyncSection', () => {
     expect(document.querySelector('.settings-sync-result-block')).toBeInTheDocument();
   });
 
-  it('shows pending badge when pendingCount > 0', () => {
+  it('shows pending badge when queue summary has pending items', () => {
     renderSection({
       sync: { serverUrl: 'https://sync.example.com', hasApiKey: true, enabled: true },
-      pendingCount: 7,
+      queueSummary: {
+        pendingCount: 7,
+        syncedCount: 12,
+        failedCount: 1,
+        conflictCount: 0,
+        lastSyncedAt: null,
+        oldestPendingAt: null,
+      },
     });
     expect(screen.getByText('7 pending')).toBeInTheDocument();
+  });
+
+  it('renders the detailed queue status panel with counts and timestamps', () => {
+    renderSection({
+      sync: { serverUrl: 'https://sync.example.com', hasApiKey: true, enabled: true },
+      queueSummary: {
+        pendingCount: 3,
+        syncedCount: 41,
+        failedCount: 2,
+        conflictCount: 1,
+        lastSyncedAt: new Date(Date.now() - 5 * 60_000).toISOString(), // 5m ago
+        oldestPendingAt: new Date(Date.now() - 2 * 3_600_000).toISOString(), // 2h ago
+      },
+    });
+    expect(screen.getByTestId('sync-queue-summary')).toBeInTheDocument();
+    // Counts
+    expect(screen.getByText('3')).toBeInTheDocument();
+    expect(screen.getByText('41')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('1')).toBeInTheDocument();
+    // Relative timestamps
+    expect(screen.getByText(/Last synced/)).toBeInTheDocument();
+    expect(screen.getByText(/Oldest pending/)).toBeInTheDocument();
+  });
+
+  it('shows "never synced" / "queue empty" when timestamps are missing', () => {
+    renderSection({
+      sync: { serverUrl: 'https://sync.example.com', hasApiKey: true, enabled: true },
+      queueSummary: {
+        pendingCount: 0,
+        syncedCount: 0,
+        failedCount: 0,
+        conflictCount: 0,
+        lastSyncedAt: null,
+        oldestPendingAt: null,
+      },
+    });
+    expect(screen.getByText(/Never synced/)).toBeInTheDocument();
+    expect(screen.getByText(/Queue empty/)).toBeInTheDocument();
   });
 
   it('renders request token button', () => {
