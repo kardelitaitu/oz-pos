@@ -628,6 +628,36 @@ describe('semantic topology contract', () => {
     expect(validateTopologyGraph(normalized)).toEqual([]);
   });
 
+  it('rejects a circular transfer chain with exactly cycle-detected', () => {
+    // Round 86: a hub → mid → leaf → hub transfer loop is a directed
+    // cycle over stock-bearing wires — it must be rejected, not silently
+    // accepted (the servicing guard alone would bless every warehouse
+    // since each has an inbound transfer).
+    const normalized = graph(
+      [
+        branch(),
+        workspace('ws-1'),
+        warehouseWith('wh-hub', { stock: 300, capacity: 1000 }),
+        warehouseWith('wh-mid', { stock: 200, capacity: 800 }),
+        warehouseWith('wh-leaf', { stock: 100, capacity: 500 }),
+      ],
+      [
+        ownershipWire('w-owner', 'ws-1'),
+        stockWire('w-stock', 'ws-1', 'wh-hub'),
+        transferWire('w-hub-mid', 'wh-hub', 'wh-mid'),
+        transferWire('w-mid-leaf', 'wh-mid', 'wh-leaf'),
+        transferWire('w-leaf-hub', 'wh-leaf', 'wh-hub'),
+      ],
+    );
+
+    expect(validateTopologyGraph(normalized)).toEqual([
+      expect.objectContaining({
+        code: 'cycle-detected',
+        nodeId: 'wh-hub',
+      }),
+    ]);
+  });
+
   it('flags a mid-chain warehouse cut off from its feeder as unserviced', () => {
     // Removing the hub→mid transfer leaves wh-mid with NO inbound
     // stock-bearing wire (its own outbound transfer to leaf doesn't

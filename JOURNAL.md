@@ -2374,3 +2374,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 85 — deep-chain pin)
 
 **Risks / follow-ups:** the pin covers the clean path and the mid-break; a cycle (leaf → hub back) has no explicit test — `cycle-detected` exists in the error union, so a future slice could pin that a circular transfer chain is rejected rather than silently accepted.
+
+### 2026-08-09 — circular transfer chain rejected (cycle-detected pin)
+
+**Problem (round-85 follow-up):** the deep-chain pins covered the clean path and the mid-break, but nothing pinned a CIRCULAR transfer chain (hub → mid → leaf → hub). The servicing guard would bless every warehouse in the loop (each has an inbound transfer), so the loop could be silently accepted unless cycle detection catches it.
+
+**Solution (regression pin, no production change):** a contract test builds the exact cycle and asserts the graph fails with EXACTLY one error — `cycle-detected` on `wh-hub`. `findDirectedCycleNode` builds its adjacency from all semantic wires, so transfer loops are already covered; the exact single-error assertion additionally proves the missing-stock-routing guard does NOT bless the loop. Passes immediately — the pin protects the round-82/83 servicing rules from ever making cycles valid.
+
+**Verified:** contract 41/41 (+1), full UI 4558/4558, typecheck, eslint 0/0. No FTL changes.
+
+**Commits:** (round 86 — cycle pin)
+
+**Risks / follow-ups:** cycle detection is graph-wide and not warehouse-scoped — a location-wire cycle between two stores would also trip it (existing behavior, unchanged); the cycle error renders as a canvas banner with the offending nodeId, but no editor test pins the cycle BANNER specifically — a future slice could surface it on the card like the other node-scoped errors.
