@@ -4039,6 +4039,9 @@ describe('NodeTopologyEditor — warehouse low-stock telemetry', () => {
 // ── Warehouse capacity validation ───────────────────────────────
 
 describe('NodeTopologyEditor — warehouse capacity validation', () => {
+  // Capacity checks are a Pro-tier feature — the fixture renders at Pro so
+  // the guards are enforced (the standard-tier suppression is pinned in the
+  // 'warehouse capacity tier gate' describe below).
   const renderStockedGraph = async (stock: number, capacity: number) => {
     mockLoadTopology.mockResolvedValueOnce({
       nodes: [
@@ -4051,7 +4054,7 @@ describe('NodeTopologyEditor — warehouse capacity validation', () => {
         { id: 'w-stock', from_node_id: 'ws-1', to_node_id: 'wh-1', from_port_id: 'stock-out', to_port_id: 'stock-in', relationship_type: 'stock-routing', direction: 'one-way' },
       ],
     } as never);
-    renderEditor();
+    renderEditor({ currentTier: 'pro' });
     await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
   };
 
@@ -4109,7 +4112,7 @@ describe('NodeTopologyEditor — warehouse missing stock-routing prompt', () => 
         { id: 'w-loc', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
       ],
     } as never);
-    renderEditor();
+    renderEditor({ currentTier: 'pro' });
     await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
   };
 
@@ -4136,7 +4139,7 @@ describe('NodeTopologyEditor — warehouse missing stock-routing prompt', () => 
         { id: 'w-stock', from_node_id: 'ws-1', to_node_id: 'wh-1', from_port_id: 'stock-out', to_port_id: 'stock-in', relationship_type: 'stock-routing', direction: 'one-way' },
       ],
     } as never);
-    renderEditor();
+    renderEditor({ currentTier: 'pro' });
     await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
 
     expect(warehouseNote()).toBeNull();
@@ -4150,6 +4153,50 @@ describe('NodeTopologyEditor — warehouse missing stock-routing prompt', () => 
   it('keeps the prompt off a warehouse without capacity metadata', async () => {
     await renderUnwiredWarehouse({ stock: 500 });
     expect(warehouseNote()).toBeNull();
+  });
+});
+
+// ── Warehouse capacity tier gate ────────────────────────────────
+
+describe('NodeTopologyEditor — warehouse capacity tier gate', () => {
+  const renderStandard = async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-1', type: 'workspace', name: 'Retail POS', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-1', type: 'warehouse', name: 'Main Stock Room', x: 680, y: 140, metadata: { stock: 1000, capacity: 1000 } },
+      ],
+      wires: [
+        { id: 'w-loc', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+        { id: 'w-stock', from_node_id: 'ws-1', to_node_id: 'wh-1', from_port_id: 'stock-out', to_port_id: 'stock-in', relationship_type: 'stock-routing', direction: 'one-way' },
+      ],
+    } as never);
+    renderEditor(); // default standard tier
+    await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
+  };
+
+  it('suppresses the capacity note and wire marker on standard tier', async () => {
+    await renderStandard();
+
+    expect(document.querySelector('.node-type-warehouse')?.querySelector('.node-validation-note')).toBeNull();
+    expect(document.querySelector('.wire-validation-marker')).toBeNull();
+  });
+
+  it('suppresses the missing-wire prompt on standard tier', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-1', type: 'workspace', name: 'Retail POS', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-1', type: 'warehouse', name: 'Main Stock Room', x: 680, y: 140, metadata: { stock: 500, capacity: 1000 } },
+      ],
+      wires: [
+        { id: 'w-loc', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+      ],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
+
+    expect(document.querySelector('.node-type-warehouse')?.querySelector('.node-validation-note')).toBeNull();
   });
 });
 

@@ -335,7 +335,7 @@ export default function TopologyScreen() {
       const semanticGraph = normalizeTopologyGraph(nodes, wires);
       // TopologyScreen is the real, strict boundary. Do not permit the
       // legacy primary/default fallback to survive into workspace mutation.
-      const validationErrors = validateTopologyGraph(semanticGraph);
+      const validationErrors = validateTopologyGraph(semanticGraph, licenseTier);
       if (validationErrors.length > 0) {
         const firstError = validationErrors[0]!;
         addToast({
@@ -558,7 +558,7 @@ export default function TopologyScreen() {
         return {};
       }
     },
-    [sessionToken, workspaceInstances, stores, addToast, l10n],
+    [sessionToken, workspaceInstances, stores, addToast, l10n, licenseTier, selectedBranchId],
   );
 
   return (

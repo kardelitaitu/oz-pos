@@ -660,7 +660,7 @@ function validateEditorGraph(
     (node) => node.kind === 'branch-location' && node.storeProfileId !== undefined,
   );
   const errors = hasCanonicalBranchIdentity || !allowLegacyApply
-    ? validateTopologyGraph(semanticGraph)
+    ? validateTopologyGraph(semanticGraph, tier)
     : [];
   // The multi-warehouse tier cap is an Apply-gate invariant that the
   // creation paths also enforce (every spawn/duplicate path refuses a

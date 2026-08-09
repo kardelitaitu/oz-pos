@@ -630,4 +630,35 @@ describe('semantic topology contract', () => {
     const errors = validateTopologyGraph(normalized);
     expect(errors.filter((e) => e.code === 'warehouse-missing-stock-routing')).toHaveLength(0);
   });
+
+  it('enforces the capacity guards on Pro tier', () => {
+    const normalized = graph(
+      [branch(), workspace('ws-1'), warehouseWith('wh-1', { stock: 1000, capacity: 1000 })],
+      [ownershipWire('w-owner', 'ws-1'), stockWire('w-stock', 'ws-1', 'wh-1')],
+    );
+
+    expect(validateTopologyGraph(normalized, 'pro')).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'warehouse-at-capacity' }),
+    ]));
+  });
+
+  it('skips the at-capacity guard below Pro tier', () => {
+    const normalized = graph(
+      [branch(), workspace('ws-1'), warehouseWith('wh-1', { stock: 1000, capacity: 1000 })],
+      [ownershipWire('w-owner', 'ws-1'), stockWire('w-stock', 'ws-1', 'wh-1')],
+    );
+
+    const errors = validateTopologyGraph(normalized, 'standard');
+    expect(errors.filter((e) => e.code === 'warehouse-at-capacity')).toHaveLength(0);
+  });
+
+  it('skips the missing-wire prompt below Pro tier', () => {
+    const normalized = graph(
+      [branch(), workspace('ws-1'), warehouseWith('wh-1', { stock: 500, capacity: 1000 })],
+      [ownershipWire('w-owner', 'ws-1')],
+    );
+
+    const errors = validateTopologyGraph(normalized, 'standard');
+    expect(errors.filter((e) => e.code === 'warehouse-missing-stock-routing')).toHaveLength(0);
+  });
 });

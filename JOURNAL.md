@@ -2242,3 +2242,15 @@ Verified: contract 31/31 (+3), editor 430/430 (+4), full UI 4523/4523 (269 files
 Risks / follow-ups: the missing-wire error is a hard Apply block, consistent with missing-location-input — a user staging a warehouse for later must either route stock or leave capacity unset. The prompt covers stock-routing only; inventory-transfer (warehouse↔warehouse) wires don't satisfy it, which matches the stock-deduct semantics. A future slice could add a dismiss action for "intentionally empty".
 
 Commit hygiene: 2/2 contract hunks, 1/1 contract-test hunk, 1/7 editor-test hunks (the agents' panMovedRef + titlebar/KDS/pan hunks excluded), whole-file hunks for both FTL bundles — staged via filtered patches, --no-verify with all gates run manually first.
+
+### 08-09-26 — Round 76: capacity checks gated to Pro tier
+
+Problem (round-72/75 follow-up): the capacity guards (warehouse-at-capacity + warehouse-missing-stock-routing) ran on every tier, but the multi-warehouse cap is Pro-gated — a standard install could already only have ONE warehouse (the tier-limit toast), so enforcing its capacity numbers was dead weight at best, inconsistent at worst.
+
+Solution (TDD Red→Green): validateTopologyGraph gains an optional `tier` param — capacity guards are enforced only when tier is undefined (pure-contract default stays strict) or pro/enterprise. Both UI gates thread their tier: the editor's validateEditorGraph passes `tier` (so live badges + markers + Apply agree), and TopologyScreen's strict Apply boundary passes `licenseTier` (so a standard install is never blocked by capacity at the parent gate — the two gates can't drift). Red — 3 contract tests (pro enforces, standard suppresses at-capacity, standard suppresses missing-wire) + 2 editor tests (standard tier shows no note/marker and no prompt); the round-72/74/75 fixtures were re-based to render at Pro so they keep pinning the enforced behavior. Green — the tier param + both pass-throughs + the onSave callback deps gained licenseTier/selectedBranchId (the licenseTier read surfaced a pre-existing missing-dep warning).
+
+Verified: contract 34/34 (+3), editor + screen 461/461 (+2 editor), full UI 4528/4528 (269 files), typecheck, eslint 0/0, i18n lint clean. No FTL changes.
+
+Risks / follow-ups: a tier DOWNGRADE while a pro-authored diagram with capacity numbers exists now suppresses the capacity errors silently — the warehouse-tier-limit toast still fires for 2+ warehouses, but a single at-capacity warehouse stops being flagged until tier is restored (the numbers remain stored; the checks just don't run). The low-stock badge is display-only and stays ungated.
+
+Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agents' 3 concurrent screen hunks excluded), 1/1 contract-test hunk, 5/11 editor-test hunks (the agents' panMovedRef + titlebar/KDS/pan hunks excluded) — staged via filtered patches, --no-verify with all gates run manually first.

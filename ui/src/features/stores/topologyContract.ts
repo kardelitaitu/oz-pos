@@ -474,8 +474,17 @@ function findDirectedCycleNode(graph: SemanticTopologyGraph): string | undefined
  * Rust Apply boundary. It deliberately does not resolve display names,
  * primary stores, or a `default` store.
  */
-export function validateTopologyGraph(graph: SemanticTopologyGraph): TopologyValidationError[] {
+export function validateTopologyGraph(
+  graph: SemanticTopologyGraph,
+  tier?: string,
+): TopologyValidationError[] {
   const errors: TopologyValidationError[] = [];
+  // The warehouse capacity guards are a Pro-tier business feature, mirroring
+  // the editor's warehouse-tier-limit cap. `tier` is optional so the pure
+  // contract stays strict by default (no tier context => enforced); the UI
+  // gates pass their license tier so standard/free/one_time installs skip
+  // the capacity checks exactly like the multi-warehouse cap.
+  const capacityEnforced = tier === undefined || ['pro', 'enterprise'].includes(tier);
   if (graph.schemaVersion !== TOPOLOGY_SCHEMA_VERSION) {
     errors.push({
       code: 'unsupported-schema-version',
@@ -582,39 +591,41 @@ export function validateTopologyGraph(graph: SemanticTopologyGraph): TopologyVal
   // Room has room. The design-time metadata numbers (rounds 70-71) drive
   // it — no capacity metadata means no check, so legacy graphs with no
   // numbers stay unflagged.
-  for (const wire of graph.wires) {
-    if (wire.relationshipType !== 'stock-routing') continue;
-    const target = graph.nodes.find((node) => node.id === wire.toNodeId);
-    if (!target || target.kind !== 'warehouse') continue;
-    if (target.capacity === undefined || target.stock === undefined) continue;
-    if (target.stock >= target.capacity) {
+  if (capacityEnforced) {
+    for (const wire of graph.wires) {
+      if (wire.relationshipType !== 'stock-routing') continue;
+      const target = graph.nodes.find((node) => node.id === wire.toNodeId);
+      if (!target || target.kind !== 'warehouse') continue;
+      if (target.capacity === undefined || target.stock === undefined) continue;
+      if (target.stock >= target.capacity) {
+        errors.push({
+          code: 'warehouse-at-capacity',
+          messageId: 'topology-validation-warehouse-at-capacity',
+          nodeId: target.id,
+          wireId: wire.id,
+        });
+      }
+    }
+
+    // Reverse guard: a warehouse configured with room but NO incoming
+    // stock-deduct wire is an unserviced Stock Room — prompt the user to
+    // route stock in. Skipped when the warehouse is full (stock >= capacity;
+    // nothing should route in then) or has no capacity metadata (legacy
+    // graphs with no design-time numbers stay unflagged).
+    for (const node of graph.nodes) {
+      if (node.kind !== 'warehouse') continue;
+      if (node.capacity === undefined) continue;
+      if (node.stock !== undefined && node.stock >= node.capacity) continue;
+      const hasStockRouting = graph.wires.some(
+        (wire) => wire.relationshipType === 'stock-routing' && wire.toNodeId === node.id,
+      );
+      if (hasStockRouting) continue;
       errors.push({
-        code: 'warehouse-at-capacity',
-        messageId: 'topology-validation-warehouse-at-capacity',
-        nodeId: target.id,
-        wireId: wire.id,
+        code: 'warehouse-missing-stock-routing',
+        messageId: 'topology-validation-warehouse-missing-stock-routing',
+        nodeId: node.id,
       });
     }
-  }
-
-  // Reverse guard: a warehouse configured with room but NO incoming
-  // stock-deduct wire is an unserviced Stock Room — prompt the user to
-  // route stock in. Skipped when the warehouse is full (stock >= capacity;
-  // nothing should route in then) or has no capacity metadata (legacy
-  // graphs with no design-time numbers stay unflagged).
-  for (const node of graph.nodes) {
-    if (node.kind !== 'warehouse') continue;
-    if (node.capacity === undefined) continue;
-    if (node.stock !== undefined && node.stock >= node.capacity) continue;
-    const hasStockRouting = graph.wires.some(
-      (wire) => wire.relationshipType === 'stock-routing' && wire.toNodeId === node.id,
-    );
-    if (hasStockRouting) continue;
-    errors.push({
-      code: 'warehouse-missing-stock-routing',
-      messageId: 'topology-validation-warehouse-missing-stock-routing',
-      nodeId: node.id,
-    });
   }
 
   const branches = graph.nodes.filter((node) => node.kind === 'branch-location');
