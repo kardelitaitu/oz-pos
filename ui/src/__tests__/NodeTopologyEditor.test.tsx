@@ -6169,14 +6169,14 @@ describe('NodeTopologyEditor — validation panel & view prefs', () => {
     expect(document.querySelector('.topology-issues-btn')).toBeNull();
   });
 
-  it('persists the elbow routing preference to localStorage', () => {
+  it('persists the elbow routing preference to the branch-scoped key', () => {
     renderEditor();
     fireEvent.click(screen.getByText('Elbow wires'));
-    expect(localStorage.getItem('oz-topology-view-routing')).toBe('elbow');
+    expect(localStorage.getItem('oz-topology-view-routing:unassigned')).toBe('elbow');
   });
 
   it('restores the elbow routing preference on mount', () => {
-    localStorage.setItem('oz-topology-view-routing', 'elbow');
+    localStorage.setItem('oz-topology-view-routing:unassigned', 'elbow');
     renderEditor();
 
     const path = document.querySelector('.wire-path') as SVGPathElement;
@@ -6187,6 +6187,53 @@ describe('NodeTopologyEditor — validation panel & view prefs', () => {
     renderEditor();
     fireEvent.click(screen.getByText('Snap to grid')); // toggles OFF
     expect(localStorage.getItem('oz-topology-view-snap')).toBe('0');
+  });
+
+  describe('per-branch wire-routing persistence', () => {
+    // The parent describe clears localStorage before each test; scrub after
+    // too so a leftover 'elbow' under the 'unassigned' key can't leak into
+    // later describes that assert curved paths on a default mount.
+    afterEach(() => localStorage.clear());
+
+    it('persists the choice to the active branch\'s key only', () => {
+      renderEditor({ branchId: 'branch-a' });
+      fireEvent.click(screen.getByText('Elbow wires'));
+
+      expect(localStorage.getItem('oz-topology-view-routing:branch-a')).toBe('elbow');
+      expect(localStorage.getItem('oz-topology-view-routing:branch-b')).toBeNull();
+    });
+
+    it('restores the branch\'s own saved routing on mount', () => {
+      localStorage.setItem('oz-topology-view-routing:branch-a', 'elbow');
+      renderEditor({ branchId: 'branch-a' });
+
+      const path = document.querySelector('.wire-path') as SVGPathElement;
+      expect(path.getAttribute('d')).toContain('L ');
+    });
+
+    it('does not leak another branch\'s saved routing', () => {
+      localStorage.setItem('oz-topology-view-routing:branch-a', 'elbow');
+      renderEditor({ branchId: 'branch-b' });
+
+      const path = document.querySelector('.wire-path') as SVGPathElement;
+      expect(path.getAttribute('d')).toContain('C ');
+    });
+
+    it('inherits the legacy per-install value once when no per-branch choice exists', () => {
+      localStorage.setItem('oz-topology-view-routing', 'elbow');
+      renderEditor({ branchId: 'branch-a' });
+
+      const path = document.querySelector('.wire-path') as SVGPathElement;
+      expect(path.getAttribute('d')).toContain('L ');
+    });
+
+    it('falls back to curved when the saved value is corrupted', () => {
+      localStorage.setItem('oz-topology-view-routing:branch-a', 'garbage');
+      renderEditor({ branchId: 'branch-a' });
+
+      const path = document.querySelector('.wire-path') as SVGPathElement;
+      expect(path.getAttribute('d')).toContain('C ');
+    });
   });
 });
 

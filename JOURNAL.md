@@ -1893,3 +1893,13 @@ Solution: Red→Green, mirroring the per-branch viewport memory (`oz-topology-vi
 Test counts: +4 (editor 333). Full UI 4369 (265 files). Gates: typecheck, eslint, i18n parity clean (no new FTL keys).
 
 Commits: this round, scoped to NodeTopologyEditor.tsx/.test.tsx + JOURNAL.md.
+
+### 2026-08-09 — Round 47: per-diagram wire-routing preference
+
+Problem: The journaled round-36/45 follow-up — the elbow/curved routing choice was a single per-install preference. Every diagram shared one routing style; switching branches (which remounts the editor) couldn't give each diagram its own look, and the choice wasn't scoped the way the viewport memory and minimap now are.
+
+Solution: Red→Green, same pattern as round 46. Red: updated the two existing persistence tests to the branch-scoped key (`oz-topology-view-routing:unassigned`) and added five tests — persist to the active branch's key only (branch-b stays null), restore the branch's own saved routing on mount, no cross-branch leak, legacy per-install inheritance, corrupted-value fallback to curved. 4 failed for the right reasons (two branch-scoped drivers + the two updated tests); isolation/legacy/corruption passed as spec guards. Green: `routingKey = oz-topology-view-routing:<branchId|unassigned>`, lazy mount-time read with a one-time legacy fallback to the old global key (`saved ?? legacy`), write-back effect on `[routingKey, wireRouting]` — the legacy value migrates to the branch key on first write, so existing users don't lose their choice.
+
+Test counts: +5 (editor 338). Full UI 4374 (265 files). Gates: typecheck, eslint, i18n parity clean (no new FTL keys).
+
+Commits: this round, scoped to NodeTopologyEditor.tsx/.test.tsx + JOURNAL.md.

@@ -772,11 +772,17 @@ export default function NodeTopologyEditor({
     setFinderOpen(false);
   }, [selectOnly]);
   /** Wire routing style: smooth cubic beziers (default) or orthogonal
-   *  elbow segments. Persisted per install in localStorage so the choice
-   *  survives reloads. */
+   *  elbow segments. Persisted per diagram (branch) in localStorage — the
+   *  same key scheme as the viewport memory and minimap — so each diagram
+   *  keeps its own routing across branch switches and reloads. A legacy
+   *  per-install value is inherited once when no per-diagram choice exists
+   *  yet (the write-back effect then migrates it to the branch key). */
+  const routingKey = `oz-topology-view-routing:${branchId ?? 'unassigned'}`;
   const [wireRouting, setWireRouting] = useState<'curved' | 'elbow'>(() => {
     try {
-      return localStorage.getItem('oz-topology-view-routing') === 'elbow' ? 'elbow' : 'curved';
+      const saved = localStorage.getItem(routingKey);
+      const value = saved ?? localStorage.getItem('oz-topology-view-routing');
+      return value === 'elbow' ? 'elbow' : 'curved';
     } catch {
       return 'curved';
     }
@@ -817,9 +823,9 @@ export default function NodeTopologyEditor({
 
   useEffect(() => {
     try {
-      localStorage.setItem('oz-topology-view-routing', wireRouting);
+      localStorage.setItem(routingKey, wireRouting);
     } catch { /* storage may be unavailable (private mode) — view pref only */ }
-  }, [wireRouting]);
+  }, [routingKey, wireRouting]);
 
   useEffect(() => {
     try {
