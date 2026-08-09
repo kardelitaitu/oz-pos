@@ -1322,6 +1322,44 @@ describe('NodeTopologyEditor Component', () => {
 
       await waitFor(() => expect(onRenameBranch).toHaveBeenCalledWith('store-1', 'Inspector Renamed Branch'));
     });
+
+    it('reverts the card label when the parent REJECTS a body-config rename', async () => {
+      // The parent returns false (it toasts the error) — the canvas must not
+      // keep holding a name the backend refused, or the next authoritative
+      // refresh would silently revert it. commitNodeRename keeps its draft
+      // open for retry; a blurred input has no draft, so the honest state is
+      // the focus-time (authoritative) name.
+      const onRenameWorkspace = vi.fn().mockResolvedValue(false);
+      renderEditor({ onRenameWorkspace });
+      const card = document.querySelector('.topology-node[data-node-id="ws-1"]') as HTMLElement;
+      const title = () => card.querySelector('.node-title')?.textContent;
+      expect(title()).toBe('Retail POS #1');
+
+      const input = document.querySelector('.node-config-input') as HTMLInputElement;
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: 'Rejected POS' } });
+      // Live-bound input updates the card as you type.
+      expect(title()).toBe('Rejected POS');
+      fireEvent.blur(input);
+
+      await waitFor(() => expect(onRenameWorkspace).toHaveBeenCalledWith('ws-1', 'Rejected POS'));
+      await waitFor(() => expect(title()).toBe('Retail POS #1'));
+    });
+
+    it('keeps the new label when the parent ACCEPTS a body-config rename', async () => {
+      const onRenameWorkspace = vi.fn().mockResolvedValue(true);
+      renderEditor({ onRenameWorkspace });
+      const card = document.querySelector('.topology-node[data-node-id="ws-1"]') as HTMLElement;
+      const title = () => card.querySelector('.node-title')?.textContent;
+
+      const input = document.querySelector('.node-config-input') as HTMLInputElement;
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: 'Accepted POS' } });
+      fireEvent.blur(input);
+
+      await waitFor(() => expect(onRenameWorkspace).toHaveBeenCalledWith('ws-1', 'Accepted POS'));
+      expect(title()).toBe('Accepted POS');
+    });
   });
 
   // ── Warehouse tier Apply gate (P1 slice 2) ─────────────────────

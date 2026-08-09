@@ -1776,7 +1776,17 @@ export default function NodeTopologyEditor({
     if (trimmed === renameBaselineRef.current) return;
     const persist = node.type === 'store' ? onRenameBranch : onRenameWorkspace;
     if (!persist) return;
-    await persist(nodeId, trimmed);
+    const ok = await persist(nodeId, trimmed);
+    if (ok === false) {
+      // The parent refused (it toasts the error) — revert the live-bound name
+      // to the focus-time (authoritative) baseline so the canvas never holds
+      // a name the backend rejected. commitNodeRename keeps its draft open
+      // for a retry; a blurred input has no draft to keep, so reverting is
+      // the honest state — the alternative (keep the edited name) would
+      // silently revert on the next authoritative refresh instead.
+      setNodes((prev) => prev.map((n) => (n.id === nodeId ? { ...n, name: renameBaselineRef.current ?? n.name } : n)));
+      return;
+    }
     renameBaselineRef.current = trimmed;
   }, [nodes, onRenameBranch, onRenameWorkspace]);
 
