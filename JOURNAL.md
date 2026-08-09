@@ -2446,3 +2446,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 91 — wire terminology)
 
 **Risks / follow-ups:** "koneksi siku" (Elbow connections) and "one Location In wire" read slightly more literally than their predecessors, but the one-to-one mapping is the win; a native-speaker could re-tune the compound phrases without breaking the unification.
+
+### 2026-08-09 — native-speaker pass extended to settings/sync/KDS id (round 92)
+
+**Problem (round-90/91 follow-up):** the id pass had covered only topology keys; the settings, sync, and KDS areas of the Indonesian bundle had never had the same scrutiny.
+
+**Solution (copy-only, Verify + Commit):** reviewed the rest of multi-store.id.ftl (multi-store-* keys — all clean: "Dasbor Multi-Toko", "Terminal Daring", "NPWP"), every settings-sync-* key, the full kds.id.ftl (clean: "Tampilan Dapur", "PENCUCI MULUT", offline/dead-letter copy all natural), and a full read of settings.id.ftl (928 lines). Three surgical fixes: (1) `settings-sync-pull-result` said "{ $tax_rates } pajak" while its sibling `settings-sync-pull-toast-success` says "tarif pajak" — unified on "tarif pajak"; (2) `settings-license-live-online` translated "Live" as "Langsung" (the broadcast-live sense) — now "Aktif", pairing with "Nonaktif" (Inactive); (3) the Course Firing heading/enable said "Pengiriman Course" (untranslated English) while the hint uses "hidangan" — now "Pengiriman Hidangan". Deliberate non-changes: "Alihkan" for Toggle is the established bundle-wide term (changing one instance would re-create the round-91 inconsistency) and "Admin Settings ↗" is a branded cross-ref label.
+
+**Verified:** i18n lint (parity + dedupe) clean, full UI 4563/4563 unchanged. No en changes, no key-set changes, no test pins on id values.
+
+**Commits:** (round 92 — settings/sync/KDS id pass)
+
+**Risks / follow-ups:** the other bundles (products, sales, inventory, staff, etc.) still await the same pass; "Alihkan" as the toggle translation could be revisited bundle-wide in one future slice if a native speaker objects.
