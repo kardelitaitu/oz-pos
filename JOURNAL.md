@@ -2814,3 +2814,17 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** `ef7be27f` (3 files: authz.rs, mod.rs, sales.rs deleted).
 
 **Risks / follow-ups:** `apps/tablet-client` carries a twin `commands/sales.rs` re-export module (same split pattern) — same treatment is a candidate slice there; also, any other `_legacy`/`_compat` items found by the naming scan (topology's `legacy_topology_belongs_to_branch` and `ambiguous_legacy_wire`) are genuinely used in production, so they stay.
+
+### 2026-08-10 — topology tests finally ran: fixed the hidden ambiguous-wire fixture breakage (round 117)
+
+**Problem:** rounds 114–116 could not run the oz-pos-app tests — `oz-pos-app.exe` in `target/debug` was locked. Retried per request and identified the holder: **PID 86448, the user's running app** (started 04:50), not a transient rebuild — so the lock will never clear while the app is open. Workaround discovered: `cargo test -p oz-pos-app --lib` builds a hash-named test harness that does NOT collide with the bin exe, so the unit tests run.
+
+**The hidden breakage:** the first real run exposed a pre-existing failure nobody could see since the lock appeared: `tauri_save_topology_with_wires_roundtrips_fully` panicked with `ambiguous-legacy-wire` on its own fixture. Root cause: `make_node_cmd` hardcodes `node_type: "store"` for every id, so `ws-1` was also a `store` — the fixture saved a store→store wire with no semantic fields, which `674e41bb` (ambiguous-legacy-wire rejection) now correctly refuses. The test predates the rejection and the exe lock hid the breakage from everyone (the rejection landed while the app was running).
+
+**Fix (Red already proven — the test failed on arrival):** rewrote the fixture to satisfy the current semantic contract, mirroring the passing `semantic_save_*` fixtures: `store-a` is a `store` carrying the migration-025-seeded `default` `store_profile_id`, `ws-1` is a `workspace`, and `cmd-w-1` declares `relationship_type: "location"` with `location-out`/`location-in` ports — a deterministic branch→workspace ownership edge. Load assertions (nodes 2, wires 1, from/to ids) unchanged. `make_node_cmd` keeps its 5 other call sites.
+
+**Verified:** topology **215/215**, full lib **864/864**, `wiring_audit` integration **6/6** (it audits the generate_handler — unaffected). The other 4 integration tests (`kernel_lifecycle`, `window_state_multi_monitor`, `window_visibility`, `capability_parity`) spawn the bin via `CARGO_BIN_EXE` and are inherently blocked by the running app — unrelated to this change.
+
+**Commits:** `04683eae`
+
+**Risks / follow-ups:** the bin-target unit tests and exe-spawning integration tests remain unrunnable until the app is closed — a future slice could add a `--lib`-only CI lane or a named test profile so the desktop-client suite stops being hostage to a running app.
