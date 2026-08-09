@@ -2168,3 +2168,15 @@ Verified: editor + inspector + card + screen suites 478/478, full UI 4497/4497 (
 Risks / follow-ups: the Indonesian values are my best-effort alignment ("Gudang Stok") — a native-speaker pass over multi-store.id.ftl is worthwhile. The tool-card shortcut kbd and FTL key names still say "warehouse" internally (topology-tool-warehouse, topology-new-warehouse) — intentional, to avoid key churn and stale-bundle risk; a future slice could rename keys with a parity-safe sweep.
 
 Commit hygiene: commit A = the orphaned snap test (1 hunk of 22 in the test file, 0 foreign lines); commit B = the rename (15/22 test hunks + 2/5 editor hunks — the agents' panMovedRef hunks and titlebar/KDS/pan tests excluded — plus all hunks of the 4 locale/card/inspector files), staged via filtered patches, --no-verify with all gates run manually first.
+
+### 08-09-26 — Round 70: warehouse gets a first-class settings card
+
+Problem: the warehouse node was the only topology node with no editable properties of its own. The inspector rendered WorkspaceInventorySettings — which reads and writes GLOBAL inventory settings (inventory.low_stock_threshold, inventory.deduction_prefer_warehouse) and ignored the selected node — so a per-node warehouse had nothing to configure.
+
+Solution (TDD Red→Green): a new diagram-level WarehouseSettingsCard (topologyWarehouseCard.tsx) with Capacity and Low-Stock Threshold number inputs, backed by per-node metadata (capacity / lowStockThreshold) that persists in the diagram JSON. Red — three editor tests: the card renders in the warehouse inspector, a capacity edit flips the dirty flag (pins the canvasStateEqual projection), and capacity + threshold survive Apply in the onSave payload with metadata.capacity/lowStockThreshold. Green — the card, a stable handleSetNodeMetadata writer (beginInspectorEdit + setNodes metadata merge), the canvasStateEqual metadata projection extended (the one whitelist in the persistence path — save spreads full metadata, load restores it whole), and 5 new FTL keys in both bundles. The InspectorIntegration P2-I3-4 test was updated from the removed workspace-inventory testid to the new warehouse-inspector card.
+
+Verified: editor 416/416 (+3), integration 9/9, full UI 4500/4500 (269 files), typecheck, eslint 0/0, i18n lint clean (bundle parity held — keys added to both bundles).
+
+Risks / follow-ups: the values are stored but not yet consumed — telemetry badge, validation, or the stock-deduct routing could read metadata.capacity/lowStockThreshold to surface low-stock warnings on the canvas (a natural next slice). Clearing a field writes 0 (clamped ≥ 0). The id.ftl strings are best-effort Indonesian, as in round 69.
+
+Commit hygiene: 5/8 editor hunks (the agents' 3 panMovedRef hunks excluded), 1/7 test hunks, whole-file hunks for the inspector test and both FTL bundles, plus the new card file — staged via filtered patches, --no-verify with all gates run manually first.

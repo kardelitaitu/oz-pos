@@ -211,16 +211,18 @@ describe('Inspector drawer integration (Phase 2)', () => {
     });
   });
 
-  // ── P2-I3-4: Warehouse node renders InventorySettings ────
+  // ── P2-I3-4: Warehouse node renders its own settings card ────
 
-  it('selecting a warehouse node renders WorkspaceInventorySettings', async () => {
+  it('selecting a warehouse node renders the Stock Room settings card', async () => {
     renderEditor();
 
     selectNodeByType('warehouse');
 
     await waitFor(() => {
       expect(screen.getByText('Node Inspector')).toBeInTheDocument();
-      expect(screen.getByTestId('workspace-inventory')).toBeInTheDocument();
+      expect(screen.getByTestId('warehouse-inspector')).toBeInTheDocument();
+      expect(screen.getByLabelText(/Capacity/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Low-Stock Threshold/)).toBeInTheDocument();
     });
   });
 

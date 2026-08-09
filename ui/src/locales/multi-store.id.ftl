@@ -183,6 +183,11 @@ topology-wire-flip-hint-connecting =
     Balik arah? Klik tetap menjaga koneksi Anda tetap berjalan.
 topology-inspector-close-aria = Tutup inspektur
 topology-inspector-hardware-title = Perangkat Keras
+topology-warehouse-settings-title = Pengaturan Gudang Stok
+topology-warehouse-capacity = Kapasitas
+topology-warehouse-capacity-desc = Jumlah maksimal item yang dapat ditampung Gudang Stok ini
+topology-warehouse-low-stock-threshold = Ambang Stok Menipis
+topology-warehouse-low-stock-desc = Beri tahu saat stok tersimpan turun ke angka ini atau di bawahnya
 topology-ws-type-select-aria = Pilih tipe workspace
 # $name (String) — node display name · $port (String) — port position (top/right/bottom/left)
 topology-port-aria = Port { $port } { $name }

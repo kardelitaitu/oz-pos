@@ -185,6 +185,11 @@ topology-wire-flip-hint-connecting =
     Flip direction? Clicking keeps your connection in progress.
 topology-inspector-close-aria = Close inspector
 topology-inspector-hardware-title = Hardware Device
+topology-warehouse-settings-title = Stock Room Settings
+topology-warehouse-capacity = Capacity
+topology-warehouse-capacity-desc = Max items this Stock Room can hold
+topology-warehouse-low-stock-threshold = Low-Stock Threshold
+topology-warehouse-low-stock-desc = Alert when stored stock drops to or below this count
 topology-ws-type-select-aria = Select workspace type
 # $name (String) — node display name · $port (String) — port position (top/right/bottom/left)
 topology-port-aria = { $name } { $port } port

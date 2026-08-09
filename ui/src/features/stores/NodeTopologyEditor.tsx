@@ -8,7 +8,6 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import { loadTopology } from '@/api/topology';
 import { useSettings } from '@/contexts/SettingsContext';
 import {
-  WorkspaceInventorySettings,
   StoreInfoCard,
   type WorkspaceCardProps,
 } from '@/features/settings/workspace-cards';
@@ -40,6 +39,7 @@ import {
   NODE_PORT_Y,
 } from './nodeTopologyClamp';
 import { computeAutoLayout } from './nodeTopologyLayout';
+import { WarehouseSettingsCard } from './topologyWarehouseCard';
 import { pinchTransform, TOUCH_DRAG_THRESHOLD } from './nodeTopologyTouch';
 import {
   deserializeTopology,
@@ -395,6 +395,8 @@ function canvasStateEqual(
           typeKey: n.metadata['typeKey'],
           purposeKey: n.metadata['purposeKey'],
           enabled: n.metadata['enabled'],
+          capacity: n.metadata['capacity'],
+          lowStockThreshold: n.metadata['lowStockThreshold'],
         },
       } : {}),
     }));
@@ -4284,6 +4286,16 @@ export default function NodeTopologyEditor({
       : n)));
   }, [beginInspectorEdit]);
 
+  /** Stable metadata writer for the warehouse settings card (capacity,
+   *  low-stock threshold). Keeps edits in the beginInspectorEdit dirty
+   *  flow so canvasStateEqual can project the new keys. */
+  const handleSetNodeMetadata = useCallback((nodeId: string, patch: Record<string, unknown>) => {
+    beginInspectorEdit(nodeId);
+    setNodes((prev) => prev.map((n) => (n.id === nodeId
+      ? { ...n, metadata: { ...n.metadata, ...patch } }
+      : n)));
+  }, [beginInspectorEdit]);
+
   const handleDeleteRequest = () => {
     if (selectedNodeIds.size > 0) {
       const targets = [...selectedNodeIds];
@@ -5682,11 +5694,7 @@ export default function NodeTopologyEditor({
                 </div>
               )}
               {selectedNode.type === 'warehouse' && (
-                <WorkspaceInventorySettings
-                  variant="inspector-drawer"
-                  locationId={selectedNode.id}
-                  {...(sessionToken ? { sessionToken } : {})}
-                />
+                <WarehouseSettingsCard node={selectedNode} onChange={handleSetNodeMetadata} />
               )}
               {selectedNode.type === 'store' && (
                 <StoreInfoCard variant="inspector-drawer" />

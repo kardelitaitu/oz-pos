@@ -3919,6 +3919,56 @@ describe('NodeTopologyEditor — warehouse tool-card tier lock', () => {
   });
 });
 
+// ── Warehouse inspector settings card ───────────────────────────
+
+describe('NodeTopologyEditor — warehouse inspector settings card', () => {
+  const selectWarehouse = () => {
+    const warehouse = document.querySelector('.node-type-warehouse') as HTMLElement;
+    expect(warehouse).not.toBeNull();
+    fireEvent.mouseDown(warehouse, { button: 0 });
+  };
+
+  it('renders the Stock Room settings card with capacity and low-stock inputs', () => {
+    renderEditor();
+    selectWarehouse();
+
+    expect(screen.getByText('Stock Room Settings')).toBeInTheDocument();
+    expect(screen.getByLabelText(/Capacity/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Low-Stock Threshold/)).toBeInTheDocument();
+  });
+
+  it('marks the diagram dirty when capacity is edited', async () => {
+    const onDirtyChange = vi.fn();
+    renderEditor({ onDirtyChange });
+    // Wait for the post-load clean snapshot so the edit is the only delta.
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false));
+    selectWarehouse();
+
+    fireEvent.change(screen.getByLabelText(/Capacity/), { target: { value: '500' } });
+
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+  });
+
+  it('persists capacity and low-stock threshold through Apply', async () => {
+    const onSave = vi.fn();
+    renderEditor({ onSave });
+    selectWarehouse();
+
+    fireEvent.change(screen.getByLabelText(/Capacity/), { target: { value: '500' } });
+    fireEvent.change(screen.getByLabelText(/Low-Stock Threshold/), { target: { value: '25' } });
+
+    fireEvent.click(screen.getByText('Apply Topology Changes'));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+
+    const [nodes] = onSave.mock.calls[0]!;
+    const wh = nodes.find((n: { id: string }) => n.id === 'wh-1');
+    expect(wh).toBeDefined();
+    expect(wh.metadata.capacity).toBe(500);
+    expect(wh.metadata.lowStockThreshold).toBe(25);
+  });
+});
+
 // ── Zoom controls behavior ──────────────────────────────────────
 
 describe('NodeTopologyEditor — zoom controls behavior', () => {
