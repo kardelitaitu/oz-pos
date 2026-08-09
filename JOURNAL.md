@@ -2386,3 +2386,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 86 — cycle pin)
 
 **Risks / follow-ups:** cycle detection is graph-wide and not warehouse-scoped — a location-wire cycle between two stores would also trip it (existing behavior, unchanged); the cycle error renders as a canvas banner with the offending nodeId, but no editor test pins the cycle BANNER specifically — a future slice could surface it on the card like the other node-scoped errors.
+
+### 2026-08-09 — multi-warehouse tier cap unified into the contract (round 87)
+
+**Problem (round-79 parity follow-up):** the multi-warehouse cap lived ONLY in the editor's live gate — `validateTopologyGraph` never emitted `warehouse-tier-limit`, so TopologyScreen's strict Apply boundary called a contract that couldn't block a loaded/pasted Pro-authored 2-warehouse diagram on standard tier. Same class of parent-gate drift round 79 pinned for the capacity guard, but the cap itself was still split.
+
+**Solution (TDD Red→Green):** moved the cap into `validateTopologyGraph` as the single source of truth — `tierLimitEnforced` mirrors `capacityEnforced` (strict by default when tier is undefined, skipped on pro/enterprise), appended LAST so semantic/integrity errors keep precedence. The editor's duplicate block was deleted; its creation paths (tool-card/duplicate, `wouldExceedWarehouseCap`) still refuse a second warehouse on the way in. The six hub-and-spoke contract tests (rounds 82/83/85/86) were converted to pass `'pro'` so they keep testing semantics under the new strict default; a new contract test pins standard-tier 2-warehouse → `warehouse-tier-limit`, and a TopologyScreen test pins the exact toast at the parent gate on a semantically-clean transfer chain (apply never called, `topology-toast-multi-warehouse` error toast).
+
+**Verified:** contract 43/43 (+2), screen 34/34 (+1), full UI 4561/4561, typecheck, eslint 0/0. No FTL changes (the `topology-toast-multi-warehouse` key already existed).
+
+**Commits:** (round 87 — tier cap unified)
+
+**Risks / follow-ups:** the cap error carries no nodeId, so the validation panel shows it as a banner-level issue without a card to jump to — a future slice could scope it to the second warehouse node; the editor's live gate now delegates entirely to the contract, so any drift in error ordering between the two gates is gone by construction.

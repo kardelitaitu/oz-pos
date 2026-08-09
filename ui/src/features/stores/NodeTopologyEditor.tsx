@@ -662,22 +662,15 @@ function validateEditorGraph(
   const hasCanonicalBranchIdentity = semanticGraph.nodes.some(
     (node) => node.kind === 'branch-location' && node.storeProfileId !== undefined,
   );
-  const errors = hasCanonicalBranchIdentity || !allowLegacyApply
+  // validateTopologyGraph owns the multi-warehouse tier cap (round 87) —
+  // it pushes warehouse-tier-limit below Pro and the pure contract stays
+  // strict by default. The creation paths still refuse a second warehouse
+  // on the way in (tool-card/duplicate, wouldExceedWarehouseCap); this
+  // gate catches the remaining routes (downgrade, loaded legacy, paste)
+  // so Apply can never persist 2+ warehouses on a non-Pro install.
+  return hasCanonicalBranchIdentity || !allowLegacyApply
     ? validateTopologyGraph(semanticGraph, tier)
     : [];
-  // The multi-warehouse tier cap is an Apply-gate invariant that the
-  // creation paths also enforce (every spawn/duplicate path refuses a
-  // second warehouse below Pro). Enforcing it here catches the remaining
-  // routes in: a tier downgrade while a 2-warehouse diagram exists, or a
-  // loaded legacy diagram — so Apply can never persist 2+ warehouses on a
-  // non-Pro install.
-  if (!['pro', 'enterprise'].includes(tier)) {
-    const warehouseCount = semanticGraph.nodes.filter((n) => n.kind === 'warehouse').length;
-    if (warehouseCount >= 2) {
-      errors.push({ code: 'warehouse-tier-limit', messageId: 'topology-toast-multi-warehouse' });
-    }
-  }
-  return errors;
 }
 
 export default function NodeTopologyEditor({

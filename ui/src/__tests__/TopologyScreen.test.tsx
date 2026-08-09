@@ -779,6 +779,65 @@ describe('TopologyScreen', () => {
     });
   });
 
+  it('blocks a two-warehouse transfer chain on standard tier at the parent gate', async () => {
+    // Round 87: the multi-warehouse cap must be enforced by TopologyScreen's
+    // strict Apply boundary, not only by the editor's live gate — a loaded
+    // or pasted Pro-authored 2-warehouse diagram on standard must never
+    // persist. The transfer chain is semantically clean; the license cap
+    // is the only blocker.
+    await renderReady();
+
+    await triggerSave(
+      [
+        storeNode(),
+        wsNode({ id: 'ws-pos', name: 'Retail POS', metadata: { typeKey: 'store-pos' } }),
+        {
+          id: 'wh-hub',
+          type: 'warehouse',
+          name: 'Hub Stock Room',
+          x: 0,
+          y: 0,
+          metadata: { stock: 300, capacity: 1000 },
+        },
+        {
+          id: 'wh-sat',
+          type: 'warehouse',
+          name: 'Satellite Stock Room',
+          x: 0,
+          y: 0,
+          metadata: { stock: 200, capacity: 500 },
+        },
+      ],
+      [
+        locationWire('store-1', 'ws-pos', 'w-loc'),
+        {
+          id: 'w-stock',
+          fromNodeId: 'ws-pos',
+          fromPortId: 'stock-out',
+          toNodeId: 'wh-hub',
+          toPortId: 'stock-in',
+          relationshipType: 'stock-routing',
+          direction: 'one-way',
+        },
+        {
+          id: 'w-transfer',
+          fromNodeId: 'wh-hub',
+          fromPortId: 'transfer-out',
+          toNodeId: 'wh-sat',
+          toPortId: 'transfer-in',
+          relationshipType: 'inventory-transfer',
+          direction: 'one-way',
+        },
+      ],
+    );
+
+    expect(mockApplyTopologyDiff).not.toHaveBeenCalled();
+    expect(mockAddToast).toHaveBeenCalledWith({
+      message: 'topology-toast-multi-warehouse',
+      type: 'error',
+    });
+  });
+
   it('applies the same diagram once the prompt is dismissed (intentionally empty)', async () => {
     mockLicenseTier = 'pro';
     // Simulate the editor having dismissed the prompt for wh-1: the issue

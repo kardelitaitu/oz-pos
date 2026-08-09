@@ -506,12 +506,15 @@ export function validateTopologyGraph(
   tier?: string,
 ): TopologyValidationError[] {
   const errors: TopologyValidationError[] = [];
-  // The warehouse capacity guards are a Pro-tier business feature, mirroring
-  // the editor's warehouse-tier-limit cap. `tier` is optional so the pure
-  // contract stays strict by default (no tier context => enforced); the UI
-  // gates pass their license tier so standard/free/one_time installs skip
-  // the capacity checks exactly like the multi-warehouse cap.
+  // The warehouse capacity guards AND the multi-warehouse cap are Pro-tier
+  // business features. `tier` is optional so the pure contract stays strict
+  // by default (no tier context => enforced); the UI gates pass their
+  // license tier so standard/free/one_time installs skip the capacity
+  // checks and hit the warehouse-tier-limit cap instead. One source of
+  // truth for both, so the editor's live gate and the screen's Apply
+  // boundary can never disagree (round 87).
   const capacityEnforced = tier === undefined || ['pro', 'enterprise'].includes(tier);
+  const tierLimitEnforced = tier === undefined || !['pro', 'enterprise'].includes(tier);
   if (graph.schemaVersion !== TOPOLOGY_SCHEMA_VERSION) {
     errors.push({
       code: 'unsupported-schema-version',
@@ -780,6 +783,17 @@ export function validateTopologyGraph(
         nodeId: workspaceId,
         portId: 'location-in',
       });
+    }
+  }
+
+  // Multi-warehouse tier cap (round 87): below Pro, a diagram may carry at
+  // most one Stock Room. Appended LAST so semantic/integrity errors keep
+  // their precedence — a broken diagram reports the break first, the
+  // license cap only after the graph itself is sound.
+  if (tierLimitEnforced) {
+    const warehouseCount = graph.nodes.filter((node) => node.kind === 'warehouse').length;
+    if (warehouseCount >= 2) {
+      errors.push({ code: 'warehouse-tier-limit', messageId: 'topology-toast-multi-warehouse' });
     }
   }
 

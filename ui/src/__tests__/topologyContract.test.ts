@@ -595,7 +595,7 @@ describe('semantic topology contract', () => {
       ],
     );
 
-    expect(validateTopologyGraph(normalized)).toEqual(expect.arrayContaining([
+    expect(validateTopologyGraph(normalized, 'pro')).toEqual(expect.arrayContaining([
       expect.objectContaining({
         code: 'warehouse-at-capacity',
         nodeId: 'wh-sat',
@@ -625,7 +625,7 @@ describe('semantic topology contract', () => {
       ],
     );
 
-    expect(validateTopologyGraph(normalized)).toEqual([]);
+    expect(validateTopologyGraph(normalized, 'pro')).toEqual([]);
   });
 
   it('rejects a circular transfer chain with exactly cycle-detected', () => {
@@ -650,7 +650,7 @@ describe('semantic topology contract', () => {
       ],
     );
 
-    expect(validateTopologyGraph(normalized)).toEqual([
+    expect(validateTopologyGraph(normalized, 'pro')).toEqual([
       expect.objectContaining({
         code: 'cycle-detected',
         nodeId: 'wh-hub',
@@ -677,7 +677,7 @@ describe('semantic topology contract', () => {
       ],
     );
 
-    const errors = validateTopologyGraph(normalized);
+    const errors = validateTopologyGraph(normalized, 'pro');
     expect(errors.filter((e) => e.code === 'warehouse-missing-stock-routing')).toEqual([
       expect.objectContaining({ nodeId: 'wh-mid' }),
     ]);
@@ -698,7 +698,7 @@ describe('semantic topology contract', () => {
       ],
     );
 
-    const errors = validateTopologyGraph(normalized);
+    const errors = validateTopologyGraph(normalized, 'pro');
     expect(errors.filter((e) => e.code === 'warehouse-at-capacity')).toHaveLength(0);
   });
 
@@ -783,7 +783,7 @@ describe('semantic topology contract', () => {
       ],
     );
 
-    expect(validateTopologyGraph(normalized)).toEqual([]);
+    expect(validateTopologyGraph(normalized, 'pro')).toEqual([]);
   });
 
   it('still flags a warehouse with room that receives neither stock nor transfer', () => {
@@ -817,6 +817,49 @@ describe('semantic topology contract', () => {
     expect(validateTopologyGraph(normalized, 'pro')).toEqual(expect.arrayContaining([
       expect.objectContaining({ code: 'warehouse-at-capacity' }),
     ]));
+  });
+
+  it('flags two warehouses below Pro tier as a tier-limit violation', () => {
+    // Round 87: the multi-warehouse cap is an Apply-gate invariant the
+    // contract must own — the editor and the parent screen gate both pass
+    // their tier, so this single check keeps them in lockstep. The
+    // transfer chain is semantically clean; the license cap is the only
+    // thing that makes it illegal on standard.
+    const normalized = graph(
+      [
+        branch(),
+        workspace('ws-1'),
+        warehouseWith('wh-hub', { stock: 300, capacity: 1000 }),
+        warehouseWith('wh-sat', { stock: 200, capacity: 500 }),
+      ],
+      [
+        ownershipWire('w-owner', 'ws-1'),
+        stockWire('w-stock', 'ws-1', 'wh-hub'),
+        transferWire('w-transfer', 'wh-hub', 'wh-sat'),
+      ],
+    );
+
+    expect(validateTopologyGraph(normalized, 'standard')).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'warehouse-tier-limit' }),
+    ]));
+  });
+
+  it('allows two warehouses on Pro tier', () => {
+    const normalized = graph(
+      [
+        branch(),
+        workspace('ws-1'),
+        warehouseWith('wh-hub', { stock: 300, capacity: 1000 }),
+        warehouseWith('wh-sat', { stock: 200, capacity: 500 }),
+      ],
+      [
+        ownershipWire('w-owner', 'ws-1'),
+        stockWire('w-stock', 'ws-1', 'wh-hub'),
+        transferWire('w-transfer', 'wh-hub', 'wh-sat'),
+      ],
+    );
+
+    expect(validateTopologyGraph(normalized, 'pro')).toEqual([]);
   });
 
   it('skips the at-capacity guard below Pro tier', () => {
