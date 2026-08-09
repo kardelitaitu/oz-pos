@@ -6246,6 +6246,29 @@ describe('NodeTopologyEditor — auto-layout', () => {
     await waitFor(() => expect(['Store', 'POS A', 'POS B', 'WH'].map(posOf)).toEqual(before));
   });
 
+  it('Auto-layout snaps to the grid when elbow routing and snap are both on', () => {
+    // Elbow (orthogonal) wires only look clean when the cards sit on the
+    // 24px grid, so the layout anchor snaps in that mode. The retail preset
+    // lands off-grid (store at x=80), so every node must move to a lattice
+    // point.
+    localStorage.setItem('oz-topology-view-routing:unassigned', 'elbow');
+    localStorage.setItem('oz-topology-view-snap:unassigned', '1');
+    try {
+      renderEditor();
+      fireEvent.click(screen.getByText('Auto-layout'));
+
+      const cards = [...document.querySelectorAll('.topology-node')];
+      for (const card of cards) {
+        const el = card as HTMLElement;
+        expect(parseFloat(el.style.left) % 24).toBe(0);
+        expect(parseFloat(el.style.top) % 24).toBe(0);
+      }
+    } finally {
+      localStorage.removeItem('oz-topology-view-routing:unassigned');
+      localStorage.removeItem('oz-topology-view-snap:unassigned');
+    }
+  });
+
   it('Auto-layout clears stale bends authored for the old geometry', () => {
     renderEditor();
     // Retail preset: store→ws→wh. Bend w-1 at (400, 300).
