@@ -527,6 +527,66 @@ describe('CloudSyncSettings', () => {
     });
   });
 
+  it('shows the upgrade prompt when sync_run reports planRequired', async () => {
+    // ADR sync-plan-gating: a free tenant's sync attempt must render a
+    // dedicated "requires a paid plan" block, not a generic sync error.
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'get_sync_settings_scoped') {
+        return Promise.resolve({ serverUrl: 'https://sync.example.com', hasApiKey: true, enabled: true });
+      }
+      if (cmd === 'sync_run') {
+        return Promise.resolve({
+          synced: 0,
+          failed: 0,
+          error: 'cloud sync requires a paid plan',
+          planRequired: true,
+        });
+      }
+      return defaultImpl(cmd);
+    });
+
+    await waitForSyncSection();
+
+    fireEvent.click(screen.getByRole('button', { name: /sync now/i }));
+
+    await waitFor(() => {
+      // The dedicated upgrade block (not the generic error line).
+      expect(screen.getAllByText(/requires a paid plan/i).length).toBeGreaterThanOrEqual(1);
+    });
+    // The hint that local sales keep working must also be present.
+    expect(screen.getByText(/local sales keep working/i)).toBeInTheDocument();
+    // No generic "Sync failed" toast path: the block replaces the error.
+    expect(screen.queryByText(/Sync failed/i)).not.toBeInTheDocument();
+  });
+
+  it('does not show the upgrade prompt for a generic sync error', async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'get_sync_settings_scoped') {
+        return Promise.resolve({ serverUrl: 'https://sync.example.com', hasApiKey: true, enabled: true });
+      }
+      if (cmd === 'sync_run') {
+        return Promise.resolve({
+          synced: 0,
+          failed: 0,
+          error: 'network unreachable',
+          planRequired: false,
+        });
+      }
+      return defaultImpl(cmd);
+    });
+
+    await waitForSyncSection();
+
+    fireEvent.click(screen.getByRole('button', { name: /sync now/i }));
+
+    await waitFor(() => {
+      // The error text shows in the status line; the upgrade block must NOT.
+      expect(screen.getAllByText(/network unreachable/i).length).toBeGreaterThanOrEqual(1);
+    });
+    expect(screen.queryByText(/requires a paid plan/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/local sales keep working/i)).not.toBeInTheDocument();
+  });
+
   // ═══════════════════════════════════════════════════════════════
   //  hasApiKey state update after save (regression guard)
   // ═══════════════════════════════════════════════════════════════
