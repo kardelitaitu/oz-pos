@@ -546,6 +546,50 @@ type HistoryEntry = { nodes: TopologyNodeData[]; wires: TopologyWireData[] };
 const issueKey = (nodeId: string, messageId: string) => `node:${nodeId}:${messageId}`;
 const graphIssueKey = (messageId: string) => `graph:${messageId}`;
 
+/** Milliseconds the issues-count readout waits after the LAST validation
+ *  change before animating to the new count. Long enough to absorb the
+ *  flicker of a drag or connect gesture that temporarily changes the
+ *  issue set, short enough to feel responsive. */
+const ISSUES_COUNT_SETTLE_MS = 300;
+
+/** Settled issues-count readout for the validation button. Receives the
+ *  LIVE count on every validation recompute but only commits it (with a
+ *  pop animation) once the value holds steady for
+ *  [`ISSUES_COUNT_SETTLE_MS`] — a drag that flicks 1→2→1 never animates
+ *  twice. Isolated as a memo component so the settle timer's re-renders
+ *  are local to this label and never touch the canvas. */
+const ValidationIssuesLabel = memo(function ValidationIssuesLabel({ count }: { count: number }) {
+  const { l10n } = useLocalization();
+  const [displayCount, setDisplayCount] = useState(count);
+  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevCountRef = useRef(count);
+
+  useEffect(() => {
+    if (count === prevCountRef.current) return;
+    prevCountRef.current = count;
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    settleTimerRef.current = setTimeout(() => {
+      settleTimerRef.current = null;
+      setDisplayCount(count);
+    }, ISSUES_COUNT_SETTLE_MS);
+  }, [count]);
+
+  useEffect(
+    () => () => {
+      if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    },
+    [],
+  );
+
+  // Re-keying on the settled count remounts the span so the pop keyframe
+  // replays exactly when the readout settles on a new value.
+  return (
+    <span key={displayCount} className="topology-issues-label topology-issues-label-pop">
+      {l10n.getString('topology-validation-details', { count: displayCount })}
+    </span>
+  );
+});
+
 /** Isolated simulation pulse circle so the 30ms tick doesn't re-render the whole canvas. */
 const SimulationPulse = memo(function SimulationPulse({ x, y }: { x: number; y: number }) {
   return <circle cx={x} cy={y} r="6" className="wire-simulation-pulse" />;
@@ -4090,7 +4134,7 @@ export default function NodeTopologyEditor({
                 onClick={() => setValidationPanelOpen((o) => !o)}
               >
                 <WarningIcon size={14} />
-                {l10n.getString('topology-validation-details', { count: totalIssues })}
+                <ValidationIssuesLabel count={totalIssues} />
               </button>
               {validationPanelOpen && (
                 <div
@@ -4736,14 +4780,6 @@ export default function NodeTopologyEditor({
                   }}
                 >
                   <div className="node-header node-titlebar">
-                    <span className="node-type-accent" />
-                    <span className="node-grip" aria-hidden="true" title={l10n.getString('topology-node-drag-hint')}>
-                      <svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true">
-                        <circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" />
-                        <circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" />
-                        <circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" />
-                      </svg>
-                    </span>
                     <div className="node-title-wrapper">
                       <span className="node-type-icon">
                         {(() => { const Icon = NODE_TYPE_ICON[node.type]; return <Icon size={16} />; })()}
@@ -4765,6 +4801,31 @@ export default function NodeTopologyEditor({
                       ) : (
                         <span className="node-title">{node.name}</span>
                       )}
+                    </div>
+                  </div>
+
+                  <div className="node-body">
+                    <div className="node-body-meta">
+                      <span className="node-type-accent node-body-accent" aria-hidden="true" />
+                      <span className="node-grip" aria-hidden="true" title={l10n.getString('topology-node-drag-hint')}>
+                        <svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true">
+                          <circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" />
+                          <circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" />
+                          <circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" />
+                        </svg>
+                      </span>
+                      <span className="node-subtitle">{node.subtitle}</span>
+                    </div>
+                    <div className="node-body-status">
+                      {(() => {
+                        const telemetry = getTelemetry(node);
+                        if (!telemetry) return null;
+                        return (
+                          <span className={`node-telemetry-badge telemetry-${telemetry.status}`} aria-hidden="true">
+                            {telemetry.badge}
+                          </span>
+                        );
+                      })()}
                       {isRenameable && renamingNodeId !== node.id && (
                         <button
                           type="button"
@@ -4780,19 +4841,6 @@ export default function NodeTopologyEditor({
                         </button>
                       )}
                     </div>
-                    {(() => {
-                      const telemetry = getTelemetry(node);
-                      if (!telemetry) return null;
-                      return (
-                        <span className={`node-telemetry-badge telemetry-${telemetry.status}`} aria-hidden="true">
-                          {telemetry.badge}
-                        </span>
-                      );
-                    })()}
-                  </div>
-
-                  <div className="node-body">
-                    <span className="node-subtitle">{node.subtitle}</span>
                     {node.type === 'workspace' && (
                       <div className="node-config-row">
                         <label htmlFor={`node-name-${node.id}`} className="node-config-label">

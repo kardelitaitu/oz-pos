@@ -6238,7 +6238,9 @@ describe('NodeTopologyEditor — validation panel & view prefs', () => {
 
       fireEvent.click(dismissBtns[0] as HTMLElement);
       expect(panel.querySelectorAll('.topology-validation-item')).toHaveLength(1);
-      expect(screen.getByText(/Issues \(1\)/)).toBeInTheDocument();
+      // The readout is settled — it commits the new count once the value
+      // holds steady (the panel itself is live).
+      await waitFor(() => expect(screen.getByText(/Issues \(1\)/)).toBeInTheDocument());
       // The dismissed issue's card note badge is gone too.
       expect(document.querySelectorAll('.node-validation-note')).toHaveLength(1);
     });
@@ -6263,7 +6265,7 @@ describe('NodeTopologyEditor — validation panel & view prefs', () => {
 
       const panel = await openPanel();
       fireEvent.click(panel.querySelectorAll('.topology-validation-item-dismiss')[0] as HTMLElement);
-      expect(screen.getByText(/Issues \(1\)/)).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByText(/Issues \(1\)/)).toBeInTheDocument());
 
       unmount();
       renderEditor();
@@ -6278,7 +6280,7 @@ describe('NodeTopologyEditor — validation panel & view prefs', () => {
 
       const panel = await openPanel();
       fireEvent.click(panel.querySelectorAll('.topology-validation-item-dismiss')[0] as HTMLElement);
-      expect(screen.getByText(/Issues \(1\)/)).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByText(/Issues \(1\)/)).toBeInTheDocument());
 
       unmount();
       renderEditor({ branchId: 'branch-b' });
@@ -6314,6 +6316,63 @@ describe('NodeTopologyEditor — validation panel & view prefs', () => {
       renderEditor();
       await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
       expect(screen.getByText(/Issues \(2\)/)).toBeInTheDocument();
+    });
+
+    describe('settled issues-count readout', () => {
+      it('defers the readout update until the count settles', async () => {
+        mockLoadTopology.mockResolvedValue(twoIssueFixture);
+        renderEditor();
+        await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
+
+        const panel = await openPanel();
+        fireEvent.click(panel.querySelectorAll('.topology-validation-item-dismiss')[0] as HTMLElement);
+
+        // The panel is live, but the badge readout keeps the previous
+        // settled value until the count holds steady — a drag or dismiss
+        // burst must not flicker the number on every validation recompute.
+        expect(screen.getByText(/Issues \(2\)/)).toBeInTheDocument();
+        await waitFor(() => expect(screen.getByText(/Issues \(1\)/)).toBeInTheDocument());
+      });
+
+      it('settles a burst of changes to the final count, skipping intermediates', async () => {
+        const threeIssueFixture = {
+          nodes: [
+            { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+            { id: 'ws-1', type: 'workspace', name: 'Retail POS #1', x: 380, y: 80, metadata: { typeKey: 'store-pos' } },
+            { id: 'ws-2', type: 'workspace', name: 'KDS #1', x: 380, y: 240, metadata: { typeKey: 'kds' } },
+            { id: 'ws-3', type: 'workspace', name: 'KDS #2', x: 380, y: 400, metadata: { typeKey: 'kds' } },
+          ],
+          wires: [],
+        } as never;
+        mockLoadTopology.mockResolvedValue(threeIssueFixture);
+        renderEditor();
+        await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(4));
+
+        fireEvent.click(screen.getByText(/Issues \(3\)/));
+        const panel = document.querySelector('.topology-validation-panel') as HTMLElement;
+        const dismiss = panel.querySelectorAll('.topology-validation-item-dismiss');
+        fireEvent.click(dismiss[0] as HTMLElement);
+        fireEvent.click(dismiss[1] as HTMLElement);
+
+        // Both dismisses landed inside the settle window: the readout is
+        // still on the previous settled value, then jumps straight to the
+        // final count without ever showing the intermediate 2.
+        expect(screen.getByText(/Issues \(3\)/)).toBeInTheDocument();
+        await waitFor(() => expect(screen.getByText(/Issues \(1\)/)).toBeInTheDocument());
+      });
+
+      it('applies the pop animation when the readout settles on a new count', async () => {
+        mockLoadTopology.mockResolvedValue(twoIssueFixture);
+        renderEditor();
+        await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
+
+        const panel = await openPanel();
+        fireEvent.click(panel.querySelectorAll('.topology-validation-item-dismiss')[0] as HTMLElement);
+
+        await waitFor(() => {
+          expect(screen.getByText(/Issues \(1\)/)).toHaveClass('topology-issues-label-pop');
+        });
+      });
     });
   });
 

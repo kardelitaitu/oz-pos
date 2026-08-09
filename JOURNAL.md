@@ -1941,3 +1941,15 @@ Test counts: Rust +8 (sync module 23, app lib 836, platform-sync 271); UI +5 con
 Deliberately NOT done: no settings UI surface for PG sync (the HTTP SyncSettingsPanel twin) — the api layer + contract tests pin the wire shape so a UI slice can consume it; the pg_sync.* keys remain also writable via the generic set_setting command.
 
 Commits: this round, scoped to platform/sync/src/pg_daemon.rs, apps/desktop-client/src/{state.rs, commands/sync.rs, lib.rs}, ui/src/api/offline.ts, ui/src/__tests__/api-offline-contract.test.ts + JOURNAL.md.
+
+### 2026-08-09 — Round 51: settled issues-count badge animation
+
+Problem: The Issues (N) button readout updated live on every validation recompute — during a drag or connect gesture that temporarily changed the issue set, the number flickered through intermediates, and the change carried no visual event. Any settle/animation machinery added in the parent would also re-render the whole canvas tree.
+
+Solution: Red→Green. Red: three tests — (1) after dismissing an issue the readout keeps the previous settled value until the count holds steady (the panel itself stays live), then commits; (2) a burst of two dismisses inside the settle window jumps 3→1 without ever displaying the intermediate 2; (3) the settled readout carries the pop class. All failed pre-fix (live count, no class). Green: a memo'd `ValidationIssuesLabel` component receives the LIVE count but only commits it once the value holds steady for 300ms — the display span is re-keyed on the settled count so the `topology-issues-pop` keyframe replays exactly once per settle, and the settle timer's re-renders are label-local, never touching the canvas (the round-49 containment philosophy). CSS in NodeTopologyEditor.css gated by the no-preference/reduce pair (animation compliance 12/12, zero dither/popover registrations). The three round-48 dismiss tests that asserted the count synchronously now await the settle — the panel is live, the badge is settled, by design.
+
+Test counts: +3 (editor 350). Full UI 4392 (265 files). Gates: typecheck, eslint, i18n parity clean.
+
+Note: the tree's NodeTopologyEditor.test.tsx also carries another agent's two uncommitted tests (title-bar icon node, Restaurant POS→KDS connection); my commit stages only my hunks via a filtered `git apply --cached` patch (theirs stay unstaged).
+
+Commits: this round, scoped to NodeTopologyEditor.tsx/.css + my test-file hunks + JOURNAL.md.
