@@ -321,6 +321,22 @@ async fn health_handler(
     })
 }
 
+/// Read the admin key from the environment, treating an unset or *empty*
+/// value as "not configured" so dev mode stays open.
+///
+/// An empty string must not enable key gating: `docker compose` passes
+/// `OZ_ADMIN_KEY` through as `""` when the host variable is absent, and
+/// `Some("")` would lock token minting behind an impossible empty header.
+fn admin_key_from_env() -> Option<String> {
+    configured_admin_key(std::env::var("OZ_ADMIN_KEY"))
+}
+
+/// Pure core of [`admin_key_from_env`] — `Some(key)` for a non-empty value,
+/// `None` for missing or empty (testable without mutating the environment).
+fn configured_admin_key(raw: Result<String, std::env::VarError>) -> Option<String> {
+    raw.ok().filter(|key| !key.is_empty())
+}
+
 /// Build the combined router: REST API + sync endpoints + rate limiting.
 pub fn build_router(state: CloudServerState, rate_limiter: RateLimiterState) -> Router {
     let cors = CorsLayer::new()
@@ -334,7 +350,7 @@ pub fn build_router(state: CloudServerState, rate_limiter: RateLimiterState) -> 
         // ADR sync-auth-hardening P2: gate token minting with the admin key
         // when configured; open in dev mode when unset. Read here so the
         // running server honours OZ_ADMIN_KEY (main.rs owns the env).
-        admin_key: std::env::var("OZ_ADMIN_KEY").ok(),
+        admin_key: admin_key_from_env(),
     };
     let api_router = oz_api::router(api_state);
 
@@ -390,6 +406,31 @@ mod tests {
     };
     use http_body_util::BodyExt;
     use tower::ServiceExt;
+
+    // ── Admin key env semantics ───────────────────────────────────
+
+    #[test]
+    fn configured_admin_key_missing_is_none() {
+        assert_eq!(
+            configured_admin_key(Err(std::env::VarError::NotPresent)),
+            None
+        );
+    }
+
+    #[test]
+    fn configured_admin_key_empty_is_none() {
+        // docker compose passes an empty string when the host var is absent;
+        // it must behave like unset (dev mode stays open), not Some("").
+        assert_eq!(configured_admin_key(Ok(String::new())), None);
+    }
+
+    #[test]
+    fn configured_admin_key_non_empty_is_some() {
+        assert_eq!(
+            configured_admin_key(Ok("super-secret".to_string())),
+            Some("super-secret".to_string())
+        );
+    }
 
     /// Helper: build an in-memory database with migrations applied.
     fn fresh_db() -> Connection {
