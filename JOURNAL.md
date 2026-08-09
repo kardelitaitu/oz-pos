@@ -2562,3 +2562,20 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 99 — pin extension)
 
 **Risks / follow-ups:** the PaymentModal dead-attribute fix is the immediate next slice (it makes the pinned 0,00 value real in production); `appearance-hw-accel-aria` orphan should be wired to the settings switch or dropped.
+
+### 2026-08-09 — orphaned appearance-hw-accel-aria wired to the switch (round 100)
+
+**Problem (round-99 follow-up):** the round-98 pin table included `appearance-hw-accel-aria`, but the key had NO production consumer — the hardware-acceleration switch in AppearanceSettings was missing an aria-label entirely (its accessible name came from the visible label + a hardcoded English sr-only "Toggle" span). The pinned value was guarding an orphan.
+
+**Solution (TDD Red→Green):**
+- **Red** — SettingsToggleButtons.test.tsx (which renders with the REAL settings.ftl bundle) now asserts the switch's accessible name via `getByRole('switch', { name: 'Toggle hardware acceleration' })`; failed against the old code (the name came from the two labels, not an aria-label).
+- **Green** — the checkbox input is wrapped in `<Localized id="appearance-hw-accel-aria" attrs={{ 'aria-label': true }}>`, the exact production pattern SetupWizard and 134 other call sites use. The switch now announces "Toggle hardware acceleration" (en) / "Aktifkan/nonaktifkan akselerasi perangkat keras" (id) — the round-99 render-path pin for this key is now backed by a real consumer.
+- AppearanceSettings.test.tsx was deliberately left untouched: it mocks @fluent/react (Localized renders children only), so its click-delegation coverage still passes and its purpose (slider-click → onChange) is orthogonal to the name.
+
+**Verified:** SettingsToggleButtons 3/3 + AppearanceSettings 30/30, i18nBundle 14/14, full UI 4565/4565, typecheck, eslint, i18n lint clean. No FTL changes.
+
+**Left in place (noted):** the sr-only "Toggle" span inside the settings-toggle label is now redundant for naming (aria-label overrides) but harmless; it stays hardcoded English — a separate consistency slice could localize or drop it across ALL settings toggles at once.
+
+**Commits:** (round 100 — hw-accel aria wired)
+
+**Risks / follow-ups:** the PaymentModal dead-attribute fix (round-99 finding) remains open — the split-amount placeholder and aria-label still render English fallbacks; same <Localized attrs> treatment applies there.

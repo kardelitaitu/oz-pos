@@ -242,7 +242,10 @@ describe('Settings Toggle Buttons Regression Suite', () => {
     renderWithProvidersSync(<AppearanceSettings />, settingsFtl, sharedFtl);
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Hardware Acceleration')).toBeInTheDocument();
+      // The switch's accessible name comes from the appearance-hw-accel-aria
+      // message (aria-label), wired via <Localized attrs> — not from the
+      // visible "Hardware Acceleration" label.
+      expect(screen.getByRole('switch', { name: 'Toggle hardware acceleration' })).toBeInTheDocument();
     });
 
     const hwInput = document.getElementById('hw-accel-checkbox') as HTMLInputElement;

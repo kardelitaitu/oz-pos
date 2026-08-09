@@ -319,14 +319,16 @@ export function AppearanceSettings({
           <label className="settings-toggle" htmlFor="hw-accel-checkbox">
             <span className="sr-only">Toggle</span>
             <span className="settings-toggle-switch">
-              <input
-                id="hw-accel-checkbox"
-                type="checkbox"
-                role="switch"
-                checked={hwAccelEnabled}
-                aria-checked={hwAccelEnabled}
-                onChange={(e) => setHwAccelEnabled(e.target.checked)}
-              />
+              <Localized id="appearance-hw-accel-aria" attrs={{ 'aria-label': true }}>
+                <input
+                  id="hw-accel-checkbox"
+                  type="checkbox"
+                  role="switch"
+                  checked={hwAccelEnabled}
+                  aria-checked={hwAccelEnabled}
+                  onChange={(e) => setHwAccelEnabled(e.target.checked)}
+                />
+              </Localized>
               <span className="settings-toggle-slider" />
             </span>
           </label>
