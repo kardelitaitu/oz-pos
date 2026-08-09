@@ -2398,3 +2398,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 87 — tier cap unified)
 
 **Risks / follow-ups:** the cap error carries no nodeId, so the validation panel shows it as a banner-level issue without a card to jump to — a future slice could scope it to the second warehouse node; the editor's live gate now delegates entirely to the contract, so any drift in error ordering between the two gates is gone by construction.
+
+### 2026-08-09 — hub-and-spoke validation rules documented in ADR #34 (round 88)
+
+**Problem:** the rounds-82–87 warehouse validation semantics lived only in the contract code. ADR #34's Apply-rejection list covered generic graph errors but nothing about stock flow, and its connector-vocabulary table still listed the long-stripped "Inventory Manager (`inventory`)" node with no Stock Room row — the rules had no durable home and the ADR contradicted the current node model.
+
+**Solution (docs-only, Verify + Commit):** added to `docs/decisions/2026-08-07-business-logic-topology-builder.md` — (1) the vocabulary table's Inventory Manager row became the Stock Room (`warehouse`) row with its real ports (`stock-in`/`transfer-in`, `stock-out`); (2) the section-2 paragraph and section-4 parent-child bullets now state a Stock Room's required input is an inbound stock-bearing edge; (3) a new "Warehouse stock-flow validation (hub-and-spoke)" block under section 5 pins all five rules: inbound-wire servicing (`warehouse-missing-stock-routing`, dismissible per diagram), at-capacity rejection with wireId, warehouse→warehouse transfer legality, cycle rejection for circular chains, and the Pro-tier gate + `warehouse-tier-limit` single-source contract. Every claim traces to the contract code (semantic matrix, capacity/servicing guards, tier cap).
+
+**Verified:** footer regex valid (`last audited 09-08-26 by buffy`); targeted checks only — the full drift-guard scan is heavy and the tree is shared, so I validated the edited file's footer directly. No code changes, no FTL changes.
+
+**Commits:** (round 88 — ADR hub-and-spoke rules)
+
+**Risks / follow-ups:** the user guide (`docs/user-guide.md`) still has NO topology section at all — the rules are documented architecturally but not user-facing; `docs/user-guide.md` is 71 lines with zero topology content, so a topology user-guide section is a separate larger slice. The working tree carried a pre-existing agent edit to the same section-2 paragraph (KDS scope-inheritance clarification); my commit stages only my hunks and the agent's edit stays unstaged.

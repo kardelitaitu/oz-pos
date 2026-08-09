@@ -111,14 +111,15 @@ Final connector vocabulary (as implemented in the UX):
 | Branch Location (store) | — | `location-out` / **Location** | Provides branch-location context to child nodes; supports fan-out. |
 | POS / register workspaces (`store-pos`, `restaurant-pos`) | `location-in` / **Location** (required) | `workspace-out` / **Operation** | Location ownership edge is required; the Operation output feeds downstream operational nodes. |
 | Kitchen Display (KDS) | `operation-in` / **Operation** (required) | — | Sink: consumes exactly one Operation feed, forwards nothing. |
-| Inventory Manager (`inventory`) | one flexible input: `location-in` or `operation-in` (label follows the attached wire) | `workspace-out` / **Operation** | Accepts either a Location feed (from the Branch Location) or an Operation feed (from a POS or another inventory); unwired it reads **Input**. |
+| Stock Room (`warehouse`) | `stock-in` or `transfer-in` (label follows the attached wire) | `stock-out` / **Stock Out** | Receives stock via `stock-routing` (from a POS workspace) or `inventory-transfer` (from another Stock Room — hub-and-spoke); its output feeds downstream Stock Rooms. A room without an inbound stock-bearing wire is flagged (see section 5). |
 
 A workspace is invalid until it has its required ownership connection: POS-type
 workspaces need exactly one `location-in` edge from a Branch Location's
-`location-out`; KDS needs exactly one `operation-in` edge; inventory needs at
-least one compatible input edge. The Branch Location `location-out` supports
-fan-out to multiple workspaces. `operation-in` feeds are operational edges and
-must never substitute for ownership.
+`location-out`; KDS needs exactly one `operation-in` edge; a Stock Room needs
+at least one inbound stock-bearing edge (`stock-routing` or
+`inventory-transfer`). The Branch Location `location-out` supports fan-out to
+multiple workspaces. `operation-in` feeds are operational edges and must never
+substitute for ownership.
 
 The exact internal schema is intentionally deferred to the implementation ADR
 or follow-up design. The semantic contract above is fixed by this decision.
@@ -161,11 +162,12 @@ For the initial model:
 - `Branch Location` is the exactly-one root node.
 - Every workspace exposes a required input, resolved per type (see the
   connector vocabulary in section 2): POS workspaces require `Location In`,
-  KDS requires `Operation In`, inventory requires one flexible input
-  (`Location` or `Operation`).
+  KDS requires `Operation In`, a Stock Room requires an inbound stock-bearing
+  feed (`stock-in` or `transfer-in`).
 - Every workspace must receive exactly one compatible ownership connection
   from the Branch Location (via `Location Out → Location In`) before Apply is
-  allowed; KDS and inventory receive their operational feed as their input.
+  allowed; KDS receives its operational feed and a Stock Room receives its
+  stock feed as their input.
 - The Branch Location's `Location Out` may fan out to multiple workspaces.
 - A workspace cannot be considered location-bound merely because it is near a
   branch location on the canvas, and there is no primary-store fallback when the
@@ -202,7 +204,41 @@ The backend must independently reject Apply when any of these conditions fail:
 - ownership edges contain a cycle or a workspace is unreachable from the root;
 - the graph has an unsupported schema version; or
 - a legacy geometric relationship has not been mapped safely to a semantic
-  relationship.
+  relationship; or
+- the warehouse stock-flow rules below are violated.
+
+#### Warehouse stock-flow validation (hub-and-spoke)
+
+Stock Rooms carry two design-time numbers — capacity and low-stock
+threshold. The low-stock threshold drives the card's telemetry badge; the
+graph enforces how stock flows in using capacity:
+
+1. **Every Stock Room needs an inbound stock-bearing wire.** `stock-routing`
+   (workspace → room) or `inventory-transfer` (room → room) both service the
+   prompt; an outbound wire never services its sender. A room with capacity
+   metadata and room to spare (`stock < capacity`) that has no inbound
+   stock-bearing wire fails with `warehouse-missing-stock-routing`. The
+   prompt is dismissible per diagram for a Stock Room intentionally staged
+   empty; the dismissal bypasses both the editor's live gate and the screen's
+   Apply boundary for that error code only.
+2. **A full Stock Room rejects inbound stock.** An inbound stock-bearing wire
+   into a room with `stock >= capacity` fails with `warehouse-at-capacity`,
+   carrying the wire id so the warning marker renders on the wire itself.
+3. **Transfers may originate from any Stock Room.** `inventory-transfer`
+   accepts a warehouse source (hub-and-spoke: a hub feeds its satellites),
+   mirroring the warehouse source already allowed for `stock-routing`. A
+   chain of rooms (hub → mid → leaf) validates clean so long as every room
+   is serviced and has room.
+4. **Circular transfer chains are rejected.** A hub → mid → leaf → hub loop
+   fails with `cycle-detected` — the servicing rule never blesses a cycle
+   just because every room has an inbound wire.
+5. **The guards are Pro-tier business features.** Both the capacity and the
+   servicing checks run only on pro/enterprise (or when no tier context is
+   available — the pure contract stays strict). Below Pro, a diagram may
+   carry at most one Stock Room (`warehouse-tier-limit`); creation paths
+   refuse a second room on the way in, and the same contract enforces the
+   cap at Apply so the editor's live gate and the screen's Apply boundary
+   can never disagree.
 
 The first implementation scope is declarative configuration of existing
 capabilities—workspace instances, branch ownership, routing, and settings. It
