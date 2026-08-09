@@ -5734,7 +5734,7 @@ export default function NodeTopologyEditor({
                 </div>
               )}
               {selectedNode.type === 'warehouse' && (
-                <WarehouseSettingsCard node={selectedNode} onChange={handleSetNodeMetadata} />
+                <WarehouseSettingsCard node={selectedNode} onChange={handleSetNodeMetadata} capacityLocked={!isProAllowed} />
               )}
               {selectedNode.type === 'store' && (
                 <StoreInfoCard variant="inspector-drawer" />

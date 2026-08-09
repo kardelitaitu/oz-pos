@@ -186,6 +186,8 @@ topology-inspector-close-aria = Tutup inspektur
 topology-inspector-hardware-title = Perangkat Keras
 topology-warehouse-settings-title = Pengaturan Gudang Stok
 topology-warehouse-capacity = Kapasitas
+# Ditampilkan pada tier non-Pro saat input kapasitas dinonaktifkan (putaran 78).
+topology-warehouse-capacity-locked-hint = Tingkatkan ke Pro untuk mengatur batas kapasitas.
 topology-warehouse-capacity-desc = Jumlah maksimal item yang dapat ditampung Gudang Stok ini
 topology-warehouse-low-stock-threshold = Ambang Stok Menipis
 topology-warehouse-low-stock-desc = Beri tahu saat stok tersimpan turun ke angka ini atau di bawahnya

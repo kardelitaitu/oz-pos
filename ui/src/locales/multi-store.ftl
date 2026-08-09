@@ -188,6 +188,8 @@ topology-inspector-close-aria = Close inspector
 topology-inspector-hardware-title = Hardware Device
 topology-warehouse-settings-title = Stock Room Settings
 topology-warehouse-capacity = Capacity
+# Shown on non-Pro tiers where the capacity inputs are disabled (round 78).
+topology-warehouse-capacity-locked-hint = Upgrade to Pro to set capacity limits.
 topology-warehouse-capacity-desc = Max items this Stock Room can hold
 topology-warehouse-low-stock-threshold = Low-Stock Threshold
 topology-warehouse-low-stock-desc = Alert when stored stock drops to or below this count

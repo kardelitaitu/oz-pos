@@ -1406,6 +1406,21 @@
   font-size: var(--text-sm);
 }
 
+/* Pro-tier lock chip on the warehouse capacity inputs (round 78) —
+   mirrors the tool-card .lock-badge but inline with the field label. */
+.inspector-lock-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: var(--space-2);
+  vertical-align: middle;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  background: var(--color-danger-subtle);
+  color: var(--color-danger);
+}
+
 .inspector-field input[type="text"] {
   padding: var(--space-2);
   background-color: var(--color-bg);

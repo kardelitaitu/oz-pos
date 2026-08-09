@@ -10,11 +10,17 @@
  */
 
 import { Localized } from '@fluent/react';
+import { LockIcon } from './NodeTopologyIcons';
 import type { TopologyNodeData } from './NodeTopologyEditor';
 
 export interface WarehouseSettingsCardProps {
   node: TopologyNodeData;
   onChange: (nodeId: string, patch: Record<string, unknown>) => void;
+  /** Pro-tier gate (round 78): capacity + low-stock are the enforced
+   *  numbers (rounds 72/75/76), so on non-Pro tiers the inputs are
+   *  disabled with a lock badge — mirroring the tool-card lock. Current
+   *  Stock stays editable everywhere: it drives the display-only badge. */
+  capacityLocked?: boolean;
 }
 
 function readNumber(node: TopologyNodeData, key: string): number | undefined {
@@ -22,7 +28,7 @@ function readNumber(node: TopologyNodeData, key: string): number | undefined {
   return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
 }
 
-export function WarehouseSettingsCard({ node, onChange }: WarehouseSettingsCardProps) {
+export function WarehouseSettingsCard({ node, onChange, capacityLocked = false }: WarehouseSettingsCardProps) {
   const capacity = readNumber(node, 'capacity');
   const lowStockThreshold = readNumber(node, 'lowStockThreshold');
   const stock = readNumber(node, 'stock');
@@ -32,12 +38,17 @@ export function WarehouseSettingsCard({ node, onChange }: WarehouseSettingsCardP
       <h4>
         <Localized id="topology-warehouse-settings-title">Stock Room Settings</Localized>
       </h4>
-      {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- text is provided by <Localized> child */}
       <label className="inspector-field">
-        <span><Localized id="topology-warehouse-capacity">Capacity</Localized></span>
+        <span>
+          <Localized id="topology-warehouse-capacity">Capacity</Localized>
+          {capacityLocked && (
+            <span className="inspector-lock-badge"><LockIcon size={12} /> <Localized id="topology-lock-pro">Pro</Localized></span>
+          )}
+        </span>
         <input
           type="number"
           min={0}
+          disabled={capacityLocked}
           value={capacity ?? ''}
           onChange={(e) => {
             const parsed = parseInt(e.target.value, 10);
@@ -45,15 +56,24 @@ export function WarehouseSettingsCard({ node, onChange }: WarehouseSettingsCardP
           }}
         />
         <span className="inspector-hint">
-          <Localized id="topology-warehouse-capacity-desc">Max items this Stock Room can hold</Localized>
+          {capacityLocked ? (
+            <Localized id="topology-warehouse-capacity-locked-hint">Upgrade to Pro to set capacity limits.</Localized>
+          ) : (
+            <Localized id="topology-warehouse-capacity-desc">Max items this Stock Room can hold</Localized>
+          )}
         </span>
       </label>
-      {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- text is provided by <Localized> child */}
       <label className="inspector-field">
-        <span><Localized id="topology-warehouse-low-stock-threshold">Low-Stock Threshold</Localized></span>
+        <span>
+          <Localized id="topology-warehouse-low-stock-threshold">Low-Stock Threshold</Localized>
+          {capacityLocked && (
+            <span className="inspector-lock-badge"><LockIcon size={12} /> <Localized id="topology-lock-pro">Pro</Localized></span>
+          )}
+        </span>
         <input
           type="number"
           min={0}
+          disabled={capacityLocked}
           value={lowStockThreshold ?? ''}
           onChange={(e) => {
             const parsed = parseInt(e.target.value, 10);
@@ -61,7 +81,11 @@ export function WarehouseSettingsCard({ node, onChange }: WarehouseSettingsCardP
           }}
         />
         <span className="inspector-hint">
-          <Localized id="topology-warehouse-low-stock-desc">Alert when stored stock drops to or below this count</Localized>
+          {capacityLocked ? (
+            <Localized id="topology-warehouse-capacity-locked-hint">Upgrade to Pro to set capacity limits.</Localized>
+          ) : (
+            <Localized id="topology-warehouse-low-stock-desc">Alert when stored stock drops to or below this count</Localized>
+          )}
         </span>
       </label>
       {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- text is provided by <Localized> child */}

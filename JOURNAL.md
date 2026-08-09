@@ -2268,3 +2268,17 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 77 — tier-downgrade notice)
 
 **Risks / follow-ups:** the notice is display-only — on downgrade the stored numbers stay and re-enforce on upgrade (documented round 76); a dismiss action ("I know, don't remind me") is a natural next slice; the notice doesn't enumerate which warehouses carry capacity, only that some do.
+
+### 2026-08-09 — capacity inputs Pro-gated with a lock badge
+
+**Problem (round-77 follow-up):** the capacity *checks* were Pro-gated (rounds 72/75/76) and the downgrade notice explained the numbers "aren't enforced", but the settings card still let a standard-tier user freely edit Capacity and Low-Stock Threshold — authoring numbers that the current plan silently refuses to enforce.
+
+**Solution (TDD Red→Green):** `WarehouseSettingsCard` gains a `capacityLocked` prop (the editor passes `!isProAllowed`, the same signal as the tool-card lock). When locked: the Capacity + Low-Stock Threshold inputs are `disabled`, each label carries an inline `inspector-lock-badge` (LockIcon + existing `topology-lock-pro` "Pro" chip — the tool-card pattern), and the field hint swaps to "Upgrade to Pro to set capacity limits." Current Stock stays editable on every tier — it drives the display-only badge that round 76 deliberately left ungated. The two stale `label-has-associated-control` disable directives on the modified labels dropped (eslint flagged them unused once the disabled prop made the association unambiguous). 1 new FTL key per bundle — parity held; `.inspector-lock-badge` uses only design tokens (compliance gate clean).
+
+**TDD:** Red — 3 new editor tests (standard: capacity+threshold disabled with badge + hint ×2 occurrences; Current Stock still enabled; Pro: all three enabled, no badge). The round-70 "edits capacity" tests were re-based to render at Pro so they keep pinning the edit path.
+
+**Verified:** editor + integration 448/448 (+3), full UI 4536/4536, typecheck, eslint 0/0, i18n lint clean, token compliance clean.
+
+**Commits:** (round 78 — capacity input tier lock)
+
+**Risks / follow-ups:** a standard-tier user with a Pro-authored warehouse sees the values read-only — coherent with the round-77 notice, and an upgrade re-enables editing with no data loss; the `free`/`one_time` tiers lock too (consistent with `isProAllowed`); the badge split (stock editable, threshold locked) is worth a user-facing note if it confuses.

@@ -3940,7 +3940,8 @@ describe('NodeTopologyEditor — warehouse inspector settings card', () => {
 
   it('marks the diagram dirty when capacity is edited', async () => {
     const onDirtyChange = vi.fn();
-    renderEditor({ onDirtyChange });
+    // Capacity edits are Pro-gated (round 78) — render at Pro so the edit lands.
+    renderEditor({ currentTier: 'pro', onDirtyChange });
     // Wait for the post-load clean snapshot so the edit is the only delta.
     await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false));
     selectWarehouse();
@@ -3952,7 +3953,8 @@ describe('NodeTopologyEditor — warehouse inspector settings card', () => {
 
   it('persists capacity and low-stock threshold through Apply', async () => {
     const onSave = vi.fn();
-    renderEditor({ onSave });
+    // Capacity edits are Pro-gated (round 78) — render at Pro so the edits land.
+    renderEditor({ currentTier: 'pro', onSave });
     selectWarehouse();
 
     fireEvent.change(screen.getByLabelText(/Capacity/), { target: { value: '500' } });
@@ -3984,6 +3986,44 @@ describe('NodeTopologyEditor — warehouse inspector settings card', () => {
     const wh = nodes.find((n: { id: string }) => n.id === 'wh-1');
     expect(wh).toBeDefined();
     expect(wh.metadata.stock).toBe(5);
+  });
+});
+
+// ── Warehouse capacity tier lock ────────────────────────────────
+
+describe('NodeTopologyEditor — warehouse capacity tier lock', () => {
+  const selectWarehouse = () => {
+    const warehouse = document.querySelector('.node-type-warehouse') as HTMLElement;
+    expect(warehouse).not.toBeNull();
+    fireEvent.mouseDown(warehouse, { button: 0 });
+  };
+
+  it('disables the capacity inputs on standard tier with a Pro lock badge and hint', () => {
+    renderEditor();
+    selectWarehouse();
+
+    expect(screen.getByLabelText(/Capacity/)).toBeDisabled();
+    expect(screen.getByLabelText(/Low-Stock Threshold/)).toBeDisabled();
+    expect(document.querySelector('.inspector-lock-badge')).not.toBeNull();
+    // The locked hint shows under both disabled fields.
+    expect(screen.getAllByText('Upgrade to Pro to set capacity limits.')).toHaveLength(2);
+  });
+
+  it('keeps Current Stock editable on standard tier', () => {
+    renderEditor();
+    selectWarehouse();
+
+    expect(screen.getByLabelText(/Current Stock/)).toBeEnabled();
+  });
+
+  it('enables all warehouse inputs on Pro tier without the lock badge', () => {
+    renderEditor({ currentTier: 'pro' });
+    selectWarehouse();
+
+    expect(screen.getByLabelText(/Capacity/)).toBeEnabled();
+    expect(screen.getByLabelText(/Low-Stock Threshold/)).toBeEnabled();
+    expect(screen.getByLabelText(/Current Stock/)).toBeEnabled();
+    expect(document.querySelector('.inspector-lock-badge')).toBeNull();
   });
 });
 
