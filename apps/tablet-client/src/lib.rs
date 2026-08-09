@@ -177,6 +177,15 @@ pub fn run() {
                                                 );
                                             }
                                         }
+                                        // ADR sync-plan-gating: a free tenant
+                                        // is gated, not broken — keep items
+                                        // `pending` so they sync automatically
+                                        // after an upgrade (no mark_all_failed).
+                                        Err(oz_core::sync_client::SyncHttpError::PlanRequired) => {
+                                            tracing::error!(
+                                                "tablet sync daemon: cloud sync requires a paid plan"
+                                            );
+                                        }
                                         Err(e) => {
                                             let _ = oz_core::sync_client::mark_all_failed(
                                                 &store,

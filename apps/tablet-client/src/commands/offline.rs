@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::{State, command};
 
-use oz_core::sync_client::{self, SyncConfig};
+use oz_core::sync_client::{self, SyncAttemptResult, SyncConfig};
 use oz_core::{OfflineQueueItem, RemoteSyncFailure, Store, SyncPriority};
 
 use foundation::validate_not_empty;
@@ -105,6 +105,11 @@ pub struct SyncResult {
     pub failed_count: i64,
     /// Total number of items that were attempted.
     pub total_count: i64,
+    /// The server rejected the attempt because this tenant is on the
+    /// `free` plan (ADR sync-plan-gating). Items stay `pending` and sync
+    /// automatically after an upgrade.
+    #[serde(default)]
+    pub plan_required: bool,
 }
 
 /// Arguments for enqueuing an offline transaction.
@@ -234,6 +239,7 @@ pub async fn retry_offline_sync(state: State<'_, AppState>) -> Result<SyncResult
             synced_count: 0,
             failed_count: 0,
             total_count: 0,
+            plan_required: false,
         });
     }
 
@@ -251,6 +257,15 @@ pub async fn retry_offline_sync(state: State<'_, AppState>) -> Result<SyncResult
     let store = Store::new(&db);
     let attempt = match outcomes {
         Ok(outcomes) => sync_client::apply_sync_outcomes(&store, &pending_items, &outcomes)?,
+        // ADR sync-plan-gating: a free tenant is gated, not broken. Do NOT
+        // mark the items failed — they stay `pending` and sync automatically
+        // once the tenant upgrades.
+        Err(sync_client::SyncHttpError::PlanRequired) => SyncAttemptResult {
+            synced: 0,
+            failed: 0,
+            error: Some("cloud sync requires a paid plan".into()),
+            plan_required: true,
+        },
         Err(e) => sync_client::mark_all_failed(&store, &pending_items, &e.to_string())?,
     };
     drop(db);
@@ -259,6 +274,7 @@ pub async fn retry_offline_sync(state: State<'_, AppState>) -> Result<SyncResult
         synced_count: attempt.synced as i64,
         failed_count: attempt.failed as i64,
         total_count,
+        plan_required: attempt.plan_required,
     })
 }
 
@@ -532,6 +548,7 @@ mod tests {
             synced_count: 5,
             failed_count: 2,
             total_count: 7,
+            plan_required: false,
         };
         let d = format!("{sr:?}");
         assert!(d.contains("5"));
@@ -544,6 +561,7 @@ mod tests {
             synced_count: 10,
             failed_count: 0,
             total_count: 10,
+            plan_required: false,
         };
         let json = serde_json::to_value(&sr).unwrap();
         assert_eq!(json["syncedCount"], 10);
