@@ -60,6 +60,7 @@ topology-shortcuts-title = Pintasan
 topology-shortcuts-help = Tampilkan pintasan keyboard
 topology-shortcuts-pan = Geser kanvas
 topology-shortcuts-duplicate-drag = Gandakan dengan menyeret
+topology-shortcuts-additive-marquee = Tambahkan ke pilihan
 topology-shortcuts-spawn = Tambahkan node dari slot palet
 topology-shortcuts-nudge = Pindahkan node terpilih (Shift = halus 1px)
 topology-shortcuts-esc = Batalkan pilihan atau aksi yang sedang berlangsung

@@ -79,6 +79,7 @@ const TOPOLOGY_SHORTCUTS: { id: string; key: string }[] = [
   { id: 'topology-shortcuts-help', key: 'F1' },
   { id: 'topology-shortcuts-pan', key: 'Space + Drag' },
   { id: 'topology-shortcuts-duplicate-drag', key: 'Alt + Drag' },
+  { id: 'topology-shortcuts-additive-marquee', key: 'Shift + Drag' },
   { id: 'topology-shortcuts-spawn', key: '1–4' },
   { id: 'topology-shortcuts-select-all', key: 'Ctrl+A' },
   { id: 'topology-shortcuts-duplicate', key: 'Ctrl+D' },

@@ -62,6 +62,7 @@ topology-shortcuts-title = Shortcuts
 topology-shortcuts-help = Show keyboard shortcuts
 topology-shortcuts-pan = Pan the canvas
 topology-shortcuts-duplicate-drag = Duplicate by dragging
+topology-shortcuts-additive-marquee = Add to the selection
 topology-shortcuts-spawn = Spawn a node from the palette slot
 topology-shortcuts-nudge = Move selected nodes (Shift = fine 1px)
 topology-shortcuts-esc = Deselect or cancel the in-flight action

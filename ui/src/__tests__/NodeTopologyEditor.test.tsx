@@ -120,6 +120,7 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-shortcuts-help': 'Show keyboard shortcuts',
   'topology-shortcuts-pan': 'Pan the canvas',
   'topology-shortcuts-duplicate-drag': 'Duplicate by dragging',
+  'topology-shortcuts-additive-marquee': 'Add to the selection',
   'topology-shortcuts-spawn': 'Spawn a node from the palette slot',
   'topology-shortcuts-nudge': 'Move selected nodes (Shift = snap to grid)',
   'topology-shortcuts-esc': 'Deselect or cancel the in-flight action',
@@ -5114,6 +5115,18 @@ describe('NodeTopologyEditor — shortcuts help popover', () => {
     fireEvent.click(helpBtn);
     fireEvent.mouseDown(document.body);
     expect(document.querySelector('.topology-shortcuts-popover')).toBeNull();
+  });
+
+  it('documents Shift+drag as an additive marquee gesture', () => {
+    renderEditor();
+    const helpBtn = screen.getByRole('button', { name: 'Keyboard shortcuts' });
+
+    fireEvent.click(helpBtn);
+    // Every other canvas gesture (Space+drag pan, Alt+drag duplicate) has a
+    // help row; the additive Shift+drag marquee must be discoverable too —
+    // both the kbd glyph and its FTL description.
+    expect(screen.getByText('Shift + Drag')).toBeInTheDocument();
+    expect(screen.getByText('Add to the selection')).toBeInTheDocument();
   });
 });
 
