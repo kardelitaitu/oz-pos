@@ -177,7 +177,9 @@ pub async fn request_sync_token(
         }
     };
     match resolved {
-        Some(u) => Ok(sync_client::request_token(&u).await),
+        Some(u) => {
+            Ok(sync_client::request_token(&u, sync_client::admin_key_from_env().as_deref()).await)
+        }
         None => Ok(sync_client::TokenResult {
             ok: false,
             token: None,

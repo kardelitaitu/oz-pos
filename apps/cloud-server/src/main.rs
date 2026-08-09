@@ -15,6 +15,7 @@
 //! |---|---|---|
 //! | `OZ_DB_PATH` | `oz-pos.db` | Path to the SQLite database file |
 //! | `OZ_API_PORT` | `3099` | HTTP server listen port |
+//! | `OZ_ADMIN_KEY` | — | Admin key gating `POST /api/v1/tokens` (ADR sync-auth-hardening P2). When unset the token endpoint stays open (dev mode); set it in production so only callers with the matching `X-Admin-Key` header can mint tokens. |
 //! | `OZ_REDIRECT_ONLY` | — | Run in redirect-only mode (ADR #11). Requires `OZ_SYNC_REDIRECT_URL`. Skips DB, prune, metrics, API — only serves the migration redirect. |
 //! | `OZ_SYNC_REDIRECT_URL` | — | New server URL for migration redirect. When set, all `/api/sync/*` requests return `{"error":"server_migrated","new_url":"<url>"}` with HTTP 421. |
 //! | `RUST_LOG` | `info` | Log level filter (e.g. `debug`, `oz_cloud_server=debug`) |

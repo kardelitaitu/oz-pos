@@ -175,11 +175,25 @@ pub struct TokenResult {
     pub expires_at: Option<String>,
 }
 
+/// Read the admin key that gates token minting (ADR sync-auth-hardening P2).
+///
+/// Comes from the `OZ_ADMIN_KEY` environment variable; the client sends it as
+/// `X-Admin-Key` so auto-provisioning and refresh keep working against a
+/// gated server. Returns `None` on dev machines without the variable.
+pub fn admin_key_from_env() -> Option<String> {
+    std::env::var("OZ_ADMIN_KEY")
+        .ok()
+        .filter(|key| !key.trim().is_empty())
+}
+
 /// Request a new JWT API token from the cloud server's
 /// `POST /api/v1/tokens` endpoint (async — safe to call from
 /// Tauri async command handlers).
+///
+/// `admin_key` is sent as `X-Admin-Key` when present (ADR sync-auth-hardening
+/// P2); servers configured with `OZ_ADMIN_KEY` reject minting without it.
 #[cfg(feature = "sync-http")]
-pub async fn request_token(url: &str) -> TokenResult {
+pub async fn request_token(url: &str, admin_key: Option<&str>) -> TokenResult {
     let token_url = format!("{}/api/v1/tokens", url.trim_end_matches('/'));
     let body = serde_json::json!({"label": "pos-terminal"});
 
@@ -198,13 +212,14 @@ pub async fn request_token(url: &str) -> TokenResult {
         }
     };
 
-    match client
+    let mut request = client
         .post(&token_url)
-        .header("Content-Type", "application/json")
-        .json(&body)
-        .send()
-        .await
-    {
+        .header("Content-Type", "application/json");
+    if let Some(key) = admin_key {
+        request = request.header("X-Admin-Key", key);
+    }
+
+    match request.json(&body).send().await {
         Ok(resp) => {
             if resp.status().is_success() {
                 #[derive(Deserialize)]
@@ -259,7 +274,7 @@ pub async fn request_token(url: &str) -> TokenResult {
 
 /// Stub when sync-http is disabled.
 #[cfg(not(feature = "sync-http"))]
-pub async fn request_token(_url: &str) -> TokenResult {
+pub async fn request_token(_url: &str, _admin_key: Option<&str>) -> TokenResult {
     TokenResult {
         ok: false,
         token: None,
@@ -274,7 +289,7 @@ pub async fn request_token(_url: &str) -> TokenResult {
 /// the DB lock (the same three-phase split the sync commands use). Returns
 /// the new key on success, or `None` when the server refused to mint one.
 pub async fn request_refresh_token(server_url: &str) -> Option<String> {
-    let token = request_token(server_url).await;
+    let token = request_token(server_url, admin_key_from_env().as_deref()).await;
     if !token.ok {
         tracing::warn!(
             status = %token.status,

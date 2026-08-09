@@ -63,6 +63,10 @@ use tracing::info;
 pub struct AppState {
     /// Shared SQLite connection (mutex-guarded for axum handler safety).
     pub db: Arc<Mutex<Connection>>,
+
+    /// Admin key that gates `POST /api/v1/tokens` (ADR sync-auth-hardening
+    /// P2). `None` = dev mode, the token endpoint stays open.
+    pub admin_key: Option<String>,
 }
 
 /// Build the API router with all routes and middleware.
@@ -70,7 +74,8 @@ pub struct AppState {
 /// Public routes (no auth):
 /// - `GET /api/v1/health`
 ///
-/// Token management (no auth in this pass; add admin key later):
+/// Token management (gated by `OZ_ADMIN_KEY` when configured — ADR
+/// sync-auth-hardening P2; open in dev mode):
 /// - `POST /api/v1/tokens`
 ///
 /// Protected routes (JWT required):
@@ -141,8 +146,12 @@ pub async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .map_err(|e| format!("enabling WAL: {e}"))?;
     oz_core::migrations::run(&mut conn).map_err(|e| format!("running migrations: {e}"))?;
 
+    let admin_key = std::env::var("OZ_ADMIN_KEY")
+        .ok()
+        .filter(|key| !key.trim().is_empty());
     let state = AppState {
         db: Arc::new(Mutex::new(conn)),
+        admin_key,
     };
 
     let port: u16 = std::env::var("OZ_API_PORT")
@@ -180,6 +189,7 @@ mod tests {
     fn test_app() -> Router {
         let state = AppState {
             db: Arc::new(Mutex::new(fresh_conn())),
+            admin_key: None,
         };
         router(state)
     }
@@ -202,6 +212,7 @@ mod tests {
         .unwrap();
         let state = AppState {
             db: Arc::new(Mutex::new(conn)),
+            admin_key: None,
         };
         router(state)
     }
@@ -754,6 +765,7 @@ mod tests {
         oz_core::db::Store::new(&conn).seed_default_roles().unwrap();
         let state = AppState {
             db: Arc::new(Mutex::new(conn)),
+            admin_key: None,
         };
         router(state)
     }

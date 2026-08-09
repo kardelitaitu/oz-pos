@@ -136,7 +136,14 @@ pub async fn auto_provision_local_sync(db: Arc<Mutex<Connection>>) {
     for attempt in 1..=PROBE_ATTEMPTS {
         let ping = sync_client::ping_server(LOCAL_SYNC_URL).await;
         if ping.ok {
-            let token = sync_client::request_token(LOCAL_SYNC_URL).await;
+            // ADR sync-auth-hardening P2: a server started with OZ_ADMIN_KEY
+            // rejects minting without the matching header — pass it through
+            // when the client environment carries it.
+            let token = sync_client::request_token(
+                LOCAL_SYNC_URL,
+                sync_client::admin_key_from_env().as_deref(),
+            )
+            .await;
             if let (true, Some(key)) = (token.ok, token.token) {
                 let mut conn = db.lock().await;
                 match persist_provisioned_sync(&mut conn, LOCAL_SYNC_URL, &key) {

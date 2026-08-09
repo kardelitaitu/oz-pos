@@ -109,7 +109,11 @@ pub(crate) fn read_config_and_pending(
 /// API key. Returns `true` when a new key was stored. Callers invoke this
 /// once after an `AuthRejected` and never loop on it.
 async fn refresh_persisted_api_key(db: &DbConnection, server_url: &str) -> bool {
-    let token = oz_core::sync_client::request_token(server_url).await;
+    let token = oz_core::sync_client::request_token(
+        server_url,
+        oz_core::sync_client::admin_key_from_env().as_deref(),
+    )
+    .await;
     let Some(key) = token.token.filter(|_| token.ok) else {
         tracing::warn!(
             status = %token.status,

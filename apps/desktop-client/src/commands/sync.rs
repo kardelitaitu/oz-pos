@@ -378,7 +378,9 @@ pub async fn request_sync_token(
         }
     };
     match resolved {
-        Some(u) => Ok(sync_client::request_token(&u).await),
+        Some(u) => {
+            Ok(sync_client::request_token(&u, sync_client::admin_key_from_env().as_deref()).await)
+        }
         None => Ok(sync_client::TokenResult {
             ok: false,
             token: None,
@@ -965,6 +967,47 @@ mod tests {
         assert_eq!(
             items[0].status,
             oz_core::offline::OfflineQueueStatus::Synced
+        );
+    }
+
+    #[tokio::test]
+    async fn request_token_sends_admin_key_header_when_provided() {
+        // ADR sync-auth-hardening P2: a gated server (OZ_ADMIN_KEY set)
+        // only mints tokens when the request carries the matching
+        // X-Admin-Key header. Pin the wire contract here.
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let server_url = format!("http://{}", listener.local_addr().unwrap());
+        let captured: Arc<tokio::sync::Mutex<Option<String>>> =
+            Arc::new(tokio::sync::Mutex::new(None));
+        let captured_server = captured.clone();
+        let task = tokio::spawn(async move {
+            let Ok((mut socket, _)) = listener.accept().await else {
+                return;
+            };
+            let mut buffer = vec![0_u8; 16 * 1024];
+            let n = socket.read(&mut buffer).await.unwrap_or(0);
+            let request = String::from_utf8_lossy(&buffer[..n]).into_owned();
+            *captured_server.lock().await = Some(request);
+            let body = r#"{"token":{"token":"jwt-1","expires_at":null,"token_id":"u1"}}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let _ = socket.write_all(response.as_bytes()).await;
+        });
+
+        let result = sync_client::request_token(&server_url, Some("sekret")).await;
+        task.await.unwrap();
+
+        assert!(result.ok, "token request failed: {}", result.status);
+        let request = captured.lock().await.clone().unwrap();
+        assert!(
+            request.to_ascii_lowercase().contains("x-admin-key: sekret"),
+            "token request did not carry the admin key: {request}"
         );
     }
 
