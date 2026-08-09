@@ -16,8 +16,13 @@ import multiStoreFtl from '@/locales/multi-store.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
 vi.mock('@/api/topology', () => ({
-  loadTopology: vi.fn(),
-  saveTopology: vi.fn(),
+  // Self-seeding defaults so ANY describe — or a filtered run that skips
+  // the Component describe's beforeEach — mounts the editor without
+  // depending on an earlier describe having seeded the mocks first.
+  // Sibling describes are otherwise order-dependent: a bare vi.fn()
+  // returns undefined and crashes the load effect's `.then` on mount.
+  loadTopology: vi.fn(() => Promise.resolve(null)),
+  saveTopology: vi.fn(() => Promise.resolve(undefined)),
 }));
 
 // Passthrough mock: keep real LocalizationProvider/ReactLocalization so
