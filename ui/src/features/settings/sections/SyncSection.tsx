@@ -10,6 +10,7 @@ import type {
   PingResult,
   TokenResult,
   OfflineQueueSummaryDto,
+  SyncPlanResult,
 } from '@/api/offline';
 
 /** Structured expiry info for a JWT token. */
@@ -88,6 +89,8 @@ export interface SyncSectionProps {
   pullResult: PullResult | null;
   setPullResult: (r: PullResult | null) => void;
   queueSummary: OfflineQueueSummaryDto | null;
+  /** The tenant's sync plan read from the server (ADR sync-plan-gating). */
+  syncPlan: SyncPlanResult | null;
   testing: boolean;
   setTesting: (v: boolean) => void;
   pingResult: PingResult | null;
@@ -126,6 +129,7 @@ export default function SyncSection({
   pullResult,
   setPullResult,
   queueSummary,
+  syncPlan,
   testing,
   setTesting,
   pingResult,
@@ -309,6 +313,30 @@ export default function SyncSection({
                 </span>
               )}
             </div>
+
+            {/* ── Tenant plan (ADR sync-plan-gating) ── */}
+            {syncPlan && (
+              <div
+                className={`settings-sync-plan-row${syncPlan.plan === 'free' ? ' settings-sync-plan-row--free' : ''}`}
+                data-testid="sync-plan-row"
+              >
+                <Localized id="settings-sync-plan-label"><span className="settings-sync-plan-label">Plan</span></Localized>
+                {syncPlan.plan === 'pro' ? (
+                  <span className="settings-sync-plan-badge settings-sync-plan-badge--pro">
+                    <Localized id="settings-sync-plan-pro"><span>Pro</span></Localized>
+                  </span>
+                ) : (
+                  <span className="settings-sync-plan-badge settings-sync-plan-badge--free">
+                    <Localized id="settings-sync-plan-free"><span>Free</span></Localized>
+                  </span>
+                )}
+                {syncPlan.plan === 'free' && (
+                  <Localized id="settings-sync-plan-upgrade-hint">
+                    <span className="settings-sync-plan-upgrade-hint">Upgrade to sync to the cloud</span>
+                  </Localized>
+                )}
+              </div>
+            )}
 
             {/* ── Detailed queue status ──────────────── */}
             {queueSummary && (

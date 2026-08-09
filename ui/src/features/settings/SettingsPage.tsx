@@ -24,6 +24,7 @@ import {
   syncRun,
   syncPull,
   getOfflineQueueStatusSummary,
+  getSyncPlan,
   testSyncConnection,
   requestSyncToken,
   type SyncSettingsDto,
@@ -31,6 +32,7 @@ import {
   type PullResult,
   type PingResult,
   type OfflineQueueSummaryDto,
+  type SyncPlanResult,
 } from '@/api/offline';
 
 import {
@@ -252,6 +254,7 @@ function SettingsPageContent() {
   const [syncResult, setSyncResult] = useState<SyncAttemptResult | null>(null);
   const [pullResult, setPullResult] = useState<PullResult | null>(null);
   const [queueSummary, setQueueSummary] = useState<OfflineQueueSummaryDto | null>(null);
+  const [syncPlan, setSyncPlan] = useState<SyncPlanResult | null>(null);
   const [testing, setTesting] = useState(false);
   const [pingResult, setPingResult] = useState<PingResult | null>(null);
   const [requesting, setRequesting] = useState(false);
@@ -575,18 +578,29 @@ function SettingsPageContent() {
     }
   }, []);
 
-  // Poll the summary while the Cloud Sync section is open so the status
-  // panel (counts + last-synced) stays live without manual refreshes.
+  // Poll the summary + plan while the Cloud Sync section is open so the
+  // status panel (counts + last-synced + plan) stays live without manual
+  // refreshes.
+  const refreshSyncPlan = useCallback(async () => {
+    try {
+      setSyncPlan(await getSyncPlan());
+    } catch {
+      setSyncPlan(null);
+    }
+  }, []);
+
   useEffect(() => {
     if (activeSection !== 'sync') {
       return;
     }
     refreshQueueSummary();
+    refreshSyncPlan();
     const id = window.setInterval(() => {
       void refreshQueueSummary();
+      void refreshSyncPlan();
     }, SYNC_STATUS_POLL_MS);
     return () => window.clearInterval(id);
-  }, [activeSection, refreshQueueSummary]);
+  }, [activeSection, refreshQueueSummary, refreshSyncPlan]);
 
   // ── Keyboard shortcuts ────────────────────────────────────
 
@@ -739,6 +753,7 @@ function SettingsPageContent() {
             pullResult={pullResult}
             setPullResult={setPullResult}
             queueSummary={queueSummary}
+            syncPlan={syncPlan}
             testing={testing}
             setTesting={setTesting}
             pingResult={pingResult}

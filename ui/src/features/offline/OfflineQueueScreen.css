@@ -85,6 +85,55 @@
   white-space: nowrap;
 }
 
+/* ── Tenant plan row (ADR sync-plan-gating) ───────────── */
+
+.offline-queue-plan-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border, rgba(0, 0, 0, 0.08));
+  border-radius: var(--radius-md);
+  background: var(--color-bg-secondary, rgba(0, 0, 0, 0.02));
+  font-size: var(--text-sm);
+}
+
+.offline-queue-plan-row--free {
+  border-color: var(--color-warning-border, #ffc107);
+  background: var(--color-warning-dim, rgba(255, 193, 7, 0.08));
+}
+
+.offline-queue-plan-label {
+  color: var(--color-fg-secondary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.offline-queue-plan-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-0_5) var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.offline-queue-plan-badge--pro {
+  background: var(--color-success-dim, rgba(16, 185, 129, 0.15));
+  color: var(--color-success, #10b981);
+}
+
+.offline-queue-plan-badge--free {
+  background: var(--color-warning, #ffc107);
+  color: var(--color-accent-fg);
+}
+
+.offline-queue-plan-upgrade-hint {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: var(--color-fg-secondary);
+}
+
 /* ── Detailed queue status summary (P1-6) ─────────────── */
 
 .offline-queue-summary {

@@ -35,6 +35,10 @@ const testL10n = {
       'settings-sync-summary-synced': 'synced',
       'settings-sync-summary-failed': 'failed',
       'settings-sync-summary-conflicts': 'conflicts',
+      'settings-sync-plan-label': 'Plan',
+      'settings-sync-plan-free': 'Free',
+      'settings-sync-plan-pro': 'Pro',
+      'settings-sync-plan-upgrade-hint': 'Upgrade to sync to the cloud',
       'settings-sync-last-synced': 'Last synced {time}',
       'settings-sync-last-synced-never': 'Never synced',
       'settings-sync-oldest-pending': 'Oldest pending {time}',
@@ -147,6 +151,7 @@ function renderSection(overrides: Record<string, unknown> = {}) {
     pullResult: null,
     setPullResult: vi.fn(),
     queueSummary: null,
+    syncPlan: null,
     testing: false,
     setTesting: vi.fn(),
     pingResult: null,
@@ -332,6 +337,26 @@ describe('SyncSection', () => {
     });
     expect(screen.getByText(/Never synced/)).toBeInTheDocument();
     expect(screen.getByText(/Queue empty/)).toBeInTheDocument();
+  });
+
+  it('renders the pro plan row from the server', () => {
+    renderSection({
+      sync: { serverUrl: 'https://sync.example.com', hasApiKey: true, enabled: true },
+      syncPlan: { ok: true, plan: 'pro', status: 'ok' },
+    });
+    expect(screen.getByTestId('sync-plan-row')).toBeInTheDocument();
+    expect(screen.getByText('Pro')).toBeInTheDocument();
+    expect(screen.queryByText(/Upgrade to sync/)).toBeNull();
+  });
+
+  it('renders the free plan row with the upgrade hint', () => {
+    renderSection({
+      sync: { serverUrl: 'https://sync.example.com', hasApiKey: true, enabled: true },
+      syncPlan: { ok: true, plan: 'free', status: 'ok' },
+    });
+    expect(screen.getByTestId('sync-plan-row')).toBeInTheDocument();
+    expect(screen.getByText('Free')).toBeInTheDocument();
+    expect(screen.getByText(/Upgrade to sync/)).toBeInTheDocument();
   });
 
   it('renders request token button', () => {

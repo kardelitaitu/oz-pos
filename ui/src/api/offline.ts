@@ -266,6 +266,20 @@ export interface SyncPullArgs {
 export const syncPull = (args: SyncPullArgs): Promise<PullResult> =>
   loggedInvoke<PullResult>('sync_pull', { args });
 
+// ── Tenant plan (ADR sync-plan-gating) ─────────────────────────
+
+/** Result of reading the caller's own sync plan from the server. */
+export interface SyncPlanResult {
+  ok: boolean;
+  /** Effective plan: `free` | `pro` — present when the read succeeded. */
+  plan: 'free' | 'pro' | null;
+  status: string;
+}
+
+/** Read the caller's own sync plan via `GET /api/v1/tenants/me/plan`. */
+export const getSyncPlan = (): Promise<SyncPlanResult> =>
+  loggedInvoke<SyncPlanResult>('get_sync_plan');
+
 // ── Connection Test ──────────────────────────────────────────────
 
 /** Result of pinging the cloud server's health endpoint. */

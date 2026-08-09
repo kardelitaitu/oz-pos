@@ -15,6 +15,7 @@ const mockDeleteOfflineItem = vi.fn();
 const mockOfflineQueueStatusSummary = vi.fn();
 const mockListRemoteFailures = vi.fn();
 const mockRequeueRemoteFailure = vi.fn();
+const mockGetSyncPlan = vi.fn();
 
 vi.mock('@/api/offline', () => ({
   listAllOffline: (...args: unknown[]) => mockListAllOffline(...args),
@@ -22,6 +23,7 @@ vi.mock('@/api/offline', () => ({
   retryOfflineSync: (...args: unknown[]) => mockRetryOfflineSync(...args),
   deleteOfflineItem: (...args: unknown[]) => mockDeleteOfflineItem(...args),
   getOfflineQueueStatusSummary: (...args: unknown[]) => mockOfflineQueueStatusSummary(...args),
+  getSyncPlan: (...args: unknown[]) => mockGetSyncPlan(...args),
   listRemoteFailures: (...args: unknown[]) => mockListRemoteFailures(...args),
   requeueRemoteFailure: (...args: unknown[]) => mockRequeueRemoteFailure(...args),
 }));
@@ -68,9 +70,11 @@ describe('OfflineQueueScreen', () => {
     mockOfflineQueueStatusSummary.mockReset();
     mockListRemoteFailures.mockReset();
     mockRequeueRemoteFailure.mockReset();
+    mockGetSyncPlan.mockReset();
     mockListAllOffline.mockResolvedValue([]);
     mockPendingOfflineCount.mockResolvedValue(0);
     mockListRemoteFailures.mockResolvedValue([]);
+    mockGetSyncPlan.mockResolvedValue({ ok: true, plan: 'pro', status: 'ok' });
     mockOfflineQueueStatusSummary.mockResolvedValue({
       pendingCount: 0, syncedCount: 0, failedCount: 0, conflictCount: 0,
       lastSyncedAt: null, oldestPendingAt: null,
@@ -334,6 +338,28 @@ describe('OfflineQueueScreen', () => {
     });
     expect(screen.getByText(/Never synced/)).toBeInTheDocument();
     expect(screen.getByText(/Queue empty/)).toBeInTheDocument();
+  });
+
+  it('renders the pro plan row from the server', async () => {
+    mockGetSyncPlan.mockResolvedValue({ ok: true, plan: 'pro', status: 'ok' });
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('offline-queue-plan-row')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Pro')).toBeInTheDocument();
+    expect(screen.queryByText(/Upgrade to sync/)).toBeNull();
+  });
+
+  it('renders the free plan row with the upgrade hint', async () => {
+    mockGetSyncPlan.mockResolvedValue({ ok: true, plan: 'free', status: 'ok' });
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('offline-queue-plan-row')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Free')).toBeInTheDocument();
+    expect(screen.getByText(/Upgrade to sync/)).toBeInTheDocument();
   });
 
   it('shows a stale notice after repeated poll failures (ERR-07)', async () => {

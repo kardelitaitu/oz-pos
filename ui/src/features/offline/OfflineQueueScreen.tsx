@@ -8,11 +8,13 @@ import {
   retryOfflineSync,
   deleteOfflineItem,
   getOfflineQueueStatusSummary,
+  getSyncPlan,
   listRemoteFailures,
   requeueRemoteFailure,
   type OfflineQueueItemDto,
   type OfflineQueueSummaryDto,
   type RemoteSyncFailureDto,
+  type SyncPlanResult,
   type SyncResult,
 } from '@/api/offline';
 import { Card } from '@/components/Card';
@@ -97,6 +99,9 @@ export default function OfflineQueueScreen() {
   // Detailed queue status (pending/synced/failed/conflicts + timestamps)
   // surfaced from offline_queue_status_summary (P1-6 sync observability).
   const [queueSummary, setQueueSummary] = useState<OfflineQueueSummaryDto | null>(null);
+  // The tenant's sync plan read from the server (ADR sync-plan-gating) —
+  // lets operators see free/pro and the upgrade prompt without syncing.
+  const [syncPlan, setSyncPlan] = useState<SyncPlanResult | null>(null);
   // SYNC-11: remote items quarantined after repeated pull-application failures.
   const [failures, setFailures] = useState<RemoteSyncFailureDto[]>([]);
   const [requeueError, setRequeueError] = useState<string | null>(null);
@@ -126,6 +131,9 @@ export default function OfflineQueueScreen() {
         setConflictCount(summary.conflictCount);
         setQueueSummary(summary);
       }
+      // Best-effort plan read — never fail the screen if the server is
+      // unreachable or sync isn't configured.
+      getSyncPlan().then(setSyncPlan).catch(() => setSyncPlan(null));
       setFailures(remoteFailures);
     } catch {
       setError(l10n.getString('offline-queue-error'));
@@ -163,6 +171,7 @@ export default function OfflineQueueScreen() {
           setConflictCount(summary.conflictCount);
           setQueueSummary(summary);
         }
+        getSyncPlan().then(setSyncPlan).catch(() => setSyncPlan(null));
         pollFailuresRef.current = 0;
         setPollStale(false);
         setLastPolledAt(new Date());
@@ -263,6 +272,31 @@ export default function OfflineQueueScreen() {
           </Localized>
         </Button>
       </div>
+
+      {/* ADR sync-plan-gating: show the tenant's plan so operators see
+          free/pro and the upgrade prompt without running a sync. */}
+      {syncPlan && (
+        <div
+          className={`offline-queue-plan-row${syncPlan.plan === 'free' ? ' offline-queue-plan-row--free' : ''}`}
+          data-testid="offline-queue-plan-row"
+        >
+          <Localized id="offline-queue-plan-label"><span className="offline-queue-plan-label">Plan</span></Localized>
+          {syncPlan.plan === 'pro' ? (
+            <span className="offline-queue-plan-badge offline-queue-plan-badge--pro">
+              <Localized id="offline-queue-plan-pro"><span>Pro</span></Localized>
+            </span>
+          ) : (
+            <span className="offline-queue-plan-badge offline-queue-plan-badge--free">
+              <Localized id="offline-queue-plan-free"><span>Free</span></Localized>
+            </span>
+          )}
+          {syncPlan.plan === 'free' && (
+            <Localized id="offline-queue-plan-upgrade-hint">
+              <span className="offline-queue-plan-upgrade-hint">Upgrade to sync to the cloud</span>
+            </Localized>
+          )}
+        </div>
+      )}
 
       {/* P1-6: detailed queue status — same numbers operators see in
           Settings → Cloud Sync, surfaced here outside settings. */}

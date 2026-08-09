@@ -132,6 +132,9 @@ const { invokeMock, defaultImpl, failCommands, lastCallArgs } = vi.hoisted(() =>
         oldestPendingAt: null,
       });
     }
+    if (cmd === 'get_sync_plan') {
+      return Promise.resolve({ ok: true, plan: 'pro', status: 'ok' });
+    }
     return Promise.resolve(undefined);
   };
   return { invokeMock: vi.fn(impl), defaultImpl: impl, failCommands, lastCallArgs };
