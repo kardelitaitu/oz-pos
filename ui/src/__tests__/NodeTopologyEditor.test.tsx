@@ -4047,6 +4047,110 @@ describe('NodeTopologyEditor — canvas pan', () => {
   });
 });
 
+// ── Touch gestures (pointer-event parity for tablets) ──────────
+// jsdom has no PointerEvent, so test-setup.ts polyfills it; these tests
+// drive the canvas's pointer handlers with pointerType 'touch'.
+
+describe('NodeTopologyEditor — touch gestures', () => {
+  beforeEach(() => {
+    mockLoadTopology.mockResolvedValue(null);
+  });
+
+  it('single-finger drag on empty canvas pans the viewport', () => {
+    renderEditor();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    const viewport = document.querySelector('.node-canvas-viewport') as HTMLElement;
+    expect(viewport.style.transform).toContain('translate(0px, 0px)');
+
+    fireEvent.pointerDown(canvas, { pointerId: 1, pointerType: 'touch', clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(canvas, { pointerId: 1, pointerType: 'touch', clientX: 150, clientY: 130 });
+    fireEvent.pointerUp(canvas, { pointerId: 1, pointerType: 'touch' });
+
+    expect(viewport.style.transform).toContain('translate(50px, 30px)');
+  });
+
+  it('a sub-threshold touch is a tap, not a pan', () => {
+    renderEditor();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    const viewport = document.querySelector('.node-canvas-viewport') as HTMLElement;
+    // Select a node first: a tap (no pan) must still clear the selection on
+    // release, proving the gesture stayed a tap below the drag threshold.
+    fireEvent.mouseDown(document.querySelectorAll('.topology-node')[0]!, { button: 0 });
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(1);
+
+    fireEvent.pointerDown(canvas, { pointerId: 1, pointerType: 'touch', clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(canvas, { pointerId: 1, pointerType: 'touch', clientX: 105, clientY: 103 });
+    fireEvent.pointerUp(canvas, { pointerId: 1, pointerType: 'touch' });
+
+    expect(viewport.style.transform).toContain('translate(0px, 0px)');
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(0);
+  });
+
+  it('tap on empty canvas clears the node selection', () => {
+    renderEditor();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    // Select a node first (mouse path), then tap the background.
+    fireEvent.mouseDown(document.querySelectorAll('.topology-node')[0]!, { button: 0 });
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(1);
+
+    fireEvent.pointerDown(canvas, { pointerId: 1, pointerType: 'touch', clientX: 10, clientY: 10 });
+    fireEvent.pointerUp(canvas, { pointerId: 1, pointerType: 'touch' });
+
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(0);
+  });
+
+  it('two-finger pinch zooms toward the midpoint', () => {
+    renderEditor();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    const viewport = document.querySelector('.node-canvas-viewport') as HTMLElement;
+
+    // Fingers at (100,100) + (140,100): mid (120,100), dist 40.
+    fireEvent.pointerDown(canvas, { pointerId: 1, pointerType: 'touch', clientX: 100, clientY: 100 });
+    fireEvent.pointerDown(canvas, { pointerId: 2, pointerType: 'touch', clientX: 140, clientY: 100 });
+    // Spread to dist 60, mid (130,100): zoom 1.5, pan (-50,-50).
+    fireEvent.pointerMove(canvas, { pointerId: 2, pointerType: 'touch', clientX: 160, clientY: 100 });
+
+    expect(document.querySelector('.canvas-zoom-level')?.textContent).toBe('150%');
+    expect(viewport.style.transform).toContain('scale(1.5)');
+
+    fireEvent.pointerUp(canvas, { pointerId: 1, pointerType: 'touch' });
+    fireEvent.pointerUp(canvas, { pointerId: 2, pointerType: 'touch' });
+  });
+
+  it('touch drag on a node card moves the node', () => {
+    renderEditor();
+    const firstNode = document.querySelector('.topology-node') as HTMLElement;
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    const viewport = document.querySelector('.node-canvas-viewport') as HTMLElement;
+    const beforeLeft = firstNode.style.left;
+
+    fireEvent.pointerDown(firstNode, { pointerId: 1, pointerType: 'touch', clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(canvas, { pointerId: 1, pointerType: 'touch', clientX: 48, clientY: 48 });
+    fireEvent.pointerUp(canvas, { pointerId: 1, pointerType: 'touch' });
+
+    expect(firstNode.style.left).not.toBe(beforeLeft);
+    expect(viewport.style.transform).toContain('translate(0px, 0px)');
+  });
+
+  it('a second finger cancels an armed node drag and enters pinch', () => {
+    renderEditor();
+    const firstNode = document.querySelector('.topology-node') as HTMLElement;
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    const beforeLeft = firstNode.style.left;
+
+    // First finger lands on the node (arms a drag), second lands on the
+    // background before any movement → pinch, never a node drag.
+    fireEvent.pointerDown(firstNode, { pointerId: 1, pointerType: 'touch', clientX: 0, clientY: 0 });
+    fireEvent.pointerDown(canvas, { pointerId: 2, pointerType: 'touch', clientX: 200, clientY: 200 });
+    fireEvent.pointerMove(canvas, { pointerId: 2, pointerType: 'touch', clientX: 260, clientY: 200 });
+    fireEvent.pointerUp(canvas, { pointerId: 1, pointerType: 'touch' });
+    fireEvent.pointerUp(canvas, { pointerId: 2, pointerType: 'touch' });
+
+    expect(firstNode.style.left).toBe(beforeLeft);
+    expect(document.querySelector('.canvas-zoom-level')?.textContent).not.toBe('100%');
+  });
+});
+
 // ── Multi-select, marquee, group drag, batch delete ────────────
 
 describe('NodeTopologyEditor — multi-select & marquee', () => {

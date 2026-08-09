@@ -33,6 +33,7 @@ import {
 import { plainErrorMessage } from '@/utils/app-error';
 import { clampNodeToViewport, findFreeSpawnSpot, NODE_WIDTH, NODE_HEIGHT, NODE_PORT_Y } from './nodeTopologyClamp';
 import { computeAutoLayout } from './nodeTopologyLayout';
+import { pinchTransform, TOUCH_DRAG_THRESHOLD } from './nodeTopologyTouch';
 import {
   normalizeTopologyGraph,
   normalizeWireDirection,
@@ -1076,6 +1077,12 @@ export default function NodeTopologyEditor({
   nodesRef.current = nodes;
   const wiresRef = useRef<TopologyWireData[]>(wires);
   wiresRef.current = wires;
+  /** Mirror of the dragging set for the touch gesture loop: the document
+   *  pointer listeners installed at pointerdown run in a stale closure, so
+   *  state reads there must go through refs (drag moves would otherwise see
+   *  the pre-drag empty set forever). */
+  const draggingNodeIdsRef = useRef<Set<string>>(draggingNodeIds);
+  draggingNodeIdsRef.current = draggingNodeIds;
   const isCanvasDirty = useCallback(() => {
     const snap = appliedSnapshotRef.current;
     if (!snap) return true;
@@ -2846,35 +2853,42 @@ export default function NodeTopologyEditor({
     setConfirmDelete(null);
   }, [confirmDelete, confirmDeleteMany, selectedWireId, connectingFromNodeId, connectingFromPort, wires, pushHistory, deleteNodes]);
 
-  const handleNodeMouseDown = (e: React.MouseEvent, nodeId: string) => {
-    e.stopPropagation();
-    setRelationshipPicker(null);
-    if (e.button !== 0) return;
+  /** End an in-flight node drag (release / document mouseup / touch up):
+   *  commit any Alt-drag copies, clear the drag set and offsets, and drop
+   *  the alignment guide. Shared by the mouse document listener, the canvas
+   *  onMouseUp, and the touch gesture loop. */
+  const finalizeNodeDrag = () => {
+    commitDuplicateDrag();
+    setDraggingNodeIds(new Set());
+    draggingNodeIdsRef.current = new Set();
+    dragHasMovedRef.current = false;
+    dragOffsetsRef.current.clear();
+    dragStartRef.current.clear();
+    setAlignmentGuide(null);
+  };
+
+  /** Arm a node drag (mouse mousedown or the touch gesture loop): set the
+   *  dragging set, compute each node's grip offset from the pointer, and —
+   *  for mouse — attach the document mouseup that finalizes the drag when
+   *  the pointer releases outside the canvas. The duplicate (Alt+drag) setup
+   *  lives here so every creation path shares one gate and one history
+   *  contract. Touch passes gesture='touch': the touch loop owns its own
+   *  pointermove/pointerup listeners, so only the drag STATE is armed. */
+  const beginNodeDrag = (
+    clientX: number,
+    clientY: number,
+    selection: Set<string>,
+    isDuplicateDrag: boolean,
+    gesture: 'mouse' | 'touch',
+  ) => {
     userInteractedRef.current = true;
-    // Multi-select rules: shift+mousedown ADDS the node to the selection;
-    // a plain mousedown on an unselected node collapses to just it; a
-    // mousedown on a node already inside a multi-selection keeps the group
-    // so it can be dragged as a whole.
-    const wasSelected = selectedNodeIds.has(nodeId);
-    let selection: Set<string>;
-    if (e.shiftKey && !wasSelected) {
-      selection = new Set(selectedNodeIds);
-      selection.add(nodeId);
-      setSelectedNodeIds(selection);
-      setSelectedNodeId(nodeId);
-    } else if (!wasSelected) {
-      selection = new Set([nodeId]);
-      selectOnly(nodeId);
-    } else {
-      selection = new Set(selectedNodeIds);
-    }
+    setRelationshipPicker(null);
     setSelectedWireId(null);
     // Alt+drag = Figma-style DUPLICATE drag: the dragged set is replaced by
     // fresh copies (new ids, starting at the originals' positions) that
     // follow the cursor while the originals stay put; the drop commits them
     // as ONE undo entry, Escape discards them. Wires copy only when BOTH
     // endpoints are in the selection (mirrors duplicateSelection).
-    const isDuplicateDrag = e.altKey;
     // The creation-path gates apply to the duplicate paths too: an Alt+drag
     // that would copy a Branch Location or a warehouse past the tier cap is
     // refused up front (no copies, no drag, no history entry).
@@ -2918,33 +2932,37 @@ export default function NodeTopologyEditor({
       dragIds = [...selection];
     }
     // Copy: the drag set must never share identity with the live selection
-    // state (a future mutation of one would corrupt the other).
-    setDraggingNodeIds(new Set(dragIds));
+    // state (a future mutation of one would corrupt the other). Mirror the
+    // ref SYNCHRONOUSLY too — the touch path calls applyDragMove in the same
+    // event handler, before React re-renders and the render-time mirror
+    // (draggingNodeIdsRef.current = draggingNodeIds) would catch up.
+    const nextDragSet = new Set(dragIds);
+    setDraggingNodeIds(nextDragSet);
+    draggingNodeIdsRef.current = nextDragSet;
     dragHasMovedRef.current = false;
 
-    // Cancel any in-flight drag listener from a previous drag, then arm a
-    // document-level mouseup so releasing the pointer outside the canvas
-    // still ends the drag (the canvas onMouseUp is unreachable there).
-    dragCleanupRef.current?.();
-    const handleDocumentMouseUp = () => {
-      commitDuplicateDrag();
-      setDraggingNodeIds(new Set());
-      dragHasMovedRef.current = false;
-      dragOffsetsRef.current.clear();
-      dragStartRef.current.clear();
-      setAlignmentGuide(null);
-      document.removeEventListener('mouseup', handleDocumentMouseUp);
-      dragCleanupRef.current = null;
-    };
-    document.addEventListener('mouseup', handleDocumentMouseUp);
-    dragCleanupRef.current = () => {
-      document.removeEventListener('mouseup', handleDocumentMouseUp);
-      dragCleanupRef.current = null;
-    };
+    if (gesture === 'mouse') {
+      // Cancel any in-flight drag listener from a previous drag, then arm a
+      // document-level mouseup so releasing the pointer outside the canvas
+      // still ends the drag (the canvas onMouseUp is unreachable there).
+      dragCleanupRef.current?.();
+      const handleDocumentMouseUp = () => {
+        finalizeNodeDrag();
+        document.removeEventListener('mouseup', handleDocumentMouseUp);
+        dragCleanupRef.current = null;
+      };
+      document.addEventListener('mouseup', handleDocumentMouseUp);
+      dragCleanupRef.current = () => {
+        document.removeEventListener('mouseup', handleDocumentMouseUp);
+        dragCleanupRef.current = null;
+      };
+    }
+    // Touch: the touch gesture loop's document pointer listeners own the
+    // moves and the finalize — nothing to arm here beyond the drag state.
 
     const rect = canvasRef.current?.getBoundingClientRect();
-    const canvasX = (e.clientX - (rect?.left ?? 0) - pan.x) / zoom;
-    const canvasY = (e.clientY - (rect?.top ?? 0) - pan.y) / zoom;
+    const canvasX = (clientX - (rect?.left ?? 0) - pan.x) / zoom;
+    const canvasY = (clientY - (rect?.top ?? 0) - pan.y) / zoom;
     dragOffsetsRef.current.clear();
     dragStartRef.current.clear();
     const copyToOriginal = new Map([...originalToCopy].map(([k, v]) => [v, k]));
@@ -2959,6 +2977,105 @@ export default function NodeTopologyEditor({
         dragStartRef.current.set(id, { x: n.x, y: n.y });
       }
     }
+  };
+
+  const handleNodeMouseDown = (e: React.MouseEvent, nodeId: string) => {
+    e.stopPropagation();
+    setRelationshipPicker(null);
+    if (e.button !== 0) return;
+    // Multi-select rules: shift+mousedown ADDS the node to the selection;
+    // a plain mousedown on an unselected node collapses to just it; a
+    // mousedown on a node already inside a multi-selection keeps the group
+    // so it can be dragged as a whole.
+    const wasSelected = selectedNodeIds.has(nodeId);
+    let selection: Set<string>;
+    if (e.shiftKey && !wasSelected) {
+      selection = new Set(selectedNodeIds);
+      selection.add(nodeId);
+      setSelectedNodeIds(selection);
+      setSelectedNodeId(nodeId);
+    } else if (!wasSelected) {
+      selection = new Set([nodeId]);
+      selectOnly(nodeId);
+    } else {
+      selection = new Set(selectedNodeIds);
+    }
+    beginNodeDrag(e.clientX, e.clientY, selection, e.altKey, 'mouse');
+  };
+
+  /** Apply one drag-move to the dragged group (mouse canvas mousemove and
+   *  the touch gesture loop share this). Reads the dragging set and nodes
+   *  via refs so the touch path — which runs in the document-listener
+   *  closure armed at pointerdown — always sees the CURRENT drag state, not
+   *  the stale render-time snapshot. */
+  const applyDragMove = (clientX: number, clientY: number) => {
+    if (draggingNodeIdsRef.current.size === 0) return;
+    // Push history once, on the first real movement — a plain click that
+    // never moves must not create a no-op undo entry. An Alt+drag defers
+    // its entry to the drop (one undo for the whole duplicate).
+    if (!dragHasMovedRef.current) {
+      dragHasMovedRef.current = true;
+      if (!duplicateDragRef.current) pushHistory();
+    }
+    // Dynamic edge clamp (replaces the old hard 20px floor): every node
+    // in the dragged group may travel north/west until its box nearly
+    // leaves the visible canvas, but can never be pushed off-screen and
+    // lost. Pan/zoom aware, so the reachable edge follows the current
+    // view. Each node clamps independently; the group delta is otherwise
+    // identical (same raw cursor → same per-node offset).
+    const canvas = canvasRef.current;
+    const rect = canvas?.getBoundingClientRect();
+    const rawX = (clientX - (rect?.left ?? 0) - pan.x) / zoom;
+    const rawY = (clientY - (rect?.top ?? 0) - pan.y) / zoom;
+    // Figma-style COLLECTIVE alignment: every dragged node's edges/centers
+    // snap to stationary nodes' edges/centers within a small threshold; the
+    // closest match across the whole group wins per axis and the delta
+    // applies to the group so it stays rigid (a non-grabbed member's edge
+    // can snap the group — Figma semantics). The aligned axis skips grid
+    // snapping (guides beat the grid); the other axis still snaps as
+    // configured.
+    const targets = new Map<string, { x: number; y: number }>();
+    for (const [id, off] of dragOffsetsRef.current) {
+      if (!draggingNodeIdsRef.current.has(id)) continue;
+      targets.set(id, clampNodeToViewport(rawX - off.x, rawY - off.y, {
+        panX: pan.x,
+        panY: pan.y,
+        zoom,
+        canvasW: canvas?.clientWidth ?? 0,
+        canvasH: canvas?.clientHeight ?? 0,
+      }));
+    }
+    const align = targets.size > 0
+      ? computeAlignmentGuides(targets, draggingNodeIdsRef.current, nodesRef.current)
+      : { dx: 0, dy: 0, alignedX: false, alignedY: false };
+    setAlignmentGuide(
+      align.x !== undefined || align.y !== undefined
+        ? { ...(align.x !== undefined ? { x: align.x } : {}), ...(align.y !== undefined ? { y: align.y } : {}) }
+        : null,
+    );
+    setNodes((prev) =>
+      prev.map((n) => {
+        const off = dragOffsetsRef.current.get(n.id);
+        if (!off) return n;
+        const clamped = clampNodeToViewport(rawX - off.x, rawY - off.y, {
+          panX: pan.x,
+          panY: pan.y,
+          zoom,
+          canvasW: canvas?.clientWidth ?? 0,
+          canvasH: canvas?.clientHeight ?? 0,
+        });
+        // The delta is the dragged axis MINUS the reference (pAxis − rAxis),
+        // so SUBTRACTING it lands the edge exactly on the line — a drag that
+        // raw-lands 3px off snaps onto it, never parking 2× the miss away.
+        let fx = clamped.x - align.dx;
+        let fy = clamped.y - align.dy;
+        if (snapEnabled) {
+          if (!align.alignedX) fx = snap(fx);
+          if (!align.alignedY) fy = snap(fy);
+        }
+        return { ...n, x: fx, y: fy };
+      }),
+    );
   };
 
   const handleCanvasMouseMove = (e: React.MouseEvent) => {
@@ -2979,74 +3096,8 @@ export default function NodeTopologyEditor({
       }
     }
 
-    if (draggingNodeIds.size > 0) {
-      // Push history once, on the first real movement — a plain click that
-      // never moves must not create a no-op undo entry. An Alt+drag defers
-      // its entry to the drop (one undo for the whole duplicate).
-      if (!dragHasMovedRef.current) {
-        dragHasMovedRef.current = true;
-        if (!duplicateDragRef.current) pushHistory();
-      }
-      // Dynamic edge clamp (replaces the old hard 20px floor): every node
-      // in the dragged group may travel north/west until its box nearly
-      // leaves the visible canvas, but can never be pushed off-screen and
-      // lost. Pan/zoom aware, so the reachable edge follows the current
-      // view. Each node clamps independently; the group delta is otherwise
-      // identical (same raw cursor → same per-node offset).
-      const canvas = canvasRef.current;
-      const rect = canvas?.getBoundingClientRect();
-      const rawX = (e.clientX - (rect?.left ?? 0) - pan.x) / zoom;
-      const rawY = (e.clientY - (rect?.top ?? 0) - pan.y) / zoom;
-      // Figma-style COLLECTIVE alignment: every dragged node's edges/centers
-      // snap to stationary nodes' edges/centers within a small threshold; the
-      // closest match across the whole group wins per axis and the delta
-      // applies to the group so it stays rigid (a non-grabbed member's edge
-      // can snap the group — Figma semantics). The aligned axis skips grid
-      // snapping (guides beat the grid); the other axis still snaps as
-      // configured.
-      const targets = new Map<string, { x: number; y: number }>();
-      for (const [id, off] of dragOffsetsRef.current) {
-        if (!draggingNodeIds.has(id)) continue;
-        targets.set(id, clampNodeToViewport(rawX - off.x, rawY - off.y, {
-          panX: pan.x,
-          panY: pan.y,
-          zoom,
-          canvasW: canvas?.clientWidth ?? 0,
-          canvasH: canvas?.clientHeight ?? 0,
-        }));
-      }
-      const align = targets.size > 0
-        ? computeAlignmentGuides(targets, draggingNodeIds, nodes)
-        : { dx: 0, dy: 0, alignedX: false, alignedY: false };
-      setAlignmentGuide(
-        align.x !== undefined || align.y !== undefined
-          ? { ...(align.x !== undefined ? { x: align.x } : {}), ...(align.y !== undefined ? { y: align.y } : {}) }
-          : null,
-      );
-      setNodes((prev) =>
-        prev.map((n) => {
-          const off = dragOffsetsRef.current.get(n.id);
-          if (!off) return n;
-          const clamped = clampNodeToViewport(rawX - off.x, rawY - off.y, {
-            panX: pan.x,
-            panY: pan.y,
-            zoom,
-            canvasW: canvas?.clientWidth ?? 0,
-            canvasH: canvas?.clientHeight ?? 0,
-          });
-          // The delta is the dragged axis MINUS the reference (pAxis − rAxis),
-          // so SUBTRACTING it lands the edge exactly on the line — a drag that
-          // raw-lands 3px off snaps onto it, never parking 2× the miss away.
-          let fx = clamped.x - align.dx;
-          let fy = clamped.y - align.dy;
-          if (snapEnabled) {
-            if (!align.alignedX) fx = snap(fx);
-            if (!align.alignedY) fy = snap(fy);
-          }
-          return { ...n, x: fx, y: fy };
-        }),
-      );
-    } else if (marqueeStartRef.current) {
+    applyDragMove(e.clientX, e.clientY);
+    if (marqueeStartRef.current) {
       // Marquee: track the drag rect in container-relative screen px.
       const rect = canvasRef.current?.getBoundingClientRect();
       const next = {
@@ -3090,12 +3141,7 @@ export default function NodeTopologyEditor({
   };
 
   const handleCanvasMouseUp = () => {
-    commitDuplicateDrag();
-    setDraggingNodeIds(new Set());
-    dragHasMovedRef.current = false;
-    dragOffsetsRef.current.clear();
-    dragStartRef.current.clear();
-    setAlignmentGuide(null);
+    finalizeNodeDrag();
     // The marquee is finalized by its own document-level mouseup listener
     // (armed at marquee start), which also fires when the pointer is
     // released OUTSIDE the canvas — the canvas onMouseUp is unreachable
@@ -3334,6 +3380,222 @@ export default function NodeTopologyEditor({
       }));
       return newZoom;
     });
+  };
+
+  // ── Touch gestures (pointer parity for tablets) ────────────────
+  // Mouse input keeps the mouse handlers above (and all their tests); touch
+  // input runs entirely through pointer events. One finger on a node card
+  // drags it, one finger on empty canvas pans (a sub-threshold touch is a
+  // tap that clears the selection), and two fingers pinch-zoom about the
+  // midpoint. The gesture loop runs in DOCUMENT-level pointer listeners
+  // armed at the first pointerdown: touch pointers have implicit capture,
+  // so moves/ups keep firing even when the finger leaves the canvas, and
+  // dispatching on the canvas (tests) still bubbles to the document. All
+  // gesture state lives in refs so the stale down-time closure always sees
+  // the latest drag/pan/zoom.
+  const touchPointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  interface TouchGesture {
+    mode: 'none' | 'node-drag' | 'pan' | 'pinch';
+    startX: number;
+    startY: number;
+    nodeId: string | null;
+    selection: Set<string>;
+    panStart: { x: number; y: number };
+    pinchZoom0: number;
+    pinchPan0: { x: number; y: number };
+    pinchMid0: { x: number; y: number };
+    pinchDist0: number;
+  }
+  const touchGestureRef = useRef<TouchGesture | null>(null);
+  const touchCleanupRef = useRef<(() => void) | null>(null);
+
+  /** Finish a touch gesture with all fingers lifted: finalize any node drag
+   *  (commits Alt-style copies — none on touch — and clears drag state),
+   *  end a pan, or resolve a tap (empty-canvas taps clear the selection). */
+  const endTouchGesture = (g: TouchGesture) => {
+    if (g.mode === 'node-drag') {
+      finalizeNodeDrag();
+    } else if (g.mode === 'pan') {
+      // Touch pans never emit the native contextmenu (no right button), so
+      // the contextmenu-suppression ref is a mouse-only concern.
+      isPanningRef.current = false;
+      document.body.style.cursor = '';
+    } else if (g.mode === 'none' && g.nodeId === null) {
+      // A tap on empty canvas is the touch equivalent of a plain click
+      // (the mouse path finalizes an empty marquee, which clears the
+      // selection). Node taps already selected at pointerdown.
+      clearSelection();
+      setSelectedWireId(null);
+    }
+    touchPointersRef.current.clear();
+    touchGestureRef.current = null;
+    touchCleanupRef.current?.();
+  };
+
+  const handleTouchPointerMove = (e: PointerEvent) => {
+    if (e.pointerType !== 'touch') return;
+    const prev = touchPointersRef.current.get(e.pointerId);
+    if (prev) touchPointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const g = touchGestureRef.current;
+    if (!g) return;
+    if (g.mode === 'pinch') {
+      if (touchPointersRef.current.size < 2) return;
+      const pts = [...touchPointersRef.current.values()];
+      const p1 = pts[0]!;
+      const p2 = pts[1]!;
+      const out = pinchTransform(
+        { zoom: g.pinchZoom0, pan: g.pinchPan0 },
+        g.pinchMid0,
+        g.pinchDist0,
+        { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 },
+        Math.hypot(p2.x - p1.x, p2.y - p1.y),
+      );
+      setZoom(out.zoom);
+      setPan(out.pan);
+      return;
+    }
+    if (g.mode === 'none') {
+      const dx = e.clientX - g.startX;
+      const dy = e.clientY - g.startY;
+      if (Math.hypot(dx, dy) < TOUCH_DRAG_THRESHOLD) return;
+      if (g.nodeId !== null) {
+        // The node was already selected at pointerdown; arm the drag with
+        // the stored selection (the group, when the touch landed on an
+        // already-selected member).
+        beginNodeDrag(g.startX, g.startY, g.selection, false, 'touch');
+        g.mode = 'node-drag';
+      } else {
+        isPanningRef.current = true;
+        document.body.style.cursor = 'grabbing';
+        // Pan baseline from the down-time view (same as startPan's
+        // panStartRef: clientX − pan.x).
+        g.panStart = { x: g.startX - pan.x, y: g.startY - pan.y };
+        g.mode = 'pan';
+      }
+    }
+    if (g.mode === 'node-drag') {
+      applyDragMove(e.clientX, e.clientY);
+    } else if (g.mode === 'pan') {
+      setPan({ x: e.clientX - g.panStart.x, y: e.clientY - g.panStart.y });
+    }
+  };
+
+  const handleTouchPointerUp = (e: PointerEvent) => {
+    if (e.pointerType !== 'touch') return;
+    touchPointersRef.current.delete(e.pointerId);
+    const g = touchGestureRef.current;
+    if (!g) {
+      // All fingers lifted outside a gesture (e.g. the inert finger left
+      // after a pinch disarmed the gesture) — drop the listeners.
+      if (touchPointersRef.current.size === 0) touchCleanupRef.current?.();
+      return;
+    }
+    if (touchPointersRef.current.size > 0) {
+      // A finger remains down. After a pinch (or an armed-but-unmoved
+      // gesture) the remaining finger must not continue a pan or drag —
+      // disarm until all fingers lift.
+      if (g.mode === 'pinch' || g.mode === 'none') touchGestureRef.current = null;
+      return;
+    }
+    endTouchGesture(g);
+  };
+
+  /** A system gesture stole the touch (scroll, notification) — end the
+   *  gesture exactly like a release; the finger is already gone. */
+  const handleTouchPointerCancel = (e: PointerEvent) => {
+    if (e.pointerType !== 'touch') return;
+    handleTouchPointerUp(e);
+  };
+
+  /** Arm the document-level touch gesture listeners once, when the first
+   *  touch pointer lands. Removed by endTouchGesture when all fingers lift. */
+  const armTouchDocumentListeners = () => {
+    if (touchCleanupRef.current) return;
+    document.addEventListener('pointermove', handleTouchPointerMove);
+    document.addEventListener('pointerup', handleTouchPointerUp);
+    document.addEventListener('pointercancel', handleTouchPointerCancel);
+    touchCleanupRef.current = () => {
+      document.removeEventListener('pointermove', handleTouchPointerMove);
+      document.removeEventListener('pointerup', handleTouchPointerUp);
+      document.removeEventListener('pointercancel', handleTouchPointerCancel);
+      touchCleanupRef.current = null;
+    };
+  };
+
+  const handleCanvasPointerDown = (e: React.PointerEvent) => {
+    if (e.pointerType !== 'touch') return;
+    // Suppress the compatibility mouse events (mousedown/mouseup) a real
+    // browser dispatches after touch — without this, a touch pan would
+    // spawn a ghost marquee and a touch node-tap would double-arm a drag.
+    e.preventDefault();
+    userInteractedRef.current = true;
+    setRelationshipPicker(null);
+    setContextMenu(null);
+    touchPointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const g = touchGestureRef.current;
+    if (touchPointersRef.current.size === 1) {
+      // First finger: arm a drag (node card) or pan (background) candidate.
+      const target = e.target as HTMLElement;
+      const card = target.closest('.topology-node');
+      const onNode = !!card && !target.closest('input, button, select, textarea, [data-no-node-drag]');
+      if (onNode) {
+        const nodeId = (card as HTMLElement).dataset['nodeId'] ?? null;
+        if (nodeId) {
+          // Selection mirrors the mouse mousedown rules: a tap on an
+          // unselected node collapses to it; a tap on an already-selected
+          // node keeps the group so it can be dragged as a whole.
+          const wasSelected = selectedNodeIds.has(nodeId);
+          if (!wasSelected) selectOnly(nodeId);
+          setSelectedWireId(null);
+          touchGestureRef.current = {
+            mode: 'none',
+            startX: e.clientX,
+            startY: e.clientY,
+            nodeId,
+            selection: wasSelected ? new Set(selectedNodeIds) : new Set([nodeId]),
+            panStart: { x: 0, y: 0 },
+            pinchZoom0: 1,
+            pinchPan0: { x: 0, y: 0 },
+            pinchMid0: { x: 0, y: 0 },
+            pinchDist0: 0,
+          };
+        }
+      } else {
+        touchGestureRef.current = {
+          mode: 'none',
+          startX: e.clientX,
+          startY: e.clientY,
+          nodeId: null,
+          selection: new Set(),
+          panStart: { x: 0, y: 0 },
+          pinchZoom0: 1,
+          pinchPan0: { x: 0, y: 0 },
+          pinchMid0: { x: 0, y: 0 },
+          pinchDist0: 0,
+        };
+      }
+    } else if (touchPointersRef.current.size === 2) {
+      // Second finger: commit any in-flight node drag (the node stays where
+      // it is; its undo entry was already pushed on first movement), then
+      // enter pinch about the two fingers' midpoint.
+      if (g?.mode === 'node-drag') finalizeNodeDrag();
+      const pts = [...touchPointersRef.current.values()];
+      const p1 = pts[0]!;
+      const p2 = pts[1]!;
+      touchGestureRef.current = {
+        mode: 'pinch',
+        startX: 0,
+        startY: 0,
+        nodeId: null,
+        selection: new Set(),
+        panStart: { x: 0, y: 0 },
+        pinchZoom0: zoom,
+        pinchPan0: pan,
+        pinchMid0: { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 },
+        pinchDist0: Math.hypot(p2.x - p1.x, p2.y - p1.y),
+      };
+    }
+    armTouchDocumentListeners();
   };
 
   const handleAddNode = (type: NodeType, at?: { x: number; y: number }) => {
@@ -4212,6 +4474,7 @@ export default function NodeTopologyEditor({
           onMouseMove={handleCanvasMouseMove}
           onMouseUp={handleCanvasMouseUp}
           onMouseDown={handleCanvasMouseDown}
+          onPointerDown={handleCanvasPointerDown}
           onWheel={handleWheel}
           onContextMenu={(e) => {
             e.preventDefault();

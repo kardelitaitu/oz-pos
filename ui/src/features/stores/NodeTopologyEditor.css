@@ -250,6 +250,10 @@
   flex: 1;
   position: relative;
   background-color: var(--color-bg);
+  /* Touch parity: the canvas owns its gestures (pan/pinch/drag) — without
+     this the browser would hijack touch scrolling/zooming before the
+     pointer handlers see the events. */
+  touch-action: none;
   /* Space held → the next left-drag pans; the grab cursor advertises it. */
   &.canvas-space-pan,
   &.canvas-space-pan * {

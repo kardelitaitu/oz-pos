@@ -114,6 +114,42 @@ afterEach(async () => {
   invalidateCatalog();
 });
 
+// ── PointerEvent polyfill ────────────────────────────────────────
+// jsdom (even v24) does not implement PointerEvent, so fireEvent.pointer*
+// would throw "PointerEvent is not defined". The topology editor's touch
+// parity uses pointer events; this minimal polyfill (MouseEvent subclass
+// carrying the pointer fields) lets component tests drive touch gestures.
+if (typeof window !== 'undefined' && !window.PointerEvent) {
+  class PointerEventPolyfill extends MouseEvent {
+    pointerId: number;
+    pointerType: string;
+    isPrimary: boolean;
+    width: number;
+    height: number;
+    pressure: number;
+    tangentialPressure: number;
+    tiltX: number;
+    tiltY: number;
+    twist: number;
+    constructor(type: string, init: PointerEventInit = {}) {
+      super(type, init);
+      this.pointerId = init.pointerId ?? 0;
+      this.pointerType = init.pointerType ?? 'mouse';
+      this.isPrimary = init.isPrimary ?? true;
+      this.width = init.width ?? 1;
+      this.height = init.height ?? 1;
+      this.pressure = init.pressure ?? 0.5;
+      this.tangentialPressure = init.tangentialPressure ?? 0;
+      this.tiltX = init.tiltX ?? 0;
+      this.tiltY = init.tiltY ?? 0;
+      this.twist = init.twist ?? 0;
+    }
+  }
+  // Expose the same name jsdom would use for the global constructor so
+  // testing-library's createEvent resolves it via window.PointerEvent.
+  window.PointerEvent = PointerEventPolyfill as unknown as typeof PointerEvent;
+}
+
 // matchMedia is not implemented in jsdom; Fluent uses it for
 // responsive layouts. Stub it.
 if (typeof window !== 'undefined' && !window.matchMedia) {
