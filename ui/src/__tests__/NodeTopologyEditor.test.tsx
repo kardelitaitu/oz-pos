@@ -100,12 +100,12 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-port-generic-out': 'Output',
   'topology-port-input-only': 'Input connectors receive connections; choose an output connector first.',
   'topology-validation-missing-location': 'Connect this workspace to a Branch Location using Location In.',
-  'topology-validation-multiple-location': 'A workspace can have only one Location In connection.',
+  'topology-validation-multiple-location': 'A workspace can have only one Location In wire.',
   'topology-validation-missing-branch': 'Add exactly one Branch Location node.',
   'topology-validation-multiple-branches': 'Keep exactly one Branch Location node in this graph.',
   'topology-validation-invalid-purpose': 'This workspace purpose is not supported by its technical type.',
   'topology-node-stock-wire-hint': "Connect a workspace's Stock Out or another Stock Room's output to this Stock Room's Stock In.",
-  'topology-validation-unknown-wire-endpoint': 'This connection references a node that is not in the graph.',
+  'topology-validation-unknown-wire-endpoint': 'This wire references a node that is not in the graph.',
   'topology-field-name': 'Name',
   'topology-field-name-aria': 'Edit name',
   'topology-field-enabled': 'Enabled',
@@ -966,7 +966,7 @@ describe('NodeTopologyEditor Component', () => {
     } as never);
     renderEditor();
     await waitFor(() => expect(getNodeCount()).toBe(2));
-    expect(screen.getByText('This connection references a node that is not in the graph.')).toBeInTheDocument();
+    expect(screen.getByText('This wire references a node that is not in the graph.')).toBeInTheDocument();
   });
 
   it('badges a workspace fed by two Location wires (multiple inputs)', async () => {
@@ -983,7 +983,7 @@ describe('NodeTopologyEditor Component', () => {
     } as never);
     renderEditor();
     await waitFor(() => expect(getNodeCount()).toBe(3));
-    expect(within(nodeAt(2)).getByText('A workspace can have only one Location In connection.')).toBeInTheDocument();
+    expect(within(nodeAt(2)).getByText('A workspace can have only one Location In wire.')).toBeInTheDocument();
   });
 
   it('badges a workspace whose purpose does not match its type', async () => {

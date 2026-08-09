@@ -2434,3 +2434,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 90 — id FTL pass)
 
 **Risks / follow-ups:** the id bundle still mixes "kabel" (wire toggle keys) and "koneksi" (validation keys) for wire — pre-existing, outside the rounds 69-84 key set; and the remaining id values beyond topology were not part of this pass.
+
+### 2026-08-09 — unified wire terminology across both bundles (round 91)
+
+**Problem (round-90 follow-up):** the id bundle split "kabel" (surface keys: routing/labels toggles, delete/rename wire, rename placeholder, delete-many) from "koneksi" (validation prose) — a split that mirrored en's own "wire" (surface) vs "connection" (validation) split, so the en↔id mapping was two words on each side for the same entity.
+
+**Solution (TDD Red→Green, copy):** chose the pair en "wire" ↔ id "koneksi" for the whole topology surface. Red — the two editor assertions that pin the validation copy were strengthened to the new "wire" text and failed against the old stub. Green — (1) en.ftl: the 7 validation keys that called the wire entity "connection" now say "wire" ("This wire references…", "one Location In wire", "Remove one operational wire", etc.); (2) id.ftl: the 7 "kabel" keys became "koneksi" ("Koneksi siku", "Label koneksi", "Hapus koneksi", "semua koneksinya"); (3) the TOPOLOGY_EN stub entries matched. Compound terms that were never the entity noun stayed: "connection type" (picker), "Device connection" (relationship name), "Input connectors receive connections" — those already map connection↔koneksi.
+
+**Verified:** editor 451/451 (Red→Green), i18n lint (parity + dedupe) clean, typecheck clean, eslint 0/0, full UI 4563/4563 unchanged. Test names mentioning "Location In connection" were left alone (descriptions, not copy).
+
+**Commits:** (round 91 — wire terminology)
+
+**Risks / follow-ups:** "koneksi siku" (Elbow connections) and "one Location In wire" read slightly more literally than their predecessors, but the one-to-one mapping is the win; a native-speaker could re-tune the compound phrases without breaking the unification.
