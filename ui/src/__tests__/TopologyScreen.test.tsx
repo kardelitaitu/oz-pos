@@ -46,10 +46,23 @@ vi.mock('@/frontend/shared/Toast', () => ({
   useToast: () => ({ addToast: mockAddToast }),
 }));
 
-vi.mock('@fluent/react', () => ({
-  useLocalization: () => ({ l10n: { getString: (id: string) => id } }),
-  Localized: ({ children }: { id: string; children: React.ReactNode }) => <>{children}</>,
-}));
+vi.mock('@fluent/react', () => {
+  // Minimal stand-in for ErrorBoundary's module-level bundle: it constructs
+  // `new ReactLocalization([bundle])` and formats its emergency fallback
+  // strings via getString. Without this export the whole suite fails to
+  // collect (the mocked module graph resolves ErrorBoundary's import).
+  class ReactLocalization {
+    constructor(_bundles: unknown[]) { /* bundle list accepted for parity */ }
+    getString(id: string) {
+      return id;
+    }
+  }
+  return {
+    useLocalization: () => ({ l10n: { getString: (id: string) => id } }),
+    Localized: ({ children }: { id: string; children: React.ReactNode }) => <>{children}</>,
+    ReactLocalization,
+  };
+});
 
 // Capture the props the screen passes to the editor so tests can drive
 // the save-diff logic without the real canvas.
