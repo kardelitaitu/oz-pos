@@ -673,9 +673,20 @@ export function validateTopologyGraph(
 
   const branches = graph.nodes.filter((node) => node.kind === 'branch-location');
   if (branches.length === 0) {
+    // No branch exists — there is nothing to jump to; the banner is the
+    // only honest surface for this graph-level error.
     errors.push({ code: 'missing-branch-location', messageId: 'topology-validation-missing-branch' });
   } else if (branches.length > 1) {
-    errors.push({ code: 'multiple-branch-locations', messageId: 'topology-validation-multiple-branches' });
+    // Round 108: the extra-branch error is scoped to the SECOND branch —
+    // the node that pushes the count past the required single root — so
+    // the editor renders it as a node-scoped card note with a jump target
+    // instead of a dead-end banner (same class as the round-103
+    // tier-limit scoping). Deterministic by node order.
+    errors.push({
+      code: 'multiple-branch-locations',
+      messageId: 'topology-validation-multiple-branches',
+      nodeId: branches[1]!.id,
+    });
   }
 
   const branchIds = new Set(branches.map((node) => node.id));

@@ -2670,3 +2670,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 107 — two-item tier-limit panel pin)
 
 **Risks / follow-ups:** the tier-limit UX is now pinned end to end (contract shape → panel items → jump). The remaining banner-only error audit (which codes still render graph-level and why) is the natural next analysis slice.
+
+### 2026-08-10 — banner-only audit: scoped the extra-branch error to the second Branch (round 108)
+
+**Problem (round-107 follow-up, the banner-only error audit):** I enumerated every TopologyValidationError emission against the editor's bucketing (nodeId → card note + panel jump; wireId-only → byWire wire marker + banner; neither → banner). One real dead-end of the exact class rounds 103-107 just fixed: `multiple-branch-locations` emitted with NO nodeId — a loaded/pasted diagram with two Branch Location nodes got a banner with nowhere to jump, unlike `branch-location-missing-identity` (already node-scoped). The other banner-only codes are honest graph-level errors: `missing-branch-location` (no branch exists — nothing to jump to), `unsupported-schema-version` (whole graph), and the five wireId-only codes (`invalid-semantic-connection`, `ambiguous-legacy-wire`, `invalid-location-connection`, `duplicate-wire`, `unknown-wire-endpoint`) which DO carry a wire-scoped canvas marker as their anchor.
+
+**Solution (TDD Red→Green):** the contract now scopes `multiple-branch-locations` to the SECOND branch (`branches[1]`) — the node that pushes the count past the required single root — mirroring the round-103 tier-limit precedent. Red: the existing `rejects multiple parents` test tightened to pin `nodeId: 'branch-2'` (failed — no nodeId). Green: emit `branches[1]!.id`, with a comment explaining why `missing-branch-location` deliberately stays graph-level. The editor's `clears the multiple-branch banner live` test survived unchanged — its `getByText` assertion now resolves via the second branch's card note, same as the round-103 tier-limit test.
+
+**Verified:** contract 45/45, topology suites 532/532, full UI 4569/4569, tsc, eslint clean.
+
+**Commits:** (round 108 — extra-branch error scoping)
+
+**Risks / follow-ups:** the two-branch editor render (node-scoped card note + jump) is not individually pinned — the tier-limit pins (rounds 105/107) prove the generic mapping; a 2-branch editor pin mirroring round 105 would close the loop. The five wireId-only codes' banner presence is intentional (wire marker is the anchor) but the panel shows them as static items — a panel wire-item with a jump-to-wire action is a possible future slice.

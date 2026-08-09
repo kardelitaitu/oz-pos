@@ -478,7 +478,12 @@ describe('semantic topology contract', () => {
     ));
 
     expect(errors).toEqual(expect.arrayContaining([
-      expect.objectContaining({ code: 'multiple-branch-locations' }),
+      // Round 108: the extra-branch error is scoped to the SECOND branch —
+      // the node that pushes the count past the required single root — so
+      // the editor renders it as a node-scoped card note with a jump
+      // target instead of a dead-end banner (same class as the round-103
+      // tier-limit scoping).
+      expect.objectContaining({ code: 'multiple-branch-locations', nodeId: 'branch-2' }),
       expect.objectContaining({ code: 'multiple-location-inputs', nodeId: 'ws-1' }),
       expect.objectContaining({ code: 'duplicate-wire', wireId: 'wire-a-duplicate' }),
     ]));
