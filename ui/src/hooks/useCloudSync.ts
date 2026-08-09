@@ -201,13 +201,11 @@ export function useCloudSync(deps: UseCloudSyncDeps): UseCloudSyncReturn {
     // Guard against overlapping runs (auto-sync interval can fire while
     // a manual sync is still in flight).
     if (syncingRef.current) return;
-    if (!serverURL.trim()) {
-      addToast({
-        message: t(l10n, 'settings-sync-toast-fail', 'Sync failed — check server URL and token'),
-        type: 'error',
-      });
-      return;
-    }
+    // The backend is the source of truth for persisted sync settings. Do
+    // not gate this command on the localStorage URL: debug auto-provision
+    // and the Tauri settings command can configure sync before this UI
+    // hydration copy is populated. `sync_run` returns the actionable
+    // configured/disabled or transport error for the operator.
     syncingRef.current = true;
     setSyncing(true);
     try {
@@ -251,7 +249,7 @@ export function useCloudSync(deps: UseCloudSyncDeps): UseCloudSyncReturn {
       syncingRef.current = false;
       setSyncing(false);
     }
-  }, [serverURL, addToast, l10n, refreshPendingCount]);
+  }, [addToast, l10n, refreshPendingCount]);
 
   // `syncNow` is closed over `serverURL` so we hold a ref so the
   // auto-sync interval always invokes the freshest version without

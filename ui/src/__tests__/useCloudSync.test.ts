@@ -4,7 +4,7 @@
 //   1. Lazy localStorage hydration on mount
 //   2. IPC token load on mount (get_setting)
 //   3. persist() routing (localStorage + updateSyncSettings + set_setting)
-//   4. syncNow — empty URL guard, success, backend error, exception, in-flight guard
+//   4. syncNow — persisted-settings delegation, success, backend error, exception, in-flight guard
 //   5. Auto-sync setInterval — setup, fire, cleanup, clamp, in-flight no-double-fire
 //
 // The hook's external dependencies (`@tauri-apps/api/core` for `invoke`,
@@ -264,7 +264,8 @@ describe('useCloudSync', () => {
 
   // 4. syncNow — success / failure / exception / in-flight guard ─
   describe('syncNow', () => {
-    it('shows an error toast when serverURL is empty and does not call syncRun', async () => {
+    it('delegates to sync_run when localStorage has no URL so persisted backend settings remain authoritative', async () => {
+      mocks.syncRun.mockResolvedValue({ synced: 1, failed: 0, error: null });
       const addToast = vi.fn();
       const { result } = await renderHookInAct(() => useCloudSync(makeDeps({ addToast })));
 
@@ -272,10 +273,11 @@ describe('useCloudSync', () => {
         await result.current.syncNow();
       });
 
-      expect(mocks.syncRun).not.toHaveBeenCalled();
+      expect(mocks.syncRun).toHaveBeenCalledTimes(1);
+      expect(result.current.status).toBe('online');
       expect(capturedToasts(addToast)).toContainEqual({
-        message: 'Sync failed — check server URL and token',
-        type: 'error',
+        message: 'Sync completed successfully',
+        type: 'success',
       });
     });
 
