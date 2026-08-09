@@ -118,6 +118,10 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/tax-rates",
             post(routes::tax_rates::create_tax_rate),
         )
+        .route(
+            "/api/v1/tenants/me/plan",
+            get(routes::plans::get_my_plan_handler),
+        )
         .route("/api/v1/users", post(routes::users::create_user))
         .route("/api/v1/sales", post(routes::sales::create_sale))
         .route("/api/v1/sales/{id}", get(routes::sales::get_sale))

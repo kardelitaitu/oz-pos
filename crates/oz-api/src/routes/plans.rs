@@ -7,7 +7,7 @@
 
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Extension, Path, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
@@ -17,6 +17,7 @@ use oz_core::TenantPlan;
 use oz_core::db::Store;
 
 use crate::AppState;
+use crate::auth::ApiTokenClaims;
 use crate::routes::tokens::admin_key_authorised;
 
 /// Request body for setting a tenant's plan.
@@ -24,6 +25,45 @@ use crate::routes::tokens::admin_key_authorised;
 pub struct SetPlanRequest {
     /// `free` or `pro`. Unknown values are rejected (fail closed).
     pub plan: String,
+}
+
+/// `GET /api/v1/tenants/me/plan` — read the caller's own sync plan.
+///
+/// The tenant is taken from the JWT claims (never the URL, so a tenant
+/// cannot spoof another tenant's plan state). A tenant with no plan row is
+/// reported as `free` — the same fail-closed default the sync
+/// `plan_middleware` applies, so the panel shows the effective plan.
+/// Unlike the sync router this endpoint is NOT plan-gated: a free tenant
+/// must be able to read its own plan to render the upgrade prompt.
+pub async fn get_my_plan_handler(
+    State(state): State<AppState>,
+    Extension(claims): Extension<ApiTokenClaims>,
+) -> Response {
+    let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
+
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    let plan = match store.get_tenant_plan(tenant_id) {
+        Ok(Some(plan)) => plan,
+        Ok(None) => TenantPlan::Free,
+        Err(e) => {
+            tracing::error!(error = %e, tenant_id, "reading tenant plan failed");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "plan_read_failed"})),
+            )
+                .into_response();
+        }
+    };
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "tenant_id": tenant_id,
+            "plan": plan.as_db_str(),
+        })),
+    )
+        .into_response()
 }
 
 /// `PUT /api/v1/tenants/{tenant_id}/plan` — assign or change a tenant's plan.
@@ -123,6 +163,70 @@ mod tests {
             builder = builder.header("X-Admin-Key", key);
         }
         builder.body(Body::from(body.to_owned())).unwrap()
+    }
+
+    fn authed_get(uri: &str, tenant_id: Option<&str>) -> Request<Body> {
+        let token = crate::auth::create_token("test", Some(1), tenant_id)
+            .unwrap()
+            .token;
+        Request::builder()
+            .method("GET")
+            .uri(uri)
+            .header("Authorization", format!("Bearer {token}"))
+            .body(Body::empty())
+            .unwrap()
+    }
+
+    // ── Self plan read (ADR sync-plan-gating follow-up) ──────────
+
+    #[tokio::test]
+    async fn get_my_plan_returns_pro_after_set() {
+        let app = test_app();
+        // Seed a pro plan for tenant-a via the admin endpoint.
+        let resp = app
+            .clone()
+            .oneshot(put_plan(
+                "/api/v1/tenants/tenant-a/plan",
+                r#"{"plan":"pro"}"#,
+                None,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let resp = app
+            .oneshot(authed_get("/api/v1/tenants/me/plan", Some("tenant-a")))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert_eq!(json["tenant_id"], "tenant-a");
+        assert_eq!(json["plan"], "pro");
+    }
+
+    #[tokio::test]
+    async fn get_my_plan_defaults_to_free_when_no_row() {
+        let app = test_app();
+        let resp = app
+            .oneshot(authed_get("/api/v1/tenants/me/plan", Some("tenant-nobody")))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = body_json(resp).await;
+        assert_eq!(json["tenant_id"], "tenant-nobody");
+        assert_eq!(json["plan"], "free", "missing row must fail closed to free");
+    }
+
+    #[tokio::test]
+    async fn get_my_plan_requires_auth() {
+        let app = test_app();
+        let req = Request::builder()
+            .method("GET")
+            .uri("/api/v1/tenants/me/plan")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]

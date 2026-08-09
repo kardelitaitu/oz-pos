@@ -36,6 +36,7 @@ pub fn openapi_spec() -> Value {
             { "name": "Users", "description": "User account management" },
             { "name": "Sales", "description": "Sale creation, retrieval, and status transitions" },
             { "name": "Sync", "description": "Offline queue push/pull sync endpoints" },
+            { "name": "Plans", "description": "Tenant cloud sync plans (ADR sync-plan-gating)" },
             { "name": "Webhooks", "description": "Third-party payment provider webhook receivers" }
         ],
         "components": {
@@ -428,6 +429,38 @@ fn build_paths() -> Value {
             }
         },
 
+        // ── Plans (tenant sync plan — ADR sync-plan-gating) ────────
+        "/api/v1/tenants/me/plan": {
+            "get": {
+                "tags": ["Plans"],
+                "summary": "Get the caller's sync plan",
+                "description": "Returns the tenant's cloud sync plan (free or pro) resolved from the JWT claims — a missing plan row reports free (fail closed). Unlike the sync router this endpoint is not plan-gated, so a free tenant can read its own plan to render the upgrade prompt.",
+                "operationId": "getMyPlan",
+                "security": [{ "bearerAuth": [] }],
+                "responses": {
+                    "200": { "description": "Effective plan for the authenticated tenant", "content": { "application/json": { "schema": { "type": "object", "properties": { "tenant_id": { "type": "string" }, "plan": { "type": "string", "enum": ["free", "pro"] } } } } } },
+                    "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                }
+            }
+        },
+        "/api/v1/tenants/{tenant_id}/plan": {
+            "put": {
+                "tags": ["Plans"],
+                "summary": "Set a tenant's sync plan (admin)",
+                "description": "Assigns free or pro to a tenant. Requires the X-Admin-Key header when OZ_ADMIN_KEY is configured; open in dev mode.",
+                "operationId": "setTenantPlan",
+                "parameters": [{ "name": "tenant_id", "in": "path", "required": true, "schema": { "type": "string" } }],
+                "requestBody": {
+                    "content": { "application/json": { "schema": { "type": "object", "properties": { "plan": { "type": "string", "enum": ["free", "pro"] } }, "required": ["plan"] } } }
+                },
+                "responses": {
+                    "200": { "description": "Plan updated", "content": { "application/json": { "schema": { "type": "object", "properties": { "tenant_id": { "type": "string" }, "plan": { "type": "string" } } } } } },
+                    "400": { "description": "Unknown plan name", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "401": { "description": "Missing or invalid admin key", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                }
+            }
+        },
+
         // ── Categories ──────────────────────────────────────────────
         "/api/v1/categories": {
             "get": {
@@ -754,6 +787,14 @@ mod tests {
         assert!(
             paths.contains_key("/api/v1/products/{sku}/stock"),
             "missing stock adjustment"
+        );
+        assert!(
+            paths.contains_key("/api/v1/tenants/me/plan"),
+            "missing self plan read"
+        );
+        assert!(
+            paths.contains_key("/api/v1/tenants/{tenant_id}/plan"),
+            "missing plan set"
         );
         assert!(
             paths.contains_key("/api/v1/categories"),
