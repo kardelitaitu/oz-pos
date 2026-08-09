@@ -2784,3 +2784,17 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** `81e0741c` (fix, after splitting the edit out of the user's `2d7ffc43` docs(sync) commit, which had swept it in — re-created `44b9dae7` docs + `81e0741c` fix, combined tree identical).
 
 **Risks / follow-ups:** none — one-attribute refactor; the wrapper is pinned by the 3 existing test call sites.
+
+### 2026-08-10 — reconsidered the test-only save wrapper: stays test-only (round 115)
+
+**Problem (design question):** round 114 gated `save_topology_json` behind `#[cfg(test)]` after its last production caller migrated to `save_topology_json_at_key`. Reconsidered whether it should instead gain a production caller for unscoped diagram saves.
+
+**Analysis (evidence):** the unscoped save IS a live production path — the frontend calls `save_topology` with no branchId (pinned by `api-ipc-contract.test.ts`), and the command resolves `topology_setting_key(None)` → `TOPOLOGY_SETTING_KEY` → `save_topology_json_at_key`. The wrapper is a byte-equivalent alias of that exact path (same constant, same function), used as a concise abbreviation by **13** test call sites (not 3 — round 114's count was wrong; the grep there accidentally filtered out `save_topology_json(` call lines).
+
+**Decision:** keep it test-only. Wiring it into `save_topology`'s None case would fork the command into two branches and duplicate key resolution for zero behavioral gain; production's single key-resolution + single save is the cleaner expression. The wrapper's doc comment now records this explicitly ("Do NOT wire it into production…") so the decision survives review. Correction: round 114's "three remaining call sites" is wrong — it is 13, all inside `mod tests`.
+
+**Verified:** `cargo check -p oz-pos-app` and `--tests` clean (doc-comment-only change). Tests still unrunnable: `oz-pos-app.exe` stays locked (post-commit graphify background rebuild holds it); left running per the concurrent-tree rule.
+
+**Commits:** `fb46fa57` (docs, split out of the settings agent's `a60c74bf` which swept it in via `git add -A` — re-created `12728584` settings + `fb46fa57` docs, combined tree identical). Second sweep of the session; both splits verified byte-equivalent.
+
+**Risks / follow-ups:** the wrapper's continued existence is now justified in-code; if test counts grow the abbreviation stays worthwhile. Nothing further.
