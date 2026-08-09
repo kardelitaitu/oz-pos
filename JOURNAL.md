@@ -2682,3 +2682,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 108 — extra-branch error scoping)
 
 **Risks / follow-ups:** the two-branch editor render (node-scoped card note + jump) is not individually pinned — the tier-limit pins (rounds 105/107) prove the generic mapping; a 2-branch editor pin mirroring round 105 would close the loop. The five wireId-only codes' banner presence is intentional (wire marker is the anchor) but the panel shows them as static items — a panel wire-item with a jump-to-wire action is a possible future slice.
+
+### 2026-08-10 — pinned the extra-branch error as node-scoped (round 109)
+
+**Problem (round-108 follow-up, journaled):** round 108 scoped multiple-branch-locations to the second Branch's nodeId, and the editor's generic bucketing upgraded it from a dead-end banner to a card note + panel jump — but nothing pinned that rendering, so a contract regression (dropping nodeId) would silently re-introduce the banner.
+
+**Solution (test-only pin):** a new editor describe loads a two-Branch diagram on standard tier and asserts: no graph-level banner; exactly ONE node-scoped panel item named "Branch B" carrying the multiple-branch message (not static); and the item's jump button selects the Branch B card and closes the panel. Mechanism proven live: temporarily stripping `nodeId` from the contract emission failed the test at the first assertion (`expected <div class="topology-validation-banner">…</div> to be null`), then restored byte-exact.
+
+**Verified:** editor 454/454 (+1), topology suites 533/533, tsc, eslint clean. Full UI 4572 with TWO failures — both `CloudSyncSettings.test.tsx`, both caused by the sync agents' UNSTAGED SyncSection.tsx: their new plan-required notice duplicates the "requires a paid plan" / "network unreachable" text an existing test expects once (`Found multiple elements`). Same class as the round-102 sync-CSS gap — their in-flight work, left for them, not mine to edit in a shared tree.
+
+**Commits:** (round 109 — extra-branch node-scoping pin)
+
+**Risks / follow-ups:** the two UX dead-ends found by the banner-only audit (rounds 108-109) are now pinned end to end. Remaining: the five wireId-only codes' panel rows are static — a jump-to-wire panel action is a possible future slice; the agents' CloudSyncSettings conflict is theirs to close.

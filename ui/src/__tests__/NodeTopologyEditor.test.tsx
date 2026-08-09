@@ -8814,3 +8814,64 @@ describe('NodeTopologyEditor — tier-limit error node scoping', () => {
     expect(document.querySelector('.topology-validation-panel')).toBeNull();
   });
 });
+
+// ── Extra-branch error is node-scoped (round 108 follow-up) ──────
+
+describe('NodeTopologyEditor — extra-branch error node scoping', () => {
+  it('renders the multiple-branch error as a node-scoped panel item with a working jump', async () => {
+    // Round 108: the contract scopes multiple-branch-locations to the
+    // SECOND Branch Location, so the editor must render it as a card note
+    // + panel item with a jump button — never the graph-level banner.
+    // This pins that bucketing; a regression to banner-level would
+    // re-introduce the dead-end banner this audit removed.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch A', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'store-2', type: 'store', name: 'Branch B', x: 80, y: 400, store_profile_id: 'store-2' },
+        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [
+        {
+          id: 'w-1',
+          from_node_id: 'store-1',
+          from_port: 'right',
+          to_node_id: 'ws-a',
+          to_port: 'left',
+          direction: 'one-way',
+        },
+      ],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+
+    // The error is node-scoped: no graph-level banner may appear.
+    expect(document.querySelector('.topology-validation-banner')).toBeNull();
+
+    // Open the validation panel via the Issues button.
+    fireEvent.click(document.querySelector('.topology-issues-btn')!);
+    const panel = document.querySelector('.topology-validation-panel');
+    expect(panel).not.toBeNull();
+
+    // The message lives in exactly ONE node-scoped item, pointing at
+    // Branch B — the second Branch Location the contract flags.
+    const matching = Array.from(panel!.querySelectorAll('.topology-validation-item')).filter((el) =>
+      el.textContent?.includes('Keep exactly one Branch Location node in this graph.'),
+    );
+    expect(matching).toHaveLength(1);
+    const item = matching[0]!;
+    expect(item.querySelector('.topology-validation-item-node')?.textContent).toBe('Branch B');
+    expect(item.querySelector('.topology-validation-item-static')).toBeNull();
+
+    // The jump button selects Branch B (the card gains node-selected) and
+    // closes the panel — the node is now front and center.
+    const branchBCard = Array.from(document.querySelectorAll('.topology-node')).find((el) =>
+      el.textContent?.includes('Branch B'),
+    )!;
+    expect(branchBCard.className).not.toContain('node-selected');
+
+    fireEvent.click(item.querySelector('.topology-validation-item-select')!);
+
+    expect(branchBCard.className).toContain('node-selected');
+    expect(document.querySelector('.topology-validation-panel')).toBeNull();
+  });
+});
