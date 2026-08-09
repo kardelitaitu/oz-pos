@@ -1915,3 +1915,15 @@ Key design decision — OCCURRENCE-scoped dismissals: the forget effect drops a 
 Test counts: +6 (editor 344). Full UI 4380 (265 files). Compliance (noise-dither + popover) 11/11. Gates: typecheck, eslint, i18n parity clean.
 
 Commits: this round, scoped to NodeTopologyEditor.tsx/.css/.test.tsx + both FTL bundles + JOURNAL.md.
+
+### 2026-08-09 — Round 49: rAF-throttled cursor HUD readout
+
+Problem: The journaled follow-up — `handleCanvasMouseMove` called `setCursorPos` on EVERY mousemove, re-rendering the whole editor (canvas, wires, minimap, HUD) at input frequency. On large diagrams a simple hover sweep across the canvas churned through dozens of renders per second for a readout nobody reads for logic.
+
+Solution: Red→Green. Red: updated the existing synchronous HUD-cursor test to await a frame, and added two tests — (1) synchronously after a mousemove the readout is still stale (the handler only schedules the frame, it never sets state per event) — failed pre-fix because the update was synchronous; (2) a burst of moves coalesces into the LATEST position (spec guard for the ref-drain: the frame must carry the last coords, not the first). Green: `pendingCursorPosRef` holds the latest coords; the handler schedules at most one rAF per frame which drains the ref into `setCursorPos`; a mount-cleanup effect cancels the pending frame. The wire-preview cursor (`previewCursor`) is deliberately untouched — it only updates while a connection is in flight and must track the pointer, a separate concern from the HUD readout.
+
+Test note: the tests await one frame inside `act` (`requestAnimationFrame` inside the act callback) so the component's frame fires within the act scope — deterministic, no act warnings, no fake timers.
+
+Test counts: +2 (editor 346). Full UI 4382 (265 files). Gates: typecheck, eslint, i18n parity clean (no new FTL keys).
+
+Commits: this round, scoped to NodeTopologyEditor.tsx/.test.tsx + JOURNAL.md.

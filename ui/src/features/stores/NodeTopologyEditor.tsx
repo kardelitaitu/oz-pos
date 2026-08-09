@@ -854,6 +854,19 @@ export default function NodeTopologyEditor({
   /** Cursor position in canvas coords (HUD readout) — null until the
    *  pointer first crosses the canvas. */
   const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
+  /** rAF throttle for the readout: the mousemove handler writes the latest
+   *  coords to a ref and schedules at most ONE state update per frame, so
+   *  large-diagram mousemoves stop re-rendering the editor on every event.
+   *  The readout is display-only — nothing reads cursorPos for logic — so
+   *  the one-frame lag is invisible. */
+  const pendingCursorPosRef = useRef<{ x: number; y: number } | null>(null);
+  const cursorRafRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (cursorRafRef.current !== null) cancelAnimationFrame(cursorRafRef.current);
+    },
+    [],
+  );
   const isPanningRef = useRef(false);
   const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const panCleanupRef = useRef<(() => void) | null>(null);
@@ -2836,10 +2849,18 @@ export default function NodeTopologyEditor({
     mousePosRef.current = { x: e.clientX, y: e.clientY };
     const posRect = canvasRef.current?.getBoundingClientRect();
     if (posRect) {
-      setCursorPos({
+      pendingCursorPosRef.current = {
         x: Math.round((e.clientX - posRect.left - pan.x) / zoom),
         y: Math.round((e.clientY - posRect.top - pan.y) / zoom),
-      });
+      };
+      // Drain the ref once per frame — a burst of moves within a frame
+      // coalesces into a single state update carrying the latest coords.
+      if (cursorRafRef.current === null) {
+        cursorRafRef.current = requestAnimationFrame(() => {
+          cursorRafRef.current = null;
+          setCursorPos(pendingCursorPosRef.current);
+        });
+      }
     }
 
     if (draggingNodeIds.size > 0) {

@@ -5773,14 +5773,54 @@ describe('NodeTopologyEditor — F2 rename & status readouts', () => {
     expect(hud.textContent).toContain('2 selected');
   });
 
-  it('the HUD tracks the cursor position in canvas coords', () => {
+  it('the HUD tracks the cursor position in canvas coords', async () => {
     renderEditor();
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
 
     fireEvent.mouseMove(canvas, { clientX: 120, clientY: 80 });
 
+    // The readout is rAF-throttled — the update lands on the next frame.
+    await act(async () => {
+      await new Promise((r) => requestAnimationFrame(() => r(undefined)));
+    });
+
     const hud = document.querySelector('.canvas-hud') as HTMLElement;
     expect(hud.textContent).toContain('120, 80');
+  });
+
+  it('defers the cursor readout update to the next animation frame', async () => {
+    renderEditor();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    const hud = document.querySelector('.canvas-hud') as HTMLElement;
+
+    fireEvent.mouseMove(canvas, { clientX: 120, clientY: 80 });
+
+    // Synchronously after the event the readout is still stale — the
+    // handler only schedules the frame; it never sets state per event.
+    expect(hud.textContent).not.toContain('120, 80');
+
+    await act(async () => {
+      await new Promise((r) => requestAnimationFrame(() => r(undefined)));
+    });
+    expect(hud.textContent).toContain('120, 80');
+  });
+
+  it('coalesces a burst of moves into the latest position', async () => {
+    renderEditor();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    const hud = document.querySelector('.canvas-hud') as HTMLElement;
+
+    fireEvent.mouseMove(canvas, { clientX: 10, clientY: 10 });
+    fireEvent.mouseMove(canvas, { clientX: 50, clientY: 60 });
+    fireEvent.mouseMove(canvas, { clientX: 200, clientY: 150 });
+
+    await act(async () => {
+      await new Promise((r) => requestAnimationFrame(() => r(undefined)));
+    });
+
+    // The frame drains the LATEST coords — the readout never lags behind
+    // to a mid-burst value even though only one state update ran.
+    expect(hud.textContent).toContain('200, 150');
   });
 });
 
