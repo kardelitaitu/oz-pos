@@ -746,6 +746,11 @@ pub const ALL: &[Migration] = &[
         id: "126_tenant_plans.sql",
         sql: include_str!("../migrations/126_tenant_plans.sql"),
     },
+    // ── Sync plan gating: Stripe customer → tenant mapping for subscription webhooks ──
+    Migration {
+        id: "127_stripe_customers.sql",
+        sql: include_str!("../migrations/127_stripe_customers.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.

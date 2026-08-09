@@ -67,6 +67,7 @@ pub mod loyalty;
 /// Offline queue and sync state.
 pub mod offline;
 pub mod plans;
+pub mod stripe;
 pub use offline::RemoteSyncFailure;
 /// Payment CRUD (tenders, transactions).
 pub mod payments;
