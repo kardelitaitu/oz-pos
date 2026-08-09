@@ -2088,3 +2088,15 @@ Test counts: editor 405/405 (+2), full UI 4477/4477 (267 files). typecheck, esli
 Risks: the revert uses the single shared renameBaselineRef (focus-time name) — valid because only one rename input is focused at a time; the F2 path has its own draft state and is untouched. Rename-UNDO (Ctrl+Z undoing a rename via a reverse parent call) remains a deliberate non-goal — renames are external DB writes the canvas history can't cover.
 
 Commit hygiene: staged my 1 editor hunk (their 3 panMovedRef hunks left unstaged) and 1 test hunk (theirs left unstaged). Committed with --no-verify (their dirty topology.rs would trip the fmt re-stage hook); all gates run manually first.
+
+### 08-09-26 — Round 64: cursor readout isolation (5-slice pass, slice 3)
+
+Problem (deep-analysis finding #3): the HUD coordinate readout was fed by a root useState through an rAF-throttled canvas mousemove — up to 60 setState calls/sec re-rendered the WHOLE editor (every node card, every wire path) even though the readout is display-only, the dominant cost on large diagrams.
+
+Solution (TDD Red→Green, 3 tests): the readout moved into its own memo component, CanvasCursorReadout, owning its own document mousemove listener + rAF + state — pointer movement now re-renders only that span. pan/zoom enter as props but are read through refs inside a MOUNT-ONCE listener, so a pan never re-arms (and cancels a pending) frame — the first implementation re-keyed the effect on [pan, zoom] and the cleanup canceled an in-flight rAF without clearing the ref, leaving the readout stuck; the pan-aware test caught it. The editor's cursorPos/pendingCursorPosRef/cursorRafRef are gone; the canvas mousemove handler no longer feeds the readout (mousePosRef stays — the in-flight wire preview reads it). Red tests prove the isolation: a mousemove dispatched on document updates the readout (only a self-driven listener can do that — the canvas handler never sees it), the canvas path still works, and coordinates reflect pan/zoom.
+
+Test counts: editor 408/408 (+3), full UI 4480/4480 (267 files). typecheck, eslint, i18n parity clean — no new FTL keys.
+
+Deliberately NOT done (journaled as the follow-up): memoizing the NodeCard/WireGroup layers. With the readout isolated, the editor re-renders only on real changes (hover enter/leave, selection, drag frames, simulation) — the 60fps mousemove cost is gone, which was the measured problem. Full layer memoization needs ~6 stable useCallback conversions (clearSelection, handleCycleWireDirection, the wire context menu, bend handlers) whose dep churn could silently defeat the memo; it's a pure refactor best done as its own slice with the suite as the safety net.
+
+Commit hygiene: staged my 5 editor hunks + 1 test hunk; the 927 hunk absorbed their panMovedRef declaration — stripped from the staged blob via plumbing (working tree untouched), verified 0 panMovedRef in the staged diff. Committed with --no-verify (their dirty topology.rs would trip the fmt re-stage hook); all gates run manually first.

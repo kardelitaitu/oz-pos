@@ -4289,6 +4289,53 @@ describe('NodeTopologyEditor — edge auto-pan while dragging', () => {
   });
 });
 
+// ── Cursor readout isolation ────────────────────────────────────
+// The HUD coordinate readout lives in its own rAF-owning component with
+// its own document mousemove listener, so pointer movement re-renders the
+// readout alone — never the whole editor (which used to re-render up to
+// 60×/sec while the mouse moved over a large diagram).
+
+describe('NodeTopologyEditor — cursor readout isolation', () => {
+  beforeEach(() => {
+    mockLoadTopology.mockResolvedValue(null);
+  });
+
+  it('updates from its OWN document-level listener, not the canvas handler', async () => {
+    renderEditor();
+    expect(document.querySelector('.canvas-hud-cursor')?.textContent).toBe('—');
+
+    // A move on `document` never reaches the canvas's onMouseMove — only a
+    // self-driven listener can update the readout. Pre-fix this stays '—'.
+    fireEvent.mouseMove(document, { clientX: 200, clientY: 88 });
+    await waitFor(() => expect(document.querySelector('.canvas-hud-cursor')?.textContent).toBe('200, 88'));
+  });
+
+  it('still shows canvas coordinates when the pointer moves over the canvas', async () => {
+    renderEditor();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    fireEvent.mouseMove(canvas, { clientX: 123, clientY: 45 });
+    await waitFor(() => expect(document.querySelector('.canvas-hud-cursor')?.textContent).toBe('123, 45'));
+  });
+
+  it('reflects the current pan/zoom in the displayed coordinates', async () => {
+    renderEditor();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    const viewport = document.querySelector('.node-canvas-viewport') as HTMLElement;
+
+    // Pan the viewport, then move the pointer: the readout is in CANVAS
+    // coords (pan subtracted), so a (150, 50) screen point with pan (50, 0)
+    // reads as canvas (100, 50).
+    fireEvent.mouseDown(canvas, { button: 1, clientX: 100, clientY: 100 });
+    fireEvent.mouseMove(document, { clientX: 150, clientY: 100 });
+    fireEvent.mouseUp(document, { button: 1 });
+    expect(viewport.style.transform).toContain('translate(50px, 0px)');
+
+    fireEvent.mouseMove(canvas, { clientX: 150, clientY: 50 });
+    await waitFor(() => expect(document.querySelector('.canvas-hud-cursor')?.textContent).toBe('100, 50'));
+  });
+});
+
 // ── Multi-select, marquee, group drag, batch delete ────────────
 
 describe('NodeTopologyEditor — multi-select & marquee', () => {

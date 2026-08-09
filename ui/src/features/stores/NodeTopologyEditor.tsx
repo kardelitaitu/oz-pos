@@ -563,6 +563,58 @@ const graphIssueKey = (messageId: string) => `graph:${messageId}`;
  *  issue set, short enough to feel responsive. */
 const ISSUES_COUNT_SETTLE_MS = 300;
 
+/** HUD cursor-position readout, isolated in its own memo component with
+ *  its own document mousemove listener and rAF throttle. The readout is
+ *  display-only, so a burst of moves coalesces into at most ONE state
+ *  update per frame — and that update is LOCAL to this span, so pointer
+ *  movement over a large diagram never re-renders the editor (which used
+ *  to re-render every node card and wire path up to 60×/sec). pan/zoom
+ *  come in as props so the conversion to canvas coords stays current. */
+const CanvasCursorReadout = memo(function CanvasCursorReadout({ pan, zoom }: { pan: { x: number; y: number }; zoom: number }) {
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const pendingRef = useRef<{ x: number; y: number } | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const elRef = useRef<HTMLSpanElement>(null);
+  // Mount-once listener: pan/zoom are read via refs inside the handler so a
+  // pan/zoom change never re-arms (and cancels a pending) rAF. Re-arming on
+  // every pan would ALSO cancel an in-flight frame — leaving the readout
+  // stuck until the next move re-schedules.
+  const panRef = useRef(pan);
+  panRef.current = pan;
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      // The readout lives inside the canvas container; its rect is the
+      // viewport origin for the pan/zoom conversion.
+      const rect = elRef.current?.closest('.node-canvas-container')?.getBoundingClientRect();
+      if (!rect) return;
+      pendingRef.current = {
+        x: Math.round((e.clientX - rect.left - panRef.current.x) / zoomRef.current),
+        y: Math.round((e.clientY - rect.top - panRef.current.y) / zoomRef.current),
+      };
+      if (rafRef.current === null) {
+        rafRef.current = requestAnimationFrame(() => {
+          rafRef.current = null;
+          setPos(pendingRef.current);
+        });
+      }
+    };
+    document.addEventListener('mousemove', onMove);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
+
+  return (
+    <span ref={elRef} className="canvas-hud-item canvas-hud-cursor">
+      {pos ? `${pos.x}, ${pos.y}` : '—'}
+    </span>
+  );
+});
+
 /** Settled issues-count readout for the validation button. Receives the
  *  LIVE count on every validation recompute but only commits it (with a
  *  pop animation) once the value holds steady for
@@ -927,22 +979,11 @@ export default function NodeTopologyEditor({
    *  — drives the wire preview so it follows the pointer, not just the
    *  last hovered target. */
   const [previewCursor, setPreviewCursor] = useState<{ x: number; y: number } | null>(null);
-  /** Cursor position in canvas coords (HUD readout) — null until the
-   *  pointer first crosses the canvas. */
-  const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
-  /** rAF throttle for the readout: the mousemove handler writes the latest
-   *  coords to a ref and schedules at most ONE state update per frame, so
-   *  large-diagram mousemoves stop re-rendering the editor on every event.
-   *  The readout is display-only — nothing reads cursorPos for logic — so
-   *  the one-frame lag is invisible. */
-  const pendingCursorPosRef = useRef<{ x: number; y: number } | null>(null);
-  const cursorRafRef = useRef<number | null>(null);
-  useEffect(
-    () => () => {
-      if (cursorRafRef.current !== null) cancelAnimationFrame(cursorRafRef.current);
-    },
-    [],
-  );
+  /** Latest pointer position for the in-flight wire preview (the
+   *  connection line follows the last cursor position when no socket is
+   *  hovered). Ref-only — the readout no longer needs it; CanvasCursorReadout
+   *  owns its own listener and rAF. */
+  const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const isPanningRef = useRef(false);
   const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const panCleanupRef = useRef<(() => void) | null>(null);
@@ -985,7 +1026,6 @@ export default function NodeTopologyEditor({
   const [connectingFromPort, setConnectingFromPort] = useState<PortName | null>(null);
   /** Nearest target port while dragging a connection, for snap-to-port preview. */
   const [hoveredTarget, setHoveredTarget] = useState<{ nodeId: string; port: PortName; variantIndex: number } | null>(null);
-  const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   /** Mirror of `history` state for synchronous reads in undo/redo handlers. */
@@ -3145,22 +3185,9 @@ export default function NodeTopologyEditor({
 
   const handleCanvasMouseMove = (e: React.MouseEvent) => {
     mousePosRef.current = { x: e.clientX, y: e.clientY };
-    const posRect = canvasRef.current?.getBoundingClientRect();
-    if (posRect) {
-      pendingCursorPosRef.current = {
-        x: Math.round((e.clientX - posRect.left - pan.x) / zoom),
-        y: Math.round((e.clientY - posRect.top - pan.y) / zoom),
-      };
-      // Drain the ref once per frame — a burst of moves within a frame
-      // coalesces into a single state update carrying the latest coords.
-      if (cursorRafRef.current === null) {
-        cursorRafRef.current = requestAnimationFrame(() => {
-          cursorRafRef.current = null;
-          setCursorPos(pendingCursorPosRef.current);
-        });
-      }
-    }
-
+    // NOTE: the HUD cursor readout is NOT fed here — CanvasCursorReadout
+    // owns its own document listener + rAF, so canvas mousemoves re-render
+    // only that span, never the editor.
     applyDragMove(e.clientX, e.clientY);
     if (marqueeStartRef.current) {
       // Marquee: track the drag rect in container-relative screen px.
@@ -5386,7 +5413,7 @@ export default function NodeTopologyEditor({
             <span className="canvas-hud-divider" />
             <span className="canvas-hud-item">{l10n.getString('topology-hud-wires', { count: wires.length })}</span>
             <span className="canvas-hud-divider" />
-            <span className="canvas-hud-item canvas-hud-cursor">{cursorPos ? `${cursorPos.x}, ${cursorPos.y}` : '—'}</span>
+            <CanvasCursorReadout pan={pan} zoom={zoom} />
             <span className="canvas-hud-divider" />
             <span className="canvas-hud-item">{l10n.getString('topology-status-selection', { count: selectedNodeIds.size })}</span>
           </div>
