@@ -240,6 +240,24 @@ describe('topology.ts IPC contract', () => {
     expect(mockInvoke).toHaveBeenCalledWith('load_topology', undefined);
   });
 
+  it('loadTopology invokes "load_topology" with a branch id', async () => {
+    mockInvoke.mockResolvedValue(null);
+    await loadTopology('branch-a');
+    expect(mockInvoke).toHaveBeenCalledWith('load_topology', { branchId: 'branch-a' });
+  });
+
+  it('saveTopology invokes "save_topology" with a branch id', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    const nodes = [{ id: 'n1', type: 'store', name: 'Main', x: 0, y: 0 }];
+    const wires = [{ id: 'w1', from_node_id: 'n1', to_node_id: 'n2', direction: 'one-way' }];
+    await saveTopology(nodes, wires, 'branch-a');
+    expect(mockInvoke).toHaveBeenCalledWith('save_topology', {
+      nodes,
+      wires,
+      branchId: 'branch-a',
+    });
+  });
+
   it('applyTopologyDiff invokes "apply_topology_diff" with full diff payload', async () => {
     mockInvoke.mockResolvedValue(undefined);
     const nodes = [{ id: 'n1', type: 'store', name: 'S', x: 0, y: 0 }];
@@ -255,6 +273,20 @@ describe('topology.ts IPC contract', () => {
       workspaceArchives: archives,
       diagramNodes: nodes,
       diagramWires: wires,
+    });
+  });
+
+  it('applyTopologyDiff includes the active branch id when provided', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await applyTopologyDiff('tok', [], [], [], [], [], 'branch-a');
+    expect(mockInvoke).toHaveBeenCalledWith('apply_topology_diff', {
+      sessionToken: 'tok',
+      workspaceCreations: [],
+      workspaceUpdates: [],
+      workspaceArchives: [],
+      diagramNodes: [],
+      diagramWires: [],
+      branchId: 'branch-a',
     });
   });
 

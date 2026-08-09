@@ -1,7 +1,7 @@
 // ── Topology Persistence ───────────────────────────────────────────
-// Save / load the node topology graph via Tauri IPC.  The backend
-// serialises nodes + wires as JSON and stores them in the settings
-// table under the key `oz-pos/topology`.
+// Save / load the node topology graph via Tauri IPC. The backend
+// serialises nodes + wires as JSON and stores each branch under a
+// branch-specific settings key derived from `oz-pos/topology`.
 
 import { loggedInvoke } from '@/utils/logged-invoke';
 
@@ -48,15 +48,24 @@ export interface TopologyData {
   wires: TopologyWirePayload[];
 }
 
-/** Persist the topology graph. Overwrites any previous save. */
+/** Persist the topology graph for one branch. Overwrites that branch's save. */
 export const saveTopology = (
   nodes: TopologyNodePayload[],
   wires: TopologyWirePayload[],
-): Promise<void> => loggedInvoke('save_topology', { nodes, wires });
+  branchId?: string,
+): Promise<void> =>
+  loggedInvoke('save_topology', {
+    nodes,
+    wires,
+    ...(branchId !== undefined ? { branchId } : {}),
+  });
 
-/** Load the persisted topology graph, or `null` if none saved yet. */
-export const loadTopology = (): Promise<TopologyData | null> =>
-  loggedInvoke<TopologyData | null>('load_topology');
+/** Load the persisted topology graph for a branch, or `null` if none saved yet. */
+export const loadTopology = (branchId?: string): Promise<TopologyData | null> =>
+  loggedInvoke<TopologyData | null>(
+    'load_topology',
+    branchId !== undefined ? { branchId } : undefined,
+  );
 
 // ── Atomic topology diff (Critical #4) ───────────────────────────
 
@@ -90,7 +99,8 @@ export interface UpdateInstanceRequest {
  *
  * Creates, updates, and archives workspace instances within a single
  * SQLite transaction on the store database, then saves the topology
- * diagram (nodes + wires) on the global database.
+ * diagram (nodes + wires) on the global database under the selected branch
+ * identity.
  *
  * Replaces the previous pattern of 4+ sequential `await` calls
  * (createWorkspaceInstanceScoped, updateWorkspaceInstanceScoped,
@@ -104,6 +114,7 @@ export const applyTopologyDiff = (
   workspaceArchives: string[],
   diagramNodes: TopologyNodePayload[],
   diagramWires: TopologyWirePayload[],
+  branchId?: string,
 ): Promise<void> =>
   loggedInvoke('apply_topology_diff', {
     sessionToken,
@@ -112,4 +123,5 @@ export const applyTopologyDiff = (
     workspaceArchives,
     diagramNodes,
     diagramWires,
+    ...(branchId !== undefined ? { branchId } : {}),
   });

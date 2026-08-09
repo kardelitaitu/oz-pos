@@ -5555,6 +5555,11 @@ describe('NodeTopologyEditor — per-branch viewport memory', () => {
     renderEditor({ branchId: 'fresh-branch' });
     expect(zoomLevel()).toBe('100%');
   });
+
+  it('loads topology data for the active branch', async () => {
+    renderEditor({ branchId: 'branch-a' });
+    await waitFor(() => expect(mockLoadTopology).toHaveBeenCalledWith('branch-a'));
+  });
 });
 
 // ── Node finder (Ctrl+F) ────────────────────────────────────────

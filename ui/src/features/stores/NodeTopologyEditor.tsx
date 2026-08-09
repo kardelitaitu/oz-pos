@@ -1402,7 +1402,7 @@ export default function NodeTopologyEditor({
       return;
     }
     let cancelled = false;
-    loadTopology()
+    loadTopology(branchId)
       .then((data) => {
         // Build a lookup of saved node positions/metadata (the diagram layer).
         const savedById = new Map<string, TopologyNodeData>();

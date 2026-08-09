@@ -267,8 +267,55 @@ const TOPOLOGY_SETTING_KEY: &str = "oz-pos/topology";
 const TOPOLOGY_APPLY_RECOVERY_KEY: &str = "oz-pos/topology/apply-recovery";
 const TOPOLOGY_SCHEMA_VERSION: u64 = 1;
 
+/// Resolve the settings key for one branch topology.
+///
+/// The unscoped key remains the compatibility path for legacy callers. New
+/// branch-aware callers always use a separate key, so one branch can never
+/// overwrite another branch's diagram.
+fn topology_setting_key(branch_id: Option<&str>) -> Result<String, AppError> {
+    let Some(branch_id) = branch_id else {
+        return Ok(TOPOLOGY_SETTING_KEY.to_owned());
+    };
+    if branch_id.trim().is_empty()
+        || branch_id.len() > 200
+        || branch_id.chars().any(|ch| ch.is_control() || ch == '/')
+    {
+        return Err(AppError::Invalid(
+            "topology branch id contains invalid characters".into(),
+        ));
+    }
+    Ok(format!("{TOPOLOGY_SETTING_KEY}/{branch_id}"))
+}
+
 fn value_string<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
     value.get(key).and_then(Value::as_str)
+}
+
+/// Allow a canonical legacy diagram to be read once by its matching branch.
+///
+/// Unscoped diagrams without a stable `store_profile_id` are intentionally
+/// not guessed into a branch: doing so would recreate the cross-branch leak
+/// this key split is meant to prevent.
+fn legacy_topology_belongs_to_branch(value: &Value, branch_id: &str) -> Result<bool, AppError> {
+    let (nodes, wires) = if value.get("schema_version").is_some() {
+        validate_topology_envelope(value)?
+    } else {
+        let object = value
+            .as_object()
+            .ok_or_else(|| AppError::Internal("topology payload must be an object".into()))?;
+        let nodes = object
+            .get("nodes")
+            .and_then(Value::as_array)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        let wires = object
+            .get("wires")
+            .and_then(Value::as_array)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        (nodes, wires)
+    };
+    Ok(semantic_branch_profile_id(nodes, wires) == Some(branch_id))
 }
 
 fn topology_validation(
@@ -325,8 +372,9 @@ fn semantic_branch_profile_id<'a>(nodes: &'a [Value], wires: &[Value]) -> Option
 ///
 /// Legacy geometric payloads remain readable during migration. A payload that
 /// contains semantic ownership fields is validated strictly: it must contain
-/// one identified Branch Location and every workspace must have exactly one
-/// `location-out` to `location-in` edge. Geometry and display names are never
+/// one identified Branch Location, every non-KDS workspace must have exactly
+/// one `location-out` to `location-in` edge, and every KDS must have exactly
+/// one Restaurant POS operation feed. Geometry and display names are never
 /// used to infer ownership here.
 fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), AppError> {
     if !has_semantic_fields(nodes, wires) {
@@ -471,26 +519,53 @@ fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), AppErr
                 ),
             ));
         }
-        let incoming = wires
-            .iter()
-            .filter(|wire| {
-                value_string(wire, "relationship_type") == Some("location")
-                    && value_string(wire, "to_node_id") == Some(workspace_id)
-                    && value_string(wire, "to_port_id") == Some("location-in")
-            })
-            .count();
+        let is_kds = type_key == "kds";
+        let incoming = if is_kds {
+            wires
+                .iter()
+                .filter(|wire| {
+                    value_string(wire, "relationship_type") == Some("generic")
+                        && value_string(wire, "to_node_id") == Some(workspace_id)
+                        && value_string(wire, "to_port_id") == Some("operation-in")
+                })
+                .count()
+        } else {
+            wires
+                .iter()
+                .filter(|wire| {
+                    value_string(wire, "relationship_type") == Some("location")
+                        && value_string(wire, "to_node_id") == Some(workspace_id)
+                        && value_string(wire, "to_port_id") == Some("location-in")
+                })
+                .count()
+        };
         if incoming != 1 {
             return Err(topology_validation(
                 if incoming == 0 {
-                    "missing-location-input"
+                    if is_kds {
+                        "missing-operation-input"
+                    } else {
+                        "missing-location-input"
+                    }
+                } else if is_kds {
+                    "multiple-operation-inputs"
                 } else {
                     "multiple-location-inputs"
                 },
                 Some(workspace_id),
                 None,
-                Some("location-in"),
+                Some(if is_kds {
+                    "operation-in"
+                } else {
+                    "location-in"
+                }),
                 format!(
-                    "workspace {workspace_id} requires exactly one Location In connection, found {incoming}"
+                    "workspace {workspace_id} requires exactly one {} connection, found {incoming}",
+                    if is_kds {
+                        "Operation In"
+                    } else {
+                        "Location In"
+                    }
                 ),
             ));
         }
@@ -565,10 +640,11 @@ fn require_load_id(value: &Value, what: &str) -> Result<(), AppError> {
     Ok(())
 }
 
-fn save_topology_json(
+fn save_topology_json_at_key(
     conn: &Connection,
     nodes: Vec<Value>,
     wires: Vec<Value>,
+    setting_key: &str,
 ) -> Result<(), AppError> {
     validate_semantic_ownership(conn, &nodes, &wires)?;
     // The legacy typed structs validate geometry and known serialized node
@@ -600,9 +676,18 @@ fn save_topology_json(
     let json = serde_json::to_string(&envelope)
         .map_err(|e| AppError::Internal(format!("serialize topology: {e}")))?;
     let tx = conn.unchecked_transaction()?;
-    oz_core::Settings::set(&tx, TOPOLOGY_SETTING_KEY, &json)?;
+    oz_core::Settings::set(&tx, setting_key, &json)?;
     tx.commit()?;
     Ok(())
+}
+
+/// Compatibility wrapper for unscoped legacy callers and unit tests.
+fn save_topology_json(
+    conn: &Connection,
+    nodes: Vec<Value>,
+    wires: Vec<Value>,
+) -> Result<(), AppError> {
+    save_topology_json_at_key(conn, nodes, wires, TOPOLOGY_SETTING_KEY)
 }
 
 /// Snapshot of a workspace row touched by a topology Apply.
@@ -619,6 +704,8 @@ struct WorkspaceApplySnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct TopologyApplyRecovery {
     store_id: String,
+    #[serde(default)]
+    topology_branch_id: Option<String>,
     creations: Vec<CreateInstanceRequest>,
     snapshots: Vec<WorkspaceApplySnapshot>,
     previous_topology: Option<String>,
@@ -630,12 +717,16 @@ struct TopologyApplyRecovery {
 /// databases, so Apply uses a forward-write plus compensation boundary. The
 /// restore itself is transactional and preserves the exact prior raw setting,
 /// including legacy envelopes.
-fn restore_topology_setting(conn: &Connection, previous: Option<&str>) -> Result<(), AppError> {
+fn restore_topology_setting(
+    conn: &Connection,
+    setting_key: &str,
+    previous: Option<&str>,
+) -> Result<(), AppError> {
     let tx = conn.unchecked_transaction()?;
     match previous {
-        Some(json) => oz_core::Settings::set(&tx, TOPOLOGY_SETTING_KEY, json)?,
+        Some(json) => oz_core::Settings::set(&tx, setting_key, json)?,
         None => {
-            oz_core::Settings::remove(&tx, TOPOLOGY_SETTING_KEY)?;
+            oz_core::Settings::remove(&tx, setting_key)?;
         }
     }
     tx.commit()?;
@@ -694,7 +785,8 @@ async fn recover_pending_topology_apply(
     .await?;
     {
         let db = state.db.lock().await;
-        restore_topology_setting(&db, recovery.previous_topology.as_deref())?;
+        let setting_key = topology_setting_key(recovery.topology_branch_id.as_deref())?;
+        restore_topology_setting(&db, &setting_key, recovery.previous_topology.as_deref())?;
         clear_topology_recovery(&db)?;
     }
     Ok(())
@@ -1082,10 +1174,12 @@ pub fn load_topology_data(conn: &Connection) -> Result<Option<TopologyData>, App
 pub async fn save_topology(
     nodes: Vec<Value>,
     wires: Vec<Value>,
+    branch_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
+    let setting_key = topology_setting_key(branch_id.as_deref())?;
     let conn = state.db.lock().await;
-    save_topology_json(&conn, nodes, wires)
+    save_topology_json_at_key(&conn, nodes, wires, &setting_key)
 }
 
 /// Load the persisted topology graph.
@@ -1103,9 +1197,33 @@ pub async fn save_topology(
 /// corrupt value would brick the whole topology instead of letting the
 /// editor repair it.
 #[tauri::command]
-pub async fn load_topology(state: State<'_, AppState>) -> Result<Option<Value>, AppError> {
+pub async fn load_topology(
+    branch_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Option<Value>, AppError> {
+    let setting_key = topology_setting_key(branch_id.as_deref())?;
     let conn = state.db.lock().await;
-    let raw = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)?;
+    let raw = match oz_core::Settings::get(&conn, &setting_key)? {
+        Some(json) => Some(json),
+        None => {
+            // Migrate only an old diagram whose canonical branch identity
+            // proves it belongs to this branch. Ambiguous legacy geometry is
+            // left unassigned rather than leaked into every branch.
+            let Some(branch_id) = branch_id.as_deref() else {
+                return Ok(None);
+            };
+            let Some(legacy_json) = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)? else {
+                return Ok(None);
+            };
+            let value: Value = serde_json::from_str(&legacy_json)
+                .map_err(|e| AppError::Internal(format!("invalid topology JSON: {e}")))?;
+            if legacy_topology_belongs_to_branch(&value, branch_id)? {
+                Some(legacy_json)
+            } else {
+                None
+            }
+        }
+    };
     let Some(json) = raw else {
         return Ok(None);
     };
@@ -1174,9 +1292,11 @@ pub async fn apply_topology_diff(
     workspace_archives: Vec<String>,
     diagram_nodes: Vec<Value>,
     diagram_wires: Vec<Value>,
+    branch_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    let topology_key = topology_setting_key(branch_id.as_deref())?;
     recover_pending_topology_apply(&state, &session.store_id).await?;
 
     // Reject malformed graphs before any workspace mutation. Legacy
@@ -1200,7 +1320,7 @@ pub async fn apply_topology_diff(
     // compensated from this snapshot.
     let previous_topology = {
         let global_db = state.db.lock().await;
-        oz_core::Settings::get(&global_db, TOPOLOGY_SETTING_KEY)?
+        oz_core::Settings::get(&global_db, &topology_key)?
     };
 
     // Snapshot all pre-existing rows that a later compensation may need to restore.
@@ -1220,6 +1340,19 @@ pub async fn apply_topology_diff(
             return Err(AppError::PermissionDenied(format!(
                 "topology Branch Location {branch_profile_id} is outside the session store"
             )));
+        }
+        if let Some(requested_branch_id) = branch_id.as_deref()
+            && requested_branch_id != branch_profile_id
+        {
+            return Err(topology_validation(
+                "branch-id-mismatch",
+                None,
+                None,
+                None,
+                format!(
+                    "topology branch {requested_branch_id} does not match Branch Location {branch_profile_id}"
+                ),
+            ));
         }
         for creation in &workspace_creations {
             if creation.store_id != branch_profile_id {
@@ -1449,13 +1582,16 @@ pub async fn apply_topology_diff(
     // This `.await` is now safe — all non-`Send` types from the store
     // DB block have been dropped.
     let global_db = state.db.lock().await;
-    if let Err(save_error) = save_topology_json(&global_db, diagram_nodes, diagram_wires) {
+    if let Err(save_error) =
+        save_topology_json_at_key(&global_db, diagram_nodes, diagram_wires, &topology_key)
+    {
         drop(global_db);
         // Journal the compensation before attempting it. If the process or a
         // database lock interrupts recovery, the next Apply retries the exact
         // same restoration instead of leaving an undiagnosed partial state.
         let recovery = TopologyApplyRecovery {
             store_id: session.store_id.clone(),
+            topology_branch_id: branch_id.clone(),
             creations: workspace_creations.clone(),
             snapshots: workspace_snapshot.clone(),
             previous_topology: previous_topology.clone(),
@@ -1483,7 +1619,7 @@ pub async fn apply_topology_diff(
         }
         let restore = {
             let db = state.db.lock().await;
-            restore_topology_setting(&db, previous_topology.as_deref())
+            restore_topology_setting(&db, &topology_key, previous_topology.as_deref())
         };
         if let Err(restore_error) = restore {
             return Err(AppError::Internal(format!(
@@ -1576,6 +1712,77 @@ mod tests {
     }
 
     #[test]
+    fn branch_topology_settings_are_isolated() {
+        let conn = fresh_conn();
+        let branch_a_key = topology_setting_key(Some("branch-a")).unwrap();
+        let branch_b_key = topology_setting_key(Some("branch-b")).unwrap();
+
+        save_topology_json_at_key(
+            &conn,
+            vec![serde_json::json!({
+                "id": "branch-a",
+                "type": "store",
+                "name": "Branch A",
+                "x": 0.0,
+                "y": 0.0,
+            })],
+            vec![],
+            &branch_a_key,
+        )
+        .unwrap();
+        save_topology_json_at_key(
+            &conn,
+            vec![serde_json::json!({
+                "id": "branch-b",
+                "type": "store",
+                "name": "Branch B",
+                "x": 0.0,
+                "y": 0.0,
+            })],
+            vec![],
+            &branch_b_key,
+        )
+        .unwrap();
+
+        let a = oz_core::Settings::get(&conn, &branch_a_key)
+            .unwrap()
+            .unwrap();
+        let b = oz_core::Settings::get(&conn, &branch_b_key)
+            .unwrap()
+            .unwrap();
+        assert!(a.contains("branch-a"));
+        assert!(!a.contains("branch-b"));
+        assert!(b.contains("branch-b"));
+        assert!(!b.contains("branch-a"));
+        assert!(
+            oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn topology_setting_key_rejects_path_injection() {
+        let result = topology_setting_key(Some("branch/a"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn legacy_topology_is_only_migrated_for_matching_branch() {
+        let value = serde_json::json!({
+            "schema_version": TOPOLOGY_SCHEMA_VERSION,
+            "nodes": [{
+                "id": "branch-a",
+                "type": "branch-location",
+                "store_profile_id": "branch-a"
+            }],
+            "wires": []
+        });
+        assert!(legacy_topology_belongs_to_branch(&value, "branch-a").unwrap());
+        assert!(!legacy_topology_belongs_to_branch(&value, "branch-b").unwrap());
+    }
+
+    #[test]
     fn semantic_save_preserves_bend_points() {
         // The command envelope persists the RAW wire payload (save_topology_json
         // writes `wires: Vec<Value>` untouched after validation), so the editor's
@@ -1640,6 +1847,37 @@ mod tests {
             .unwrap();
         let value: Value = serde_json::from_str(&raw).unwrap();
         assert_eq!(value["wires"][0]["direction"], "reverse");
+    }
+
+    #[test]
+    fn semantic_save_accepts_kds_operation_feed_from_restaurant_pos() {
+        let conn = fresh_conn();
+        let mut resto = semantic_node("resto-pos", "workspace", None);
+        resto["metadata"] = serde_json::json!({ "typeKey": "restaurant-pos" });
+        let mut kds = semantic_node("kds", "workspace", None);
+        kds["metadata"] = serde_json::json!({ "typeKey": "kds" });
+        let operation_wire = serde_json::json!({
+            "id": "wire-resto-kds",
+            "from_node_id": "resto-pos",
+            "to_node_id": "kds",
+            "direction": "one-way",
+            "from_port_id": "operation-out",
+            "to_port_id": "operation-in",
+            "relationship_type": "generic",
+        });
+        let result = save_topology_json(
+            &conn,
+            vec![
+                semantic_node("branch", "branch-location", Some("default")),
+                resto,
+                kds,
+            ],
+            vec![
+                semantic_location_wire("wire-resto-location", "resto-pos"),
+                operation_wire,
+            ],
+        );
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -5334,11 +5572,12 @@ mod tests {
         save_topology(
             vec![serde_json::to_value(make_node_cmd("n1")).unwrap()],
             vec![],
+            None,
             app.state(),
         )
         .await
         .unwrap();
-        let loaded = load_topology(app.state()).await.unwrap();
+        let loaded = load_topology(None, app.state()).await.unwrap();
         assert!(loaded.is_some());
         let data = loaded.unwrap();
         assert_eq!(data["nodes"].as_array().unwrap().len(), 1);
@@ -5362,6 +5601,7 @@ mod tests {
         save_topology(
             vec![serde_json::to_value(make_node_cmd("first")).unwrap()],
             vec![],
+            None,
             app.state(),
         )
         .await
@@ -5369,14 +5609,57 @@ mod tests {
         save_topology(
             vec![serde_json::to_value(make_node_cmd("second")).unwrap()],
             vec![],
+            None,
             app.state(),
         )
         .await
         .unwrap();
 
-        let loaded = load_topology(app.state()).await.unwrap().unwrap();
+        let loaded = load_topology(None, app.state()).await.unwrap().unwrap();
         assert_eq!(loaded["nodes"].as_array().unwrap().len(), 1);
         assert_eq!(loaded["nodes"][0]["id"], "second");
+    }
+
+    #[tokio::test]
+    async fn tauri_topology_commands_are_branch_scoped() {
+        let state = AppState::for_test();
+        {
+            let mut conn = state.db.lock().await;
+            migrations::run(&mut conn).unwrap();
+        }
+
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        save_topology(
+            vec![serde_json::to_value(make_node_cmd("branch-a-node")).unwrap()],
+            vec![],
+            Some("branch-a".into()),
+            app.state(),
+        )
+        .await
+        .unwrap();
+        save_topology(
+            vec![serde_json::to_value(make_node_cmd("branch-b-node")).unwrap()],
+            vec![],
+            Some("branch-b".into()),
+            app.state(),
+        )
+        .await
+        .unwrap();
+
+        let branch_a = load_topology(Some("branch-a".into()), app.state())
+            .await
+            .unwrap()
+            .unwrap();
+        let branch_b = load_topology(Some("branch-b".into()), app.state())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(branch_a["nodes"][0]["id"], "branch-a-node");
+        assert_eq!(branch_b["nodes"][0]["id"], "branch-b-node");
     }
 
     #[tokio::test]
@@ -5405,7 +5688,7 @@ mod tests {
             .build(tauri::generate_context!())
             .unwrap();
 
-        let loaded = load_topology(app.state()).await.unwrap().unwrap();
+        let loaded = load_topology(None, app.state()).await.unwrap().unwrap();
         // Raw passthrough: the nameless node is served intact (the editor
         // renders the card without a title and heals it on the next edit).
         assert!(loaded["nodes"][0].get("name").is_none());
@@ -5425,7 +5708,7 @@ mod tests {
             .build(tauri::generate_context!())
             .unwrap();
 
-        let loaded = load_topology(app.state()).await.unwrap();
+        let loaded = load_topology(None, app.state()).await.unwrap();
         assert!(loaded.is_none());
     }
 
@@ -5453,8 +5736,10 @@ mod tests {
             "direction": "one-way",
         })];
 
-        save_topology(nodes, wires, app.state()).await.unwrap();
-        let loaded = load_topology(app.state()).await.unwrap().unwrap();
+        save_topology(nodes, wires, None, app.state())
+            .await
+            .unwrap();
+        let loaded = load_topology(None, app.state()).await.unwrap().unwrap();
 
         assert_eq!(loaded["nodes"].as_array().unwrap().len(), 2);
         assert_eq!(loaded["wires"].as_array().unwrap().len(), 1);
@@ -5488,7 +5773,7 @@ mod tests {
             .build(tauri::generate_context!())
             .unwrap();
 
-        let loaded = load_topology(app.state()).await.unwrap().unwrap();
+        let loaded = load_topology(None, app.state()).await.unwrap().unwrap();
         // Raw passthrough: the editor's normalizeWireDirection folds the
         // corrupt value to one-way and heals the row on the next Apply.
         assert_eq!(loaded["wires"][0]["direction"], "bidirectional");
@@ -5523,7 +5808,7 @@ mod tests {
             .build(tauri::generate_context!())
             .unwrap();
 
-        let loaded = load_topology(app.state()).await.unwrap().unwrap();
+        let loaded = load_topology(None, app.state()).await.unwrap().unwrap();
         assert_eq!(loaded["nodes"].as_array().unwrap().len(), 2);
     }
     // ── Audit follow-up: node-id uniqueness + enum validation + atomicity ─

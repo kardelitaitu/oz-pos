@@ -515,6 +515,7 @@ export default function TopologyScreen() {
           archives,
           diagramNodes,
           diagramWires,
+          selectedBranchId ?? undefined,
         );
 
         const created = creations.length;
