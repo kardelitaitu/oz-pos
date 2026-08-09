@@ -5,6 +5,7 @@ import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
 import NodeTopologyEditor, { type WorkspaceInstanceSeed, type BranchLocationSeed } from '../features/stores/NodeTopologyEditor';
 import {
   clampNodeToViewport,
+  findFreeSpawnSpot,
   NODE_HEIGHT,
   NODE_PORT_ROW_H,
   NODE_PORT_MARKER,
@@ -1164,6 +1165,81 @@ describe('NodeTopologyEditor Component', () => {
     expect(screen.getByText('New Hardware')).toBeInTheDocument();
   });
 
+  // ── Spawn placement (P3): no stacking, no off-screen spawns ──────
+
+  describe('palette spawn placement', () => {
+    afterEach(() => localStorage.removeItem('oz-topology-viewport:unassigned'));
+
+    it('spawns new nodes without overlapping the preset or each other', () => {
+      renderEditor();
+      mockCanvasSize(1200, 900);
+
+      fireEvent.click(screen.getByText('+ Store Node'));
+      fireEvent.click(screen.getByText('+ Store Node'));
+
+      // Canvas node order is preset (3) then appended spawns (2).
+      const boxes = [...document.querySelectorAll('.topology-node')].map((el) => {
+        const n = el as HTMLElement;
+        return { x: parseFloat(n.style.left), y: parseFloat(n.style.top) };
+      });
+      expect(boxes).toHaveLength(5);
+      for (let i = 0; i < boxes.length; i += 1) {
+        for (let j = i + 1; j < boxes.length; j += 1) {
+          const a = boxes[i]!;
+          const b = boxes[j]!;
+          const overlap = a.x < b.x + NODE_WIDTH && a.x + NODE_WIDTH > b.x
+            && a.y < b.y + NODE_HEIGHT && a.y + NODE_HEIGHT > b.y;
+          expect(overlap, `nodes ${i} and ${j} overlap`).toBe(false);
+        }
+      }
+    });
+
+    it('pans the viewport so a palette spawn is visible after a panned-away view', () => {
+      // Restore a view panned far off the diagram (e.g. after a branch
+      // switch): the origin jitter spot is completely off a 800×600 canvas.
+      localStorage.setItem('oz-topology-viewport:unassigned', JSON.stringify({ zoom: 1, pan: { x: 3000, y: 3000 } }));
+      renderEditor();
+      mockCanvasSize(800, 600);
+
+      fireEvent.click(screen.getByText('+ Store Node'));
+
+      const vp = document.querySelector('.node-canvas-viewport') as HTMLElement;
+      const m = vp.style.transform.match(/translate\((-?[\d.]+)px, (-?[\d.]+)px\) scale\(([\d.]+)\)/);
+      expect(m).not.toBeNull();
+      const panX = parseFloat(m![1]!);
+      const panY = parseFloat(m![2]!);
+      const zoom = parseFloat(m![3]!);
+
+      // The view must have MOVED to reveal the fresh node — the seeded
+      // far-away pan is gone (auto-scroll, not a clamp-only pin at the edge).
+      expect(vp.style.transform).not.toContain('translate(3000px, 3000px)');
+
+      const el = nodeAt(3) as HTMLElement;
+      const sx = panX + parseFloat(el.style.left) * zoom;
+      const sy = panY + parseFloat(el.style.top) * zoom;
+      // Node box intersects the 800×600 viewport with ≥40px edge margin.
+      expect(sx + NODE_WIDTH > 40 && sx < 800 - 40).toBe(true);
+      expect(sy + NODE_HEIGHT > 40 && sy < 600 - 40).toBe(true);
+    });
+
+    it('clamps a context-menu spawn at the canvas edge into view', () => {
+      renderEditor();
+      mockCanvasSize(800, 600);
+      const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+      // Right-click at the far right edge (identity transform → canvas
+      // coords equal screen coords): the 240px node would extend off-canvas.
+      fireEvent.contextMenu(canvas, { clientX: 790, clientY: 300 });
+      fireEvent.click(screen.getByText('New Hardware'));
+
+      const last = [...document.querySelectorAll('.topology-node')].pop() as HTMLElement;
+      expect(last.className).toContain('node-type-hardware');
+      const x = parseFloat(last.style.left);
+      expect(x).toBeLessThanOrEqual(800 - 40); // clamped inside the east margin
+      expect(x + NODE_WIDTH).toBeGreaterThan(40); // and past the west margin
+    });
+  });
+
   it('prevents adding second warehouse on standard tier', () => {
     renderEditor();
 
@@ -1450,6 +1526,41 @@ describe('NodeTopologyEditor Component', () => {
       // jsdom / pre-layout canvases report 0 — no viewport constraint exists.
       expect(clampNodeToViewport(120, 90, { panX: 0, panY: 0, zoom: 1, canvasW: 0, canvasH: 0 }))
         .toEqual({ x: 120, y: 90 });
+    });
+  });
+
+  // ── findFreeSpawnSpot unit contract ─────────────────────────────
+
+  describe('findFreeSpawnSpot (collision-free spawn placement)', () => {
+    it('returns the candidate unchanged when nothing overlaps it', () => {
+      expect(findFreeSpawnSpot({ x: 120, y: 90 }, []))
+        .toEqual({ x: 120, y: 90 });
+    });
+
+    it('steps outward to the first position clear of an occupied box', () => {
+      // Candidate sits inside the occupied 240×240 box at (80, 140) plus
+      // the 24px gap — the spiral must escape it.
+      const free = findFreeSpawnSpot({ x: 100, y: 100 }, [{ x: 80, y: 140 }]);
+      const overlapsOccupied = free.x < 80 + NODE_WIDTH + 24 && free.x + NODE_WIDTH + 24 > 80
+        && free.y < 140 + NODE_HEIGHT + 24 && free.y + NODE_HEIGHT + 24 > 140;
+      expect(free).not.toEqual({ x: 100, y: 100 });
+      expect(overlapsOccupied).toBe(false);
+    });
+
+    it('escapes a dense wall of boxes within the bounded search', () => {
+      // A 3×3 wall spanning 0..792 in both axes — the spiral must find a
+      // clear cell despite starting inside it.
+      const wall: { x: number; y: number }[] = [];
+      for (let r = 0; r < 3; r += 1) {
+        for (let c = 0; c < 3; c += 1) {
+          wall.push({ x: c * (NODE_WIDTH + 24), y: r * (NODE_HEIGHT + 24) });
+        }
+      }
+      const free = findFreeSpawnSpot({ x: 130, y: 130 }, wall);
+      const clear = !wall.some((o) =>
+        free.x < o.x + NODE_WIDTH + 24 && free.x + NODE_WIDTH + 24 > o.x
+        && free.y < o.y + NODE_HEIGHT + 24 && free.y + NODE_HEIGHT + 24 > o.y);
+      expect(clear).toBe(true);
     });
   });
 

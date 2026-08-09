@@ -73,3 +73,52 @@ export function clampNodeToViewport(
     y: Math.min(Math.max(y, loY), hiY),
   };
 }
+
+export interface SpawnSpotOptions {
+  /** Canvas-space gap kept between the spawned box and any occupied box
+   *  (default 24 — one grid step). */
+  gap?: number;
+  /** Maximum spiral rings searched before giving up (default 64 → ±1536px). */
+  maxSteps?: number;
+}
+
+/**
+ * First collision-free spot near `start` for a new uniform node card.
+ *
+ * Palette spawns jitter around the diagram origin, which historically
+ * stacked them invisibly on top of the preset cards (the jitter box sits
+ * inside the branch card's bounds). This scans a square spiral outward in
+ * `gap`-sized steps and returns the first position whose box (plus the
+ * gap) intersects no occupied box — so a fresh node always lands visibly
+ * clear of the existing diagram. When every ring is exhausted it returns
+ * the farthest corner reached as a best-effort spot rather than failing.
+ */
+export function findFreeSpawnSpot(
+  start: { x: number; y: number },
+  occupied: { x: number; y: number }[],
+  opts: SpawnSpotOptions = {},
+): { x: number; y: number } {
+  const gap = opts.gap ?? 24;
+  const maxSteps = opts.maxSteps ?? 64;
+  const boxW = NODE_WIDTH + gap;
+  const boxH = NODE_HEIGHT + gap;
+  const overlaps = (p: { x: number; y: number }) =>
+    occupied.some((o) =>
+      p.x < o.x + boxW && p.x + boxW > o.x
+      && p.y < o.y + boxH && p.y + boxH > o.y);
+  if (!overlaps(start)) return start;
+  let best = start;
+  for (let ring = 1; ring <= maxSteps; ring += 1) {
+    const d = ring * gap;
+    // Perimeter of the square ring: cells where |dx| or |dy| equals the ring.
+    for (let dy = -ring; dy <= ring; dy += 1) {
+      for (let dx = -ring; dx <= ring; dx += 1) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+        const p = { x: start.x + dx * gap, y: start.y + dy * gap };
+        if (!overlaps(p)) return p;
+      }
+    }
+    best = { x: start.x + d, y: start.y + d };
+  }
+  return best;
+}

@@ -31,7 +31,7 @@ import {
   WarningIcon,
 } from './NodeTopologyIcons';
 import { plainErrorMessage } from '@/utils/app-error';
-import { clampNodeToViewport, NODE_WIDTH, NODE_HEIGHT, NODE_PORT_Y } from './nodeTopologyClamp';
+import { clampNodeToViewport, findFreeSpawnSpot, NODE_WIDTH, NODE_HEIGHT, NODE_PORT_Y } from './nodeTopologyClamp';
 import {
   normalizeTopologyGraph,
   normalizeWireDirection,
@@ -3348,15 +3348,43 @@ export default function NodeTopologyEditor({
     pushHistory();
 
     const id = `${type}-${crypto.randomUUID()}`;
+    // Placement: a context-menu spawn honors the cursor; a palette spawn
+    // jitters near the origin then settles into the first collision-free
+    // spot (the old jitter box sat entirely inside the preset branch card,
+    // so palette spawns stacked invisibly on top of it). Both are clamped
+    // into the visible viewport so a node can never land off-canvas, and a
+    // palette spot that was outside the view (panned/zoomed away) pans the
+    // viewport so the fresh node is revealed instead of silently invisible.
+    const raw = at
+      ? { x: snapOrNot(at.x), y: snapOrNot(at.y) }
+      : { x: snapOrNot(200 + Math.random() * 100), y: snapOrNot(150 + Math.random() * 100) };
+    const free = at ? raw : findFreeSpawnSpot(raw, nodes.map((n) => ({ x: n.x, y: n.y })));
+    const canvas = canvasRef.current;
+    const canvasW = canvas?.clientWidth ?? 0;
+    const canvasH = canvas?.clientHeight ?? 0;
+    const placed = clampNodeToViewport(free.x, free.y, {
+      panX: pan.x,
+      panY: pan.y,
+      zoom,
+      canvasW,
+      canvasH,
+    });
+    if (!at && canvasW > 0 && canvasH > 0
+      && (placed.x !== free.x || placed.y !== free.y)) {
+      // The natural palette spot was off-view — pan to reveal the node
+      // (mirrors the node-finder jump).
+      setPan({
+        x: canvasW / 2 - (placed.x + NODE_WIDTH / 2) * zoom,
+        y: canvasH / 2 - (placed.y + NODE_HEIGHT / 2) * zoom,
+      });
+    }
     const newNode: TopologyNodeData = {
       id,
       type,
       name: l10n.getString(`topology-new-${type}`),
       subtitle: l10n.getString(`topology-new-${type}-subtitle`),
-      // The context menu passes a canvas-space cursor position; palette
-      // clicks keep the historical jittered spawn spot.
-      x: at ? snapOrNot(at.x) : snapOrNot(200 + Math.random() * 100),
-      y: at ? snapOrNot(at.y) : snapOrNot(150 + Math.random() * 100),
+      x: placed.x,
+      y: placed.y,
       telemetryBadge: l10n.getString('topology-new-ready'),
       telemetryStatus: 'online',
       // New workspace nodes default to the retail POS type until the user
