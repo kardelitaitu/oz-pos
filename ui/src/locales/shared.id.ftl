@@ -61,7 +61,7 @@ statusbar-app-status-aria = Status aplikasi
 statusbar-version = OZ-POS Enterprise v0.0.25
 statusbar-sync-name = Sinkronisasi
 statusbar-gateway-name = Stripe
-statusbar-license = Lisensi Proprieter
+statusbar-license = Lisensi Proprietary
 
 # POS Cart Line Items
 shared-loading = Memuat…

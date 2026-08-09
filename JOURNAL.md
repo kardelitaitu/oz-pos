@@ -2506,3 +2506,23 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 96 — render-path pin)
 
 **Risks / follow-ups:** the render-path test uses the raw production primitives rather than the full LocaleContext component (which needs a locale context provider); a future slice could mount LocaleContext itself for an even more end-to-end proof.
+
+### 2026-08-09 — native-speaker pass extended to products/sales/inventory/staff/shared/terminals (round 97)
+
+**Problem (round-92 follow-up):** the pass had covered multi-store/settings/kds but not the six remaining id bundles (~1,740 keys). Full reads of shared, staff, terminals, products, inventory, and the 984-line sales bundle found five drift-class issues.
+
+**Solution (id only, en untouched):**
+- `statusbar-license` (shared): "Lisensi **Proprieter**" — misspelled; settings already uses the untranslated product term "Proprietary" → "Lisensi Proprietary".
+- `scale-read-error` (sales): "Error timbangan" vs sibling `weight-scale-error` "Kesalahan timbangan" — same en source ("Scale error"), two wordings → unified on "Kesalahan timbangan".
+- `sales-history-status-cancelled` (sales): "Dibatalkan" collided with `sales-history-status-voided` — en distinguishes Cancelled from Voided (void restocks), so the status filter was ambiguous → "Batal" vs "Dibatalkan".
+- low-stock term (sales): retail used "stok rendah" in 5 keys while the bundle-wide established term is "Stok Menipis" (inventory `inventory-report-low-stock`, multi-store `topology-warehouse-low-stock-threshold`) → all 5 retail keys unified on "stok menipis".
+- `payment-split-amount-placeholder` (sales): "0.00" vs sibling `payment-tendered-input` "0,00" — Indonesian decimal comma → unified on "0,00".
+- `inv-reason-damaged` (inventory): "kadaluarsa" — non-standard spelling; the very next line `inv-reason-write-off` already says "kedaluwarsa", as does sales' gift-card "Kedaluwarsa" → "kedaluwarsa".
+
+**Deliberately NOT changed:** `retail-cart-items`/`retail-low-stock-banner` identical [one]/[other] branches (Indonesian has no plural inflection — identical branches are correct localization, and en's item/items split doesn't translate); "Alihkan" (established bundle term); `&quot;` encoding quirk (present in both bundles).
+
+**Verified:** i18n lint (parity + FTL dedupe) clean, full UI 4565/4565 unchanged (value-only, no key-set change), no en changes, nothing pins the old id values.
+
+**Commits:** (round 97 — extended id pass)
+
+**Risks / follow-ups:** the 10 fixed values are not yet in the rounds-90-92 pin table — extending `nativeSpeakerPins` in i18nBundle.test.tsx would CI-guard them; "Batal" for Cancelled vs "Dibatalkan" for Voided is a judgment call a native speaker could re-tune; the products bundle was clean on this pass but remains un-audited at the same depth as sales.
