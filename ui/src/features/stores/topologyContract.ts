@@ -437,9 +437,12 @@ function semanticNodesMatchWire(
           && ['store-pos', 'restaurant-pos', 'inventory'].includes(fromTypeKey))
           || fromNode.kind === 'warehouse');
     case 'transfer-out|transfer-in|inventory-transfer':
+      // Round 82: a warehouse may feed another warehouse (hub-and-spoke).
+      // Workspace sources stay valid for the direct-transfer case.
       return toNode.kind === 'warehouse'
-        && fromNode.kind === 'workspace'
-        && ['store-pos', 'restaurant-pos', 'inventory'].includes(fromTypeKey);
+        && ((fromNode.kind === 'warehouse')
+          || (fromNode.kind === 'workspace'
+            && ['store-pos', 'restaurant-pos', 'inventory'].includes(fromTypeKey)));
     case 'ticket-out|ticket-in|ticket-routing':
       return fromNode.kind === 'workspace'
         && fromTypeKey === 'kds'
@@ -632,18 +635,23 @@ export function validateTopologyGraph(
     }
 
     // Reverse guard: a warehouse configured with room but NO incoming
-    // stock-deduct wire is an unserviced Stock Room — prompt the user to
-    // route stock in. Skipped when the warehouse is full (stock >= capacity;
-    // nothing should route in then) or has no capacity metadata (legacy
-    // graphs with no design-time numbers stay unflagged).
+    // stock-bearing wire is an unserviced Stock Room — prompt the user to
+    // route stock in. ANY inbound stock-bearing wire services the prompt:
+    // stock-routing (workspace → warehouse) OR inventory-transfer
+    // (warehouse → warehouse, round 82 — hub-and-spoke models where a
+    // satellite is fed by a hub). Skipped when the warehouse is full
+    // (stock >= capacity; nothing should route in then) or has no capacity
+    // metadata (legacy graphs with no design-time numbers stay unflagged).
     for (const node of graph.nodes) {
       if (node.kind !== 'warehouse') continue;
       if (node.capacity === undefined) continue;
       if (node.stock !== undefined && node.stock >= node.capacity) continue;
-      const hasStockRouting = graph.wires.some(
-        (wire) => wire.relationshipType === 'stock-routing' && wire.toNodeId === node.id,
+      const hasStockInbound = graph.wires.some(
+        (wire) =>
+          (wire.relationshipType === 'stock-routing' || wire.relationshipType === 'inventory-transfer')
+          && wire.toNodeId === node.id,
       );
-      if (hasStockRouting) continue;
+      if (hasStockInbound) continue;
       errors.push({
         code: 'warehouse-missing-stock-routing',
         messageId: 'topology-validation-warehouse-missing-stock-routing',

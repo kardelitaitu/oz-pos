@@ -2322,3 +2322,17 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 81 — intentionally-empty dismiss)
 
 **Risks / follow-ups:** occurrence-scoping still applies — adding then removing the wire re-surfaces the prompt (the stored key is forgotten when the issue leaves the live set); the dismiss is per-diagram (branch), so each branch decides independently; the editor gate and screen gate both read localStorage at save time — a race (dismiss + instant Apply) is absorbed by the same synchronous read the editor's own gate performs.
+
+### 2026-08-09 — inventory-transfer satisfies the stock-in prompt (hub-and-spoke)
+
+**Problem (round-75 follow-up):** the missing-stock-routing guard only counted `stock-routing` wires in — and `semanticNodesMatchWire` restricted inventory-transfer to workspace→warehouse sources. A hub-and-spoke model (workspace feeds a hub via stock-routing; satellites fed by warehouse→warehouse transfer) flagged every satellite as unserviced even though stock genuinely flows in.
+
+**Solution (TDD Red→Green):** two contract changes. (1) The reverse guard now counts ANY inbound stock-bearing wire — `stock-routing` OR `inventory-transfer` — as servicing the warehouse (variable renamed `hasStockRouting` → `hasStockInbound`; comment rewritten). (2) `semanticNodesMatchWire`'s transfer case now also allows `fromNode.kind === 'warehouse'`, mirroring the stock-routing case which already did — so a warehouse→warehouse transfer wire is a *valid semantic connection* (the first Red attempt surfaced `invalid-semantic-connection` on the transfer wire, proving the guard change alone was insufficient). Workspace→warehouse transfer stays valid. Note: warehouse→warehouse STOCK-Routing was already legal; this round only relaxes the transfer relationship.
+
+**TDD:** Red — 1 contract test (hub + satellite graph must be `[]`) + 1 editor test (satellite card shows no prompt note). Red correctly showed BOTH failures (guard + semantic validity). Also added a companion contract test pinning that a warehouse receiving NEITHER wire is still flagged — the hub-and-spoke rule is not an escape hatch.
+
+**Verified:** contract 36/36 (+2), editor + screen + integration 491/491 (+1), full UI 4552/4552, typecheck, eslint 0/0. No FTL changes (the "route stock in" copy covers both wire kinds).
+
+**Commits:** (round 82 — hub-and-spoke stock servicing)
+
+**Risks / follow-ups:** the at-capacity guard still counts stock-routing only — a satellite fed by transfer is never at-capacity-flagged even though transfers also land stock (a transfer INTO a full satellite arguably should warn); the Add stock wire hint still says "workspace's Stock Out" — accurate but now under-specified for satellites (a warehouse source also resolves the prompt); the coexist editor test (workspace→warehouse Transfer) still passes, so the relaxed source rule didn't loosen the direct-transfer contract.

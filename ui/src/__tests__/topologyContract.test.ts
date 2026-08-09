@@ -53,6 +53,18 @@ const stockWire = (id: string, workspaceId: string, warehouseId: string): Topolo
   direction: 'one-way',
 });
 
+const transferWire = (id: string, fromWarehouseId: string, toWarehouseId: string): TopologyWireData => ({
+  id,
+  fromNodeId: fromWarehouseId,
+  fromPort: 'right',
+  fromPortId: 'transfer-out',
+  toNodeId: toWarehouseId,
+  toPort: 'left',
+  toPortId: 'transfer-in',
+  relationshipType: 'inventory-transfer',
+  direction: 'one-way',
+});
+
 const ownershipWire = (id: string, workspaceId: string): TopologyWireData => ({
   id,
   fromNodeId: 'branch-1',
@@ -629,6 +641,49 @@ describe('semantic topology contract', () => {
 
     const errors = validateTopologyGraph(normalized);
     expect(errors.filter((e) => e.code === 'warehouse-missing-stock-routing')).toHaveLength(0);
+  });
+
+  it('lets an inventory-transfer wire into a warehouse satisfy the stock-in prompt (hub-and-spoke)', () => {
+    // Round 82: a satellite Stock Room fed by inventory-transfer from a
+    // hub validates clean — any inbound stock-bearing wire (stock-routing
+    // OR warehouse-to-warehouse transfer) services the prompt.
+    const normalized = graph(
+      [
+        branch(),
+        workspace('ws-1'),
+        warehouseWith('wh-hub', { stock: 500, capacity: 1000 }),
+        warehouseWith('wh-sat', { stock: 200, capacity: 500 }),
+      ],
+      [
+        ownershipWire('w-owner', 'ws-1'),
+        stockWire('w-stock', 'ws-1', 'wh-hub'),
+        transferWire('w-transfer', 'wh-hub', 'wh-sat'),
+      ],
+    );
+
+    expect(validateTopologyGraph(normalized)).toEqual([]);
+  });
+
+  it('still flags a warehouse with room that receives neither stock nor transfer', () => {
+    // The hub-and-spoke rule is not an escape hatch: a warehouse with NO
+    // inbound stock-bearing wire at all is still unserviced.
+    const normalized = graph(
+      [
+        branch(),
+        workspace('ws-1'),
+        warehouseWith('wh-hub', { stock: 500, capacity: 1000 }),
+        warehouseWith('wh-sat', { stock: 200, capacity: 500 }),
+      ],
+      [
+        ownershipWire('w-owner', 'ws-1'),
+        stockWire('w-stock', 'ws-1', 'wh-hub'),
+      ],
+    );
+
+    const errors = validateTopologyGraph(normalized);
+    expect(errors.filter((e) => e.code === 'warehouse-missing-stock-routing')).toEqual([
+      expect.objectContaining({ nodeId: 'wh-sat' }),
+    ]);
   });
 
   it('enforces the capacity guards on Pro tier', () => {

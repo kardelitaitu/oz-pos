@@ -4195,6 +4195,32 @@ describe('NodeTopologyEditor — warehouse missing stock-routing prompt', () => 
     await renderUnwiredWarehouse({ stock: 500 });
     expect(warehouseNote()).toBeNull();
   });
+
+  it('keeps the prompt off a satellite warehouse fed by inventory-transfer (hub-and-spoke)', async () => {
+    // Round 82: the hub receives stock-routing from the workspace; the
+    // satellite receives warehouse-to-warehouse inventory-transfer. Both
+    // are serviced — the satellite must not be flagged.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-1', type: 'workspace', name: 'Retail POS', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-hub', type: 'warehouse', name: 'Hub Stock Room', x: 680, y: 80, metadata: { stock: 500, capacity: 1000 } },
+        { id: 'wh-sat', type: 'warehouse', name: 'Satellite Stock Room', x: 980, y: 80, metadata: { stock: 200, capacity: 500 } },
+      ],
+      wires: [
+        { id: 'w-loc', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+        { id: 'w-stock', from_node_id: 'ws-1', to_node_id: 'wh-hub', from_port_id: 'stock-out', to_port_id: 'stock-in', relationship_type: 'stock-routing', direction: 'one-way' },
+        { id: 'w-transfer', from_node_id: 'wh-hub', to_node_id: 'wh-sat', from_port_id: 'transfer-out', to_port_id: 'transfer-in', relationship_type: 'inventory-transfer', direction: 'one-way' },
+      ],
+    } as never);
+    renderEditor({ currentTier: 'pro' });
+    await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(4));
+
+    const satellite = [...document.querySelectorAll('.topology-node')].find((n) =>
+      n.textContent?.includes('Satellite Stock Room'),
+    );
+    expect(satellite?.querySelector('.node-validation-note')).toBeNull();
+  });
 });
 
 // ── Validation panel stock-wire action ──────────────────────────
