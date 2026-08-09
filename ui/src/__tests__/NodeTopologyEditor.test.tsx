@@ -159,6 +159,22 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-shortcuts-find': 'Find node',
   'topology-auto-layout': 'Auto-layout',
   'topology-layout-announce': 'Topology arranged automatically',
+  'topology-rack-share-title': 'Share',
+  'topology-export': 'Export',
+  'topology-import': 'Import',
+  'topology-save-template': 'Save template',
+  'topology-template-name-placeholder': 'Template name',
+  'topology-template-save': 'Save',
+  'topology-templates': 'Templates',
+  'topology-template-load': 'Load',
+  'topology-template-delete': 'Delete',
+  'topology-no-templates': 'No saved templates',
+  'topology-toast-export-copied': 'Topology copied to clipboard',
+  'topology-toast-import-ok': 'Topology imported',
+  'topology-toast-import-invalid': 'Clipboard does not contain a valid topology',
+  'topology-toast-clipboard-unavailable': 'Clipboard is not available',
+  'topology-toast-template-saved': 'Template saved',
+  'topology-toast-template-deleted': 'Template deleted',
 };
 
 vi.mock('@fluent/react', async () => {
@@ -7906,5 +7922,127 @@ describe('NodeTopologyEditor — load fallback determinism', () => {
     await waitFor(() => expect(getNodeCount()).toBe(0));
     expect(document.querySelector('.topology-node[data-node-id="store-1"]')).toBeNull();
     expect(screen.getByText('Build your store topology')).toBeInTheDocument();
+  });
+});
+
+describe('topology export / import / templates (clipboard + localStorage)', () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  const readText = vi.fn();
+
+  const stubClipboard = () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText, readText },
+      configurable: true,
+    });
+  };
+  const unsetClipboard = () => {
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+  };
+
+  const validPayload = JSON.stringify({
+    format: 'oz-topology',
+    version: 1,
+    nodes: [
+      { id: 'imp-1', type: 'store', name: 'Imported Branch', x: 80, y: 140 },
+      { id: 'imp-2', type: 'workspace', name: 'Imported POS', x: 400, y: 80 },
+    ],
+    wires: [{ id: 'imp-w1', fromNodeId: 'imp-1', toNodeId: 'imp-2', direction: 'one-way' }],
+  });
+
+  beforeEach(() => {
+    writeText.mockClear();
+    readText.mockReset();
+    stubClipboard();
+    localStorage.clear();
+  });
+
+  it('exports the current diagram as the versioned envelope', async () => {
+    renderEditor();
+    expect(getNodeCount()).toBe(3); // retail preset
+
+    fireEvent.click(screen.getByText('Export'));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    const json = writeText.mock.calls[0]![0] as string;
+    const parsed = JSON.parse(json);
+    expect(parsed.format).toBe('oz-topology');
+    expect(parsed.version).toBe(1);
+    expect(parsed.nodes).toHaveLength(3);
+    expect(parsed.nodes[0]!.id).toBe('store-1');
+    expect(screen.getByText('Topology copied to clipboard')).toBeInTheDocument();
+  });
+
+  it('toasts when the clipboard API is unavailable', async () => {
+    unsetClipboard();
+    renderEditor();
+
+    fireEvent.click(screen.getByText('Export'));
+
+    await waitFor(() =>
+      expect(screen.getByText('Clipboard is not available')).toBeInTheDocument(),
+    );
+  });
+
+  it('imports a valid payload, replaces the canvas, and is undoable', async () => {
+    readText.mockResolvedValue(validPayload);
+    renderEditor();
+
+    fireEvent.click(screen.getByText('Import'));
+
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    expect(document.querySelector('.topology-node[data-node-id="imp-1"]')).not.toBeNull();
+    expect(document.querySelector('.topology-node[data-node-id="imp-2"]')).not.toBeNull();
+    expect(document.querySelector('.topology-node[data-node-id="store-1"]')).toBeNull();
+    expect(screen.getByText('Topology imported')).toBeInTheDocument();
+
+    // Undo restores the retail preset.
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+  });
+
+  it('rejects clipboard content that is not a valid topology', async () => {
+    readText.mockResolvedValue('garbage { not json');
+    renderEditor();
+
+    fireEvent.click(screen.getByText('Import'));
+
+    await waitFor(() =>
+      expect(screen.getByText('Clipboard does not contain a valid topology')).toBeInTheDocument(),
+    );
+    expect(getNodeCount()).toBe(3);
+  });
+
+  it('saves the current diagram as a named template', async () => {
+    renderEditor();
+
+    fireEvent.click(screen.getByText('Save template'));
+    fireEvent.change(screen.getByPlaceholderText('Template name'), { target: { value: 'My Layout' } });
+    fireEvent.click(screen.getByText('Save'));
+
+    await waitFor(() =>
+      expect(screen.getByText('Template saved')).toBeInTheDocument(),
+    );
+    const raw = localStorage.getItem('oz-topology-template:My Layout');
+    expect(raw).not.toBeNull();
+    expect(JSON.parse(raw!).nodes).toHaveLength(3);
+  });
+
+  it('loads and deletes a saved template', async () => {
+    localStorage.setItem('oz-topology-template:Import Me', validPayload);
+    renderEditor();
+
+    fireEvent.click(screen.getByText('Templates'));
+    expect(screen.getByText('Import Me')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Load'));
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    expect(document.querySelector('.topology-node[data-node-id="imp-1"]')).not.toBeNull();
+
+    fireEvent.click(screen.getByText('Templates'));
+    fireEvent.click(screen.getByText('Delete'));
+    await waitFor(() =>
+      expect(screen.getByText('Template deleted')).toBeInTheDocument(),
+    );
+    expect(localStorage.getItem('oz-topology-template:Import Me')).toBeNull();
   });
 });

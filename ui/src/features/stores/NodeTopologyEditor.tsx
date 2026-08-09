@@ -42,6 +42,14 @@ import {
 import { computeAutoLayout } from './nodeTopologyLayout';
 import { pinchTransform, TOUCH_DRAG_THRESHOLD } from './nodeTopologyTouch';
 import {
+  deserializeTopology,
+  serializeTopology,
+  saveTemplate,
+  loadTemplate,
+  listTemplates,
+  deleteTemplate,
+} from './topologyExport';
+import {
   normalizeTopologyGraph,
   normalizeWireDirection,
   validateTopologyGraph,
@@ -1219,6 +1227,13 @@ export default function NodeTopologyEditor({
    *  Escape or any document mousedown outside the picker (the picker
    *  wrapper stops propagation, so slider drags never close it). */
   const [zoomPickerOpen, setZoomPickerOpen] = useState(false);
+  /** Save-template popover: open flag + the in-flight template name. */
+  const [templateSaveOpen, setTemplateSaveOpen] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  /** Templates popover: open flag + the last-listed names (re-listed on
+   *  open and after a delete so the list never goes stale). */
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [savedTemplates, setSavedTemplates] = useState<string[]>([]);
   /** Minimap visibility per diagram (branch) — mirrors the viewport memory's
    *  per-branch key scheme so a branch switch (which remounts the editor)
    *  restores the user's hide/show choice for that diagram instead of
@@ -1973,6 +1988,82 @@ export default function NodeTopologyEditor({
     setWires((prev) => prev.map(({ bends: _bends, ...rest }) => rest));
     setLiveAnnouncement(l10nRef.current.getString('topology-layout-announce'));
   }, [nodes, wires, pushHistory, snapEnabled, wireRouting]);
+
+  /** Copy the diagram to the clipboard as the versioned JSON envelope.
+   *  Guards a missing clipboard API (insecure context / WebView) with an
+   *  explanatory toast instead of throwing. */
+  const handleExport = useCallback(async () => {
+    if (!navigator.clipboard?.writeText) {
+      addToast({ message: l10nRef.current.getString('topology-toast-clipboard-unavailable'), type: 'warning' });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(serializeTopology(nodes, wires));
+      addToast({ message: l10nRef.current.getString('topology-toast-export-copied'), type: 'info' });
+    } catch {
+      addToast({ message: l10nRef.current.getString('topology-toast-clipboard-unavailable'), type: 'warning' });
+    }
+  }, [nodes, wires, addToast]);
+
+  /** Replace the canvas with a clipboard payload under ONE undo entry. A
+   *  strict-parse failure (or a missing/unreadable clipboard) leaves the
+   *  canvas untouched — a bad paste can never half-load a broken diagram. */
+  const handleImport = useCallback(async () => {
+    if (!navigator.clipboard?.readText) {
+      addToast({ message: l10nRef.current.getString('topology-toast-clipboard-unavailable'), type: 'warning' });
+      return;
+    }
+    let json: string;
+    try {
+      json = await navigator.clipboard.readText();
+    } catch {
+      addToast({ message: l10nRef.current.getString('topology-toast-import-invalid'), type: 'warning' });
+      return;
+    }
+    const payload = deserializeTopology(json);
+    if (!payload) {
+      addToast({ message: l10nRef.current.getString('topology-toast-import-invalid'), type: 'warning' });
+      return;
+    }
+    pushHistory();
+    setNodes(payload.nodes.map((n) => ({ ...n })));
+    setWires(payload.wires.map((w) => ({ ...w })));
+    addToast({ message: l10nRef.current.getString('topology-toast-import-ok'), type: 'info' });
+  }, [pushHistory, addToast]);
+
+  /** Save the diagram under `name`; an empty name keeps the popover open
+   *  (the pure helper refuses it — nothing to save). */
+  const handleSaveTemplate = useCallback((name: string) => {
+    if (saveTemplate(name, nodes, wires) === null) return;
+    setTemplateSaveOpen(false);
+    setTemplateName('');
+    addToast({ message: l10nRef.current.getString('topology-toast-template-saved'), type: 'info' });
+  }, [nodes, wires, addToast]);
+
+  /** Load a saved template, replacing the canvas under one undo entry. */
+  const handleLoadTemplate = useCallback((name: string) => {
+    const payload = loadTemplate(name);
+    if (!payload) return;
+    pushHistory();
+    setNodes(payload.nodes.map((n) => ({ ...n })));
+    setWires(payload.wires.map((w) => ({ ...w })));
+    setTemplatesOpen(false);
+    addToast({ message: l10nRef.current.getString('topology-toast-import-ok'), type: 'info' });
+  }, [pushHistory, addToast]);
+
+  /** Delete a saved template and re-list, so the popover reflects the
+   *  deletion immediately. */
+  const handleDeleteTemplate = useCallback((name: string) => {
+    deleteTemplate(name);
+    setSavedTemplates(listTemplates());
+    addToast({ message: l10nRef.current.getString('topology-toast-template-deleted'), type: 'info' });
+  }, [addToast]);
+
+  /** Toggle the templates popover, re-listing on every open. */
+  const openTemplates = useCallback(() => {
+    setSavedTemplates(listTemplates());
+    setTemplatesOpen((v) => !v);
+  }, []);
 
   /** Commit an in-flight Alt+drag: the copies stay where they dropped,
    *  become the selection, and the whole duplicate-drop lands as ONE undo
@@ -4554,6 +4645,94 @@ export default function NodeTopologyEditor({
               >
                 <Localized id="topology-wire-labels-toggle">Wire labels</Localized>
               </button>
+            </div>
+
+            <div className="tool-rack-section">
+              <h4 className="tool-rack-section-title"><Localized id="topology-rack-share-title">Share</Localized></h4>
+              <div className="rack-share-row">
+                <button type="button" className="rack-view-toggle" onClick={handleExport}>
+                  <Localized id="topology-export">Export</Localized>
+                </button>
+                <button type="button" className="rack-view-toggle" onClick={handleImport}>
+                  <Localized id="topology-import">Import</Localized>
+                </button>
+              </div>
+              <div className="rack-share-row">
+                <button
+                  type="button"
+                  className="rack-view-toggle"
+                  aria-expanded={templateSaveOpen}
+                  onClick={() => setTemplateSaveOpen((v) => !v)}
+                >
+                  <Localized id="topology-save-template">Save template</Localized>
+                </button>
+                <button
+                  type="button"
+                  className="rack-view-toggle"
+                  aria-expanded={templatesOpen}
+                  onClick={openTemplates}
+                >
+                  <Localized id="topology-templates">Templates</Localized>
+                </button>
+              </div>
+              {templateSaveOpen && (
+                <div
+                  className="rack-template-pop"
+                  role="group"
+                  aria-label={l10n.getString('topology-save-template')}
+                >
+                  <input
+                    type="text"
+                    className="rack-template-input"
+                    placeholder={l10n.getString('topology-template-name-placeholder')}
+                    value={templateName}
+                    onChange={(e) => setTemplateName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSaveTemplate(templateName);
+                      else if (e.key === 'Escape') {
+                        setTemplateSaveOpen(false);
+                        setTemplateName('');
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="rack-template-save"
+                    onClick={() => handleSaveTemplate(templateName)}
+                  >
+                    <Localized id="topology-template-save">Save</Localized>
+                  </button>
+                </div>
+              )}
+              {templatesOpen && (
+                <div
+                  className="rack-template-list"
+                  role="group"
+                  aria-label={l10n.getString('topology-templates')}
+                >
+                  {savedTemplates.length === 0 ? (
+                    <span className="rack-template-empty">
+                      <Localized id="topology-no-templates">No saved templates</Localized>
+                    </span>
+                  ) : (
+                    <ul className="rack-template-items">
+                      {savedTemplates.map((name) => (
+                        <li key={name} className="rack-template-item">
+                          <span className="rack-template-name">{name}</span>
+                          <div className="rack-template-actions">
+                            <button type="button" onClick={() => handleLoadTemplate(name)}>
+                              <Localized id="topology-template-load">Load</Localized>
+                            </button>
+                            <button type="button" onClick={() => handleDeleteTemplate(name)}>
+                              <Localized id="topology-template-delete">Delete</Localized>
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
             </div>
         </div>
 
