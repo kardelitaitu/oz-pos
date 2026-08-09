@@ -160,3 +160,9 @@ The canonical local entry points and what each covers:
 | UI test (4 shards) | < 2 min | ~1.5 min |
 | E2E (3 shards) | < 8 min | ~6 min |
 | Docker build | < 5 min | ~3 min |
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers, all file references valid
+

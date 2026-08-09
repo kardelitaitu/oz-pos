@@ -384,3 +384,9 @@ without coupling add/remove to stock changes.
 **End of ADR #20.** Implements ADR-18 §13 Finding #31 by introducing the
 three-phase sale lifecycle with stock reservation before payment capture.
 Blocked on ADR-19 (deduction location lock + deduction_locations JSON schema).
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
+

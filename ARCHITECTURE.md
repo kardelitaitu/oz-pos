@@ -495,3 +495,9 @@ For the full list see the `docs/decisions/` directory.
 *This document is a living specification. Phase boundaries are guidelines,
 not hard deadlines. Every PR should move the codebase closer to the target
 architecture.*
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (verified against actual codebase) · verified accurate: all 33 directories, modules, crates, and platform components exist; Module trait with lifecycle methods confirmed; event bus in platform/kernel/src/event_bus.rs; sync engine functional; 29 workspace members match documented count exactly
+

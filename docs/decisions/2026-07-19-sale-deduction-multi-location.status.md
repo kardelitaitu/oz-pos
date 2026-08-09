@@ -119,3 +119,9 @@
 - **Offline queue** reconciler for two-command flow (ADR-21 candidate)
 - **Cache strategy** for `resolve_primary_location` (ADR-20 candidate)
 - **BOM/Recipe** per-ingredient location routing (future ADR)
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
+

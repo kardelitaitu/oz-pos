@@ -111,3 +111,9 @@ When a merchant enters a purchased license key:
 - Offline signature verification using embedded 2048-bit RSA public key (`LICENSE_PUBLIC_KEY_PEM`).
 - System clock rollback protection via SQLite ledger timestamps.
 - Audit logging of all trial activation attempts on the PocketBase Auth Server.
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
+

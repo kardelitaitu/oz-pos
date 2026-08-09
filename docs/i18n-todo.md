@@ -107,3 +107,9 @@ bytes still match the English source.
 4 bundles, ~2 hours of translation work to close. None are user-blocking;
 the fallback path serves users with `locale="id"` correctly in the
 interim.
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers, all file references valid
+

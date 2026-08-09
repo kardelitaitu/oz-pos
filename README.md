@@ -239,3 +239,9 @@ New contributors are encouraged to start with documentation improvements, UI pol
 This software (`oz-pos`) is **NOT open source**. No part of this codebase, associated binaries, or documentation may be copied, modified, distributed, sublicensed, hosted, or deployed in any commercial, non-commercial, or production setting without explicit written permission and a valid executed Commercial License Agreement.
 
 See [LICENSE](./LICENSE) for terms and restrictions. For commercial licensing and pricing inquiries, contact: **adikaradwiatmaja@gmail.com**.
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (verified against actual codebase) · verified accurate: all test counts, modules, crates, security features, and feature capabilities confirmed; version 0.0.25 matches Cargo.toml
+

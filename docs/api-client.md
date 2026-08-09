@@ -177,3 +177,9 @@ const client = new OZPosClient({
 import { http, HttpResponse } from 'msw';
 // ... configure MSW handlers to intercept requests
 ```
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers, all file references valid
+

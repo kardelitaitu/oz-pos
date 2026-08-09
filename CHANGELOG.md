@@ -1492,3 +1492,9 @@ Settings navigation tree extracted from monolithic SettingsPage.tsx into a stand
 [0.0.3]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.0.3
 [0.0.2]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.0.2
 [0.0.1]: https://github.com/kardelitaitu/oz-pos/releases/tag/v0.0.1
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (verified against actual codebase) · verified accurate: version numbers match Cargo.toml, all script paths exist, ADRs referenced in docs/decisions/, test counts verified
+

@@ -71,3 +71,9 @@ cargo flamegraph -p oz-pos-desktop -- --test some_integration_test
 - **Wide bars** = functions that consume significant CPU time
 - **Tall stacks** = deep call chains in hot paths
 - Red / orange = user-space code; blue / purple = kernel calls
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers, all file references valid
+

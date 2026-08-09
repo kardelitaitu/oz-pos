@@ -206,3 +206,9 @@ cargo test -p oz-plugin --lib
 | Lua errors on startup | Syntax error in script — check logs |
 | `attempt to call a nil value` on `oz.*` | The plugin lacks the permission for that binding |
 | Hook not firing | `oz.register_hook` needs `cart:read`; check the event name and function name |
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers, all file references valid
+

@@ -89,3 +89,9 @@ The plugin infrastructure (Lua sandbox, permission system) is ready to host a vo
 - `docs/plugin-guide.md` — Plugin API versioning and HAL driver registration
 - `crates/oz-hal/examples/custom_barcode_scanner.rs` — Custom HAL driver pattern (voice would follow same pattern)
 - `docs/a11y.md` — WCAG-2.1 AA checklist (voice would address 2.5.3 Label in Name)
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
+

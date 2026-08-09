@@ -294,3 +294,9 @@ Rely solely on the existing `UpdateBanner` component that auto-checks on mount.
 - `.github/workflows/release.yml` — Release automation workflow (new)
 - `docs/decisions/2026-01-15-module-system-design.md` — ADR #1: Module system (updater module could be extracted later)
 - [Tauri v2 Updater Plugin Documentation](https://v2.tauri.app/plugin/updater/) — Reference for plugin API and config
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
+

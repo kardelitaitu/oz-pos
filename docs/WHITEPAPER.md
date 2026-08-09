@@ -136,3 +136,9 @@ These choices balance performance, reliability, and scalability across small bou
 OZ-POS is more than a POS system — it is a **platform**. Like the wizard behind the curtain, it hides extraordinary complexity behind a simple, magical interface. Rust guarantees safety and speed. Tauri v2 delivers a native experience on every target. The feature-flag system ensures every merchant — from a solo warung owner to an enterprise chain operator — gets exactly the tool they need, nothing more and nothing less.
 
 > *Small codebase. Limitless possibilities.*
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers, all file references valid
+

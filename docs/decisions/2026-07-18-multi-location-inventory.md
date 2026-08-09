@@ -1638,3 +1638,9 @@ Instead of a `location_id` column, give each location its own SQLite file.
 - `ui/src/features/inventory/ShiftBar.tsx` — Inventory shift start/stop bar with transaction summary (new)
 - `docs/decisions/2026-07-10-workspace-type-instance-design.md` — ADR #4: Workspace instances (foundation)
 - `docs/decisions/2026-07-10-crdt-delta-ledger-offline-sync.md` — ADR #6: Stock movements delta ledger (foundation)
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers
+

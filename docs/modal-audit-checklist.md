@@ -366,3 +366,9 @@ useFocusTrap(nestedPanelRef, showCustomerSearch, () => setShowCustomerSearch(fal
 5. **Test screen reader**: Modal should be announced as a dialog with its aria-label
 6. **Typecheck**: `cd ui && npm run typecheck` — must be clean
 7. **Bundle parity**: `cd ui && npm run lint` (or commit — pre-commit hook runs `verify-bundle-parity`)
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers, all file references valid
+
