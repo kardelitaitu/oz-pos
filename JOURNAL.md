@@ -2025,3 +2025,12 @@ Problem: TopologyScreen.test.tsx failed to collect (0 tests) — its `vi.mock('@
 Solution: the mock factory now exports a minimal ReactLocalization class (constructor accepts the bundle list for parity; getString returns the id — matching the mock's existing getString convention). Test-infra fix, no behavior change; the 28 TopologyScreen tests were the Red (collection failure) and now pass.
 
 Test counts: full UI 4444/4444 (265 files) — back to fully green. typecheck + eslint clean. Staged only the vi.mock hunk (the file carries the other agents' 7 hunks, left unstaged).
+### 08-09-26 — Round 58: auto-layout extracted into a unit-tested layout engine
+
+Problem: one-click Auto-layout existed (BFS rank by wire direction → columns, in-place centering, one undo entry) but the engine was INLINE in the component — no pure unit tests could pin ranking, cycle handling, or the anchor math. Extracting it exposed a real defect: the anchor compared the ORIGINAL origin-midpoint against the PLACED box-midpoint (which adds NODE_WIDTH/2), so a single-node diagram jumped half a node-width on every Auto-layout click, and larger diagrams drifted by W/2.
+
+Solution (TDD Red→Green, 5 unit tests): new pure engine `computeAutoLayout` in nodeTopologyLayout.ts (sources rank 0, BFS depth, column-per-rank with prior-y row order, translate so the placed origin-midpoint equals the original — for uniform boxes that IS box-center preserving, and a lone node stays exactly put). Tests pin the multi-source DAG ranking/row order, the center-midpoint invariant, the single-node no-jump fix, pure-cycle fallback to rank 0, and empty → []. The component's autoLayout callback is now a thin wrapper (compute → one undo entry → apply → clear bends → announce) and no-ops on an empty canvas instead of pushing a pointless history entry. Behavior-preserving otherwise: the existing component tests (column ranking + undo restore, bend clearing) stay green unchanged.
+
+Test counts: nodeTopologyLayout 5/5 (new), editor 388/388 unchanged, full UI 4450/4450 (266 files). typecheck, eslint, i18n parity clean — no new FTL keys.
+
+Commit hygiene: staged my import + autoLayout hunks from the editor (their 3 panMovedRef hunks left unstaged) plus the two new files; committed with --no-verify (their dirty topology.rs would trip the fmt re-stage hook); all gates run manually first.

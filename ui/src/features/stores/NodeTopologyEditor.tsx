@@ -32,6 +32,7 @@ import {
 } from './NodeTopologyIcons';
 import { plainErrorMessage } from '@/utils/app-error';
 import { clampNodeToViewport, findFreeSpawnSpot, NODE_WIDTH, NODE_HEIGHT, NODE_PORT_Y } from './nodeTopologyClamp';
+import { computeAutoLayout } from './nodeTopologyLayout';
 import {
   normalizeTopologyGraph,
   normalizeWireDirection,
@@ -1872,68 +1873,18 @@ export default function NodeTopologyEditor({
     });
   }, [nodes, wires]);
 
-  /** One-click organize: rank nodes by wire direction (sources rank 0,
-   *  targets one higher, BFS), place each rank in a column with rows sorted
-   *  by current y, then re-center the result on the old bounding-box center
-   *  so the diagram doesn't jump. Wires re-route automatically; authored
-   *  bends are cleared because their coordinates described the OLD
-   *  geometry. ONE undo entry restores everything. */
+  /** One-click organize (see computeAutoLayout): a thin wrapper that
+   *  pushes ONE undo entry, applies the engine's placements, clears authored
+   *  bends (their coordinates described the OLD geometry), and announces the
+   *  result. An empty diagram has nothing to organize — no history entry. */
   const autoLayout = useCallback(() => {
-    const rank = new Map<string, number>();
-    // BFS along wire direction from the sources (nodes nothing points to);
-    // cycles keep their first-seen rank.
-    const frontier = nodes.filter((n) => !wires.some((w) => w.toNodeId === n.id)).map((n) => n.id);
-    for (const id of frontier) rank.set(id, 0);
-    let depth = 0;
-    let current = frontier;
-    while (current.length > 0 && depth < nodes.length) {
-      const next: string[] = [];
-      for (const id of current) {
-        for (const w of wires) {
-          if (w.fromNodeId === id && !rank.has(w.toNodeId)) {
-            rank.set(w.toNodeId, depth + 1);
-            next.push(w.toNodeId);
-          }
-        }
-      }
-      current = next;
-      depth += 1;
-    }
-    // Anything still unranked (a pure cycle) lands in column 0.
-    for (const n of nodes) if (!rank.has(n.id)) rank.set(n.id, 0);
-
-    // Anchor: keep the new bounding box centered on the old one so the
-    // layout reorganizes in place instead of sliding across the canvas.
-    const xs = nodes.map((n) => n.x);
-    const ys = nodes.map((n) => n.y);
-    const oldCx = (Math.min(...xs) + Math.max(...xs)) / 2;
-    const oldCy = (Math.min(...ys) + Math.max(...ys)) / 2;
-
-    const GAP_X = 64; // 2⅔ grid steps between columns
-    const GAP_Y = 48; // 2 grid steps between rows
-    const byRank = new Map<number, TopologyNodeData[]>();
-    for (const n of nodes) {
-      const r = rank.get(n.id)!;
-      const col = byRank.get(r) ?? [];
-      col.push(n);
-      byRank.set(r, col);
-    }
-    const placed: Array<{ id: string; x: number; y: number }> = [];
-    for (const r of [...byRank.keys()].sort((a, b) => a - b)) {
-      const col = byRank.get(r)!;
-      col.sort((a, b) => a.y - b.y);
-      const colX = r * (NODE_WIDTH + GAP_X);
-      col.forEach((n, i) => placed.push({ id: n.id, x: colX, y: i * (NODE_HEIGHT + GAP_Y) }));
-    }
-    const newCx = (Math.min(...placed.map((p) => p.x)) + Math.max(...placed.map((p) => p.x)) + NODE_WIDTH) / 2;
-    const newCy = (Math.min(...placed.map((p) => p.y)) + Math.max(...placed.map((p) => p.y)) + NODE_HEIGHT) / 2;
-    const dx = oldCx - newCx;
-    const dy = oldCy - newCy;
-
+    const placed = computeAutoLayout(nodes, wires);
+    if (placed.length === 0) return;
     pushHistory();
+    const byId = new Map(placed.map((p) => [p.id, p]));
     setNodes((prev) => prev.map((n) => {
-      const p = placed.find((pl) => pl.id === n.id);
-      return p ? { ...n, x: Math.round(p.x + dx), y: Math.round(p.y + dy) } : n;
+      const p = byId.get(n.id);
+      return p ? { ...n, x: p.x, y: p.y } : n;
     }));
     // exactOptionalPropertyTypes forbids `bends: undefined` — destructure
     // the property away so the wires leave with NO bends key at all.
