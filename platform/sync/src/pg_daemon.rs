@@ -17,6 +17,7 @@ use oz_core::settings::Settings;
 
 use crate::pg_transport::PgTransport;
 use crate::queue::SyncQueue;
+use crate::{SyncError, SyncResult, import_snapshot};
 
 /// Default interval between PG sync cycles (60 seconds — PG sync is
 /// typically less time-sensitive than HTTP sync).
@@ -362,6 +363,51 @@ impl PgSyncDaemon {
                             }
                         }
                     }
+                    Err(SyncError::AnchorExpired { oldest_available }) => {
+                        tracing::warn!(
+                            oldest_available = ?oldest_available,
+                            "pg sync anchor expired — fetching snapshot to recover"
+                        );
+                        match transport.fetch_snapshot().await {
+                            Ok(snapshot) => {
+                                let db_clone = db.clone();
+                                let anchor = oldest_available.clone();
+                                let recovery = tokio::task::spawn_blocking(move || {
+                                    let conn = db_clone.blocking_lock();
+                                    let store = Store::new(&conn);
+                                    recover_pg_snapshot(&store, &snapshot, anchor.as_deref())
+                                })
+                                .await;
+                                match recovery {
+                                    Ok(Ok(imported)) => {
+                                        tracing::info!(
+                                            imported,
+                                            "pg snapshot imported after anchor expiry"
+                                        );
+                                    }
+                                    Ok(Err(e)) => {
+                                        if sync_error.is_none() {
+                                            sync_error =
+                                                Some(format!("snapshot recovery failed: {e}"));
+                                        }
+                                    }
+                                    Err(e) => {
+                                        if sync_error.is_none() {
+                                            sync_error =
+                                                Some(format!("snapshot recovery panicked: {e}"));
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                if sync_error.is_none() {
+                                    sync_error =
+                                        Some(format!("snapshot recovery fetch failed: {e}"));
+                                }
+                            }
+                        }
+                        break;
+                    }
                     Err(e) => {
                         if sync_error.is_none() {
                             sync_error = Some(format!("pull phase: {e}"));
@@ -433,6 +479,22 @@ impl Default for PgSyncDaemon {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Import a PostgreSQL snapshot, then move the durable pull anchor to the
+/// server's oldest retained boundary.
+///
+/// The anchor is changed only after [`import_snapshot`] succeeds. A failed
+/// import therefore leaves the stale anchor intact so the next cycle can
+/// retry recovery rather than claiming that the gap was repaired.
+fn recover_pg_snapshot(
+    store: &Store<'_>,
+    snapshot: &crate::transport::SyncSnapshotResponse,
+    oldest_available: Option<&str>,
+) -> SyncResult<usize> {
+    let imported = import_snapshot(store, snapshot)?;
+    store.set_sync_pull_state(oldest_available, None)?;
+    Ok(imported)
 }
 
 /// Apply one page of pulled remote items atomically (SYNC-01 parity with the
@@ -559,6 +621,69 @@ mod tests {
         item.id = id.into();
         item.created_at = "2026-01-01T00:00:00.000Z".into();
         item
+    }
+
+    #[test]
+    fn snapshot_recovery_imports_before_resetting_anchor() {
+        let conn = migrations::fresh_db();
+        let store = Store::new(&conn);
+        store
+            .set_sync_pull_state(Some("stale"), Some("stale-cursor"))
+            .unwrap();
+        let snapshot = crate::transport::SyncSnapshotResponse {
+            version: 1,
+            products: vec![crate::transport::SnapshotProduct {
+                id: "pg-snapshot-product".into(),
+                sku: "PG-SNAPSHOT".into(),
+                name: "PG Snapshot Product".into(),
+                price_minor: 250,
+                currency: "USD".into(),
+                category_id: None,
+                barcode: None,
+                created_at: None,
+                updated_at: None,
+                price_updated_at: None,
+                track_serial: false,
+                store_id: None,
+            }],
+            tax_rates: vec![],
+            users: vec![],
+        };
+
+        let imported = recover_pg_snapshot(&store, &snapshot, Some("oldest"))
+            .expect("valid snapshot should recover the PG anchor");
+        assert_eq!(imported, 1);
+        let pull_state = store.get_sync_pull_state().unwrap();
+        assert_eq!(pull_state.since.as_deref(), Some("oldest"));
+        assert_eq!(pull_state.cursor, None);
+        let product_name: String = conn
+            .query_row(
+                "SELECT name FROM products WHERE sku = 'PG-SNAPSHOT'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(product_name, "PG Snapshot Product");
+    }
+
+    #[test]
+    fn snapshot_recovery_keeps_stale_anchor_when_import_fails() {
+        let conn = migrations::fresh_db();
+        let store = Store::new(&conn);
+        store
+            .set_sync_pull_state(Some("stale"), Some("stale-cursor"))
+            .unwrap();
+        let snapshot = crate::transport::SyncSnapshotResponse {
+            version: 99,
+            products: vec![],
+            tax_rates: vec![],
+            users: vec![],
+        };
+
+        assert!(recover_pg_snapshot(&store, &snapshot, Some("oldest")).is_err());
+        let pull_state = store.get_sync_pull_state().unwrap();
+        assert_eq!(pull_state.since.as_deref(), Some("stale"));
+        assert_eq!(pull_state.cursor.as_deref(), Some("stale-cursor"));
     }
 
     // ── SYNC-01 parity: atomic pull apply + durable anchor ────────────

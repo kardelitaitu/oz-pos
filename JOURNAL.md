@@ -1817,3 +1817,13 @@ Solution: Red→Green. Added a daemon integration test with a retention-aware mo
 Verification: Red failed with zero snapshot requests; Green passed the new regression. `bash scripts/test-tdd.sh -p platform/sync`: **263/263 passed, 19 skipped**. `cargo clippy -p platform-sync --all-targets --no-deps -- -D warnings`: clean. Changed Rust files are rustfmt-clean; the workspace `cargo fmt --all -- --check` remains blocked only by an unrelated pre-existing formatting diff in `apps/desktop-client/src/commands/topology.rs`.
 
 Deliberately NOT done: snapshot import and anchor reset remain two database commits, matching the existing `SyncEngine` path; a crash between them can repeat an idempotent snapshot import but cannot advance a stale anchor incorrectly. PostgreSQL daemon parity and recovery backoff remain separate slices.
+
+### 2026-08-09 — TDD cycle: PostgreSQL sync daemon recovers expired anchors
+
+Problem: `PgTransport` queried the remote PostgreSQL queue with an expired durable `since` value as if it were a normal pull. Unlike the HTTP transport, it never detected retention gaps, so a PostgreSQL-backed terminal could not converge after the remote pruned its history.
+
+Solution: Red→Green. PostgreSQL pulls now compare the first-page anchor with `MIN(created_at)` and return the shared `AnchorExpired` error while leaving cursor pages unchanged. `PgTransport::fetch_snapshot` builds the existing typed reference-data snapshot directly from PostgreSQL without selecting `pin_hash`. `PgSyncDaemon` catches the expiry, imports through the shared transactional importer on a blocking task, and resets `(since, cursor)` only after import succeeds. Recovery errors retain the stale anchor for retry.
+
+Verification: Red first failed because the anchor classifier was absent; the focused classifier and recovery tests then passed. `bash scripts/test-tdd.sh -p platform/sync`: **267/267 passed, 19 skipped**. `cargo test -p platform-sync --all-targets`: **267 passed, 19 ignored**. `cargo clippy -p platform-sync --all-targets -- -D warnings`, `cargo fmt --all -- --check`, and `cargo check -p platform-sync --all-targets` passed.
+
+Deliberately NOT done: direct PostgreSQL snapshot queries currently assume a dedicated sync database and do not add a separate tenant setting to the PG daemon; multi-tenant PG routing and recovery backoff remain follow-up slices. Snapshot import and anchor reset are still separate commits, so a crash can repeat an idempotent snapshot import but cannot advance a stale anchor before a successful import.

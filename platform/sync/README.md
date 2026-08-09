@@ -4,6 +4,19 @@
 
 Offline-first sync engine for OZ-POS. Provides an offline queue, HTTP transport, push/pull replication, and last-write-wins conflict resolution.
 
+When a retained pull anchor expires, both `SyncEngine` and the SQLite-backed
+`SyncDaemon` fetch the authoritative snapshot, import it transactionally, and
+reset the durable pull anchor to the server's `oldest_available` boundary.
+This prevents a terminal from re-fetching the same snapshot on every daemon
+cycle.
+
+The PostgreSQL-backed `PgSyncDaemon` follows the same recovery contract: it
+checks the remote retention watermark, fetches reference data directly from
+the PostgreSQL tables when the durable anchor has expired, imports it through
+the shared typed importer, and resets the anchor only after a successful
+import. PostgreSQL deployments use a dedicated sync database rather than the
+HTTP snapshot endpoint.
+
 ## Architecture
 
 ```

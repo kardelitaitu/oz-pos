@@ -21,6 +21,24 @@ pub struct PgTransport {
 const PG_PULL_PAGE_SIZE: usize = 500;
 const PG_PULL_FETCH_LIMIT: i64 = 501;
 
+/// Classify whether a pull's durable anchor predates the retained remote data.
+fn classify_anchor_expiry(
+    since: Option<&str>,
+    cursor: Option<&str>,
+    oldest_available: Option<&str>,
+) -> Option<SyncError> {
+    if cursor.is_none()
+        && let (Some(since), Some(oldest_available)) = (since, oldest_available)
+        && since < oldest_available
+    {
+        return Some(SyncError::AnchorExpired {
+            oldest_available: Some(oldest_available.to_owned()),
+        });
+    }
+
+    None
+}
+
 /// Decode a `"created_at|id"` composite pull cursor into its parts.
 ///
 /// A malformed or missing cursor yields `(None, None)` — the caller then
@@ -177,6 +195,105 @@ impl PgTransport {
         Ok(outcomes)
     }
 
+    /// Fetch the authoritative reference-data snapshot from PostgreSQL.
+    ///
+    /// PostgreSQL sync uses a dedicated database rather than the HTTP
+    /// snapshot endpoint, so the same typed snapshot contract is assembled
+    /// from the remote reference tables. Credential verifier material is
+    /// deliberately excluded from the users query.
+    pub async fn fetch_snapshot(
+        &self,
+    ) -> Result<super::transport::SyncSnapshotResponse, SyncError> {
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| SyncError::Transport(format!("pg connection failed: {e}")))?;
+
+        let products = client
+            .query(
+                "SELECT id, sku, name, price_minor, currency, category_id, barcode,
+                        created_at::TEXT, updated_at::TEXT, price_updated_at::TEXT,
+                        (track_serial::TEXT IN ('1', 't', 'true')) AS track_serial,
+                        store_id
+                 FROM products
+                 ORDER BY sku ASC",
+                &[],
+            )
+            .await
+            .map_err(|e| SyncError::Transport(format!("pg snapshot products query failed: {e}")))?
+            .into_iter()
+            .map(|row| super::transport::SnapshotProduct {
+                id: row.get("id"),
+                sku: row.get("sku"),
+                name: row.get("name"),
+                price_minor: row.get("price_minor"),
+                currency: row.get("currency"),
+                category_id: row.get("category_id"),
+                barcode: row.get("barcode"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+                price_updated_at: row.get("price_updated_at"),
+                track_serial: row.get("track_serial"),
+                store_id: row.get("store_id"),
+            })
+            .collect();
+
+        let tax_rates = client
+            .query(
+                "SELECT id, name, rate_bps,
+                        (is_default::TEXT IN ('1', 't', 'true')) AS is_default,
+                        (is_inclusive::TEXT IN ('1', 't', 'true')) AS is_inclusive,
+                        created_at::TEXT, updated_at::TEXT
+                 FROM tax_rates
+                 ORDER BY id ASC",
+                &[],
+            )
+            .await
+            .map_err(|e| SyncError::Transport(format!("pg snapshot tax rates query failed: {e}")))?
+            .into_iter()
+            .map(|row| super::transport::SnapshotTaxRate {
+                id: row.get("id"),
+                name: row.get("name"),
+                rate_bps: row.get("rate_bps"),
+                is_default: row.get("is_default"),
+                is_inclusive: row.get("is_inclusive"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            })
+            .collect();
+
+        let users = client
+            .query(
+                "SELECT id, username, display_name, role_id,
+                        (is_active::TEXT IN ('1', 't', 'true')) AS is_active,
+                        created_at::TEXT, updated_at::TEXT
+                 FROM users
+                 ORDER BY username ASC",
+                &[],
+            )
+            .await
+            .map_err(|e| SyncError::Transport(format!("pg snapshot users query failed: {e}")))?
+            .into_iter()
+            .map(|row| super::transport::SnapshotUser {
+                id: row.get("id"),
+                username: row.get("username"),
+                display_name: row.get("display_name"),
+                role_id: row.get("role_id"),
+                is_active: row.get("is_active"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            })
+            .collect();
+
+        Ok(super::transport::SyncSnapshotResponse {
+            version: super::transport::SNAPSHOT_SCHEMA_VERSION,
+            products,
+            tax_rates,
+            users,
+        })
+    }
+
     /// Pull updates from the remote PostgreSQL database.
     ///
     /// Returns up to [`PG_PULL_PAGE_SIZE`] items ordered by
@@ -197,6 +314,22 @@ impl PgTransport {
             .get()
             .await
             .map_err(|e| SyncError::Transport(format!("pg connection failed: {e}")))?;
+
+        // Mirror the HTTP server's P-1 retention contract. A cursor already
+        // identifies an exact resume point, so only the first page checks
+        // whether the durable anchor predates the oldest retained row.
+        if since.is_some() && cursor.is_none() {
+            let oldest_available: Option<String> = client
+                .query_one("SELECT MIN(created_at)::TEXT FROM offline_queue", &[])
+                .await
+                .map_err(|e| SyncError::Transport(format!("pg anchor query failed: {e}")))?
+                .try_get(0)
+                .map_err(|e| SyncError::Transport(format!("pg anchor decode failed: {e}")))?;
+            if let Some(error) = classify_anchor_expiry(since, cursor, oldest_available.as_deref())
+            {
+                return Err(error);
+            }
+        }
 
         let (cursor_ts, cursor_id) = decode_pull_cursor(cursor);
         let limit = PG_PULL_FETCH_LIMIT;
@@ -404,6 +537,44 @@ mod tests {
                 // Timed out — no PG server reachable, which is expected.
             }
         }
+    }
+
+    // ── Anchor expiry ───────────────────────────────────────────────────
+
+    #[test]
+    fn expired_anchor_returns_oldest_available_without_cursor() {
+        let result = classify_anchor_expiry(
+            Some("2026-01-01T00:00:00Z"),
+            None,
+            Some("2026-02-01T00:00:00Z"),
+        );
+
+        match result {
+            Some(SyncError::AnchorExpired { oldest_available }) => {
+                assert_eq!(oldest_available.as_deref(), Some("2026-02-01T00:00:00Z"));
+            }
+            other => panic!("expected expired anchor, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn anchor_expiry_is_skipped_for_current_or_cursor_pulls() {
+        assert!(
+            classify_anchor_expiry(
+                Some("2026-02-02T00:00:00Z"),
+                None,
+                Some("2026-02-01T00:00:00Z"),
+            )
+            .is_none()
+        );
+        assert!(
+            classify_anchor_expiry(
+                Some("2026-01-01T00:00:00Z"),
+                Some("2026-02-01T00:00:00Z|item-1"),
+                Some("2026-02-01T00:00:00Z"),
+            )
+            .is_none()
+        );
     }
 
     // ── Composite (created_at, id) cursor ──────────────────────────────
