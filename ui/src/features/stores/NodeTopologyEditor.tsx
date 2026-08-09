@@ -3964,6 +3964,15 @@ export default function NodeTopologyEditor({
     () => liveValidation.graphLevel.filter((e) => !resolvedIssues.has(graphIssueKey(e.messageId))),
     [liveValidation, resolvedIssues],
   );
+  /** Banner-only graph-level issues (round 111): a wireId-only error whose
+   *  wire RENDERS (has geometry) is carried by the canvas marker + the
+   *  jumpable panel row, so the banner is decluttered for it. Errors
+   *  without a canvas anchor stay: true graph-level errors, and wires that
+   *  can't render (ghost endpoint → no geometry → no marker). */
+  const bannerGraphLevel = useMemo(
+    () => visibleGraphLevel.filter((err) => !err.wireId || !wireGeometries.has(err.wireId)),
+    [visibleGraphLevel, wireGeometries],
+  );
   const totalIssues = visibleNodeIssues.length + visibleGraphLevel.length;
 
   /** One-click "Add stock wire" guidance (round 80): the validation panel
@@ -4912,17 +4921,24 @@ export default function NodeTopologyEditor({
           onWheel={handleWheel}
           onContextMenu={(e) => {
             e.preventDefault();
+            if (panMovedRef.current) {
+              // A right-button pan ends with a native contextmenu event;
+              // consume only that post-drag event. The next stationary
+              // right-click is allowed to open the menu normally.
+              panMovedRef.current = false;
+              return;
+            }
             const rect = canvasRef.current?.getBoundingClientRect();
             setContextMenu({ x: e.clientX - (rect?.left ?? 0), y: e.clientY - (rect?.top ?? 0) });
           }}
         >
-          {visibleGraphLevel.length > 0 && (
+          {bannerGraphLevel.length > 0 && (
             <div
               className="topology-validation-banner"
               role="alert"
               onMouseDown={(e) => e.stopPropagation()}
             >
-              {visibleGraphLevel.map((err) => (
+              {bannerGraphLevel.map((err) => (
                 <span key={err.messageId} className="topology-validation-banner-item">
                   {l10n.getString(err.messageId)}
                 </span>

@@ -2706,3 +2706,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 110 — wire validation jump)
 
 **Risks / follow-ups:** the wire marker (byWire) still renders on the canvas AND the banner still carries wire errors — the jump now gives the panel row the same affordance the marker has; a future slice could drop wireId-only errors from the banner since the panel row is now actionable (the round-108 audit kept them there when rows were static).
+
+### 2026-08-10 — banner decluttered for renderable wire errors (round 111)
+
+**Problem (round-110 follow-up, journaled):** the canvas banner still carried wireId-only errors even though round 110 made their panel rows jumpable — "A wire already connects these ports." overlaid the canvas with no wire context while the panel row + wire marker both existed.
+
+**Solution (TDD Red→Green):** the banner now renders `bannerGraphLevel` — visibleGraphLevel filtered to errors WITHOUT a canvas anchor: `!err.wireId || !wireGeometries.has(err.wireId)`. A wire error whose wire RENDERS (geometry exists → marker carries it) is decluttered from the banner; a ghost-endpoint wire (no geometry → no marker, line 5370 returns null) KEEPS the banner — that's the honest boundary, and the pre-existing `shows a canvas banner for a wire referencing a ghost node` test stayed green as the no-regression pin. Red: a new editor test asserted a renderable-wire error (invalid-semantic-connection on a workspace→workspace stock wire) renders NO banner while staying jumpable in the panel — failed (`expected <div class="topology-validation-banner">…</div> to be null`). The round-110 describe's fixture was hoisted to describe scope for reuse.
+
+**Verified:** editor 456/456 (+1), topology suites 535/535, full UI **4574/4574**, tsc, eslint clean.
+
+**Commits:** (round 111 — banner declutter)
+
+**Risks / follow-ups:** the banner now means "no canvas anchor" — true graph-level errors + unrenderable wires. The five wireId-only codes are fully actionable end to end (marker + jumpable panel row); the wire-jump UX series (rounds 108-111) is complete.

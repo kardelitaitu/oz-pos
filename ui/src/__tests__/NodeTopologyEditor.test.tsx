@@ -8880,50 +8880,53 @@ describe('NodeTopologyEditor — extra-branch error node scoping', () => {
 // ── Wire-level validation items are jumpable (round 109 follow-up) ──
 
 describe('NodeTopologyEditor — wire-level validation panel jump', () => {
+  // A workspace-to-workspace stock-routing wire: the contract flags w-bad
+  // with exactly ONE invalid-semantic-connection error (wireId-only), and
+  // the wire RENDERS (both endpoints exist → it carries a canvas marker).
+  const invalidWireDiagram = {
+    nodes: [
+      { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+      { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+      { id: 'ws-b', type: 'workspace', name: 'POS B', x: 380, y: 400, metadata: { typeKey: 'store-pos' } },
+    ],
+    wires: [
+      {
+        id: 'w-loc-a',
+        from_node_id: 'store-1',
+        to_node_id: 'ws-a',
+        from_port_id: 'location-out',
+        to_port_id: 'location-in',
+        relationship_type: 'location',
+        direction: 'one-way',
+      },
+      {
+        id: 'w-loc-b',
+        from_node_id: 'store-1',
+        to_node_id: 'ws-b',
+        from_port_id: 'location-out',
+        to_port_id: 'location-in',
+        relationship_type: 'location',
+        direction: 'one-way',
+      },
+      {
+        id: 'w-bad',
+        from_node_id: 'ws-a',
+        to_node_id: 'ws-b',
+        from_port_id: 'stock-out',
+        to_port_id: 'stock-in',
+        relationship_type: 'stock-routing',
+        direction: 'one-way',
+      },
+    ],
+  } as never;
+
   it('turns a wireId-only validation item into a jump that selects the wire', async () => {
     // Round 109 follow-up: wireId-only errors (invalid-semantic-connection,
     // duplicate-wire, ambiguous-legacy-wire, invalid-location-connection,
     // unknown-wire-endpoint) rendered as STATIC panel rows — the user saw
     // the message but had no way to find the offending wire. They now
     // render as jumpable items that select the wire.
-    mockLoadTopology.mockResolvedValueOnce({
-      nodes: [
-        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
-        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
-        { id: 'ws-b', type: 'workspace', name: 'POS B', x: 380, y: 400, metadata: { typeKey: 'store-pos' } },
-      ],
-      wires: [
-        {
-          id: 'w-loc-a',
-          from_node_id: 'store-1',
-          to_node_id: 'ws-a',
-          from_port_id: 'location-out',
-          to_port_id: 'location-in',
-          relationship_type: 'location',
-          direction: 'one-way',
-        },
-        {
-          id: 'w-loc-b',
-          from_node_id: 'store-1',
-          to_node_id: 'ws-b',
-          from_port_id: 'location-out',
-          to_port_id: 'location-in',
-          relationship_type: 'location',
-          direction: 'one-way',
-        },
-        // Workspace-to-workspace stock routing is semantically invalid: the
-        // contract flags w-bad with invalid-semantic-connection (wireId-only).
-        {
-          id: 'w-bad',
-          from_node_id: 'ws-a',
-          to_node_id: 'ws-b',
-          from_port_id: 'stock-out',
-          to_port_id: 'stock-in',
-          relationship_type: 'stock-routing',
-          direction: 'one-way',
-        },
-      ],
-    } as never);
+    mockLoadTopology.mockResolvedValueOnce(invalidWireDiagram);
     renderEditor();
     await waitFor(() => expect(getNodeCount()).toBe(3));
 
@@ -8949,5 +8952,27 @@ describe('NodeTopologyEditor — wire-level validation panel jump', () => {
     )!;
     expect(badGroup.classList.contains('wire-selected')).toBe(true);
     expect(document.querySelector('.topology-validation-panel')).toBeNull();
+  });
+
+  it('keeps a renderable wire-level error out of the banner', async () => {
+    // Round 110 follow-up: a wireId-only error on a RENDERABLE wire is
+    // carried by its canvas marker + jumpable panel row, so the banner is
+    // decluttered. The ghost-wire case (no geometry → no marker) must keep
+    // the banner — pinned by the 'shows a canvas banner for a wire
+    // referencing a ghost node' test.
+    mockLoadTopology.mockResolvedValueOnce(invalidWireDiagram);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+
+    expect(document.querySelector('.topology-validation-banner')).toBeNull();
+
+    // The error is still live in the panel as a jumpable item.
+    fireEvent.click(document.querySelector('.topology-issues-btn')!);
+    const panel = document.querySelector('.topology-validation-panel');
+    expect(panel).not.toBeNull();
+    const wireItem = Array.from(panel!.querySelectorAll('.topology-validation-item')).find((el) =>
+      el.textContent?.includes('This wire uses an incompatible port and relationship type.'),
+    )!;
+    expect(wireItem.querySelector('.topology-validation-item-select')).not.toBeNull();
   });
 });
