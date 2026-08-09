@@ -4200,6 +4200,63 @@ describe('NodeTopologyEditor — warehouse capacity tier gate', () => {
   });
 });
 
+// ── Warehouse capacity tier notice ──────────────────────────────
+
+describe('NodeTopologyEditor — warehouse capacity tier notice', () => {
+  const renderGraph = async (tier: 'standard' | 'pro', metadata: Record<string, unknown>) => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-1', type: 'workspace', name: 'Retail POS', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-1', type: 'warehouse', name: 'Main Stock Room', x: 680, y: 140, metadata },
+      ],
+      wires: [
+        { id: 'w-loc', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+      ],
+    } as never);
+    renderEditor({ currentTier: tier });
+    await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
+  };
+
+  it('shows the notice on standard tier when capacity numbers are stored', async () => {
+    await renderGraph('standard', { stock: 500, capacity: 1000 });
+
+    const notice = document.querySelector('.topology-tier-notice');
+    expect(notice).not.toBeNull();
+    expect(notice?.textContent).toContain('capacity');
+  });
+
+  it('hides the notice on Pro tier with the same numbers', async () => {
+    await renderGraph('pro', { stock: 500, capacity: 1000 });
+    expect(document.querySelector('.topology-tier-notice')).toBeNull();
+  });
+
+  it('hides the notice on standard tier without capacity numbers', async () => {
+    await renderGraph('standard', { stock: 500 });
+    expect(document.querySelector('.topology-tier-notice')).toBeNull();
+  });
+
+  it('does not block Apply', async () => {
+    const onSave = vi.fn();
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-1', type: 'workspace', name: 'Retail POS', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-1', type: 'warehouse', name: 'Main Stock Room', x: 680, y: 140, metadata: { stock: 500, capacity: 1000 } },
+      ],
+      wires: [
+        { id: 'w-loc', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+      ],
+    } as never);
+    renderEditor({ onSave });
+    await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
+
+    expect(document.querySelector('.topology-tier-notice')).not.toBeNull();
+    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+  });
+});
+
 // ── Zoom controls behavior ──────────────────────────────────────
 
 describe('NodeTopologyEditor — zoom controls behavior', () => {

@@ -144,6 +144,7 @@ topology-inspector-node-name = Node Name
 topology-inspector-subtitle = Subtitle / Location
 topology-tier-suffix = { $tier } TIER
 topology-toast-multi-warehouse = Multiple Stock Rooms require a Pro Tier license.
+topology-tier-capacity-notice = Stock Room capacity numbers are saved but not enforced on your current plan — upgrade to Pro to use capacity limits.
 topology-toast-selection-dropped = The selected element is not part of this preset and was deselected.
 topology-toast-wire-duplicate = A wire already connects these ports.
 topology-toast-fallback-warehouse = Multi-warehouse stock deduction fallback wires require a Pro Tier license.

@@ -2254,3 +2254,17 @@ Verified: contract 34/34 (+3), editor + screen 461/461 (+2 editor), full UI 4528
 Risks / follow-ups: a tier DOWNGRADE while a pro-authored diagram with capacity numbers exists now suppresses the capacity errors silently — the warehouse-tier-limit toast still fires for 2+ warehouses, but a single at-capacity warehouse stops being flagged until tier is restored (the numbers remain stored; the checks just don't run). The low-stock badge is display-only and stays ungated.
 
 Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agents' 3 concurrent screen hunks excluded), 1/1 contract-test hunk, 5/11 editor-test hunks (the agents' panMovedRef + titlebar/KDS/pan hunks excluded) — staged via filtered patches, --no-verify with all gates run manually first.
+
+### 2026-08-09 — tier-downgrade notice for stored capacity numbers
+
+**Problem:** rounds 72/75/76 gated the capacity checks to Pro tier, but a Pro-authored diagram with capacity numbers opened on standard tier silently suppresses those checks — the user's warehouse reads "1000 / 1000 items" with no indication the enforcement isn't running.
+
+**Solution:** a non-blocking, bottom-center info strip (`topology-tier-notice`, `role="status"`) shown only when `currentTier` is standard (not pro/enterprise) AND any warehouse carries numeric `capacity` metadata (`hasCapacityMetadata` memo). It deliberately does NOT block Apply (the banner stays reserved for blocking errors). 1 new FTL key per bundle — parity held. The CSS uses only `--space-*`/`--radius-md`/`--text-xs`/warning tokens, so the token-compliance gate stayed clean.
+
+**TDD:** Red — 4 editor tests (shows on standard + capacity stored; hides on Pro; hides on standard without capacity; does not block Apply); only the two "shows/hides" assertions failed first. Green — memo + JSX + role fix (eslint demanded a role on the mousedown-interceptor div) + FTL + CSS.
+
+**Verified:** editor + integration 461/461 (+4), full UI 4533/4533, typecheck, eslint 0/0, i18n lint clean, token compliance clean.
+
+**Commits:** (round 77 — tier-downgrade notice)
+
+**Risks / follow-ups:** the notice is display-only — on downgrade the stored numbers stay and re-enforce on upgrade (documented round 76); a dismiss action ("I know, don't remind me") is a natural next slice; the notice doesn't enumerate which warehouses carry capacity, only that some do.

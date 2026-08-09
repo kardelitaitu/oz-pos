@@ -3906,6 +3906,15 @@ export default function NodeTopologyEditor({
     return { byNode, byWire, graphLevel };
   }, [nodes, wires, allowLegacyApply, currentTier]);
 
+  /** True when any warehouse carries design-time capacity numbers — the
+   *  tier-downgrade notice's trigger. The numbers were authored (Pro)
+   *  but the capacity guards are suppressed on the current tier, so the
+   *  user must be told the checks aren't running. */
+  const hasCapacityMetadata = useMemo(
+    () => nodes.some((n) => n.type === 'warehouse' && typeof n.metadata?.['capacity'] === 'number'),
+    [nodes],
+  );
+
   /** Aggregated issue list for the validation panel: per-node problems
    *  first (actionable — clicking jumps to the node), then graph-level. */
   const [validationPanelOpen, setValidationPanelOpen] = useState(false);
@@ -4871,6 +4880,16 @@ export default function NodeTopologyEditor({
                   {l10n.getString(err.messageId)}
                 </span>
               ))}
+            </div>
+          )}
+          {!['pro', 'enterprise'].includes(currentTier) && hasCapacityMetadata && (
+            <div className="topology-tier-notice" role="status" onMouseDown={(e) => e.stopPropagation()}>
+              <WarningIcon size={14} />
+              <span>
+                <Localized id="topology-tier-capacity-notice">
+                  Stock Room capacity numbers are saved but not enforced on your current plan — upgrade to Pro to use capacity limits.
+                </Localized>
+              </span>
             </div>
           )}
           {totalIssues > 0 && (
