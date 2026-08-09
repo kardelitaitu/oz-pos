@@ -2482,3 +2482,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 94 — id pin extension)
 
 **Risks / follow-ups:** the en-side counterparts are still unpinned (a round-91 en "connection"→"wire" regression would not fail this table); every deliberate future copy change must update the pin (by design).
+
+### 2026-08-09 — en-side inverse guard added to the id pin (round 95)
+
+**Problem (round-94 follow-up):** the pin table guarded only the id direction — an en-side regression (e.g., the round-91 "connection"→"wire" copy reverting) would not fail the suite.
+
+**Solution (pin extension):** each row of `nativeSpeakerPins` now carries BOTH `en` and `id` expectations, and the single test resolves every key from the real `getBundle('en')` AND `getBundle('id')` bundles, failing with a direction-specific message ("en X drifted from its pinned value" / "id X drifted"). All 14 keys pinned in both directions, including the two placeholder-bearing ones (confirm-delete-many with count=2, pull-result with products/tax_rates/users). Mechanism proven in BOTH directions: mutating en dismiss to "Dismiss issue" went red with `en "topology-validation-dismiss" drifted…` and reverted green; the id direction was already proven in round 93.
+
+**Verified:** i18nBundle 13/13 (one test), full UI 4564/4564, typecheck, eslint 0/0, i18n lint clean.
+
+**Commits:** (round 95 — en inverse guard)
+
+**Risks / follow-ups:** the en expectations freeze source copy too — a deliberate en wording change must update the pin (by design, same contract as the id side); the remaining non-pinned keys across other bundles are out of scope for this native-speaker set.
