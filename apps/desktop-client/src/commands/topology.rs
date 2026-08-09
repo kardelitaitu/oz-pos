@@ -984,7 +984,9 @@ fn save_topology_json_at_key(
     Ok(())
 }
 
-/// Compatibility wrapper for unscoped legacy callers and unit tests.
+#[cfg(test)]
+/// Test convenience wrapper: unscoped save used only by the unit tests.
+/// Production callers use `save_topology_json_at_key` directly.
 fn save_topology_json(
     conn: &Connection,
     nodes: Vec<Value>,
@@ -1495,7 +1497,7 @@ pub async fn save_topology(
 /// Stored values are served raw so the frontend's documented load-time
 /// healing (normalizeWireDirection, ghost-wire filtering, port defaults)
 /// can run — mirroring `load_topology_data`. Structure is enforced at the
-/// save boundary (`save_topology_json`), where the healed value must hold.
+/// save boundary (`save_topology_json_at_key`), where the healed value must hold.
 /// Do NOT re-add `validate_topology_structure` here: a single stored
 /// corrupt value would brick the whole topology instead of letting the
 /// editor repair it.
@@ -1544,7 +1546,7 @@ pub async fn load_topology(
     // load_topology_data is documented raw-by-design ("the load boundary
     // stays raw"). Rejecting a stored row for display-level gaps would
     // brick the whole topology instead of letting the editor repair it.
-    // Both gates run at the save/Apply boundary (save_topology_json), where
+    // Both gates run at the save/Apply boundary (save_topology_json_at_key), where
     // the healed value must hold.
     validate_load_shape(nodes, wires)?;
     Ok(Some(value))
