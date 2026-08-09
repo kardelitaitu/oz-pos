@@ -1966,3 +1966,12 @@ Commits: 769f5275 (test infra, test file only) + d664b189 (help row, editor + te
 Test counts: +1 (editor 351→352 mine; 353 total with their hover-focus test). Filtered marquee run 20/20 (was 14 crashed). Full UI 4395 (265 files). Gates: typecheck, eslint, i18n parity, bundle parity clean.
 
 Risks: none new. The journaled 08-08 note (union reads the mousedown-closure selection) still holds — nothing mutates selection mid-marquee today. Their title-bar restructure tests are currently red against the un-restructured editor (their incomplete batch, not mine).
+### 2026-08-09 — Round 53: per-branch snap & wire-labels view prefs
+
+Problem: the per-branch localStorage migration (rounds 46-47) covered minimap and wire routing, but snap-to-grid and wire labels were still per-install globals — a user who disables snap for one diagram got it disabled everywhere, and branch switches (which remount the editor) couldn't restore a diagram's own look.
+
+Solution: Red→Green, the exact round-47 shape. Red: updated the two global-key tests to the branch-scoped key (`oz-topology-view-snap:unassigned`, `oz-topology-view-wire-labels:unassigned`) and added two nested describes (5 tests each): persist to the active branch's key only, restore the branch's own saved value on mount, no cross-branch leak, one-time legacy per-install inheritance, corrupted-value fallback (snap ON / labels hidden). 4 drivers failed for the right reasons; the isolation/legacy/corruption guards passed as spec guards. Green: `snapKey` / `wireLabelsKey` = `oz-topology-view-<pref>:<branchId|unassigned>`, lazy mount reads with `saved ?? legacy` fallback, write-back effects on `[key, value]`.
+
+Test counts: +10 (editor 353→363). Full UI 4405 (265 files). Gates: typecheck, eslint, i18n parity clean (no new FTL keys — no UI text changed).
+
+Commits: this round, scoped to NodeTopologyEditor.tsx + my test-file hunks + JOURNAL.md (staged via filtered git apply; the tree's other agent hunks — title-bar restructure, Resto→KDS, zoom-controls, contextmenu suppression, hover-focus, panMovedRef — stay unstaged in their batch).

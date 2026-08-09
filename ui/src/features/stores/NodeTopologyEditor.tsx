@@ -845,11 +845,15 @@ export default function NodeTopologyEditor({
       return 'curved';
     }
   });
+  const snapKey = `oz-topology-view-snap:${branchId ?? 'unassigned'}`;
   /** Snap interactive placement (drag/nudge/spawn) to the 24px grid.
-   *  Persisted alongside the routing preference. */
+   *  Persisted per branch alongside the routing preference; a legacy
+   *  per-install value is inherited once when no per-branch choice exists. */
   const [snapEnabled, setSnapEnabled] = useState<boolean>(() => {
     try {
-      return localStorage.getItem('oz-topology-view-snap') !== '0';
+      const saved = localStorage.getItem(snapKey);
+      const value = saved ?? localStorage.getItem('oz-topology-view-snap');
+      return value !== '0';
     } catch {
       return true;
     }
@@ -860,9 +864,12 @@ export default function NodeTopologyEditor({
   /** Wire label pills: optional permanent labels at each wire's midpoint
    *  (clicking one opens the round-20 rename editor). Persisted with the
    *  other view prefs; default off to keep the current clean look. */
+  const wireLabelsKey = `oz-topology-view-wire-labels:${branchId ?? 'unassigned'}`;
   const [wireLabelsVisible, setWireLabelsVisible] = useState<boolean>(() => {
     try {
-      return localStorage.getItem('oz-topology-view-wire-labels') === '1';
+      const saved = localStorage.getItem(wireLabelsKey);
+      const value = saved ?? localStorage.getItem('oz-topology-view-wire-labels');
+      return value === '1';
     } catch {
       return false;
     }
@@ -870,9 +877,9 @@ export default function NodeTopologyEditor({
 
   useEffect(() => {
     try {
-      localStorage.setItem('oz-topology-view-wire-labels', wireLabelsVisible ? '1' : '0');
+      localStorage.setItem(wireLabelsKey, wireLabelsVisible ? '1' : '0');
     } catch { /* storage may be unavailable (private mode) — view pref only */ }
-  }, [wireLabelsVisible]);
+  }, [wireLabelsKey, wireLabelsVisible]);
 
   /** Any wire carrying authored bends. The elbow/curved toggle then applies
    *  only to UNBENT wires (authored geometry wins), so the View rack shows
@@ -887,9 +894,9 @@ export default function NodeTopologyEditor({
 
   useEffect(() => {
     try {
-      localStorage.setItem('oz-topology-view-snap', snapEnabled ? '1' : '0');
+      localStorage.setItem(snapKey, snapEnabled ? '1' : '0');
     } catch { /* storage may be unavailable (private mode) — view pref only */ }
-  }, [snapEnabled]);
+  }, [snapKey, snapEnabled]);
   /** Grid-aware placement: identity when the snap toggle is off. */
   const snapOrNot = (v: number) => (snapEnabled ? snap(v) : v);
   /** Live cursor position in canvas coords while a connection is in flight

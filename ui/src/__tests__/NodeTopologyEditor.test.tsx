@@ -6408,10 +6408,52 @@ describe('NodeTopologyEditor — validation panel & view prefs', () => {
     expect(path.getAttribute('d')).toContain('L ');
   });
 
-  it('persists the snap preference to localStorage', () => {
+  it('persists the snap preference to the branch-scoped key', () => {
     renderEditor();
     fireEvent.click(screen.getByText('Snap to grid')); // toggles OFF
-    expect(localStorage.getItem('oz-topology-view-snap')).toBe('0');
+    expect(localStorage.getItem('oz-topology-view-snap:unassigned')).toBe('0');
+  });
+
+  describe('per-branch snap persistence', () => {
+    // Scrub after too so a leftover '0' under a branch key can't affect
+    // later default-mount describes that assume snap is on.
+    afterEach(() => localStorage.clear());
+
+    it("persists the choice to the active branch's key only", () => {
+      renderEditor({ branchId: 'branch-a' });
+      fireEvent.click(screen.getByText('Snap to grid')); // toggles OFF
+
+      expect(localStorage.getItem('oz-topology-view-snap:branch-a')).toBe('0');
+      expect(localStorage.getItem('oz-topology-view-snap:branch-b')).toBeNull();
+    });
+
+    it("restores the branch's own saved snap on mount", () => {
+      localStorage.setItem('oz-topology-view-snap:branch-a', '0');
+      renderEditor({ branchId: 'branch-a' });
+
+      expect(screen.getByRole('button', { name: 'Snap to grid' })).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it("does not leak another branch's saved snap", () => {
+      localStorage.setItem('oz-topology-view-snap:branch-a', '0');
+      renderEditor({ branchId: 'branch-b' });
+
+      expect(screen.getByRole('button', { name: 'Snap to grid' })).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('inherits the legacy per-install value once when no per-branch choice exists', () => {
+      localStorage.setItem('oz-topology-view-snap', '0');
+      renderEditor({ branchId: 'branch-a' });
+
+      expect(screen.getByRole('button', { name: 'Snap to grid' })).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('falls back to snap ON when the saved value is corrupted', () => {
+      localStorage.setItem('oz-topology-view-snap:branch-a', 'garbage');
+      renderEditor({ branchId: 'branch-a' });
+
+      expect(screen.getByRole('button', { name: 'Snap to grid' })).toHaveAttribute('aria-pressed', 'true');
+    });
   });
 
   describe('per-branch wire-routing persistence', () => {
@@ -6514,18 +6556,59 @@ describe('NodeTopologyEditor — wire label pills', () => {
     expect(pills()).toHaveLength(1); // the renamed wire's pill is hidden
   });
 
-  it('persists the preference to localStorage and restores it on mount', () => {
+  it('persists the preference to the branch-scoped key', () => {
     renderEditor();
     fireEvent.click(screen.getByText('Wire labels'));
-    expect(localStorage.getItem('oz-topology-view-wire-labels')).toBe('1');
+    expect(localStorage.getItem('oz-topology-view-wire-labels:unassigned')).toBe('1');
   });
 
   it('restores the wire-labels preference on mount', () => {
-    localStorage.setItem('oz-topology-view-wire-labels', '1');
+    localStorage.setItem('oz-topology-view-wire-labels:unassigned', '1');
     renderEditor();
 
     expect(pills()).toHaveLength(2);
     expect(screen.getByRole('button', { name: 'Wire labels' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  describe('per-branch wire-labels persistence', () => {
+    afterEach(() => localStorage.clear());
+
+    it("persists the choice to the active branch's key only", () => {
+      renderEditor({ branchId: 'branch-a' });
+      fireEvent.click(screen.getByText('Wire labels'));
+
+      expect(localStorage.getItem('oz-topology-view-wire-labels:branch-a')).toBe('1');
+      expect(localStorage.getItem('oz-topology-view-wire-labels:branch-b')).toBeNull();
+    });
+
+    it("restores the branch's own saved wire-labels on mount", () => {
+      localStorage.setItem('oz-topology-view-wire-labels:branch-a', '1');
+      renderEditor({ branchId: 'branch-a' });
+
+      expect(pills()).toHaveLength(2);
+      expect(screen.getByRole('button', { name: 'Wire labels' })).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it("does not leak another branch's saved wire-labels", () => {
+      localStorage.setItem('oz-topology-view-wire-labels:branch-a', '1');
+      renderEditor({ branchId: 'branch-b' });
+
+      expect(pills()).toHaveLength(0);
+    });
+
+    it('inherits the legacy per-install value once when no per-branch choice exists', () => {
+      localStorage.setItem('oz-topology-view-wire-labels', '1');
+      renderEditor({ branchId: 'branch-a' });
+
+      expect(pills()).toHaveLength(2);
+    });
+
+    it('falls back to hidden when the saved value is corrupted', () => {
+      localStorage.setItem('oz-topology-view-wire-labels:branch-a', 'garbage');
+      renderEditor({ branchId: 'branch-a' });
+
+      expect(pills()).toHaveLength(0);
+    });
   });
 
   it('dims pills for wires outside the hovered node neighbourhood', () => {
