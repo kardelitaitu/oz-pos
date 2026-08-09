@@ -869,13 +869,42 @@ describe('semantic topology contract', () => {
       ],
     );
 
-    expect(validateTopologyGraph(normalized, 'standard')).toEqual(expect.arrayContaining([
-      // Round 87 follow-up: the cap is scoped to the SECOND warehouse — the
-      // one that pushes the count past the allowed single Stock Room — so
-      // the editor renders it as a node-scoped card note with a jump
-      // target instead of a banner with nowhere to go.
-      expect.objectContaining({ code: 'warehouse-tier-limit', nodeId: 'wh-sat' }),
-    ]));
+    const tierErrors = validateTopologyGraph(normalized, 'standard').filter(
+      (e) => e.code === 'warehouse-tier-limit',
+    );
+    // Exactly ONE excess Stock Room for two warehouses — the second node is
+    // the one that pushes the count past the allowed single Stock Room, so
+    // the editor renders it as a node-scoped card note with a jump target
+    // instead of a banner with nowhere to go (round 87 follow-up).
+    expect(tierErrors).toEqual([expect.objectContaining({ nodeId: 'wh-sat' })]);
+  });
+
+  it('flags every warehouse beyond the first below Pro tier', () => {
+    // Multi-excess shape (round 103 follow-up): the cap flags the FIRST
+    // allowed Stock Room plus every warehouse after it — with three Stock
+    // Rooms the second and third are each flagged, one jumpable error per
+    // excess node, so a user downgraded with several Stock Rooms can fix
+    // them one by one.
+    const normalized = graph(
+      [
+        branch(),
+        workspace('ws-1'),
+        warehouseWith('wh-hub', { stock: 300, capacity: 1000 }),
+        warehouseWith('wh-mid', { stock: 200, capacity: 500 }),
+        warehouseWith('wh-leaf', { stock: 100, capacity: 400 }),
+      ],
+      [
+        ownershipWire('w-owner', 'ws-1'),
+        stockWire('w-stock', 'ws-1', 'wh-hub'),
+        transferWire('w-x1', 'wh-hub', 'wh-mid'),
+        transferWire('w-x2', 'wh-mid', 'wh-leaf'),
+      ],
+    );
+
+    const tierErrors = validateTopologyGraph(normalized, 'standard').filter(
+      (e) => e.code === 'warehouse-tier-limit',
+    );
+    expect(tierErrors.map((e) => e.nodeId)).toEqual(['wh-mid', 'wh-leaf']);
   });
 
   it('allows two warehouses on Pro tier', () => {

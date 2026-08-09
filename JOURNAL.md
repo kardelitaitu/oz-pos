@@ -2646,3 +2646,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 105 — tier-limit node-scoping pin)
 
 **Risks / follow-ups:** the multi-excess slice (flag every warehouse beyond the first) would extend the contract test, not this editor test; the observed one-off full-suite flake was not reproduced or identified.
+
+### 2026-08-10 — tier-limit cap flags every excess Stock Room (round 106)
+
+**Problem (round-103 follow-up, journaled):** the cap flagged only the SECOND warehouse — with three Stock Rooms on standard tier, the third went unflagged, so a downgraded diagram with several excess rooms reported just one jumpable error.
+
+**Solution (TDD Red→Green):** the contract now flags every warehouse beyond the first (`slice(1)`) — one `warehouse-tier-limit` error per excess node, deterministic by node order. Red: a new contract test pins a 3-warehouse transfer chain emitting exactly `['wh-mid', 'wh-leaf']` (failed with `['wh-mid']` only); the existing 2-warehouse test was tightened to pin exactly ONE error (the single-excess boundary). The editor needs no changes — the panel maps one jumpable item per node-scoped error by construction (proven for the single case in round 105).
+
+**Verified:** contract 45/45 (+1), topology suites 531/531, full UI 4568/4568, tsc, eslint clean.
+
+**Commits:** (round 106 — multi-excess tier-limit)
+
+**Risks / follow-ups:** the multi-error panel rendering (3-warehouse editor render) is not individually pinned — the round-105 single-case pin plus the generic node-scoped mapping cover it; a future editor test could pin the two-item panel directly.

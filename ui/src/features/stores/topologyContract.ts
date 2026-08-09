@@ -797,17 +797,18 @@ export function validateTopologyGraph(
   // most one Stock Room. Appended LAST so semantic/integrity errors keep
   // their precedence — a broken diagram reports the break first, the
   // license cap only after the graph itself is sound. Round 87 follow-up:
-  // the error is scoped to the SECOND warehouse — the node that pushes
-  // the count past the cap — so the editor renders it as a node-scoped
-  // card note with a jump target instead of a banner with nowhere to go.
-  // Deterministic by node order: index 1 is always the first excess.
+  // the error is scoped per excess node — the FIRST Stock Room is the
+  // allowed one, every warehouse after it (slice(1)) is flagged, one
+  // jumpable error each — so a downgraded diagram with several Stock
+  // Rooms reports each one in the panel instead of a single banner with
+  // nowhere to go. Deterministic by node order.
   if (tierLimitEnforced) {
     const warehouses = graph.nodes.filter((node) => node.kind === 'warehouse');
-    if (warehouses.length >= 2) {
+    for (const excess of warehouses.slice(1)) {
       errors.push({
         code: 'warehouse-tier-limit',
         messageId: 'topology-toast-multi-warehouse',
-        nodeId: warehouses[1]!.id,
+        nodeId: excess.id,
       });
     }
   }
