@@ -2828,3 +2828,17 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** `04683eae`
 
 **Risks / follow-ups:** the bin-target unit tests and exe-spawning integration tests remain unrunnable until the app is closed — a future slice could add a `--lib`-only CI lane or a named test profile so the desktop-client suite stops being hostage to a running app.
+
+### 2026-08-10 — write_delta concurrency contract made real: serialized allocation + bounded retry (round 118)
+
+**Problem:** migration 116 (`idx_setting_updated_unique_version`) made a duplicate `(key, terminal_id, version)` a hard constraint error, and the `write_delta` doc promised callers would "retry the version allocation under a serialized lock" on that error — but **no caller implements the retry** (`set_tracked`, `set_batch_tracked`, and both sync dispatchers log-and-drop). A concurrent standalone `write_delta` either hard-errors or silently loses a delta row, punching a gap in the linear per-terminal audit trail migrations 100/116 promise.
+
+**Red (deterministic):** `write_delta_concurrent_same_pair_never_loses_delta` — connection A holds a `BEGIN IMMEDIATE` write lock, connection B's allocation is guaranteed to read the same MAX and collide on its INSERT (blocked by A's lock), A wins the slot. Pre-fix: B's `write_delta` errors (constraint/busy) — **3/3 runs failed** at `loser_result.is_ok()`. (First attempt used a barrier + thread loop and was flaky — run 2 passed — replaced with the lock-interleaving design.)
+
+**Green:** `write_delta` now dispatches on `conn.is_autocommit()`: callers already inside a transaction keep the original single-attempt savepoint path (`write_delta_nested` — their earlier value write already serializes the allocation, and a retry inside the same transaction couldn't observe the winner's committed row anyway); standalone calls run each attempt in its own `BEGIN IMMEDIATE` transaction (SQLite's reserved write lock serializes concurrent allocations) with a **bounded retry (32)** on `ConstraintViolation`/`DatabaseBusy` and a fresh snapshot, so the ledger stays gapless and no delta is lost. Extracted `next_delta_version`/`write_delta_row` helpers; `write_delta_on_tx` deduped onto them. Note: rusqlite 0.31 API — `Connection::is_autocommit()`, `ffi::ErrorCode::ConstraintViolation`/`DatabaseBusy` (older names don't exist).
+
+**Verified:** platform-core lib **225/225** (+1), new test **5/5 consecutive runs deterministic**, consumer **platform-sync 275/275** (queue.rs nested + standalone paths), `cargo clippy -p platform-core --lib -- -D warnings` clean (one real catch: my first `write_delta_nested` introduced a pointless closure — clippy flagged it, fixed), `cargo fmt --check` clean, CRLF preserved in raw.rs.
+
+**Commits:** `5d45763e`
+
+**Risks / follow-ups:** (1) the nested path (set_tracked/queue) relies on the outer value-write ordering to serialize — a dedicated concurrent set_tracked test would pin that; (2) the original savepoint path left the implicit transaction open after a standalone error (latent) — the new standalone path always ends its transaction per attempt (COMMIT/ROLLBACK), which closes that in passing.
