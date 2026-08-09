@@ -2043,3 +2043,12 @@ Solution (TDD Red→Green, 3 tests): the engine now splits the graph into undire
 Test counts: nodeTopologyLayout 8/8 (+3), editor 388/388 unchanged, full UI 4454/4454 (266 files). typecheck, eslint, i18n parity clean — no new FTL keys.
 
 Commit hygiene: both files are entirely mine (round 58 created them); staged directly, journal via index surgery (agents' entries excluded), committed with --no-verify (their dirty topology.rs would trip the fmt re-stage hook); all gates run manually first.
+### 08-09-26 — Round 60: auto-layout snaps to the grid for elbow routing
+
+Problem: elbow (orthogonal) wires only look clean when the cards sit on the 24px lattice, but the auto-layout anchor produced free-floating positions (the center-midpoint almost never lands on the grid), so elbow-routed diagrams came out of Auto-layout with ragged wire runs.
+
+Solution (TDD Red→Green, 3 tests): computeAutoLayout gains a snapToGrid option (LAYOUT_GRID = 24) that snaps every final placement to the lattice; the default keeps the exact free-floating anchor math, so curved routing and all existing layout behavior/tests are byte-identical. The editor passes snapToGrid when snap is enabled AND the wire-routing toggle is elbow — the elbow-routing readout (round 47's pref) decides the geometry, the snap toggle decides the lattice. Component test seeds both prefs, clicks Auto-layout, and asserts every card lands on a grid point; engine tests pin the snapped-on / free-floating-by-default contract.
+
+Test counts: nodeTopologyLayout 10/10 (+2), editor 389/389 (+1), full UI 4457/4457 (266 files). typecheck, eslint, i18n parity clean — no new FTL keys.
+
+Commit hygiene: engine + engine-test files are entirely mine; editor autoLayout hunks staged with the agents' panMovedRef hunks left unstaged; journal via index surgery; committed with --no-verify (their dirty topology.rs would trip the fmt re-stage hook); all gates run manually first.

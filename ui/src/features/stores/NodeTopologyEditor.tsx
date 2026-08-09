@@ -1878,7 +1878,12 @@ export default function NodeTopologyEditor({
    *  bends (their coordinates described the OLD geometry), and announces the
    *  result. An empty diagram has nothing to organize — no history entry. */
   const autoLayout = useCallback(() => {
-    const placed = computeAutoLayout(nodes, wires);
+    // Elbow-routed wires are orthogonal — snap the placements to the grid
+    // so the orthogonal geometry stays clean; curved wires tolerate the
+    // free-floating anchor positions.
+    const placed = computeAutoLayout(nodes, wires, {
+      snapToGrid: snapEnabled && wireRouting === 'elbow',
+    });
     if (placed.length === 0) return;
     pushHistory();
     const byId = new Map(placed.map((p) => [p.id, p]));
@@ -1890,7 +1895,7 @@ export default function NodeTopologyEditor({
     // the property away so the wires leave with NO bends key at all.
     setWires((prev) => prev.map(({ bends: _bends, ...rest }) => rest));
     setLiveAnnouncement(l10nRef.current.getString('topology-layout-announce'));
-  }, [nodes, wires, pushHistory]);
+  }, [nodes, wires, pushHistory, snapEnabled, wireRouting]);
 
   /** Commit an in-flight Alt+drag: the copies stay where they dropped,
    *  become the selection, and the whole duplicate-drop lands as ONE undo

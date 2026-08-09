@@ -17,6 +17,8 @@ export const LAYOUT_GAP_Y = 48;
 /** Extra canvas-space gap between forest bands (4 grid steps) so
  *  independent trees read as separate diagrams, not one deep chain. */
 export const LAYOUT_COMPONENT_GAP = 96;
+/** The grid lattice the editor snaps interactive placement to. */
+export const LAYOUT_GRID = 24;
 
 /** Minimal node shape the engine needs (id + current position). */
 export interface LayoutNode {
@@ -39,9 +41,18 @@ export interface NodePlacement {
   y: number;
 }
 
+export interface AutoLayoutOptions {
+  /** Snap every placement to the 24px grid. Elbow-routed wires are
+   *  orthogonal, so they only look clean when the cards sit on the
+   *  lattice; the editor passes this when snap is enabled AND the routing
+   *  toggle is elbow. Curved routing keeps the free-floating anchor math. */
+  snapToGrid?: boolean;
+}
+
 export function computeAutoLayout(
   nodes: LayoutNode[],
   wires: LayoutWire[],
+  options: AutoLayoutOptions = {},
 ): NodePlacement[] {
   if (nodes.length === 0) return [];
 
@@ -143,5 +154,12 @@ export function computeAutoLayout(
   }
   const dx = oldCx - midOf(placed.map((p) => p.x));
   const dy = oldCy - midOf(placed.map((p) => p.y));
-  return placed.map((p) => ({ id: p.id, x: Math.round(p.x + dx), y: Math.round(p.y + dy) }));
+  const snapTo = (v: number) => Math.round(v / LAYOUT_GRID) * LAYOUT_GRID;
+  return placed.map((p) => {
+    const x = Math.round(p.x + dx);
+    const y = Math.round(p.y + dy);
+    return options.snapToGrid
+      ? { id: p.id, x: snapTo(x), y: snapTo(y) }
+      : { id: p.id, x, y };
+  });
 }

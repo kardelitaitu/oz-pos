@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeAutoLayout } from '@/features/stores/nodeTopologyLayout';
+import { computeAutoLayout, LAYOUT_GRID } from '@/features/stores/nodeTopologyLayout';
 
 // The topology editor's one-click Auto-layout: a layered wire-direction
 // engine. Sources rank 0, each wire target ranks one deeper (BFS), every
@@ -151,5 +151,42 @@ describe('computeAutoLayout — forest layout (multiple independent roots)', () 
     expect(byId.get('c')!.x).toBeLessThan(byId.get('d')!.x);
     expect(byId.get('d')!.x).toBeLessThan(byId.get('a')!.x);
     expect(byId.get('a')!.x).toBeLessThan(byId.get('b')!.x);
+  });
+});
+
+// Elbow-routed wires are orthogonal — they look clean only when the cards
+// sit on the grid. With snap enabled the auto-layout anchor therefore
+// snaps every placement to the 24px grid; the default (curved routing /
+// snap off) keeps the free-floating positions the anchor math produces.
+describe('computeAutoLayout — grid snapping (snapToGrid)', () => {
+  const tangled = () => ({
+    nodes: [
+      { id: 'store', x: 0, y: 400 },
+      { id: 'ws-a', x: 300, y: 100 },
+      { id: 'ws-b', x: 700, y: 300 },
+      { id: 'wh', x: 200, y: 500 },
+    ],
+    wires: [
+      { id: 'w1', fromNodeId: 'store', toNodeId: 'ws-a' },
+      { id: 'w2', fromNodeId: 'store', toNodeId: 'ws-b' },
+      { id: 'w3', fromNodeId: 'ws-b', toNodeId: 'wh' },
+    ],
+  });
+
+  it('snaps every placement to the grid when snapToGrid is set', () => {
+    const { nodes, wires } = tangled();
+    const placed = computeAutoLayout(nodes, wires, { snapToGrid: true });
+    for (const p of placed) {
+      expect(p.x % LAYOUT_GRID).toBe(0);
+      expect(p.y % LAYOUT_GRID).toBe(0);
+    }
+  });
+
+  it('keeps the free-floating anchor positions by default (no snap)', () => {
+    const { nodes, wires } = tangled();
+    const placed = computeAutoLayout(nodes, wires);
+    // The natural layout lands off-grid (the anchor midpoint rarely aligns
+    // with the 24px lattice) — that is the curved-routing behavior.
+    expect(placed.some((p) => p.x % LAYOUT_GRID !== 0 || p.y % LAYOUT_GRID !== 0)).toBe(true);
   });
 });
