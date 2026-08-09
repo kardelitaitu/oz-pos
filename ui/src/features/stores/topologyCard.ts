@@ -47,6 +47,12 @@ export function isKdsNode(node: TopologyNodeData): boolean {
   return node.type === 'workspace' && node.metadata?.['typeKey'] === 'kds';
 }
 
+/** True for Restaurant POS workspace instances. Restaurant POS emits an
+ * operational feed consumed by the KDS operation input. */
+export function isRestaurantPosNode(node: TopologyNodeData): boolean {
+  return node.type === 'workspace' && node.metadata?.['typeKey'] === 'restaurant-pos';
+}
+
 /** True for Inventory Management workspace instances (metadata typeKey 'inventory'). */
 export function isInventoryNode(node: TopologyNodeData): boolean {
   return node.type === 'workspace' && node.metadata?.['typeKey'] === 'inventory';
@@ -200,9 +206,10 @@ export function semanticPortId(node: TopologyNodeData, port: PortName, variantIn
 /** ALL semantic ids a socket can represent, in canonical order. The first
  *  entry is the socket's PRIMARY semantic (what gatingSemanticId resolves);
  *  extra entries exist when one socket admits multiple relationships — a
- *  plain workspace output is either a stock-routing feed OR a transfer
- *  feed, and a warehouse input receives either. The relationship picker
- *  (ADR #34) is what disambiguates multi-entry sockets at drop time. */
+ *  Restaurant POS output admits an operational feed in addition to its
+ *  stock/transfer feeds, while a warehouse input receives stock or transfer.
+ *  The relationship picker (ADR #34) disambiguates multi-entry sockets at
+ *  drop time. */
 export function socketSemanticIds(
   node: TopologyNodeData,
   port: PortName,
@@ -227,10 +234,12 @@ export function socketSemanticIds(
   if (node.type === 'store') return ['location-out'];
   if (node.type === 'warehouse') return ['stock-out'];
   if (node.type === 'hardware') return ['device-out'];
-  // Workspace right: a KDS forwards ticket feeds; every other workspace
-  // (store-pos, restaurant-pos, inventory) can emit a stock-routing feed
-  // OR a transfer feed — the two relationships share this socket.
+  // Workspace right: a KDS forwards ticket feeds. Restaurant POS also emits
+  // an operational feed for KDS; it retains stock/transfer routing on the
+  // same socket for inventory connections. Other workspace types keep their
+  // existing stock/transfer semantics.
   if (isKdsNode(node)) return ['ticket-out'];
+  if (isRestaurantPosNode(node)) return ['operation-out', 'stock-out', 'transfer-out'];
   return ['stock-out', 'transfer-out'];
 }
 
@@ -270,15 +279,13 @@ interface SemanticPairingRow {
  *  never sources, and mismatched semantics (a Location feed into a stock
  *  rack, a stock feed into a Location input) gate closed.
  *
- *  Reachability note: `operation-out` (reserved for a future dedicated
- *  operation feed) and `ticket-in` (the Resto preset's loaded kds→printer
- *  wire records ticket-out/ticket-in, but hardware inputs gate as
- *  generic-in) are contract-level members no current node PRODUCES, so
- *  their rows are load-compatible / future-facing rather than authorable
- *  today. */
+ *  Reachability note: `operation-out` is produced by Restaurant POS for its
+ *  operational feed into KDS; `ticket-in` is admitted by hardware inputs so
+ *  the Resto preset's loaded kds→printer wire (ticket-out/ticket-in) is also
+ *  authorable. Other unused semantic members remain contract-level and
+ *  future-facing rather than authorable today. */
 const SEMANTIC_PORT_PAIRINGS: readonly SemanticPairingRow[] = [
   { source: 'location-out', target: 'location-in', relationshipType: 'location', labelId: 'topology-relationship-location' },
-  { source: 'location-out', target: 'operation-in', relationshipType: 'location', labelId: 'topology-relationship-location' },
   { source: 'stock-out', target: 'stock-in', relationshipType: 'stock-routing', labelId: 'topology-relationship-stock-routing' },
   { source: 'transfer-out', target: 'transfer-in', relationshipType: 'inventory-transfer', labelId: 'topology-relationship-inventory-transfer' },
   { source: 'ticket-out', target: 'ticket-in', relationshipType: 'ticket-routing', labelId: 'topology-relationship-ticket-routing' },

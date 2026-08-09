@@ -98,10 +98,10 @@ describe('topologyCard registry — per-node-type behavior', () => {
 
 describe('typed connection pairing (ADR #34 first slice)', () => {
   it('pairs only the legal semantic port combinations', () => {
-    // Ownership: a Branch Location output feeds any workspace input
-    // (KDS and inventory inputs are flexible and accept the Operation feed).
+    // Ownership: a Branch Location output feeds the Location input only.
+    // KDS operation inputs require a Restaurant POS operation feed.
     expect(canSemanticPortsConnect('location-out', 'location-in')).toBe(true);
-    expect(canSemanticPortsConnect('location-out', 'operation-in')).toBe(true);
+    expect(canSemanticPortsConnect('location-out', 'operation-in')).toBe(false);
     // Stock routing, ticket routing, operation feeds, hardware + generic.
     expect(canSemanticPortsConnect('stock-out', 'stock-in')).toBe(true);
     expect(canSemanticPortsConnect('ticket-out', 'ticket-in')).toBe(true);
@@ -125,7 +125,7 @@ describe('typed connection pairing (ADR #34 first slice)', () => {
     // Outputs.
     expect(gatingSemanticId(node({ type: 'store' }), 'right')).toBe('location-out');
     expect(gatingSemanticId(node({ metadata: { typeKey: 'store-pos' } }), 'right')).toBe('stock-out');
-    expect(gatingSemanticId(node({ metadata: { typeKey: 'restaurant-pos' } }), 'right')).toBe('stock-out');
+    expect(gatingSemanticId(node({ metadata: { typeKey: 'restaurant-pos' } }), 'right')).toBe('operation-out');
     expect(gatingSemanticId(node({ metadata: { typeKey: 'inventory' } }), 'right')).toBe('stock-out');
     expect(gatingSemanticId(node({ metadata: { typeKey: 'kds' } }), 'right')).toBe('ticket-out');
     expect(gatingSemanticId(node({ type: 'warehouse' }), 'right')).toBe('stock-out');
@@ -157,11 +157,11 @@ describe('typed connection pairing (ADR #34 first slice)', () => {
 
 describe('relationship options (ADR #34 multi-semantic slice)', () => {
   it('resolves the multi-semantic socket map: workspaces output stock OR transfer', () => {
-    // A plain workspace (store-pos / restaurant-pos / inventory) can emit
-    // either a stock-routing feed or a transfer feed — the two relationships
-    // share the SAME output socket, so a drop must choose between them.
+    // Store POS and inventory can emit either a stock-routing feed or a
+    // transfer feed. Restaurant POS additionally emits an operational feed
+    // for KDS on the same output socket.
     expect(socketSemanticIds(node({ type: 'workspace', metadata: { typeKey: 'store-pos' } }), 'right')).toEqual(['stock-out', 'transfer-out']);
-    expect(socketSemanticIds(node({ metadata: { typeKey: 'restaurant-pos' } }), 'right')).toEqual(['stock-out', 'transfer-out']);
+    expect(socketSemanticIds(node({ metadata: { typeKey: 'restaurant-pos' } }), 'right')).toEqual(['operation-out', 'stock-out', 'transfer-out']);
     expect(socketSemanticIds(node({ metadata: { typeKey: 'inventory' } }), 'right')).toEqual(['stock-out', 'transfer-out']);
     // A warehouse INPUT likewise accepts both: stock-in or transfer-in.
     expect(socketSemanticIds(node({ type: 'warehouse' }), 'left')).toEqual(['stock-in', 'transfer-in']);
@@ -204,6 +204,20 @@ describe('relationship options (ADR #34 multi-semantic slice)', () => {
         toPortId: 'transfer-in',
         relationshipType: 'inventory-transfer',
         labelId: 'topology-relationship-inventory-transfer',
+      },
+    ]);
+  });
+
+  it('allows Restaurant POS to route operational tickets into a KDS', () => {
+    const resto = node({ type: 'workspace', metadata: { typeKey: 'restaurant-pos' } });
+    const kds = node({ type: 'workspace', metadata: { typeKey: 'kds' } });
+
+    expect(wireRelationshipOptions(resto, 'right', kds, 'left')).toEqual([
+      {
+        fromPortId: 'operation-out',
+        toPortId: 'operation-in',
+        relationshipType: 'generic',
+        labelId: 'topology-relationship-operation',
       },
     ]);
   });

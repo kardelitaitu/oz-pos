@@ -86,6 +86,9 @@ export interface TopologyValidationError {
     | 'invalid-purpose'
     | 'missing-location-input'
     | 'multiple-location-inputs'
+    | 'missing-operation-input'
+    | 'multiple-operation-inputs'
+    | 'invalid-operation-source'
     | 'invalid-location-connection'
     | 'duplicate-wire'
     | 'unknown-wire-endpoint';
@@ -255,6 +258,25 @@ function inferredWire(
     };
   }
 
+  // Older diagrams stored only geometry for workspace-to-workspace wires.
+  // Preserve the Restaurant POS → KDS operational relationship from the
+  // stable workspace type keys instead of folding it to legacy-out/legacy-in;
+  // otherwise the KDS appears connected but still reports a missing
+  // Operation In requirement after reload.
+  if (
+    fromNode?.kind === 'workspace'
+    && fromNode.typeKey === 'restaurant-pos'
+    && toNode?.kind === 'workspace'
+    && toNode.typeKey === 'kds'
+  ) {
+    return {
+      fromPortId: 'operation-out',
+      toPortId: 'operation-in',
+      relationshipType: 'generic',
+      legacyInferred: true,
+    };
+  }
+
   if (fromNode?.kind === 'workspace' && toNode?.kind === 'warehouse') {
     return {
       // Same closed-union discipline: a truthy-but-corrupt port or type
@@ -347,10 +369,12 @@ function locationWires(graph: SemanticTopologyGraph): SemanticTopologyWire[] {
 }
 
 /**
- * Validate the first vertical slice: one Branch Location owns every workspace.
+ * Validate the first vertical slice: one Branch Location owns ordinary
+ * workspaces, while a KDS inherits its store scope through exactly one
+ * Restaurant POS operation feed.
  *
  * This is pure and deterministic so the same contract can be mirrored by the
- * Rust Apply boundary later. It deliberately does not resolve display names,
+ * Rust Apply boundary. It deliberately does not resolve display names,
  * primary stores, or a `default` store.
  */
 export function validateTopologyGraph(graph: SemanticTopologyGraph): TopologyValidationError[] {
@@ -473,6 +497,48 @@ export function validateTopologyGraph(graph: SemanticTopologyGraph): TopologyVal
   }
 
   for (const workspaceId of workspaceIds) {
+    const workspace = graph.nodes.find((node) => node.id === workspaceId);
+    const isKds = workspace?.typeKey === 'kds';
+    if (isKds) {
+      // KDS is operationally owned by the Restaurant POS feed. Its single
+      // left socket is operation-in, so a valid operation wire satisfies the
+      // KDS requirement; it must not also require a second Location wire on
+      // the same socket.
+      const operationInputs = graph.wires.filter(
+        (wire) => wire.toNodeId === workspaceId
+          && wire.toPortId === 'operation-in'
+          && wire.relationshipType === 'generic',
+      );
+      if (operationInputs.length === 0) {
+        errors.push({
+          code: 'missing-operation-input',
+          messageId: 'topology-validation-missing-operation',
+          nodeId: workspaceId,
+          portId: 'operation-in',
+        });
+      } else if (operationInputs.length > 1) {
+        errors.push({
+          code: 'multiple-operation-inputs',
+          messageId: 'topology-validation-multiple-operation',
+          nodeId: workspaceId,
+          portId: 'operation-in',
+        });
+      } else {
+        const operationInput = operationInputs[0]!;
+        const source = graph.nodes.find((node) => node.id === operationInput.fromNodeId);
+        if (operationInput.fromPortId !== 'operation-out' || source?.typeKey !== 'restaurant-pos') {
+          errors.push({
+            code: 'invalid-operation-source',
+            messageId: 'topology-validation-invalid-operation-source',
+            nodeId: workspaceId,
+            wireId: operationInput.id,
+            portId: 'operation-in',
+          });
+        }
+      }
+      continue;
+    }
+
     const incoming = ownership.filter(
       (wire) => wire.toNodeId === workspaceId && wire.toPortId === 'location-in',
     );

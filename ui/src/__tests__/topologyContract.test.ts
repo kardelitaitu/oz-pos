@@ -256,6 +256,83 @@ describe('semantic topology contract', () => {
     expect(validateTopologyGraph(normalized)).toEqual([]);
   });
 
+  it('accepts a KDS operationally connected to Restaurant POS', () => {
+    const resto = { ...workspace('resto-pos'), metadata: { typeKey: 'restaurant-pos' } };
+    const kds = { ...workspace('kds'), metadata: { typeKey: 'kds' } };
+    const errors = validateTopologyGraph(graph(
+      [branch(), resto, kds],
+      [
+        ownershipWire('wire-resto-location', 'resto-pos'),
+        {
+          id: 'wire-resto-kds',
+          fromNodeId: 'resto-pos',
+          fromPortId: 'operation-out',
+          toNodeId: 'kds',
+          toPortId: 'operation-in',
+          relationshipType: 'generic',
+          direction: 'one-way',
+        },
+      ],
+    ));
+
+    expect(errors).toEqual([]);
+  });
+
+  it('rejects an operation feed into KDS when the source is not Restaurant POS', () => {
+    const storePos = { ...workspace('store-pos'), metadata: { typeKey: 'store-pos' } };
+    const kds = { ...workspace('kds'), metadata: { typeKey: 'kds' } };
+    const errors = validateTopologyGraph(graph(
+      [branch(), storePos, kds],
+      [
+        ownershipWire('wire-pos-location', 'store-pos'),
+        {
+          id: 'wire-invalid-operation-source',
+          fromNodeId: 'store-pos',
+          fromPortId: 'operation-out',
+          toNodeId: 'kds',
+          toPortId: 'operation-in',
+          relationshipType: 'generic',
+          direction: 'one-way',
+        },
+      ],
+    ));
+
+    expect(errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: 'invalid-operation-source',
+        nodeId: 'kds',
+        wireId: 'wire-invalid-operation-source',
+      }),
+    ]));
+  });
+
+  it('infers a legacy Restaurant POS → KDS wire as the required operation feed', () => {
+    const resto = { ...workspace('resto-pos'), metadata: { typeKey: 'restaurant-pos' } };
+    const kds = { ...workspace('kds'), metadata: { typeKey: 'kds' } };
+    const normalized = graph(
+      [branch(), resto, kds],
+      [
+        ownershipWire('wire-resto-location', 'resto-pos'),
+        {
+          id: 'wire-resto-kds-legacy',
+          fromNodeId: 'resto-pos',
+          toNodeId: 'kds',
+          fromPort: 'right',
+          toPort: 'left',
+          direction: 'one-way',
+        },
+      ],
+    );
+
+    expect(normalized.wires[1]).toMatchObject({
+      fromPortId: 'operation-out',
+      toPortId: 'operation-in',
+      relationshipType: 'generic',
+      legacyInferred: true,
+    });
+    expect(validateTopologyGraph(normalized)).toEqual([]);
+  });
+
   it('rejects a workspace without the required Location In connection', () => {
     const errors = validateTopologyGraph(graph([branch(), workspace('ws-unowned')], []));
 

@@ -520,15 +520,16 @@ fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), AppErr
             ));
         }
         let is_kds = type_key == "kds";
+        let operation_inputs: Vec<&Value> = wires
+            .iter()
+            .filter(|wire| {
+                value_string(wire, "relationship_type") == Some("generic")
+                    && value_string(wire, "to_node_id") == Some(workspace_id)
+                    && value_string(wire, "to_port_id") == Some("operation-in")
+            })
+            .collect();
         let incoming = if is_kds {
-            wires
-                .iter()
-                .filter(|wire| {
-                    value_string(wire, "relationship_type") == Some("generic")
-                        && value_string(wire, "to_node_id") == Some(workspace_id)
-                        && value_string(wire, "to_port_id") == Some("operation-in")
-                })
-                .count()
+            operation_inputs.len()
         } else {
             wires
                 .iter()
@@ -568,6 +569,29 @@ fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), AppErr
                     }
                 ),
             ));
+        }
+        if is_kds {
+            let operation_wire = operation_inputs[0];
+            let source_is_restaurant_pos =
+                operation_wire.get("from_port_id").and_then(Value::as_str) == Some("operation-out")
+                    && nodes.iter().any(|node| {
+                        value_string(node, "id") == value_string(operation_wire, "from_node_id")
+                            && node
+                                .get("metadata")
+                                .and_then(|metadata| value_string(metadata, "typeKey"))
+                                == Some("restaurant-pos")
+                    });
+            if !source_is_restaurant_pos {
+                return Err(topology_validation(
+                    "invalid-operation-source",
+                    Some(workspace_id),
+                    value_string(operation_wire, "id"),
+                    Some("operation-in"),
+                    format!(
+                        "workspace {workspace_id} Operation In must receive operation-out from Restaurant POS"
+                    ),
+                ));
+            }
         }
     }
     Ok(())
@@ -1878,6 +1902,50 @@ mod tests {
             ],
         );
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn semantic_save_rejects_operation_feed_from_non_restaurant_pos() {
+        let conn = fresh_conn();
+        let mut store_pos = semantic_node("store-pos", "workspace", None);
+        store_pos["metadata"] = serde_json::json!({ "typeKey": "store-pos" });
+        let mut kds = semantic_node("kds", "workspace", None);
+        kds["metadata"] = serde_json::json!({ "typeKey": "kds" });
+        let invalid_operation_wire = serde_json::json!({
+            "id": "wire-invalid-operation-source",
+            "from_node_id": "store-pos",
+            "to_node_id": "kds",
+            "direction": "one-way",
+            "from_port_id": "operation-out",
+            "to_port_id": "operation-in",
+            "relationship_type": "generic",
+        });
+        let result = save_topology_json(
+            &conn,
+            vec![
+                semantic_node("branch", "branch-location", Some("default")),
+                store_pos,
+                kds,
+            ],
+            vec![
+                semantic_location_wire("wire-pos-location", "store-pos"),
+                invalid_operation_wire,
+            ],
+        );
+
+        match result {
+            Err(AppError::TopologyValidation {
+                code,
+                wire_id,
+                node_id,
+                ..
+            }) => {
+                assert_eq!(code, "invalid-operation-source");
+                assert_eq!(wire_id.as_deref(), Some("wire-invalid-operation-source"));
+                assert_eq!(node_id.as_deref(), Some("kds"));
+            }
+            other => panic!("expected invalid-operation-source, got {other:?}"),
+        }
     }
 
     #[test]
