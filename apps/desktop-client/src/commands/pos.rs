@@ -23,27 +23,45 @@ use crate::state::AppState;
 
 const TOPOLOGY_RUNTIME_SETTING_KEY: &str = "oz-pos/topology-runtime";
 
-/// Select the first warehouse target from a validated POS stock route.
+/// Select every distinct warehouse target from validated POS stock routes.
 ///
-/// Stock deduction currently resolves one primary location per sale. The
-/// topology route chooses which warehouse workspace supplies that location;
-/// split fulfillment remains handled by the existing shortfall flow.
-fn runtime_stock_target_instance(plan: &Value, source_instance_id: &str) -> Option<String> {
-    plan.get("routes")
-        .and_then(Value::as_array)
-        .and_then(|routes| {
-            routes.iter().find_map(|route| {
-                (route.get("source_instance_id").and_then(Value::as_str)
-                    == Some(source_instance_id)
-                    && route.get("from_port_id").and_then(Value::as_str) == Some("stock-out")
-                    && route.get("to_port_id").and_then(Value::as_str) == Some("stock-in")
-                    && route.get("relationship_type").and_then(Value::as_str)
-                        == Some("stock-routing"))
+/// Runtime-plan order is the allocation priority: the first route is the
+/// preferred warehouse, and later routes fill the remaining quantity.
+fn runtime_stock_target_instances(plan: &Value, source_instance_id: &str) -> Vec<String> {
+    let mut targets = Vec::new();
+    if let Some(routes) = plan.get("routes").and_then(Value::as_array) {
+        for route in routes {
+            let is_stock_route = route.get("source_instance_id").and_then(Value::as_str)
+                == Some(source_instance_id)
+                && route.get("from_port_id").and_then(Value::as_str) == Some("stock-out")
+                && route.get("to_port_id").and_then(Value::as_str) == Some("stock-in")
+                && route.get("relationship_type").and_then(Value::as_str) == Some("stock-routing");
+            let Some(target) = is_stock_route
                 .then(|| route.get("target_instance_id").and_then(Value::as_str))
                 .flatten()
-                .map(str::to_owned)
-            })
-        })
+            else {
+                continue;
+            };
+            if !targets.iter().any(|existing| existing == target) {
+                targets.push(target.to_owned());
+            }
+        }
+    }
+    targets
+}
+
+fn resolve_runtime_stock_targets(
+    conn: &rusqlite::Connection,
+    store_id: &str,
+    source_instance_id: &str,
+) -> Result<Vec<String>, AppError> {
+    let key = format!("{TOPOLOGY_RUNTIME_SETTING_KEY}/{store_id}");
+    let Some(json) = oz_core::Settings::get(conn, &key)? else {
+        return Ok(Vec::new());
+    };
+    let plan: Value = serde_json::from_str(&json)
+        .map_err(|e| AppError::Internal(format!("parse topology runtime plan: {e}")))?;
+    Ok(runtime_stock_target_instances(&plan, source_instance_id))
 }
 
 fn resolve_runtime_stock_target(
@@ -51,13 +69,11 @@ fn resolve_runtime_stock_target(
     store_id: &str,
     source_instance_id: &str,
 ) -> Result<Option<String>, AppError> {
-    let key = format!("{TOPOLOGY_RUNTIME_SETTING_KEY}/{store_id}");
-    let Some(json) = oz_core::Settings::get(conn, &key)? else {
-        return Ok(None);
-    };
-    let plan: Value = serde_json::from_str(&json)
-        .map_err(|e| AppError::Internal(format!("parse topology runtime plan: {e}")))?;
-    Ok(runtime_stock_target_instance(&plan, source_instance_id))
+    Ok(
+        resolve_runtime_stock_targets(conn, store_id, source_instance_id)?
+            .into_iter()
+            .next(),
+    )
 }
 
 /// Discriminator for [`CompleteSaleArgs`]/[`CompleteSaleScopedArgs`] payment
@@ -1134,22 +1150,25 @@ pub async fn complete_sale_scoped(
     state: State<'_, AppState>,
 ) -> Result<CompleteSaleResult, AppError> {
     let session = state.resolve_session(&session_token)?;
-    let stock_target_instance_id = {
+    let stock_target_instance_ids = {
         let global_db = state.db.lock().await;
-        resolve_runtime_stock_target(&global_db, &session.store_id, &session.instance_id)?
+        resolve_runtime_stock_targets(&global_db, &session.store_id, &session.instance_id)?
     };
-    let deduction_instance_id = stock_target_instance_id
-        .as_deref()
+    let deduction_instance_id = stock_target_instance_ids
+        .first()
+        .map(String::as_str)
         .unwrap_or(&session.instance_id);
     let conn = state
         .db_manager
         .open_store(&session.store_id)
         .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
-    if let Some(target_instance_id) = stock_target_instance_id.as_deref() {
+    if !stock_target_instance_ids.is_empty() {
         let db = conn
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
-        oz_core::location_resolver::resolve_primary_location(&db, target_instance_id, None)?;
+        for target_instance_id in &stock_target_instance_ids {
+            oz_core::location_resolver::resolve_primary_location(&db, target_instance_id, None)?;
+        }
     }
 
     // ── Lock 1: Load and remove the cart ──────────────────────────
@@ -1284,8 +1303,16 @@ pub async fn complete_sale_scoped(
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
         let store = Store::new(&db);
-        if let Some(target_instance_id) = stock_target_instance_id.as_deref() {
-            oz_core::location_resolver::resolve_primary_location(&db, target_instance_id, None)?;
+        let mut stock_locations = Vec::with_capacity(stock_target_instance_ids.len());
+        for target_instance_id in &stock_target_instance_ids {
+            let location = oz_core::location_resolver::resolve_primary_location(
+                &db,
+                target_instance_id,
+                None,
+            )?;
+            if !stock_locations.contains(&location) {
+                stock_locations.push(location);
+            }
         }
 
         store.compute_sale_tax(
@@ -1315,13 +1342,24 @@ pub async fn complete_sale_scoped(
             }]
         };
 
-        store.complete_sale_deduction(
-            &sale,
-            Some(&deduction_instance_id),
-            &splits,
-            &session.user_id,
-            Some(&session.terminal_id),
-        )?
+        if stock_locations.is_empty() {
+            store.complete_sale_deduction(
+                &sale,
+                Some(&deduction_instance_id),
+                &splits,
+                &session.user_id,
+                Some(&session.terminal_id),
+            )?
+        } else {
+            store.complete_sale_deduction_with_locations(
+                &sale,
+                Some(&deduction_instance_id),
+                &stock_locations,
+                &splits,
+                &session.user_id,
+                Some(&session.terminal_id),
+            )?
+        }
     };
 
     let total = cart.total();
@@ -1688,6 +1726,7 @@ pub async fn delete_held_cart_scoped(
 mod tests {
     use super::*;
     use oz_core::Currency;
+    use tauri::Manager as _;
 
     fn usd() -> Currency {
         "USD".parse().unwrap()
@@ -1862,6 +1901,140 @@ mod tests {
         assert!(matches!(result, Err(AppError::InvalidSession)));
     }
 
+    #[tokio::test]
+    async fn scoped_sale_deducts_from_topology_warehouse_not_pos_location() {
+        use oz_core::migrations;
+        use oz_core::session::SessionContext;
+        use platform_core::StoreDatabaseManager;
+
+        let store_id = "store-stock-route-e2e";
+        let pos_instance_id = "pos-stock-route-e2e";
+        let warehouse_instance_id = "warehouse-stock-route-e2e";
+        let global = migrations::fresh_db();
+        let runtime_key = format!("{TOPOLOGY_RUNTIME_SETTING_KEY}/{store_id}");
+        let runtime_plan = serde_json::json!({
+            "routes": [{
+                "source_instance_id": pos_instance_id,
+                "target_instance_id": warehouse_instance_id,
+                "from_port_id": "stock-out",
+                "to_port_id": "stock-in",
+                "relationship_type": "stock-routing"
+            }]
+        });
+        oz_core::Settings::set(&global, &runtime_key, &runtime_plan.to_string()).unwrap();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = StoreDatabaseManager::new(temp_dir.path().to_path_buf(), migrations::ALL);
+        let store_conn = manager.open_store(store_id).unwrap();
+        {
+            let db = store_conn.lock().unwrap();
+            let store = Store::new(&db);
+            store.seed_default_roles().unwrap();
+            db.execute(
+                "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+                 VALUES ('stock-route-user', 'stock-route-user', 'hash', 'Stock Route User', 'role-owner', 1, '2026-08-09T00:00:00Z', '2026-08-09T00:00:00Z')",
+                [],
+            )
+            .unwrap();
+            db.execute_batch(
+                "INSERT OR IGNORE INTO store_profiles (id, name, is_primary) VALUES ('store-stock-route-e2e', 'Stock Route E2E', 0);
+                 INSERT INTO inventory_locations (id, name, type) VALUES
+                    ('stock-route-pos-location', 'Stock Route POS', 'store'),
+                    ('stock-route-warehouse-location', 'Stock Route Warehouse', 'warehouse');
+                 INSERT INTO workspace_instances (id, type_key, store_id, name, bound_location_id)
+                    VALUES ('pos-stock-route-e2e', 'restaurant-pos', 'store-stock-route-e2e', 'Route POS', 'stock-route-pos-location');
+                 INSERT INTO workspace_instances (id, type_key, store_id, name, bound_location_id)
+                    VALUES ('warehouse-stock-route-e2e', 'warehouse', 'store-stock-route-e2e', 'Route Warehouse', 'stock-route-warehouse-location');
+                 INSERT INTO products (id, sku, name, price_minor, currency, product_type)
+                    VALUES ('stock-route-product', 'STOCK-ROUTE-COFFEE', 'Stock Route Coffee', 1000, 'USD', 'retail');
+                 INSERT INTO stock_summary (item_id, location_id, qty)
+                    VALUES ('stock-route-product', 'stock-route-pos-location', 20),
+                           ('stock-route-product', 'stock-route-warehouse-location', 20);",
+            )
+            .unwrap();
+        }
+
+        let mut state = AppState::for_test_with_conn(global);
+        state.db_manager = manager;
+        state.session_store.write().unwrap().insert(
+            "stock-route-token".into(),
+            SessionContext::new(
+                "stock-route-user".into(),
+                "role-owner".into(),
+                "stock-route-terminal".into(),
+                store_id.into(),
+                pos_instance_id.into(),
+                "restaurant-pos".into(),
+                None,
+                0,
+            ),
+        );
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let started = start_sale_scoped(
+            "stock-route-token".into(),
+            StartSaleArgs {
+                currency: "USD".into(),
+            },
+            app.state(),
+        )
+        .await
+        .unwrap();
+        add_line_scoped(
+            "stock-route-token".into(),
+            AddLineArgs {
+                cart_id: started.cart_id,
+                sku: Sku::new("STOCK-ROUTE-COFFEE"),
+                qty: 3,
+                unit_price_minor: 1000,
+            },
+            app.state(),
+        )
+        .await
+        .unwrap();
+        complete_sale_scoped(
+            "stock-route-token".into(),
+            CompleteSaleScopedArgs {
+                cart_id: started.cart_id,
+                payment_method: "cash".into(),
+                tendered_minor: Some(3000),
+                customer_id: None,
+                payment_splits: None,
+                customer_name: None,
+                serial_numbers: None,
+            },
+            app.state(),
+        )
+        .await
+        .unwrap();
+
+        let state = app.state::<AppState>();
+        let store_conn = state.db_manager.open_store(store_id).unwrap();
+        let db = store_conn.lock().unwrap();
+        let pos_qty: i64 = db
+            .query_row(
+                "SELECT qty FROM stock_summary WHERE item_id = 'stock-route-product' AND location_id = 'stock-route-pos-location'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let warehouse_qty: i64 = db
+            .query_row(
+                "SELECT qty FROM stock_summary WHERE item_id = 'stock-route-product' AND location_id = 'stock-route-warehouse-location'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(pos_qty, 20, "POS stock must remain untouched by the route");
+        assert_eq!(
+            warehouse_qty, 17,
+            "Warehouse stock must fund the completed sale"
+        );
+    }
+
     #[test]
     fn runtime_plan_selects_stock_target_for_pos_source() {
         let plan = serde_json::json!({
@@ -1874,9 +2047,42 @@ mod tests {
             }]
         });
         assert_eq!(
-            runtime_stock_target_instance(&plan, "pos-main").as_deref(),
-            Some("warehouse-main")
+            runtime_stock_target_instances(&plan, "pos-main"),
+            vec!["warehouse-main"]
         );
-        assert_eq!(runtime_stock_target_instance(&plan, "other-pos"), None);
+        assert!(runtime_stock_target_instances(&plan, "other-pos").is_empty());
+    }
+
+    #[test]
+    fn runtime_plan_preserves_distinct_stock_targets_in_route_order() {
+        let plan = serde_json::json!({
+            "routes": [
+                {
+                    "source_instance_id": "pos-main",
+                    "target_instance_id": "warehouse-b",
+                    "from_port_id": "stock-out",
+                    "to_port_id": "stock-in",
+                    "relationship_type": "stock-routing"
+                },
+                {
+                    "source_instance_id": "pos-main",
+                    "target_instance_id": "warehouse-a",
+                    "from_port_id": "stock-out",
+                    "to_port_id": "stock-in",
+                    "relationship_type": "stock-routing"
+                },
+                {
+                    "source_instance_id": "pos-main",
+                    "target_instance_id": "warehouse-b",
+                    "from_port_id": "stock-out",
+                    "to_port_id": "stock-in",
+                    "relationship_type": "stock-routing"
+                }
+            ]
+        });
+        assert_eq!(
+            runtime_stock_target_instances(&plan, "pos-main"),
+            vec!["warehouse-b", "warehouse-a"]
+        );
     }
 }

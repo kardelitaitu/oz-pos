@@ -1,5 +1,7 @@
 //! Sale CRUD — create, list, get, update status, held carts, exports.
 
+use std::collections::HashMap;
+
 use rusqlite::params;
 
 use crate::error::CoreError;
@@ -139,6 +141,37 @@ fn validate_payment_splits_cover_total(
     Ok(())
 }
 
+fn stock_at_locations(
+    tx: &rusqlite::Transaction<'_>,
+    product_id: &str,
+    locations: &[crate::inventory::LocationId],
+) -> Result<Vec<crate::sale_deduction::LocationStock>, CoreError> {
+    locations
+        .iter()
+        .map(|location_id| {
+            let qty: i64 = tx
+                .query_row(
+                    "SELECT COALESCE(qty, 0) FROM stock_summary WHERE item_id = ?1 AND location_id = ?2",
+                    rusqlite::params![product_id, location_id.as_str()],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+            let location_name: String = tx
+                .query_row(
+                    "SELECT name FROM inventory_locations WHERE id = ?1",
+                    rusqlite::params![location_id.as_str()],
+                    |row| row.get(0),
+                )
+                .unwrap_or_else(|_| location_id.as_str().to_owned());
+            Ok(crate::sale_deduction::LocationStock {
+                location_id: location_id.clone(),
+                location_name,
+                qty_available: qty,
+            })
+        })
+        .collect()
+}
+
 impl Store<'_> {
     /// Complete a sale with location-aware stock deduction (ADR-19 §6).
     ///
@@ -168,6 +201,36 @@ impl Store<'_> {
         sale: &Sale,
         workspace_instance_id: Option<&str>,
         payment_splits: &[crate::PaymentSplitArg],
+        staff_user_id: &str,
+        terminal_id: Option<&str>,
+    ) -> Result<crate::sale_deduction::CompleteSaleResult, CoreError> {
+        let location = crate::location_resolver::resolve_primary_location(
+            self.conn,
+            workspace_instance_id.unwrap_or("default"),
+            None,
+        )
+        .unwrap_or_else(|_| crate::location_resolver::get_default_location_id());
+        self.complete_sale_deduction_with_locations(
+            sale,
+            workspace_instance_id,
+            &[location],
+            payment_splits,
+            staff_user_id,
+            terminal_id,
+        )
+    }
+
+    /// Complete a sale by greedily allocating each tracked line across the
+    /// topology-selected locations in route order. All stock checks,
+    /// deductions, sale persistence, and deduction provenance remain inside
+    /// one SQLite transaction; an underfunded route set rolls back entirely.
+    #[allow(clippy::too_many_arguments)]
+    pub fn complete_sale_deduction_with_locations(
+        &self,
+        sale: &Sale,
+        workspace_instance_id: Option<&str>,
+        stock_locations: &[crate::inventory::LocationId],
+        payment_splits: &[crate::PaymentSplitArg],
         _staff_user_id: &str,
         _terminal_id: Option<&str>,
     ) -> Result<crate::sale_deduction::CompleteSaleResult, CoreError> {
@@ -191,16 +254,19 @@ impl Store<'_> {
         // racing on the same inventory row. Same pattern as create_sale().
         let tx = self.conn.unchecked_transaction()?;
 
-        // ── Resolve primary deduction location ─────────────────────
-        let primary_location = crate::location_resolver::resolve_primary_location(
-            &tx,
-            workspace_instance_id.unwrap_or("default"),
-            None,
-        )
-        .unwrap_or_else(|_| crate::location_resolver::get_default_location_id());
+        // ── Resolve topology route order ──────────────────────────
+        let default_location = crate::location_resolver::get_default_location_id();
+        let stock_locations = if stock_locations.is_empty() {
+            std::slice::from_ref(&default_location)
+        } else {
+            stock_locations
+        };
+        let primary_location = stock_locations[0].clone();
 
         // ── Phase 1: stock check + shortfall collection ────────────
         let mut deductions: Vec<StockDeduction> = Vec::with_capacity(sale.lines.len());
+        let mut line_deductions: HashMap<String, Vec<crate::sale_deduction::LocationAllocation>> =
+            HashMap::new();
         let mut shortfalls: Vec<Shortfall> = Vec::new();
 
         for line in &sale.lines {
@@ -238,18 +304,28 @@ impl Store<'_> {
 
             // 1. Check composite product stock if it tracks inventory
             if tracks_inventory {
-                let available: i64 = tx
-                    .query_row(
-                        "SELECT COALESCE(qty, 0) FROM stock_summary \
-                         WHERE item_id = ?1 AND location_id = ?2",
-                        rusqlite::params![pid, primary_location.as_str()],
-                        |row| row.get(0),
-                    )
-                    .unwrap_or(0);
-
-                if available < line.qty {
-                    let deficit = line.qty - available;
-                    let alternatives = if let Some(ws_id) = workspace_instance_id {
+                let availability = stock_at_locations(&tx, &pid, stock_locations)?;
+                if let Some(allocations) =
+                    crate::sale_deduction::allocate_stock_in_route_order(line.qty, &availability)
+                {
+                    deductions.extend(allocations.iter().map(|allocation| StockDeduction {
+                        sku: line.sku.clone(),
+                        location_id: allocation.location_id.clone(),
+                        delta: -allocation.qty,
+                    }));
+                    line_deductions.insert(line.id.to_string(), allocations);
+                } else {
+                    let available = availability
+                        .first()
+                        .map(|location| location.qty_available)
+                        .unwrap_or(0);
+                    let alternatives = if stock_locations.len() > 1 {
+                        availability
+                            .into_iter()
+                            .skip(1)
+                            .filter(|a| a.qty_available > 0)
+                            .collect()
+                    } else if let Some(ws_id) = workspace_instance_id {
                         crate::location_resolver::resolve_location_chain_for_sku(
                             &tx, ws_id, &line.sku, line.qty,
                         )
@@ -266,15 +342,9 @@ impl Store<'_> {
                         product_name: line.sku.clone(),
                         requested_qty: line.qty,
                         primary_qty_available: available,
-                        deficit,
+                        deficit: line.qty.saturating_sub(available),
                         primary_location_id: primary_location.clone(),
                         alternatives,
-                    });
-                } else {
-                    deductions.push(StockDeduction {
-                        sku: line.sku.clone(),
-                        location_id: primary_location.clone(),
-                        delta: -line.qty,
                     });
                 }
             }
@@ -309,21 +379,36 @@ impl Store<'_> {
                                 field: "qty",
                                 message: "ingredient deduction quantity overflow".into(),
                             })?;
-                            let available: i64 = tx
-                                .query_row(
-                                    "SELECT COALESCE(qty, 0) FROM stock_summary \
-                                     WHERE item_id = ?1 AND location_id = ?2",
-                                    rusqlite::params![
-                                        ingredient.ingredient_product_id,
-                                        primary_location.as_str()
-                                    ],
-                                    |row| row.get(0),
+                            let availability = stock_at_locations(
+                                &tx,
+                                &ingredient.ingredient_product_id,
+                                stock_locations,
+                            )?;
+                            if let Some(allocations) =
+                                crate::sale_deduction::allocate_stock_in_route_order(
+                                    required_qty,
+                                    &availability,
                                 )
-                                .unwrap_or(0);
-
-                            if available < required_qty {
-                                let deficit = required_qty - available;
-                                let alternatives = if let Some(ws_id) = workspace_instance_id {
+                            {
+                                deductions.extend(allocations.iter().map(|allocation| {
+                                    StockDeduction {
+                                        sku: ing_sku.clone(),
+                                        location_id: allocation.location_id.clone(),
+                                        delta: -allocation.qty,
+                                    }
+                                }));
+                            } else {
+                                let available = availability
+                                    .first()
+                                    .map(|location| location.qty_available)
+                                    .unwrap_or(0);
+                                let alternatives = if stock_locations.len() > 1 {
+                                    availability
+                                        .into_iter()
+                                        .skip(1)
+                                        .filter(|a| a.qty_available > 0)
+                                        .collect()
+                                } else if let Some(ws_id) = workspace_instance_id {
                                     crate::location_resolver::resolve_location_chain_for_sku(
                                         &tx,
                                         ws_id,
@@ -343,15 +428,9 @@ impl Store<'_> {
                                     product_name: ing_name,
                                     requested_qty: required_qty,
                                     primary_qty_available: available,
-                                    deficit,
+                                    deficit: required_qty.saturating_sub(available),
                                     primary_location_id: primary_location.clone(),
                                     alternatives,
-                                });
-                            } else {
-                                deductions.push(StockDeduction {
-                                    sku: ing_sku,
-                                    location_id: primary_location.clone(),
-                                    delta: -required_qty,
                                 });
                             }
                         }
@@ -399,14 +478,27 @@ impl Store<'_> {
         let deduction_json = serde_json::json!({
             "version": 1,
             "lines": sale.lines.iter().map(|line| {
+                let deductions = line_deductions
+                    .get(&line.id.to_string())
+                    .map(|allocations| {
+                        allocations
+                            .iter()
+                            .map(|allocation| serde_json::json!({
+                                "location_id": allocation.location_id.as_str(),
+                                "qty": allocation.qty,
+                                "sold_at": now,
+                            }))
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_else(|| vec![serde_json::json!({
+                        "location_id": primary_location.as_str(),
+                        "qty": line.qty,
+                        "sold_at": now,
+                    })]);
                 serde_json::json!({
                     "sale_line_id": line.id,
                     "sku": line.sku,
-                    "deductions": [{
-                        "location_id": primary_location.as_str(),
-                        "qty": line.qty,
-                        "sold_at": now
-                    }]
+                    "deductions": deductions,
                 })
             }).collect::<Vec<_>>()
         })
@@ -3453,6 +3545,56 @@ mod tests {
         )
         .unwrap();
         product_id
+    }
+
+    #[test]
+    fn complete_sale_deduction_topology_allocates_across_routes_atomically() {
+        let conn = fresh();
+        let s = store(&conn);
+        setup_locations_with_stock(&conn, "TOPO-COFFEE", "loc-route-a", 3, "loc-route-b", 10);
+        let sale = make_single_line_sale("TOPO-COFFEE", 8, 1000);
+        let locations = vec![
+            crate::inventory::LocationId::from("loc-route-a"),
+            crate::inventory::LocationId::from("loc-route-b"),
+        ];
+        let result = s
+            .complete_sale_deduction_with_locations(
+                &sale,
+                None,
+                &locations,
+                &tender(8000),
+                "cashier-1",
+                None,
+            )
+            .unwrap();
+        assert_eq!(result.status, SaleStatus::Pending);
+
+        let route_a: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary WHERE item_id = (SELECT id FROM products WHERE sku = 'TOPO-COFFEE') AND location_id = 'loc-route-a'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let route_b: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary WHERE item_id = (SELECT id FROM products WHERE sku = 'TOPO-COFFEE') AND location_id = 'loc-route-b'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(route_a, 0);
+        assert_eq!(route_b, 5);
+
+        let deduction_locations: String = conn
+            .query_row(
+                "SELECT deduction_locations FROM sales WHERE id = ?1",
+                [&sale.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(deduction_locations.contains("loc-route-a"));
+        assert!(deduction_locations.contains("loc-route-b"));
     }
 
     #[test]

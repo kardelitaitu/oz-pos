@@ -195,6 +195,43 @@ impl Store<'_> {
             .collect()
     }
 
+    /// Return an order only when it is visible to the requested KDS instance.
+    ///
+    /// A targeted order is hidden from every other instance, including direct
+    /// lookups; legacy untargeted orders remain visible for compatibility.
+    pub fn get_kds_order_for_instance(
+        &self,
+        id: &str,
+        instance_id: &str,
+    ) -> Result<Option<KdsOrder>, CoreError> {
+        let Some(order) = self.get_kds_order(id)? else {
+            return Ok(None);
+        };
+        Ok(self
+            .order_visible_to_instance(&order, instance_id)?
+            .then_some(order))
+    }
+
+    /// Require that a KDS order belongs to the current instance.
+    ///
+    /// Inaccessible orders deliberately return `NotFound` rather than an
+    /// authorization detail so a direct IPC caller cannot probe another
+    /// display's ticket IDs.
+    pub fn ensure_kds_order_visible_to_instance(
+        &self,
+        id: &str,
+        instance_id: &str,
+    ) -> Result<(), CoreError> {
+        if self.get_kds_order_for_instance(id, instance_id)?.is_some() {
+            Ok(())
+        } else {
+            Err(CoreError::NotFound {
+                entity: "kds_order",
+                id: id.to_owned(),
+            })
+        }
+    }
+
     fn order_visible_to_instance(
         &self,
         order: &KdsOrder,
@@ -259,6 +296,28 @@ impl Store<'_> {
     /// When `input.line_items` is `Some`, the existing kds_line_items
     /// for this order are deleted and replaced with the new ones, and
     /// the summary/count are re-derived from the structured data.
+    /// Update an order only when it belongs to the current KDS instance.
+    pub fn update_kds_order_items_for_instance(
+        &self,
+        input: crate::UpdateKdsOrderItemsInput,
+        instance_id: &str,
+    ) -> Result<KdsOrder, CoreError> {
+        self.ensure_kds_order_visible_to_instance(&input.id, instance_id)?;
+        self.update_kds_order_items(input)
+    }
+
+    /// Update an order status only when it belongs to the current KDS instance.
+    pub fn update_kds_status_for_instance(
+        &self,
+        id: &str,
+        new_status: &str,
+        instance_id: &str,
+    ) -> Result<KdsOrder, CoreError> {
+        self.ensure_kds_order_visible_to_instance(id, instance_id)?;
+        self.update_kds_status(id, new_status)
+    }
+
+    /// Update an order's summary and optionally replace its structured line items.
     pub fn update_kds_order_items(
         &self,
         input: crate::UpdateKdsOrderItemsInput,
@@ -690,6 +749,16 @@ impl Store<'_> {
         rows.map(|r| Ok(r?)).collect()
     }
 
+    /// Get line items only when the parent order belongs to the current instance.
+    pub fn get_kds_order_lines_for_instance(
+        &self,
+        order_id: &str,
+        instance_id: &str,
+    ) -> Result<Vec<KdsLineItem>, CoreError> {
+        self.ensure_kds_order_visible_to_instance(order_id, instance_id)?;
+        self.get_kds_order_lines(order_id)
+    }
+
     /// Get all line items for a KDS order, ordered by course then position.
     pub fn get_kds_order_lines(&self, order_id: &str) -> Result<Vec<KdsLineItem>, CoreError> {
         let mut stmt = self.conn.prepare(
@@ -715,6 +784,33 @@ impl Store<'_> {
     /// Update the status of a single KDS line item. Automatically sets
     /// the corresponding timestamp (started_at, ready_at, served_at)
     /// based on the new status.
+    /// Update a line item only when its parent order belongs to the current
+    /// KDS instance.
+    pub fn update_kds_line_item_status_for_instance(
+        &self,
+        item_id: &str,
+        new_status: &str,
+        instance_id: &str,
+    ) -> Result<KdsLineItem, CoreError> {
+        let order_id: String = self
+            .conn
+            .query_row(
+                "SELECT kds_order_id FROM kds_line_items WHERE id = ?1",
+                params![item_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| match error {
+                rusqlite::Error::QueryReturnedNoRows => CoreError::NotFound {
+                    entity: "kds_line_item",
+                    id: item_id.to_owned(),
+                },
+                other => CoreError::Db(other),
+            })?;
+        self.ensure_kds_order_visible_to_instance(&order_id, instance_id)?;
+        self.update_kds_line_item_status(item_id, new_status)
+    }
+
+    /// Update a line item's status and its corresponding workflow timestamp.
     pub fn update_kds_line_item_status(
         &self,
         item_id: &str,
@@ -1667,6 +1763,81 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn scoped_kds_commands_reject_cross_instance_targeted_order() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_product(&conn, "BURGER", "Burger");
+
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("BURGER"), 1, price(500)))
+            .unwrap();
+        let sale = Sale::from_cart(&cart).unwrap();
+        s.create_sale(&sale).unwrap();
+        let order = s
+            .complete_sale_to_kds_fanout(&sale.id, Some("store-1"), &["kds-main".to_owned()])
+            .unwrap()
+            .remove(0);
+        let line = s
+            .create_kds_line_items(
+                &order.id,
+                &[CreateKdsLineItemInput {
+                    sku: "BURGER".into(),
+                    display_name: "Burger".into(),
+                    qty: 1,
+                    course: Some("main".into()),
+                    modifiers: vec![],
+                }],
+            )
+            .unwrap()
+            .remove(0);
+
+        // The print command uses this scoped lookup before it touches a printer.
+        assert!(
+            s.get_kds_order_for_instance(&order.id, "kds-other")
+                .unwrap()
+                .is_none()
+        );
+        let err = s
+            .ensure_kds_order_visible_to_instance(&order.id, "kds-other")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "kds_order"));
+
+        // Status and whole-order edit commands cannot mutate another display's ticket.
+        let err = s
+            .update_kds_status_for_instance(&order.id, "preparing", "kds-other")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "kds_order"));
+        let err = s
+            .update_kds_order_items_for_instance(
+                crate::UpdateKdsOrderItemsInput {
+                    id: order.id.clone(),
+                    items_summary: "Tampered".into(),
+                    item_count: 1,
+                    line_items: None,
+                },
+                "kds-other",
+            )
+            .unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "kds_order"));
+
+        // Both line-item read and update commands enforce the parent order scope.
+        let err = s
+            .get_kds_order_lines_for_instance(&order.id, "kds-other")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "kds_order"));
+        let err = s
+            .update_kds_line_item_status_for_instance(&line.id, "ready", "kds-other")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::NotFound { entity, .. } if entity == "kds_order"));
+
+        let unchanged = s.get_kds_order(&order.id).unwrap().unwrap();
+        assert_eq!(unchanged.status, "pending");
+        assert_eq!(unchanged.items_summary, "Burger");
+        let unchanged_line = s.get_kds_order_lines(&order.id).unwrap().remove(0);
+        assert_eq!(unchanged_line.item_status, "pending");
     }
 
     #[test]
