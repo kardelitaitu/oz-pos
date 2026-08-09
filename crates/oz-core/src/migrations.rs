@@ -741,6 +741,11 @@ pub const ALL: &[Migration] = &[
         id: "125_sync_terminals.sql",
         sql: include_str!("../migrations/125_sync_terminals.sql"),
     },
+    // ── Sync plan gating: per-tenant cloud sync plans (ADR sync-plan-gating) ──
+    Migration {
+        id: "126_tenant_plans.sql",
+        sql: include_str!("../migrations/126_tenant_plans.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.

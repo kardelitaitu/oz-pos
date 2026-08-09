@@ -66,6 +66,7 @@ pub mod kds;
 pub mod loyalty;
 /// Offline queue and sync state.
 pub mod offline;
+pub mod plans;
 pub use offline::RemoteSyncFailure;
 /// Payment CRUD (tenders, transactions).
 pub mod payments;
