@@ -2730,3 +2730,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 112 — wire-jump focus)
 
 **Risks / follow-ups:** the wire-jump UX series (rounds 108-112) is complete: marker → jumpable panel row → banner declutter → keyboard focus. The on-card excess badge (tier/branch 'N of 1 allowed' chip) remains the standing UX idea; the ADR banner-rule documentation is the standing docs item.
+
+### 2026-08-10 — on-card excess-count badge for Stock Rooms and Branches (round 113)
+
+**Problem (round-112 standing follow-up):** tier and branch excess problems were discoverable only by opening the validation panel — the card note said WHAT ("Multiple Stock Rooms require a Pro Tier license.") but not HOW MANY are in play, so a user glancing at the canvas couldn't gauge the scale of the fix.
+
+**Solution (TDD Red→Green):** a compact `node-validation-count-badge` chip inside the validation note on excess cards: "N Stock Rooms — 1 allowed" (tier-limit) and "N Branch Locations — 1 allowed" (extra branch), computed per node by a new `excessBadgeByNode` memo (kind count from the editor's node list, resolved via l10n with the count var) and threaded through a new optional `countBadge` prop on TopologyNodeCard (null on every other card keeps the memo boundary clean). Two new FTL keys in both bundles (en: "…— 1 allowed"; id: "…— 1 diizinkan"), test stub mirrors the en values. Red: two editor tests assert the badge text on the wh-2 card ("2 Stock Rooms — 1 allowed") and the store-2 card ("2 Branch Locations — 1 allowed") — failed with `expected undefined to be …` (no badge element). Green: FTL keys + memo + prop + chip + CSS (warning-toned pill at the note's right edge).
+
+**Verified:** editor 458/458 (+2), topology suites 537/537, full UI **4576/4576**, tsc, eslint, i18n lint (parity + dedupe) clean.
+
+**Commits:** (round 113 — excess-count badge)
+
+**Risks / follow-ups:** the id values ("Gudang Stok — 1 diizinkan", "Branch Location — 1 diizinkan") are best-effort — a native-speaker pass over the two new keys is the natural i18n follow-up; the badge could also gain a hover tooltip explaining the Pro-tier upgrade path.

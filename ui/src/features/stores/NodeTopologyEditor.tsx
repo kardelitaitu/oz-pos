@@ -4038,6 +4038,26 @@ export default function NodeTopologyEditor({
     return m;
   }, [nodes, liveValidation, resolvedIssues]);
 
+  /** Compact excess-count chip (round 113): a node carrying
+   *  warehouse-tier-limit shows "N Stock Rooms — 1 allowed"; one carrying
+   *  multiple-branch-locations shows "N Branch Locations — 1 allowed".
+   *  The card note already says WHAT is wrong; the badge says HOW MANY are
+   *  in play at a glance, without opening the panel. Only excess nodes
+   *  (the ones the errors pin to) get the badge. */
+  const excessBadgeByNode = useMemo(() => {
+    const m = new Map<string, string>();
+    const warehouseCount = nodes.filter((n) => n.type === 'warehouse').length;
+    const branchCount = nodes.filter((n) => n.type === 'store').length;
+    for (const [nodeId, errs] of liveValidation.byNode) {
+      if (errs.some((e) => e.code === 'warehouse-tier-limit')) {
+        m.set(nodeId, l10n.getString('topology-warehouse-excess-badge', { count: warehouseCount }));
+      } else if (errs.some((e) => e.code === 'multiple-branch-locations')) {
+        m.set(nodeId, l10n.getString('topology-branch-excess-badge', { count: branchCount }));
+      }
+    }
+    return m;
+  }, [liveValidation, nodes, l10n]);
+
   /** First-match 'left' input port wiring per node (the flexible inventory
    *  label). Stable across hover/selection so the card memo holds. */
   const connectedPortIdByNode = useMemo(() => {
@@ -5505,6 +5525,7 @@ export default function NodeTopologyEditor({
                 connectingFromPort={connectingFromPort}
                 hoveredTarget={hoveredTarget}
                 nodeErrors={nodeErrorsByNode.get(node.id) ?? EMPTY_ERRORS}
+                countBadge={excessBadgeByNode.get(node.id) ?? null}
                 stockWireHint={addStockWireHintId === node.id}
                 onDismissNodeIssue={handleDismissNodeIssue}
                 isFresh={freshNodeIds.has(node.id)}

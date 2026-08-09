@@ -47,6 +47,8 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-new-hardware-subtitle': 'Peripheral',
   'topology-new-ready': 'Ready',
   'topology-toast-multi-warehouse': 'Multiple Stock Rooms require a Pro Tier license.',
+  'topology-warehouse-excess-badge': '{count} Stock Rooms — 1 allowed',
+  'topology-branch-excess-badge': '{count} Branch Locations — 1 allowed',
   'topology-toast-wire-duplicate': 'A wire already connects these ports.',
   'topology-wire-incompatible': 'These connectors cannot be connected.',
   'topology-relationship-picker-title': 'Choose connection type',
@@ -8814,34 +8816,50 @@ describe('NodeTopologyEditor — tier-limit error node scoping', () => {
     expect(wh3Card.className).toContain('node-selected');
     expect(document.querySelector('.topology-validation-panel')).toBeNull();
   });
+
+  it('shows an excess-count badge on the flagged Stock Room card', async () => {
+    // Round 113: the tier-limit card note says WHAT is wrong; the badge
+    // says HOW MANY Stock Rooms are in play at a glance, without opening
+    // the panel.
+    mockLoadTopology.mockResolvedValueOnce(twoWarehouseDiagram);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(4));
+
+    const wh2Card = document.querySelector('.topology-node[data-node-id="wh-2"]')!;
+    expect(wh2Card.querySelector('.node-validation-count-badge')?.textContent).toBe(
+      '2 Stock Rooms — 1 allowed',
+    );
+  });
 });
 
 // ── Extra-branch error is node-scoped (round 108 follow-up) ──────
 
 describe('NodeTopologyEditor — extra-branch error node scoping', () => {
+  const twoBranchDiagram = {
+    nodes: [
+      { id: 'store-1', type: 'store', name: 'Branch A', x: 80, y: 140, store_profile_id: 'store-1' },
+      { id: 'store-2', type: 'store', name: 'Branch B', x: 80, y: 400, store_profile_id: 'store-2' },
+      { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+    ],
+    wires: [
+      {
+        id: 'w-1',
+        from_node_id: 'store-1',
+        from_port: 'right',
+        to_node_id: 'ws-a',
+        to_port: 'left',
+        direction: 'one-way',
+      },
+    ],
+  } as never;
+
   it('renders the multiple-branch error as a node-scoped panel item with a working jump', async () => {
     // Round 108: the contract scopes multiple-branch-locations to the
     // SECOND Branch Location, so the editor must render it as a card note
     // + panel item with a jump button — never the graph-level banner.
     // This pins that bucketing; a regression to banner-level would
     // re-introduce the dead-end banner this audit removed.
-    mockLoadTopology.mockResolvedValueOnce({
-      nodes: [
-        { id: 'store-1', type: 'store', name: 'Branch A', x: 80, y: 140, store_profile_id: 'store-1' },
-        { id: 'store-2', type: 'store', name: 'Branch B', x: 80, y: 400, store_profile_id: 'store-2' },
-        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
-      ],
-      wires: [
-        {
-          id: 'w-1',
-          from_node_id: 'store-1',
-          from_port: 'right',
-          to_node_id: 'ws-a',
-          to_port: 'left',
-          direction: 'one-way',
-        },
-      ],
-    } as never);
+    mockLoadTopology.mockResolvedValueOnce(twoBranchDiagram);
     renderEditor();
     await waitFor(() => expect(getNodeCount()).toBe(3));
 
@@ -8874,6 +8892,17 @@ describe('NodeTopologyEditor — extra-branch error node scoping', () => {
 
     expect(branchBCard.className).toContain('node-selected');
     expect(document.querySelector('.topology-validation-panel')).toBeNull();
+  });
+
+  it('shows an excess-count badge on the extra Branch card', async () => {
+    mockLoadTopology.mockResolvedValueOnce(twoBranchDiagram);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+
+    const branchBCard = document.querySelector('.topology-node[data-node-id="store-2"]')!;
+    expect(branchBCard.querySelector('.node-validation-count-badge')?.textContent).toBe(
+      '2 Branch Locations — 1 allowed',
+    );
   });
 });
 

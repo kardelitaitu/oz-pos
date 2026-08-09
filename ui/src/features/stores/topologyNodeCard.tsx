@@ -35,6 +35,11 @@ export interface TopologyNodeCardProps {
   connectingFromPort: PortName | null;
   hoveredTarget: { nodeId: string; port: PortName } | null;
   nodeErrors: TopologyValidationError[];
+  /** Compact excess-count chip (round 113): "N Stock Rooms — 1 allowed"
+   *  / "N Branch Locations — 1 allowed", rendered inside the validation
+   *  note on nodes pinned by a tier-limit / extra-branch error. Null on
+   *  every other card keeps the memo boundary clean. */
+  countBadge?: string | null;
   /** One-click "add stock wire" guidance (round 80): set while the
    *  validation panel action is guiding the user to route stock into this
    *  warehouse — renders an info chip on the card. The editor clears it the
@@ -79,6 +84,7 @@ function TopologyNodeCardImpl({
   connectingFromPort,
   hoveredTarget,
   nodeErrors,
+  countBadge,
   stockWireHint,
   isFresh,
   isDimmed,
@@ -241,6 +247,7 @@ function TopologyNodeCardImpl({
           <span className="node-validation-text">
             {l10n.getString(nodeErrors[0]!.messageId)}
           </span>
+          {countBadge && <span className="node-validation-count-badge">{countBadge}</span>}
           {nodeErrors[0]!.code === 'warehouse-missing-stock-routing' && onDismissNodeIssue && (
             <button
               type="button"
