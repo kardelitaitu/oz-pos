@@ -58,16 +58,24 @@ pub struct SyncAttemptResult {
     pub error: Option<String>,
 }
 
-/// Typed HTTP error from the sync client (ADR sync-auth-hardening P1).
+/// Typed HTTP error from the sync client (ADR sync-auth-hardening P1/P4).
 ///
-/// `AuthRejected` is a distinct variant so callers can refresh the stored
-/// token and retry exactly once instead of treating every failure alike.
+/// 401 responses are split so callers can refresh the stored token and retry
+/// exactly once when it EXPIRED, while treating a genuinely invalid key as a
+/// configuration problem that must not be masked by a refresh.
 #[derive(Debug, thiserror::Error)]
 pub enum SyncHttpError {
-    /// The server rejected authentication (HTTP 401) — the stored token is
-    /// missing, expired, or invalid. Refresh the API key and retry once.
-    #[error("sync server rejected authentication (HTTP 401)")]
-    AuthRejected,
+    /// The server said the token expired (HTTP 401 + `token_expired`, or a
+    /// bare 401 from an older server). Safe to refresh the API key and
+    /// retry once.
+    #[error("sync server rejected authentication: token expired (HTTP 401)")]
+    AuthExpired,
+
+    /// The server said the token is invalid or missing (HTTP 401 +
+    /// `invalid_token` / `missing_token`). A configuration problem — do NOT
+    /// refresh; surface the error.
+    #[error("sync server rejected authentication: invalid token (HTTP 401)")]
+    AuthInvalid,
 
     /// The server returned a non-2xx status other than 401.
     #[error("sync server returned {status}: {body}")]
@@ -89,6 +97,21 @@ pub enum SyncHttpError {
     /// The HTTP client could not be constructed.
     #[error("failed to build HTTP client: {0}")]
     Client(String),
+}
+
+/// Classify a 401 response body (ADR sync-auth-hardening P4).
+///
+/// Servers with structured errors say `token_expired` / `invalid_token` /
+/// `missing_token`. A bare 401 (older server) is treated as stale auth so
+/// the refresh-and-retry behaviour from P1 keeps working.
+fn classify_401(body: &str) -> SyncHttpError {
+    if body.contains("token_expired") {
+        SyncHttpError::AuthExpired
+    } else if body.contains("invalid_token") || body.contains("missing_token") {
+        SyncHttpError::AuthInvalid
+    } else {
+        SyncHttpError::AuthExpired
+    }
 }
 
 /// Result of a `pull_snapshot` round-trip.
@@ -792,10 +815,12 @@ pub async fn send_items_to_server(
         .map_err(|e| SyncHttpError::Network(e.to_string()))?;
 
     if !resp.status().is_success() {
-        // ADR sync-auth-hardening P1: 401 means stale auth — the caller
-        // refreshes the API key and retries the operation exactly once.
+        // ADR sync-auth-hardening P1/P4: a 401 with `token_expired` means
+        // stale auth — the caller refreshes and retries once; `invalid_token`
+        // is a config problem that must not be masked.
         if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
-            return Err(SyncHttpError::AuthRejected);
+            let body = resp.text().await.unwrap_or_default();
+            return Err(classify_401(&body));
         }
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
@@ -981,9 +1006,10 @@ pub async fn fetch_snapshot_from_server(config: &SyncConfig) -> Result<Snapshot,
         .map_err(|e| SyncHttpError::Network(e.to_string()))?;
 
     if !resp.status().is_success() {
-        // ADR sync-auth-hardening P1: same stale-auth contract as push.
+        // ADR sync-auth-hardening P1/P4: same stale-auth contract as push.
         if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
-            return Err(SyncHttpError::AuthRejected);
+            let body = resp.text().await.unwrap_or_default();
+            return Err(classify_401(&body));
         }
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();

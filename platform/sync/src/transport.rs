@@ -276,10 +276,12 @@ impl SyncTransport {
             .map_err(|e| SyncError::Transport(classify_transport_error(&e, &url)))?;
 
         if !resp.status().is_success() {
-            // ADR sync-auth-hardening P1: a 401 means stale/missing auth —
-            // the caller refreshes the token and retries once.
+            // ADR sync-auth-hardening P1/P4: a 401 with `token_expired` means
+            // stale auth — the caller refreshes and retries once; a genuinely
+            // invalid token is a config problem that must not be masked.
             if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
-                return Err(SyncError::AuthRejected);
+                let body = resp.text().await.unwrap_or_default();
+                return Err(classify_auth_401(&body));
             }
 
             let status = resp.status();
@@ -341,9 +343,10 @@ impl SyncTransport {
         }
 
         if !resp.status().is_success() {
-            // ADR sync-auth-hardening P1: same stale-auth contract as push.
+            // ADR sync-auth-hardening P1/P4: same stale-auth contract as push.
             if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
-                return Err(SyncError::AuthRejected);
+                let body = resp.text().await.unwrap_or_default();
+                return Err(classify_auth_401(&body));
             }
 
             let status = resp.status();
@@ -420,9 +423,10 @@ impl SyncTransport {
             .map_err(|e| SyncError::Transport(classify_transport_error(&e, &url)))?;
 
         if !resp.status().is_success() {
-            // ADR sync-auth-hardening P1: same stale-auth contract as push.
+            // ADR sync-auth-hardening P1/P4: same stale-auth contract as push.
             if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
-                return Err(SyncError::AuthRejected);
+                let body = resp.text().await.unwrap_or_default();
+                return Err(classify_auth_401(&body));
             }
 
             let status = resp.status();
@@ -444,6 +448,20 @@ impl SyncTransport {
             .map_err(|e| SyncError::Transport(format!("snapshot parse failed: {e}")))?;
 
         Ok(snapshot)
+    }
+}
+
+/// Classify a 401 response body (ADR sync-auth-hardening P4): explicit
+/// `token_expired` (or a bare 401 from an older server) maps to
+/// [`SyncError::AuthExpired`]; explicit `invalid_token` / `missing_token`
+/// maps to [`SyncError::AuthInvalid`].
+fn classify_auth_401(body: &str) -> SyncError {
+    if body.contains("token_expired") {
+        SyncError::AuthExpired
+    } else if body.contains("invalid_token") || body.contains("missing_token") {
+        SyncError::AuthInvalid
+    } else {
+        SyncError::AuthExpired
     }
 }
 
@@ -1039,9 +1057,8 @@ mod tests {
             "the configured bearer token must reach the server (RUST-05)"
         );
     }
-
     #[tokio::test]
-    async fn push_items_maps_401_to_auth_rejected() {
+    async fn push_items_maps_bare_401_to_auth_expired() {
         use axum::{Router, http::StatusCode, routing::post};
 
         let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
@@ -1061,8 +1078,36 @@ mod tests {
         let err = transport.push_items(&[item]).await.unwrap_err();
 
         assert!(
-            matches!(err, SyncError::AuthRejected),
-            "a 401 from the push endpoint must surface as AuthRejected, got: {err:?}"
+            matches!(err, SyncError::AuthExpired),
+            "a bare 401 must surface as AuthExpired (backward compat), got: {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn push_items_maps_structured_invalid_token_401() {
+        use axum::{Json, Router, http::StatusCode, response::IntoResponse, routing::post};
+
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        async fn reject_push() -> impl IntoResponse {
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({"error": "invalid_token"})),
+            )
+        }
+
+        let app = Router::new().route("/api/sync/push", post(reject_push));
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+
+        let transport = SyncTransport::new(&format!("http://localhost:{port}"), Some("bad-token"));
+        let item = OfflineQueueItem::new("complete_sale", r#"{"id":4}"#);
+        let err = transport.push_items(&[item]).await.unwrap_err();
+
+        assert!(
+            matches!(err, SyncError::AuthInvalid),
+            "an explicit invalid_token 401 must surface as AuthInvalid, got: {err:?}"
         );
     }
 

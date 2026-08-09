@@ -311,7 +311,7 @@ pub async fn sync_run(state: State<'_, AppState>) -> Result<SyncAttemptResult, A
 
     // ADR sync-auth-hardening P1: a 401 means the stored token is stale —
     // refresh it once and retry the push exactly once (never in a loop).
-    if matches!(outcomes, Err(sync_client::SyncHttpError::AuthRejected)) {
+    if matches!(outcomes, Err(sync_client::SyncHttpError::AuthExpired)) {
         // ADR sync-auth-hardening P1: request a fresh token (async, no DB
         // lock), persist it under a brief lock, then retry exactly once.
         // P3: prefer terminal client credentials when the device is paired.
@@ -545,7 +545,7 @@ pub async fn sync_pull(
 
     // ADR sync-auth-hardening P1: refresh the token once and retry exactly
     // once when the server rejects our authentication.
-    if matches!(snapshot, Err(sync_client::SyncHttpError::AuthRejected)) {
+    if matches!(snapshot, Err(sync_client::SyncHttpError::AuthExpired)) {
         // ADR sync-auth-hardening P1: request a fresh token (async, no DB
         // lock), persist it under a brief lock, then retry exactly once.
         // P3: prefer terminal client credentials when the device is paired.

@@ -13,7 +13,7 @@ use axum::{
     extract::Request,
     http::{StatusCode, header},
     middleware::Next,
-    response::Response,
+    response::{IntoResponse, Response},
 };
 use chrono::{Duration, Utc};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
@@ -127,26 +127,51 @@ pub fn validate_token(token_str: &str) -> Result<ApiTokenClaims, jsonwebtoken::e
     decode::<ApiTokenClaims>(token_str, &decoding_key, &validation).map(|data| data.claims)
 }
 
+/// Build a structured 401 response distinguishing why auth failed
+/// (ADR sync-auth-hardening P4): `token_expired`, `invalid_token`, or
+/// `missing_token`. The client refreshes its stored key ONLY on
+/// `token_expired`; the other codes indicate a configuration problem.
+fn unauthorized(error_code: &'static str) -> Response {
+    (
+        StatusCode::UNAUTHORIZED,
+        [(header::WWW_AUTHENTICATE, "Bearer")],
+        axum::Json(serde_json::json!({ "error": error_code })),
+    )
+        .into_response()
+}
+
+/// Classify a JWT validation failure as `token_expired` or `invalid_token`.
+fn error_code_for(e: &jsonwebtoken::errors::Error) -> &'static str {
+    if matches!(e.kind(), jsonwebtoken::errors::ErrorKind::ExpiredSignature) {
+        "token_expired"
+    } else {
+        "invalid_token"
+    }
+}
+
 /// Axum middleware that rejects requests without a valid JWT.
 ///
 /// Attach to protected routes via `Router::layer(from_fn(auth_middleware))`.
-pub async fn auth_middleware(mut req: Request, next: Next) -> Result<Response, StatusCode> {
+/// Returns a structured 401 body (`token_expired` / `invalid_token` /
+/// `missing_token`) plus `WWW-Authenticate: Bearer` so clients can tell
+/// why auth failed (ADR sync-auth-hardening P4).
+pub async fn auth_middleware(mut req: Request, next: Next) -> Result<Response, Response> {
     let auth_header = req
         .headers()
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+        .ok_or_else(|| unauthorized("missing_token"))?;
 
     let token = auth_header
         .strip_prefix("Bearer ")
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+        .ok_or_else(|| unauthorized("missing_token"))?;
 
     match validate_token(token) {
         Ok(claims) => {
             req.extensions_mut().insert(claims);
             Ok(next.run(req).await)
         }
-        Err(_) => Err(StatusCode::UNAUTHORIZED),
+        Err(e) => Err(unauthorized(error_code_for(&e))),
     }
 }
 

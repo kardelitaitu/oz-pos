@@ -447,6 +447,73 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 
+    // ── Structured 401 bodies (ADR sync-auth-hardening P4) ────────
+
+    #[tokio::test]
+    async fn missing_token_reports_missing_token_body() {
+        let req = Request::builder()
+            .uri("/api/v1/products")
+            .body(Body::empty())
+            .unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        let json = body_json(resp).await;
+        assert_eq!(
+            json["error"], "missing_token",
+            "no header must report missing_token, not token_expired"
+        );
+    }
+
+    #[tokio::test]
+    async fn expired_token_reports_token_expired_body() {
+        let token = auth::create_token("expired", Some(-1), None).unwrap();
+        let req = auth_get("/api/v1/products", &token.token);
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        let json = body_json(resp).await;
+        assert_eq!(
+            json["error"], "token_expired",
+            "an expired signature must report token_expired so the client refreshes"
+        );
+    }
+
+    #[tokio::test]
+    async fn garbage_token_reports_invalid_token_body() {
+        let req = auth_get("/api/v1/products", "not.a.real.jwt");
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        let json = body_json(resp).await;
+        assert_eq!(
+            json["error"], "invalid_token",
+            "a malformed token must NOT report token_expired"
+        );
+    }
+
+    #[tokio::test]
+    async fn tampered_token_reports_invalid_token_body() {
+        let token = auth::create_token("tamper", Some(24), None).unwrap();
+        let req = auth_get("/api/v1/products", &format!("{}x", token.token));
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        let json = body_json(resp).await;
+        assert_eq!(
+            json["error"], "invalid_token",
+            "a tampered signature must NOT report token_expired"
+        );
+    }
+
+    #[tokio::test]
+    async fn expired_token_response_carries_www_authenticate() {
+        let token = auth::create_token("expired", Some(-1), None).unwrap();
+        let req = auth_get("/api/v1/products", &token.token);
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(
+            resp.headers().get(axum::http::header::WWW_AUTHENTICATE),
+            Some(&axum::http::HeaderValue::from_static("Bearer")),
+            "P4 responses must advertise Bearer auth"
+        );
+    }
+
     // ── Product endpoints (empty DB) ─────────────────────────────
 
     #[tokio::test]

@@ -363,11 +363,11 @@ mod tests {
                         .to_string()
                 } else if path == "/api/v1/terminals" {
                     // Echo the client-generated terminal id back.
-                    if let Some(line) = request.lines().rev().find(|l| !l.trim().is_empty()) {
-                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(line) {
-                            echoed_terminal_id =
-                                v["terminal_id"].as_str().unwrap_or_default().to_string();
-                        }
+                    if let Some(line) = request.lines().rev().find(|l| !l.trim().is_empty())
+                        && let Ok(v) = serde_json::from_str::<serde_json::Value>(line)
+                    {
+                        echoed_terminal_id =
+                            v["terminal_id"].as_str().unwrap_or_default().to_string();
                     }
                     let body = format!(
                         "{{\"terminal_id\":\"{echoed_terminal_id}\",\"device_secret\":\"dev-secret-xyz\"}}"

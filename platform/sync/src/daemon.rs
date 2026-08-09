@@ -107,7 +107,7 @@ pub(crate) fn read_config_and_pending(
 
 /// ADR sync-auth-hardening P1: request a fresh token and persist it as the
 /// API key. Returns `true` when a new key was stored. Callers invoke this
-/// once after an `AuthRejected` and never loop on it.
+/// once after an `AuthExpired` and never loop on it.
 async fn refresh_persisted_api_key(db: &DbConnection, server_url: &str) -> bool {
     // ADR sync-auth-hardening P3: prefer terminal client credentials when
     // the device is paired; fall back to the admin key / open mint.
@@ -438,9 +438,11 @@ impl SyncDaemon {
                                 .await;
                                 tracing::info!(new_url = %new_url, "server migrated — local config updated");
                             }
-                            // ADR sync-auth-hardening P1: stale auth — refresh
+                            // ADR sync-auth-hardening P1/P4: stale auth — refresh
                             // the key once and retry the push batch exactly once.
-                            if let SyncError::AuthRejected = e {
+                            // An explicit `invalid_token` is a config problem and
+                            // must not be masked by a refresh.
+                            if let SyncError::AuthExpired = e {
                                 tracing::warn!(
                                     "push rejected (401) — refreshing API key and retrying once"
                                 );
@@ -811,7 +813,7 @@ impl SyncDaemon {
                             // pull apply block is anchor/quarantine-sensitive, so
                             // a retry would duplicate ~150 lines of application
                             // logic; recovery one cycle later is automatic.
-                            if let SyncError::AuthRejected = e {
+                            if let SyncError::AuthExpired = e {
                                 tracing::warn!(
                                     "pull rejected (401) — refreshing API key for next cycle"
                                 );
