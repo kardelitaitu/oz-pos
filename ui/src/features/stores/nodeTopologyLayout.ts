@@ -14,6 +14,9 @@ import { NODE_HEIGHT, NODE_WIDTH } from './nodeTopologyClamp';
 export const LAYOUT_GAP_X = 64;
 /** Canvas-space gap between layout rows (2 grid steps). */
 export const LAYOUT_GAP_Y = 48;
+/** Extra canvas-space gap between forest bands (4 grid steps) so
+ *  independent trees read as separate diagrams, not one deep chain. */
+export const LAYOUT_COMPONENT_GAP = 96;
 
 /** Minimal node shape the engine needs (id + current position). */
 export interface LayoutNode {
@@ -73,21 +76,70 @@ export function computeAutoLayout(
   const oldCx = midOf(nodes.map((n) => n.x));
   const oldCy = midOf(nodes.map((n) => n.y));
 
-  // Place each rank in a column; rows stack in prior-y order so cards keep
-  // their relative reading order within a rank.
-  const byRank = new Map<number, LayoutNode[]>();
-  for (const n of nodes) {
-    const r = rank.get(n.id)!;
-    const col = byRank.get(r) ?? [];
-    col.push(n);
-    byRank.set(r, col);
+  // Forest bands: split the graph into undirected wire-connected
+  // components, then lay each component out in its OWN column band
+  // (side-by-side) instead of pushing every source into column 0 and
+  // stacking independent trees on top of each other. Converging roots
+  // (multiple sources feeding one target) share a component, so they stay
+  // in one band. The bands follow the diagram's left-to-right reading
+  // order (each component's current min-x), preserving where the user
+  // drew each tree.
+  const adjacency = new Map<string, string[]>();
+  for (const n of nodes) adjacency.set(n.id, []);
+  for (const w of wires) {
+    adjacency.get(w.fromNodeId)?.push(w.toNodeId);
+    adjacency.get(w.toNodeId)?.push(w.fromNodeId);
   }
+  const componentOf = new Map<string, number>();
+  let componentCount = 0;
+  for (const n of nodes) {
+    if (componentOf.has(n.id)) continue;
+    const stack = [n.id];
+    componentOf.set(n.id, componentCount);
+    while (stack.length > 0) {
+      const id = stack.pop()!;
+      for (const next of adjacency.get(id) ?? []) {
+        if (!componentOf.has(next)) {
+          componentOf.set(next, componentCount);
+          stack.push(next);
+        }
+      }
+    }
+    componentCount += 1;
+  }
+  const nodesByComponent = new Map<number, LayoutNode[]>();
+  for (const n of nodes) {
+    const c = componentOf.get(n.id)!;
+    const list = nodesByComponent.get(c) ?? [];
+    list.push(n);
+    nodesByComponent.set(c, list);
+  }
+  const componentOrder = [...nodesByComponent.keys()].sort((a, b) => {
+    const minX = (c: number) => Math.min(...nodesByComponent.get(c)!.map((n) => n.x));
+    return minX(a) - minX(b);
+  });
+
+  // Place each component's ranks in columns; rows stack in prior-y order so
+  // cards keep their relative reading order within a (component, rank).
   const placed: NodePlacement[] = [];
-  for (const r of [...byRank.keys()].sort((a, b) => a - b)) {
-    const col = byRank.get(r)!;
-    col.sort((a, b) => a.y - b.y);
-    const colX = r * (NODE_WIDTH + LAYOUT_GAP_X);
-    col.forEach((n, i) => placed.push({ id: n.id, x: colX, y: i * (NODE_HEIGHT + LAYOUT_GAP_Y) }));
+  let bandX = 0;
+  for (const c of componentOrder) {
+    const compNodes = nodesByComponent.get(c)!;
+    const maxRank = Math.max(...compNodes.map((n) => rank.get(n.id)!));
+    const byRank = new Map<number, LayoutNode[]>();
+    for (const n of compNodes) {
+      const r = rank.get(n.id)!;
+      const col = byRank.get(r) ?? [];
+      col.push(n);
+      byRank.set(r, col);
+    }
+    for (const r of [...byRank.keys()].sort((a, b) => a - b)) {
+      const col = byRank.get(r)!;
+      col.sort((a, b) => a.y - b.y);
+      const colX = bandX + r * (NODE_WIDTH + LAYOUT_GAP_X);
+      col.forEach((n, i) => placed.push({ id: n.id, x: colX, y: i * (NODE_HEIGHT + LAYOUT_GAP_Y) }));
+    }
+    bandX += (maxRank + 1) * (NODE_WIDTH + LAYOUT_GAP_X) + LAYOUT_COMPONENT_GAP;
   }
   const dx = oldCx - midOf(placed.map((p) => p.x));
   const dy = oldCy - midOf(placed.map((p) => p.y));

@@ -81,3 +81,75 @@ describe('computeAutoLayout (layered wire-direction layout engine)', () => {
     expect(computeAutoLayout([], [])).toEqual([]);
   });
 });
+
+// A forest is several independent wire-connected trees. Each tree gets its
+// own column band laid out side-by-side, instead of every source being
+// pushed into column 0 and the trees stacking vertically on top of each
+// other. Converging roots (multiple sources feeding one target) still form
+// ONE band, and the bands follow the diagram's left-to-right reading order.
+describe('computeAutoLayout — forest layout (multiple independent roots)', () => {
+  it('lays two independent trees side-by-side instead of stacking their sources', () => {
+    // Tree 1: A→B (physically left). Tree 2: C→D (physically right).
+    const placed = computeAutoLayout(
+      [
+        { id: 'a', x: 0, y: 100 },
+        { id: 'b', x: 300, y: 100 },
+        { id: 'c', x: 500, y: 300 },
+        { id: 'd', x: 800, y: 300 },
+      ],
+      [
+        { id: 'w1', fromNodeId: 'a', toNodeId: 'b' },
+        { id: 'w2', fromNodeId: 'c', toNodeId: 'd' },
+      ],
+    );
+    const byId = new Map(placed.map((p) => [p.id, p]));
+    // Tree 1's deepest node sits LEFT of tree 2's root — the bands are
+    // side-by-side, not interleaved or stacked.
+    expect(byId.get('a')!.x).toBeLessThan(byId.get('b')!.x);
+    expect(byId.get('b')!.x).toBeLessThan(byId.get('c')!.x);
+    expect(byId.get('c')!.x).toBeLessThan(byId.get('d')!.x);
+    // Both roots land on the same row (side-by-side, not stacked).
+    expect(byId.get('a')!.y).toBe(byId.get('c')!.y);
+  });
+
+  it('keeps converging roots in ONE band: sources feeding the same target still stack', () => {
+    // A→C and B→C: two sources, one target — a single tree, so the sources
+    // share a column instead of splitting into separate bands.
+    const placed = computeAutoLayout(
+      [
+        { id: 'a', x: 0, y: 0 },
+        { id: 'b', x: 0, y: 300 },
+        { id: 'c', x: 300, y: 150 },
+      ],
+      [
+        { id: 'w1', fromNodeId: 'a', toNodeId: 'c' },
+        { id: 'w2', fromNodeId: 'b', toNodeId: 'c' },
+      ],
+    );
+    const byId = new Map(placed.map((p) => [p.id, p]));
+    expect(byId.get('a')!.x).toBe(byId.get('b')!.x);
+    expect(byId.get('a')!.y).toBeLessThan(byId.get('b')!.y);
+    expect(byId.get('c')!.x).toBeGreaterThan(byId.get('a')!.x);
+  });
+
+  it('orders the bands by the diagram left-to-right reading order', () => {
+    // Tree 2 (C→D) is physically LEFT of tree 1 (A→B): the layout must
+    // keep C's band left of A's band, following the original positions.
+    const placed = computeAutoLayout(
+      [
+        { id: 'a', x: 500, y: 100 },
+        { id: 'b', x: 800, y: 100 },
+        { id: 'c', x: 0, y: 300 },
+        { id: 'd', x: 300, y: 300 },
+      ],
+      [
+        { id: 'w1', fromNodeId: 'a', toNodeId: 'b' },
+        { id: 'w2', fromNodeId: 'c', toNodeId: 'd' },
+      ],
+    );
+    const byId = new Map(placed.map((p) => [p.id, p]));
+    expect(byId.get('c')!.x).toBeLessThan(byId.get('d')!.x);
+    expect(byId.get('d')!.x).toBeLessThan(byId.get('a')!.x);
+    expect(byId.get('a')!.x).toBeLessThan(byId.get('b')!.x);
+  });
+});
