@@ -604,6 +604,55 @@ describe('semantic topology contract', () => {
     ]));
   });
 
+  it('keeps a three-warehouse transfer chain clean end to end (deep hub-and-spoke)', () => {
+    // Round 85: hub ← workspace (stock), mid ← hub (transfer), leaf ← mid
+    // (transfer). Every warehouse has an inbound stock-bearing wire and
+    // room — the chain must validate fully clean, proving deeper trees
+    // don't trip the missing-wire or capacity guards.
+    const normalized = graph(
+      [
+        branch(),
+        workspace('ws-1'),
+        warehouseWith('wh-hub', { stock: 300, capacity: 1000 }),
+        warehouseWith('wh-mid', { stock: 200, capacity: 800 }),
+        warehouseWith('wh-leaf', { stock: 100, capacity: 500 }),
+      ],
+      [
+        ownershipWire('w-owner', 'ws-1'),
+        stockWire('w-stock', 'ws-1', 'wh-hub'),
+        transferWire('w-hub-mid', 'wh-hub', 'wh-mid'),
+        transferWire('w-mid-leaf', 'wh-mid', 'wh-leaf'),
+      ],
+    );
+
+    expect(validateTopologyGraph(normalized)).toEqual([]);
+  });
+
+  it('flags a mid-chain warehouse cut off from its feeder as unserviced', () => {
+    // Removing the hub→mid transfer leaves wh-mid with NO inbound
+    // stock-bearing wire (its own outbound transfer to leaf doesn't
+    // service it) — the chain is broken mid-way and must be flagged.
+    const normalized = graph(
+      [
+        branch(),
+        workspace('ws-1'),
+        warehouseWith('wh-hub', { stock: 300, capacity: 1000 }),
+        warehouseWith('wh-mid', { stock: 200, capacity: 800 }),
+        warehouseWith('wh-leaf', { stock: 100, capacity: 500 }),
+      ],
+      [
+        ownershipWire('w-owner', 'ws-1'),
+        stockWire('w-stock', 'ws-1', 'wh-hub'),
+        transferWire('w-mid-leaf', 'wh-mid', 'wh-leaf'),
+      ],
+    );
+
+    const errors = validateTopologyGraph(normalized);
+    expect(errors.filter((e) => e.code === 'warehouse-missing-stock-routing')).toEqual([
+      expect.objectContaining({ nodeId: 'wh-mid' }),
+    ]);
+  });
+
   it('keeps a roomy satellite clean despite its transfer wire', () => {
     const normalized = graph(
       [

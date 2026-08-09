@@ -2362,3 +2362,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 84 — hint copy generalization)
 
 **Risks / follow-ups:** none behavioral — pure copy; the id translation is best-effort Indonesian (journaled rounds 69/71 flag a native-speaker pass).
+
+### 2026-08-09 — deep hub-and-spoke chain pinned in the contract
+
+**Problem (round-83/84 follow-up):** the hub-and-spoke tests covered two warehouses only — nothing pinned deeper trees, so a future guard change could silently break a hub → mid → leaf chain without any test noticing.
+
+**Solution (regression pin, no production change):** two contract tests. (1) A three-warehouse chain — hub ← workspace stock, mid ← hub transfer, leaf ← mid transfer, all with room — must validate to `[]` end to end. (2) The boundary: removing the hub→mid transfer leaves wh-mid with NO inbound stock-bearing wire (its own outbound transfer doesn't service it), so the chain breaks mid-way and wh-mid alone is flagged — outbound transfers never count as servicing. Both pass immediately (rounds 82/83 already hold the behavior); the value is pinning deeper trees against regression.
+
+**Verified:** contract 40/40 (+2), full UI 4557/4557, typecheck, eslint 0/0. No FTL changes.
+
+**Commits:** (round 85 — deep-chain pin)
+
+**Risks / follow-ups:** the pin covers the clean path and the mid-break; a cycle (leaf → hub back) has no explicit test — `cycle-detected` exists in the error union, so a future slice could pin that a circular transfer chain is rejected rather than silently accepted.
