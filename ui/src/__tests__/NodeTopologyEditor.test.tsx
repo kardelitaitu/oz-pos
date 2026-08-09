@@ -8952,6 +8952,11 @@ describe('NodeTopologyEditor — wire-level validation panel jump', () => {
     )!;
     expect(badGroup.classList.contains('wire-selected')).toBe(true);
     expect(document.querySelector('.topology-validation-panel')).toBeNull();
+
+    // Keyboard parity: focus lands on the wire's hitbox (tabIndex=0) so
+    // the keyboard user can act immediately — cycle direction, Delete,
+    // relabel — without hunting for the wire after the jump.
+    expect(document.activeElement?.getAttribute('data-wire-id')).toBe('w-bad');
   });
 
   it('keeps a renderable wire-level error out of the banner', async () => {

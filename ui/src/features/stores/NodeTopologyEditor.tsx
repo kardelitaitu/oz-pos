@@ -4016,6 +4016,12 @@ export default function NodeTopologyEditor({
     }
     setSelectedWireId(wireId);
     clearSelection();
+    // Keyboard parity (round 112): land focus on the wire's hitbox
+    // (tabIndex=0) so the keyboard user can act immediately — cycle
+    // direction, Delete, relabel — instead of hunting for the wire after
+    // the jump. Best-effort: a ghost-endpoint wire renders no hitbox, so
+    // the query misses and focus stays put.
+    (document.querySelector(`.wire-hitbox[data-wire-id="${wireId}"]`) as HTMLElement | null)?.focus();
   };
 
   /** Per-card visible errors, memoized so the memoized node cards receive a

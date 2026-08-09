@@ -2718,3 +2718,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 111 — banner declutter)
 
 **Risks / follow-ups:** the banner now means "no canvas anchor" — true graph-level errors + unrenderable wires. The five wireId-only codes are fully actionable end to end (marker + jumpable panel row); the wire-jump UX series (rounds 108-111) is complete.
+
+### 2026-08-10 — wire jump lands keyboard focus on the hitbox (round 112)
+
+**Problem (round-111 suggest):** the panel wire-jump (round 110) selected + centered the wire but left focus on the closed panel's ghost — a keyboard user had to Tab around to find the wire they were told about, breaking the parity the node jump and wire hitbox (tabIndex=0, role=button) already establish.
+
+**Solution (TDD Red→Green):** Red — the round-110 jump test gained one assertion: after clicking the panel item, `document.activeElement` carries `data-wire-id="w-bad"`. Failed (`expected null to be 'w-bad'`). Green — `handleJumpToWire` ends by focusing the hitbox via the same inline query the wire-rename focus-return already uses. Best-effort by design: a ghost-endpoint wire renders no hitbox, so the query misses and focus stays put — matching the no-anchor rule from round 111.
+
+**Verified:** editor 456/456, topology suites 535/535, full UI 4574/4574, tsc, eslint clean. No new FTL keys.
+
+**Commits:** (round 112 — wire-jump focus)
+
+**Risks / follow-ups:** the wire-jump UX series (rounds 108-112) is complete: marker → jumpable panel row → banner declutter → keyboard focus. The on-card excess badge (tier/branch 'N of 1 allowed' chip) remains the standing UX idea; the ADR banner-rule documentation is the standing docs item.
