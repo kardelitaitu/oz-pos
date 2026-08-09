@@ -2494,3 +2494,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 95 — en inverse guard)
 
 **Risks / follow-ups:** the en expectations freeze source copy too — a deliberate en wording change must update the pin (by design, same contract as the id side); the remaining non-pinned keys across other bundles are out of scope for this native-speaker set.
+
+### 2026-08-09 — pinned id values round-tripped through the production React render path (round 96)
+
+**Problem (round-95 follow-up):** the pin proved bundle RESOLUTION via formatPattern, but nothing proved the PRODUCTION plumbing — getBundle('id') → ReactLocalization → LocalizationProvider → <Localized>, the exact chain LocaleContext.tsx uses at runtime. If the id bundle ever stopped reaching React (broken provider, locale-name mismatch, dropped import), the formatPattern tests would stay green while the UI silently fell back to English.
+
+**Solution (test):** a new describe mounts all 14 pinned keys under the production path (new ReactLocalization([getBundle('id')]) + LocalizationProvider) and asserts every Indonesian value appears in the rendered DOM via getAllByText (two keys share "Label koneksi", so getByText would throw). The two placeholder-bearing keys pass their variables through `vars={{ count: 2 }}` / `vars={{ products: 3, tax_rates: 2, users: 1 }}` — the codebase's actual <Localized> convention; my first draft used the old `$count`-prop syntax, which @fluent/react rejected with "Unknown variable" and the fallback children rendered. Mechanism proven: mutating dismiss to "Abaikan masalah" failed BOTH tests — the render-path one with "Unable to find an element with the text: Abaikan" — then reverted green.
+
+**Verified:** i18nBundle 14/14 (+1), full UI 4565/4565 (+1), typecheck, eslint 0/0, i18n lint clean.
+
+**Commits:** (round 96 — render-path pin)
+
+**Risks / follow-ups:** the render-path test uses the raw production primitives rather than the full LocaleContext component (which needs a locale context provider); a future slice could mount LocaleContext itself for an even more end-to-end proof.

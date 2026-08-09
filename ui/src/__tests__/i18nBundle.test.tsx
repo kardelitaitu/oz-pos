@@ -15,7 +15,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderInAct } from '@/test-utils/renderInAct';
 import { screen } from '@testing-library/react';
-import { Localized } from '@fluent/react';
+import { Localized, LocalizationProvider, ReactLocalization } from '@fluent/react';
 import { getBundle, getAvailableLocales } from '@/i18n';
 import { withFluentLocale } from '@/locales/test-utils';
 import sharedId from '@/locales/shared.id.ftl?raw';
@@ -171,6 +171,49 @@ describe('i18n native-speaker pin (rounds 90-92)', () => {
         id.formatPattern(idMsg!.value!, args ?? null),
         `id "${key}" drifted from its pinned value`,
       ).toBe(idExpected);
+    }
+  });
+});
+
+// ── Production React render path (round 95 follow-up) ─────────
+//
+// The formatPattern assertions above prove bundle RESOLUTION. This
+// test proves the full PRODUCTION render path: getBundle('id') →
+// new ReactLocalization([bundle]) → <LocalizationProvider> →
+// <Localized>, the exact plumbing `LocaleContext.tsx` uses at
+// runtime. Every pinned key must show its Indonesian text in the
+// rendered DOM — if the id bundle ever stopped reaching React (a
+// broken provider, a wrong locale name, a dropped import), these
+// would fall back to the English placeholder children instead.
+describe('i18n native-speaker pin — production render path', () => {
+  it('renders every pinned Indonesian value through getBundle + ReactLocalization + <Localized>', async () => {
+    const l10n = new ReactLocalization([getBundle('id')]);
+    await renderInAct(
+      <LocalizationProvider l10n={l10n}>
+        <Localized id="topology-validation-dismiss"><span>Dismiss</span></Localized>
+        <Localized id="topology-node-stock-wire-hint"><span>Connect…</span></Localized>
+        <Localized id="topology-toast-fallback-warehouse"><span>Multi-warehouse…</span></Localized>
+        <Localized id="topology-wire-routing-toggle"><span>Elbow wires</span></Localized>
+        <Localized id="topology-bends-override-note"><span>Bends…</span></Localized>
+        <Localized id="topology-wire-labels-toggle"><span>Wire labels</span></Localized>
+        <Localized id="topology-context-delete-wire"><span>Delete wire</span></Localized>
+        <Localized id="topology-context-rename-wire"><span>Rename wire</span></Localized>
+        <Localized id="topology-wire-rename-placeholder"><span>Wire label</span></Localized>
+        <Localized id="topology-confirm-delete-many-msg" vars={{ count: 2 }}><span>Delete these 2 nodes…</span></Localized>
+        <Localized id="settings-sync-pull-result" vars={{ products: 3, tax_rates: 2, users: 1 }}><span>Last pull…</span></Localized>
+        <Localized id="settings-license-live-online"><span>Live</span></Localized>
+        <Localized id="workspace-resto-courses-heading"><span>Course Firing</span></Localized>
+        <Localized id="workspace-resto-courses-enable"><span>Enable Course Firing</span></Localized>
+      </LocalizationProvider>,
+    );
+
+    for (const { id: idExpected } of nativeSpeakerPins) {
+      // getAllByText (not getByText): two pinned keys share the value
+      // "Label koneksi", so a single-match query would throw.
+      expect(
+        screen.getAllByText(idExpected).length,
+        `expected Indonesian "${idExpected}" in the rendered DOM`,
+      ).toBeGreaterThan(0);
     }
   });
 });
