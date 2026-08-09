@@ -514,6 +514,13 @@ fn recover_pg_snapshot(
 /// (rows pushed as `pending` are only stamped later). Anchoring on
 /// `created_at` means a queue whose rows are never stamped still advances
 /// and is never re-pulled in full.
+///
+/// ADR #6 parity with the SQLite daemon: when the page contains
+/// `stock.movement` items (which write ONLY the raw delta ledger — the
+/// apply path never touches `stock_summary`), the materialized summary is
+/// rebuilt from the ledger before the anchor advances, and a rebuild
+/// failure retains the anchor so the next cycle re-pulls the same page and
+/// retries the derived-state rebuild.
 fn apply_pulled_page(
     store: &Store<'_>,
     page: &[OfflineQueueItem],
@@ -521,8 +528,12 @@ fn apply_pulled_page(
 ) -> Option<String> {
     let queue = SyncQueue::new();
     let mut page_all_applied = true;
+    let mut has_stock_movements = false;
 
     for remote_item in page {
+        if remote_item.action == "stock.movement" {
+            has_stock_movements = true;
+        }
         match queue.apply_remote_atomic(store, remote_item) {
             Ok(applied) => {
                 if !applied
@@ -562,6 +573,18 @@ fn apply_pulled_page(
     }
 
     if !page_all_applied {
+        return None;
+    }
+
+    // ADR #6: rebuild the materialized stock_summary from the delta ledger
+    // before advancing the pull anchor. If the rebuild fails, the old anchor
+    // is retained so the next cycle can restore the derived state as well
+    // (replay is absorbed by the idempotency ledger).
+    if has_stock_movements && let Err(e) = store.rebuild_stock_summary() {
+        tracing::error!(
+            error = %e,
+            "failed to rebuild stock summary after pg sync pull"
+        );
         return None;
     }
 
@@ -812,6 +835,72 @@ mod tests {
         let new_since =
             apply_pulled_page(&store, &[earlier, later], Some("2026-01-02T00:00:00.000Z"));
         assert_eq!(new_since.as_deref(), Some("2026-01-03T00:00:00.000Z"));
+    }
+
+    /// ADR #6 parity (SQLite daemon, daemon.rs): a page containing a
+    /// `stock.movement` writes ONLY the raw delta-ledger row (the summary
+    /// cache is NOT touched by the apply path), so the materialized
+    /// `stock_summary` must be rebuilt from the ledger before the anchor
+    /// advances. Without the rebuild, a remote stock movement pulled via PG
+    /// leaves the on-hand cache the app reads permanently stale.
+    #[test]
+    fn apply_pulled_page_rebuilds_stock_summary_after_stock_movements() {
+        let conn = migrations::fresh_db();
+        seed_product_and_inventory(&conn);
+        let store = Store::new(&conn);
+
+        let mut item = OfflineQueueItem::new(
+            "stock.movement",
+            r#"{"id":"sm-remote-1","item_id":"prod-coffee","delta":40,"reason":"restock","store_id":"default","created_at":"2026-01-05T00:00:00.000Z"}"#,
+        );
+        item.id = "pg-item-movement-1".into();
+        item.created_at = "2026-01-05T00:00:00.000Z".into();
+
+        let new_since = apply_pulled_page(&store, std::slice::from_ref(&item), None);
+
+        assert_eq!(
+            new_since.as_deref(),
+            Some("2026-01-05T00:00:00.000Z"),
+            "a stock.movement page applies and advances the anchor"
+        );
+        let summary_qty: i64 = conn
+            .query_row(
+                "SELECT qty FROM stock_summary WHERE item_id = 'prod-coffee'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            summary_qty, 40,
+            "stock_summary must be rebuilt from the ledger after a stock.movement page"
+        );
+    }
+
+    /// ADR #6 parity: if the summary rebuild fails, the durable anchor must
+    /// be retained so the next cycle re-pulls the same page (the ledger
+    /// absorbs the replay) and retries the derived-state rebuild — mirroring
+    /// the SQLite daemon's "old anchor retained so a retry can restore the
+    /// derived state as well".
+    #[test]
+    fn apply_pulled_page_retains_anchor_when_stock_summary_rebuild_fails() {
+        let conn = migrations::fresh_db();
+        seed_product_and_inventory(&conn);
+        let store = Store::new(&conn);
+        // Force the rebuild to fail: the summary table no longer exists.
+        conn.execute_batch("DROP TABLE stock_summary").unwrap();
+
+        let mut item = OfflineQueueItem::new(
+            "stock.movement",
+            r#"{"id":"sm-remote-2","item_id":"prod-coffee","delta":10,"reason":"restock","store_id":"default","created_at":"2026-01-06T00:00:00.000Z"}"#,
+        );
+        item.id = "pg-item-movement-2".into();
+        item.created_at = "2026-01-06T00:00:00.000Z".into();
+
+        let new_since = apply_pulled_page(&store, std::slice::from_ref(&item), None);
+        assert!(
+            new_since.is_none(),
+            "a failed summary rebuild must retain the pull anchor"
+        );
     }
 
     /// Helper: enqueue an offline item and return its actual ID (from the returned OfflineQueueItem).

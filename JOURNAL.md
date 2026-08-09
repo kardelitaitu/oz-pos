@@ -1839,3 +1839,13 @@ TDD finding: the confirm test failed only in the full file run — `vi.clearAllM
 Test counts: +4 (1 editor dirty-transition unit test; 3 screen: cancel keeps branch, confirm switches, clean switch stays dialog-free). Editor 326 / screen 27 / full UI 4360 (265 files). Gates: typecheck, eslint, i18n parity clean.
 
 Commits: rides the round-41-42 commits; this round committed separately below.
+
+### 2026-08-09 — Round 43: PG daemon stock-summary rebuild (ADR #6 parity)
+
+Problem: The consistency review of the PG sync work found the pull path never rebuilt the materialized `stock_summary` cache. A page containing `stock.movement` items writes ONLY the raw delta ledger (`insert_stock_movement_in_tx`) — the apply path never touches `stock_summary` — so a remote stock movement pulled via PG left the on-hand cache the app reads permanently stale until the next local mutation or restart. The SQLite daemon rebuilds after such pages (daemon.rs `has_stock_movements` → `rebuild_stock_summary`, anchor retained on rebuild failure); the PG daemon had no equivalent.
+
+Solution: Red→Green inside `apply_pulled_page`. Red: two tests — (1) a `stock.movement` page must leave `stock_summary` consistent with the ledger (fresh DB has no summary row; current code left `QueryReturnedNoRows`); (2) a failed rebuild (forced via `DROP TABLE stock_summary`) must retain the anchor. Green: track `has_stock_movements` per page, rebuild from the ledger before returning the anchor, and return `None` (anchor retained → next cycle re-pulls, ledger absorbs replay, rebuild retried) when the rebuild fails — exactly mirroring the SQLite daemon's "old anchor retained so a retry can restore the derived state". `complete_sale`/`stock.adjusted` intentionally excluded: they route through `adjust_stock_in_tx`, which upserts the summary incrementally (matches the SQLite daemon's action check).
+
+Verification: 269/269 crate tests (was 267; +2), clippy 0 warnings, `cargo fmt --check` clean.
+
+Commits: this round, scoped to `platform/sync/src/pg_daemon.rs` + JOURNAL.md.
