@@ -2842,3 +2842,17 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** `5d45763e`
 
 **Risks / follow-ups:** (1) the nested path (set_tracked/queue) relies on the outer value-write ordering to serialize — a dedicated concurrent set_tracked test would pin that; (2) the original savepoint path left the implicit transaction open after a standalone error (latent) — the new standalone path always ends its transaction per attempt (COMMIT/ROLLBACK), which closes that in passing.
+
+### 2026-08-10 — cloud prune DELETE SQL injection fixed (round 119)
+
+**Problem:** the hourly cloud prune loop deleted `offline_queue` batches with `DELETE ... WHERE id IN ('{ids}')` — string-interpolating ids straight from the column behind a comment claiming "IDs are UUIDv7 — safe". That is an assumption, not an invariant: `push_handler` accepts client-supplied `id` values verbatim with zero format validation, so a hostile id in an old `synced` row executes arbitrary SQL on the cloud database the next time the prune runs (an authenticated tenant can push such an id and wait). The prune code had **zero test coverage**.
+
+**Red:** `prune_delete_treats_hostile_id_as_data` — seeds an old `synced` row whose id is `x'); CREATE TABLE hacked(id TEXT);--`, runs `run_prune_cycle` against a fresh migrated DB, and asserts the `hacked` table never appears. Failed with `left: 1, right: 0` — the injected `CREATE TABLE` executed through the interpolated DELETE, proving the vector.
+
+**Green:** the batch DELETE now binds ids as parameters — `IN (?, ?, …)` placeholders + `rusqlite::params_from_iter(ids.iter())`, so values are data, never SQL. Batch size (500), per-batch implicit transactions, and `incremental_vacuum` between batches are preserved; `execute()` now reports the real deleted count (the assumed `batch_count` became dead and was removed). Comment rewritten to state the invariant the code now actually enforces.
+
+**Verified:** oz-cloud-server **128/128** (+1), `cargo clippy -p oz-cloud-server -- -D warnings` clean, `cargo fmt --check` clean, CRLF preserved.
+
+**Commits:** `bdf63361`
+
+**Risks / follow-ups:** (1) defense-in-depth — `push_handler` still accepts any id string; rejecting non-UUID ids at push is the natural next slice; (2) observed during analysis: the cloud server never transitions API-pushed items to `synced`/`failed` (no `UPDATE offline_queue` anywhere server-side), so the prune's `status IN ('synced','failed')` filter may never match API-pushed rows — the P-1 retention promise for those rows deserves a dedicated look.
