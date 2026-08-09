@@ -1953,3 +1953,16 @@ Test counts: +3 (editor 350). Full UI 4392 (265 files). Gates: typecheck, eslint
 Note: the tree's NodeTopologyEditor.test.tsx also carries another agent's two uncommitted tests (title-bar icon node, Restaurant POS→KDS connection); my commit stages only my hunks via a filtered `git apply --cached` patch (theirs stay unstaged).
 
 Commits: this round, scoped to NodeTopologyEditor.tsx/.css + my test-file hunks + JOURNAL.md.
+### 2026-08-09 — Shift+drag additive marquee: already shipped, now discoverable
+
+Problem: the follow-up list still carried "Shift+drag additive marquee" as open, but the 08-08 batch had already implemented it (journaled right after the direction-aware marquee round, committed in 90b1783b). Verified instead of re-implementing: the union logic (marqueeAdditiveRef, finalizer union at release, no-additive-leak reset) plus all three tests are in the committed tree and green — editor 351/351 at round start.
+
+Solution: the genuinely missing piece of "so users can extend a selection" was discoverability — the F1 shortcuts help documented Space+drag pan and Alt+drag duplicate but had no row for the union gesture. One Red→Green: a help-popover test asserting the `Shift + Drag` row + "Add to the selection" description, then a TOPOLOGY_SHORTCUTS row + en/id FTL keys.
+
+Second fix (test infra, evidence-driven): verifying the feature with a filtered run (`vitest -t "marquee"`) crashed 14 tests with "Cannot read properties of undefined (reading 'then')" at the load effect. Root cause: the api/topology mock factory returned bare `vi.fn()`s, and only the Component describe's beforeEach seeded `mockResolvedValue(null)` — sibling describes (marquee, shortcuts-help) are order-dependent, so any filtered run that skips that beforeEach mounts the editor with loadTopology() returning undefined. Fix: self-seeding defaults in the factory (loadTopology → Promise.resolve(null), saveTopology → Promise.resolve(undefined)) — zero behavior change in full runs (the beforeEach still overrides per-test), and now ANY describe runs in isolation.
+
+Commits: 769f5275 (test infra, test file only) + d664b189 (help row, editor + test + 2 FTL). Staged by filtered hunks — the tree's test file also carries another agent's live hunks (title-bar restructure, Resto→KDS, contextmenu suppression, hover-focus) and the editor carries their panMovedRef work; none swept into my commits.
+
+Test counts: +1 (editor 351→352 mine; 353 total with their hover-focus test). Filtered marquee run 20/20 (was 14 crashed). Full UI 4395 (265 files). Gates: typecheck, eslint, i18n parity, bundle parity clean.
+
+Risks: none new. The journaled 08-08 note (union reads the mousedown-closure selection) still holds — nothing mutates selection mid-marquee today. Their title-bar restructure tests are currently red against the un-restructured editor (their incomplete batch, not mine).
