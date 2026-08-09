@@ -2622,3 +2622,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 103 — tier-limit scoping)
 
 **Risks / follow-ups:** multi-excess flagging (one error per warehouse beyond the first) is the natural next slice; the agents' SyncSection CSS gap remains theirs.
+
+### 2026-08-10 — closed the settings-sync-plan-required CSS gap (round 104)
+
+**Problem:** rounds 102-103 journaled the one full-UI failure as "the agents' SyncSection CSS gap" — `settings-sync-plan-required` was used in the in-flight SyncSection.tsx but had no rule in SettingsPage.css, so screenExtraction's CSS-integrity check hard-failed (4565/4566).
+
+**Solution (Verify + Commit, no code change):** added a `.settings-sync-plan-required` rule to SettingsPage.css — a warning-tinted notice box (`--color-warning-bg` background, warning border, `--radius-md`, flex column with gap) matching the sync section's badge language, wrapping the error hint + plain hint the role="status" div carries. The reverse "no dead classes" check is a soft warning, so committing the rule ahead of the agents' SyncSection.tsx cannot break CI.
+
+**Verified:** screenExtraction 138/138, full UI **4566/4566 — first fully-green run since round 102**, no other failures.
+
+**Commits:** (round 104 — plan-required CSS)
+
+**Risks / follow-ups:** the rule is visual-only (colors/margins) — the agents may restyle when their SyncSection lands; the reverse check logs a soft warning until then.

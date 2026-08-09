@@ -1009,6 +1009,19 @@
   font-size: var(--text-xs);
 }
 
+/* ── Plan-required notice (SyncSection, role="status") ─────── */
+
+.settings-sync-plan-required {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-bg, rgba(245, 158, 11, 0.1));
+}
+
 
 
 /* ── Input password toggle ─────────────────────────────────── */
