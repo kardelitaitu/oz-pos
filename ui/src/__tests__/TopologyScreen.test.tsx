@@ -744,6 +744,61 @@ describe('TopologyScreen', () => {
     });
   });
 
+  // ══ Intentionally-empty warehouse (dismissed prompt) ══════════
+
+  // The editor persists dismissed issues to this key (branch-scoped); the
+  // screen's Apply gate must honor the same store so a warehouse staged
+  // empty can be saved.
+  const unwiredWarehouseSave = () =>
+    triggerSave(
+      [
+        storeNode(),
+        wsNode({ id: 'ws-pos', name: 'Retail POS', metadata: { typeKey: 'store-pos' } }),
+        {
+          id: 'wh-1',
+          type: 'warehouse',
+          name: 'Main Stock Room',
+          x: 0,
+          y: 0,
+          metadata: { stock: 500, capacity: 1000 },
+        },
+      ],
+      [locationWire('store-1', 'ws-pos', 'w-loc')],
+    );
+
+  it('blocks an unwired capacity warehouse on Pro tier', async () => {
+    mockLicenseTier = 'pro';
+    await renderReady();
+
+    await unwiredWarehouseSave();
+
+    expect(mockApplyTopologyDiff).not.toHaveBeenCalled();
+    expect(mockAddToast).toHaveBeenCalledWith({
+      message: 'topology-validation-warehouse-missing-stock-routing',
+      type: 'error',
+    });
+  });
+
+  it('applies the same diagram once the prompt is dismissed (intentionally empty)', async () => {
+    mockLicenseTier = 'pro';
+    // Simulate the editor having dismissed the prompt for wh-1: the issue
+    // is in the branch's resolved store (the screen auto-selects the first
+    // store as the branch), so Apply must not block on it.
+    localStorage.setItem(
+      'oz-topology-resolved-issues:store-1',
+      JSON.stringify(['node:wh-1:topology-validation-warehouse-missing-stock-routing']),
+    );
+    await renderReady();
+
+    await unwiredWarehouseSave();
+
+    expect(mockApplyTopologyDiff).toHaveBeenCalledTimes(1);
+    expect(mockAddToast).not.toHaveBeenCalledWith({
+      message: 'topology-validation-warehouse-missing-stock-routing',
+      type: 'error',
+    });
+  });
+
   // ══ Error handling ═══════════════════════════════════════════
 
   it('carries wire bend points through the diff payload', async () => {

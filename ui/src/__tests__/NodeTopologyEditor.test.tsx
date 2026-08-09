@@ -1,5 +1,5 @@
 import { useState, type ComponentProps } from 'react';
-import { screen, fireEvent, waitFor, act, within } from '@testing-library/react';
+import { screen, fireEvent, waitFor, act, within, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
 import NodeTopologyEditor, { type WorkspaceInstanceSeed, type BranchLocationSeed } from '../features/stores/NodeTopologyEditor';
@@ -4285,6 +4285,84 @@ describe('NodeTopologyEditor — validation panel stock-wire action', () => {
     expect(getWireCount()).toBe(2);
 
     await waitFor(() => expect(document.querySelector('.node-stock-wire-hint')).toBeNull());
+  });
+});
+
+// ── Missing-stock-routing dismiss (intentionally empty) ─────────
+
+describe('NodeTopologyEditor — missing-stock-routing dismiss', () => {
+  const unwiredFixture = {
+    nodes: [
+      { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+      { id: 'ws-1', type: 'workspace', name: 'Retail POS', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+      { id: 'wh-1', type: 'warehouse', name: 'Main Stock Room', x: 680, y: 140, metadata: { stock: 500, capacity: 1000 } },
+    ],
+    wires: [
+      { id: 'w-loc', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+    ],
+  } as never;
+
+  const renderUnwired = async (props?: Parameters<typeof renderEditor>[0]) => {
+    mockLoadTopology.mockResolvedValueOnce(unwiredFixture);
+    renderEditor({ currentTier: 'pro', ...props });
+    await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
+  };
+
+  const noteDismiss = () =>
+    document.querySelector('.node-type-warehouse')?.querySelector('.node-validation-note-dismiss') as HTMLElement | null;
+
+  it('renders a dismiss action on the missing-stock-routing card note', async () => {
+    await renderUnwired();
+    expect(noteDismiss()).not.toBeNull();
+  });
+
+  it('keeps the dismiss action off other error notes', async () => {
+    // A workspace missing its Location In is a hard integrity error — no
+    // "intentionally empty" escape hatch exists for it.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-1', type: 'workspace', name: 'Retail POS', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(2));
+
+    expect(document.querySelector('.node-validation-note-dismiss')).toBeNull();
+  });
+
+  it('dismissing the prompt hides the note and lets Apply succeed', async () => {
+    const onSave = vi.fn();
+    await renderUnwired({ onSave });
+
+    expect(document.querySelector('.node-validation-note')).not.toBeNull();
+    fireEvent.click(noteDismiss()!);
+
+    await waitFor(() => expect(document.querySelector('.node-validation-note')).toBeNull());
+    // Zero visible issues → the issues widget disappears entirely.
+    expect(document.querySelector('.topology-issues-btn')).toBeNull();
+
+    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+  });
+
+  it('keeps the dismissed state and the Apply bypass across a reload', async () => {
+    const onSave = vi.fn();
+    await renderUnwired({ onSave, branchId: 'b-dismiss' });
+    fireEvent.click(noteDismiss()!);
+    await waitFor(() => expect(document.querySelector('.node-validation-note')).toBeNull());
+
+    // Reload the same branch — the persisted dismissal must still hide the
+    // note and keep Apply unblocked.
+    cleanup();
+    mockLoadTopology.mockResolvedValueOnce(unwiredFixture);
+    renderEditor({ currentTier: 'pro', onSave, branchId: 'b-dismiss' });
+    await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
+
+    expect(document.querySelector('.node-validation-note')).toBeNull();
+    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
   });
 });
 

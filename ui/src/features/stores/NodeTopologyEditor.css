@@ -1476,6 +1476,29 @@
   line-height: 1.35;
 }
 
+/* "Intentionally empty" dismiss on the missing-stock-routing note
+   (round 81) — sits at the note's right edge, warning-toned. */
+.node-validation-note-dismiss {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-4);
+  height: var(--space-4);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-warning);
+  font-size: var(--text-sm);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.node-validation-note-dismiss:hover {
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+}
+
 /* One-click "add stock wire" guidance chip (round 80) — info-styled,
    stacked above the warning note so the two never overlap. */
 .node-stock-wire-hint {

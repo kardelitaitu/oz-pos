@@ -55,6 +55,8 @@ import { cubicBezier, polylinePoint } from './topologyWireGeometry';
 import {
   normalizeTopologyGraph,
   normalizeWireDirection,
+  readResolvedIssueKeys,
+  topologyIssueKey,
   validateTopologyGraph,
   type TopologyValidationError,
 } from './topologyContract';
@@ -533,8 +535,9 @@ type HistoryEntry = { nodes: TopologyNodeData[]; wires: TopologyWireData[] };
 /** Stable keys identifying a validation issue for mark-issue-resolved
  *  persistence: a node issue is scoped by its card + message, a graph-level
  *  issue by its message alone. Module-scope so every surface (panel, banner,
- *  card notes) derives the same key from the same error. */
-const issueKey = (nodeId: string, messageId: string) => `node:${nodeId}:${messageId}`;
+ *  card notes) derives the same key from the same error. The node key format
+ *  lives in the contract so the screen's Apply gate reads the same store. */
+const issueKey = topologyIssueKey;
 const graphIssueKey = (messageId: string) => `graph:${messageId}`;
 
 /** Milliseconds the issues-count readout waits after the LAST validation
@@ -3932,28 +3935,31 @@ export default function NodeTopologyEditor({
    *  Dismissals are OCCURRENCE-scoped — the forget effect below drops a
    *  stored key once the issue leaves the live set, so a genuinely NEW
    *  occurrence later surfaces again instead of staying hidden forever.
-   *  Cosmetic only: the Apply gate validates the raw graph and is never
-   *  bypassed by a dismissal. */
+   *  Cosmetic for every issue EXCEPT warehouse-missing-stock-routing: a
+   *  dismissed "route stock in" prompt is the round-81 "intentionally
+   *  empty" escape hatch, so the Apply gate (editor AND screen — they
+   *  share this store) skips that error when its key is resolved. All
+   *  other issues still hard-block Apply. */
   const resolvedIssuesKey = `oz-topology-resolved-issues:${branchId ?? 'unassigned'}`;
-  const [resolvedIssues, setResolvedIssues] = useState<Set<string>>(() => {
-    try {
-      const raw = localStorage.getItem(resolvedIssuesKey);
-      if (raw) {
-        const parsed = JSON.parse(raw) as unknown;
-        if (Array.isArray(parsed)) {
-          return new Set(parsed.filter((k): k is string => typeof k === 'string'));
-        }
-      }
-    } catch { /* corrupted — start empty */ }
-    return new Set();
-  });
-  const dismissIssue = (key: string) =>
-    setResolvedIssues((prev) => {
-      if (prev.has(key)) return prev;
-      const next = new Set(prev);
-      next.add(key);
-      return next;
-    });
+  const [resolvedIssues, setResolvedIssues] = useState<Set<string>>(() =>
+    readResolvedIssueKeys(resolvedIssuesKey),
+  );
+  // useCallback: the card consumes this via the memoized TopologyNodeCard
+  // (round 66 boundary) — an unstable identity would re-render every card.
+  const dismissIssue = useCallback(
+    (key: string) =>
+      setResolvedIssues((prev) => {
+        if (prev.has(key)) return prev;
+        const next = new Set(prev);
+        next.add(key);
+        return next;
+      }),
+    [],
+  );
+  const handleDismissNodeIssue = useCallback(
+    (nodeId: string, messageId: string) => dismissIssue(issueKey(nodeId, messageId)),
+    [dismissIssue],
+  );
   /** Visible (non-dismissed) issues drive the button count, the panel, the
    *  banner, and the card notes — every surface reads the same filtered
    *  lists so they can never disagree. */
@@ -4554,8 +4560,13 @@ export default function NodeTopologyEditor({
               variant="primary"
               onClick={async () => {
                 // Same gate as the live badge surface — shared helper keeps
-                // the Apply toast and the on-canvas badges in lockstep.
-                const validationErrors = validateEditorGraph(nodes, wires, allowLegacyApply, currentTier);
+                // the Apply toast and the on-canvas badges in lockstep. A
+                // DISMISSED missing-stock-routing prompt (intentionally
+                // empty warehouse) is the one error that stops blocking
+                // once the user explicitly resolved it (round 81).
+                const validationErrors = validateEditorGraph(nodes, wires, allowLegacyApply, currentTier).filter(
+                  (e) => !(e.code === 'warehouse-missing-stock-routing' && e.nodeId && resolvedIssues.has(issueKey(e.nodeId, e.messageId))),
+                );
                 if (validationErrors.length > 0) {
                   addToast({
                     message: l10n.getString(validationErrors[0]!.messageId),
@@ -5433,6 +5444,7 @@ export default function NodeTopologyEditor({
                 hoveredTarget={hoveredTarget}
                 nodeErrors={nodeErrorsByNode.get(node.id) ?? EMPTY_ERRORS}
                 stockWireHint={addStockWireHintId === node.id}
+                onDismissNodeIssue={handleDismissNodeIssue}
                 isFresh={freshNodeIds.has(node.id)}
                 isDimmed={hoverConnections !== null && !hoverConnections.has(node.id)}
                 isRenameable={(node.type === 'store' && !!onRenameBranch) || (node.type === 'workspace' && !!onRenameWorkspace)}

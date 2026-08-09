@@ -2308,3 +2308,17 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 80 — add-stock-wire guidance)
 
 **Risks / follow-ups:** the action only guides — it doesn't auto-connect (no source heuristic; when exactly one workspace has an unused stock-out the editor could offer to wire it directly); the chip centers the warehouse but doesn't flash the stock-in port — a port highlight would complete the affordance; `free`/`one_time` tiers also show the action since the guard runs when tier is undefined (pure contract) — worth confirming the panel matches the tier gate.
+
+### 2026-08-09 — "intentionally empty" dismiss for the missing-stock-routing prompt
+
+**Problem (round-75 follow-up):** a warehouse staged empty for later could NOT be Applied — the missing-stock-routing prompt was a hard Apply block, and the round-31 mark-issue-resolved dismissals were deliberately cosmetic-only ("the Apply gate validates the raw graph and is never bypassed"). No escape hatch existed for a warehouse intentionally left unrouted.
+
+**Solution (TDD Red→Green):** the ONE error that becomes bypassable on explicit dismissal is `warehouse-missing-stock-routing` — every other issue still hard-blocks Apply. The card note now renders a dismiss (×) button exclusively on that error (reusing `topology-validation-dismiss` — no new FTL keys). Dismissing writes the round-31 resolved store, hides the note, zeroes the issues widget, AND unblocks Apply. The bypass is gate-parity-safe: `topologyIssueKey` + `readResolvedIssueKeys` moved into the contract (the editor aliases its local key, refactoring its useState reader onto the shared parse), and TopologyScreen's strict Apply boundary reads the SAME branch-scoped localStorage store — so the editor and parent gate can never disagree. The round-31 "cosmetic only" comment now documents the single exception. `dismissIssue` became a useCallback (the memoized card consumes it via `onDismissNodeIssue` — the round-66 memo tests caught the first inline-lambda version).
+
+**TDD:** Red — 4 editor tests (dismiss affordance only on missing-stock-routing notes; other notes get none; dismiss → note gone + Issues widget gone + Apply succeeds; the bypass survives a same-branch reload) + 2 screen tests (Pro blocks the unwired warehouse; with the resolved key seeded in the branch store, the same diagram applies). The screen's branch key turned out to be `store-1` (auto-selected first store), not `unassigned` — the debug print caught it.
+
+**Verified:** editor + screen + contract + integration 524/524 (+6), memo 3/3, full UI 4549/4549, typecheck, eslint 0/0, i18n lint clean, token compliance clean.
+
+**Commits:** (round 81 — intentionally-empty dismiss)
+
+**Risks / follow-ups:** occurrence-scoping still applies — adding then removing the wire re-surfaces the prompt (the stored key is forgotten when the issue leaves the live set); the dismiss is per-diagram (branch), so each branch decides independently; the editor gate and screen gate both read localStorage at save time — a race (dismiss + instant Apply) is absorbed by the same synchronous read the editor's own gate performs.

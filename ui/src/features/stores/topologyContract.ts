@@ -13,6 +13,30 @@ type TopologyWireInput = TopologyWireData & {
 /** Version of the semantic topology contract understood by this client. */
 export const TOPOLOGY_SCHEMA_VERSION = 1;
 
+/** Stable occurrence key for a per-node validation issue. Shared by the
+ *  editor (mark-issue-resolved) and the screen's Apply gate so a dismissed
+ *  issue is identified identically in both — the round-81 "intentionally
+ *  empty" bypass reads the same store both sides write. */
+export const topologyIssueKey = (nodeId: string, messageId: string) => `node:${nodeId}:${messageId}`;
+
+/** Parse the editor's persisted resolved-issue store. The screen's Apply
+ *  gate reads the SAME localStorage key the editor writes (branch-scoped,
+ *  `oz-topology-resolved-issues:<branch>`), so a dismissal that unblocks
+ *  the editor also unblocks the parent gate — the two can never disagree.
+ *  Corrupted values start empty, mirroring the editor's read path. */
+export function readResolvedIssueKeys(storageKey: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (raw) {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) {
+        return new Set(parsed.filter((k): k is string => typeof k === 'string'));
+      }
+    }
+  } catch { /* corrupted — start empty */ }
+  return new Set();
+}
+
 /** Closed node kinds used by the first ownership slice. */
 export type SemanticNodeKind = 'branch-location' | 'workspace' | 'warehouse' | 'hardware';
 

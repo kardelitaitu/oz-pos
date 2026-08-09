@@ -59,6 +59,12 @@ export interface TopologyNodeCardProps {
   onPersistRename: (nodeId: string, name: string) => void;
   onSetNodeName: (nodeId: string, name: string) => void;
   onSetNodeEnabled: (nodeId: string, enabled: boolean) => void;
+  /** Dismiss the card's validation note (round 81). Only the
+   *  missing-stock-routing prompt is semantically dismissable — the
+   *  "intentionally empty" warehouse — so the affordance is gated on that
+   *  error code alone. The editor persists the dismissal and the Apply
+   *  gates (editor + screen) skip the resolved error. */
+  onDismissNodeIssue?: (nodeId: string, messageId: string) => void;
   onPortClick: (e: React.MouseEvent, nodeId: string, port: PortName) => void;
   onHoverNode: Dispatch<SetStateAction<string | null>>;
   getTelemetry: (node: TopologyNodeData) => TelemetryBadge | null;
@@ -93,6 +99,7 @@ function TopologyNodeCardImpl({
   onPersistRename,
   onSetNodeName,
   onSetNodeEnabled,
+  onDismissNodeIssue,
   onPortClick,
   onHoverNode,
   getTelemetry,
@@ -234,6 +241,18 @@ function TopologyNodeCardImpl({
           <span className="node-validation-text">
             {l10n.getString(nodeErrors[0]!.messageId)}
           </span>
+          {nodeErrors[0]!.code === 'warehouse-missing-stock-routing' && onDismissNodeIssue && (
+            <button
+              type="button"
+              className="node-validation-note-dismiss"
+              aria-label={topologyUiString(l10n, 'topology-validation-dismiss', null)}
+              title={topologyUiString(l10n, 'topology-validation-dismiss', null)}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={() => onDismissNodeIssue(node.id, nodeErrors[0]!.messageId)}
+            >
+              <span aria-hidden="true">×</span>
+            </button>
+          )}
         </div>
       )}
       {stockWireHint && (
