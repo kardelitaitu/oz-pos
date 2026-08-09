@@ -16,6 +16,7 @@ import {
   settingsCardForTypeKey,
   topologyUiString,
   workspaceTypeLabel,
+  sanitizeCopiedNode,
 } from '@/features/stores/topologyCard';
 
 const node = (overrides: Partial<TopologyNodeData>): TopologyNodeData => ({
@@ -289,5 +290,37 @@ describe('relationship options (ADR #34 multi-semantic slice)', () => {
     expect(leftPortLabelId(hw, 0)).toBe('topology-port-generic-in');
     expect(leftPortVariants(hw)).toEqual(['generic-in']);
     expect(portAriaLabelId(hw, 'left')).toBe('topology-port-aria');
+  });
+});
+
+describe('sanitizeCopiedNode — Branch Location identity strip', () => {
+  // The graph keeps EXACTLY one Branch Location, so a duplicated store card
+  // must not carry the original's canonical store identity: the copy is a
+  // diagram-only card (same model as a palette-spawned store) instead of a
+  // second card impersonating the real branch. Every duplicate path
+  // (Ctrl+D / Ctrl+V / Alt+drag / mid-drag conversion) routes through this.
+  it('strips storeProfileId from a duplicated Branch Location copy', () => {
+    const branch = node({ type: 'store', storeProfileId: 'loc-1' });
+
+    const copy = sanitizeCopiedNode(branch);
+
+    expect(copy.storeProfileId).toBeUndefined();
+    expect(copy.id).toBe('n-1');
+    expect(copy.type).toBe('store');
+    expect(copy.name).toBe('N');
+    expect(copy.x).toBe(0);
+    expect(copy.y).toBe(0);
+  });
+
+  it('leaves a store with no canonical identity untouched', () => {
+    const store = node({ type: 'store' });
+    expect(sanitizeCopiedNode(store)).toEqual(store);
+  });
+
+  it('leaves non-store node copies untouched (same reference)', () => {
+    const ws = node({ type: 'workspace', metadata: { typeKey: 'store-pos' } });
+    const copy = sanitizeCopiedNode(ws);
+    expect(copy).toBe(ws);
+    expect(copy.metadata).toEqual({ typeKey: 'store-pos' });
   });
 });

@@ -1986,3 +1986,14 @@ Deliberately NOT done (slice 2, next): the Apply-gate rule — validateEditorGra
 Test counts: +4 (editor 364→368; the +1 is another agent's test landing mid-round). Full UI 4413 (265 files). Gates: typecheck, eslint, i18n parity clean (no new FTL keys — toast reused).
 
 Commits: this round, scoped to NodeTopologyEditor.tsx + my test-file hunks + JOURNAL.md (filtered git apply; the tree's other agent hunks stay unstaged).
+### 2026-08-09 — Round 55: duplicate-path hygiene — refusal helper + Branch Location identity strip (P2)
+
+Problem (from the node review, P2): duplicating a Branch Location copied the original's canonical store identity (storeProfileId) onto the copy — a second card impersonating the real branch. The graph keeps exactly ONE branch (validation), so the duplicate was rejected at Apply with a confusing multiple-branch error, and on a reload the identity merge would rename the copy to the branch's name as if it were the same location.
+
+Design detour worth journaling: the first attempt BLOCKED store duplication with a toast (mirroring the warehouse gate) — but 16 pinned tests (the Alt+drag describe, Ctrl+D cascade, node-menu duplicate) document that duplicating the store card is intentional canvas behavior ("canvas copy is free, Apply validates"). Blocking was a behavior regression against the suite, so I reverted it and took the review's second option: the copy becomes a diagram-only card, same model as a palette-spawned store.
+
+Solution: Red→Green. Red: 3 unit tests for a new pure helper `sanitizeCopiedNode` (topologyCard.ts) — strips storeProfileId from store copies, leaves no-identity stores and non-store nodes untouched (all failed: missing surface). Green: the helper + wiring into ALL four duplicate paths (Ctrl+D, Ctrl+V, Alt+drag start, mid-drag conversion) — a duplicated branch can no longer claim the canonical identity, so reloads can't merge it into the real branch. Along the way the round-54 inline warehouse checks were extracted into a shared `duplicateRefusal(copies)` helper (returns the FTL toast id or null) — the four paths now share one gate instead of four copies.
+
+Test counts: +3 (topologyCard 26; editor 369 unchanged — the strip is invisible to the existing duplicate tests, which never assert identity on copies). Full UI 4419 (265 files). Gates: typecheck, eslint, i18n parity clean (no new FTL keys).
+
+Risks: a duplicated store card is still Apply-invalid (two branches) — that's the validation layer's accurate job now, with a clear message; the deeper "spawned/unbacked store cards can't gain canonical identity" gap is the separate P1/P2 finding (New Store spawn) still open on the list.

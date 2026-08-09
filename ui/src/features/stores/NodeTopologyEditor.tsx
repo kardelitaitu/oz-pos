@@ -50,6 +50,7 @@ import {
   workspaceTypeLabel,
   settingsCardForTypeKey,
   topologyUiString,
+  sanitizeCopiedNode,
 } from './topologyCard';
 import './NodeTopologyEditor.css';
 
@@ -1239,6 +1240,18 @@ export default function NodeTopologyEditor({
       !isProAllowed && nodesRef.current.filter((n) => n.type === 'warehouse').length + extra > 1,
     [isProAllowed],
   );
+  /** Validate a pending duplicate/paste BEFORE any mutation: warehouses obey
+   *  the Pro-tier cap. Returns the FTL toast id to refuse with, or null when
+   *  the gesture is allowed. Every duplicate path shares it so the gate can
+   *  never be bypassed by an alternate route. */
+  const duplicateRefusal = useCallback(
+    (copies: TopologyNodeData[]): string | null => {
+      const whCopies = copies.filter((n) => n.type === 'warehouse').length;
+      if (whCopies > 0 && wouldExceedWarehouseCap(whCopies)) return 'topology-toast-multi-warehouse';
+      return null;
+    },
+    [wouldExceedWarehouseCap],
+  );
 
   /** O(1) node lookup by id — replaces `nodes.find` in hot paths (wire rendering, etc.). */
   const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
@@ -1967,11 +1980,11 @@ export default function NodeTopologyEditor({
     const start = dragStartRef.current;
     if (start.size === 0) return;
     const draggedIds = new Set(start.keys());
-    // Refuse the mid-drag conversion when it would duplicate a warehouse
-    // past the tier cap — the move simply stays a move, with the toast.
-    const whCopies = nodesRef.current.filter((n) => draggedIds.has(n.id) && n.type === 'warehouse').length;
-    if (whCopies > 0 && wouldExceedWarehouseCap(whCopies)) {
-      addToast({ message: l10n.getString('topology-toast-multi-warehouse'), type: 'warning' });
+    // Refuse the mid-drag conversion when it would copy a Branch Location or
+    // duplicate a warehouse past the tier cap — the move simply stays a move.
+    const refusal = duplicateRefusal(nodesRef.current.filter((n) => draggedIds.has(n.id)));
+    if (refusal) {
+      addToast({ message: l10n.getString(refusal), type: 'warning' });
       return;
     }
     duplicateHistoryPushedRef.current = dragHasMovedRef.current;
@@ -1984,7 +1997,10 @@ export default function NodeTopologyEditor({
       .map((n) => {
         const newId = `${n.type}-${crypto.randomUUID()}`;
         originalToCopy.set(n.id, newId);
-        return { ...n, id: newId };
+        // sanitizeCopiedNode strips a Branch Location copy's canonical
+        // identity — the copy is a diagram-only card, never a second
+        // branch impersonating the original.
+        return { ...sanitizeCopiedNode(n), id: newId };
       });
     const wireCopies = wiresRef.current
       .filter((w) => draggedIds.has(w.fromNodeId) && draggedIds.has(w.toNodeId))
@@ -2015,7 +2031,7 @@ export default function NodeTopologyEditor({
     dragOffsetsRef.current = offsets;
     setDraggingNodeIds(new Set(duplicateCopyIdsRef.current));
     document.body.style.cursor = 'copy';
-  }, [wouldExceedWarehouseCap, addToast, l10n]);
+  }, [duplicateRefusal, addToast, l10n]);
 
   /** Escape mid-MOVE (Figma semantics): the dragged nodes snap back to
    *  their pre-drag positions, the move's single history entry is popped
@@ -2385,12 +2401,12 @@ export default function NodeTopologyEditor({
   const duplicateSelection = useCallback(() => {
     if (selectedNodeIds.size === 0) return;
     const ids = new Set(selectedNodeIds);
-    // The warehouse tier cap is shared with the palette spawn — a duplicate
-    // that would exceed it is refused BEFORE the history entry, so a blocked
-    // gesture leaves no undo record.
-    const whCopies = nodes.filter((n) => ids.has(n.id) && n.type === 'warehouse').length;
-    if (whCopies > 0 && wouldExceedWarehouseCap(whCopies)) {
-      addToast({ message: l10n.getString('topology-toast-multi-warehouse'), type: 'warning' });
+    // Creation-path gates (branch + warehouse tier cap) refuse the gesture
+    // BEFORE the history entry, so a blocked duplicate leaves no undo
+    // record — shared with paste/Alt+drag so no route can bypass them.
+    const refusal = duplicateRefusal(nodes.filter((n) => ids.has(n.id)));
+    if (refusal) {
+      addToast({ message: l10n.getString(refusal), type: 'warning' });
       return;
     }
     pushHistory();
@@ -2405,7 +2421,10 @@ export default function NodeTopologyEditor({
         canvasW: canvasRef.current?.clientWidth ?? 0,
         canvasH: canvasRef.current?.clientHeight ?? 0,
       });
-      return { ...n, id: newId, x: clamped.x, y: clamped.y };
+      // sanitizeCopiedNode strips a Branch Location copy's canonical
+      // identity — the copy is a diagram-only card, never a second
+      // branch impersonating the original.
+      return { ...sanitizeCopiedNode(n), id: newId, x: clamped.x, y: clamped.y };
     });
     const wireCopies = wires
       .filter((w) => ids.has(w.fromNodeId) && ids.has(w.toNodeId))
@@ -2420,7 +2439,7 @@ export default function NodeTopologyEditor({
     setSelectedNodeIds(new Set(copies.map((c) => c.id)));
     setSelectedNodeId(copies[0]?.id ?? null);
     setSelectedWireId(null);
-  }, [nodes, wires, selectedNodeIds, pushHistory, pan, zoom, wouldExceedWarehouseCap, addToast, l10n]);
+  }, [nodes, wires, selectedNodeIds, pushHistory, pan, zoom, duplicateRefusal, addToast, l10n]);
 
   /** Paste the clipboard with a per-paste cascade offset; wires whose both
    *  endpoints were copied come along. The pasted copies become the
@@ -2428,11 +2447,12 @@ export default function NodeTopologyEditor({
   const pasteClipboard = useCallback(() => {
     const clip = clipboardRef.current;
     if (clip.nodes.length === 0) return;
-    // Same tier gate as the other creation paths — pasting warehouse nodes
-    // past the cap is refused before any history entry or cascade offset.
-    const whCopies = clip.nodes.filter((n) => n.type === 'warehouse').length;
-    if (whCopies > 0 && wouldExceedWarehouseCap(whCopies)) {
-      addToast({ message: l10n.getString('topology-toast-multi-warehouse'), type: 'warning' });
+    // Same creation-path gates as the other routes — a clipboard holding a
+    // Branch Location or warehouses past the tier cap is refused before any
+    // history entry or cascade offset.
+    const refusal = duplicateRefusal(clip.nodes);
+    if (refusal) {
+      addToast({ message: l10n.getString(refusal), type: 'warning' });
       return;
     }
     pushHistory();
@@ -2450,7 +2470,10 @@ export default function NodeTopologyEditor({
         canvasW: canvasRef.current?.clientWidth ?? 0,
         canvasH: canvasRef.current?.clientHeight ?? 0,
       });
-      return { ...n, id: newId, x: clamped.x, y: clamped.y };
+      // sanitizeCopiedNode strips a Branch Location copy's canonical
+      // identity — the copy is a diagram-only card, never a second
+      // branch impersonating the original.
+      return { ...sanitizeCopiedNode(n), id: newId, x: clamped.x, y: clamped.y };
     });
     const wireCopies = clip.wires
       .filter((w) => idMap.has(w.fromNodeId) && idMap.has(w.toNodeId))
@@ -2465,7 +2488,7 @@ export default function NodeTopologyEditor({
     setSelectedNodeIds(new Set(copies.map((c) => c.id)));
     setSelectedNodeId(copies[0]?.id ?? null);
     setSelectedWireId(null);
-  }, [pushHistory, pan, zoom, wouldExceedWarehouseCap, addToast, l10n]);
+  }, [pushHistory, pan, zoom, duplicateRefusal, addToast, l10n]);
 
   /** Latest-ref for the spawn handler: the keydown effect runs earlier in
    *  the component body than `handleAddNode`'s const declaration, so a
@@ -2856,13 +2879,13 @@ export default function NodeTopologyEditor({
     // as ONE undo entry, Escape discards them. Wires copy only when BOTH
     // endpoints are in the selection (mirrors duplicateSelection).
     const isDuplicateDrag = e.altKey;
-    // The warehouse tier cap applies to the duplicate paths too: an Alt+drag
-    // that would copy a warehouse past the cap is refused up front (no
-    // copies, no drag, no history entry) with the same toast as the palette.
+    // The creation-path gates apply to the duplicate paths too: an Alt+drag
+    // that would copy a Branch Location or a warehouse past the tier cap is
+    // refused up front (no copies, no drag, no history entry).
     if (isDuplicateDrag) {
-      const whCopies = nodes.filter((n) => selection.has(n.id) && n.type === 'warehouse').length;
-      if (whCopies > 0 && wouldExceedWarehouseCap(whCopies)) {
-        addToast({ message: l10n.getString('topology-toast-multi-warehouse'), type: 'warning' });
+      const refusal = duplicateRefusal(nodes.filter((n) => selection.has(n.id)));
+      if (refusal) {
+        addToast({ message: l10n.getString(refusal), type: 'warning' });
         return;
       }
     }
@@ -2875,7 +2898,10 @@ export default function NodeTopologyEditor({
         .map((n) => {
           const newId = `${n.type}-${crypto.randomUUID()}`;
           originalToCopy.set(n.id, newId);
-          return { ...n, id: newId };
+          // sanitizeCopiedNode strips a Branch Location copy's canonical
+          // identity — the copy is a diagram-only card, never a second
+          // branch impersonating the original.
+          return { ...sanitizeCopiedNode(n), id: newId };
         });
       const wireCopies = wires
         .filter((w) => selection.has(w.fromNodeId) && selection.has(w.toNodeId))

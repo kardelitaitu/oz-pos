@@ -70,6 +70,18 @@ export function settingsCardForTypeKey(
   return WORKSPACE_SETTINGS_CARD[typeKey] ?? WORKSPACE_SETTINGS_CARD['store-pos']!;
 }
 
+/** A node prepared for canvas duplication/paste. A Branch Location copy must
+ *  NOT carry the original's canonical store identity: the graph keeps exactly
+ *  one branch, so the copy is a diagram-only card (the same model as a
+ *  palette-spawned store) instead of a second card impersonating the real
+ *  branch. Every duplicate path (Ctrl+D, Ctrl+V, Alt+drag, the mid-drag
+ *  conversion) routes through this. Non-store nodes pass through untouched. */
+export function sanitizeCopiedNode(node: TopologyNodeData): TopologyNodeData {
+  if (node.type !== 'store') return node;
+  const { storeProfileId: _stripped, ...rest } = node;
+  return rest;
+}
+
 /** Type label resolver for the workspace type selector. Pure — the caller
  *  supplies the l10n string resolver so this module stays i18n-framework
  *  agnostic and trivially testable. */
