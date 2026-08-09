@@ -74,6 +74,46 @@ export function clampNodeToViewport(
   };
 }
 
+/** Screen-px band inside each canvas edge that triggers auto-pan while
+ *  dragging, and the max pan delta (px) applied per move event at full
+ *  band depth. Tuned so a drag at the edge scrolls fast enough to cross a
+ *  large diagram without outrunning the pointer. */
+export const EDGE_AUTO_PAN_MARGIN = 48;
+export const EDGE_AUTO_PAN_MAX_DELTA = 20;
+
+export interface EdgeAutoPanOptions {
+  /** Screen-px band inside each edge that triggers a pan (default 48). */
+  margin?: number;
+  /** Max pan delta per move event at full band depth (default 20). */
+  maxDelta?: number;
+}
+
+/** Pan delta for edge auto-pan during a drag: the closer the pointer sits
+ *  to a canvas edge (inside the margin band), the more the viewport pans
+ *  per move event — dragging toward an edge keeps revealing new content so
+ *  the drag can continue across a large diagram instead of hitting the
+ *  viewport clamp. Pointers OUTSIDE the canvas produce NO delta: a drag
+ *  that leaves the canvas holds the node at the clamp edge (the "never lose
+ *  a node off-canvas" invariant) rather than chasing the cursor. */
+export function edgeAutoPanDelta(
+  px: number,
+  py: number,
+  width: number,
+  height: number,
+  opts: EdgeAutoPanOptions = {},
+): { dx: number; dy: number } {
+  if (width <= 0 || height <= 0) return { dx: 0, dy: 0 };
+  const margin = opts.margin ?? EDGE_AUTO_PAN_MARGIN;
+  const maxDelta = opts.maxDelta ?? EDGE_AUTO_PAN_MAX_DELTA;
+  const depth = (v: number, limit: number) => {
+    if (v < 0 || v > limit) return 0;
+    if (v < margin) return -((margin - v) / margin) * maxDelta;
+    if (v > limit - margin) return ((v - (limit - margin)) / margin) * maxDelta;
+    return 0;
+  };
+  return { dx: depth(px, width), dy: depth(py, height) };
+}
+
 export interface SpawnSpotOptions {
   /** Canvas-space gap kept between the spawned box and any occupied box
    *  (default 24 — one grid step). */

@@ -5,6 +5,7 @@ import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
 import NodeTopologyEditor, { type WorkspaceInstanceSeed, type BranchLocationSeed } from '../features/stores/NodeTopologyEditor';
 import {
   clampNodeToViewport,
+  edgeAutoPanDelta,
   findFreeSpawnSpot,
   NODE_HEIGHT,
   NODE_PORT_ROW_H,
@@ -1695,6 +1696,42 @@ describe('NodeTopologyEditor Component', () => {
   });
 
   // ── findFreeSpawnSpot unit contract ─────────────────────────────
+
+  describe('edgeAutoPanDelta (edge auto-pan math)', () => {
+    it('returns no delta in the canvas middle', () => {
+      expect(edgeAutoPanDelta(400, 300, 800, 600)).toEqual({ dx: 0, dy: 0 });
+    });
+
+    it('pans right, proportional to how deep the pointer sits in the right band', () => {
+      // 800px wide, 48px band → band starts at 752. 16px in (of 48) is
+      // one third of maxDelta (20) ≈ 6.67; at the very edge it's 20.
+      const half = edgeAutoPanDelta(768, 300, 800, 600);
+      expect(half.dx).toBeCloseTo(6.67, 2);
+      expect(half.dy).toBe(0);
+      const full = edgeAutoPanDelta(800, 300, 800, 600);
+      expect(full.dx).toBe(20);
+    });
+
+    it('pans left/up/down from the other bands', () => {
+      const left = edgeAutoPanDelta(16, 300, 800, 600);
+      expect(left.dx).toBeCloseTo(-13.33, 2);
+      expect(left.dy).toBe(0);
+      const bottom = edgeAutoPanDelta(400, 590, 800, 600);
+      expect(bottom.dx).toBe(0);
+      expect(bottom.dy).toBeCloseTo(15.83, 2);
+    });
+
+    it('a corner pan goes both ways at once', () => {
+      const corner = edgeAutoPanDelta(784, 8, 800, 600);
+      expect(corner.dx).toBeGreaterThan(0);
+      expect(corner.dy).toBeLessThan(0);
+    });
+
+    it('a pointer OUTSIDE the canvas produces no delta (drag holds at the clamp edge)', () => {
+      expect(edgeAutoPanDelta(-400, 300, 800, 600)).toEqual({ dx: 0, dy: 0 });
+      expect(edgeAutoPanDelta(810, 300, 800, 600)).toEqual({ dx: 0, dy: 0 });
+    });
+  });
 
   describe('findFreeSpawnSpot (collision-free spawn placement)', () => {
     it('returns the candidate unchanged when nothing overlaps it', () => {
@@ -4148,6 +4185,69 @@ describe('NodeTopologyEditor — touch gestures', () => {
 
     expect(firstNode.style.left).toBe(beforeLeft);
     expect(document.querySelector('.canvas-zoom-level')?.textContent).not.toBe('100%');
+  });
+});
+
+// ── Edge auto-pan while dragging ────────────────────────────────
+// Dragging a node toward a canvas edge pans the viewport so the drag can
+// continue across a large diagram instead of hitting the viewport clamp.
+
+describe('NodeTopologyEditor — edge auto-pan while dragging', () => {
+  beforeEach(() => {
+    mockLoadTopology.mockResolvedValue(null);
+  });
+
+  const readPanX = () => {
+    const viewport = document.querySelector('.node-canvas-viewport') as HTMLElement;
+    const m = viewport.style.transform.match(/translate\(([-\d.]+)px/);
+    return m ? Number(m[1]) : 0;
+  };
+
+  it('dragging a node into the right edge band pans the viewport', () => {
+    renderEditor();
+    mockCanvasSize(800, 600);
+    const firstNode = document.querySelector('.topology-node') as HTMLElement;
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    expect(readPanX()).toBe(0);
+
+    fireEvent.mouseDown(firstNode, { button: 0, clientX: 0, clientY: 0 });
+    // Pointer 16px inside the right band (band starts at 752 of 800);
+    // y=100 is mid-canvas so only the x axis pans.
+    fireEvent.mouseMove(canvas, { clientX: 784, clientY: 100 });
+
+    expect(readPanX()).toBeGreaterThan(0);
+    expect(Number.parseInt(firstNode.style.left, 10)).toBeGreaterThan(80);
+    fireEvent.mouseUp(canvas, { button: 0 });
+  });
+
+  it('touch drags auto-pan too (the gesture-loop closure sees fresh pan via refs)', () => {
+    renderEditor();
+    mockCanvasSize(800, 600);
+    const firstNode = document.querySelector('.topology-node') as HTMLElement;
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    fireEvent.pointerDown(firstNode, { pointerId: 1, pointerType: 'touch', clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(canvas, { pointerId: 1, pointerType: 'touch', clientX: 784, clientY: 100 });
+    fireEvent.pointerUp(canvas, { pointerId: 1, pointerType: 'touch' });
+
+    expect(readPanX()).toBeGreaterThan(0);
+  });
+
+  it('a drag far OUTSIDE the canvas holds at the clamp edge without panning', () => {
+    renderEditor();
+    mockCanvasSize(800, 600);
+    const firstNode = document.querySelector('.topology-node') as HTMLElement;
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    expect(readPanX()).toBe(0);
+
+    fireEvent.mouseDown(firstNode, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: -1000, clientY: -1000 });
+
+    // The node holds at the clamp edge and the viewport never moved — the
+    // pinned "never lose a node off-canvas" invariant stays intact.
+    expect(firstNode.style.left).toBe('-192px');
+    expect(readPanX()).toBe(0);
+    fireEvent.mouseUp(canvas, { button: 0 });
   });
 });
 

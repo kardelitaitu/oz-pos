@@ -31,7 +31,14 @@ import {
   WarningIcon,
 } from './NodeTopologyIcons';
 import { plainErrorMessage } from '@/utils/app-error';
-import { clampNodeToViewport, findFreeSpawnSpot, NODE_WIDTH, NODE_HEIGHT, NODE_PORT_Y } from './nodeTopologyClamp';
+import {
+  clampNodeToViewport,
+  edgeAutoPanDelta,
+  findFreeSpawnSpot,
+  NODE_WIDTH,
+  NODE_HEIGHT,
+  NODE_PORT_Y,
+} from './nodeTopologyClamp';
 import { computeAutoLayout } from './nodeTopologyLayout';
 import { pinchTransform, TOUCH_DRAG_THRESHOLD } from './nodeTopologyTouch';
 import {
@@ -1083,6 +1090,19 @@ export default function NodeTopologyEditor({
    *  the pre-drag empty set forever). */
   const draggingNodeIdsRef = useRef<Set<string>>(draggingNodeIds);
   draggingNodeIdsRef.current = draggingNodeIds;
+  /** Pan mirror for the same stale-closure reason as draggingNodeIdsRef:
+   *  applyDragMove auto-pans the viewport mid-drag, so the drag math must
+   *  always read the CURRENT pan (a down-time closure would compute targets
+   *  against the pre-pan view and the dragged node would lag the pointer).
+   *  zoom has an existing mirror (zoomRef, used by the finder centering). */
+  const panRef = useRef(pan);
+  panRef.current = pan;
+  /** Last pointer position fed to applyDragMove, for edge auto-pan's
+   *  direction gate: the viewport only pans when the drag moves TOWARD the
+   *  edge the pointer sits in — a drag that drifts away from the edge (or
+   *  holds still) must not scroll. Seeded at drag start so the first move
+   *  has a baseline. */
+  const lastDragMovePosRef = useRef<{ x: number; y: number } | null>(null);
   const isCanvasDirty = useCallback(() => {
     const snap = appliedSnapshotRef.current;
     if (!snap) return true;
@@ -2865,6 +2885,7 @@ export default function NodeTopologyEditor({
     dragOffsetsRef.current.clear();
     dragStartRef.current.clear();
     setAlignmentGuide(null);
+    lastDragMovePosRef.current = null;
   };
 
   /** Arm a node drag (mouse mousedown or the touch gesture loop): set the
@@ -2940,6 +2961,8 @@ export default function NodeTopologyEditor({
     setDraggingNodeIds(nextDragSet);
     draggingNodeIdsRef.current = nextDragSet;
     dragHasMovedRef.current = false;
+    // Seed the edge auto-pan direction baseline at the grip point.
+    lastDragMovePosRef.current = { x: clientX, y: clientY };
 
     if (gesture === 'mouse') {
       // Cancel any in-flight drag listener from a previous drag, then arm a
@@ -3017,16 +3040,59 @@ export default function NodeTopologyEditor({
       dragHasMovedRef.current = true;
       if (!duplicateDragRef.current) pushHistory();
     }
-    // Dynamic edge clamp (replaces the old hard 20px floor): every node
-    // in the dragged group may travel north/west until its box nearly
-    // leaves the visible canvas, but can never be pushed off-screen and
-    // lost. Pan/zoom aware, so the reachable edge follows the current
-    // view. Each node clamps independently; the group delta is otherwise
-    // identical (same raw cursor → same per-node offset).
+    // Edge auto-pan: a pointer inside an edge band pans the viewport so a
+    // drag can keep moving across a large diagram instead of stalling at
+    // the viewport clamp. Reads the CURRENT pan via panRef (the touch
+    // gesture loop runs in a down-time closure; the mouse path is equally
+    // fresh) and derives the drag math from the POST-pan view, so the
+    // dragged node tracks the pointer through the scroll. Pointers OUTSIDE
+    // the canvas produce no delta — the clamp below then holds the node at
+    // the edge (the never-lose-a-node invariant).
     const canvas = canvasRef.current;
     const rect = canvas?.getBoundingClientRect();
-    const rawX = (clientX - (rect?.left ?? 0) - pan.x) / zoom;
-    const rawY = (clientY - (rect?.top ?? 0) - pan.y) / zoom;
+    const curPan = panRef.current;
+    const curZoom = zoomRef.current;
+    let auto = edgeAutoPanDelta(
+      clientX - (rect?.left ?? 0),
+      clientY - (rect?.top ?? 0),
+      canvas?.clientWidth ?? 0,
+      canvas?.clientHeight ?? 0,
+    );
+    // Direction gate: only pan toward the edge the pointer is pushing
+    // against. A drag drifting AWAY from the edge (or holding still) must
+    // not scroll — proximity alone would pan while dragging toward the
+    // diagram's interior near a corner.
+    const lastPos = lastDragMovePosRef.current;
+    if (lastPos) {
+      const moveDx = clientX - lastPos.x;
+      const moveDy = clientY - lastPos.y;
+      if (auto.dx !== 0 && Math.sign(auto.dx) !== Math.sign(moveDx)) auto = { ...auto, dx: 0 };
+      if (auto.dy !== 0 && Math.sign(auto.dy) !== Math.sign(moveDy)) auto = { ...auto, dy: 0 };
+    }
+    lastDragMovePosRef.current = { x: clientX, y: clientY };
+    const nextPan = auto.dx === 0 && auto.dy === 0
+      ? curPan
+      : { x: curPan.x + auto.dx, y: curPan.y + auto.dy };
+    if (nextPan !== curPan) setPan(nextPan);
+    const rawX = (clientX - (rect?.left ?? 0) - nextPan.x) / curZoom;
+    const rawY = (clientY - (rect?.top ?? 0) - nextPan.y) / curZoom;
+    // Dynamic edge clamp: every node in the dragged group may travel
+    // north/west until its box nearly leaves the visible canvas, but can
+    // never be pushed off-screen and lost. Pan/zoom aware, so the reachable
+    // edge follows the current view. Each node clamps independently; the
+    // group delta is otherwise identical (same raw cursor → same per-node
+    // offset).
+    const targets = new Map<string, { x: number; y: number }>();
+    for (const [id, off] of dragOffsetsRef.current) {
+      if (!draggingNodeIdsRef.current.has(id)) continue;
+      targets.set(id, clampNodeToViewport(rawX - off.x, rawY - off.y, {
+        panX: nextPan.x,
+        panY: nextPan.y,
+        zoom: curZoom,
+        canvasW: canvas?.clientWidth ?? 0,
+        canvasH: canvas?.clientHeight ?? 0,
+      }));
+    }
     // Figma-style COLLECTIVE alignment: every dragged node's edges/centers
     // snap to stationary nodes' edges/centers within a small threshold; the
     // closest match across the whole group wins per axis and the delta
@@ -3034,17 +3100,6 @@ export default function NodeTopologyEditor({
     // can snap the group — Figma semantics). The aligned axis skips grid
     // snapping (guides beat the grid); the other axis still snaps as
     // configured.
-    const targets = new Map<string, { x: number; y: number }>();
-    for (const [id, off] of dragOffsetsRef.current) {
-      if (!draggingNodeIdsRef.current.has(id)) continue;
-      targets.set(id, clampNodeToViewport(rawX - off.x, rawY - off.y, {
-        panX: pan.x,
-        panY: pan.y,
-        zoom,
-        canvasW: canvas?.clientWidth ?? 0,
-        canvasH: canvas?.clientHeight ?? 0,
-      }));
-    }
     const align = targets.size > 0
       ? computeAlignmentGuides(targets, draggingNodeIdsRef.current, nodesRef.current)
       : { dx: 0, dy: 0, alignedX: false, alignedY: false };
@@ -3058,9 +3113,9 @@ export default function NodeTopologyEditor({
         const off = dragOffsetsRef.current.get(n.id);
         if (!off) return n;
         const clamped = clampNodeToViewport(rawX - off.x, rawY - off.y, {
-          panX: pan.x,
-          panY: pan.y,
-          zoom,
+          panX: nextPan.x,
+          panY: nextPan.y,
+          zoom: curZoom,
           canvasW: canvas?.clientWidth ?? 0,
           canvasH: canvas?.clientHeight ?? 0,
         });
