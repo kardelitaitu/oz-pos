@@ -28,6 +28,8 @@ export interface TopologyWirePayload {
   to_node_id: string;
   direction: string;
   label?: string;
+  /** Orthogonal bend points the wire routes through (canvas coords). */
+  bends?: Array<{ x: number; y: number }>;
   from_port?: string;
   to_port?: string;
   /** Semantic source port ID; geometric anchors remain presentation data. */

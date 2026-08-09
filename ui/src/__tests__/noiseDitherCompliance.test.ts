@@ -25,7 +25,7 @@ const COMPONENTS_CSS = resolve(UI_SRC, 'frontend/themes/components.css');
 // When a new shadow-using component is added, its CSS class selector
 // must be added to the ::after list in components.css AND to this set.
 //
-// Current count: 39 selectors (6 core + 1 utility + 32 deprecated legacy).
+// Current count: 40 selectors (6 core + 1 utility + 33 feature-specific).
 // Increment when adding new selectors; decrement when cleaning up legacy.
 const KNOWN_NOISE_SELECTORS = [
   // Core pattern classes (always covered)
@@ -39,6 +39,11 @@ const KNOWN_NOISE_SELECTORS = [
   '.noise-dither',
   // Emergency fallback card (ERR-02)
   '.error-boundary__card',
+  // Topology wire rename input + label pill (positioned absolute with
+  // explicit z-index — the .noise-dither relative utility would fight
+  // their anchoring, so they use the explicit ::after path).
+  '.wire-rename-input',
+  '.wire-label-pill',
   // DEPRECATED LEGACY SELECTORS (feature-specific classes)
   '.retail-shift-modal',
   '.retail-held-carts-modal',
@@ -122,8 +127,19 @@ const KNOWN_NOISE_SELECTORS = [
   '.toggle-thumb',
   '.topology-node',
   '.node-selected',
+  '.topology-validation-banner',
+  '.topology-relationship-picker',
   '.settings-shortcuts-popover',
   '.canvas-hud',
+  '.canvas-zoom-controls',
+  '.canvas-zoom-slider-pop',
+  '.topology-shortcuts-popover',
+  '.topology-context-menu',
+  '.topology-finder',
+  '.topology-align-toolbar',
+  '.topology-minimap',
+  '.topology-validation-panel',
+  '.topology-issues-btn',
   '.customer-mgmt-history',
   '.panel',
   ':global(.dark) .panel',

@@ -1576,6 +1576,31 @@ mod tests {
     }
 
     #[test]
+    fn semantic_save_preserves_bend_points() {
+        // The command envelope persists the RAW wire payload (save_topology_json
+        // writes `wires: Vec<Value>` untouched after validation), so the editor's
+        // bend points must survive the Apply round-trip even though the typed
+        // validation struct has no `bends` field (serde ignores unknown fields).
+        let conn = fresh_conn();
+        let nodes = vec![
+            semantic_node("branch", "branch-location", Some("default")),
+            semantic_node("ws-1", "workspace", None),
+        ];
+        let mut wire = semantic_location_wire("wire-1", "ws-1");
+        wire["bends"] = serde_json::json!([{ "x": 350.0, "y": 334.0 }, { "x": 400.0, "y": 300.0 }]);
+        save_topology_json(&conn, nodes, vec![wire]).unwrap();
+
+        let raw = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)
+            .unwrap()
+            .unwrap();
+        let value: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(value["wires"][0]["bends"][0]["x"], 350.0);
+        assert_eq!(value["wires"][0]["bends"][0]["y"], 334.0);
+        assert_eq!(value["wires"][0]["bends"][1]["x"], 400.0);
+        assert_eq!(value["wires"][0]["bends"][1]["y"], 300.0);
+    }
+
+    #[test]
     fn semantic_save_accepts_two_way_location_wire() {
         // Direction is presentation-only: the frontend contract keeps
         // one-way | reverse | two-way all legal (normalizeWireDirection),

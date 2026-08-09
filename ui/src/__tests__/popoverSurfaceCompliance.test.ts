@@ -47,6 +47,13 @@ const POPOVER_SURFACES: ReadonlyArray<{ selector: string; file: string }> = [
   { selector: '.kds-picker-modal', file: 'features/kds/components/KdsProductPickerModal.css' },
   { selector: '.node-inspector-drawer', file: 'features/stores/NodeTopologyEditor.css' },
   { selector: '.canvas-hud', file: 'features/stores/NodeTopologyEditor.css' },
+  { selector: '.canvas-zoom-controls', file: 'features/stores/NodeTopologyEditor.css' },
+  { selector: '.canvas-zoom-slider-pop', file: 'features/stores/NodeTopologyEditor.css' },
+  { selector: '.topology-shortcuts-popover', file: 'features/stores/NodeTopologyEditor.css' },
+  { selector: '.topology-context-menu', file: 'features/stores/NodeTopologyEditor.css' },
+  { selector: '.topology-align-toolbar', file: 'features/stores/NodeTopologyEditor.css' },
+  { selector: '.topology-minimap', file: 'features/stores/NodeTopologyEditor.css' },
+  { selector: '.topology-validation-panel', file: 'features/stores/NodeTopologyEditor.css' },
   { selector: '.dev-toolbar', file: 'features/design/DevToolbar.css' },
   // Sticky header over scrolling rows — rows must not bleed through (THM-08).
   { selector: '.custom-report-table th', file: 'features/reports/CustomReportScreen.css' },

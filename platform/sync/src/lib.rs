@@ -75,8 +75,8 @@ pub enum SyncError {
 
     /// The client's sync anchor (`since` timestamp) is older than the
     /// oldest retained row on the server. Data in that gap has been
-    /// pruned (P-1 retention). The client should log a warning and
-    /// retry on the next scheduled cycle.
+    /// pruned (P-1 retention). Sync clients should recover through the
+    /// snapshot endpoint when available, then resume from that boundary.
     #[error("anchor expired: data older than {}", oldest_available.as_deref().unwrap_or("unknown"))]
     AnchorExpired {
         /// ISO-8601 timestamp of the oldest retained row on the server.
@@ -1535,7 +1535,7 @@ pub fn build_batches(
 ///
 /// Upserts products (by SKU), tax rates (by ID), and users (by username)
 /// inside a single transaction. Returns the total number of rows written.
-fn import_snapshot(
+pub(crate) fn import_snapshot(
     store: &Store<'_>,
     snapshot: &transport::SyncSnapshotResponse,
 ) -> SyncResult<usize> {

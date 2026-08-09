@@ -67,6 +67,7 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-confirm-preset-msg':
     'Loading a preset will replace your current topology. Any unsaved changes will be lost. You can undo this action after loading.',
   'topology-confirm-preset-label': 'Load Preset',
+  'topology-status-selection': '{count} selected',
   'topology-canvas-aria-label': 'Topology editor canvas. Use arrow keys to nudge selected nodes, Ctrl+Z to undo.',
   'topology-ws-type-store-pos': 'Retail POS',
   'topology-ws-type-restaurant-pos': 'Restaurant POS',
@@ -101,6 +102,55 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-field-name-aria': 'Edit name',
   'topology-field-enabled': 'Enabled',
   'topology-field-enabled-aria': 'Toggle enabled state',
+  'topology-zoom-in': 'Zoom in',
+  'topology-zoom-out': 'Zoom out',
+  'topology-zoom-level-aria': 'Zoom level ({count})%',
+  'topology-zoom-slider-aria': 'Zoom level',
+  'topology-empty-state-title': 'Build your store topology',
+  'topology-empty-state-body':
+    'Drag tools from the palette onto the canvas, or press 1–4 to add a node. Connect nodes with the port sockets on each card.',
+  'topology-unsaved': 'Unsaved changes',
+  'topology-shortcuts-aria': 'Keyboard shortcuts',
+  'topology-shortcuts-title': 'Shortcuts',
+  'topology-shortcuts-help': 'Show keyboard shortcuts',
+  'topology-shortcuts-pan': 'Pan the canvas',
+  'topology-shortcuts-duplicate-drag': 'Duplicate by dragging',
+  'topology-shortcuts-spawn': 'Spawn a node from the palette slot',
+  'topology-shortcuts-nudge': 'Move selected nodes (Shift = snap to grid)',
+  'topology-shortcuts-esc': 'Deselect or cancel the in-flight action',
+  'topology-shortcuts-inspector': 'Focus the inspector name field',
+  'topology-context-add-title': 'Add Node',
+  'topology-context-select-all': 'Select All',
+  'topology-context-selection-title': '{count} selected',
+  'topology-context-clear-selection': 'Clear selection',
+  'topology-context-zoom-selection': 'Zoom to Selection',
+  'topology-context-rename': 'Rename',
+  'topology-context-duplicate': 'Duplicate',
+  'topology-wire-toggle-aria': 'Toggle wire direction',
+  'topology-context-delete-wire': 'Delete wire',
+  'topology-context-rename-wire': 'Rename wire',
+  'topology-wire-rename-placeholder': 'Wire label',
+  'topology-wire-labels-toggle': 'Wire labels',
+  'topology-snap-announce': 'Aligned',
+  'topology-duplicate-announce': 'Duplicate created',
+  'topology-duplicate-cancel-announce': 'Duplicate cancelled',
+  'topology-validation-details': 'Issues ({count})',
+  'topology-align-aria': 'Align & distribute',
+  'topology-align-left': 'Align left',
+  'topology-align-hcenter': 'Align horizontal centers',
+  'topology-align-right': 'Align right',
+  'topology-align-top': 'Align top',
+  'topology-align-vcenter': 'Align vertical centers',
+  'topology-align-bottom': 'Align bottom',
+  'topology-distribute-h': 'Distribute horizontally',
+  'topology-distribute-v': 'Distribute vertically',
+  'topology-bends-override-note': 'Bends override routing on bent wires',
+  'topology-finder-aria': 'Find node',
+  'topology-finder-placeholder': 'Search nodes…',
+  'topology-finder-no-matches': 'No nodes match',
+  'topology-shortcuts-find': 'Find node',
+  'topology-auto-layout': 'Auto-layout',
+  'topology-layout-announce': 'Topology arranged automatically',
 };
 
 vi.mock('@fluent/react', async () => {
@@ -163,6 +213,7 @@ const renderEditor = (props?: {
   onRenameBranch?: (id: string, name: string) => Promise<boolean> | boolean | void;
   onRenameWorkspace?: (id: string, name: string) => Promise<boolean> | boolean | void;
   allowLegacyApply?: boolean;
+  branchId?: string;
 }) =>
   renderWithProvidersSync(<NodeTopologyEditor currentTier="standard" {...props} />, multiStoreFtl, sharedFtl);
 
@@ -1344,19 +1395,18 @@ describe('NodeTopologyEditor Component', () => {
     mockCanvasSize(800, 600);
 
     selectFirstNode();
-    // Shift nudges move in full grid steps (24px), so every press actually
-    // advances: 80 → 48 → 24 → 0 → -24 → … → clamps at minX = -200,
-    // snaps to the grid bound -192. (A plain 8px nudge oscillates on the
-    // 24px grid and would never reach the edge.)
+    // Plain arrows with snap on move in full grid steps (24px), so every
+    // press actually advances: 80 → 48 → 24 → 0 → -24 → … → clamps at
+    // minX = -200, snapping to the grid bound -192.
     for (let i = 0; i < 15; i += 1) {
-      fireEvent.keyDown(canvas, { key: 'ArrowLeft', shiftKey: true });
+      fireEvent.keyDown(canvas, { key: 'ArrowLeft' });
     }
     expect(firstNode.style.left).toBe('-192px');
 
     // North: 140 → 120 → 96 → … → clamps at minY = -200,
     // snapping to the nearest grid position -192.
     for (let i = 0; i < 15; i += 1) {
-      fireEvent.keyDown(canvas, { key: 'ArrowUp', shiftKey: true });
+      fireEvent.keyDown(canvas, { key: 'ArrowUp' });
     }
     expect(firstNode.style.top).toBe('-192px');
   });
@@ -1728,20 +1778,175 @@ function BranchDeleteHarness() {
 
     selectFirstNode();
 
-    // Shift+ArrowRight moves a full grid step: snap(80 + 24) = 96.
-    fireEvent.keyDown(canvas, { key: 'ArrowRight', shiftKey: true });
+    // ArrowRight with snap on moves exactly one grid step: snap(80 + 24) = 96.
+    fireEvent.keyDown(canvas, { key: 'ArrowRight' });
     expect(firstNode.style.left).toBe('96px');
 
     // Holding the key fires repeated keydowns (repeat: true). Those are
     // the SAME held nudge — they must not move further nor create extra
     // undo entries.
-    fireEvent.keyDown(canvas, { key: 'ArrowRight', shiftKey: true, repeat: true });
+    fireEvent.keyDown(canvas, { key: 'ArrowRight', repeat: true });
     expect(firstNode.style.left).toBe('96px');
 
     // A single undo must return the node to the ORIGINAL position — the
     // held key produced exactly one history entry.
     fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
     expect(firstNode.style.left).toBe('80px');
+  });
+
+  it('Shift+arrow nudges exactly 1px and bypasses the grid entirely', () => {
+    renderEditor();
+    const firstNode = document.querySelector('.topology-node') as HTMLElement;
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    expect(firstNode.style.left).toBe('80px');
+    expect(firstNode.style.top).toBe('140px');
+
+    selectFirstNode();
+
+    // Shift = fine adjustment: 1px raw, never rounded to the 24px grid.
+    fireEvent.keyDown(canvas, { key: 'ArrowRight', shiftKey: true });
+    expect(firstNode.style.left).toBe('81px');
+    fireEvent.keyDown(canvas, { key: 'ArrowDown', shiftKey: true });
+    expect(firstNode.style.top).toBe('141px');
+  });
+
+  it('plain arrows with snap on move exactly one grid step (no dead presses)', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [{ id: 'x', type: 'store', name: 'X', x: 96, y: 96 }],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(1));
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    const node = document.querySelector('.topology-node') as HTMLElement;
+    selectFirstNode();
+
+    // From an ON-GRID position (96), the old 8px step snapped back to 96
+    // (a dead press). One grid step must move 96 → 120 deterministically.
+    fireEvent.keyDown(canvas, { key: 'ArrowRight' });
+    expect(node.style.left).toBe('120px');
+  });
+
+  it('plain arrows with snap off move the raw 8px step', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [{ id: 'x', type: 'store', name: 'X', x: 96, y: 96 }],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(1));
+    fireEvent.click(screen.getByText('Snap to grid')); // toggles OFF
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    const node = document.querySelector('.topology-node') as HTMLElement;
+    selectFirstNode();
+
+    fireEvent.keyDown(canvas, { key: 'ArrowRight' });
+    expect(node.style.left).toBe('104px');
+  });
+
+  // ── Alignment guides on fine nudge (Shift+arrow) ────────────────
+
+  describe('NodeTopologyEditor — alignment guides on fine nudge', () => {
+    // A at (200, 200) has its RIGHT edge at 440; B at (447, 250) has its LEFT
+    // edge at 447 — a 7px gap, just outside the 6px alignment band.
+    const loadNudgeFixture = () => {
+      mockLoadTopology.mockResolvedValueOnce({
+        nodes: [
+          { id: 'a', type: 'store', name: 'A', x: 200, y: 200 },
+          { id: 'b', type: 'workspace', name: 'B', x: 447, y: 250, metadata: { typeKey: 'store-pos' } },
+        ],
+        wires: [],
+      } as never);
+      renderEditor();
+    };
+
+    const canvas = () => document.querySelector('.node-canvas-container') as HTMLElement;
+    const nodeA = () => document.querySelector('.topology-node[data-node-id="a"]') as HTMLElement;
+
+    it('draws an alignment guide when a fine nudge lands flush against a neighbour', async () => {
+      loadNudgeFixture();
+      await waitFor(() => expect(getNodeCount()).toBe(2));
+      selectFirstNode();
+
+      // A's right edge is 7px short of B's left edge (outside the 6px band).
+      // One Shift+Right brings it to 441 → ENTRY snap lands flush at 447
+      // (A.x = 207) and the guide draws on B's edge.
+      fireEvent.keyDown(canvas(), { key: 'ArrowRight', shiftKey: true });
+
+      expect(nodeA().style.left).toBe('207px');
+      expect(document.querySelector('.alignment-guide-x')).not.toBeNull();
+    });
+
+    it('entry snap does not eat in-band nudges (raw 1px moves stand)', async () => {
+      loadNudgeFixture();
+      await waitFor(() => expect(getNodeCount()).toBe(2));
+      selectFirstNode();
+
+      fireEvent.keyDown(canvas(), { key: 'ArrowRight', shiftKey: true });
+      expect(nodeA().style.left).toBe('207px'); // flush at 447 (entry snap)
+
+      // The band was entered ONCE — further nudges must move freely (208,
+      // 209), never snapping back to 207. The guide stays visible in-band.
+      fireEvent.keyDown(canvas(), { key: 'ArrowRight', shiftKey: true });
+      expect(nodeA().style.left).toBe('208px');
+      expect(document.querySelector('.alignment-guide-x')).not.toBeNull();
+      fireEvent.keyDown(canvas(), { key: 'ArrowRight', shiftKey: true });
+      expect(nodeA().style.left).toBe('209px');
+      expect(document.querySelector('.alignment-guide-x')).not.toBeNull();
+    });
+
+    it('clears the guide once a nudge leaves the alignment band', async () => {
+      loadNudgeFixture();
+      await waitFor(() => expect(getNodeCount()).toBe(2));
+      selectFirstNode();
+
+      fireEvent.keyDown(canvas(), { key: 'ArrowRight', shiftKey: true });
+      expect(nodeA().style.left).toBe('207px'); // entry snap, flush at 447
+
+      // 6 more nudges → 213 (edge 453, still 6px from the line = in band).
+      for (let i = 0; i < 6; i++) fireEvent.keyDown(canvas(), { key: 'ArrowRight', shiftKey: true });
+      expect(nodeA().style.left).toBe('213px');
+      expect(document.querySelector('.alignment-guide-x')).not.toBeNull();
+
+      // One more → 214 (edge 454, 7px past) — out of the band, guide clears.
+      fireEvent.keyDown(canvas(), { key: 'ArrowRight', shiftKey: true });
+      expect(nodeA().style.left).toBe('214px');
+      expect(document.querySelector('.alignment-guide')).toBeNull();
+    });
+
+    it('a member\'s edge entry snap carries the whole selection rigidly (collective nudge)', async () => {
+      // Round-25 semantics through the KEYBOARD path: A (200, 200) has its
+      // right edge at 440; B (447, 250) sits 7px short of it; C (900, 250)
+      // is far. Select B + C and Shift+Left — B's left edge enters the band
+      // (446, dist 6), the entry snap lands it flush at 440, and C rides
+      // along rigidly (900 → 893). No member was pre-aligned, so entry fires.
+      mockLoadTopology.mockResolvedValueOnce({
+        nodes: [
+          { id: 'a', type: 'store', name: 'A', x: 200, y: 200 },
+          { id: 'b', type: 'workspace', name: 'B', x: 447, y: 250, metadata: { typeKey: 'store-pos' } },
+          { id: 'c', type: 'workspace', name: 'C', x: 900, y: 250, metadata: { typeKey: 'store-pos' } },
+        ],
+        wires: [],
+      } as never);
+      renderEditor();
+      await waitFor(() => expect(getNodeCount()).toBe(3));
+      mockCanvasSize(1200, 800);
+
+      // Backward marquee (980,460) → (460,260) touches B + C but NOT A
+      // (A's box 200-440 × 200-440 stays clear of the 460-980 × 260-460 box).
+      const canvasEl = canvas();
+      fireEvent.mouseDown(canvasEl, { button: 0, clientX: 980, clientY: 460 });
+      fireEvent.mouseMove(canvasEl, { clientX: 460, clientY: 260 });
+      fireEvent.mouseUp(canvasEl, { button: 0 });
+      expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(2);
+
+      fireEvent.keyDown(canvasEl, { key: 'ArrowLeft', shiftKey: true });
+
+      const nodeB = document.querySelector('.topology-node[data-node-id="b"]') as HTMLElement;
+      const nodeC = document.querySelector('.topology-node[data-node-id="c"]') as HTMLElement;
+      expect(nodeB.style.left).toBe('440px'); // B's edge flush on A's right edge
+      expect(nodeC.style.left).toBe('893px'); // whole selection rides rigidly
+      expect(document.querySelector('.alignment-guide-x')).not.toBeNull();
+    });
   });
 
   // ── Fresh topology reload clears the undo stack (#15) ────────────
@@ -1861,10 +2066,12 @@ function BranchDeleteHarness() {
 
   // ── Zoom controls ───────────────────────────────────────────────
 
-  it('shows zoom percentage and canvas controls', () => {
+  it('shows zoom controls in the floating canvas cluster', () => {
     renderEditor();
 
-    expect(screen.getByText('Zoom: 100%')).toBeInTheDocument();
+    expect(document.querySelector('.canvas-zoom-level')?.textContent).toBe('100%');
+    expect(screen.getByRole('button', { name: 'Zoom in' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Zoom out' })).toBeInTheDocument();
     expect(screen.getByText('Fit All')).toBeInTheDocument();
     expect(screen.getByText('Reset View')).toBeInTheDocument();
   });
@@ -2835,6 +3042,43 @@ describe('NodeTopologyEditor — duplicate detection vs defaulted ports', () => 
   });
 });
 
+// ── F1 shortcuts help ───────────────────────────────────────────
+
+describe('NodeTopologyEditor — F1 shortcuts help', () => {
+  it('F1 opens the shortcuts popover and a second F1 closes it', () => {
+    renderEditor();
+    expect(document.querySelector('.topology-shortcuts-popover')).toBeNull();
+
+    fireEvent.keyDown(window, { key: 'F1' });
+    expect(document.querySelector('.topology-shortcuts-popover')).not.toBeNull();
+    // The help lists its own trigger.
+    expect(screen.getByText('Show keyboard shortcuts')).not.toBeNull();
+    expect(screen.getByText('F1')).not.toBeNull();
+
+    fireEvent.keyDown(window, { key: 'F1' });
+    expect(document.querySelector('.topology-shortcuts-popover')).toBeNull();
+  });
+
+  it('F1 works while focus is on a rack control (not swallowed by the rack guard)', () => {
+    renderEditor();
+    // Canvas shortcuts are normally inert when a rack control has focus.
+    (document.querySelector('.node-tool-rack button') as HTMLElement | null)?.focus();
+
+    fireEvent.keyDown(window, { key: 'F1' });
+    expect(document.querySelector('.topology-shortcuts-popover')).not.toBeNull();
+  });
+
+  it('F1 lists the flagship gestures: Space+drag pan and Alt+drag duplicate', () => {
+    renderEditor();
+    fireEvent.keyDown(window, { key: 'F1' });
+
+    expect(screen.getByText('Pan the canvas')).not.toBeNull();
+    expect(screen.getByText('Space + Drag')).not.toBeNull();
+    expect(screen.getByText('Duplicate by dragging')).not.toBeNull();
+    expect(screen.getByText('Alt + Drag')).not.toBeNull();
+  });
+});
+
 // ── Canvas shortcuts vs focused chrome controls ─────────────────
 
 describe('NodeTopologyEditor — canvas shortcuts vs focused chrome', () => {
@@ -3310,10 +3554,10 @@ describe('NodeTopologyEditor — zoom controls behavior', () => {
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
 
     fireEvent.wheel(canvas, { deltaY: -100, clientX: 10, clientY: 10 });
-    expect(screen.getByText('Zoom: 110%')).toBeInTheDocument();
+    expect(document.querySelector('.canvas-zoom-level')?.textContent).toBe('110%');
 
     fireEvent.click(screen.getByText('Reset View'));
-    expect(screen.getByText('Zoom: 100%')).toBeInTheDocument();
+    expect(document.querySelector('.canvas-zoom-level')?.textContent).toBe('100%');
   });
 
   it('Fit All recomputes the zoom from the node bounds', () => {
@@ -3321,13 +3565,63 @@ describe('NodeTopologyEditor — zoom controls behavior', () => {
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
 
     fireEvent.wheel(canvas, { deltaY: -100, clientX: 10, clientY: 10 });
-    expect(screen.getByText('Zoom: 110%')).toBeInTheDocument();
+    expect(document.querySelector('.canvas-zoom-level')?.textContent).toBe('110%');
 
     fireEvent.click(screen.getByText('Fit All'));
     // Fit-to-bounds replaces the wheel zoom with a computed value (still
     // clamped to the 40%..200% range).
-    expect(screen.queryByText('Zoom: 110%')).not.toBeInTheDocument();
-    expect(screen.getByText(/^Zoom: (?:[4-9]\d|1\d\d|200)%$/)).toBeInTheDocument();
+    expect(document.querySelector('.canvas-zoom-level')?.textContent).not.toBe('110%');
+    expect(document.querySelector('.canvas-zoom-level')?.textContent).toMatch(/^(?:[4-9]\d|1\d\d|200)%$/);
+  });
+
+  it('floating zoom buttons step the zoom in and out', () => {
+    renderEditor();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    expect(document.querySelector('.canvas-zoom-level')?.textContent).toBe('125%');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom out' }));
+    expect(document.querySelector('.canvas-zoom-level')?.textContent).toBe('100%');
+  });
+
+  it('clicking the zoom level opens a slider popover seeded with the current zoom', () => {
+    renderEditor();
+    const zoomBtn = screen.getByRole('button', { name: /zoom level/i });
+    expect(zoomBtn).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(zoomBtn);
+    expect(zoomBtn).toHaveAttribute('aria-expanded', 'true');
+    const slider = document.querySelector('.canvas-zoom-slider-pop input[type="range"]') as HTMLInputElement;
+    expect(slider).not.toBeNull();
+    expect(slider.value).toBe('100');
+  });
+
+  it('dragging the slider changes the zoom live', () => {
+    renderEditor();
+    fireEvent.click(screen.getByRole('button', { name: /zoom level/i }));
+    const slider = document.querySelector('.canvas-zoom-slider-pop input[type="range"]') as HTMLInputElement;
+
+    fireEvent.change(slider, { target: { value: '75' } });
+
+    expect(document.querySelector('.canvas-zoom-level')?.textContent).toBe('75%');
+    expect((document.querySelector('.node-canvas-viewport') as HTMLElement).style.transform).toContain('scale(0.75)');
+  });
+
+  it('Escape or an outside click closes the slider popover', () => {
+    renderEditor();
+    const zoomBtn = screen.getByRole('button', { name: /zoom level/i });
+    fireEvent.click(zoomBtn);
+    expect(document.querySelector('.canvas-zoom-slider-pop')).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(document.querySelector('.canvas-zoom-slider-pop')).toBeNull();
+    expect(zoomBtn).toHaveAttribute('aria-expanded', 'false');
+
+    // Reopen, then click the canvas background — the popover must close.
+    fireEvent.click(zoomBtn);
+    expect(document.querySelector('.canvas-zoom-slider-pop')).not.toBeNull();
+    fireEvent.mouseDown(document.querySelector('.node-canvas-container')!);
+    expect(document.querySelector('.canvas-zoom-slider-pop')).toBeNull();
   });
 });
 
@@ -3365,6 +3659,93 @@ describe('NodeTopologyEditor — canvas pan', () => {
 
     expect(firstNode.style.left).not.toBe(beforeLeft);
     expect(viewport.style.transform).toContain('translate(0px, 0px)');
+  });
+
+  it('Space+drag pans like the middle button without clearing the selection or opening a marquee', () => {
+    renderEditor();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    const viewport = document.querySelector('.node-canvas-viewport') as HTMLElement;
+
+    // Select a node first (mousedown selects) — space-panning must not destroy it.
+    fireEvent.mouseDown(document.querySelectorAll('.topology-node')[0]!, { button: 0 });
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(1);
+
+    // Hold Space (arms the pan cursor), then LEFT-drag by (50, 30).
+    fireEvent.keyDown(window, { code: 'Space', key: ' ' });
+    expect(canvas.className).toContain('canvas-space-pan');
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 100, clientY: 100 });
+    fireEvent.mouseMove(document, { clientX: 150, clientY: 130 });
+    fireEvent.mouseUp(document, { button: 0 });
+    fireEvent.keyUp(window, { code: 'Space', key: ' ' });
+
+    expect(viewport.style.transform).toContain('translate(50px, 30px)');
+    expect(document.querySelector('.topology-marquee')).toBeNull();
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(1);
+  });
+
+  it('releasing Space before the drag restores the left-drag marquee', () => {
+    renderEditor();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    fireEvent.keyDown(window, { code: 'Space', key: ' ' });
+    fireEvent.keyUp(window, { code: 'Space', key: ' ' });
+
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 650, clientY: 420 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(2);
+  });
+
+  it('Space on a focused wire cycles its direction instead of arming the pan', () => {
+    renderEditor();
+    const hitbox = document.querySelector('.wire-hitbox') as HTMLElement;
+    const path = () => hitbox.parentElement!.querySelector('path.wire-path') as Element;
+    expect(path().getAttribute('data-direction')).toBe('one-way');
+
+    fireEvent.keyDown(hitbox, { code: 'Space', key: ' ' });
+
+    expect(path().getAttribute('data-direction')).toBe('reverse');
+    expect(document.querySelector('.node-canvas-container')!.className).not.toContain('canvas-space-pan');
+  });
+
+  it('the Pan tool turns left-drags into pans and preserves the selection', () => {
+    renderEditor();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    const viewport = document.querySelector('.node-canvas-viewport') as HTMLElement;
+
+    fireEvent.click(screen.getByText('Pan tool'));
+    const toggle = screen.getByRole('button', { name: 'Pan tool' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(canvas.className).toContain('canvas-space-pan');
+
+    fireEvent.mouseDown(document.querySelectorAll('.topology-node')[0]!, { button: 0 });
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(1);
+
+    // Left-drag on empty canvas pans by the pointer delta, no marquee.
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 100, clientY: 100 });
+    fireEvent.mouseMove(document, { clientX: 150, clientY: 130 });
+    fireEvent.mouseUp(document, { button: 0 });
+
+    expect(viewport.style.transform).toContain('translate(50px, 30px)');
+    expect(document.querySelector('.topology-marquee')).toBeNull();
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(1);
+  });
+
+  it('turning the Pan tool off restores the left-drag marquee', () => {
+    renderEditor();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    fireEvent.click(screen.getByText('Pan tool'));
+    fireEvent.click(screen.getByText('Pan tool'));
+    expect(screen.getByRole('button', { name: 'Pan tool' })).toHaveAttribute('aria-pressed', 'false');
+    expect(canvas.className).not.toContain('canvas-space-pan');
+
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 650, clientY: 420 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(2);
   });
 });
 
@@ -3410,6 +3791,121 @@ describe('NodeTopologyEditor — multi-select & marquee', () => {
     expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(2);
   });
 
+  it('left→right marquee selects only fully-contained nodes (excludes partial overlaps)', () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    // Box (300,100)→(650,420): store-1 (80–320 × 140–380) and ws-1
+    // (380–620 × 80–320) each poke OUTSIDE the box, so a forward drag must
+    // NOT select them; wh-1 (680–920) is entirely clear too.
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 300, clientY: 100 });
+    fireEvent.mouseMove(canvas, { clientX: 650, clientY: 420 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(0);
+  });
+
+  it('left→right marquee fully containing a node selects it', () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    // Box (0,0)→(650,420) fully contains store-1 (80–320 × 140–380) and
+    // ws-1 (380–620 × 80–320); wh-1 (680+) is clear.
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 650, clientY: 420 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+
+    const selected = document.querySelectorAll('.topology-node.node-selected');
+    expect(selected).toHaveLength(2);
+    expect(selected[0]?.getAttribute('data-node-id')).toBe('store-1');
+    expect(selected[1]?.getAttribute('data-node-id')).toBe('ws-1');
+  });
+
+  it('right→left marquee selects any node the box touches (partial overlap counts)', () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    // The same (300,100)→(650,420) box, dragged BACKWARD from (650,420):
+    // store-1 and ws-1 poke out of it, yet a backward drag must still grab
+    // every node the box touches.
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 650, clientY: 420 });
+    fireEvent.mouseMove(canvas, { clientX: 300, clientY: 100 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+
+    const selected = document.querySelectorAll('.topology-node.node-selected');
+    expect(selected).toHaveLength(2);
+    expect(selected[0]?.getAttribute('data-node-id')).toBe('store-1');
+    expect(selected[1]?.getAttribute('data-node-id')).toBe('ws-1');
+  });
+
+  it('shift+drag marquee unions into the existing selection', () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    // Select store-1 + ws-1 with a forward marquee.
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 650, clientY: 420 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(2);
+
+    // Shift+drag a box that fully contains wh-1 (680–920 × 140–380): it
+    // JOINS the selection; nothing is lost.
+    fireEvent.mouseDown(canvas, { button: 0, shiftKey: true, clientX: 650, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 1000, clientY: 500 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+
+    const selected = document.querySelectorAll('.topology-node.node-selected');
+    expect(selected).toHaveLength(3);
+    const ids = Array.from(selected).map((el) => el.getAttribute('data-node-id'));
+    expect(ids).toEqual(expect.arrayContaining(['store-1', 'ws-1', 'wh-1']));
+  });
+
+  it('shift+drag marquee that captures nothing leaves the selection intact', () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 650, clientY: 420 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(2);
+
+    // Shift+drag over the empty bottom-left (every node sits above y=380):
+    // a non-additive marquee would clear the selection; Shift must keep it.
+    fireEvent.mouseDown(canvas, { button: 0, shiftKey: true, clientX: 0, clientY: 500 });
+    fireEvent.mouseMove(canvas, { clientX: 300, clientY: 800 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(2);
+  });
+
+  it('a plain drag after shift+drag still replaces the selection (no additive leak)', () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 650, clientY: 420 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+    fireEvent.mouseDown(canvas, { button: 0, shiftKey: true, clientX: 650, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 1000, clientY: 500 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(3);
+
+    // A subsequent NON-shift marquee over wh-1 alone must replace, not grow.
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 650, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 1000, clientY: 500 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+
+    const selected = document.querySelectorAll('.topology-node.node-selected');
+    expect(selected).toHaveLength(1);
+    expect(selected[0]?.getAttribute('data-node-id')).toBe('wh-1');
+  });
+
   it('a plain click on empty canvas clears the multi-selection', () => {
     renderEditor();
     mockCanvasSize(1200, 800);
@@ -3423,6 +3919,25 @@ describe('NodeTopologyEditor — multi-select & marquee', () => {
     // Click (no drag) on empty background below the warehouse card.
     fireEvent.mouseDown(canvas, { button: 0, clientX: 700, clientY: 500 });
     fireEvent.mouseUp(canvas, { button: 0 });
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(0);
+  });
+
+  it('Escape cancels an in-flight marquee box and disarms its finalizer', () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    // A marquee over the store card (80..320, 140..380) — a normal release
+    // would select it.
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 100, clientY: 100 });
+    fireEvent.mouseMove(canvas, { clientX: 400, clientY: 300 });
+    expect(document.querySelector('.topology-marquee')).not.toBeNull();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(document.querySelector('.topology-marquee')).toBeNull();
+
+    // The cancelled marquee cannot commit a selection on a later release.
+    fireEvent.mouseUp(document, { button: 0, clientX: 400, clientY: 300 });
     expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(0);
   });
 
@@ -3806,6 +4321,227 @@ describe('NodeTopologyEditor — wire click direction cycle', () => {
   });
 });
 
+// ── Wire bend editing ────────────────────────────────────────────
+
+describe('NodeTopologyEditor — wire bend editing', () => {
+  /** Select w-1 (first wire) so its bend handles render. */
+  const selectFirstWire = () => {
+    const hitbox = document.querySelector('.wire-hitbox') as Element;
+    fireEvent.click(hitbox);
+    return hitbox;
+  };
+
+  /** Create a bend on w-1 by dragging its midpoint ghost to (400, 300). */
+  const createBend = () => {
+    const ghost = document.querySelector('.wire-bend-ghost') as Element;
+    fireEvent.mouseDown(ghost, { button: 0, clientX: 350, clientY: 334 });
+    fireEvent.mouseMove(document, { clientX: 400, clientY: 300 });
+    fireEvent.mouseUp(document, { button: 0 });
+  };
+
+  it('creates a bend by dragging the midpoint ghost and routes the wire through it', () => {
+    renderEditor();
+    const hitbox = selectFirstWire();
+
+    // Retail w-1 runs store right (320,364) → ws left (380,304); with no
+    // bends the ghost sits at the curve's midpoint.
+    const ghost = document.querySelector('.wire-bend-ghost') as Element;
+    expect(ghost).not.toBeNull();
+    expect(ghost.getAttribute('cx')).toBe('350');
+    expect(ghost.getAttribute('cy')).toBe('334');
+
+    createBend();
+
+    const handle = document.querySelector('.wire-bend-handle') as Element;
+    expect(handle).not.toBeNull();
+    expect(handle.getAttribute('cx')).toBe('400');
+    expect(handle.getAttribute('cy')).toBe('300');
+
+    // The wire now routes through the bend as an orthogonal polyline.
+    const path = hitbox.parentElement!.querySelector('path.wire-path') as Element;
+    expect(path.getAttribute('d')).toBe('M 320 364 L 400 300 L 380 304');
+
+    // The whole drag is ONE undo entry.
+    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+  });
+
+  it('shows a bends-override note when any wire carries bends, and hides it otherwise', () => {
+    renderEditor();
+    // No bends yet — the elbow/curved toggle applies to every wire, no note.
+    expect(screen.queryByText('Bends override routing on bent wires')).toBeNull();
+
+    selectFirstWire();
+    createBend();
+
+    // The elbow toggle silently does nothing for a bent wire (authored
+    // geometry wins) — the note makes that visible instead of lying.
+    expect(screen.getByText('Bends override routing on bent wires')).toBeInTheDocument();
+    // The toggle itself carries the same explanation as a tooltip.
+    const toggle = screen.getByText('Elbow wires').closest('button');
+    expect(toggle?.getAttribute('title')).toContain('Bends override');
+  });
+
+  it('moves an existing bend by dragging its handle', () => {
+    renderEditor();
+    const hitbox = selectFirstWire();
+    createBend();
+
+    const handle = document.querySelector('.wire-bend-handle') as Element;
+    fireEvent.mouseDown(handle, { button: 0, clientX: 400, clientY: 300 });
+    fireEvent.mouseMove(document, { clientX: 420, clientY: 280 });
+    fireEvent.mouseUp(document, { button: 0 });
+
+    expect(handle.getAttribute('cx')).toBe('420');
+    expect(handle.getAttribute('cy')).toBe('280');
+    const path = hitbox.parentElement!.querySelector('path.wire-path') as Element;
+    expect(path.getAttribute('d')).toBe('M 320 364 L 420 280 L 380 304');
+  });
+
+  it('removes a bend on double-click, restoring the default curve', () => {
+    renderEditor();
+    const hitbox = selectFirstWire();
+    createBend();
+
+    const handle = document.querySelector('.wire-bend-handle') as Element;
+    fireEvent.doubleClick(handle);
+
+    expect(document.querySelector('.wire-bend-handle')).toBeNull();
+    const path = hitbox.parentElement!.querySelector('path.wire-path') as Element;
+    expect(path.getAttribute('d')).toContain('C');
+  });
+
+  it('undo restores the unbent wire', () => {
+    renderEditor();
+    const hitbox = selectFirstWire();
+    createBend();
+
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+
+    expect(document.querySelector('.wire-bend-handle')).toBeNull();
+    const path = hitbox.parentElement!.querySelector('path.wire-path') as Element;
+    expect(path.getAttribute('d')).toContain('C');
+  });
+
+  it('marks the canvas dirty when a bend is created', () => {
+    renderEditor();
+    selectFirstWire();
+    createBend();
+
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+  });
+
+  it('Escape cancels an in-flight bend drag, restoring the bend and popping the entry', () => {
+    renderEditor();
+    const hitbox = selectFirstWire();
+    createBend(); // bend at (400, 300) — one undo entry (the creation)
+
+    const handle = document.querySelector('.wire-bend-handle') as Element;
+    fireEvent.mouseDown(handle, { button: 0, clientX: 400, clientY: 300 });
+    fireEvent.mouseMove(document, { clientX: 420, clientY: 280 });
+    // Bend now at (420, 280) — the move pushed a SECOND entry.
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    // The bend snaps back to where the drag started.
+    expect(handle.getAttribute('cx')).toBe('400');
+    expect(handle.getAttribute('cy')).toBe('300');
+    const path = hitbox.parentElement!.querySelector('path.wire-path') as Element;
+    expect(path.getAttribute('d')).toBe('M 320 364 L 400 300 L 380 304');
+
+    // The cancelled MOVE left no entry: ONE undo reverts the creation.
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    expect(document.querySelector('.wire-bend-handle')).toBeNull();
+    expect(path.getAttribute('d')).toContain('C');
+  });
+
+  it('Escape cancels a bend creation started from a ghost, leaving no trace', () => {
+    renderEditor();
+    const hitbox = selectFirstWire(); // the selection click also cycles
+    // direction (one undo entry — existing wire-click semantics)
+
+    const ghost = document.querySelector('.wire-bend-ghost') as Element;
+    fireEvent.mouseDown(ghost, { button: 0, clientX: 350, clientY: 334 });
+    fireEvent.mouseMove(document, { clientX: 400, clientY: 300 });
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    // The whole creation gesture is cancelled: no bend, default curve. The
+    // drag's entry was popped, so ONE undo reverts the selection's
+    // direction cycle — it must NOT re-create the bend.
+    expect(document.querySelector('.wire-bend-handle')).toBeNull();
+    const path = hitbox.parentElement!.querySelector('path.wire-path') as Element;
+    expect(path.getAttribute('d')).toContain('C');
+
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    expect(document.querySelector('.wire-bend-handle')).toBeNull();
+    expect(path.getAttribute('data-direction')).toBe('one-way');
+  });
+
+  it('reveals midpoint bend ghosts on hover without selecting the wire', () => {
+    renderEditor();
+    expect(document.querySelector('.wire-bend-ghost')).toBeNull();
+
+    const hitbox = document.querySelector('.wire-hitbox') as Element;
+    fireEvent.mouseEnter(hitbox.parentElement as Element); // the wire group
+
+    const ghost = document.querySelector('.wire-bend-ghost') as Element;
+    expect(ghost).not.toBeNull();
+    expect(ghost.getAttribute('cx')).toBe('350');
+    expect(ghost.getAttribute('cy')).toBe('334');
+    // Hover alone must NOT select the wire: no bend handles, no undo entry
+    // (a click-to-select would push a direction-cycle entry).
+    expect(document.querySelector('.wire-bend-handle')).toBeNull();
+    expect(screen.queryByText('Undo (Ctrl+Z)')).not.toBeInTheDocument();
+  });
+
+  it('dragging a hover ghost creates the bend and selects the wire', () => {
+    renderEditor();
+    const hitbox = document.querySelector('.wire-hitbox') as Element;
+    fireEvent.mouseEnter(hitbox.parentElement as Element);
+
+    const ghost = document.querySelector('.wire-bend-ghost') as Element;
+    fireEvent.mouseDown(ghost, { button: 0, clientX: 350, clientY: 334 });
+    fireEvent.mouseMove(document, { clientX: 400, clientY: 300 });
+    fireEvent.mouseUp(document, { button: 0 });
+
+    expect(document.querySelector('.wire-bend-handle')).not.toBeNull();
+    const path = hitbox.parentElement!.querySelector('path.wire-path') as Element;
+    expect(path.getAttribute('d')).toBe('M 320 364 L 400 300 L 380 304');
+    // The drag is exactly ONE undo entry (hover pushed nothing, and the
+    // direction cycle never fired) — undo removes the bend.
+    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    expect(document.querySelector('.wire-bend-handle')).toBeNull();
+  });
+
+  it('clears the hover ghost when the pointer leaves the wire', () => {
+    renderEditor();
+    const hitbox = document.querySelector('.wire-hitbox') as Element;
+    const group = hitbox.parentElement as Element;
+    fireEvent.mouseEnter(group);
+    expect(document.querySelector('.wire-bend-ghost')).not.toBeNull();
+
+    fireEvent.mouseLeave(group);
+    expect(document.querySelector('.wire-bend-ghost')).toBeNull();
+  });
+
+  it('a completed bend drag is not cancelled by a later Escape', () => {
+    renderEditor();
+    const hitbox = selectFirstWire();
+    createBend();
+
+    const handle = document.querySelector('.wire-bend-handle') as Element;
+    fireEvent.mouseDown(handle, { button: 0, clientX: 400, clientY: 300 });
+    fireEvent.mouseMove(document, { clientX: 420, clientY: 280 });
+    fireEvent.mouseUp(document, { button: 0 }); // drag completes
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    // Plain Escape clears the selection — the moved bend stays put.
+    const path = hitbox.parentElement!.querySelector('path.wire-path') as Element;
+    expect(path.getAttribute('d')).toBe('M 320 364 L 420 280 L 380 304');
+    expect(document.querySelector('.wire-bend-handle')).toBeNull();
+  });
+});
+
 // ── Hover-target preview snap ───────────────────────────────────
 
 describe('NodeTopologyEditor — hover-target preview snap', () => {
@@ -3962,6 +4698,32 @@ describe('NodeTopologyEditor — connected wire label', () => {
     const last = wires[wires.length - 1]!;
     const title = last.querySelector('.wire-hitbox title');
     expect(title?.textContent).toContain('topology-wire-label-connected');
+  });
+});
+
+// ── Wire relabel undo ───────────────────────────────────────────
+
+describe('NodeTopologyEditor — wire relabel undo', () => {
+  it('undo restores the previous wire label in one step', () => {
+    renderEditor();
+    const hitbox = document.querySelector('.wire-hitbox') as Element;
+    const label = () => hitbox.querySelector('title')?.textContent ?? '';
+    expect(label()).toContain('Binds Store');
+
+    // Right-click the wire → Rename wire (labels are hidden by default, so
+    // the context menu is the affordance).
+    fireEvent.contextMenu(hitbox);
+    fireEvent.click(screen.getByText('Rename wire'));
+
+    const input = document.querySelector('.wire-rename-input') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'X Wire' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(label()).toContain('X Wire');
+    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    expect(label()).toContain('Binds Store');
   });
 });
 
@@ -4200,5 +4962,1863 @@ describe('NodeTopologyEditor — dialog Escape isolation', () => {
     // the editor's window-level handler (the dialog owns the keyboard).
     expect(getNodeCount()).toBe(countAfterEdit);
     expect(document.querySelector('.topology-node.node-selected')).not.toBeNull();
+  });
+});
+
+// ── Tool-slot shortcuts + empty-state onboarding ────────────────
+
+describe('NodeTopologyEditor — tool-slot shortcuts', () => {
+  const lastNodeType = () => {
+    const nodes = document.querySelectorAll('.topology-node');
+    return nodes[nodes.length - 1]?.className ?? '';
+  };
+
+  it('1 spawns a store node, 2 a workspace, 3 a warehouse, 4 hardware', () => {
+    // Pro tier: the standard-tier preset already owns a warehouse, which
+    // would block the '3' slot on the multi-warehouse gate.
+    renderEditor({ currentTier: 'pro' });
+    const before = getNodeCount();
+
+    fireEvent.keyDown(window, { key: '1' });
+    expect(getNodeCount()).toBe(before + 1);
+    expect(lastNodeType()).toContain('node-type-store');
+
+    fireEvent.keyDown(window, { key: '2' });
+    expect(lastNodeType()).toContain('node-type-workspace');
+
+    fireEvent.keyDown(window, { key: '3' });
+    expect(lastNodeType()).toContain('node-type-warehouse');
+
+    fireEvent.keyDown(window, { key: '4' });
+    expect(lastNodeType()).toContain('node-type-hardware');
+    expect(getNodeCount()).toBe(before + 4);
+  });
+
+  it('does not spawn while the user is typing in a text field', () => {
+    renderEditor();
+    const before = getNodeCount();
+    const input = document.querySelector('.node-config-input') as HTMLInputElement | null;
+    expect(input).not.toBeNull();
+
+    fireEvent.keyDown(input!, { key: '1' });
+    expect(getNodeCount()).toBe(before);
+  });
+
+  it('does not spawn while a palette tool card owns focus', () => {
+    renderEditor();
+    const before = getNodeCount();
+    const toolCard = document.querySelector('.tool-card') as HTMLElement | null;
+    expect(toolCard).not.toBeNull();
+
+    fireEvent.keyDown(toolCard!, { key: '2' });
+    expect(getNodeCount()).toBe(before);
+  });
+});
+
+describe('NodeTopologyEditor — empty-state onboarding', () => {
+  beforeEach(() => {
+    mockLoadTopology.mockResolvedValue(null);
+  });
+
+  it('shows an onboarding hint when the canvas has no nodes', async () => {
+    // Provided-but-empty branches/instances = the real post-delete / fresh
+    // install state: the canvas is unowned and must guide the user.
+    renderEditor({ branchLocations: [], workspaceInstances: [] });
+
+    await waitFor(() => expect(getNodeCount()).toBe(0));
+    expect(screen.getByText('Build your store topology')).toBeInTheDocument();
+    expect(screen.getByText(/press 1–4 to add a node/)).toBeInTheDocument();
+  });
+
+  it('hides the hint once a node lands on the canvas', async () => {
+    renderEditor({ branchLocations: [], workspaceInstances: [] });
+    await waitFor(() => expect(getNodeCount()).toBe(0));
+    expect(screen.getByText('Build your store topology')).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: '1' });
+    await waitFor(() => expect(getNodeCount()).toBe(1));
+    expect(screen.queryByText('Build your store topology')).not.toBeInTheDocument();
+  });
+});
+
+// ── Unsaved-changes indicator ────────────────────────────────────
+
+describe('NodeTopologyEditor — unsaved-changes indicator', () => {
+  it('shows the chip after an edit and clears it on Apply', async () => {
+    renderEditor();
+    expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
+
+    // A name edit is validation-safe (unlike adding a second branch), so
+    // Apply can actually succeed and clear the indicator.
+    const nameInput = document.querySelector('.node-config-input') as HTMLInputElement;
+    fireEvent.change(nameInput, { target: { value: 'Renamed POS' } });
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Apply Topology Changes'));
+    await waitFor(() => expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument());
+  });
+
+  it('clears when undo returns the canvas to the saved state', () => {
+    renderEditor();
+    const nameInput = document.querySelector('.node-config-input') as HTMLInputElement;
+    fireEvent.change(nameInput, { target: { value: 'Renamed POS' } });
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+    expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
+  });
+});
+
+// ── Shortcuts help popover ───────────────────────────────────────
+
+describe('NodeTopologyEditor — shortcuts help popover', () => {
+  it('opens on the help button and lists the canvas shortcuts', () => {
+    renderEditor();
+    const helpBtn = screen.getByRole('button', { name: 'Keyboard shortcuts' });
+
+    fireEvent.click(helpBtn);
+    expect(helpBtn).toHaveAttribute('aria-expanded', 'true');
+    expect(document.querySelector('.topology-shortcuts-popover')).not.toBeNull();
+    expect(screen.getByText('Spawn a node from the palette slot')).toBeInTheDocument();
+  });
+
+  it('closes on Escape and on an outside click', () => {
+    renderEditor();
+    const helpBtn = screen.getByRole('button', { name: 'Keyboard shortcuts' });
+
+    fireEvent.click(helpBtn);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(document.querySelector('.topology-shortcuts-popover')).toBeNull();
+
+    fireEvent.click(helpBtn);
+    fireEvent.mouseDown(document.body);
+    expect(document.querySelector('.topology-shortcuts-popover')).toBeNull();
+  });
+});
+
+// ── Hover focus mode ─────────────────────────────────────────────
+
+describe('NodeTopologyEditor — hover focus mode', () => {
+  it('dims non-connected nodes while hovering a card and restores on leave', () => {
+    renderEditor();
+    const nodes = [...document.querySelectorAll('.topology-node')] as HTMLElement[];
+    const [store, ws, wh] = nodes;
+
+    // Retail preset: store-1 → ws-1 and ws-1 → wh-1. Hovering the store
+    // keeps its direct neighbour lit and dims the unconnected warehouse.
+    fireEvent.mouseEnter(store!);
+    expect(store!.classList.contains('node-dimmed')).toBe(false);
+    expect(ws!.classList.contains('node-dimmed')).toBe(false);
+    expect(wh!.classList.contains('node-dimmed')).toBe(true);
+
+    fireEvent.mouseLeave(store!);
+    expect(document.querySelectorAll('.node-dimmed')).toHaveLength(0);
+  });
+});
+
+// ── Canvas context menu ──────────────────────────────────────────
+
+describe('NodeTopologyEditor — canvas context menu', () => {
+  beforeEach(() => {
+    mockLoadTopology.mockResolvedValue(null);
+  });
+
+  it('opens on right-click and spawns the chosen node at the cursor', () => {
+    renderEditor();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    fireEvent.contextMenu(canvas, { clientX: 400, clientY: 300 });
+    expect(document.querySelector('.topology-context-menu')).not.toBeNull();
+
+    const before = getNodeCount();
+    fireEvent.click(screen.getByText('New Hardware'));
+    expect(getNodeCount()).toBe(before + 1);
+    expect(document.querySelector('.topology-context-menu')).toBeNull();
+
+    // Spawned at the right-click point (identity transform → canvas coords
+    // equal screen coords), snapped to the 24px grid: snap(400) = 408.
+    const last = [...document.querySelectorAll('.topology-node')].pop() as HTMLElement;
+    expect(last.className).toContain('node-type-hardware');
+    expect(last.style.left).toBe('408px');
+  });
+
+  it('Select All selects every node from the context menu', () => {
+    renderEditor();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    fireEvent.contextMenu(canvas, { clientX: 100, clientY: 100 });
+    fireEvent.click(screen.getByText('Select All'));
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(3);
+    expect(document.querySelector('.topology-context-menu')).toBeNull();
+  });
+
+  it('closes on Escape', () => {
+    renderEditor();
+    fireEvent.contextMenu(document.querySelector('.node-canvas-container')!, { clientX: 100, clientY: 100 });
+    expect(document.querySelector('.topology-context-menu')).not.toBeNull();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(document.querySelector('.topology-context-menu')).toBeNull();
+  });
+
+  it('navigates menuitems with arrow keys and wraps at the ends', () => {
+    renderEditor();
+    fireEvent.contextMenu(document.querySelector('.node-canvas-container')!, { clientX: 100, clientY: 100 });
+    const menu = document.querySelector('.topology-context-menu') as HTMLElement;
+    const items = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+    expect(items.length).toBeGreaterThanOrEqual(4); // 4 add-types + select all + fit + reset
+
+    items[0]!.focus();
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(items[1]);
+    // Wrap forward from the last item back to the first.
+    items[items.length - 1]!.focus();
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(items[0]);
+    // Wrap backward from the first item to the last.
+    fireEvent.keyDown(menu, { key: 'ArrowUp' });
+    expect(document.activeElement).toBe(items[items.length - 1]);
+  });
+
+  it('shows the selection count + Clear selection when a marquee leaves a multi-selection', () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    // Forward marquee over store-1 + ws-1 (preset geometry: store-1
+    // 80–320 × 140–380, ws-1 380–620 × 80–320) — both fully contained.
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 650, clientY: 420 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(2);
+
+    // Right-click the empty canvas: the menu opens and the selection stays.
+    fireEvent.contextMenu(canvas, { clientX: 100, clientY: 100 });
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(2);
+
+    // The menu leads with the count and a clear action (scoped to the menu
+    // — the HUD shows the same "N selected" readout at the canvas bottom).
+    expect(screen.getByText('2 selected', { selector: '.topology-context-section-title' })).not.toBeNull();
+    expect(screen.getByText('Clear selection', { selector: '.topology-context-item' })).not.toBeNull();
+  });
+
+  it('Clear selection clears the marquee selection and closes the menu', () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 650, clientY: 420 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(2);
+
+    fireEvent.contextMenu(canvas, { clientX: 100, clientY: 100 });
+    fireEvent.click(screen.getByText('Clear selection'));
+
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(0);
+    expect(document.querySelector('.topology-context-menu')).toBeNull();
+  });
+
+  it('hides the selection section when nothing is selected', () => {
+    renderEditor();
+    fireEvent.contextMenu(document.querySelector('.node-canvas-container')!, { clientX: 100, clientY: 100 });
+    expect(document.querySelector('.topology-context-menu')).not.toBeNull();
+    expect(screen.queryByText('Clear selection', { selector: '.topology-context-item' })).toBeNull();
+    expect(screen.queryByText('0 selected', { selector: '.topology-context-section-title' })).toBeNull();
+  });
+});
+
+// ── Align & distribute toolbar ───────────────────────────────────
+
+describe('NodeTopologyEditor — align & distribute toolbar', () => {
+  beforeEach(() => {
+    mockLoadTopology.mockResolvedValue(null);
+  });
+
+  const selectPair = () => {
+    const nodes = [...document.querySelectorAll('.topology-node')] as HTMLElement[];
+    fireEvent.mouseDown(nodes[0]!, { button: 0 });
+    fireEvent.mouseDown(nodes[1]!, { button: 0, shiftKey: true });
+  };
+
+  it('appears only with 2+ selected and aligns tops', () => {
+    renderEditor();
+    expect(document.querySelector('.topology-align-toolbar')).toBeNull();
+
+    selectPair();
+    expect(document.querySelector('.topology-align-toolbar')).not.toBeNull();
+
+    // Preset ys: store 140, ws 80 (different). Align top → both = 80.
+    const beforeY = () => [...document.querySelectorAll('.topology-node')]
+      .map((n) => parseInt((n as HTMLElement).style.top, 10));
+    expect(beforeY()[0]).toBe(140);
+    expect(beforeY()[1]).toBe(80);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Align top' }));
+    const afterY = beforeY();
+    expect(afterY[0]).toBe(80);
+    expect(afterY[1]).toBe(80);
+    expect(afterY[2]).toBe(140); // warehouse untouched
+  });
+
+  it('undo restores the pre-align geometry in one step', () => {
+    renderEditor();
+    const nodes = [...document.querySelectorAll('.topology-node')] as HTMLElement[];
+    fireEvent.mouseDown(nodes[0]!, { button: 0 });
+    fireEvent.mouseDown(nodes[1]!, { button: 0, shiftKey: true });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Align top' }));
+    const yAfterAlign = () => [...document.querySelectorAll('.topology-node')]
+      .map((n) => parseInt((n as HTMLElement).style.top, 10));
+    expect(yAfterAlign()[0]).toBe(80);
+    expect(yAfterAlign()[1]).toBe(80);
+    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    const yAfterUndo = yAfterAlign();
+    expect(yAfterUndo[0]).toBe(140);
+    expect(yAfterUndo[1]).toBe(80);
+  });
+
+  it('distributes selected nodes evenly on the vertical axis', () => {
+    renderEditor();
+    // Select all three: shift-click after the first keeps the group.
+    const nodes = [...document.querySelectorAll('.topology-node')] as HTMLElement[];
+    fireEvent.mouseDown(nodes[0]!, { button: 0 });
+    fireEvent.mouseDown(nodes[1]!, { button: 0, shiftKey: true });
+    fireEvent.mouseDown(nodes[2]!, { button: 0, shiftKey: true });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Distribute vertically' }));
+
+    // Sorted ys after distribution must have equal gaps: ws 80, store 110, wh 140.
+    const ys = [...document.querySelectorAll('.topology-node')]
+      .map((n) => parseInt((n as HTMLElement).style.top, 10))
+      .sort((a, b) => a - b);
+    expect(ys[1]! - ys[0]!).toBe(ys[2]! - ys[1]!);
+  });
+});
+
+// ── Clipboard & bulk duplication ────────────────────────────────
+
+describe('NodeTopologyEditor — clipboard & bulk duplication', () => {
+  beforeEach(() => {
+    mockLoadTopology.mockResolvedValue(null);
+  });
+
+  const selectNode = (i: number, shift = false) => {
+    const nodes = [...document.querySelectorAll('.topology-node')] as HTMLElement[];
+    fireEvent.mouseDown(nodes[i]!, { button: 0, shiftKey: shift });
+  };
+  const nodeCount = () => document.querySelectorAll('.topology-node').length;
+  const nodePos = () => [...document.querySelectorAll('.topology-node')]
+    .map((n) => ({
+      x: parseInt((n as HTMLElement).style.left, 10),
+      y: parseInt((n as HTMLElement).style.top, 10),
+    }));
+
+  it('Ctrl+D duplicates a selected node one grid step away and selects the copy', async () => {
+    renderEditor();
+    selectNode(0);
+
+    fireEvent.keyDown(document, { key: 'd', ctrlKey: true });
+
+    await waitFor(() => expect(nodeCount()).toBe(4));
+    // Original untouched at (80, 140); copy lands +24 on both axes.
+    const pos = nodePos();
+    expect(pos).toContainEqual({ x: 80, y: 140 });
+    expect(pos).toContainEqual({ x: 104, y: 164 });
+    // The copy — not the original — is the new selection, so Ctrl+D cascades.
+    const selected = [...document.querySelectorAll('.topology-node.node-selected')] as HTMLElement[];
+    expect(selected).toHaveLength(1);
+    expect(selected[0]!.style.left).toBe('104px');
+  });
+
+  it('Ctrl+D repeats cascade so each duplicate offsets from the last', async () => {
+    renderEditor();
+    selectNode(0);
+
+    fireEvent.keyDown(document, { key: 'd', ctrlKey: true });
+    await waitFor(() => expect(nodeCount()).toBe(4));
+    fireEvent.keyDown(document, { key: 'd', ctrlKey: true });
+    await waitFor(() => expect(nodeCount()).toBe(5));
+
+    const pos = nodePos();
+    expect(pos).toContainEqual({ x: 80, y: 140 });
+    expect(pos).toContainEqual({ x: 104, y: 164 });
+    expect(pos).toContainEqual({ x: 128, y: 188 });
+  });
+
+  it('Ctrl+D duplicates wires whose both endpoints are selected', async () => {
+    renderEditor();
+    // Retail preset already wires store→ws and ws→wh (2 wires); add a fresh
+    // workspace and wire it store→new-ws so the pair is authorable.
+    fireEvent.click(screen.getByText('+ Workspace Node'));
+    fireEvent.click(portOf(nodeAt(0), 'right'));
+    fireEvent.click(portOf(nodeAt(3), 'left'));
+    expect(getWireCount()).toBe(3);
+
+    selectNode(0);
+    selectNode(3, true);
+    fireEvent.keyDown(document, { key: 'd', ctrlKey: true });
+
+    await waitFor(() => expect(nodeCount()).toBe(6));
+    // The store→new-ws wire is copied (both endpoints selected); the preset
+    // wires stay uncopied (ws-1/wh-1 are not in the selection).
+    expect(getWireCount()).toBe(4);
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(2);
+  });
+
+  it('does not duplicate a wire when only one endpoint is selected', async () => {
+    renderEditor();
+    fireEvent.click(screen.getByText('+ Workspace Node'));
+    fireEvent.click(portOf(nodeAt(0), 'right'));
+    fireEvent.click(portOf(nodeAt(3), 'left'));
+    expect(getWireCount()).toBe(3);
+
+    selectNode(0); // store only — the wire's other end is not selected
+    fireEvent.keyDown(document, { key: 'd', ctrlKey: true });
+
+    await waitFor(() => expect(nodeCount()).toBe(5));
+    expect(getWireCount()).toBe(3); // no dangling wire copy
+  });
+
+  it('Ctrl+C then Ctrl+V pastes a cascade and selects the pasted copies', async () => {
+    renderEditor();
+    selectNode(0);
+
+    fireEvent.keyDown(document, { key: 'c', ctrlKey: true });
+    fireEvent.keyDown(document, { key: 'v', ctrlKey: true });
+    await waitFor(() => expect(nodeCount()).toBe(4));
+    expect(nodePos()).toContainEqual({ x: 104, y: 164 });
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(1);
+
+    // Second paste cascades one more grid step.
+    fireEvent.keyDown(document, { key: 'v', ctrlKey: true });
+    await waitFor(() => expect(nodeCount()).toBe(5));
+    expect(nodePos()).toContainEqual({ x: 128, y: 188 });
+  });
+
+  it('Ctrl+A selects every node on the canvas', async () => {
+    renderEditor();
+
+    fireEvent.keyDown(document, { key: 'a', ctrlKey: true });
+
+    await waitFor(() => expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(3));
+  });
+
+  it('undo restores the original canvas after a duplicate', async () => {
+    renderEditor();
+    selectNode(0);
+
+    fireEvent.keyDown(document, { key: 'd', ctrlKey: true });
+    await waitFor(() => expect(nodeCount()).toBe(4));
+
+    fireEvent.keyDown(document, { key: 'z', ctrlKey: true });
+    await waitFor(() => expect(nodeCount()).toBe(3));
+  });
+});
+
+// ── Per-branch viewport memory ──────────────────────────────────
+
+describe('NodeTopologyEditor — per-branch viewport memory', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.clearAllMocks();
+    mockLoadTopology.mockResolvedValue(null);
+    mockSaveTopology.mockResolvedValue(undefined);
+  });
+
+  const zoomLevel = () => document.querySelector('.canvas-zoom-level')?.textContent;
+
+  it('restores a branch’s saved zoom when the editor remounts', () => {
+    const first = renderEditor({ branchId: 'branch-a' });
+    expect(zoomLevel()).toBe('100%');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    expect(zoomLevel()).toBe('125%');
+
+    first.unmount();
+    renderEditor({ branchId: 'branch-a' });
+    expect(zoomLevel()).toBe('125%');
+  });
+
+  it('does not leak one branch’s view into another branch', () => {
+    const first = renderEditor({ branchId: 'branch-a' });
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    first.unmount();
+
+    renderEditor({ branchId: 'branch-b' });
+    expect(zoomLevel()).toBe('100%');
+  });
+
+  it('keeps identity zoom for a branch with no saved view', () => {
+    renderEditor({ branchId: 'fresh-branch' });
+    expect(zoomLevel()).toBe('100%');
+  });
+});
+
+// ── Node finder (Ctrl+F) ────────────────────────────────────────
+
+describe('NodeTopologyEditor — node finder', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockLoadTopology.mockResolvedValue(null);
+    mockSaveTopology.mockResolvedValue(undefined);
+  });
+
+  const openFinder = () => fireEvent.keyDown(document, { key: 'f', ctrlKey: true });
+  const finderInput = () => document.querySelector('.topology-finder-input') as HTMLInputElement | null;
+
+  it('Ctrl+F opens the finder and filters nodes by name as you type', () => {
+    renderEditor();
+    expect(document.querySelector('.topology-finder')).toBeNull();
+
+    openFinder();
+    const input = finderInput();
+    expect(input).not.toBeNull();
+    expect(document.activeElement).toBe(input);
+
+    fireEvent.change(input!, { target: { value: 'warehouse' } });
+    const items = [...document.querySelectorAll('.topology-finder-item')].map((el) => el.textContent);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toContain('Main Warehouse');
+
+    // No match — the empty state renders instead of a stale list.
+    fireEvent.change(input!, { target: { value: 'zzz-none' } });
+    expect(document.querySelector('.topology-finder-empty')).not.toBeNull();
+  });
+
+  it('Enter jumps to the highlighted match, selects and centers it, and closes the finder', () => {
+    renderEditor();
+    openFinder();
+    const input = finderInput();
+    fireEvent.change(input!, { target: { value: 'warehouse' } });
+    fireEvent.keyDown(input!, { key: 'Enter' });
+
+    // The overlay closes.
+    expect(document.querySelector('.topology-finder')).toBeNull();
+    // The matched node is the selection.
+    const selected = [...document.querySelectorAll('.topology-node.node-selected')] as HTMLElement[];
+    expect(selected).toHaveLength(1);
+    expect(selected[0]!.textContent).toContain('Main Warehouse');
+    // The viewport centers the node at the current zoom (canvas is 0×0 in
+    // jsdom, so pan = -node center): transform is exactly deterministic.
+    const vp = document.querySelector('.node-canvas-viewport') as HTMLElement;
+    const cx = 680 + NODE_WIDTH / 2;
+    const cy = 140 + NODE_HEIGHT / 2;
+    expect(vp.style.transform).toBe(`translate(${-cx}px, ${-cy}px) scale(1)`);
+  });
+
+  it('Escape closes the finder without changing selection or view', () => {
+    renderEditor();
+    const before = (document.querySelector('.node-canvas-viewport') as HTMLElement).style.transform;
+
+    openFinder();
+    const input = finderInput();
+    fireEvent.change(input!, { target: { value: 'warehouse' } });
+    fireEvent.keyDown(input!, { key: 'Escape' });
+
+    expect(document.querySelector('.topology-finder')).toBeNull();
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(0);
+    expect((document.querySelector('.node-canvas-viewport') as HTMLElement).style.transform).toBe(before);
+  });
+});
+
+// ── Auto-layout ──────────────────────────────────────────────────
+
+describe('NodeTopologyEditor — auto-layout', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockLoadTopology.mockResolvedValue(null);
+    mockSaveTopology.mockResolvedValue(undefined);
+  });
+
+  const posOf = (name: string) => {
+    const el = [...document.querySelectorAll('.topology-node')]
+      .find((n) => n.textContent?.includes(name)) as HTMLElement;
+    return { x: parseInt(el.style.left, 10), y: parseInt(el.style.top, 10) };
+  };
+
+  it('Auto-layout ranks nodes by wire direction into columns and restores on one undo', async () => {
+    // A deliberately tangled diagram: store at the BOTTOM, a mid-store and
+    // the warehouse straddling the workspaces' column.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Store', x: 0, y: 400 },
+        { id: 'ws-1', type: 'workspace', name: 'POS A', x: 300, y: 100 },
+        { id: 'ws-2', type: 'workspace', name: 'POS B', x: 700, y: 300 },
+        { id: 'wh-1', type: 'warehouse', name: 'WH', x: 200, y: 500 },
+      ],
+      wires: [
+        { id: 'w-1', from_node_id: 'store-1', to_node_id: 'ws-1', direction: 'one-way' },
+        { id: 'w-2', from_node_id: 'store-1', to_node_id: 'ws-2', direction: 'one-way' },
+        { id: 'w-3', from_node_id: 'ws-2', to_node_id: 'wh-1', direction: 'one-way' },
+      ],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(4));
+
+    const before = ['Store', 'POS A', 'POS B', 'WH'].map(posOf);
+
+    fireEvent.click(screen.getByText('Auto-layout'));
+
+    const after = ['Store', 'POS A', 'POS B', 'WH'].map(posOf);
+    // Store (rank 0) is left of both POS workspaces (rank 1), which share
+    // one column and stack in prior-y order (POS A above POS B); the
+    // warehouse (rank 2, fed by POS B) is rightmost.
+    expect(after[0]!.x).toBeLessThan(after[1]!.x);
+    expect(after[1]!.x).toBe(after[2]!.x);
+    expect(after[1]!.y).toBeLessThan(after[2]!.y);
+    expect(after[3]!.x).toBeGreaterThan(after[1]!.x);
+
+    // ONE undo restores the tangled geometry exactly.
+    fireEvent.keyDown(document, { key: 'z', ctrlKey: true });
+    await waitFor(() => expect(['Store', 'POS A', 'POS B', 'WH'].map(posOf)).toEqual(before));
+  });
+
+  it('Auto-layout clears stale bends authored for the old geometry', () => {
+    renderEditor();
+    // Retail preset: store→ws→wh. Bend w-1 at (400, 300).
+    fireEvent.click(document.querySelector('.wire-hitbox') as Element);
+    const ghost = document.querySelector('.wire-bend-ghost') as Element;
+    fireEvent.mouseDown(ghost, { button: 0, clientX: 350, clientY: 334 });
+    fireEvent.mouseMove(document, { clientX: 400, clientY: 300 });
+    fireEvent.mouseUp(document, { button: 0 });
+    expect(document.querySelector('.wire-bend-handle')).not.toBeNull();
+
+    fireEvent.click(screen.getByText('Auto-layout'));
+
+    // The bend described the old geometry — the reorganization clears it.
+    expect(document.querySelector('.wire-bend-handle')).toBeNull();
+  });
+});
+
+// ── Minimap overview ────────────────────────────────────────────
+
+describe('NodeTopologyEditor — minimap overview', () => {
+  beforeEach(() => {
+    mockLoadTopology.mockResolvedValue(null);
+  });
+
+  it('renders one minimap node rect per canvas node', () => {
+    renderEditor();
+    const map = document.querySelector('.topology-minimap');
+    expect(map).not.toBeNull();
+    expect(map!.querySelectorAll('.topology-minimap-node')).toHaveLength(3);
+  });
+
+  it('hides the minimap when the canvas is empty', async () => {
+    // An empty load falls back to the retail preset, so the only way to an
+    // empty canvas is deleting every node. Use a single unwired node so
+    // Delete removes it immediately (no dialog).
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [{ id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 }],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(1));
+    expect(document.querySelector('.topology-minimap')).not.toBeNull();
+
+    fireEvent.mouseDown(document.querySelector('.topology-node') as HTMLElement, { button: 0 });
+    fireEvent.keyDown(document, { key: 'Delete' });
+
+    await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(0));
+    expect(document.querySelector('.topology-minimap')).toBeNull();
+  });
+
+  it('clicking the minimap recenters the viewport', () => {
+    renderEditor();
+    const map = document.querySelector('.topology-minimap') as HTMLElement;
+    const viewport = document.querySelector('.node-canvas-viewport') as HTMLElement;
+    expect(viewport.style.transform).toContain('translate(0px, 0px)');
+
+    // jsdom rects are zero-sized, so the pointer lands at raw minimap px.
+    fireEvent.mouseDown(map, { button: 0, clientX: 160, clientY: 60 });
+
+    // Recentering computes a non-zero pan → the viewport translate changes.
+    expect(viewport.style.transform).not.toContain('translate(0px, 0px)');
+  });
+
+  it('the viewport rect tracks panning on the main canvas', () => {
+    renderEditor();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    const mapRect = document.querySelector('.topology-minimap-viewport') as HTMLElement;
+    const before = mapRect.getAttribute('x');
+
+    // Middle-button drag pans the main canvas (see the canvas-pan describe).
+    fireEvent.mouseDown(canvas, { button: 1, clientX: 100, clientY: 100 });
+    fireEvent.mouseMove(document, { clientX: 150, clientY: 130 });
+    fireEvent.mouseUp(document, { button: 1 });
+
+    expect(mapRect.getAttribute('x')).not.toBe(before);
+  });
+});
+
+// ── F2 inline rename + HUD status readouts ──────────────────────
+
+describe('NodeTopologyEditor — F2 rename & status readouts', () => {
+  beforeEach(() => {
+    mockLoadTopology.mockResolvedValue(null);
+  });
+
+  it('F2 opens the inline rename for the selected store node', () => {
+    renderEditor({ onRenameBranch: vi.fn() });
+    fireEvent.mouseDown(document.querySelectorAll('.topology-node')[0]!, { button: 0 });
+
+    fireEvent.keyDown(document, { key: 'F2' });
+
+    const input = document.querySelector('.node-card-rename-input') as HTMLInputElement;
+    expect(input).not.toBeNull();
+    expect(input.value).toBe('Downtown Branch');
+  });
+
+  it('F2 does not open rename for non-renameable nodes', () => {
+    renderEditor({ onRenameBranch: vi.fn() });
+    fireEvent.mouseDown(document.querySelectorAll('.topology-node')[2]!, { button: 0 }); // warehouse
+
+    fireEvent.keyDown(document, { key: 'F2' });
+
+    expect(document.querySelector('.node-card-rename-input')).toBeNull();
+  });
+
+  it('the HUD reports the selection count', () => {
+    renderEditor();
+    const hud = document.querySelector('.canvas-hud') as HTMLElement;
+    expect(hud.textContent).toContain('0 selected');
+
+    const nodes = document.querySelectorAll('.topology-node');
+    fireEvent.mouseDown(nodes[0]!, { button: 0 });
+    fireEvent.mouseDown(nodes[1]!, { button: 0, shiftKey: true });
+
+    expect(hud.textContent).toContain('2 selected');
+  });
+
+  it('the HUD tracks the cursor position in canvas coords', () => {
+    renderEditor();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    fireEvent.mouseMove(canvas, { clientX: 120, clientY: 80 });
+
+    const hud = document.querySelector('.canvas-hud') as HTMLElement;
+    expect(hud.textContent).toContain('120, 80');
+  });
+});
+
+// ── Zoom to selection & zoom shortcuts ──────────────────────────
+
+describe('NodeTopologyEditor — zoom to selection & zoom shortcuts', () => {
+  beforeEach(() => {
+    mockLoadTopology.mockResolvedValue(null);
+  });
+
+  const zoomLevel = () => (document.querySelector('.canvas-zoom-level') as HTMLElement).textContent;
+
+  it('context menu offers Zoom to Selection only when nodes are selected', () => {
+    renderEditor();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    fireEvent.contextMenu(canvas, { clientX: 100, clientY: 100 });
+    expect(screen.queryByText('Zoom to Selection')).toBeNull();
+
+    fireEvent.mouseDown(document.querySelectorAll('.topology-node')[0]!, { button: 0 });
+    fireEvent.contextMenu(canvas, { clientX: 100, clientY: 100 });
+    expect(screen.getByText('Zoom to Selection')).toBeInTheDocument();
+  });
+
+  it('Zoom to Selection fits the selected node', () => {
+    renderEditor();
+    expect(zoomLevel()).toBe('100%');
+
+    fireEvent.mouseDown(document.querySelectorAll('.topology-node')[0]!, { button: 0 });
+    fireEvent.contextMenu(document.querySelector('.node-canvas-container')!, { clientX: 100, clientY: 100 });
+    fireEvent.click(screen.getByText('Zoom to Selection'));
+
+    // Fit-to-bounds replaces the current zoom with a computed value within
+    // the clamped 40%..200% range (jsdom's zero-sized canvas → min clamp).
+    expect(zoomLevel()).not.toBe('100%');
+    expect(zoomLevel()).toMatch(/^(?:[4-9]\d|1\d\d|200)%$/);
+  });
+
+  it('Ctrl+0 fits the diagram and Ctrl+1 returns to 100%', () => {
+    renderEditor();
+    expect(zoomLevel()).toBe('100%');
+
+    fireEvent.keyDown(document, { key: '0', ctrlKey: true });
+    expect(zoomLevel()).toMatch(/^(?:[4-9]\d|1\d\d|200)%$/);
+    expect(zoomLevel()).not.toBe('100%');
+
+    fireEvent.keyDown(document, { key: '1', ctrlKey: true });
+    expect(zoomLevel()).toBe('100%');
+  });
+
+  it('Ctrl+= zooms in and Ctrl+- zooms out by a step', () => {
+    renderEditor();
+
+    fireEvent.keyDown(document, { key: '=', ctrlKey: true });
+    expect(zoomLevel()).toBe('125%');
+
+    fireEvent.keyDown(document, { key: '-', ctrlKey: true });
+    expect(zoomLevel()).toBe('100%');
+  });
+});
+
+// ── Wire routing styles (curved vs orthogonal elbow) ─────────────
+
+describe('NodeTopologyEditor — wire routing styles', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+  beforeEach(() => {
+    mockLoadTopology.mockResolvedValue(null);
+  });
+
+  const firstPathD = () => {
+    const path = document.querySelector('.wire-path') as SVGPathElement;
+    return path.getAttribute('d');
+  };
+
+  it('draws curved bezier wires by default', () => {
+    renderEditor();
+    expect(firstPathD()).toContain('C ');
+  });
+
+  it('toggles to orthogonal elbow routing and back', () => {
+    renderEditor();
+
+    fireEvent.click(screen.getByText('Elbow wires'));
+    expect(firstPathD()).toContain('L ');
+    expect(firstPathD()).not.toContain('C ');
+
+    fireEvent.click(screen.getByText('Elbow wires'));
+    expect(firstPathD()).toContain('C ');
+  });
+
+  it('keeps the simulation pulse on elbow-routed wires', () => {
+    vi.useFakeTimers();
+    renderEditor();
+
+    fireEvent.click(screen.getByText('Elbow wires'));
+    fireEvent.click(screen.getByText('Test Order Simulation'));
+
+    expect(document.querySelector('.wire-simulation-pulse')).not.toBeNull();
+  });
+});
+
+// ── Node context menu & double-click rename ─────────────────────
+
+describe('NodeTopologyEditor — node context menu & double-click rename', () => {
+  beforeEach(() => {
+    mockLoadTopology.mockResolvedValue(null);
+  });
+
+  const rightClickNode = (i: number) => {
+    const node = document.querySelectorAll('.topology-node')[i] as HTMLElement;
+    fireEvent.contextMenu(node, { clientX: 100, clientY: 100 });
+  };
+
+  it('right-click selects the node and opens a node menu with Rename', () => {
+    renderEditor({ onRenameBranch: vi.fn() });
+    rightClickNode(0); // store
+
+    expect(document.querySelector('.topology-context-menu')).not.toBeNull();
+    expect(screen.getByText('Rename')).toBeInTheDocument();
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(1);
+  });
+
+  it('the node menu duplicates the node', () => {
+    renderEditor({ onRenameBranch: vi.fn() });
+    rightClickNode(0);
+
+    fireEvent.click(screen.getByText('Duplicate'));
+    expect(getNodeCount()).toBe(4);
+  });
+
+  it('the node menu deletes an unwired node immediately', () => {
+    renderEditor();
+    fireEvent.click(screen.getByText('+ Workspace Node'));
+    expect(getNodeCount()).toBe(4);
+
+    rightClickNode(3); // the fresh unwired workspace
+    fireEvent.click(screen.getByText('Delete Node'));
+    expect(getNodeCount()).toBe(3);
+  });
+
+  it('non-renameable nodes hide the Rename item', () => {
+    renderEditor({ onRenameBranch: vi.fn() });
+    rightClickNode(2); // warehouse
+
+    expect(screen.queryByText('Rename')).toBeNull();
+    expect(screen.getByText('Delete Node')).toBeInTheDocument();
+  });
+
+  it('double-click opens the inline rename on a renameable node', () => {
+    renderEditor({ onRenameBranch: vi.fn() });
+
+    fireEvent.doubleClick(document.querySelectorAll('.topology-node')[0]!);
+
+    const input = document.querySelector('.node-card-rename-input') as HTMLInputElement;
+    expect(input).not.toBeNull();
+    expect(input.value).toBe('Downtown Branch');
+  });
+});
+
+// ── Wire context menu ───────────────────────────────────────────
+
+describe('NodeTopologyEditor — wire context menu', () => {
+  beforeEach(() => {
+    mockLoadTopology.mockResolvedValue(null);
+  });
+
+  const rightClickWire = (i: number) => {
+    const hitbox = document.querySelectorAll('.wire-hitbox')[i] as HTMLElement;
+    fireEvent.contextMenu(hitbox, { clientX: 400, clientY: 300 });
+  };
+
+  it('right-click selects the wire and opens a wire menu titled with its label', () => {
+    renderEditor();
+
+    rightClickWire(0); // preset w-1: 'Binds Store'
+
+    expect(document.querySelector('.topology-context-menu')).not.toBeNull();
+    // The menu is titled with the wire's label and offers direction + delete.
+    expect(screen.getByText('Binds Store', { selector: '.topology-context-section-title' })).not.toBeNull();
+    expect(screen.getByText('Toggle wire direction')).not.toBeNull();
+    expect(screen.getByText('Delete wire')).not.toBeNull();
+    // The wire itself is selected (and node selection is cleared).
+    expect(document.querySelector('.wire-selected')).not.toBeNull();
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(0);
+  });
+
+  it('Toggle direction from the wire menu cycles the wire direction', () => {
+    renderEditor();
+    const hitbox = document.querySelector('.wire-hitbox') as Element;
+    const path = () => hitbox.parentElement!.querySelector('path.wire-path') as Element;
+    expect(path().getAttribute('data-direction')).toBe('one-way');
+
+    rightClickWire(0);
+    fireEvent.click(screen.getByText('Toggle wire direction'));
+
+    expect(path().getAttribute('data-direction')).toBe('reverse');
+    expect(document.querySelector('.topology-context-menu')).toBeNull();
+  });
+
+  it('Delete wire from the menu opens the confirm dialog; confirming removes the wire', () => {
+    renderEditor();
+    const wireCount = document.querySelectorAll('.wire-hitbox').length;
+
+    rightClickWire(1); // preset w-2
+    fireEvent.click(screen.getByText('Delete wire'));
+
+    // Same confirm flow as the Delete key: dialog names the wire delete.
+    expect(screen.getByText('Delete Wire')).toBeInTheDocument();
+    expect(document.querySelectorAll('.wire-hitbox')).toHaveLength(wireCount);
+
+    fireEvent.click(screen.getByText('Delete')); // confirm label
+    expect(document.querySelectorAll('.wire-hitbox')).toHaveLength(wireCount - 1);
+    expect(document.querySelector('.wire-selected')).toBeNull();
+  });
+
+  it('Rename wire opens an inline editor seeded with the label; Enter commits it', () => {
+    renderEditor();
+
+    rightClickWire(0); // preset w-1: 'Binds Store'
+    fireEvent.click(screen.getByText('Rename wire'));
+
+    const input = document.querySelector('.wire-rename-input') as HTMLInputElement;
+    expect(input).not.toBeNull();
+    expect(input.value).toBe('Binds Store');
+    // The menu closes and the wire stays selected while editing.
+    expect(document.querySelector('.topology-context-menu')).toBeNull();
+    expect(document.querySelector('.wire-selected')).not.toBeNull();
+
+    fireEvent.change(input, { target: { value: 'Backbone' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(document.querySelector('.wire-rename-input')).toBeNull();
+    const titles = [...document.querySelectorAll('.wire-hitbox title')];
+    expect(titles.some((t) => t.textContent?.includes('Backbone'))).toBe(true);
+    expect(titles.some((t) => t.textContent?.includes('Binds Store'))).toBe(false);
+  });
+
+  it('an empty wire label clears the custom label back to the endpoint display', () => {
+    renderEditor();
+
+    rightClickWire(0); // preset w-1: 'Binds Store'
+    fireEvent.click(screen.getByText('Rename wire'));
+
+    const input = document.querySelector('.wire-rename-input') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    // The custom label is gone — the menu now titles the wire from its
+    // endpoints (the label pill no longer exists on the canvas).
+    rightClickWire(0);
+    expect(screen.getByText('Downtown Branch → Retail POS #1', { selector: '.topology-context-section-title' })).not.toBeNull();
+  });
+
+  it('Escape cancels the wire rename without touching the label', () => {
+    renderEditor();
+
+    rightClickWire(0);
+    fireEvent.click(screen.getByText('Rename wire'));
+
+    const input = document.querySelector('.wire-rename-input') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'Nope' } });
+    fireEvent.keyDown(input, { key: 'Escape' });
+
+    expect(document.querySelector('.wire-rename-input')).toBeNull();
+    const titles = [...document.querySelectorAll('.wire-hitbox title')];
+    expect(titles.some((t) => t.textContent?.includes('Binds Store'))).toBe(true);
+  });
+
+  it('a wire relabel marks the canvas dirty (label is a persisted field)', () => {
+    renderEditor();
+
+    rightClickWire(0);
+    fireEvent.click(screen.getByText('Rename wire'));
+
+    const input = document.querySelector('.wire-rename-input') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'Backbone' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(document.querySelector('.topology-dirty-dot')).not.toBeNull();
+  });
+});
+
+// ── Live connection preview & snap-to-grid toggle ────────────────
+
+describe('NodeTopologyEditor — live preview & snap toggle', () => {
+  beforeEach(() => {
+    mockLoadTopology.mockResolvedValue(null);
+  });
+
+  const canvas = () => document.querySelector('.node-canvas-container') as HTMLElement;
+
+  it('the connection preview follows the cursor while connecting', () => {
+    renderEditor();
+    fireEvent.mouseMove(canvas(), { clientX: 200, clientY: 150 });
+    fireEvent.click(portOf(nodeAt(0), 'right'));
+    const before = previewLine()!.getAttribute('d');
+
+    fireEvent.mouseMove(canvas(), { clientX: 320, clientY: 210 });
+    const after = previewLine()!.getAttribute('d');
+
+    expect(after).not.toBe(before);
+  });
+
+  it('the connection preview uses elbow routing when enabled', () => {
+    renderEditor();
+    fireEvent.click(screen.getByText('Elbow wires'));
+    fireEvent.mouseMove(canvas(), { clientX: 300, clientY: 200 });
+
+    fireEvent.click(portOf(nodeAt(0), 'right'));
+
+    expect(previewLine()!.getAttribute('d')).toContain('L ');
+  });
+
+  it('dragging with snap off places the node off-grid', () => {
+    renderEditor();
+    fireEvent.click(screen.getByText('Snap to grid')); // toggles OFF
+    const node = document.querySelector('.topology-node') as HTMLElement;
+
+    fireEvent.mouseDown(node, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 123, clientY: 100 });
+    fireEvent.mouseUp(canvas(), { button: 0 });
+
+    // raw 203px (unsnapped) vs 192px if it had snapped to the 24px grid
+    expect(node.style.left).toBe('203px');
+  });
+
+  it('the canvas menu spawn respects the snap toggle', () => {
+    renderEditor();
+    fireEvent.click(screen.getByText('Snap to grid')); // toggles OFF
+
+    fireEvent.contextMenu(canvas(), { clientX: 100, clientY: 100 });
+    fireEvent.click(screen.getByText('New Hardware'));
+
+    const last = [...document.querySelectorAll('.topology-node')].pop() as HTMLElement;
+    expect(last.style.left).toBe('100px'); // snap(100) would be 96
+  });
+});
+
+// ── Validation issues panel & persisted view prefs ──────────────
+
+describe('NodeTopologyEditor — validation panel & view prefs', () => {
+  beforeEach(() => {
+    mockLoadTopology.mockResolvedValue(null);
+    localStorage.clear();
+  });
+
+  const issueFixture = {
+    nodes: [
+      // Canonical store identity opts the canvas into strict validation;
+      // the workspace has no Location In wire → a per-node issue.
+      { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+      { id: 'ws-1', type: 'workspace', name: 'Retail POS #1', x: 380, y: 80, metadata: { typeKey: 'store-pos' } },
+    ],
+    wires: [],
+  } as never;
+
+  it('shows an issues button with the count when the diagram has problems', async () => {
+    mockLoadTopology.mockResolvedValueOnce(issueFixture);
+    renderEditor();
+    await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(2));
+
+    const btn = document.querySelector('.topology-issues-btn') as HTMLElement;
+    expect(btn).not.toBeNull();
+    expect(btn.textContent).toContain('Issues (1)');
+  });
+
+  it('the panel lists the issue and clicking it selects the node', async () => {
+    mockLoadTopology.mockResolvedValueOnce(issueFixture);
+    renderEditor();
+    await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(2));
+
+    fireEvent.click(screen.getByText(/Issues \(1\)/));
+    const panel = document.querySelector('.topology-validation-panel') as HTMLElement;
+    expect(panel).not.toBeNull();
+    expect(within(panel).getByText('Connect this workspace to a Branch Location using Location In.')).toBeInTheDocument();
+
+    fireEvent.click(within(panel).getByText('Retail POS #1'));
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(1);
+    expect(document.querySelector('.topology-validation-panel')).toBeNull();
+  });
+
+  it('no issues button on a clean diagram', () => {
+    renderEditor();
+    expect(document.querySelector('.topology-issues-btn')).toBeNull();
+  });
+
+  it('persists the elbow routing preference to localStorage', () => {
+    renderEditor();
+    fireEvent.click(screen.getByText('Elbow wires'));
+    expect(localStorage.getItem('oz-topology-view-routing')).toBe('elbow');
+  });
+
+  it('restores the elbow routing preference on mount', () => {
+    localStorage.setItem('oz-topology-view-routing', 'elbow');
+    renderEditor();
+
+    const path = document.querySelector('.wire-path') as SVGPathElement;
+    expect(path.getAttribute('d')).toContain('L ');
+  });
+
+  it('persists the snap preference to localStorage', () => {
+    renderEditor();
+    fireEvent.click(screen.getByText('Snap to grid')); // toggles OFF
+    expect(localStorage.getItem('oz-topology-view-snap')).toBe('0');
+  });
+});
+
+// ── Wire label pills ────────────────────────────────────────────
+
+describe('NodeTopologyEditor — wire label pills', () => {
+  beforeEach(() => {
+    mockLoadTopology.mockResolvedValue(null);
+    localStorage.clear();
+  });
+
+  const pills = () => [...document.querySelectorAll('.wire-label-pill')];
+
+  it('are hidden by default; the View toggle reveals a pill at each wire midpoint', () => {
+    renderEditor();
+    expect(pills()).toHaveLength(0);
+
+    fireEvent.click(screen.getByText('Wire labels'));
+    expect(screen.getByRole('button', { name: 'Wire labels' })).toHaveAttribute('aria-pressed', 'true');
+
+    // One pill per preset wire, titled with the label (custom or endpoint).
+    const texts = pills().map((p) => p.textContent);
+    expect(texts).toContain('Binds Store');
+    expect(texts).toContain('Stock Deduct (P1)');
+  });
+
+  it('clicking a pill opens the rename editor without cycling the direction', () => {
+    renderEditor();
+    fireEvent.click(screen.getByText('Wire labels'));
+
+    const path = () => document.querySelector('.wire-path') as SVGPathElement;
+    expect(path().getAttribute('data-direction')).toBe('one-way');
+
+    fireEvent.click(pills()[0]!);
+
+    // The rename editor opens seeded with the label (round 20 flow) and the
+    // wire is selected — but the direction did NOT cycle (the wire itself
+    // remains the cycle affordance).
+    const input = document.querySelector('.wire-rename-input') as HTMLInputElement;
+    expect(input).not.toBeNull();
+    expect(input.value).toBe('Binds Store');
+    expect(path().getAttribute('data-direction')).toBe('one-way');
+    expect(document.querySelector('.wire-selected')).not.toBeNull();
+  });
+
+  it('the pill of the wire being renamed is replaced by the editor input', () => {
+    renderEditor();
+    fireEvent.click(screen.getByText('Wire labels'));
+
+    fireEvent.click(pills()[0]!);
+
+    expect(document.querySelector('.wire-rename-input')).not.toBeNull();
+    expect(pills()).toHaveLength(1); // the renamed wire's pill is hidden
+  });
+
+  it('persists the preference to localStorage and restores it on mount', () => {
+    renderEditor();
+    fireEvent.click(screen.getByText('Wire labels'));
+    expect(localStorage.getItem('oz-topology-view-wire-labels')).toBe('1');
+  });
+
+  it('restores the wire-labels preference on mount', () => {
+    localStorage.setItem('oz-topology-view-wire-labels', '1');
+    renderEditor();
+
+    expect(pills()).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Wire labels' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('dims pills for wires outside the hovered node neighbourhood', () => {
+    renderEditor();
+    fireEvent.click(screen.getByText('Wire labels'));
+
+    // Hover the store: w-2 (ws-1 → wh-1) is not in its neighbourhood.
+    fireEvent.mouseEnter(document.querySelectorAll('.topology-node')[0]!);
+
+    const dimmed = document.querySelectorAll('.wire-label-pill.wire-label-pill-dimmed');
+    expect(dimmed).toHaveLength(1);
+    expect(dimmed[0]!.textContent).toBe('Stock Deduct (P1)');
+  });
+});
+
+// ── Alignment guides while dragging ─────────────────────────────
+
+describe('NodeTopologyEditor — alignment guides', () => {
+  beforeEach(() => {
+    mockLoadTopology.mockResolvedValue(null);
+  });
+
+  const canvas = () => document.querySelector('.node-canvas-container') as HTMLElement;
+
+  it('snaps a dragged edge to a stationary edge and draws a vertical guide', () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    const store = nodeAt(0); // store-1 at (80, 140) — box 80–320 × 140–380
+
+    // Drag store-1 so its RIGHT edge (raw x 140 + 240 = 380) lands on
+    // ws-1's LEFT edge (380). The raw 140 would grid-snap to 144, so an
+    // exact 140 proves the guide won over the grid.
+    fireEvent.mouseDown(store, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 60, clientY: 24 });
+
+    expect(store.style.left).toBe('140px');
+    expect(document.querySelector('.alignment-guide-x')).not.toBeNull();
+    expect(document.querySelector('.alignment-guide-y')).toBeNull();
+  });
+
+  it('snaps a dragged center to a stationary center and draws a horizontal guide', () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    const ws = nodeAt(1); // ws-1 at (380, 80) — centerY 200
+
+    // Drag ws-1 down so its centerY (raw y 140 + 120 = 260) lands on
+    // store-1's centerY (260). Exact 140 vs the grid's 144 again.
+    fireEvent.mouseDown(ws, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 0, clientY: 60 });
+
+    expect(ws.style.top).toBe('140px');
+    expect(document.querySelector('.alignment-guide-y')).not.toBeNull();
+    expect(document.querySelector('.alignment-guide-x')).toBeNull();
+  });
+
+  it('does not snap beyond the threshold (guides stay clear)', () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    fireEvent.click(screen.getByText('Snap to grid')); // toggles OFF
+    const store = nodeAt(0);
+
+    // Right edge lands at 390 — 10px past ws-1's left edge (380): no snap.
+    fireEvent.mouseDown(store, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 70, clientY: 24 });
+
+    expect(store.style.left).toBe('150px');
+    expect(document.querySelector('.alignment-guide')).toBeNull();
+  });
+
+  it('clears the guides when the drag ends', () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    const store = nodeAt(0);
+
+    fireEvent.mouseDown(store, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 60, clientY: 24 });
+    expect(document.querySelector('.alignment-guide-x')).not.toBeNull();
+
+    fireEvent.mouseUp(canvas(), { button: 0 });
+    expect(document.querySelector('.alignment-guide')).toBeNull();
+  });
+
+  it('applies the snap to the whole dragged group rigidly', () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    const canvasEl = canvas();
+
+    // Backward marquee (touched semantics) selects ws-1 + wh-1 only.
+    fireEvent.mouseDown(canvasEl, { button: 0, clientX: 700, clientY: 400 });
+    fireEvent.mouseMove(canvasEl, { clientX: 380, clientY: 80 });
+    fireEvent.mouseUp(canvasEl, { button: 0 });
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(2);
+
+    // Drag ws-1 so its LEFT edge (320) meets store-1's RIGHT edge (320).
+    // The −60 delta must carry wh-1 along (680 → 620), group-rigid.
+    fireEvent.mouseDown(nodeAt(1), { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvasEl, { clientX: -60, clientY: 0 });
+
+    expect(nodeAt(1).style.left).toBe('320px');
+    expect(nodeAt(2).style.left).toBe('620px');
+    expect(document.querySelector('.alignment-guide-x')).not.toBeNull();
+  });
+
+  it('snaps on a NON-grabbed member\'s edge and carries the whole group rigidly', () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    const canvasEl = canvas();
+
+    // Backward marquee selects ws-1 + wh-1 (grabbed = ws-1).
+    fireEvent.mouseDown(canvasEl, { button: 0, clientX: 700, clientY: 400 });
+    fireEvent.mouseMove(canvasEl, { clientX: 380, clientY: 80 });
+    fireEvent.mouseUp(canvasEl, { button: 0 });
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(2);
+
+    // Drag the group by (−360, 0): ws-1 → (20, 80), wh-1 → (320, 140). The
+    // GRABBED node's edges touch nothing, but wh-1's LEFT edge lands exactly
+    // on store-1's RIGHT edge (320) — the group must snap on that member.
+    fireEvent.mouseDown(nodeAt(1), { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvasEl, { clientX: -360, clientY: 0 });
+
+    // Aligned-axis grid skip holds for the whole group: ws-1 stays at the
+    // raw 20 (not snap(20) = 24) and wh-1 at exactly 320.
+    expect(nodeAt(1).style.left).toBe('20px');
+    expect(nodeAt(2).style.left).toBe('320px');
+    expect(document.querySelector('.alignment-guide-x')).not.toBeNull();
+  });
+
+  it('snaps EXACTLY onto the line when the drag approaches 3px PAST it', async () => {
+    // A at (200, 200) — right edge 440; B at (446, 250) — left edge 446.
+    // Drag A so its right edge RAW-lands at 449 (3px past the line): the
+    // snap must pull it back onto 446, not park it 6px past (the sign bug
+    // would land at 212px; the correct landing is 206px = flush at 446).
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'a', type: 'store', name: 'A', x: 200, y: 200 },
+        { id: 'b', type: 'workspace', name: 'B', x: 446, y: 250, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    mockCanvasSize(1200, 800);
+    const a = document.querySelector('.topology-node[data-node-id="a"]') as HTMLElement;
+
+    // offset = 0 − 200 = −200; clientX 9 → target x 209 (edge 449).
+    fireEvent.mouseDown(a, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 9, clientY: 0 });
+
+    expect(a.style.left).toBe('206px');
+    expect(document.querySelector('.alignment-guide-x')).not.toBeNull();
+    expect((document.querySelector('.alignment-guide-x') as HTMLElement).style.left).toBe('446px');
+  });
+
+  it('snaps EXACTLY onto the line when the drag approaches 3px SHORT of it', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'a', type: 'store', name: 'A', x: 200, y: 200 },
+        { id: 'b', type: 'workspace', name: 'B', x: 446, y: 250, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    mockCanvasSize(1200, 800);
+    const a = document.querySelector('.topology-node[data-node-id="a"]') as HTMLElement;
+
+    // clientX 3 → target x 203 (edge 443, 3px short): the snap must push it
+    // forward onto 446 (206px) — the sign bug would land at 200px instead.
+    fireEvent.mouseDown(a, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 3, clientY: 0 });
+
+    expect(a.style.left).toBe('206px');
+    expect(document.querySelector('.alignment-guide-x')).not.toBeNull();
+  });
+});
+
+// ── Alt+drag to duplicate ───────────────────────────────────────
+
+describe('NodeTopologyEditor — Alt+drag to duplicate', () => {
+  beforeEach(() => {
+    mockLoadTopology.mockResolvedValue(null);
+  });
+
+  const canvas = () => document.querySelector('.node-canvas-container') as HTMLElement;
+  const nodeBy = (id: string) =>
+    document.querySelector(`.topology-node[data-node-id="${id}"]`) as HTMLElement;
+  const copyNodes = (prefix: string) =>
+    [...document.querySelectorAll('.topology-node')].filter((n) =>
+      n.getAttribute('data-node-id')!.startsWith(`${prefix}-`),
+    ) as HTMLElement[];
+
+  it('duplicates the dragged node: the original stays put, the copy follows the cursor', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [{ id: 'a', type: 'store', name: 'A', x: 200, y: 200 }],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(1));
+    mockCanvasSize(1200, 800);
+
+    // Alt+drag: offset −200 → the copy lands at x 300 (clientX 100); the
+    // original must NOT move (a plain drag would move it to 300 too).
+    fireEvent.mouseDown(nodeBy('a'), { button: 0, altKey: true, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 100, clientY: 0 });
+    fireEvent.mouseUp(canvas(), { button: 0 });
+
+    expect(getNodeCount()).toBe(2);
+    expect(nodeBy('a').style.left).toBe('200px'); // original unmoved
+
+    const copy = copyNodes('store');
+    expect(copy).toHaveLength(1);
+    // The copy followed the cursor through the SAME snap pipeline as a
+    // normal drag: raw 300 → snap(300) = 312.
+    expect(copy[0]!.style.left).toBe('312px');
+    // The copy became the selection; the original was released.
+    expect(copy[0]!.classList.contains('node-selected')).toBe(true);
+    expect(nodeBy('a').classList.contains('node-selected')).toBe(false);
+  });
+
+  it('Escape cancels an in-flight Alt+drag: no copy, no history entry, original stays', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [{ id: 'a', type: 'store', name: 'A', x: 200, y: 200 }],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(1));
+    mockCanvasSize(1200, 800);
+
+    fireEvent.mouseDown(nodeBy('a'), { button: 0, altKey: true, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 100, clientY: 0 });
+    expect(getNodeCount()).toBe(2); // copy previewed live mid-drag
+
+    fireEvent.keyDown(canvas(), { key: 'Escape' });
+
+    expect(getNodeCount()).toBe(1);
+    expect(nodeBy('a').style.left).toBe('200px');
+    expect(screen.queryByText('Undo (Ctrl+Z)')).toBeNull(); // nothing pushed
+  });
+
+  it('duplicates the whole group rigidly and copies wires with both endpoints selected', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'a', type: 'store', name: 'A', x: 200, y: 200 },
+        { id: 'b', type: 'workspace', name: 'B', x: 500, y: 200, metadata: { typeKey: 'store-pos' } },
+      ],
+      // Loaded wire shape is snake_case (backend contract).
+      wires: [{ id: 'w1', from_node_id: 'a', to_node_id: 'b', direction: 'one-way' }],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    mockCanvasSize(1200, 800);
+
+    // Backward marquee selects A + B.
+    fireEvent.mouseDown(canvas(), { button: 0, clientX: 800, clientY: 500 });
+    fireEvent.mouseMove(canvas(), { clientX: 100, clientY: 100 });
+    fireEvent.mouseUp(canvas(), { button: 0 });
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(2);
+
+    // Snap off so the rigid +60 group delta is exact (per-node grid snap
+    // would land the copies at 264/552 instead — snap is covered in test 1).
+    fireEvent.click(screen.getByText('Snap to grid'));
+
+    // Alt+drag on A by +60: BOTH copies ride along rigidly (+60 each).
+    fireEvent.mouseDown(nodeBy('a'), { button: 0, altKey: true, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 60, clientY: 0 });
+    fireEvent.mouseUp(canvas(), { button: 0 });
+
+    expect(getNodeCount()).toBe(4);
+    expect(getWireCount()).toBe(2); // original + copy (both endpoints copied)
+    expect(nodeBy('a').style.left).toBe('200px');
+    expect(nodeBy('b').style.left).toBe('500px');
+
+    const storeCopy = copyNodes('store');
+    const wsCopy = copyNodes('workspace');
+    expect(storeCopy).toHaveLength(1);
+    expect(wsCopy).toHaveLength(1);
+    expect(storeCopy[0]!.style.left).toBe('260px');
+    expect(wsCopy[0]!.style.left).toBe('560px');
+  });
+
+  it('the duplicate drop is ONE undo entry', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [{ id: 'a', type: 'store', name: 'A', x: 200, y: 200 }],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(1));
+    mockCanvasSize(1200, 800);
+
+    fireEvent.mouseDown(nodeBy('a'), { button: 0, altKey: true, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 100, clientY: 0 });
+    fireEvent.mouseUp(canvas(), { button: 0 });
+    expect(getNodeCount()).toBe(2);
+
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    expect(getNodeCount()).toBe(1); // the whole copy vanishes in one undo
+    expect(nodeBy('a').style.left).toBe('200px');
+  });
+
+  it('Alt pressed MID-move converts the move into a live duplicate (Figma)', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [{ id: 'a', type: 'store', name: 'A', x: 200, y: 200 }],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(1));
+    mockCanvasSize(1200, 800);
+
+    // Plain move drag: the node follows the cursor to snap(300) = 312.
+    fireEvent.mouseDown(nodeBy('a'), { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 100, clientY: 0 });
+    expect(nodeBy('a').style.left).toBe('312px');
+
+    // Press Alt MID-drag: the original snaps back to its start (200) and a
+    // copy takes over the cursor, continuing from the current position (312).
+    fireEvent.keyDown(canvas(), { key: 'Alt' });
+    expect(nodeBy('a').style.left).toBe('200px'); // original dropped back
+    expect(getNodeCount()).toBe(2); // the copy took over the drag
+
+    // The copy keeps following: snap(350) = 360.
+    fireEvent.mouseMove(canvas(), { clientX: 150, clientY: 0 });
+    fireEvent.mouseUp(canvas(), { button: 0 });
+
+    const copy = copyNodes('store');
+    expect(copy).toHaveLength(1);
+    expect(copy[0]!.style.left).toBe('360px');
+    expect(copy[0]!.classList.contains('node-selected')).toBe(true);
+  });
+
+  it('Escape after a mid-drag convert cancels: no copy, no history entry', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [{ id: 'a', type: 'store', name: 'A', x: 200, y: 200 }],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(1));
+    mockCanvasSize(1200, 800);
+
+    fireEvent.mouseDown(nodeBy('a'), { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 100, clientY: 0 });
+    expect(getNodeCount()).toBe(1);
+
+    fireEvent.keyDown(canvas(), { key: 'Alt' });
+    expect(getNodeCount()).toBe(2);
+
+    fireEvent.keyDown(canvas(), { key: 'Escape' });
+
+    expect(getNodeCount()).toBe(1);
+    expect(nodeBy('a').style.left).toBe('200px');
+    expect(screen.queryByText('Undo (Ctrl+Z)')).toBeNull(); // entry popped too
+  });
+
+  it('a converted drop is ONE undo entry (the move entry doubles as pre-drag)', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [{ id: 'a', type: 'store', name: 'A', x: 200, y: 200 }],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(1));
+    mockCanvasSize(1200, 800);
+
+    fireEvent.mouseDown(nodeBy('a'), { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 100, clientY: 0 });
+    fireEvent.keyDown(canvas(), { key: 'Alt' });
+    fireEvent.mouseMove(canvas(), { clientX: 150, clientY: 0 });
+    fireEvent.mouseUp(canvas(), { button: 0 });
+    expect(getNodeCount()).toBe(2);
+
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    expect(getNodeCount()).toBe(1); // exactly ONE undo removes the copy
+    expect(nodeBy('a').style.left).toBe('200px');
+  });
+});
+
+// ── Accessible live announcements ───────────────────────────────
+
+describe('NodeTopologyEditor — accessible live announcements', () => {
+  beforeEach(() => {
+    mockLoadTopology.mockResolvedValue(null);
+  });
+
+  const canvas = () => document.querySelector('.node-canvas-container') as HTMLElement;
+  // The editor also has a role="status" dirty chip — target the live region
+  // by its test id instead.
+  const status = () => screen.getByTestId('topology-live-region');
+
+  it('announces an alignment snap when a drag lands on a guide', () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    expect(status().textContent).toBe('');
+
+    // store-1 (80,140) → right edge lands on ws-1's left edge (380).
+    fireEvent.mouseDown(nodeAt(0), { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 60, clientY: 24 });
+
+    expect(status().textContent).toBe('Aligned');
+    fireEvent.mouseUp(canvas(), { button: 0 });
+    // A re-approach re-announces (the guide clear reset the entry latch).
+    fireEvent.mouseDown(nodeAt(0), { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 60, clientY: 24 });
+    expect(status().textContent).toBe('Aligned');
+  });
+
+  it('stays silent for a plain drag that never snaps', () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    expect(status().textContent).toBe('');
+
+    // Right edge lands 10px past ws-1's left edge — beyond the 6px band.
+    fireEvent.mouseDown(nodeAt(0), { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 70, clientY: 24 });
+    fireEvent.mouseUp(canvas(), { button: 0 });
+
+    expect(status().textContent).toBe('');
+  });
+
+  it('announces a fine-nudge snap the same way', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'a', type: 'store', name: 'A', x: 200, y: 200 },
+        { id: 'b', type: 'workspace', name: 'B', x: 447, y: 250, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    expect(status().textContent).toBe('');
+    selectFirstNode();
+
+    fireEvent.keyDown(canvas(), { key: 'ArrowRight', shiftKey: true }); // entry snap
+    expect(status().textContent).toBe('Aligned');
+  });
+
+  it('announces an Alt+drag duplicate drop', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [{ id: 'a', type: 'store', name: 'A', x: 200, y: 200 }],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(1));
+    mockCanvasSize(1200, 800);
+    expect(status().textContent).toBe('');
+
+    fireEvent.mouseDown(document.querySelector('.topology-node') as HTMLElement, { button: 0, altKey: true, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 100, clientY: 0 });
+    fireEvent.mouseUp(canvas(), { button: 0 });
+
+    expect(getNodeCount()).toBe(2);
+    expect(status().textContent).toBe('Duplicate created');
+  });
+
+  it('announces an Escape-cancelled duplicate drag', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [{ id: 'a', type: 'store', name: 'A', x: 200, y: 200 }],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(1));
+    mockCanvasSize(1200, 800);
+
+    fireEvent.mouseDown(document.querySelector('.topology-node') as HTMLElement, { button: 0, altKey: true, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 100, clientY: 0 });
+    fireEvent.keyDown(canvas(), { key: 'Escape' });
+
+    expect(getNodeCount()).toBe(1);
+    expect(status().textContent).toBe('Duplicate cancelled');
+  });
+});
+
+// ── Escape cancels an in-flight move ────────────────────────────
+
+describe('NodeTopologyEditor — Escape cancels a move', () => {
+  beforeEach(() => {
+    mockLoadTopology.mockResolvedValue(null);
+  });
+
+  const canvas = () => document.querySelector('.node-canvas-container') as HTMLElement;
+  const node = () => document.querySelector('.topology-node') as HTMLElement;
+
+  it('Escape mid-move snaps the node back to its start position and pops the drag entry', () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    expect(node().style.left).toBe('80px');
+
+    // Drag to (150, 210): store-1's axes land 10px off every neighbour
+    // (no alignment guide), so the grid snap wins → (144, 216).
+    fireEvent.mouseDown(node(), { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 70, clientY: 70 });
+    expect(node().style.left).toBe('144px');
+    expect(screen.getByText('Undo (Ctrl+Z)')).toBeInTheDocument(); // move pushed an entry
+
+    fireEvent.keyDown(canvas(), { key: 'Escape' });
+
+    // The move is undone — node returns to its start position, and the
+    // drag's history entry is popped (undo would otherwise be a no-op).
+    expect(node().style.left).toBe('80px');
+    expect(screen.queryByText('Undo (Ctrl+Z)')).toBeNull();
+    // The selection survives the cancel (Figma keeps it selected).
+    expect(node().classList.contains('node-selected')).toBe(true);
+  });
+
+  it('a completed move is NOT cancelled by a later Escape', () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+
+    fireEvent.mouseDown(node(), { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 70, clientY: 70 });
+    fireEvent.mouseUp(canvas(), { button: 0 });
+    expect(node().style.left).toBe('144px');
+
+    fireEvent.keyDown(canvas(), { key: 'Escape' });
+
+    // The move was committed — a later Escape must NOT yank it back.
+    expect(node().style.left).toBe('144px');
+  });
+
+  it('a plain Escape with no drag in flight still clears the selection', () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+
+    fireEvent.mouseDown(node(), { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseUp(canvas(), { button: 0 });
+    expect(node().classList.contains('node-selected')).toBe(true);
+
+    fireEvent.keyDown(canvas(), { key: 'Escape' });
+
+    expect(node().classList.contains('node-selected')).toBe(false);
+  });
+});
+
+// ── Auto-fit on load ────────────────────────────────────────────
+
+describe('NodeTopologyEditor — auto-fit on load', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  const viewport = () => document.querySelector('.node-canvas-viewport') as HTMLElement;
+
+  it('zooms out to fit an overflowing loaded diagram', async () => {
+    // Two nodes 2000px apart — way past the 800px canvas.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'a', type: 'store', name: 'A', x: 0, y: 0 },
+        { id: 'b', type: 'workspace', name: 'B', x: 2000, y: 100, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    mockCanvasSize(800, 600);
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+
+    // fitZoom = min(680/2240, 480/340, 1.5) → 0.30 → clamped to 0.4.
+    expect(viewport().style.transform).toContain('scale(0.4)');
+  });
+
+  it('leaves the view at identity when the diagram fits the viewport', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [{ id: 'a', type: 'store', name: 'A', x: 80, y: 140 }],
+      wires: [],
+    } as never);
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    await waitFor(() => expect(getNodeCount()).toBe(1));
+
+    expect(viewport().style.transform).toBe('translate(0px, 0px) scale(1)');
+  });
+
+  it('never refits after the user has interacted, even when the content changes', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'a', type: 'store', name: 'A', x: 0, y: 0 },
+        { id: 'b', type: 'workspace', name: 'B', x: 2000, y: 100, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    mockCanvasSize(800, 600);
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    expect(viewport().style.transform).toContain('scale(0.4)'); // fitted on load
+
+    // Interact: plain mousedown on node 'a' disarms auto-fit.
+    fireEvent.mouseDown(nodeAt(0), { button: 0 });
+    fireEvent.mouseUp(nodeAt(0), { button: 0 });
+
+    // Delete node 'a': the content key changes, but the user is driving now
+    // — the view must not jump (a refit would zoom 'b' alone to scale(1.5)).
+    // A wire-less node deletes immediately (no confirm dialog).
+    const target = nodeAt(0);
+    target.focus();
+    fireEvent.keyDown(target, { key: 'Delete' });
+    await waitFor(() => expect(getNodeCount()).toBe(1));
+
+    expect(viewport().style.transform).toContain('scale(0.4)');
+  });
+});
+
+// ── Load fallback determinism ───────────────────────────────────
+
+describe('NodeTopologyEditor — load fallback determinism', () => {
+  // The TopologyScreen parent passes EMPTY arrays for both seeds on its
+  // first render (its lists load async). The load must treat that as "no
+  // real instances yet" — fall back to the saved diagram / preset — and
+  // never wipe the canvas to empty before the real seeds arrive.
+
+  const savedFixture = {
+    nodes: [
+      { id: 'store-1', type: 'store', name: 'TOKO TEST', x: 80, y: 80 },
+      { id: 'ws-1', type: 'workspace', name: 'Store POS', x: 380, y: 80, metadata: { typeKey: 'store-pos' } },
+    ],
+    wires: [],
+  } as never;
+
+  it('empty seeds fall back to the SAVED diagram instead of wiping the canvas', async () => {
+    mockLoadTopology.mockResolvedValueOnce(savedFixture);
+    renderEditor({ workspaceInstances: [], branchLocations: [] });
+
+    // The saved store + workspace render (the empty arrays are NOT treated
+    // as "no branches exist" — they are just not-loaded-yet).
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    expect(document.querySelector('.topology-node[data-node-id="store-1"]')).not.toBeNull();
+    expect(document.querySelector('.topology-node[data-node-id="ws-1"]')).not.toBeNull();
+  });
+
+  it('empty seeds with no saved data show the onboarding state instead of demo data', async () => {
+    mockLoadTopology.mockResolvedValue(null);
+    renderEditor({ workspaceInstances: [], branchLocations: [] });
+
+    // A parent that explicitly resolved to no branches owns the graph — the
+    // empty canvas + onboarding hint, never the demo preset.
+    await waitFor(() => expect(getNodeCount()).toBe(0));
+    expect(screen.getByText('Build your store topology')).toBeInTheDocument();
+  });
+
+  it('a genuinely empty branch list still drops the store when instances exist', async () => {
+    // Regression pin: deleting the LAST branch (locations [] while a stale
+    // workspace instance lingers) must keep wiping the store card — the
+    // empty-locations delete semantics are preserved.
+    mockLoadTopology.mockResolvedValueOnce(savedFixture);
+    renderEditor({
+      workspaceInstances: [{ instanceId: 'ws-1', typeKey: 'store-pos', storeId: 'store-1', name: 'Store POS' }],
+      branchLocations: [],
+    });
+
+    await waitFor(() => expect(getNodeCount()).toBe(1));
+    expect(document.querySelector('.topology-node[data-node-id="store-1"]')).toBeNull();
+    expect(document.querySelector('.topology-node[data-node-id="ws-1"]')).not.toBeNull();
   });
 });

@@ -18,6 +18,7 @@ import { checkLicenseStatus } from '@/api/license';
 import { plainErrorMessage } from '@/utils/app-error';
 import SettingsSelect from '@/features/settings/SettingsSelect';
 import { Button } from '@/components/Button';
+import './TopologyScreen.css';
 import NodeTopologyEditor, {
   type TopologyNodeData,
   type TopologyWireData,
@@ -68,6 +69,15 @@ export default function TopologyScreen() {
   const [deleteBranchSaving, setDeleteBranchSaving] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
+  /** Set once the first stores/listStores resolution lands — before that,
+   *  the seeds must read as undefined ("not supplied yet") rather than the
+   *  initial empty array, or the editor's load would treat the not-yet-
+   *  loaded placeholder as an authoritative empty store and wipe the canvas
+   *  (or flash the onboarding hint) before the real data arrives. */
+  const storesResolvedRef = useRef(false);
+  /** Same gate for the workspace-instances list (setWorkspaceInstances). */
+  const instancesResolvedRef = useRef(false);
+
   const load = useCallback(async () => {
     try {
       const [licStatus, storeData] = await Promise.all([
@@ -78,6 +88,8 @@ export default function TopologyScreen() {
       setStores(storeData);
     } catch {
       /* non-fatal — the editor still renders with the preset fallback */
+    } finally {
+      storesResolvedRef.current = true;
     }
   }, []);
 
@@ -97,6 +109,8 @@ export default function TopologyScreen() {
       setWorkspaceInstances((await listWorkspacesScoped(sessionToken)).filter(isTopologyInstance));
     } catch {
       setWorkspaceInstances([]);
+    } finally {
+      instancesResolvedRef.current = true;
     }
   }, [sessionToken]);
 
@@ -140,33 +154,37 @@ export default function TopologyScreen() {
   const deleteTargetName = stores.find((s) => s.id === deleteTargetId)?.name ?? '';
 
   /** Seed the topology editor with real workspace instances for the selected branch. */
-  const branchLocationSeed: BranchLocationSeed[] = useMemo(
-    () => stores
-      // A topology is branch-scoped: exactly one Branch Location root per
-      // graph. The selector picks which branch's graph is on canvas; without
-      // a selected branch the graph stays visibly unowned and is blocked by
-      // semantic validation rather than guessing a fallback.
-      .filter((store) => selectedBranchId === null || store.id === selectedBranchId)
-      .map((store) => ({ id: store.id, name: store.name })),
+  const branchLocationSeed: BranchLocationSeed[] | undefined = useMemo(
+    () => storesResolvedRef.current
+      ? stores
+        // A topology is branch-scoped: exactly one Branch Location root per
+        // graph. The selector picks which branch's graph is on canvas; without
+        // a selected branch the graph stays visibly unowned and is blocked by
+        // semantic validation rather than guessing a fallback.
+        .filter((store) => selectedBranchId === null || store.id === selectedBranchId)
+        .map((store) => ({ id: store.id, name: store.name }))
+      : undefined,
     [stores, selectedBranchId],
   );
 
-  const workspaceSeed: WorkspaceInstanceSeed[] = useMemo(
-    () => workspaceInstances
-      .filter((w) => selectedBranchId === null || w.store_id === selectedBranchId)
-      .map((w) => {
-        const seed: WorkspaceInstanceSeed = {
-          instanceId: w.instance_id,
-          typeKey: w.type_key,
-          purposeKey: w.purpose_key,
-          storeId: w.store_id,
-          storeName: w.store_name,
-          name: w.name,
-        };
-        if (w.description) seed.subtitle = w.description;
-        if (w.colour) seed.colour = w.colour;
-        return seed;
-      }),
+  const workspaceSeed: WorkspaceInstanceSeed[] | undefined = useMemo(
+    () => instancesResolvedRef.current
+      ? workspaceInstances
+        .filter((w) => selectedBranchId === null || w.store_id === selectedBranchId)
+        .map((w) => {
+          const seed: WorkspaceInstanceSeed = {
+            instanceId: w.instance_id,
+            typeKey: w.type_key,
+            purposeKey: w.purpose_key,
+            storeId: w.store_id,
+            storeName: w.store_name,
+            name: w.name,
+          };
+          if (w.description) seed.subtitle = w.description;
+          if (w.colour) seed.colour = w.colour;
+          return seed;
+        })
+      : undefined,
     [workspaceInstances, selectedBranchId],
   );
 
@@ -465,6 +483,7 @@ export default function TopologyScreen() {
           direction: w.direction,
         };
         if (w.label !== undefined) payload.label = w.label;
+        if (w.bends !== undefined) payload.bends = w.bends;
         if (w.fromPort !== undefined) payload.from_port = w.fromPort;
         if (w.toPort !== undefined) payload.to_port = w.toPort;
         if (w.fromPortId !== undefined) payload.from_port_id = w.fromPortId;
@@ -532,9 +551,10 @@ export default function TopologyScreen() {
           nodes onto the new graph. */}
       <NodeTopologyEditor
         key={selectedBranchId ?? 'unassigned'}
+        branchId={selectedBranchId ?? 'unassigned'}
         currentTier={licenseTier as 'free' | 'one_time' | 'standard' | 'pro' | 'enterprise'}
-        workspaceInstances={workspaceSeed}
-        branchLocations={branchLocationSeed}
+        {...(workspaceSeed !== undefined ? { workspaceInstances: workspaceSeed } : {})}
+        {...(branchLocationSeed !== undefined ? { branchLocations: branchLocationSeed } : {})}
         onRenameBranch={handleRenameBranch}
         onRenameWorkspace={handleRenameWorkspace}
         allowLegacyApply={false}

@@ -19,9 +19,9 @@ use oz_core::events::SettingsUpdated;
 use oz_core::settings::Settings;
 use oz_core::sync_client::SyncConfig;
 
-use crate::SyncError;
 use crate::queue::SyncQueue;
 use crate::transport::{PushOutcome, SyncTransport};
+use crate::{SyncError, import_snapshot};
 
 /// Base interval; actual per-cycle sleep is randomized 60–120s.
 const DEFAULT_SYNC_INTERVAL: Duration = Duration::from_secs(30);
@@ -621,6 +621,66 @@ impl SyncDaemon {
                                 }
                             }
                         }
+                        Err(SyncError::AnchorExpired { oldest_available }) => {
+                            pulled = 0;
+                            tracing::warn!(
+                                oldest_available = ?oldest_available,
+                                "sync anchor expired — fetching snapshot to recover"
+                            );
+                            match transport.fetch_snapshot().await {
+                                Ok(snapshot) => {
+                                    let db_clone = db.clone();
+                                    let anchor = oldest_available.clone();
+                                    let recovery = tokio::task::spawn_blocking(move || {
+                                        let conn = db_clone.blocking_lock();
+                                        let store = Store::new(&conn);
+                                        let imported = import_snapshot(&store, &snapshot)?;
+                                        store.set_sync_pull_state(anchor.as_deref(), None)?;
+                                        Ok::<usize, SyncError>(imported)
+                                    })
+                                    .await;
+                                    match recovery {
+                                        Ok(Ok(imported)) => {
+                                            tracing::info!(
+                                                imported,
+                                                "snapshot imported after daemon anchor expiry"
+                                            );
+                                        }
+                                        Ok(Err(e)) => {
+                                            if sync_error.is_none() {
+                                                sync_error =
+                                                    Some(format!("snapshot recovery failed: {e}"));
+                                            }
+                                        }
+                                        Err(e) => {
+                                            if sync_error.is_none() {
+                                                sync_error = Some(format!(
+                                                    "snapshot recovery panicked: {e}"
+                                                ));
+                                            }
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    if let SyncError::ServerMigrated { new_url } = &e {
+                                        let db = db.clone();
+                                        let url = new_url.clone();
+                                        let _ = tokio::task::spawn_blocking(move || {
+                                            let conn = db.blocking_lock();
+                                            let store = Store::new(&conn);
+                                            let _ =
+                                                Settings::set_sync_server_url(store.conn(), &url);
+                                        })
+                                        .await;
+                                        tracing::info!(new_url = %new_url, "server migrated — local config updated");
+                                    }
+                                    if sync_error.is_none() {
+                                        sync_error =
+                                            Some(format!("snapshot recovery fetch failed: {e}"));
+                                    }
+                                }
+                            }
+                        }
                         Err(e) => {
                             pulled = 0;
                             // ADR #11: Handle server migration redirect.
@@ -756,7 +816,13 @@ impl Default for SyncDaemon {
 mod tests {
     use super::*;
     use crate::transport::{PullResponse, PushOutcome, PushResponse};
-    use axum::{Json, Router, extract::State, routing::post};
+    use axum::{
+        Json, Router,
+        extract::State,
+        http::StatusCode,
+        response::IntoResponse,
+        routing::{get, post},
+    };
     use oz_core::migrations;
     use oz_core::settings::Settings;
     use tokio::sync::Notify;
@@ -1017,6 +1083,101 @@ mod tests {
 
         daemon.stop().await;
         tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+
+    // ── TDD: daemon anchor-expiry recovery ─────────────────────────
+
+    async fn spawn_anchor_expired_daemon_server() -> (String, Arc<std::sync::atomic::AtomicUsize>) {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let snapshot_hits = Arc::new(AtomicUsize::new(0));
+
+        async fn handle_pull(
+            State(_snapshot_hits): State<Arc<AtomicUsize>>,
+            Json(request): Json<crate::transport::PullRequest>,
+        ) -> impl IntoResponse {
+            const OLDEST_AVAILABLE: &str = "2026-02-01T00:00:00.000Z";
+            if request.since.as_deref() == Some("2025-01-01T00:00:00.000Z") {
+                return (
+                    StatusCode::GONE,
+                    Json(serde_json::json!({
+                        "error": "anchor_expired",
+                        "oldest_available": OLDEST_AVAILABLE,
+                    })),
+                )
+                    .into_response();
+            }
+            Json(PullResponse {
+                items: vec![],
+                next_cursor: None,
+            })
+            .into_response()
+        }
+
+        async fn handle_snapshot(
+            State(snapshot_hits): State<Arc<AtomicUsize>>,
+        ) -> Json<crate::transport::SyncSnapshotResponse> {
+            snapshot_hits.fetch_add(1, Ordering::SeqCst);
+            Json(crate::transport::SyncSnapshotResponse {
+                version: 1,
+                products: vec![],
+                tax_rates: vec![],
+                users: vec![],
+            })
+        }
+
+        let app = Router::new()
+            .route("/api/sync/pull", post(handle_pull))
+            .route("/api/sync/snapshot", get(handle_snapshot))
+            .with_state(snapshot_hits.clone());
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        (format!("http://localhost:{port}"), snapshot_hits)
+    }
+
+    /// A stale daemon anchor must recover through the snapshot endpoint and
+    /// advance to the server's oldest retained row. Without this path the
+    /// daemon logs `AnchorExpired` forever and never converges.
+    #[tokio::test]
+    async fn daemon_recovers_expired_anchor_with_snapshot() {
+        use std::sync::atomic::Ordering;
+
+        let (server_url, snapshot_hits) = spawn_anchor_expired_daemon_server().await;
+        let db = setup_db();
+        let db_setup = db.clone();
+        let url = server_url.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db_setup.blocking_lock();
+            let store = Store::new(&conn);
+            Settings::set_sync_enabled(&conn, true).unwrap();
+            Settings::set_sync_server_url(&conn, &url).unwrap();
+            store
+                .set_sync_pull_state(Some("2025-01-01T00:00:00.000Z"), None)
+                .unwrap();
+        })
+        .await
+        .unwrap();
+
+        let status = Arc::new(RwLock::new(DaemonStatus::default()));
+        SyncDaemon::run_tick(&db, &status, &noop_settings_sink()).await;
+
+        assert_eq!(snapshot_hits.load(Ordering::SeqCst), 1);
+        let state = tokio::task::spawn_blocking({
+            let db = db.clone();
+            move || {
+                let conn = db.blocking_lock();
+                Store::new(&conn).get_sync_pull_state().unwrap()
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(state.since.as_deref(), Some("2026-02-01T00:00:00.000Z"));
+        assert!(state.cursor.is_none());
+        assert!(status.read().await.last_error.is_none());
     }
 
     // ── TDD Bug #1: spawn_blocking panic is not silently swallowed ─

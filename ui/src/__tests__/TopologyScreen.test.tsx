@@ -179,7 +179,11 @@ function appliedArgs() {
     updates: call[2] as { id: string; name: string; purpose_key?: string }[],
     archives: call[3] as string[],
     diagramNodes: call[4] as { id: string }[],
-    diagramWires: call[5] as { from_node_id: string; to_node_id: string }[],
+    diagramWires: call[5] as {
+      from_node_id: string;
+      to_node_id: string;
+      bends?: { x: number; y: number }[];
+    }[],
   };
 }
 
@@ -558,6 +562,24 @@ describe('TopologyScreen', () => {
   });
 
   // ══ Error handling ═══════════════════════════════════════════
+
+  it('carries wire bend points through the diff payload', async () => {
+    await renderReady();
+
+    const wires = [
+      {
+        ...locationWire('store-1', 'ws-existing', 'w-1'),
+        bends: [{ x: 350, y: 334 }, { x: 400, y: 300 }],
+      },
+    ];
+    await triggerSave([
+      storeNode(),
+      wsNode({ id: 'ws-existing', name: 'Front Register', metadata: { typeKey: 'store-pos', persisted: true } }),
+    ], wires);
+
+    const a = appliedArgs();
+    expect(a.diagramWires[0]!.bends).toEqual([{ x: 350, y: 334 }, { x: 400, y: 300 }]);
+  });
 
   it('surfaces applyTopologyDiff errors via toast and returns empty idMap', async () => {
     mockApplyTopologyDiff.mockRejectedValue(new Error('DB locked'));

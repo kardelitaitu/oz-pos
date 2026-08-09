@@ -1210,3 +1210,610 @@ Clean (0 errors).
 **Commits:** none yet — tests + the desktop extraction + journal ride the session batch.
 
 **Notes / remaining risks:** none new — the desktop/tablet command duplication now exists only in the trivial command wrapper; the data fn could move to a shared crate (oz-core/platform-core) if a third client ever needs it, but that's speculative. The e2e batch (adr22 spec + editor fix) and this sync batch are separate uncommitted changes in the same tree.
+
+### 2026-08-08 — Topology editor UX polish sprint (professional canvas surface)
+
+**Problem:** The topology editor worked but read as a prototype: zoom lived buried in the tool-rack footer, an empty canvas gave no guidance, tool cards had no keyboard affordances, and the canvas grid/cards lacked the two-tier grid and card polish of professional diagram tools. Two compliance gates (themeTokenCompliance, noiseDitherCompliance) were also silently red on the committed CSS.
+
+**Solution:** Six UX slices, TDD where behavior changed:
+1. Tool-slot shortcuts **1–4** spawn nodes (Store/Workspace/Warehouse/Hardware) — bare keys, no repeat, inert while typing or when a rack/header/inspector control owns focus (guards reused). Wired via a latest-ref (`handleAddNodeRef`) because the keydown effect sits above `handleAddNode`'s const (TDZ). Palette cards carry `kbd` slot badges.
+2. Floating zoom cluster bottom-right: − / % / + / Fit All / Reset View (`role="toolbar"`), sharing the wheel's 40–200% clamp via `zoomBy`. Replaced the rack-footer controls; HUD keeps node/wire counts only.
+3. Empty-state onboarding overlay (title + body mentioning the shortcuts) when the canvas has zero nodes; `pointer-events: none` so panning still works.
+4. Canvas grid: subtle 120px major lines over the 24px dot grid (rgba fallback + color-mix for WKWebView <16.4).
+5. Node card polish: type-tinted header strips (color-mix over bg-subtle), hover lift + deeper shadow, crisp 2px-gap accent selection ring (respects reduced-motion).
+6. Tool rack regrouped into labeled **Add Nodes** / **Edit** sections with small-caps section titles.
+
+Bonus: fixed the pre-existing 8 hardcoded-value violations in NodeTopologyEditor.css (ported labels, validation note/banner, relationship picker to tokens) and added noise-dither coverage for `.canvas-zoom-controls`, `.topology-validation-banner`, `.topology-relationship-picker` — both compliance gates are green again.
+
+**Validation:** editor suite **185/185** (7 new: shortcuts ×3, zoom cluster, zoom buttons, empty-state ×2; 2 pinned zoom blocks re-targeted to the cluster) · TopologyScreen + InspectorIntegration + dev-mock + responsiveViewport **233/233** · themeToken + noiseDither + popoverSurface **13/13** · typecheck clean · eslint clean · i18n lint clean · bundle parity **0 missing**. Live dev-mock preview verified: badges, ADD NODES section, zoom cluster (100→125%), and the 1/2 spawn shortcuts all render/work in the running app.
+
+**Commits:** none — rides the uncommitted batch with the other agent's docs sweep (untouched).
+
+**Notes / remaining risks:** `topology-zoom` FTL key removed (replaced by zoom-in/zoom-out + cluster readout). The dev-mock's seeded "Downtown Branch" card still shows the "missing store profile identity" validation note — pre-existing dev-mock state, unrelated to this sprint. Next slices if continued: minimap, context-sensitive selection toolbar (align/distribute), wire direction labels on hover, keyboard 'Escape to deselect-all' already exists.
+
+### 2026-08-08 — Topology editor round 2: dirty state, shortcuts help, hover focus
+
+**Problem:** The editor still lacked three professional affordances: no signal that the canvas differs from the last Apply (users could walk away from an unsaved graph), no discoverable list of the growing shortcut set (1-4 spawn, Delete, Ctrl+Z/Y, arrows, Esc, Ctrl+I), and no way to read a node's neighbourhood at a glance on a busy canvas.
+
+**Solution:** Three TDD slices (5 new tests, Red→Green):
+1. **Unsaved-changes chip** (header, role=status, warning pill + dot). `isCanvasDirty()` was a click-time function backed only by a ref — a ref can't re-render. Added `snapshotVersion` state + a `commitSnapshot` helper that sets the ref AND bumps the version wherever the applied snapshot changes (Apply success, instance load, saved-diagram load, preset load); `isDirty` memo re-derives on `[nodes, wires, snapshotVersion]`. Chip appears on any edit and clears on Apply/undo-back-to-saved/load/preset.
+2. **Shortcuts help popover** — a "?" button at the far right of the header actions opens a kbd-styled cheatsheet (7 rows: 1–4, Del, Ctrl+Z, Ctrl+Y, arrows, Esc, Ctrl+I) reusing existing FTL labels where possible. KDS pattern: Escape (stopPropagation'd so the canvas deselect doesn't also fire) + outside-click close, aria-expanded/controls.
+3. **Hover focus mode** — hovering a node card dims (opacity 0.35) every node not directly wired to it and every unrelated wire; restores on leave. Opacity-only so it composes with selection rings and connection pulses, and pointer events stay live on dimmed cards.
+
+**Validation:** editor suite **190/190** (5 new) · TopologyScreen + InspectorIntegration + compliance ×3 **235/235** · typecheck clean · eslint clean (fixed 2 exhaustive-deps warnings: the memo's `snapshotVersion` dep is now `void`-referenced, `commitSnapshot` added to the preset-loader deps) · i18n lint clean · bundle parity **0 missing** · 7 new FTL keys in en+id. Live dev-mock verified: chip shows on edit, popover opens with all 7 rows, hover dims the unconnected warehouse + wire and restores on leave.
+
+**Commits:** none — rides the uncommitted batch.
+
+**Notes / remaining risks:** the popover's `min-width: 17rem` is fine but untested in the tablet shell; hover-dimming uses class-based opacity so it's cheap and stateless. Remaining candidates: selection toolbar (align/distribute), minimap, right-click canvas context menu, wire relationship label pills.
+
+### 2026-08-08 — Topology editor round 3: canvas context menu + align/distribute toolbar
+
+Problem: a professional diagram tool needs right-click creation and bulk geometry actions, but the editor had neither — nodes could only be added via the palette or 1-4 shortcuts, and multi-selection offered no alignment power.
+
+Solution:
+- **Canvas context menu**: right-click anywhere on the canvas opens a menu at the cursor — add any of the 4 node types (spawned at the click point, grid-snapped, pan/zoom-corrected), Select All, Fit All, Reset View. Focusable `role="menu"` with arrow-key navigation (wraps at ends), Escape closes (global handler), mousedown stops propagation so a right-click never starts a marquee.
+- **Align/distribute toolbar**: floats above the canvas when 2+ nodes are selected, 8 actions (align left/hcenter/right, top/vcenter/bottom, distribute horizontal/vertical) with inline glyphs and a divider between align and distribute. One undo entry per action via pushHistory.
+- **Alignment is exact, not re-snapped**: `snap(minY)` would round an off-grid extreme (legacy preset ws.y = 80 → 72) and move the anchor node. Extremes now stay put; only the non-extreme nodes move to match. Distribution uses exact equal-gap arithmetic as before.
+- Fixed a TDZ I introduced: `applyAlign` referenced `pushHistory` in its deps array before the `const pushHistory` declaration — moved the callback below it.
+- A11y compliance: `role="menu"` required focusability (jsx-a11y/interactive-supports-focus) — added tabIndex + arrow-key nav.
+
+Commits: none yet — rides the uncommitted round-2 batch (NodeTopologyEditor.tsx/css, test, locales, compliance lists).
+
+Tests: 8 new (context menu open+spawn-at-cursor, Select All, Escape close, arrow-key nav, toolbar visibility gate, align tops, distribute vertical, + align toolbar appears only with 2+). Editor suite 196/196; TopologyScreen + 3 CSS-compliance gates green; typecheck/lint/i18n/parity clean.
+
+Risks: sibling describes in NodeTopologyEditor.test.tsx were order-dependent on the main describe's beforeEach mock setup — the new context-menu and align describes now set their own `mockLoadTopology.mockResolvedValue(null)` (repo convention per test-setup.ts); the pre-existing sibling describes still rely on the leak, worth a follow-up to add their own beforeEach.
+
+### 2026-08-08 — Topology editor round 4: clipboard & bulk duplication
+
+Problem: the editor had no copy/paste or bulk duplication — recreating a node (or a whole subgraph) meant dragging fresh cards and re-wiring by hand.
+
+Solution:
+- **Ctrl+D duplicate**: copies the selection one grid step down-right (clamped to the visible canvas), copies wires only when BOTH endpoints are selected (no dangling half-wires), makes the copies the new selection so repeated Ctrl+D cascades diagonally, and is a single undo entry.
+- **Ctrl+C / Ctrl+V**: internal clipboard (Figma-style — no OS clipboard sync); each paste cascades one grid step further so repeated pastes never stack exactly, pasted copies become the selection, one undo entry per paste. A fresh copy resets the cascade.
+- **Ctrl+A**: select all nodes (keyboard twin of the context-menu action).
+- The typing guard at the top of the keydown handler already returns early inside INPUT/TEXTAREA/contentEditable, so native field copy/paste/select-all is never hijacked; the rack/header/inspector focus guard also covers the new shortcuts.
+- Shortcuts popover grew 4 rows (Ctrl+A/D/C/V); new FTL keys in en + id.
+
+Commits: none — rides the uncommitted round-2/3 batch.
+
+Tests: 7 new Red→Green (duplicate offset + copy-selected, repeat cascade, wire copy with both endpoints, no wire copy with one endpoint, paste cascade + selection, Ctrl+A select all, undo restores count). Editor suite 203/203; TopologyScreen + 3 CSS-compliance gates 36/36; typecheck/lint/i18n parity clean.
+
+Risks: clipboard is session-only (internal ref) — a reload clears it; OS clipboard sync (navigator.clipboard.writeText with the topology JSON) is a possible follow-up but needs the backend round-trip shape defined.
+
+### 2026-08-08 — Topology editor round 5: minimap overview
+
+Problem: large diagrams lost their bearings — panning far from origin gave no sense of where the content sat relative to the view.
+
+Solution:
+- **Minimap** (bottom-left of the canvas, Figma/Excalidraw-style): a 176x120 overview projecting the content bounding box — one type-colored rect per node (matching the card accents: store=info, workspace=accent, warehouse=success, hardware=warning), thin wire lines between node centers, and a live viewport rectangle.
+- **Navigation**: click or drag on the map recenters the view on that canvas point (document-level listeners, cleanup ref like node drag); keyboard: arrows nudge the view 40px, Enter centers on the content box. `role="button"` + tabIndex + focus-visible ring for a11y.
+- Viewport rect is pan/zoom-aware (scaled canvas dims / zoom), clamped to a minimum size so it never collapses. Hidden entirely when the canvas is empty.
+- Compliance: added `.topology-minimap` to the noise-dither and popover-surface lists (it's an elevated surface) + the three components.css noise blocks.
+
+Commits: none — rides the uncommitted round-2/3/4 batch.
+
+Tests: 4 new Red→Green (one rect per node, hidden on empty canvas via deleting the last node — an empty LOAD falls back to the retail preset by design, click recenters → viewport transform changes, panning the main canvas moves the viewport rect). Editor suite 207/207; full topology sweep 252/252; typecheck/lint/i18n parity clean.
+
+Risks: minimap has no on/off toggle yet (always visible with content) — a small toggle in the zoom cluster is a possible follow-up; also the minimap is per-editor, not per-diagram-name.
+
+### 2026-08-08 — Topology editor round 6: F2 inline rename + HUD status readouts
+
+Problem: renaming a node required hunting for the tiny card pencil, and the canvas gave no live feedback on where the cursor was or what was selected — basic orientation a professional diagram tool always shows.
+
+Solution:
+- **F2 inline rename**: with exactly one node selected, F2 opens the same inline rename input as the card pencil (pre-filled with the current name, focus moved in, Enter commits / Escape cancels with focus return). Gated by the same renameability rule as the pencil (store/workspace with their rename callback present), so warehouse/hardware cards are untouched. The typing guard keeps F2 inert inside text fields. Listed in the shortcuts popover.
+- **HUD status readouts**: the bottom-center HUD (nodes/wires counts) now also shows the live **cursor position in canvas coords** (tabular numerals, — until the pointer crosses the canvas) and the **selection count** ("2 selected"), both re-derived on every canvas mousemove / selection change. Extended the existing surface instead of adding a competing one — no new elevated surface, no compliance churn.
+
+Commits: none — rides the uncommitted round-2/3/4/5 batch.
+
+Tests: 4 new Red→Green (F2 opens rename with current name, F2 no-op on non-renameable nodes, HUD selection count 0→2, HUD cursor coords after mousemove). Editor suite 211/211; full topology sweep 256/256; typecheck/lint/i18n parity clean.
+
+Risks: the cursor readout re-renders the editor on every mousemove — cheap in practice but worth watching on very large diagrams; a rAF-throttle is a possible follow-up.
+
+### 2026-08-08 — Topology editor round 7: zoom-to-selection + zoom keyboard shortcuts
+
+Problem: getting a good view of a specific part of a large diagram meant manual wheel-scrolling and zooming — no way to jump straight to a selection, and no keyboard zoom at all.
+
+Solution:
+- **Zoom to Selection** (context menu): appears only when nodes are selected, fits the selection bounds with the same padding/clamp math as Fit All (40%..200%, 1.5 fit cap). Context menu also keeps Select All / Fit All / Reset View.
+- **Zoom keyboard shortcuts**: Ctrl+0 fit the whole diagram, Ctrl+1 return to 100% (identity view), Ctrl+= zoom in, Ctrl+- zoom out — the standard diagram-tool set. The typing guard keeps native browser zoom intact inside text fields. Shortcuts popover gained two rows (Ctrl+0 / Ctrl+1 and Ctrl++ / Ctrl+-).
+- Fixed another TDZ I introduced: the keydown effect's deps referenced zoomToFit/zoomBy/resetView, which were declared AFTER the effect — moved the four zoom callbacks (plus zoomToSelection) above it. This is the third instance of the same trap (rounds 3, 4); the callbacks that the keydown handler needs should live above the effect.
+
+Commits: none — rides the uncommitted round-2/3/4/5/6 batch.
+
+Tests: 4 new Red→Green (menu item gated on selection, zoom-to-selection fits within the clamped range, Ctrl+0 fits / Ctrl+1 → 100%, Ctrl+= / Ctrl+- step). Editor suite 215/215; full topology sweep 260/260; typecheck/lint/i18n parity clean.
+
+Risks: none significant; the jsdom fit-zoom tests pin the clamped range rather than exact values (zero-sized canvas → min clamp), mirroring the existing Fit All pin.
+
+### 2026-08-08 — Topology editor round 8: orthogonal (elbow) wire routing
+
+Problem: bezier wires look elegant but read as "doodles" on large graphs — professional topology/flow tools (Visio, draw.io) default to clean orthogonal elbows.
+
+Solution:
+- **Elbow routing toggle** in a new rack "View" section: flips ALL wires between the default cubic bezier and orthogonal H/V elbows. `aria-pressed` toggle, active state tinted with accent tokens.
+- **Router**: source port → horizontal run to the midpoint → vertical drop/rise to the target row → horizontal run into the target port. Reverse flows (target behind source) detour right past the source first so the elbow never folds back through the source card. Sharp corners come free from L commands; the existing `.wire-path` stroke/direction/selection styling applies unchanged.
+- **Simulation pulse rides the geometry**: new `polylinePoint` helper interpolates the 30ms pulse along the elbow's axis-aligned segments (manhattan-parameterized) instead of the phantom bezier, so it visibly travels the elbow path. Bezier mode keeps the cubic pulse.
+- Routing is a presentation preference (component-local, not persisted); `wireGeometries` memo now depends on `wireRouting`.
+
+Commits: none — rides the uncommitted round-2/3/4/5/6/7 batch.
+
+Tests: 3 new Red→Green (bezier by default, toggle to elbow and back, pulse survives elbow mode). Editor suite 218/218; full topology sweep 263/263; typecheck/lint/i18n parity clean.
+
+Risks: the elbow path is computed per wire on every wires/nodeMap/routing change — same memo cost as before; a per-diagram routing preference (localStorage) is a possible follow-up.
+
+### 2026-08-08 — Topology editor round 9: node context menu + double-click rename
+
+Problem: object-level actions lived only in the canvas menu or keyboard — right-clicking a node itself gave the generic canvas menu, and renaming required finding the tiny pencil.
+
+Solution:
+- **Node context menu**: right-click a node card selects it and opens an object-scoped menu (same chrome/close logic as the canvas menu, extended state carries an optional nodeId): Rename (only for renameable store/workspace nodes), Duplicate (same one-undo-entry path as Ctrl+D), Delete (reuses the wired/unwired confirm flow — immediate for unwired, dialog for wired), and Zoom to Selection. The node name titles the menu. Shift+right-click keeps the existing multi-selection instead of collapsing it.
+- **Double-click to rename**: double-clicking a renameable node opens the inline rename (same flow as F2 / the pencil).
+- The canvas menu is untouched — canvas right-click still opens Add Node / Select All / Fit All / Zoom to Selection / Reset View.
+
+Commits: none — rides the uncommitted round-2/3/4/5/6/7/8 batch.
+
+Tests: 5 new Red→Green (right-click selects + menu with Rename, node menu duplicates, node menu deletes unwired immediately, non-renameable hides Rename, double-click opens rename). Editor suite 223/223; full topology sweep 268/268; typecheck/lint/i18n parity clean.
+
+Risks: none significant; the node menu reuses the existing menu close-on-outside-click/Escape logic and arrow-key navigation.
+
+### 2026-08-08 — Topology editor round 10: live connection preview + snap-to-grid toggle
+
+Problem: two View/connection gaps — the in-flight wire preview only updated when the cursor neared a target port (mid-air it froze at the last mouse position), and every placement action snapped to the 24px grid with no way to place freely.
+
+Solution:
+- **Live preview cursor**: new `previewCursor` state updated on every mousemove while a connection is in flight (reset when a connection starts, so a new wire never jumps to a stale cursor). The preview memo now follows the pointer continuously.
+- **Routing-aware preview**: when the elbow toggle is on, the in-flight preview renders the same orthogonal polyline (via the shared `elbowPoints`/`polylineD` helpers) as the finished wire — what you see while dragging is what you get.
+- **Snap-to-grid toggle** in the View section: drag, arrow-nudge, and spawn (palette + context menu) place freely when off. Structural seeds (presets, workspace instances) still snap — they're layout defaults, not user placement. `aria-pressed` toggle sharing the rack-view-toggle style.
+- Dep discipline: the nudge inside the keydown effect reads `snapEnabled` inline (stable boolean dep) rather than the per-render `snapOrNot` helper, so the effect doesn't rebind on every mousemove.
+
+Commits: none — rides the uncommitted round-2/3/4/5/6/7/8/9 batch.
+
+Tests: 4 new Red→Green (preview follows cursor, preview elbow when enabled, off-grid drag with snap off, off-grid context-menu spawn). Editor suite 227/227; full topology sweep 272/272; typecheck/lint/i18n parity clean.
+
+Risks: the live preview now re-renders on every mousemove while connecting — same cost class as the HUD cursor readout, fine in practice.
+
+### 2026-08-08 — Topology editor round 11: validation issues panel + persisted view preferences
+
+Problem: live validation surfaced per-node issues only as tiny card notes and graph-level issues in the banner — there was no single place to see every problem, and the View toggles (elbow routing, snap) reset on every reload.
+
+Solution:
+- **Validation issues panel**: a warning button (top-right of the canvas, "Issues (N)") appears whenever the diagram has ANY validation problem — per-node or graph-level. Clicking opens a dialog-style panel listing every issue: per-node items first, titled with the node name and clickable to select (jump to) the offending card; graph-level items after, read-only. Counts come from the same liveValidation memo the banner/card notes use, so they can never disagree.
+- **Persisted view preferences**: elbow routing and snap-to-grid now lazy-init from localStorage (`oz-topology-view-routing` / `oz-topology-view-snap`) and write back on change — the View choices survive reloads. Writes are try/catch'd for private-mode storage.
+- New WarningIcon in the topology icon set; panel + button registered as elevated surfaces (noise-dither + popover lists + components.css blocks).
+
+Commits: none — rides the uncommitted round-2/3/4/5/6/7/8/9/10 batch.
+
+Tests: 6 new Red→Green (issues button with count on a problem diagram, panel lists the issue + click selects the node, no button on a clean diagram, routing persists to localStorage, routing restored on mount, snap persists). Editor suite 233/233; full topology sweep 278/278; typecheck/lint/i18n parity clean.
+
+Risks: the issues button is canvas-local and not persisted; a diagram-level "mark issue resolved" flow (persisted dismissal) is a possible follow-up.
+
+### 2026-08-08 — direction-aware marquee selection
+
+Problem: the marquee always used box-intersection semantics, so a small forward drag could sweep up nodes that only barely poke into the box — no way to grab exactly what you enclosed.
+
+Solution: Figma/draw.io convention — a FORWARD drag (left→right, `box.x1 >= box.x0`) selects only nodes FULLY contained in the box; a BACKWARD drag (right→left) selects every node the box touches. Pure-vertical drags default to containment (x1 ≥ x0). Existing tests that fully contained their targets survived unchanged; the shared intersection branch is preserved verbatim for backward drags.
+
+Commits: none — rides the uncommitted round-2..11 batch.
+
+Tests: 3 new Red→Green (forward drag excludes partial overlaps, forward drag with full containment selects, backward drag grabs touched nodes). Editor suite 236/236; full topology sweep 313/313 (editor + screen + card + contract + responsive); typecheck/lint/i18n parity clean.
+
+Risks: none known. A Shift+drag additive marquee (Figma-style union) is the natural follow-up.
+
+### 2026-08-08 — Shift+drag marquee union (additive selection)
+
+Problem: marquee always REPLACED the selection, so building up a selection from scattered nodes meant repeated shift+clicks — no way to add a whole region at once.
+
+Solution: holding Shift while marquee-dragging keeps the pre-drag selection and UNIONs the captured nodes into it at release. A Shift+click on empty canvas (no movement) clears nothing; a Shift+drag that captures nothing leaves the selection intact. The additive flag lives in a ref (marqueeAdditiveRef) set at mousedown and reset by the finalizer, so it can never leak into the next drag — a plain drag after a shift-drag still replaces.
+
+Commits: none — rides the uncommitted round-2..12 batch.
+
+Tests: 3 new Red→Green (shift-drag unions wh-1 into a 2-node selection, shift-drag over empty space keeps the selection, plain drag after shift-drag replaces). Editor suite 239/239; full topology sweep 316/316; typecheck/lint/i18n parity clean.
+
+Risks: the union reads the pre-drag selection from the finalizer's mousedown closure — safe today because nothing mutates the selection mid-marquee, but worth re-checking if a future feature changes selection during a drag.
+
+### 2026-08-08 — e2e: direction-aware marquee (forward contained vs backward touched)
+
+Problem: the marquee semantics (round 12) had unit coverage only — no browser test proved a real drag selects contained vs touched cards differently on the actual canvas.
+
+Solution: two new tests in adr22-workspace-settings.spec.ts that perform REAL pointer drags on the canvas:
+- Forward (left→right) asserts exactly the FULLY CONTAINED cards get node-selected; the poking-out card does not.
+- Backward (right→left) over the same box asserts exactly the TOUCHED cards (contained + poking) get selected.
+- The DevToolbar (floating bottom-right) swallowed the tail of marquee drags and froze the box mid-drag — the topology describe's beforeEach now parks it off-screen via addInitScript (localStorage `oz-pos-dev-toolbar-pos` = {-400,-400}) before login navigates.
+
+Two pre-existing bugs found along the way (not fixed here — flagged for follow-up):
+1. The topology canvas load is RACY: the editor can settle on the retail preset OR the dev-mock seed depending on async load timing (observed alternating across identical runs). The test derives geometry from the RENDERED cards (leftmost pair = contained targets, nearest-to-union card = poking card) and asserts against the measured containment/touch predicates, so it is deterministic under either outcome.
+2. The tablet canvas CLIPS the seed layout: cards extend past the 545px-wide canvas edge (nothing auto-fits on load). Marquee geometry is unreliable there, so both tests skip the tablet project with a documented reason.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 2 new e2e (desktop) — 4 consecutive full-suite passes; full adr22 file 24 passed / 2 skipped (tablet). eslint clean.
+
+Risks: none for the tests themselves. The two findings above are the real risks — the load race makes the topology screen's initial canvas non-deterministic for users, and tablet users see clipped cards.
+
+### 2026-08-08 — canvas context menu: selection summary + clear action
+
+Problem: after a marquee left a multi-selection active, the canvas right-click menu gave no indication of the selection — you had to guess and Deselect via Esc.
+
+Solution: when any nodes are selected, the canvas menu now leads with a "{N} selected" section title (FTL `topology-context-selection-title`, interpolated) and a "Clear selection" menuitem (topology-context-clear-selection) that clears the selection and closes the menu, followed by a divider before the existing Add Node section. The menu keeps the selection open when right-clicking the canvas (already the behavior — right-click never clears).
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 3 new Red→Green (marquee leaves 2 selected → menu shows "2 selected" + Clear selection, Clear selection clears + closes, no selection → section hidden). Editor suite 242/242; full topology sweep 319/319; typecheck/lint/i18n parity clean.
+
+Risks: none. Note: the "N selected" text now appears in two surfaces (HUD + context menu) — the tests scope by selector to avoid the collision.
+
+### 2026-08-08 — interactive zoom-level picker (slider popover)
+
+Problem: the zoom cluster showed a static percentage readout — precise zoom meant repeated +/- clicks with no way to scrub to a value.
+
+Solution: the `%` readout is now a real button (aria-label "Zoom level ({pct}%)", aria-expanded) that toggles a small popover above the cluster containing a 40%–200% step-5 range slider with a live % value. Slider drags call setZoom directly (same state the wheel/buttons drive), so the button text and viewport transform update live. Closed by Escape or any document mousedown outside the picker (the wrapper stops propagation so slider drags never close it) — the same close-effect pattern as the context menu. The popover is a new elevated surface, registered in the noise-dither + popover-surface lists and all three components.css blocks.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 3 new Red→Green (click opens slider seeded with current zoom + aria-expanded, dragging to 75% updates the readout + viewport scale(0.75), Escape/outside click close). Editor suite 245/245; full topology sweep + compliance 333/333; typecheck/lint/i18n parity clean.
+
+Risks: none. Note: existing zoom tests kept passing because the level keeps the .canvas-zoom-level class as a button.
+
+### 2026-08-08 — wire context menu (direction + delete)
+
+Problem: wires had no right-click affordance — a right-click on a wire fell through to the generic canvas menu, so the only ways to act on a wire were click-to-cycle and the rack/Delete key.
+
+Solution: right-clicking a wire now selects it (clearing node selection, mirroring the wire click) and opens an object-scoped menu titled with the wire's label (falling back to "from → to" node names): "Toggle wire direction" (reuses the click cycle via handleCycleWireDirection, one undo step) and "Delete wire" (reuses the established `setConfirmDelete('')` flow — the same "Delete Wire" dialog as the Delete key, so deletion is always confirmed). The contextMenu state gained an optional wireId and the render branches node → wire → canvas. All menu chrome (items, dividers, arrow-key nav, outside/Escape close) is shared with the existing menus — zero new CSS or surfaces.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 3 new Red→Green (right-click selects + menu titled with the label + Toggle/Delete items, Toggle direction cycles one-way→reverse, Delete wire opens the confirm dialog then removes it on confirm). Editor suite 248/248; full sweep + compliance 336/336; typecheck/lint/i18n parity clean.
+
+Risks: none.
+
+### 2026-08-08 — F1 shortcuts help
+
+Problem: the shortcuts popover was only reachable via the header button — keyboard-first users had to discover it by mousing around, and the help itself didn't document its own trigger.
+
+Solution: F1 now toggles the existing shortcuts popover (same popover the header button opens — one state, no duplicate surface). The handler sits at the TOP of the canvas keydown listener, deliberately before the typing/rack guards: help is never an accidental canvas edit, so F1 works while typing in a field or with a rack control focused. The popover's shortcut list gained a leading "F1 — Show keyboard shortcuts" row (topology-shortcuts-help, en/id) so the help documents itself.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 2 new Red→Green (F1 opens + lists its own row + second F1 closes; F1 works with a rack control focused). Editor suite 250/250; full sweep + compliance 338/338; typecheck/lint/i18n parity clean.
+
+Risks: none. Note: the popover was already Escape/outside-click closable — F1 toggling composes with that (Escape closes, F1 reopens).
+
+### 2026-08-08 — Space+drag to pan
+
+Problem: panning needed the middle/right mouse button — the most universal diagram gesture (hold Space, drag anywhere with the left button) was missing, and left-drag always marqueed.
+
+Solution: holding Space arms the next left-drag as a pan. A window-level Space tracker (ref for the gesture + state for the grab cursor) excludes typing fields and focused controls — a focused wire keeps its Space cycle-to-direction. The middle/right pan block was extracted into a shared startPan(e, clearSelectionFirst) helper: middle/right still clear the selection, but Space+left-drag is Figma-style and PRESERVES it. The canvas shows a grab cursor while Space is held, and the body cursor becomes 'grabbing' during the drag (restored on release). Space's default page-scroll is prevented while arming.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 4 new Red→Green (Space+drag pans by the pointer delta with no marquee and the selection intact; releasing Space before the drag restores the left-drag marquee; Space on a focused wire cycles its direction instead of arming pan; grab cursor class while armed). Editor suite 253/253; full sweep + compliance 341/341; typecheck/lint/i18n parity clean.
+
+Risks: none. Note: releasing Space mid-drag keeps the pan (the gesture is decided at mousedown, matching Figma/draw.io).
+
+### 2026-08-08 — dedicated Pan tool
+
+Problem: panning required a modifier (Space) or the middle/right mouse button — unavailable on touchscreens and undiscoverable for trackpad-only users.
+
+Solution: a "Pan tool" toggle in the rack's View section (aria-pressed, matching the Elbow/Snap toggles). While active, left-drags on the empty canvas pan (reusing round 18's startPan with selection preservation) and the canvas shows the grab cursor — the touchscreen-friendly twin of Space+drag. The tool stays active until toggled off (Figma hand-tool semantics); node dragging is untouched (the tool only claims the empty-background drag).
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 2 new Red→Green (Pan tool active → left-drag pans with no marquee and the selection intact + aria-pressed/grab cursor; toggling off restores the left-drag marquee). Editor suite 255/255; full sweep + compliance 343/343; typecheck/lint/i18n parity clean.
+
+Risks: none. Note: the pan tool and Space+drag compose — either arms the pan gesture at mousedown.
+
+### 2026-08-09 — Round 20: wire relabeling from the wire context menu
+
+Problem: wires could be relabeled only by deleting and recreating them — the context menu offered direction + delete but no way to edit a wire's label.
+
+Solution: "Rename wire" menu item on the wire context menu opens a floating input anchored at the wire's midpoint (canvas-space, scales/pans with the diagram), mirroring the node-card rename semantics: seeded with the current label, Enter commits, Escape cancels, blur commits, focus returns to the wire on keyboard close. Empty input clears the custom label back to the endpoint-name display (the label is optional). Commits push one history entry and mark the canvas dirty — `label` was already in the `canvasStateEqual` projection, so Apply Topology carries the relabel.
+
+Also fixed a latent lint error the round surfaced: the round-15 zoom-picker wrapper div used onMouseDown stopPropagation (jsx-a11y no-static-element-interactions). Moved the stopPropagation onto the two native controls (level button + range input) so the document-mousedown close still never fires inside the picker.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 4 new Red→Green (menu item opens editor seeded with label + Enter commits; empty clears to endpoint display via the menu title; Escape cancels; relabel marks dirty). Editor suite 259/259; full topology sweep 336/336; typecheck/lint/i18n parity clean.
+
+Risks: none. Note: the relabel is canvas-local (wires have no backend persistence of their own) — it persists through Apply Topology like every other wire edit.
+
+### 2026-08-09 — Round 21: wire label pills (View toggle)
+
+Problem: wire labels existed only as hover tooltips — the round-20 relabel editor had no visible label to anchor, and a diagram's connections couldn't be read at a glance.
+
+Solution: a "Wire labels" toggle in the rack's View section (aria-pressed, matching Elbow/Snap/Pan) renders a permanent pill at each wire's midpoint — the same geometry the round-20 rename input anchors to (polyline at t=0.5 or bezier midpoint). Clicking a pill selects the wire and opens the rename editor; the wire itself stays the direction-cycle affordance (pinned by a test — the pill must NOT cycle). The renamed wire's pill is hidden while its input is open, pills dim with their wire during hover-focus, and the preference persists to localStorage (oz-topology-view-wire-labels, default off to keep the clean look).
+
+Refactor: extracted `wireDisplayLabel` (custom label → endpoint-name join → connected fallback) from the round-16 menu title and now share it between the context-menu title and the pills — one derivation, two surfaces.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 6 new Red→Green (hidden by default + toggle reveals both preset labels; pill click opens rename seeded with the label without cycling direction; renamed wire's pill replaced by the editor; persists to localStorage; restores on mount; dims the non-neighbourhood pill on node hover). Editor suite 265/265; full topology sweep 342/342; typecheck/lint/i18n parity clean.
+
+Risks: none. Note: pills are HTML buttons in the pan/zoom viewport, so they scale with the diagram like every canvas surface; long labels ellipsize at 160px.
+
+### 2026-08-09 — Round 22: Figma-style alignment guides while dragging
+
+Problem: freehand node placement had only grid snap — no way to line a dragged card up with its neighbours' edges or centers, the core pro diagram-tool gesture.
+
+Solution: the grabbed node's edges/center now snap to ANY stationary node's edges/center (all 9 combos, within a 6px canvas-unit threshold) while dragging. The closest match wins per axis, the aligned axis draws a full-canvas 1px guide line (canvas-space, pans/zooms with the diagram), and the delta applies to the WHOLE dragged group so a multi-selection stays rigid. Guides beat the grid — the aligned axis skips grid snapping while the other axis still snaps as configured. Guides clear on mouseup (both the canvas and document-level paths).
+
+The TDD loop caught a real design bug: my first helper paired axes same-index (left↔left only), so aligning a dragged RIGHT edge to a stationary LEFT edge never fired — the Red test stayed red at left=144 (grid) instead of 140 (aligned), and the probe proved it. The 9-combo all-pairs match is the actual Figma semantic.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 5 new Red→Green (right-edge↔left-edge snap + vertical guide; centerY↔centerY snap + horizontal guide; no snap 10px past the threshold with grid off; guides clear on mouseup; group-rigid −60 delta carries wh-1 with ws-1). Editor suite 270/270; full topology sweep 347/347; typecheck/lint/i18n parity clean.
+
+Risks: none. Note: alignment is threshold-checked on the PRIMARY grabbed node only; a future slice could extend it to "any selected node's edges" (Figma aligns the whole group's collective edges).
+
+### 2026-08-09 — Round 23: auto-fit overflowing diagrams on load
+
+Problem: the e2e round found tablets (and any narrow canvas) render clipped cards — the seed layout extends past the 545px canvas edge and nothing fits the view on load.
+
+Solution: a one-shot load auto-fit. When a diagram's content first lands (the mount preset or an async load) on a MEASURED canvas and its bounding box overflows the viewport, it fits via the existing zoomToFit. The decision is content-keyed (node-id set): a NEW diagram (preset → load, preset swap) refits, in-place edits never do, and any user interaction (canvas/node mousedown or any key) permanently disarms it — the view belongs to the user after the first click. A zero/negative measured size (jsdom, pre-layout) never fires, so the identity view is never yanked by a phantom constraint and every existing geometry test (which run at zoom 1) stays untouched.
+
+Also updated the two marquee e2e tablet-skip comments: the clip they cited is fixed; the skip remains for the still-open preset-vs-seed load race.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 3 new Red→Green (two nodes 2000px apart fit to scale(0.4); a fitting diagram keeps translate(0,0) scale(1); after a mousedown, deleting a node does NOT refit — the view stays at the fitted zoom instead of jumping to scale(1.5)). Editor suite 273/273; full topology sweep 350/350; typecheck/lint/i18n parity clean; e2e spec lint clean.
+
+Risks: the preset-vs-seed load race (flagged in the e2e round) remains open — auto-fit now fits whichever diagram wins, but WHICH one renders is still non-deterministic on first load. That is the natural next fix.
+
+### 2026-08-09 — Round 24: deterministic first load (fixing the preset-vs-seed race)
+
+Problem: the e2e round found the first-load canvas settles non-deterministically (preset vs seed). The root cause: TopologyScreen passes EMPTY arrays for both seeds on its very first render (its lists load async), and the editor's `if (workspaceInstances)` treated that placeholder empty array as authoritative — entering the workspace rebuild, dropping the store card (empty branchLocations filter), and WIPING the canvas to empty until the real seeds arrived. A fresh install with no saved data showed an empty canvas at all.
+
+Solution (two halves):
+1. Editor — the workspace branch now runs only when instances/locations exist NOW or EVER did (`hadInstances` from prev refs), so a never-supplied empty seed falls through to the legacy saved-diagram/preset path instead of wiping. The legacy no-data path now distinguishes "standalone editor" (seeds undefined → demo preset) from "parent explicitly resolved to empty" (seeds provided → empty canvas + onboarding hint) — preserving the designed fresh-store onboarding.
+2. TopologyScreen — the seeds are gated on their sources' first resolution: until `listStores`/`listWorkspacesScoped` land, the props are OMITTED (undefined = "not supplied yet"); after resolution the real (possibly empty) arrays flow. The initial [] placeholder can no longer wipe or flash.
+
+Also added the onboarding describe's missing `mockLoadTopology.mockResolvedValue(null)` beforeEach — it passed before only because the old wipe ignored the mock; with the fallback path the mock state matters.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 3 new Red→Green (empty seeds + saved fixture → saved diagram shows, not a wipe; empty seeds + no saved data → onboarding hint, not demo data; instances present + genuinely empty locations still drops the store — deletion semantics pinned). Editor suite 276/276; TopologyScreen 23/23; full sweep 353/353; typecheck/lint/i18n parity clean.
+
+Risks: none. The e2e marquee skips remain (the dev-mock localStorage can still vary across worker sessions), but the editor's own load path is now deterministic: saved data shows immediately, the preset is the true no-data fallback, and the onboarding hint is reserved for authoritatively-empty stores.
+
+### 2026-08-09 — Round 25: collective-edge alignment for group drags
+
+Problem: round 22's alignment guides checked only the GRABBED node's edges — a group drag could miss a perfectly good snap when a non-grabbed member's edge was the one near a stationary node (the journal-flagged follow-up).
+
+Solution: `computeAlignmentGuides` now takes the raw target of EVERY dragged node and picks the closest edge/center match across the whole group per axis — Figma's collective semantics. The winning delta still shifts the whole group rigidly (one delta for all members), and the aligned axis skips grid snap for the entire group. The `dragPrimaryIdRef` machinery is gone — the primary concept is replaced by the targets map (which also simplified the mouseup cleanup).
+
+Existing round-22 tests survived unchanged (single-node drags behave identically; the old group test's assertions still hold — the grabbed ws-1 was already the closest match there). The only behavioral shift: a group whose non-grabbed member is vertically aligned now shows the Y guide too (previously invisible), which is the correct Figma behavior.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 1 new Red→Green (group of ws-1 + wh-1 dragged by −360: the GRABBED ws-1 touches nothing, but wh-1's left edge lands on store-1's right edge — group snaps to ws-1=20px / wh-1=320px with the vertical guide, and the aligned-axis grid skip holds for the whole group). Editor suite 277/277; full topology sweep 354/354; typecheck/lint/i18n parity clean.
+
+Risks: none. Note: alignment still evaluates at the drag's CURRENT raw position only — a mid-drag "sweep" through a threshold that the pointer skips (fast mouse) is not detected, same as round 22.
+
+### 2026-08-09 — Round 26: fine nudge + dead-press fix (arrow keys)
+
+Problem: the nudge semantics were backwards AND broken. Old code: Shift = 24px grid step, plain = 8px — the opposite of every pro tool (Figma's Shift+arrow is the fine 1px adjust). Worse, with snap on (default) an 8px plain nudge from an ON-GRID position snapped straight back to the same grid line — a dead press — and off-grid it jittered in a 0/24/0 pattern.
+
+Solution: Shift+arrow is now a pixel-exact 1px fine nudge that bypasses the grid entirely; plain arrows move exactly one full grid step when snap is on (deterministic, no dead presses) and the raw 8px step when off. The fine/coarse split lives in the existing shared nudge path (same edge clamp, one undo per press, `!e.repeat` held-key guard). Updated the shortcuts FTL in both bundles ("Shift = fine 1px").
+
+The two pre-existing Shift-arrow tests were updated to the new semantics (plain arrows reach the same −192 clamp destination; the repeat/undo test now uses plain ArrowRight with the identical 96px assertion).
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 3 new (Shift+Right = 81px / Shift+Down = 141px — pixel-exact; plain arrow from an on-grid 96 → 120, pinning the dead-press fix; snap-off pin 96 → 104). Editor suite 280/280; full topology sweep 357/357; typecheck/lint/i18n parity clean.
+
+Risks: none. Note: fine nudges don't draw alignment guides — wiring the round-22 guide computation into the nudge path is a natural follow-up.
+
+### 2026-08-09 — Alignment guides on fine nudge
+
+Problem: Round 26's journal flagged that fine (Shift+arrow) nudges never drew the round-22 alignment guides — the precision keyboard path was blind to neighbours, so a user could nudge a node within 6px of an edge and get no feedback.
+
+Solution: The nudge handler now runs `computeAlignmentGuides` on the nudged selection, but with an ENTRY-ONLY snap rule. The key insight: a persistent band flag goes stale across sessions, so instead the snap fires only when the nudge itself crosses INTO the 6px band — computed by comparing the pre-nudge alignment against the post-nudge alignment (`enterX = after.alignedX && !pre.alignedX`). Once inside, raw 1px moves stand (208, 209, …) and the guide lingers at the reference while the band is held; leaving the band (dist > 6) clears it, and plain grid-step arrows clear it immediately since they're grid semantics by design. The correction delta is the reference MINUS the dragged axis (exact-flush), applied group-rigid. Positions are now computed up front (not inside the setNodes updater) so the engine can run on exact post-nudge geometry.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 3 new (entry snap lands flush at 207px + guide drawn; in-band nudges stand at 208/209 with the guide held; 7 nudges out of the band clear the guide at 214px). Editor suite 283/283; full topology sweep 322/322; typecheck/lint/i18n parity clean.
+
+Risks: FINDING — the round-22 drag path applies `+align.dx` where `align.dx = pAxis - rAxis`, which parks the dragged node 2× the miss distance OFF the line for non-exact approaches (all existing tests land exactly on the line, dx=0, so it's masked); the correct snap-onto sign is `−align.dx`. One-line fix (`fx = clamped.x - align.dx`), needs a drag test approaching from 3px off to pin it. Next slice candidate.
+
+### 2026-08-09 — Drag alignment snaps exactly onto the line (sign fix)
+
+Problem: Round 27's journal found a latent sign bug in the round-22 drag alignment. `computeAlignmentGuides` returns `dx = pAxis − rAxis` (dragged axis minus reference), but the drag path APPLIED it (`fx = clamped.x + align.dx`) — so a node dragged so its edge raw-lands 3px off the line parked 2× the miss (6px) AWAY from it, on the cursor's side, instead of snapping onto the line. Every existing alignment test landed exactly on the line (dx = 0), masking it since round 22.
+
+Solution: Subtract the delta instead — `fx = clamped.x - align.dx` — so the dragged edge lands exactly on the reference line from either approach direction. The aligned-axis grid skip and the group-rigid delta are unchanged, and all five pre-existing alignment tests (dx = 0, sign-invariant) pass untouched. The round-27 nudge path already used the correct `-align.dx`, so drag and keyboard now agree.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 2 new (drag raw-landing 3px PAST the line → snaps flush at 206px with the guide at 446px; drag raw-landing 3px SHORT → snaps flush at 206px; both pin the exact 2×-miss values the bug produced: 212px / 200px). Editor suite 285/285; full topology sweep 324/324; typecheck/lint/i18n parity clean.
+
+Risks: none new. The nudge guide test (round 27) group-membership extension and the marquee-vs-guide interplay remain queued.
+
+### 2026-08-09 — Alt+drag to duplicate (Figma's one-hand copy gesture)
+
+Problem: The editor's only duplication path was Ctrl+D / context-menu (in-place, grid-offset). The flagship pro gesture — holding Alt while dragging to duplicate live — was missing, so quick "clone this node over there" flows took two operations.
+
+Solution: Alt+mousedown on a node now starts a DUPLICATE drag: fresh copies (new ids via the established `${type}-${uuid}` minting, wires copied when BOTH endpoints are selected) start at the originals' positions and follow the cursor through the exact same drag pipeline as a move — dynamic edge clamp, grid snap, and the round-22/25 alignment guides (the originals are stationary, so they even serve as guide references). The originals never move; the body cursor shows `copy`. On mouseup (canvas or document path — both fire, commit is idempotent) the copies stay, become the selection, and the whole drop lands as ONE undo entry whose snapshot is the PRE-drag state (current state minus copy ids — the originals didn't move, so the subtraction is exact; this caught a real bug in Red: pushing the dropped state made Undo restore the copies instead of removing them). Escape mid-drag discards the copies and the drag, keeps the originals selected, and leaves NO history entry. Alt+drag on a member of a multi-selection duplicates the whole group rigidly.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 4 new (single node: original stays at 200, copy follows through the snap pipeline to 312 and becomes the selection; Escape cancels with no copy, original at 200, no Undo button; group + wire: 4 nodes / 2 wires, copies land rigidly at +60 with snap off; drop is one undo — Undo removes the copy). Editor suite 289/289; full topology sweep 328/328; typecheck/lint/i18n parity clean.
+
+Risks: mid-drag Alt toggling (pressing Alt AFTER the drag starts) is not supported — the gesture is decided at mousedown, because the live-node drag model moves the actual nodes and can't cheaply snapshot originals mid-flight; a duplicate-preview model would be needed. Alt+click (no move) commits an in-place stacked copy — consistent with Figma. Journaled for a future round.
+
+### 2026-08-09 — Accessible snap & duplicate feedback (aria-live)
+
+Problem: Every snap/clone affordance added in rounds 22-29 is visual-only — the alignment guides are aria-hidden and the Alt-drag shows a `copy` cursor. A screen-reader user dragging a node onto a guide, or Alt-duplicating, gets ZERO feedback that anything happened.
+
+Solution: A visually-hidden live region (`sr-only`, `role="status"` = polite) at the editor root announces three events, localized via new FTL keys (en/id parity):
+- **Alignment snap** (drag OR fine-nudge entry): a `prevGuideRef` latch announces on the null → guide transition only — the guide object is recreated every mousemove while snapped, so without the latch a continuous drag would re-announce on every frame; the mouseup clear resets it so the next approach re-announces (pinned by a re-approach assertion).
+- **Alt-duplicate drop** ("Duplicate created") and **Escape cancel** ("Duplicate cancelled") — announced from the commit/cancel callbacks via an `l10nRef` (the ref-based callbacks must always resolve strings from the current bundle).
+- Plain drags that never snap stay silent (pinned).
+
+Bonus finding: the editor ALREADY had a `role="status"` (the dirty chip), so the live region is addressed by a `data-testid` in tests rather than role queries.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 5 new (drag snap announces + re-approach re-announces; no-snap drag stays silent; fine-nudge snap announces; Alt-drop announces; Esc-cancel announces). Editor suite 294/294; full topology sweep 333/333; typecheck/lint/i18n parity clean.
+
+Risks: none new. The journal's remaining queue: mid-drag Alt toggling (needs a duplicate-preview drag model), and the group fine-nudge alignment test (behavior already shared with drag — test-only).
+
+### 2026-08-09 — Escape cancels an in-flight move (Figma semantics)
+
+Problem: Escape during a node drag only cleared the selection — the dragged nodes stayed wherever the cursor dropped them, so a mis-grabbed move was un-cancellable (Figma snaps the nodes back to their start).
+
+Solution: `handleNodeMouseDown` now snapshots the dragged nodes' pre-drag positions into `dragStartRef` (cleared on every mouseup path, commit, and cancel). Escape mid-move runs `cancelNodeMove`: merges the start COORDINATES back (the snapshot is { x, y } — a wholesale restore would strip type/name/id), pops the move's single history entry (the drag pushed exactly one at first movement; leaving it would make Undo a no-op restore), keeps the selection, and disarms the document mouseup. The keydown guard requires `dragHasMovedRef` — a bare mousedown (e.g. selectFirstNode's mousedown with no mouseup, or a port-click sequence) leaves `dragStartRef` populated but is NOT a move, and a stale cancel would swallow the normal Escape (connection/selection clear).
+
+The TDD loop caught TWO real bugs: (1) the first cancel replaced whole nodes with the { x, y } snapshot, stripping `type` and crashing the render at the NODE_TYPE_ICON lookup — the Red test failed with a React "Element type is invalid" crash, not an assertion; (2) the unguarded Escape branch broke the pre-existing connection-cancel tests (a stale "move" intercepted Escape before the connection clear).
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 3 new (Escape mid-move → node back to start, history entry popped (no Undo button), selection kept; a completed move is NOT cancelled by a later Escape; plain Escape still clears the selection). Editor suite 297/297; full topology sweep 336/336; typecheck/lint/i18n parity clean.
+
+Risks: none new. Remaining queue: mid-drag Alt toggling (needs a duplicate-preview drag model), the group fine-nudge alignment test (test-only), and wire bend editing (needs persistence across the Apply round-trip).
+
+### 2026-08-09 — Compliance cleanup: the rounds' CSS debt (full suite green)
+
+Problem: A full `vitest run` (the real gate, not just the topology sweep) exposed 4 compliance failures the earlier rounds introduced and the per-area loops missed:
+1. `.wire-rename-input` (round 20) and `.wire-label-pill` (round 21) use `--shadow-*` but had no noise-dither coverage (P11-5).
+2. `.wire-label-pill` used a hardcoded `border-radius: 999px` instead of a `--radius-*` token.
+3. The `topology-branch-*` toolbar rules lived in SettingsPage.css but are rendered by TopologyScreen — the screen-extraction gate flagged all 7 as dead classes for SettingsPage AND AppearanceSettings.
+
+Solution: (1) Registered both selectors in the components.css noise-dither `::after` block + KNOWN_NOISE_SELECTORS + both @media parity blocks (high-contrast, reduced-motion). Deliberately used the explicit `::after` path instead of the `.noise-dither` utility class: that utility forces `position: relative`, which would fight the absolutely-positioned, z-indexed wire elements' anchoring (load-order dependent). (2) `999px` → `var(--radius-full)`. (3) Moved the 7 branch rules verbatim into a new `src/features/stores/TopologyScreen.css`, imported by TopologyScreen.tsx — the CSS now lives where the markup is.
+
+Lesson: the per-round "full topology sweep" never included the compliance suites (noise-dither, theme tokens, screen extraction); this round closed that loop — a full `vitest run` is now the verification bar.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: no new tests (the 4 failing compliance tests were the Red). FULL UI SUITE 4323/4323 (265 files) — first full pass of the session; typecheck/lint/i18n parity clean.
+
+### 2026-08-09 — Collective fine-nudge alignment: coverage pin
+
+Problem: Round 25 pinned the collective semantics for DRAG (a non-grabbed member's edge snaps the whole group) and the round-25 journal explicitly queued the equivalent fine-nudge test — the nudge path had zero collective coverage, so a regression in the shared `computeAlignmentGuides` keyboard usage could ship unnoticed.
+
+Solution: Added the test. Finding: the engine is ALREADY collective for nudges — round 27 built `next` from ALL selected nodes and the entry-only rule (`after.alignedX && !pre.alignedX`) fires on any member's entry, carrying the whole selection rigidly with the aligned-axis grid skip. The test's only Red was my own marquee geometry (the first marquee box also touched the reference store, selecting 3 not 2) — no implementation change was required. The pin locks: B's left edge entry-snap lands flush at 440 (A's right edge) while C rides 900 → 893, group-rigid, with the guide drawn.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 1 new (collective nudge: member's edge entry snap carries the selection rigidly + guide drawn). Editor suite 298/298; full topology sweep 337/337; FULL UI SUITE 4324/4324 (265 files); typecheck/lint clean.
+
+Risks: none new. The collective-entry rule has a coherent edge (a member already in the band suppresses NEW entries until the group fully leaves — the nudge-eat protection from round 27, verified by trace, not a bug). Remaining queue: mid-drag Alt toggling (needs a duplicate-preview drag model) and wire bend editing (needs persistence across the Apply round-trip).
+
+### 2026-08-09 — Mid-drag Alt toggle (Figma's live duplicate convert)
+
+Problem: Round 29's Alt+drag worked only when Alt was held at MOUSEDOWN. Pressing Alt after a drag started did nothing — the journal flagged it, assuming it needed a full duplicate-preview refactor of the drag model.
+
+Solution: Round 31's `dragStartRef` made the light approach viable — no preview refactor. Pressing Alt mid-move (`e.key === 'Alt'` in the keydown effect, guarded on a drag in flight and not already duplicating) runs `convertDragToDuplicate`:
+- The ORIGINALS snap back to their pre-drag positions (`dragStartRef`).
+- Fresh copies take over the cursor at the CURRENT mid-drag positions (from `nodesRef`), wires copied when both endpoints are dragged.
+- The drag offsets RE-KEY to the copies (same cursor-relative offsets), so the mousemove path is untouched.
+- `duplicateHistoryPushedRef` records whether the move had already pushed its entry (dragHasMovedRef). That entry IS the pre-drag state (originals at start, no copies), so the COMMIT reuses it (no duplicate undo entry) and the CANCEL pops it (otherwise Undo would be a no-op). Alt-release is deliberately ignored — Figma keeps the duplicate once converted.
+
+Commits: none — rides the uncommitted batch.
+
+Tests: 3 new (Alt mid-move → original back at 200, copy continues the drag to 360 and becomes the selection; Escape after convert → no copy, original at start, Undo button absent (entry popped); converted drop → exactly ONE undo removes the copy). Editor suite 301/301; full topology sweep 340/340; FULL UI SUITE 4327/4327 (265 files); typecheck/lint/i18n parity clean.
+
+Risks: none new. The last journaled queue item is wire bend editing (needs persistence across the Apply round-trip — wire schema + backend + contract tests).
+
+### 2026-08-09 — Round 35: shortcuts sheet lists the flagship gestures
+
+Problem: The F1 shortcuts popover was stale — the flagship gestures added in rounds 18–29 (Space+drag pan, Alt+drag duplicate) were undocumented in the sheet, while "Move selected nodes" and zoom rows were present. A shortcut sheet that omits the two most powerful canvas gestures is a discoverability gap: users who never press F1 miss the one-hand duplicate.
+
+Solution: Added two rows to TOPOLOGY_SHORTCUTS: "Pan the canvas" (Space + Drag) and "Duplicate by dragging" (Alt + Drag), with FTL keys in both bundles (en/id parity kept — i18n lint clean) plus the test-stub keys. Red test asserts all four strings render after F1.
+
+Test counts: 302 editor / 4328 full UI suite (265 files). Gates: typecheck, eslint, i18n parity clean.
+
+Commits: rides the uncommitted UX batch.
+
+### 2026-08-09 — Round 36: wire bend editing (the last flagship)
+
+Problem: The journal queue's final item — wires were fixed auto curves/elbows; users could not author geometry. The journal assumed it "needs persistence across the Apply round-trip — wire schema + backend + contract tests", i.e. a Rust struct change.
+
+Solution: Investigation found the persistence path simpler than assumed: apply_topology_diff → save_topology_json persists the RAW wire payload (Vec<Value> after validation), and the typed TopologyWirePayload is validation-only with serde ignoring unknown fields — so `bends` survive Apply with ZERO Rust code changes. The Rust pin test locks that contract.
+
+Editor: `bends?: {x,y}[]` on TopologyWireData. wireGeometries routes a bent wire as a polyline through the bends (pulse rides the same polyline). Selected wire shows a draggable handle per bend plus a dashed midpoint ghost per segment; dragging a ghost inserts a bend there and drags it in one gesture; double-click removes; one undo entry per drag (document-listener pattern, pushHistory captured at mousedown = pre-drag snapshot); bends in projWires so dirty tracking is exact; both load paths + TopologyScreen diff mapping + TS payload carry bends.
+
+Test counts: 5 editor + 1 TopologyScreen + 1 Rust pin. Editor 307 / full UI 4334 (265 files) / topology Rust 201. Gates: typecheck, eslint, i18n parity, clippy -D warnings clean.
+
+Commits: rides the uncommitted UX batch.
+
+Risks: bend handles render only on the SELECTED wire (no hover affordance yet — a discoverability polish slice). No Escape-cancel for bend drags (unlike node moves). With bends the editor shows a polyline regardless of the elbow/curved toggle — deliberate (user geometry wins), worth a doc note if the toggle becomes ambiguous.
+
+### 2026-08-09 — Round 37: Escape cancels an in-flight bend drag
+
+Problem: Round 36 journaled the gap — bend drags had no cancel, unlike node moves (round 31). A mis-dragged bend was stuck where the cursor dropped it.
+
+Solution: Mirrored cancelNodeMove. bendDragRef gained startX/startY + a `created` flag: cancel restores the bend to its start position, or REMOVES a ghost-created bend entirely (the whole creation gesture is abandoned); pops the drag's single history entry so a cancelled gesture leaves no undo record; disarms the document listeners. Keydown branch sits between the duplicate-cancel and move-cancel checks. TDZ pitfall: the keydown effect's deps evaluate the callback eagerly, so cancelBendDrag must be declared ABOVE the effect (moved next to cancelNodeMove) — the first Green attempt crashed the whole suite with "Cannot access 'cancelBendDrag' before initialization", caught by Red immediately.
+
+TDD finding: the ghost-cancel test's "no undo entry" premise was wrong — selecting a wire via click ALREADY pushes a direction-cycle entry (existing wire-click semantics), so Undo legitimately lingers after the pop. The corrected test pins the sharper invariant: one Undo reverts the direction, never re-creates the bend.
+
+Test counts: 3 editor (2 new behaviors + 1 no-false-cancel pin). Editor 310 / full UI 4337 (265 files). Gates: typecheck, eslint, i18n parity clean.
+
+Commits: rides the uncommitted UX batch.
+
+### 2026-08-09 — Round 38: hover-revealed bend affordances
+
+Problem: Round 36's journaled discoverability gap — bend ghosts rendered only on the SELECTED wire, so a user who never clicked a wire had no hint that wires can be bent.
+
+Solution: Added hoveredWireId (set on the wire-group mouseenter/leave — on the GROUP, not the hitbox path, so moving the pointer from the path onto a ghost doesn't flicker the ghosts away). The render split: midpoint ghosts show when the wire is hovered OR selected; the draggable bend handles stay selection-only so hover stays light. Dragging a hover ghost behaves identically to a selected-wire ghost (startGhostBendDrag selects the wire), so the two paths can never drift. Hover alone pushes NO history (pinned — no direction-cycle entry, no selection).
+
+Test counts: 3 editor. Editor 313 / full UI 4340 (265 files). Gates: typecheck, eslint, i18n parity clean.
+
+Commits: rides the uncommitted UX batch. This closes the last journaled topology-editor queue item — the editor's interaction surface (move/duplicate/align/guide/nudge/bend/pan/zoom/cancel/announce/discover) is now complete and fully pinned.
+
+### 2026-08-09 — Round 39: Escape cancels an in-flight marquee
+
+Problem: Survey (no skips/TODOs; journal queue empty) found the last hole in the Escape-cancel family: a marquee in flight ignored Escape entirely — the box lingered until the next mousedown/mouseup cycle, and a release after Escape still committed the box's selection.
+
+Solution: New Escape branch (after the move-cancel, before the generic connection/selection clear): clears marqueeStartRef + marqueeRef + marquee state and disarms the document-level finalizer (marqueeCleanupRef), so a release after Escape cannot commit a selection from a cancelled marquee. Pure ref/state clears — no new callbacks, so the keydown effect's deps were untouched.
+
+Test counts: 1 editor. Editor 314 / full UI 4341 (265 files). Gates: typecheck, eslint, i18n parity clean.
+
+Commits: rides the uncommitted UX batch. The Escape-cancel family is now complete: duplicate (34), node move (31), bend drag (37), marquee (39), plus the pre-existing connection/selection clears.
+
+### 2026-08-09 — Round 40: undo coverage audit — align & wire relabel pins
+
+Problem: Enumerating every mutating gesture against its undo pin found two gaps in the audit: applyAlign (one entry per action) and commitWireRename (one entry per relabel) had NO undo regression tests — the audit's rule is every mutating gesture ships a one-entry-per-gesture undo pin.
+
+Solution: Two Red tests. Align: select store+ws, Align top (both → 80), one Undo restores store → 140 / ws → 80 exactly. Wire relabel: right-click wire → Rename wire → type + Enter ('Binds Store' → 'X Wire'), one Undo restores 'Binds Store' — this pin also guards the Enter+blur double-commit idempotence (a second entry would leave 'X Wire' after one undo). Both passed immediately — the behavior was already correct; the deliverable is the regression pins (same as round 33's collective-nudge pin). No implementation change.
+
+Audit ledger: drag (1290), nudge (1762), align (NEW), duplicate (29), direction cycle (2727), wire relabel (NEW), bends (36/37), adds (2481), deletes (1229/3989), rename burst (2624), spawn (2481 path) — the one-entry-per-gesture rule is now fully pinned.
+
+Test counts: 2 editor. Editor 316 / full UI 4343 (265 files). Gates: typecheck, eslint, i18n parity clean.
+
+Commits: rides the uncommitted UX batch.
+
+### 2026-08-09 — TDD cycle: dev-mock held-cart persistence
+
+Problem: The real backend persists parked orders in `held_carts`, but the browser dev-mock returned a fixed id from `hold_cart*`, empty arrays from `list_held_carts*` / `list_open_bills*`, and `null` from `get_held_cart*`. The Retail POS hold/resume/delete UI therefore could not be exercised in a reloadable preview.
+
+Solution: Red→Green. Added three contract tests covering summary listing, full detail surviving a module reload for resume, and deletion. The mock now stores held-cart rows under `oz-dev-mock:held-carts`, returns backend-shaped summaries, preserves serialized cart data plus customer/location metadata, separates open bills by `bill_type`, and removes rows on delete for both scoped and legacy command aliases.
+
+Verification: Red confirmed the initial listing returned `[]`; then the held-cart contract suite passed **24/24**, the focused sales/retail/API sweep passed **103/103**, ESLint passed, and `git diff --check` passed. TypeScript typecheck remains blocked only by the pre-existing dirty topology batch (`NodeTopologyEditor.test.tsx` `branchId` props and `NodeTopologyEditor.tsx` optional `subtitle`), with no errors reported in the held-cart files.
+
+Deliberately NOT done: browser mock session/tenant isolation remains simplified to the single-store preview model; the next parity slice is the backend's sliding-window lockout rather than more held-cart behavior.
+
+### 2026-08-09 — Round 41: UX plan execution — toggle honesty, viewport memory, node finder, auto-layout
+
+Problem: Executed the planning round's P1–P3 slices. Survey findings that reshaped the plan: BOTH P1 items were already done — Ctrl+Shift+Z lives inside the existing ctrl+z handler (shiftKey check, pinned by an existing test I'd missed) and the clipboard/bulk-select verbs have a full describe (Ctrl+D single/cascade, both-endpoints wire rule, one-endpoint no-wire, Ctrl+C/V cascade, Ctrl+A, undo-after-duplicate). Plan premises were grep-identifier errors, not real gaps — no code changed for P1.
+
+Solution (four real slices, all Red→Green):
+1. P2a bend/routing honesty: `anyBentWires` derivation; when any wire carries bends the View rack shows a `topology-bends-override-note` (role=status) and the Elbow toggle carries it as a title tooltip. Deliberately did NOT disable the toggle — it still controls UNBENT wires, so disabling would remove working control; the note makes the per-wire override visible instead of the toggle silently lying (round-36 journaled risk).
+2. P2b per-branch viewport memory: `branchId` prop (TopologyScreen passes the same value that keys the remount); lazy mount read of `{pan,zoom}` from `oz-topology-viewport:<branchId>`; persist effect; `restoredViewRef` disables the auto-fit effect for the session when a saved view was restored (a saved position is user-owned — never yank it). jsdom made the centering test fully deterministic (0×0 canvas → pan = −node center).
+3. P3a node finder (Ctrl+F): overlay dialog top-center of the canvas; input autofocus; case-insensitive name/subtitle substring filter; ArrowUp/Down wrap; Enter jumps (selectOnly + center at current zoom via new zoomRef) and closes; Escape closes (input stops propagation; the document Escape branch checks finderOpen first so a canvas-focus Escape never clears the selection underneath). F1 sheet gained the Ctrl+F row (round-35 lesson kept the sheet honest).
+4. P3b auto-layout: rank by wire direction (BFS from sources; cycles → column 0), per-rank columns with rows sorted by current y, result re-centered on the old bbox center so the diagram reorganizes in place; ONE undo entry; clears authored bends (destructure-omit — exactOptionalPropertyTypes forbids `bends: undefined`); live announcement. Header button next to the presets.
+
+Gates: the full-suite bar caught the noise-dither miss the area tests couldn't (`.topology-finder` shadow needed KNOWN_NOISE_SELECTORS + all three ::after blocks — round-32 lesson again). Wrapping selectOnly in useCallback exposed popUndo's latent missing dep; fixed.
+
+Test counts: +10 editor (1 P2a, 3 P2b, 3 P3a, 2 P3b, 1 P1 verification none). Editor 325 / full UI 4356 (265 files). Gates: typecheck, eslint, i18n parity clean.
+
+Commits: rides the uncommitted UX batch.
+
+Risks: P0 (branch-switch dirty guard — silent data loss) remains queued; the user's plan list omitted it, so it wasn't built. Auto-layout's bend-clearing is a deliberate tradeoff (bends described the old geometry) worth a doc note. Finder matching is naive substring; rank-BFS handles cycles coarsely. Viewport memory is localStorage-only (per-device, not per-user).
+
+### 2026-08-09 — TDD cycle: SQLite sync daemon recovers expired anchors
+
+Problem: `SyncEngine` already recovered an expired `sync_pull_state` anchor through the snapshot endpoint, but `SyncDaemon::run_tick` only recorded `AnchorExpired` as an error. A terminal using the background SQLite daemon would therefore hit the same 410 and retry the same expired anchor forever.
+
+Solution: Red→Green. Added a daemon integration test with a retention-aware mock server: a stale anchor returns 410 with `oldest_available`, the snapshot is fetched, and the durable `(since, cursor)` state must become `(oldest_available, NULL)`. The daemon now imports the snapshot through the shared transactional importer on a blocking DB task, resets the anchor only after a successful import, and preserves the existing server-migration/error handling paths.
+
+Verification: Red failed with zero snapshot requests; Green passed the new regression. `bash scripts/test-tdd.sh -p platform/sync`: **263/263 passed, 19 skipped**. `cargo clippy -p platform-sync --all-targets --no-deps -- -D warnings`: clean. Changed Rust files are rustfmt-clean; the workspace `cargo fmt --all -- --check` remains blocked only by an unrelated pre-existing formatting diff in `apps/desktop-client/src/commands/topology.rs`.
+
+Deliberately NOT done: snapshot import and anchor reset remain two database commits, matching the existing `SyncEngine` path; a crash between them can repeat an idempotent snapshot import but cannot advance a stale anchor incorrectly. PostgreSQL daemon parity and recovery backoff remain separate slices.
