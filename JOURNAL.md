@@ -2194,3 +2194,15 @@ Verified: editor + integration 430/430, full UI 4505/4505 (269 files), typecheck
 Risks / follow-ups: stock/capacity/threshold are design-time metadata; a live inventory feed (settings.inventory) can supersede them in getTelemetry when the backend exposes per-warehouse stock — the branch is isolated for that swap. Badge text is plain numbers ("5 / 1000 items"), matching the existing demo badges; localization of the unit word is a future pass.
 
 Commit hygiene: 2/5 editor hunks, 2/8 test hunks (the agents' panMovedRef + titlebar/KDS/pan hunks excluded), whole-file hunks for the card and both FTL bundles — staged via filtered patches, --no-verify with all gates run manually first.
+
+### 08-09-26 — Round 72: stock-deduct validation honors warehouse capacity
+
+Problem (round-71 follow-up): a workspace→warehouse stock-deduct wire was valid regardless of the warehouse's design-time capacity — the card could read "1000 / 1000 items" (at capacity, warning badge) and still be a routable target, which the validation silently allowed.
+
+Solution (TDD Red→Green): the semantic contract now carries the warehouse stock numbers. SemanticTopologyNode gains optional stock/capacity/lowStockThreshold (normalizeTopologyGraph copies them from metadata via a new metadataNumber helper), and validateTopologyGraph adds a capacity guard: any stock-routing wire whose target warehouse has stock >= capacity pushes a new 'warehouse-at-capacity' error (nodeId + wireId), which pins as a card note and blocks Apply with a localizable message. No capacity metadata → guard skipped, so legacy graphs stay unflagged. Red — 4 contract tests (at-capacity flagged with wireId/nodeId, over-capacity flagged, below-capacity clean, no-metadata clean) + 3 editor tests (card note appears at/over capacity, stays clean below); Green — the contract changes + 1 FTL key per bundle.
+
+Verified: contract 28/28 (+4), editor 424/424 (+3), full UI 4512/4512 (269 files), typecheck, eslint 0/0, i18n lint clean.
+
+Risks / follow-ups: the guard only fires when BOTH stock and capacity are set — a warehouse with capacity but no stock (user hasn't entered Current Stock) is not flagged, which is consistent with the badge staying hidden until stock exists. The error attaches to the wire but renders on the warehouse card (byNode); a future slice could surface wire-scoped errors on the wire itself. Live inventory telemetry would supersede the design-time numbers the same way it supersedes the badge.
+
+Commit hygiene: 5/5 contract hunks, 2/2 contract-test hunks, 1/7 editor-test hunks (the agents' panMovedRef + titlebar/KDS/pan hunks excluded), whole-file hunks for both FTL bundles — staged via filtered patches, --no-verify with all gates run manually first.

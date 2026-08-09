@@ -32,6 +32,27 @@ const warehouse = (id: string): TopologyNodeData => ({
   y: 200,
 });
 
+const warehouseWith = (id: string, metadata: Record<string, unknown>): TopologyNodeData => ({
+  id,
+  type: 'warehouse',
+  name: id,
+  x: 200,
+  y: 200,
+  metadata,
+});
+
+const stockWire = (id: string, workspaceId: string, warehouseId: string): TopologyWireData => ({
+  id,
+  fromNodeId: workspaceId,
+  fromPort: 'right',
+  fromPortId: 'stock-out',
+  toNodeId: warehouseId,
+  toPort: 'left',
+  toPortId: 'stock-in',
+  relationshipType: 'stock-routing',
+  direction: 'one-way',
+});
+
 const ownershipWire = (id: string, workspaceId: string): TopologyWireData => ({
   id,
   fromNodeId: 'branch-1',
@@ -530,5 +551,49 @@ describe('semantic topology contract', () => {
     expect(validateTopologyGraph(normalized)).toEqual([
       expect.objectContaining({ code: 'unsupported-schema-version' }),
     ]);
+  });
+
+  it('flags a stock-deduct wire when the target warehouse is at or over capacity', () => {
+    const normalized = graph(
+      [branch(), workspace('ws-1'), warehouseWith('wh-1', { stock: 1000, capacity: 1000 })],
+      [ownershipWire('w-owner', 'ws-1'), stockWire('w-stock', 'ws-1', 'wh-1')],
+    );
+
+    expect(validateTopologyGraph(normalized)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: 'warehouse-at-capacity',
+        nodeId: 'wh-1',
+        wireId: 'w-stock',
+      }),
+    ]));
+  });
+
+  it('flags a stock-deduct wire when stock is over capacity', () => {
+    const normalized = graph(
+      [branch(), workspace('ws-1'), warehouseWith('wh-1', { stock: 1200, capacity: 1000 })],
+      [ownershipWire('w-owner', 'ws-1'), stockWire('w-stock', 'ws-1', 'wh-1')],
+    );
+
+    expect(validateTopologyGraph(normalized)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'warehouse-at-capacity' }),
+    ]));
+  });
+
+  it('keeps the graph clean while warehouse stock is below capacity', () => {
+    const normalized = graph(
+      [branch(), workspace('ws-1'), warehouseWith('wh-1', { stock: 500, capacity: 1000 })],
+      [ownershipWire('w-owner', 'ws-1'), stockWire('w-stock', 'ws-1', 'wh-1')],
+    );
+
+    expect(validateTopologyGraph(normalized)).toEqual([]);
+  });
+
+  it('skips the capacity guard when the warehouse has no capacity metadata', () => {
+    const normalized = graph(
+      [branch(), workspace('ws-1'), warehouse('wh-1')],
+      [ownershipWire('w-owner', 'ws-1'), stockWire('w-stock', 'ws-1', 'wh-1')],
+    );
+
+    expect(validateTopologyGraph(normalized)).toEqual([]);
   });
 });

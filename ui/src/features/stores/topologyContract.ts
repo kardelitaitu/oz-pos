@@ -54,6 +54,12 @@ export interface SemanticTopologyNode {
   typeKey?: string;
   /** Controlled business purpose, independent from type and instance label. */
   purposeKey?: string;
+  /** Design-time warehouse stock state (diagram metadata, rounds 70-71). */
+  stock?: number;
+  /** Design-time warehouse capacity — stock may not exceed it. */
+  capacity?: number;
+  /** Design-time warehouse low-stock threshold. */
+  lowStockThreshold?: number;
 }
 
 /** Stable semantic wire in a normalized graph. */
@@ -96,7 +102,8 @@ export interface TopologyValidationError {
     | 'cycle-detected'
     | 'invalid-location-connection'
     | 'duplicate-wire'
-    | 'unknown-wire-endpoint';
+    | 'unknown-wire-endpoint'
+    | 'warehouse-at-capacity';
   messageId: string;
   nodeId?: string;
   wireId?: string;
@@ -190,6 +197,11 @@ function nodeKind(node: TopologyNodeInput): SemanticNodeKind {
 function metadataString(node: TopologyNodeInput, key: string): string | undefined {
   const value = node.metadata?.[key];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function metadataNumber(node: TopologyNodeInput, key: string): number | undefined {
+  const value = node.metadata?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 /** The closed set of legal relationship types (mirrors SemanticRelationshipType).
@@ -335,6 +347,12 @@ export function normalizeTopologyGraph(
     if (storeProfileId !== undefined) semanticNode.storeProfileId = storeProfileId;
     if (typeKey !== undefined) semanticNode.typeKey = typeKey;
     if (purposeKey !== undefined) semanticNode.purposeKey = purposeKey;
+    const stock = metadataNumber(node, 'stock');
+    const capacity = metadataNumber(node, 'capacity');
+    const lowStockThreshold = metadataNumber(node, 'lowStockThreshold');
+    if (stock !== undefined) semanticNode.stock = stock;
+    if (capacity !== undefined) semanticNode.capacity = capacity;
+    if (lowStockThreshold !== undefined) semanticNode.lowStockThreshold = lowStockThreshold;
     return semanticNode;
   });
   const nodeById = new Map(semanticNodes.map((node) => [node.id, node]));
@@ -553,6 +571,26 @@ export function validateTopologyGraph(graph: SemanticTopologyGraph): TopologyVal
       errors.push({
         code: 'invalid-semantic-connection',
         messageId: 'topology-validation-invalid-semantic-connection',
+        wireId: wire.id,
+      });
+    }
+  }
+
+  // Warehouse capacity guard: a stock-deduct wire (workspace → warehouse,
+  // relationship stock-routing) is only routable while the target Stock
+  // Room has room. The design-time metadata numbers (rounds 70-71) drive
+  // it — no capacity metadata means no check, so legacy graphs with no
+  // numbers stay unflagged.
+  for (const wire of graph.wires) {
+    if (wire.relationshipType !== 'stock-routing') continue;
+    const target = graph.nodes.find((node) => node.id === wire.toNodeId);
+    if (!target || target.kind !== 'warehouse') continue;
+    if (target.capacity === undefined || target.stock === undefined) continue;
+    if (target.stock >= target.capacity) {
+      errors.push({
+        code: 'warehouse-at-capacity',
+        messageId: 'topology-validation-warehouse-at-capacity',
+        nodeId: target.id,
         wireId: wire.id,
       });
     }

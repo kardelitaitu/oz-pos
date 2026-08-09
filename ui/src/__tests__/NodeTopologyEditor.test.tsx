@@ -4036,6 +4036,47 @@ describe('NodeTopologyEditor — warehouse low-stock telemetry', () => {
   });
 });
 
+// ── Warehouse capacity validation ───────────────────────────────
+
+describe('NodeTopologyEditor — warehouse capacity validation', () => {
+  const renderStockedGraph = async (stock: number, capacity: number) => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-1', type: 'workspace', name: 'Retail POS', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-1', type: 'warehouse', name: 'Main Stock Room', x: 680, y: 140, metadata: { stock, capacity } },
+      ],
+      wires: [
+        { id: 'w-loc', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+        { id: 'w-stock', from_node_id: 'ws-1', to_node_id: 'wh-1', from_port_id: 'stock-out', to_port_id: 'stock-in', relationship_type: 'stock-routing', direction: 'one-way' },
+      ],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
+  };
+
+  const warehouseNote = () =>
+    document.querySelector('.node-type-warehouse')?.querySelector('.node-validation-note');
+
+  it('flags the Stock Room card when stock is at capacity', async () => {
+    await renderStockedGraph(1000, 1000);
+
+    const note = warehouseNote();
+    expect(note).not.toBeNull();
+    expect(note?.textContent).toContain('capacity');
+  });
+
+  it('flags the Stock Room card when stock is over capacity', async () => {
+    await renderStockedGraph(1200, 1000);
+    expect(warehouseNote()).not.toBeNull();
+  });
+
+  it('keeps the Stock Room card clean while stock is below capacity', async () => {
+    await renderStockedGraph(500, 1000);
+    expect(warehouseNote()).toBeNull();
+  });
+});
+
 // ── Zoom controls behavior ──────────────────────────────────────
 
 describe('NodeTopologyEditor — zoom controls behavior', () => {
