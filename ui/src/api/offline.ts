@@ -187,6 +187,59 @@ export const syncRun = (): Promise<SyncAttemptResult> =>
 export const pendingSyncCount = (): Promise<number> =>
   loggedInvoke<number>('pending_sync_count');
 
+// ── PostgreSQL sync settings & daemon ──────────────────────────────
+
+/** PostgreSQL sync configuration (the PG transport's connection settings). */
+export interface PgSyncSettingsDto {
+  enabled: boolean;
+  host: string | null;
+  port: string | null;
+  dbname: string | null;
+  user: string | null;
+  hasPassword: boolean;
+}
+
+/** Arguments for updating PostgreSQL sync settings. `password` is only
+ *  written when provided — omit it to keep the stored secret untouched
+ *  (the UI sends `undefined` for the unmasked field). */
+export interface UpdatePgSyncSettingsArgs {
+  enabled: boolean;
+  host?: string | null;
+  port?: string | null;
+  dbname?: string | null;
+  user?: string | null;
+  password?: string | null;
+}
+
+/** Snapshot of the PG sync daemon's state (camelCase mirror of the Rust
+ *  `PgDaemonStatus` serializer). */
+export interface PgDaemonStatusDto {
+  running: boolean;
+  lastSyncAt: string | null;
+  lastPushed: number;
+  lastPulled: number;
+  lastError: string | null;
+  pendingCount: number;
+}
+
+/** Get the PostgreSQL sync settings. */
+export const getPgSyncSettings = (): Promise<PgSyncSettingsDto> =>
+  loggedInvoke<PgSyncSettingsDto>('get_pg_sync_settings');
+
+/** Update the PostgreSQL sync settings. */
+export const updatePgSyncSettings = (args: UpdatePgSyncSettingsArgs): Promise<void> =>
+  loggedInvoke<void>('update_pg_sync_settings', { args });
+
+/** Get the PG sync daemon's current status. */
+export const pgSyncStatus = (): Promise<PgDaemonStatusDto> =>
+  loggedInvoke<PgDaemonStatusDto>('pg_sync_status');
+
+/** Start the background PG sync daemon (no-op when already running). */
+export const pgSyncStart = (): Promise<void> => loggedInvoke<void>('pg_sync_start');
+
+/** Stop the background PG sync daemon (no-op when not running). */
+export const pgSyncStop = (): Promise<void> => loggedInvoke<void>('pg_sync_stop');
+
 /**
  * Arguments for a destructive snapshot pull.
  *

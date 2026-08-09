@@ -44,6 +44,11 @@ import {
   deleteOfflineItem,
   listRemoteFailures,
   requeueRemoteFailure,
+  getPgSyncSettings,
+  updatePgSyncSettings,
+  pgSyncStatus,
+  pgSyncStart,
+  pgSyncStop,
   type SyncResult,
 } from '@/api/offline';
 
@@ -257,5 +262,69 @@ describe('offline.ts IPC contract', () => {
     await expect(syncPull({ confirmDestructive: false })).rejects.toThrow(
       'confirmDestructive must be true',
     );
+  });
+});
+
+describe('offline.ts PG sync IPC contract', () => {
+  beforeEach(() => mockInvoke.mockReset());
+
+  it('getPgSyncSettings invokes "get_pg_sync_settings" with no args', async () => {
+    mockInvoke.mockResolvedValue({
+      enabled: false,
+      host: null,
+      port: null,
+      dbname: null,
+      user: null,
+      hasPassword: false,
+    });
+    await getPgSyncSettings();
+    expect(mockInvoke).toHaveBeenCalledWith('get_pg_sync_settings', undefined);
+  });
+
+  it('updatePgSyncSettings invokes "update_pg_sync_settings" with camelCase args', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await updatePgSyncSettings({
+      enabled: true,
+      host: 'db.example.com',
+      port: '5432',
+      dbname: 'oz_sync',
+      user: 'sync_user',
+      password: 'secret',
+    });
+    expect(mockInvoke).toHaveBeenCalledWith('update_pg_sync_settings', {
+      args: {
+        enabled: true,
+        host: 'db.example.com',
+        port: '5432',
+        dbname: 'oz_sync',
+        user: 'sync_user',
+        password: 'secret',
+      },
+    });
+  });
+
+  it('pgSyncStatus invokes "pg_sync_status" and returns the camelCase status DTO', async () => {
+    mockInvoke.mockResolvedValue({
+      running: true,
+      lastSyncAt: '2026-08-09T00:00:00Z',
+      lastPushed: 5,
+      lastPulled: 3,
+      lastError: null,
+      pendingCount: 10,
+    });
+    await pgSyncStatus();
+    expect(mockInvoke).toHaveBeenCalledWith('pg_sync_status', undefined);
+  });
+
+  it('pgSyncStart invokes "pg_sync_start" with no args', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await pgSyncStart();
+    expect(mockInvoke).toHaveBeenCalledWith('pg_sync_start', undefined);
+  });
+
+  it('pgSyncStop invokes "pg_sync_stop" with no args', async () => {
+    mockInvoke.mockResolvedValue(undefined);
+    await pgSyncStop();
+    expect(mockInvoke).toHaveBeenCalledWith('pg_sync_stop', undefined);
   });
 });

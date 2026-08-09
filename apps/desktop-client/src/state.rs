@@ -60,6 +60,7 @@ use oz_hal::DriverRegistry;
 use platform_core::StoreDatabaseManager;
 use platform_kernel::Kernel;
 use platform_sync::daemon::SyncDaemon;
+use platform_sync::pg_daemon::PgSyncDaemon;
 
 use crate::error::AppError;
 
@@ -103,6 +104,12 @@ pub struct AppState {
     /// Background sync daemon. Started during app setup via
     /// [`SyncDaemon::start`](platform_sync::daemon::SyncDaemon::start).
     pub sync_daemon: SyncDaemon,
+
+    /// Background PostgreSQL sync daemon (the optional PG transport).
+    /// Started during app setup alongside the HTTP daemon; its tick loop
+    /// no-ops while `pg_sync.enabled` is off. The `pg_sync_*` commands
+    /// start/stop it and read its status.
+    pub pg_sync_daemon: PgSyncDaemon,
 
     /// Caching layer (Redis-backed when configured, no-op otherwise).
     /// Shared across all `Store` instances via `Arc`.
@@ -295,6 +302,7 @@ impl AppState {
             plugin_watcher,
             plugin_hot_reload_task,
             sync_daemon: SyncDaemon::new(),
+            pg_sync_daemon: PgSyncDaemon::new(),
             cache,
             inventory_pubsub_shutdown,
             kernel_shutdown: Some(kernel_shutdown_tx),
@@ -657,6 +665,7 @@ impl AppState {
             plugin_watcher: None,
             plugin_hot_reload_task: None,
             sync_daemon: SyncDaemon::new(),
+            pg_sync_daemon: PgSyncDaemon::new(),
             cache: oz_core::cache::create_cache("redis://127.0.0.1/", 300),
             inventory_pubsub_shutdown: None,
             kernel_shutdown: None,

@@ -9,6 +9,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use serde::Serialize;
 use tokio::sync::{Mutex, RwLock, watch};
 
 use oz_core::db::Store;
@@ -26,8 +27,11 @@ use crate::{SyncError, SyncResult, import_snapshot};
 const DEFAULT_PG_SYNC_INTERVAL: Duration = Duration::from_secs(60);
 
 /// Snapshot of the PG daemon's current state, observable via
-/// [`PgSyncDaemon::status`].
-#[derive(Debug, Clone, Default)]
+/// [`PgSyncDaemon::status`]. Serialized camelCase for the Tauri command
+/// boundary (the desktop client's `pg_sync_status` IPC returns this
+/// directly, matching the app's DTO convention).
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PgDaemonStatus {
     /// Whether the daemon is currently running.
     pub running: bool,

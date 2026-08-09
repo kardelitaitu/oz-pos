@@ -52,8 +52,6 @@ mod sync_bootstrap;
 #[rustfmt::skip]
 static TEST_MANIFEST_DIRECTIVES: [u8; 184] = *b" /MANIFEST:EMBED /MANIFESTDEPENDENCY:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"\x00";
 
-use std::sync::Arc;
-
 use crate::error::AppError;
 use crate::state::AppState;
 use tauri::{Emitter, Manager};
@@ -133,26 +131,36 @@ pub fn run() {
             let db = app.state::<AppState>().db.clone();
             let app_handle = app.handle().clone();
             // SYNC-10: a settings change made on ANOTHER terminal and pulled
-            // by the daemon is re-emitted as the `settings_updated` Tauri
+            // by either daemon is re-emitted as the `settings_updated` Tauri
             // event — the same wire shape the frontend SettingsContext
             // listens for — so the UI refetches the changed scope. Local
             // saves already publish the domain event; this closes the loop
-            // for the sync-applied path.
-            let settings_sink: platform_sync::daemon::SettingsChangedSink = {
-                let app_handle = app_handle.clone();
-                Arc::new(move |event: &oz_core::events::SettingsUpdated| {
-                    let payload = serde_json::json!({
-                        "changed_keys": event.changed_keys,
-                        "terminal_id": event.terminal_id,
-                    });
-                    let _ = app_handle.emit("settings_updated", payload);
-                })
-            };
+            // for the sync-applied path. The sink is shared by the SQLite
+            // and PostgreSQL daemons.
+            let settings_sink = commands::sync::settings_changed_sink(&app_handle);
+            let sqlite_sink = settings_sink.clone();
+            let pg_sink = settings_sink.clone();
             platform_startup::spawn_daemon("sync daemon", async move {
                 let state = app_handle.state::<AppState>();
                 state
                     .sync_daemon
-                    .start_with_sink(db, settings_sink)
+                    .start_with_sink(db, sqlite_sink)
+                    .await;
+            });
+
+            // ── Background PostgreSQL sync daemon ─────────────────────
+            // The optional PG transport. The daemon no-ops on every tick
+            // while `pg_sync.enabled` is off and re-reads the connection
+            // settings each cycle, so this unconditional spawn mirrors the
+            // SQLite daemon's — the pg_sync_start / pg_sync_stop commands
+            // control the same instance.
+            let pg_db = app.state::<AppState>().db.clone();
+            let pg_app_handle = app.handle().clone();
+            platform_startup::spawn_daemon("pg sync daemon", async move {
+                let state = pg_app_handle.state::<AppState>();
+                state
+                    .pg_sync_daemon
+                    .start_with_sink(pg_db, pg_sink)
                     .await;
             });
 
@@ -598,6 +606,11 @@ pub fn run() {
             commands::sync::pending_sync_count,
             commands::sync::test_sync_connection,
             commands::sync::request_sync_token,
+            commands::sync::get_pg_sync_settings,
+            commands::sync::update_pg_sync_settings,
+            commands::sync::pg_sync_status,
+            commands::sync::pg_sync_start,
+            commands::sync::pg_sync_stop,
             commands::refunds::process_refund,
             commands::refunds::process_refund_scoped,
             commands::refunds::list_refunds,

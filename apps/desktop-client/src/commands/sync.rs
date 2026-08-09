@@ -6,13 +6,18 @@
 //! the local cache. The settings commands let the user configure the
 //! server URL and API key.
 
+use std::sync::Arc;
+
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{Emitter, State};
 
 use oz_core::db::Store;
+use oz_core::events::SettingsUpdated;
 use oz_core::settings::Settings;
 use oz_core::sync_client::{self, PullResult, SyncAttemptResult, SyncConfig};
+use platform_sync::daemon::SettingsChangedSink;
+use platform_sync::pg_daemon::PgDaemonStatus;
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -121,6 +126,146 @@ pub fn update_sync_settings_data(
     }
     Settings::set_sync_enabled(&tx, args.enabled)?;
     tx.commit()?;
+    Ok(())
+}
+
+// ── PostgreSQL sync settings & daemon commands ──────────────────
+
+/// PostgreSQL sync configuration (the PG transport's connection settings).
+/// `has_password` reports whether a secret is stored — the password itself
+/// is never echoed back to the front-end.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PgSyncSettingsDto {
+    /// Whether PostgreSQL sync is enabled.
+    pub enabled: bool,
+    /// PostgreSQL hostname or IP.
+    pub host: Option<String>,
+    /// PostgreSQL port.
+    pub port: Option<String>,
+    /// PostgreSQL database name.
+    pub dbname: Option<String>,
+    /// PostgreSQL user.
+    pub user: Option<String>,
+    /// Whether a password is stored (never echoed back).
+    pub has_password: bool,
+}
+
+/// Get PG sync settings.
+#[tauri::command]
+pub async fn get_pg_sync_settings(
+    state: State<'_, AppState>,
+) -> Result<PgSyncSettingsDto, AppError> {
+    let db = state.db.lock().await;
+    run_get_pg_sync_settings(&db)
+}
+
+/// Business logic for `get_pg_sync_settings` (extracted for testing).
+fn run_get_pg_sync_settings(conn: &Connection) -> Result<PgSyncSettingsDto, AppError> {
+    Ok(PgSyncSettingsDto {
+        enabled: Settings::is_pg_sync_enabled(conn)?,
+        host: Settings::get_pg_sync_host(conn)?.filter(|s| !s.is_empty()),
+        port: Settings::get_pg_sync_port(conn)?.filter(|s| !s.is_empty()),
+        dbname: Settings::get_pg_sync_dbname(conn)?.filter(|s| !s.is_empty()),
+        user: Settings::get_pg_sync_user(conn)?.filter(|s| !s.is_empty()),
+        has_password: Settings::get_pg_sync_password(conn)?.is_some_and(|s| !s.is_empty()),
+    })
+}
+
+/// Update PG sync settings.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdatePgSyncSettingsArgs {
+    /// Whether PostgreSQL sync is enabled.
+    pub enabled: bool,
+    /// PostgreSQL hostname or IP (`None` clears).
+    pub host: Option<String>,
+    /// PostgreSQL port (`None` clears).
+    pub port: Option<String>,
+    /// PostgreSQL database name (`None` clears).
+    pub dbname: Option<String>,
+    /// PostgreSQL user (`None` clears).
+    pub user: Option<String>,
+    /// PostgreSQL password — written only when `Some`, so the UI's masked
+    /// untouched field never blanks the stored secret (mirror of the
+    /// HTTP sync API-key handling).
+    pub password: Option<String>,
+}
+
+/// Update PG sync settings.
+#[tauri::command]
+pub async fn update_pg_sync_settings(
+    args: UpdatePgSyncSettingsArgs,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let db = state.db.lock().await;
+    update_pg_sync_settings_data(&db, &args)?;
+    drop(db);
+    Ok(())
+}
+
+/// Persist PG sync settings atomically in a single transaction.
+///
+/// Extracted as a free function so the persistence contract (optional
+/// field clearing + password preservation) can be tested without a Tauri
+/// runtime, mirroring `update_sync_settings_data`.
+pub fn update_pg_sync_settings_data(
+    conn: &Connection,
+    args: &UpdatePgSyncSettingsArgs,
+) -> Result<(), AppError> {
+    let tx = conn.unchecked_transaction()?;
+    Settings::set_pg_sync_enabled(&tx, args.enabled)?;
+    // `None` (or an empty string) clears the field — the same row-presence
+    // contract the HTTP sync URL handling uses.
+    Settings::set_pg_sync_host(&tx, args.host.as_deref().unwrap_or(""))?;
+    Settings::set_pg_sync_port(&tx, args.port.as_deref().unwrap_or(""))?;
+    Settings::set_pg_sync_dbname(&tx, args.dbname.as_deref().unwrap_or(""))?;
+    Settings::set_pg_sync_user(&tx, args.user.as_deref().unwrap_or(""))?;
+    if let Some(ref password) = args.password {
+        Settings::set_pg_sync_password(&tx, password)?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+/// SYNC-10 settings sink shared by the SQLite and PG daemons: a settings
+/// change applied by sync is re-emitted as the `settings_updated` Tauri
+/// event (the same wire shape the frontend SettingsContext listens for)
+/// so the UI refetches the changed scope. Local saves already publish the
+/// domain event; this closes the loop for the sync-applied path.
+pub fn settings_changed_sink(app: &tauri::AppHandle) -> SettingsChangedSink {
+    let app_handle = app.clone();
+    Arc::new(move |event: &SettingsUpdated| {
+        let payload = serde_json::json!({
+            "changed_keys": event.changed_keys,
+            "terminal_id": event.terminal_id,
+        });
+        let _ = app_handle.emit("settings_updated", payload);
+    })
+}
+
+/// Get the PG daemon's current status snapshot.
+#[tauri::command]
+pub async fn pg_sync_status(state: State<'_, AppState>) -> Result<PgDaemonStatus, AppError> {
+    Ok(state.pg_sync_daemon.status().await)
+}
+
+/// Start the background PG sync daemon. No-op when already running.
+#[tauri::command]
+pub async fn pg_sync_start(
+    app_handle: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    let db = state.db.clone();
+    let sink = settings_changed_sink(&app_handle);
+    state.pg_sync_daemon.start_with_sink(db, sink).await;
+    Ok(())
+}
+
+/// Stop the background PG sync daemon. No-op when not running.
+#[tauri::command]
+pub async fn pg_sync_stop(state: State<'_, AppState>) -> Result<(), AppError> {
+    state.pg_sync_daemon.stop().await;
     Ok(())
 }
 
@@ -354,6 +499,7 @@ pub async fn sync_pull(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tauri::Manager as _;
 
     #[test]
     fn sync_settings_serialize() {
@@ -517,5 +663,204 @@ mod tests {
         assert_eq!(r.tax_rates_pulled, 1);
         assert_eq!(r.users_pulled, 2);
         assert!(r.error.is_none());
+    }
+
+    // ── PostgreSQL sync settings & daemon commands ────────────────
+
+    #[test]
+    fn pg_sync_settings_dto_serialize_camel_case() {
+        let dto = PgSyncSettingsDto {
+            enabled: true,
+            host: Some("db.example.com".into()),
+            port: Some("5432".into()),
+            dbname: Some("oz_sync".into()),
+            user: Some("sync_user".into()),
+            has_password: true,
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["enabled"], true);
+        assert_eq!(json["host"], "db.example.com");
+        assert_eq!(json["port"], "5432");
+        assert_eq!(json["dbname"], "oz_sync");
+        assert_eq!(json["user"], "sync_user");
+        assert_eq!(json["hasPassword"], true);
+    }
+
+    #[test]
+    fn update_pg_sync_settings_args_deserialize() {
+        let json = r#"{"enabled":true,"host":"db.example.com","port":"5432","dbname":"oz_sync","user":"sync_user","password":"secret"}"#;
+        let args: UpdatePgSyncSettingsArgs = serde_json::from_str(json).unwrap();
+        assert!(args.enabled);
+        assert_eq!(args.host.as_deref(), Some("db.example.com"));
+        assert_eq!(args.port.as_deref(), Some("5432"));
+        assert_eq!(args.dbname.as_deref(), Some("oz_sync"));
+        assert_eq!(args.user.as_deref(), Some("sync_user"));
+        assert_eq!(args.password.as_deref(), Some("secret"));
+    }
+
+    #[test]
+    fn update_pg_sync_settings_data_roundtrip() {
+        let conn = oz_core::migrations::fresh_db();
+        let args = UpdatePgSyncSettingsArgs {
+            enabled: true,
+            host: Some("db.example.com".into()),
+            port: Some("5433".into()),
+            dbname: Some("oz_sync".into()),
+            user: Some("sync_user".into()),
+            password: Some("secret".into()),
+        };
+        update_pg_sync_settings_data(&conn, &args).unwrap();
+
+        let dto = run_get_pg_sync_settings(&conn).unwrap();
+        assert!(dto.enabled);
+        assert_eq!(dto.host.as_deref(), Some("db.example.com"));
+        assert_eq!(dto.port.as_deref(), Some("5433"));
+        assert_eq!(dto.dbname.as_deref(), Some("oz_sync"));
+        assert_eq!(dto.user.as_deref(), Some("sync_user"));
+        assert!(dto.has_password);
+    }
+
+    #[test]
+    fn update_pg_sync_settings_data_disabled_default() {
+        let conn = oz_core::migrations::fresh_db();
+        let dto = run_get_pg_sync_settings(&conn).unwrap();
+        assert!(!dto.enabled);
+        assert!(dto.host.is_none());
+        assert!(dto.port.is_none());
+        assert!(dto.dbname.is_none());
+        assert!(dto.user.is_none());
+        assert!(!dto.has_password);
+    }
+
+    #[test]
+    fn update_pg_sync_settings_data_none_clears_optional_fields() {
+        let conn = oz_core::migrations::fresh_db();
+        update_pg_sync_settings_data(
+            &conn,
+            &UpdatePgSyncSettingsArgs {
+                enabled: true,
+                host: Some("db.example.com".into()),
+                port: Some("5432".into()),
+                dbname: Some("oz_sync".into()),
+                user: Some("sync_user".into()),
+                password: None,
+            },
+        )
+        .unwrap();
+        // A later save with None clears the connection fields (same
+        // contract as the HTTP sync URL handling).
+        update_pg_sync_settings_data(
+            &conn,
+            &UpdatePgSyncSettingsArgs {
+                enabled: false,
+                host: None,
+                port: None,
+                dbname: None,
+                user: None,
+                password: None,
+            },
+        )
+        .unwrap();
+
+        let dto = run_get_pg_sync_settings(&conn).unwrap();
+        assert!(!dto.enabled);
+        assert!(dto.host.is_none());
+        assert!(dto.port.is_none());
+        assert!(dto.dbname.is_none());
+        assert!(dto.user.is_none());
+    }
+
+    #[test]
+    fn update_pg_sync_settings_data_password_preserved_when_none() {
+        let conn = oz_core::migrations::fresh_db();
+        update_pg_sync_settings_data(
+            &conn,
+            &UpdatePgSyncSettingsArgs {
+                enabled: true,
+                host: None,
+                port: None,
+                dbname: None,
+                user: None,
+                password: Some("secret".into()),
+            },
+        )
+        .unwrap();
+        // A later save without a password must keep the stored secret —
+        // the UI sends None for the untouched masked field, mirroring the
+        // HTTP sync API-key handling.
+        update_pg_sync_settings_data(
+            &conn,
+            &UpdatePgSyncSettingsArgs {
+                enabled: true,
+                host: Some("db.example.com".into()),
+                port: None,
+                dbname: None,
+                user: None,
+                password: None,
+            },
+        )
+        .unwrap();
+
+        let dto = run_get_pg_sync_settings(&conn).unwrap();
+        assert!(dto.has_password);
+    }
+
+    #[tokio::test]
+    async fn pg_sync_settings_command_roundtrip() {
+        let conn = oz_core::migrations::fresh_db();
+        let app = tauri::test::mock_builder()
+            .manage(AppState::for_test_with_conn(conn))
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        update_pg_sync_settings(
+            UpdatePgSyncSettingsArgs {
+                enabled: true,
+                host: Some("db.example.com".into()),
+                port: None,
+                dbname: Some("oz_sync".into()),
+                user: None,
+                password: Some("secret".into()),
+            },
+            app.state(),
+        )
+        .await
+        .unwrap();
+
+        let dto = get_pg_sync_settings(app.state()).await.unwrap();
+        assert!(dto.enabled);
+        assert_eq!(dto.host.as_deref(), Some("db.example.com"));
+        assert_eq!(dto.dbname.as_deref(), Some("oz_sync"));
+        assert!(dto.has_password);
+    }
+
+    #[tokio::test]
+    async fn pg_sync_status_returns_default_on_fresh_state() {
+        let conn = oz_core::migrations::fresh_db();
+        let app = tauri::test::mock_builder()
+            .manage(AppState::for_test_with_conn(conn))
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let status = pg_sync_status(app.state()).await.unwrap();
+        assert!(!status.running);
+        assert_eq!(status.last_pushed, 0);
+        assert_eq!(status.last_pulled, 0);
+        assert_eq!(status.pending_count, 0);
+        assert!(status.last_error.is_none());
+    }
+
+    #[tokio::test]
+    async fn pg_sync_stop_on_stopped_daemon_is_noop() {
+        let conn = oz_core::migrations::fresh_db();
+        let app = tauri::test::mock_builder()
+            .manage(AppState::for_test_with_conn(conn))
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        // Stopping a daemon that was never started must succeed quietly.
+        pg_sync_stop(app.state()).await.unwrap();
+        let status = pg_sync_status(app.state()).await.unwrap();
+        assert!(!status.running);
     }
 }

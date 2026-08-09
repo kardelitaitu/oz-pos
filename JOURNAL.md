@@ -1927,3 +1927,17 @@ Test note: the tests await one frame inside `act` (`requestAnimationFrame` insid
 Test counts: +2 (editor 346). Full UI 4382 (265 files). Gates: typecheck, eslint, i18n parity clean (no new FTL keys).
 
 Commits: this round, scoped to NodeTopologyEditor.tsx/.test.tsx + JOURNAL.md.
+
+### 2026-08-09 — Round 50: wire PgSyncDaemon into the desktop app (last PG review gap)
+
+Problem: The PG review's remaining gap — `PgSyncDaemon`/`PgTransport` were exported but nothing started them: no Tauri commands, no AppState field, no startup spawn, and the `pg_sync.*` settings had typed getters/setters in oz_core but no command surface. The PG daemon was an unreachable island despite the README presenting it as a deployable option.
+
+Solution: Red→Green, mirroring the SQLite SyncDaemon wiring exactly. Red: 8 sync.rs unit tests (PgSyncSettingsDto camelCase serialization, UpdatePgSyncSettingsArgs deserialization, update_pg_sync_settings_data round-trip / None-clears-optional-fields / password-preserved-when-None, plus three mock_builder command tests: settings command round-trip, status returns default on fresh state, stop on a stopped daemon is a no-op) + 5 UI contract tests for the new wrappers — all failed on the missing surface. Green: `PgDaemonStatus` gains `Serialize` + camelCase (platform/sync); `AppState.pg_sync_daemon` field (3 constructors); commands in sync.rs — `get_pg_sync_settings`/`update_pg_sync_settings` (atomic transaction, password only written when Some), `pg_sync_status`, `pg_sync_start`/`pg_sync_stop`, plus a shared `settings_changed_sink(app)` helper (the SYNC-10 sink was extracted out of lib.rs so both daemons and the start command use one source of truth); lib.rs now spawns a "pg sync daemon" with the shared sink right after the SQLite one — the daemon no-ops per tick while `pg_sync.enabled` is off and re-reads connection settings each cycle, so the unconditional spawn is safe; 5 commands registered. UI: offline.ts gains `PgSyncSettingsDto`/`UpdatePgSyncSettingsArgs`/`PgDaemonStatusDto` + 5 wrappers.
+
+Notes: `update_pg_sync_settings` does NOT enqueue settings.update sync items (matching the HTTP update_sync_settings surface — only the generic tracked-settings path fans out). The Red was compile-Red (new command surface), not assertion-Red — the behavior is pinned by the 8 unit + 5 contract tests that now pass.
+
+Test counts: Rust +8 (sync module 23, app lib 836, platform-sync 271); UI +5 contract (4387, 265 files). Gates: clippy 0, fmt 0, typecheck, eslint clean.
+
+Deliberately NOT done: no settings UI surface for PG sync (the HTTP SyncSettingsPanel twin) — the api layer + contract tests pin the wire shape so a UI slice can consume it; the pg_sync.* keys remain also writable via the generic set_setting command.
+
+Commits: this round, scoped to platform/sync/src/pg_daemon.rs, apps/desktop-client/src/{state.rs, commands/sync.rs, lib.rs}, ui/src/api/offline.ts, ui/src/__tests__/api-offline-contract.test.ts + JOURNAL.md.
