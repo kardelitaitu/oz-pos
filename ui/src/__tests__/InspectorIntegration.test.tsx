@@ -16,7 +16,7 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-new-store-subtitle': 'Branch',
   'topology-new-workspace': 'New Workspace',
   'topology-new-workspace-subtitle': 'Register',
-  'topology-new-warehouse': 'New Warehouse',
+  'topology-new-warehouse': 'New Stock Room',
   'topology-new-warehouse-subtitle': 'Storage',
   'topology-new-hardware': 'New Hardware',
   'topology-new-hardware-subtitle': 'Peripheral',

@@ -41,12 +41,12 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-new-store-subtitle': 'Branch',
   'topology-new-workspace': 'New Workspace',
   'topology-new-workspace-subtitle': 'Register',
-  'topology-new-warehouse': 'New Warehouse',
+  'topology-new-warehouse': 'New Stock Room',
   'topology-new-warehouse-subtitle': 'Storage',
   'topology-new-hardware': 'New Hardware',
   'topology-new-hardware-subtitle': 'Peripheral',
   'topology-new-ready': 'Ready',
-  'topology-toast-multi-warehouse': 'Multi-Warehouse storage locations require a Pro Tier license.',
+  'topology-toast-multi-warehouse': 'Multiple Stock Rooms require a Pro Tier license.',
   'topology-toast-wire-duplicate': 'A wire already connects these ports.',
   'topology-wire-incompatible': 'These connectors cannot be connected.',
   'topology-relationship-picker-title': 'Choose connection type',
@@ -80,7 +80,7 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-ws-type-restaurant-pos': 'Restaurant POS',
   'topology-ws-type-kds': 'Kitchen Display (KDS)',
   'topology-port-operation-in': 'Operation',
-  'topology-ws-type-warehouse': 'Warehouse',
+  'topology-ws-type-warehouse': 'Stock Room',
   'topology-port-location-out': 'Location',
   'topology-port-location-in': 'Location',
   'topology-port-location-out-aria': 'Location port',
@@ -369,7 +369,7 @@ describe('NodeTopologyEditor Component', () => {
     expect(screen.getByText('STANDARD TIER')).toBeInTheDocument();
     expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
     expect(screen.getByText('Retail POS #1')).toBeInTheDocument();
-    expect(screen.getByText('Main Warehouse')).toBeInTheDocument();
+    expect(screen.getByText('Main Stock Room')).toBeInTheDocument();
   });
 
   it('renders tool rack sidebar and preset buttons', () => {
@@ -377,7 +377,7 @@ describe('NodeTopologyEditor Component', () => {
 
     expect(screen.getByText('+ Store Node')).toBeInTheDocument();
     expect(screen.getByText('+ Workspace Node')).toBeInTheDocument();
-    expect(screen.getByText('+ Warehouse Node')).toBeInTheDocument();
+    expect(screen.getByText('+ Stock Room')).toBeInTheDocument();
     expect(screen.getByText('+ Hardware Node')).toBeInTheDocument();
     expect(screen.getByText('Test Order Simulation')).toBeInTheDocument();
   });
@@ -1382,7 +1382,7 @@ describe('NodeTopologyEditor Component', () => {
       renderEditor();
       await waitFor(() => expect(getNodeCount()).toBe(4));
 
-      expect(screen.getByText('Multi-Warehouse storage locations require a Pro Tier license.')).toBeInTheDocument();
+      expect(screen.getByText('Multiple Stock Rooms require a Pro Tier license.')).toBeInTheDocument();
     });
 
     it('blocks Apply for two warehouses on standard tier without calling onSave', async () => {
@@ -1396,7 +1396,7 @@ describe('NodeTopologyEditor Component', () => {
       // The live banner already carries the message; the Apply toast adds a
       // second copy — getAllByText pins that the error surfaced (≥1).
       await waitFor(() =>
-        expect(screen.getAllByText('Multi-Warehouse storage locations require a Pro Tier license.').length).toBeGreaterThanOrEqual(1));
+        expect(screen.getAllByText('Multiple Stock Rooms require a Pro Tier license.').length).toBeGreaterThanOrEqual(1));
       expect(onSave).not.toHaveBeenCalled();
     });
 
@@ -1447,11 +1447,11 @@ describe('NodeTopologyEditor Component', () => {
   it('prevents adding second warehouse on standard tier', () => {
     renderEditor();
 
-    fireEvent.click(screen.getByText('+ Warehouse Node'));
-    fireEvent.click(screen.getByText('+ Warehouse Node'));
+    fireEvent.click(screen.getByText('+ Stock Room'));
+    fireEvent.click(screen.getByText('+ Stock Room'));
 
     const warningToasts = screen.queryAllByText(
-      'Multi-Warehouse storage locations require a Pro Tier license.',
+      'Multiple Stock Rooms require a Pro Tier license.',
     );
     expect(warningToasts.length).toBeGreaterThanOrEqual(1);
   });
@@ -3216,7 +3216,7 @@ function BranchDeleteHarness() {
   it('shows a toast when a preset load drops the selected node', () => {
     renderEditor();
 
-    // wh-1 (Main Warehouse) exists only in the retail preset.
+    // wh-1 (Main Stock Room) exists only in the retail preset.
     const warehouse = document.querySelector('.node-type-warehouse') as HTMLElement;
     expect(warehouse).not.toBeNull();
     fireEvent.mouseDown(warehouse, { button: 0 });
@@ -3827,7 +3827,7 @@ describe('NodeTopologyEditor — Pro-tier warehouse fallback label', () => {
 
     // Add a second warehouse, then connect the workspace to it. The retail
     // preset already has one warehouse wire, so this is fallback priority 2.
-    fireEvent.click(screen.getByText('+ Warehouse Node'));
+    fireEvent.click(screen.getByText('+ Stock Room'));
     fireEvent.click(portOf(nodeAt(1), 'right'));
     fireEvent.click(portOf(nodeAt(3), 'left'));
     // Both stock-routing and transfer are admissible — choose the stock one.
@@ -3900,11 +3900,11 @@ describe('NodeTopologyEditor — warehouse tool-card tier lock', () => {
     expect(locked!.textContent).toContain('Pro');
 
     const before = getNodeCount();
-    fireEvent.click(screen.getByText('+ Warehouse Node'));
+    fireEvent.click(screen.getByText('+ Stock Room'));
     // handleAddNode guards the tier: toast, no new node.
     expect(getNodeCount()).toBe(before);
     expect(
-      screen.getByText('Multi-Warehouse storage locations require a Pro Tier license.'),
+      screen.getByText('Multiple Stock Rooms require a Pro Tier license.'),
     ).toBeInTheDocument();
   });
 
@@ -3914,7 +3914,7 @@ describe('NodeTopologyEditor — warehouse tool-card tier lock', () => {
     expect(document.querySelector('.tool-card.locked')).toBeNull();
 
     const before = getNodeCount();
-    fireEvent.click(screen.getByText('+ Warehouse Node'));
+    fireEvent.click(screen.getByText('+ Stock Room'));
     expect(getNodeCount()).toBe(before + 1);
   });
 });
@@ -6032,7 +6032,7 @@ describe('NodeTopologyEditor — clipboard & bulk duplication', () => {
         .find((n) => n.classList.contains('node-type-warehouse')) as HTMLElement;
       fireEvent.mouseDown(wh, { button: 0 });
     };
-    const WH_TOAST = 'Multi-Warehouse storage locations require a Pro Tier license.';
+    const WH_TOAST = 'Multiple Stock Rooms require a Pro Tier license.';
 
     it('blocks Ctrl+D duplicating the only warehouse on standard tier', async () => {
       renderEditor();
@@ -6148,10 +6148,10 @@ describe('NodeTopologyEditor — node finder', () => {
     expect(input).not.toBeNull();
     expect(document.activeElement).toBe(input);
 
-    fireEvent.change(input!, { target: { value: 'warehouse' } });
+    fireEvent.change(input!, { target: { value: 'stock' } });
     const items = [...document.querySelectorAll('.topology-finder-item')].map((el) => el.textContent);
     expect(items).toHaveLength(1);
-    expect(items[0]).toContain('Main Warehouse');
+    expect(items[0]).toContain('Main Stock Room');
 
     // No match — the empty state renders instead of a stale list.
     fireEvent.change(input!, { target: { value: 'zzz-none' } });
@@ -6162,7 +6162,7 @@ describe('NodeTopologyEditor — node finder', () => {
     renderEditor();
     openFinder();
     const input = finderInput();
-    fireEvent.change(input!, { target: { value: 'warehouse' } });
+    fireEvent.change(input!, { target: { value: 'stock' } });
     fireEvent.keyDown(input!, { key: 'Enter' });
 
     // The overlay closes.
@@ -6170,7 +6170,7 @@ describe('NodeTopologyEditor — node finder', () => {
     // The matched node is the selection.
     const selected = [...document.querySelectorAll('.topology-node.node-selected')] as HTMLElement[];
     expect(selected).toHaveLength(1);
-    expect(selected[0]!.textContent).toContain('Main Warehouse');
+    expect(selected[0]!.textContent).toContain('Main Stock Room');
     // The viewport centers the node at the current zoom (canvas is 0×0 in
     // jsdom, so pan = -node center): transform is exactly deterministic.
     const vp = document.querySelector('.node-canvas-viewport') as HTMLElement;

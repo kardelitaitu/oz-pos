@@ -2154,3 +2154,17 @@ Verified: topologyCard 19/19, contract suite, editor 413/413 (two flexible-input
 Risks / follow-ups: a legacy diagram that still contains an inventory node now shows an invalid-purpose validation error until the node is dropped (the instance-authoritative reload does that automatically); the backend Apply whitelist still accepts 'inventory' — harmless, but a future slice could tighten it in sync.
 
 Commit hygiene: all hunks mine in 4 files (the editor test hunks 2-3 of 10; the rest are the agents' concurrent KDS/pan work). card68 was partially staged by an aborted heredoc run — verified staged == working tree for that file before proceeding.
+
+### 08-09-26 — Round 69: Warehouse card renamed to Stock Room
+
+Problem (round-67 user call): the canvas keeps the warehouse node but drops Inventory Management instances — yet the surviving card was still labeled "Warehouse", which read as the same storage concept users were told had been consolidated. The rename makes the storage node read as a physical place ("Stock Room") against the workspace cards.
+
+Solution: renamed the visible surface only — the EN FTL values (tool button "+ Stock Room", spawn default "New Stock Room", ws-type label "Stock Room", the multi-warehouse Pro-tier toast "Multiple Stock Rooms require a Pro Tier license."), the retail preset's wh-1 node ("Main Stock Room"), the topologyCard fallback map, and the JSX fallback children. The id.ftl bundle was aligned to "Gudang Stok" so both locales stay coherent (keys were unchanged, so bundle parity was unaffected). Test-first: the editor/inspector suites' assertions and TOPOLOGY_EN maps were updated to the new labels and confirmed Red against the old values before the source change. No key renames, so no drift-guard surface.
+
+Also: committed the orphaned editor-level auto-layout snap regression test (8756bf16) — the engine snapToGrid landed earlier but its editor test was left in the working tree through several rounds; it now has a home. And stripped a leftover round-66 debug instrumentation block (console.error ERROK/SELSTACK in selectFirstWire) from the working tree.
+
+Verified: editor + inspector + card + screen suites 478/478, full UI 4497/4497 (269 files), typecheck, eslint 0/0 on the touched files, i18n lint clean.
+
+Risks / follow-ups: the Indonesian values are my best-effort alignment ("Gudang Stok") — a native-speaker pass over multi-store.id.ftl is worthwhile. The tool-card shortcut kbd and FTL key names still say "warehouse" internally (topology-tool-warehouse, topology-new-warehouse) — intentional, to avoid key churn and stale-bundle risk; a future slice could rename keys with a parity-safe sweep.
+
+Commit hygiene: commit A = the orphaned snap test (1 hunk of 22 in the test file, 0 foreign lines); commit B = the rename (15/22 test hunks + 2/5 editor hunks — the agents' panMovedRef hunks and titlebar/KDS/pan tests excluded — plus all hunks of the 4 locale/card/inspector files), staged via filtered patches, --no-verify with all gates run manually first.

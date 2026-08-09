@@ -332,7 +332,7 @@ const PRESET_RETAIL: { nodes: TopologyNodeData[]; wires: TopologyWireData[] } = 
     // historical (80, 140) position — the geometry tests pin it.
     { id: 'store-1', type: 'store', name: 'Downtown Branch', subtitle: 'Primary Store', x: 80, y: 140, telemetryBadge: 'Online (2 POS)', telemetryStatus: 'online' },
     { id: 'ws-1', type: 'workspace', name: 'Retail POS #1', subtitle: 'Main Checkout', x: 380, y: 80, metadata: { typeKey: 'store-pos' }, telemetryBadge: 'Active', telemetryStatus: 'online' },
-    { id: 'wh-1', type: 'warehouse', name: 'Main Warehouse', subtitle: 'Primary Storage', x: 680, y: 140, telemetryBadge: '1,250 items', telemetryStatus: 'online' },
+    { id: 'wh-1', type: 'warehouse', name: 'Main Stock Room', subtitle: 'Primary Storage', x: 680, y: 140, telemetryBadge: '1,250 items', telemetryStatus: 'online' },
   ],
   wires: [
     // Natural left-to-right flow: store right → workspace left, workspace right → warehouse left
@@ -4638,7 +4638,7 @@ export default function NodeTopologyEditor({
           >
             <span className="tool-card-icon"><WarehouseIcon size={22} /></span>
             <div className="tool-card-info">
-              <strong><Localized id="topology-tool-warehouse">+ Warehouse Node</Localized></strong>
+              <strong><Localized id="topology-tool-warehouse">+ Stock Room</Localized></strong>
               <span><Localized id="topology-tool-warehouse-desc">Storage Location</Localized></span>
             </div>
             <kbd className="tool-card-shortcut" aria-hidden="true">3</kbd>
