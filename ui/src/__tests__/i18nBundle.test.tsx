@@ -94,6 +94,46 @@ describe('i18n bundle loader', () => {
   });
 });
 
+// ── Native-speaker pin (round 90) ──────────────────────────────
+//
+// The three Indonesian topology values fixed by the round-90 native-
+// speaker pass. Asserting them through the REAL production id bundle
+// (getBundle('id')) means a future re-translation drift — a revert to
+// "Abaikan masalah", a "ruang kerja" regression in the hint, or a
+// dropped "untuk pengurangan stok" — fails CI instead of shipping.
+// Unlike the TOPOLOGY_EN stub used by the editor tests (which pins en
+// only and never touches the .ftl files), these assertions exercise
+// the actual shipped bundle content.
+describe('i18n native-speaker pin (round 90)', () => {
+  const round90Pins: Array<[string, string]> = [
+    // Dismiss aria/title was shortened to match en "Dismiss".
+    ['topology-validation-dismiss', 'Abaikan'],
+    // Hint uses "workspace" (not "ruang kerja") to match the
+    // missing-stock-routing validation key.
+    [
+      'topology-node-stock-wire-hint',
+      'Hubungkan Stock Out dari workspace atau output Gudang Stok lain ke Stock In Gudang Stok ini.',
+    ],
+    // Fallback toast carries the "stock deduction" sense.
+    [
+      'topology-toast-fallback-warehouse',
+      'Koneksi fallback multi-gudang untuk pengurangan stok memerlukan lisensi Pro Tier.',
+    ],
+  ];
+
+  it('resolves the round-90 id values exactly from the production bundle', () => {
+    const id = getBundle('id');
+    for (const [key, expected] of round90Pins) {
+      const msg = id.getMessage(key);
+      expect(msg?.value, `key "${key}" must exist in the id bundle`).toBeDefined();
+      expect(
+        id.formatPattern(msg!.value!, null),
+        `key "${key}" drifted from its round-90 native-speaker value`,
+      ).toBe(expected);
+    }
+  });
+});
+
 // ── End-to-end withFluentLocale integration ──────────────────
 //
 // The bundle-loader tests above prove FluentBundle resolution

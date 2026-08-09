@@ -2458,3 +2458,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 92 — settings/sync/KDS id pass)
 
 **Risks / follow-ups:** the other bundles (products, sales, inventory, staff, etc.) still await the same pass; "Alihkan" as the toggle translation could be revisited bundle-wide in one future slice if a native speaker objects.
+
+### 2026-08-09 — round-90 id values pinned in an i18n contract test (round 93)
+
+**Problem (round-90/92 follow-up):** the native-speaker fixes were protected only by review — nothing failed CI if someone reverted "Abaikan", reintroduced "ruang kerja", or dropped "untuk pengurangan stok". The TOPOLOGY_EN stub the editor tests use pins en only and never touches the .ftl files.
+
+**Solution (regression pin):** a new describe in the existing `i18nBundle.test.tsx` asserts the three round-90 id values EXACTLY through the production `getBundle('id')` loader (the real runtime bundle, not a stub): `topology-validation-dismiss` → "Abaikan", `topology-node-stock-wire-hint` → the full "workspace … Gudang Stok lain" sentence, `topology-toast-fallback-warehouse` → the "untuk pengurangan stok" value. Table-driven so the failure message names the drifted key. Mechanism proven: temporarily mutating dismiss to "Abaikan masalah" turned the test red with the exact "drifted from its round-90 native-speaker value" message, then reverted green. (Side note: the temporary sed left the file LF-only, tripping git's autocrlf status artifact — restored the exact blob, content verified identical.)
+
+**Verified:** i18nBundle 13/13 (+1), full UI 4564/4564 (+1), i18n lint clean, typecheck, eslint 0/0.
+
+**Commits:** (round 93 — id pin)
+
+**Risks / follow-ups:** the pin covers only the three round-90 keys — the round-91 kabel→koneksi set and round-92 settings fixes could join the same table for the same protection; the test asserts exact text, so a deliberate copy improvement requires updating the pin (by design).
