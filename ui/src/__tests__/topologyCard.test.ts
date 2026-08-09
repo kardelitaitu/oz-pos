@@ -12,6 +12,7 @@ import {
   gatingSemanticId,
   socketSemanticIds,
   canSemanticPortsConnect,
+  isSemanticWireCompatible,
   wireRelationshipOptions,
   settingsCardForTypeKey,
   topologyUiString,
@@ -119,6 +120,14 @@ describe('typed connection pairing (ADR #34 first slice)', () => {
     // Inputs are never sources.
     expect(canSemanticPortsConnect('location-in', 'location-in')).toBe(false);
     expect(canSemanticPortsConnect('stock-in', 'stock-out')).toBe(false);
+  });
+
+  it('validates persisted semantic wires against the same pairing matrix', () => {
+    expect(isSemanticWireCompatible('stock-out', 'stock-in', 'stock-routing')).toBe(true);
+    expect(isSemanticWireCompatible('ticket-out', 'ticket-in', 'ticket-routing')).toBe(true);
+    expect(isSemanticWireCompatible('device-out', 'generic-in', 'hardware-connection')).toBe(true);
+    expect(isSemanticWireCompatible('stock-out', 'location-in', 'stock-routing')).toBe(false);
+    expect(isSemanticWireCompatible('ticket-out', 'ticket-in', 'generic')).toBe(false);
   });
 
   it('resolves the full typed socket map for gating (outputs + non-workspace inputs)', () => {

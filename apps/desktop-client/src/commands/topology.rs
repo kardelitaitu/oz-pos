@@ -368,6 +368,60 @@ fn semantic_branch_profile_id<'a>(nodes: &'a [Value], wires: &[Value]) -> Option
         })
 }
 
+fn semantic_type_key<'a>(node: &'a Value) -> &'a str {
+    node.get("metadata")
+        .and_then(|metadata| value_string(metadata, "typeKey"))
+        .unwrap_or("store-pos")
+}
+
+fn semantic_node_type(node: &Value) -> Option<&str> {
+    value_string(node, "type")
+}
+
+/// Mirror the frontend's closed semantic pairing matrix at the IPC boundary.
+/// Node kinds are checked as well as port ids because callers can invoke the
+/// command without going through the canvas drag gate.
+fn semantic_wire_matches_contract(wire: &Value, from_node: &Value, to_node: &Value) -> bool {
+    let from_port = value_string(wire, "from_port_id");
+    let to_port = value_string(wire, "to_port_id");
+    let relationship = value_string(wire, "relationship_type");
+    let from_type_key = semantic_type_key(from_node);
+    let to_type_key = semantic_type_key(to_node);
+    let from_type = semantic_node_type(from_node);
+    let to_type = semantic_node_type(to_node);
+
+    match (from_port, to_port, relationship) {
+        (Some("stock-out"), Some("stock-in"), Some("stock-routing")) => {
+            to_type == Some("warehouse")
+                && ((from_type == Some("workspace")
+                    && matches!(from_type_key, "store-pos" | "restaurant-pos" | "inventory"))
+                    || from_type == Some("warehouse"))
+        }
+        (Some("transfer-out"), Some("transfer-in"), Some("inventory-transfer")) => {
+            from_type == Some("workspace")
+                && matches!(from_type_key, "store-pos" | "restaurant-pos" | "inventory")
+                && to_type == Some("warehouse")
+        }
+        (Some("ticket-out"), Some("ticket-in"), Some("ticket-routing")) => {
+            from_type == Some("workspace") && from_type_key == "kds" && to_type == Some("hardware")
+        }
+        (Some("operation-out"), Some("operation-in"), Some("generic")) => {
+            from_type == Some("workspace")
+                && from_type_key == "restaurant-pos"
+                && to_type == Some("workspace")
+                && to_type_key == "kds"
+        }
+        (Some("device-out"), Some("generic-in"), Some("hardware-connection")) => {
+            from_type == Some("hardware") && to_type == Some("hardware")
+        }
+        // The generic pair is retained as a future-facing contract member;
+        // no current node emits generic-out, but a valid pair must not be
+        // rejected merely because its producer is not yet registered.
+        (Some("generic-out"), Some("generic-in"), Some("generic")) => true,
+        _ => false,
+    }
+}
+
 /// Validate the semantic ownership contract at the IPC boundary.
 ///
 /// Legacy geometric payloads remain readable during migration. A payload that
@@ -479,6 +533,45 @@ fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), AppErr
                 None,
                 format!(
                     "invalid semantic location wire: {}",
+                    value_string(wire, "id").unwrap_or("<unknown>")
+                ),
+            ));
+        }
+    }
+
+    let node_by_id = |node_id: Option<&str>| {
+        node_id.and_then(|id| {
+            nodes
+                .iter()
+                .find(|node| value_string(node, "id") == Some(id))
+        })
+    };
+    for wire in wires {
+        if value_string(wire, "relationship_type") == Some("location") {
+            continue;
+        }
+        let Some(from_node) = node_by_id(value_string(wire, "from_node_id")) else {
+            continue;
+        };
+        let Some(to_node) = node_by_id(value_string(wire, "to_node_id")) else {
+            continue;
+        };
+        let is_kds_operation = value_string(wire, "from_port_id") == Some("operation-out")
+            && value_string(wire, "to_port_id") == Some("operation-in")
+            && value_string(wire, "relationship_type") == Some("generic")
+            && semantic_node_type(to_node) == Some("workspace")
+            && semantic_type_key(to_node) == "kds";
+        if is_kds_operation {
+            continue;
+        }
+        if !semantic_wire_matches_contract(wire, from_node, to_node) {
+            return Err(topology_validation(
+                "invalid-semantic-connection",
+                None,
+                value_string(wire, "id"),
+                value_string(wire, "to_port_id"),
+                format!(
+                    "wire {} has an incompatible semantic connection",
                     value_string(wire, "id").unwrap_or("<unknown>")
                 ),
             ));
@@ -1946,6 +2039,108 @@ mod tests {
             }
             other => panic!("expected invalid-operation-source, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn semantic_save_rejects_mismatched_non_location_wire() {
+        let conn = fresh_conn();
+        let mut store_pos = semantic_node("store-pos", "workspace", None);
+        store_pos["metadata"] = serde_json::json!({ "typeKey": "store-pos" });
+        let invalid_wire = serde_json::json!({
+            "id": "wire-invalid-pair",
+            "from_node_id": "store-pos",
+            "to_node_id": "warehouse-1",
+            "direction": "one-way",
+            "from_port_id": "stock-out",
+            "to_port_id": "location-in",
+            "relationship_type": "stock-routing",
+        });
+        let result = save_topology_json(
+            &conn,
+            vec![
+                semantic_node("branch", "branch-location", Some("default")),
+                store_pos,
+                semantic_node("warehouse-1", "warehouse", None),
+            ],
+            vec![
+                semantic_location_wire("wire-store-location", "store-pos"),
+                invalid_wire,
+            ],
+        );
+
+        match result {
+            Err(AppError::TopologyValidation { code, wire_id, .. }) => {
+                assert_eq!(code, "invalid-semantic-connection");
+                assert_eq!(wire_id.as_deref(), Some("wire-invalid-pair"));
+            }
+            other => panic!("expected invalid-semantic-connection, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn semantic_save_rejects_ticket_wire_from_non_kds_workspace() {
+        let conn = fresh_conn();
+        let mut store_pos = semantic_node("store-pos", "workspace", None);
+        store_pos["metadata"] = serde_json::json!({ "typeKey": "store-pos" });
+        let invalid_wire = serde_json::json!({
+            "id": "wire-invalid-ticket-source",
+            "from_node_id": "store-pos",
+            "to_node_id": "printer-1",
+            "direction": "one-way",
+            "from_port_id": "ticket-out",
+            "to_port_id": "ticket-in",
+            "relationship_type": "ticket-routing",
+        });
+        let result = save_topology_json(
+            &conn,
+            vec![
+                semantic_node("branch", "branch-location", Some("default")),
+                store_pos,
+                semantic_node("printer-1", "hardware", None),
+            ],
+            vec![
+                semantic_location_wire("wire-store-location", "store-pos"),
+                invalid_wire,
+            ],
+        );
+
+        match result {
+            Err(AppError::TopologyValidation { code, wire_id, .. }) => {
+                assert_eq!(code, "invalid-semantic-connection");
+                assert_eq!(wire_id.as_deref(), Some("wire-invalid-ticket-source"));
+            }
+            other => panic!("expected invalid-semantic-connection, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn semantic_save_accepts_valid_stock_routing_wire() {
+        let conn = fresh_conn();
+        let mut store_pos = semantic_node("store-pos", "workspace", None);
+        store_pos["metadata"] = serde_json::json!({ "typeKey": "store-pos" });
+        let valid_wire = serde_json::json!({
+            "id": "wire-stock",
+            "from_node_id": "store-pos",
+            "to_node_id": "warehouse-1",
+            "direction": "one-way",
+            "from_port_id": "stock-out",
+            "to_port_id": "stock-in",
+            "relationship_type": "stock-routing",
+        });
+        let result = save_topology_json(
+            &conn,
+            vec![
+                semantic_node("branch", "branch-location", Some("default")),
+                store_pos,
+                semantic_node("warehouse-1", "warehouse", None),
+            ],
+            vec![
+                semantic_location_wire("wire-store-location", "store-pos"),
+                valid_wire,
+            ],
+        );
+
+        assert!(result.is_ok());
     }
 
     #[test]

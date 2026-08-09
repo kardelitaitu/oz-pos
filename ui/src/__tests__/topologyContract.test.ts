@@ -256,6 +256,82 @@ describe('semantic topology contract', () => {
     expect(validateTopologyGraph(normalized)).toEqual([]);
   });
 
+  it('rejects a non-location wire whose semantic ports and relationship disagree', () => {
+    const storePos = { ...workspace('store-pos'), metadata: { typeKey: 'store-pos' } };
+    const warehouseNode = warehouse('warehouse-1');
+    const normalized = graph(
+      [branch(), storePos, warehouseNode],
+      [
+        ownershipWire('wire-store-location', 'store-pos'),
+        {
+          id: 'wire-invalid-pair',
+          fromNodeId: 'store-pos',
+          fromPortId: 'stock-out',
+          toNodeId: 'warehouse-1',
+          toPortId: 'location-in',
+          relationshipType: 'stock-routing',
+          direction: 'one-way',
+        },
+      ],
+    );
+
+    expect(validateTopologyGraph(normalized)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: 'invalid-semantic-connection',
+        wireId: 'wire-invalid-pair',
+      }),
+    ]));
+  });
+
+  it('accepts a valid stock-routing wire through the semantic contract', () => {
+    const storePos = { ...workspace('store-pos'), metadata: { typeKey: 'store-pos' } };
+    const warehouseNode = warehouse('warehouse-1');
+    const normalized = graph(
+      [branch(), storePos, warehouseNode],
+      [
+        ownershipWire('wire-store-location', 'store-pos'),
+        {
+          id: 'wire-stock',
+          fromNodeId: 'store-pos',
+          fromPortId: 'stock-out',
+          toNodeId: 'warehouse-1',
+          toPortId: 'stock-in',
+          relationshipType: 'stock-routing',
+          direction: 'one-way',
+        },
+      ],
+    );
+
+    expect(validateTopologyGraph(normalized)).toEqual([]);
+  });
+
+  it('rejects a paired ticket wire when the endpoints are not KDS and hardware', () => {
+    const storePos = { ...workspace('store-pos'), metadata: { typeKey: 'store-pos' } };
+    const printer = { id: 'printer-1', type: 'hardware' as const, name: 'Printer', x: 200, y: 200 };
+    const normalized = graph(
+      [branch(), storePos, printer],
+      [
+        ownershipWire('wire-store-location', 'store-pos'),
+        {
+          id: 'wire-invalid-ticket-source',
+          fromNodeId: 'store-pos',
+          fromPortId: 'ticket-out',
+          toNodeId: 'printer-1',
+          toPortId: 'ticket-in',
+          relationshipType: 'ticket-routing',
+          direction: 'one-way',
+        },
+      ],
+    );
+
+    expect(validateTopologyGraph(normalized)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: 'invalid-semantic-connection',
+        wireId: 'wire-invalid-ticket-source',
+      }),
+    ]));
+  });
+
   it('accepts a KDS operationally connected to Restaurant POS', () => {
     const resto = { ...workspace('resto-pos'), metadata: { typeKey: 'restaurant-pos' } };
     const kds = { ...workspace('kds'), metadata: { typeKey: 'kds' } };

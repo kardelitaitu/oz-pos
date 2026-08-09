@@ -304,6 +304,19 @@ export function canSemanticPortsConnect(
   return SEMANTIC_PORT_PAIRINGS.some((r) => r.source === source && r.target === target);
 }
 
+/** Validate persisted semantic fields against the same pairing matrix used by
+ *  drag gating and relationship selection. Unknown strings fail closed so
+ *  hand-edited or stale payloads cannot bypass the contract. */
+export function isSemanticWireCompatible(
+  source: string,
+  target: string,
+  relationshipType: string,
+): boolean {
+  return SEMANTIC_PORT_PAIRINGS.some((row) =>
+    row.source === source && row.target === target && row.relationshipType === relationshipType
+  );
+}
+
 /** One admissible relationship for a specific socket pair — the semantic
  *  ids to RECORD on the wire (fromPortId/toPortId round-trip through the
  *  backend), the typed relationship, and its label. */

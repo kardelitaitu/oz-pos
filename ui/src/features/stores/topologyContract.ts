@@ -1,4 +1,5 @@
 import type { TopologyNodeData, TopologyWireData } from './NodeTopologyEditor';
+import { isSemanticWireCompatible } from './topologyCard';
 import type { SemanticPortId } from './topologyCard';
 
 type TopologyNodeInput = TopologyNodeData & { storeProfileId?: string };
@@ -90,6 +91,7 @@ export interface TopologyValidationError {
     | 'missing-operation-input'
     | 'multiple-operation-inputs'
     | 'invalid-operation-source'
+    | 'invalid-semantic-connection'
     | 'invalid-location-connection'
     | 'duplicate-wire'
     | 'unknown-wire-endpoint';
@@ -369,6 +371,44 @@ function locationWires(graph: SemanticTopologyGraph): SemanticTopologyWire[] {
   return graph.wires.filter((wire) => wire.relationshipType === 'location');
 }
 
+/** Match the node capabilities behind the semantic port matrix. Port ids
+ *  alone are not enough at the Apply boundary: a forged ticket-out on a
+ *  Store POS must not become a valid KDS ticket feed. */
+function semanticNodesMatchWire(
+  wire: SemanticTopologyWire,
+  fromNode: SemanticTopologyNode,
+  toNode: SemanticTopologyNode,
+): boolean {
+  const fromTypeKey = fromNode.typeKey ?? 'store-pos';
+  const toTypeKey = toNode.typeKey ?? 'store-pos';
+  switch (`${wire.fromPortId}|${wire.toPortId}|${wire.relationshipType}`) {
+    case 'stock-out|stock-in|stock-routing':
+      return toNode.kind === 'warehouse'
+        && ((fromNode.kind === 'workspace'
+          && ['store-pos', 'restaurant-pos', 'inventory'].includes(fromTypeKey))
+          || fromNode.kind === 'warehouse');
+    case 'transfer-out|transfer-in|inventory-transfer':
+      return toNode.kind === 'warehouse'
+        && fromNode.kind === 'workspace'
+        && ['store-pos', 'restaurant-pos', 'inventory'].includes(fromTypeKey);
+    case 'ticket-out|ticket-in|ticket-routing':
+      return fromNode.kind === 'workspace'
+        && fromTypeKey === 'kds'
+        && toNode.kind === 'hardware';
+    case 'operation-out|operation-in|generic':
+      return fromNode.kind === 'workspace'
+        && fromTypeKey === 'restaurant-pos'
+        && toNode.kind === 'workspace'
+        && toTypeKey === 'kds';
+    case 'device-out|generic-in|hardware-connection':
+      return fromNode.kind === 'hardware' && toNode.kind === 'hardware';
+    case 'generic-out|generic-in|generic':
+      return true;
+    default:
+      return false;
+  }
+}
+
 /**
  * Validate the first vertical slice: one Branch Location owns ordinary
  * workspaces, while a KDS inherits its store scope through exactly one
@@ -433,6 +473,32 @@ export function validateTopologyGraph(graph: SemanticTopologyGraph): TopologyVal
       errors.push({
         code: 'unknown-wire-endpoint',
         messageId: 'topology-validation-unknown-wire-endpoint',
+        wireId: wire.id,
+      });
+    }
+  }
+
+  // Every non-location wire must match the same closed pairing matrix used
+  // by the editor. Location wires have additional endpoint/cardinality rules
+  // below, and KDS operation wires have a source-node rule in the workspace
+  // loop, so those checks remain specialized rather than duplicated here.
+  for (const wire of graph.wires) {
+    if (wire.relationshipType === 'location') continue;
+    const fromNode = graph.nodes.find((node) => node.id === wire.fromNodeId);
+    const toNode = graph.nodes.find((node) => node.id === wire.toNodeId);
+    // Let the dedicated KDS check report invalid-operation-source rather than
+    // replacing it with the broader semantic-connection error.
+    const isKdsOperation = wire.fromPortId === 'operation-out'
+      && wire.toPortId === 'operation-in'
+      && wire.relationshipType === 'generic'
+      && toNode?.kind === 'workspace'
+      && toNode.typeKey === 'kds';
+    if (isKdsOperation || !fromNode || !toNode) continue;
+    if (!isSemanticWireCompatible(wire.fromPortId, wire.toPortId, wire.relationshipType)
+      || !semanticNodesMatchWire(wire, fromNode, toNode)) {
+      errors.push({
+        code: 'invalid-semantic-connection',
+        messageId: 'topology-validation-invalid-semantic-connection',
         wireId: wire.id,
       });
     }
