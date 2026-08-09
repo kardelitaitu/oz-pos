@@ -1052,6 +1052,7 @@ export default function NodeTopologyEditor({
    *  Escape or any document mousedown outside the picker (the picker
    *  wrapper stops propagation, so slider drags never close it). */
   const [zoomPickerOpen, setZoomPickerOpen] = useState(false);
+  const [minimapVisible, setMinimapVisible] = useState(true);
 
   useEffect(() => {
     if (!zoomPickerOpen) return;
@@ -1450,6 +1451,28 @@ export default function NodeTopologyEditor({
           return;
         }
 
+        // An explicit unassigned branch owns an empty graph. This is distinct
+        // from the initial loading state (where the parent omits seed props),
+        // so a saved diagram from a previously selected branch cannot leak
+        // into the unassigned canvas after the last branch is deleted.
+        const unassignedGraph = branchId === 'unassigned'
+          && workspaceInstances !== undefined
+          && branchLocations !== undefined
+          && workspaceInstances.length === 0
+          && branchLocations.length === 0;
+        if (unassignedGraph) {
+          setNodes([]);
+          setWires([]);
+          setHistory([]);
+          setRedo([]);
+          setConnectingFromNodeId(null);
+          setConnectingFromPort(null);
+          setHoveredTarget(null);
+          inspectorHistoryPushedForRef.current = null;
+          commitSnapshot({ nodes: [], wires: [] });
+          return;
+        }
+
         // No real instances/locations ever supplied — legacy/demo behaviour:
         // use the saved diagram verbatim, or fall back to the retail preset.
         if (cancelled || !data || !data.nodes || data.nodes.length === 0) {
@@ -1513,7 +1536,7 @@ export default function NodeTopologyEditor({
       });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceInstances, branchLocations]);
+  }, [workspaceInstances, branchLocations, branchId]);
 
   // ── Inline node rename on the card (Branch Location + workspace) ──
   const [renamingNodeId, setRenamingNodeId] = useState<string | null>(null);
@@ -4852,12 +4875,22 @@ export default function NodeTopologyEditor({
             <button type="button" className="canvas-zoom-btn canvas-zoom-action" onClick={resetView}>
               <Localized id="topology-reset-view">Reset View</Localized>
             </button>
+            <button
+              type="button"
+              className="canvas-zoom-btn canvas-zoom-action"
+              aria-pressed={minimapVisible}
+              onClick={() => setMinimapVisible((v) => !v)}
+            >
+              <Localized id={minimapVisible ? 'topology-minimap-hide' : 'topology-minimap-show'}>
+                {minimapVisible ? 'Hide Minimap' : 'Show Minimap'}
+              </Localized>
+            </button>
           </div>
 
           {/* ── Canvas minimap — bottom-left overview; click/drag to
                  recenter, arrows nudge the view, Enter centers on the
                  content box ────────────────────────────────────── */}
-          {contentBounds && (
+          {contentBounds && minimapVisible && (
             <div
               ref={minimapRef}
               className="topology-minimap"

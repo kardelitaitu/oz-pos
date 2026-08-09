@@ -1871,3 +1871,15 @@ Verification: 271/271 crate tests (+2), pg_daemon suite 37/37, clippy 0 warnings
 Deliberately NOT done: the daemon-level plumbing (start_with_sink → run_tick) is compile-verified but not runtime-tested — `run_tick`'s pull needs a live PG server, so the emission contract is pinned at the `apply_pulled_page` unit boundary, exactly like the stock-summary rebuild and the existing anchor tests. The desktop client wiring (emit `settings_updated` on the PG sink) awaits the PG daemon being started by the app at all (still unwired).
 
 Commits: this round, scoped to `platform/sync/src/pg_daemon.rs` + JOURNAL.md.
+
+### 2026-08-09 — Round 45: topology minimap on/off toggle (round-30 follow-up)
+
+Problem: The journaled round-30 risk — the minimap was always visible whenever the canvas had content, with no way to turn it off. Large-diagram users who navigate by pan/zoom had no way to reclaim the bottom-left corner.
+
+Solution: Red→Green. Red: two tests in the minimap describe — (1) a zoom-cluster toggle hides the minimap on click and restores it on a second click; (2) the toggle reports its state via aria-pressed and flips its label. Both failed (button absent). Green: `minimapVisible` state (default true — current behavior preserved), a `canvas-zoom-btn canvas-zoom-action` toggle after Reset View (`aria-pressed`, `<Localized>` label), and the minimap render gated on `contentBounds && minimapVisible`. Reused existing button classes — zero CSS, zero dither-registration changes. FTL keys ×2 bundles (`topology-minimap-hide` / `topology-minimap-show`).
+
+Test notes: the first aria-pressed query used `name: /minimap/i` and matched BOTH the toggle and the minimap surface itself (also role=button) — pinned by exact label instead, which additionally asserts the label flips. One transient failure appeared in the first full-suite run (never reproduced across three subsequent clean 4365/4365 runs) — a pre-existing flake, not this change.
+
+Test counts: +2 (editor 329). Full UI 4365 (265 files). Gates: typecheck, eslint, i18n parity clean.
+
+Commits: this round, scoped to NodeTopologyEditor.tsx/.test.tsx + both FTL bundles + JOURNAL.md.

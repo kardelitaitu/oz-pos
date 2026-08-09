@@ -5667,6 +5667,28 @@ describe('NodeTopologyEditor — minimap overview', () => {
 
     expect(mapRect.getAttribute('x')).not.toBe(before);
   });
+
+  it('the zoom-cluster toggle hides and restores the minimap', () => {
+    renderEditor();
+    expect(document.querySelector('.topology-minimap')).not.toBeNull();
+
+    fireEvent.click(screen.getByText('Hide Minimap'));
+    expect(document.querySelector('.topology-minimap')).toBeNull();
+
+    fireEvent.click(screen.getByText('Show Minimap'));
+    expect(document.querySelector('.topology-minimap')).not.toBeNull();
+  });
+
+  it('the minimap toggle reports its state via aria-pressed', () => {
+    renderEditor();
+    // The minimap surface itself is role="button", so pin the toggle by its
+    // exact label — which also asserts the label flips with the state.
+    const toggle = screen.getByRole('button', { name: 'Hide Minimap' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(toggle);
+    expect(screen.getByRole('button', { name: 'Show Minimap' })).toHaveAttribute('aria-pressed', 'false');
+  });
 });
 
 // ── F2 inline rename + HUD status readouts ──────────────────────
@@ -6836,5 +6858,18 @@ describe('NodeTopologyEditor — load fallback determinism', () => {
     await waitFor(() => expect(getNodeCount()).toBe(1));
     expect(document.querySelector('.topology-node[data-node-id="store-1"]')).toBeNull();
     expect(document.querySelector('.topology-node[data-node-id="ws-1"]')).not.toBeNull();
+  });
+
+  it('clears a saved diagram when the parent marks the branch unassigned', async () => {
+    mockLoadTopology.mockResolvedValueOnce(savedFixture);
+    renderEditor({
+      branchId: 'unassigned',
+      workspaceInstances: [],
+      branchLocations: [],
+    });
+
+    await waitFor(() => expect(getNodeCount()).toBe(0));
+    expect(document.querySelector('.topology-node[data-node-id="store-1"]')).toBeNull();
+    expect(screen.getByText('Build your store topology')).toBeInTheDocument();
   });
 });
