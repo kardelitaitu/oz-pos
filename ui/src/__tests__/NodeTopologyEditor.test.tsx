@@ -104,7 +104,7 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-validation-missing-branch': 'Add exactly one Branch Location node.',
   'topology-validation-multiple-branches': 'Keep exactly one Branch Location node in this graph.',
   'topology-validation-invalid-purpose': 'This workspace purpose is not supported by its technical type.',
-  'topology-node-stock-wire-hint': "Connect a workspace's Stock Out to this Stock Room's Stock In.",
+  'topology-node-stock-wire-hint': "Connect a workspace's Stock Out or another Stock Room's output to this Stock Room's Stock In.",
   'topology-validation-unknown-wire-endpoint': 'This connection references a node that is not in the graph.',
   'topology-field-name': 'Name',
   'topology-field-name-aria': 'Edit name',
@@ -4315,7 +4315,9 @@ describe('NodeTopologyEditor — validation panel stock-wire action', () => {
     // The one-click hint chip appears on the card.
     const hint = document.querySelector('.node-stock-wire-hint');
     expect(hint).not.toBeNull();
-    expect(hint?.textContent).toContain('Stock Out');
+    // Round 84: the guidance covers BOTH sources — a workspace Stock Out
+    // or another Stock Room's output (hub-and-spoke transfers).
+    expect(hint?.textContent).toContain('another Stock Room\'s output');
   });
 
   it('keeps the hint chip hidden until the action is used', async () => {

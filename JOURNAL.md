@@ -2350,3 +2350,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 83 — transfer at-capacity)
 
 **Risks / follow-ups:** a full warehouse receiving BOTH a stock wire and a transfer pushes two at-capacity errors (one per wire) — existing multi-wire behavior, unchanged; the round-82 follow-up to generalize the Add stock wire hint copy is still open; hub-and-spoke chains deeper than two warehouses (hub → mid → leaf) have no explicit contract test yet.
+
+### 2026-08-09 — Add stock wire hint generalized for hub-and-spoke sources
+
+**Problem (round-82/83 follow-up):** the round-80 hint chip said "Connect a workspace's Stock Out…" — accurate for stock-routing but under-specified now that warehouse→warehouse inventory-transfer also resolves the prompt (round 82) and transfers into full rooms are capacity-flagged (round 83). A satellite's guidance should mention the hub.
+
+**Solution (copy change, TDD'd):** the chip now reads "Connect a workspace's Stock Out or another Stock Room's output to this Stock Room's Stock In." (id: "Hubungkan Stock Out dari ruang kerja atau output Gudang Stok lain ke Stock In Gudang Stok ini."). Red — the round-80 test's assertion strengthened from the loose `toContain('Stock Out')` to pin `another Stock Room's output`; Green — TOPOLOGY_EN + both FTL bundles. Keys unchanged → bundle parity and the i18n gate untouched.
+
+**Verified:** editor suite, full UI 4555/4555 (no count change — strengthened assertion, not new test), typecheck, eslint 0/0, i18n lint clean.
+
+**Commits:** (round 84 — hint copy generalization)
+
+**Risks / follow-ups:** none behavioral — pure copy; the id translation is best-effort Indonesian (journaled rounds 69/71 flag a native-speaker pass).
