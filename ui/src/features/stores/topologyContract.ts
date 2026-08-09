@@ -613,14 +613,15 @@ export function validateTopologyGraph(
     }
   }
 
-  // Warehouse capacity guard: a stock-deduct wire (workspace → warehouse,
-  // relationship stock-routing) is only routable while the target Stock
-  // Room has room. The design-time metadata numbers (rounds 70-71) drive
-  // it — no capacity metadata means no check, so legacy graphs with no
-  // numbers stay unflagged.
+  // Warehouse capacity guard: a stock-bearing wire into a Stock Room
+  // (stock-routing, or inventory-transfer — round 83, hub-and-spoke) is
+  // only routable while the target has room. The design-time metadata
+  // numbers (rounds 70-71) drive it — no capacity metadata means no
+  // check, so legacy graphs with no numbers stay unflagged.
   if (capacityEnforced) {
     for (const wire of graph.wires) {
-      if (wire.relationshipType !== 'stock-routing') continue;
+      if (wire.relationshipType !== 'stock-routing'
+        && wire.relationshipType !== 'inventory-transfer') continue;
       const target = graph.nodes.find((node) => node.id === wire.toNodeId);
       if (!target || target.kind !== 'warehouse') continue;
       if (target.capacity === undefined || target.stock === undefined) continue;

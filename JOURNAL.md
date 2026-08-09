@@ -2336,3 +2336,17 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 82 — hub-and-spoke stock servicing)
 
 **Risks / follow-ups:** the at-capacity guard still counts stock-routing only — a satellite fed by transfer is never at-capacity-flagged even though transfers also land stock (a transfer INTO a full satellite arguably should warn); the Add stock wire hint still says "workspace's Stock Out" — accurate but now under-specified for satellites (a warehouse source also resolves the prompt); the coexist editor test (workspace→warehouse Transfer) still passes, so the relaxed source rule didn't loosen the direct-transfer contract.
+
+### 2026-08-09 — at-capacity guard covers inventory-transfer targets
+
+**Problem (round-82 follow-up):** the servicing rule was made symmetric (any inbound stock-bearing wire satisfies the prompt), but the at-capacity guard still counted stock-routing only — a transfer INTO a full satellite validated clean even though stock physically lands in a room with no space.
+
+**Solution (TDD Red→Green):** one-line guard change — the capacity loop now skips only wires that are NEITHER `stock-routing` NOR `inventory-transfer`. The error keeps its wireId, so the round-74 wire marker renders on the transfer wire itself, and the tier gate (round 76) applies unchanged since the loop sits inside `capacityEnforced`. Comment rewritten to describe "stock-bearing wire" instead of stock-deduct only.
+
+**TDD:** Red — 1 contract test (full satellite with a transfer wire → `warehouse-at-capacity` with `wireId: 'w-transfer'`) + 1 editor test (full satellite: card note + the wire marker inside the transfer wire's group). The roomy-satellite companion test pins that transfers into a warehouse with room stay clean (already passing — the guard's room check now applies to transfers too).
+
+**Verified:** contract 38/38 (+2), editor + screen + integration 530/530 (+1), full UI 4555/4555, typecheck, eslint 0/0. No FTL changes.
+
+**Commits:** (round 83 — transfer at-capacity)
+
+**Risks / follow-ups:** a full warehouse receiving BOTH a stock wire and a transfer pushes two at-capacity errors (one per wire) — existing multi-wire behavior, unchanged; the round-82 follow-up to generalize the Add stock wire hint copy is still open; hub-and-spoke chains deeper than two warehouses (hub → mid → leaf) have no explicit contract test yet.

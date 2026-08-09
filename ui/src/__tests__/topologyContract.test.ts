@@ -580,6 +580,49 @@ describe('semantic topology contract', () => {
     ]));
   });
 
+  it('flags an inventory-transfer into a full satellite warehouse at capacity (round 82 follow-up)', () => {
+    const normalized = graph(
+      [
+        branch(),
+        workspace('ws-1'),
+        warehouseWith('wh-hub', { stock: 500, capacity: 1000 }),
+        warehouseWith('wh-sat', { stock: 500, capacity: 500 }),
+      ],
+      [
+        ownershipWire('w-owner', 'ws-1'),
+        stockWire('w-stock', 'ws-1', 'wh-hub'),
+        transferWire('w-transfer', 'wh-hub', 'wh-sat'),
+      ],
+    );
+
+    expect(validateTopologyGraph(normalized)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: 'warehouse-at-capacity',
+        nodeId: 'wh-sat',
+        wireId: 'w-transfer',
+      }),
+    ]));
+  });
+
+  it('keeps a roomy satellite clean despite its transfer wire', () => {
+    const normalized = graph(
+      [
+        branch(),
+        workspace('ws-1'),
+        warehouseWith('wh-hub', { stock: 500, capacity: 1000 }),
+        warehouseWith('wh-sat', { stock: 200, capacity: 500 }),
+      ],
+      [
+        ownershipWire('w-owner', 'ws-1'),
+        stockWire('w-stock', 'ws-1', 'wh-hub'),
+        transferWire('w-transfer', 'wh-hub', 'wh-sat'),
+      ],
+    );
+
+    const errors = validateTopologyGraph(normalized);
+    expect(errors.filter((e) => e.code === 'warehouse-at-capacity')).toHaveLength(0);
+  });
+
   it('flags a stock-deduct wire when stock is over capacity', () => {
     const normalized = graph(
       [branch(), workspace('ws-1'), warehouseWith('wh-1', { stock: 1200, capacity: 1000 })],
