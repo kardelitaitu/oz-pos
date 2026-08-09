@@ -94,41 +94,68 @@ describe('i18n bundle loader', () => {
   });
 });
 
-// ── Native-speaker pin (round 90) ──────────────────────────────
+// ── Native-speaker pin (rounds 90-92) ───────────────────────────
 //
-// The three Indonesian topology values fixed by the round-90 native-
-// speaker pass. Asserting them through the REAL production id bundle
-// (getBundle('id')) means a future re-translation drift — a revert to
-// "Abaikan masalah", a "ruang kerja" regression in the hint, or a
-// dropped "untuk pengurangan stok" — fails CI instead of shipping.
+// The Indonesian values fixed by the native-speaker passes:
+//   - round 90: dismiss aria, stock-wire hint, fallback toast;
+//   - round 91: the kabel → koneksi terminology unification;
+//   - round 92: settings/sync fixes (tarif pajak, Aktif, Hidangan).
+// Asserting them through the REAL production id bundle (getBundle('id'))
+// means any future re-translation drift fails CI instead of shipping.
 // Unlike the TOPOLOGY_EN stub used by the editor tests (which pins en
 // only and never touches the .ftl files), these assertions exercise
 // the actual shipped bundle content.
-describe('i18n native-speaker pin (round 90)', () => {
-  const round90Pins: Array<[string, string]> = [
-    // Dismiss aria/title was shortened to match en "Dismiss".
-    ['topology-validation-dismiss', 'Abaikan'],
-    // Hint uses "workspace" (not "ruang kerja") to match the
-    // missing-stock-routing validation key.
-    [
-      'topology-node-stock-wire-hint',
-      'Hubungkan Stock Out dari workspace atau output Gudang Stok lain ke Stock In Gudang Stok ini.',
-    ],
-    // Fallback toast carries the "stock deduction" sense.
-    [
-      'topology-toast-fallback-warehouse',
-      'Koneksi fallback multi-gudang untuk pengurangan stok memerlukan lisensi Pro Tier.',
-    ],
-  ];
+type Pin = { key: string; args?: Record<string, string | number>; expected: string };
 
-  it('resolves the round-90 id values exactly from the production bundle', () => {
+const nativeSpeakerPins: Pin[] = [
+  // Round 90 — dismiss aria/title shortened to match en "Dismiss".
+  { key: 'topology-validation-dismiss', expected: 'Abaikan' },
+  // Round 90 — hint uses "workspace" (not "ruang kerja") to match the
+  // missing-stock-routing validation key.
+  {
+    key: 'topology-node-stock-wire-hint',
+    expected: 'Hubungkan Stock Out dari workspace atau output Gudang Stok lain ke Stock In Gudang Stok ini.',
+  },
+  // Round 90 — fallback toast carries the "stock deduction" sense.
+  {
+    key: 'topology-toast-fallback-warehouse',
+    expected: 'Koneksi fallback multi-gudang untuk pengurangan stok memerlukan lisensi Pro Tier.',
+  },
+  // Round 91 — kabel → koneksi unification across the wire surface.
+  { key: 'topology-wire-routing-toggle', expected: 'Koneksi siku' },
+  {
+    key: 'topology-bends-override-note',
+    expected: 'Titik tekuk menggantikan mode rute pada koneksi yang dilengkungkan',
+  },
+  { key: 'topology-wire-labels-toggle', expected: 'Label koneksi' },
+  { key: 'topology-context-delete-wire', expected: 'Hapus koneksi' },
+  { key: 'topology-context-rename-wire', expected: 'Ganti nama koneksi' },
+  { key: 'topology-wire-rename-placeholder', expected: 'Label koneksi' },
+  {
+    key: 'topology-confirm-delete-many-msg',
+    args: { count: 2 },
+    expected: 'Hapus 2 node dan semua koneksinya? Tindakan ini tidak dapat dibatalkan.',
+  },
+  // Round 92 — settings/sync fixes.
+  {
+    key: 'settings-sync-pull-result',
+    args: { products: 3, tax_rates: 2, users: 1 },
+    expected: 'Tarik terakhir: 3 produk, 2 tarif pajak, 1 pengguna',
+  },
+  { key: 'settings-license-live-online', expected: 'Aktif' },
+  { key: 'workspace-resto-courses-heading', expected: 'Pengiriman Hidangan' },
+  { key: 'workspace-resto-courses-enable', expected: 'Aktifkan Pengiriman Hidangan' },
+];
+
+describe('i18n native-speaker pin (rounds 90-92)', () => {
+  it('resolves every native-speaker-fixed id value exactly from the production bundle', () => {
     const id = getBundle('id');
-    for (const [key, expected] of round90Pins) {
+    for (const { key, args, expected } of nativeSpeakerPins) {
       const msg = id.getMessage(key);
       expect(msg?.value, `key "${key}" must exist in the id bundle`).toBeDefined();
       expect(
-        id.formatPattern(msg!.value!, null),
-        `key "${key}" drifted from its round-90 native-speaker value`,
+        id.formatPattern(msg!.value!, args ?? null),
+        `key "${key}" drifted from its native-speaker value`,
       ).toBe(expected);
     }
   });

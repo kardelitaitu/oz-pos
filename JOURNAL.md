@@ -2470,3 +2470,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 93 — id pin)
 
 **Risks / follow-ups:** the pin covers only the three round-90 keys — the round-91 kabel→koneksi set and round-92 settings fixes could join the same table for the same protection; the test asserts exact text, so a deliberate copy improvement requires updating the pin (by design).
+
+### 2026-08-09 — id pin table extended to rounds 91-92 (round 94)
+
+**Problem (round-93 follow-up):** the pin guarded only the three round-90 keys; the round-91 kabel→koneksi unification and round-92 settings fixes were still review-only.
+
+**Solution (pin extension):** the round-93 table in `i18nBundle.test.tsx` became `nativeSpeakerPins` covering all 14 native-speaker-fixed id values through the production `getBundle('id')` loader: round 90 (3), round 91 (7 — Koneksi siku, bends-override note, Label koneksi ×2, Hapus koneksi, Ganti nama koneksi, and confirm-delete-many with `{ $count }`), round 92 (4 — pull-result with products/tax_rates/users args, Aktif, Pengiriman Hidangan ×2). The table grew an optional `args` field for the placeholder-bearing keys (count: 2 → "Hapus 2 node dan semua koneksinya?"; products 3 / tax_rates 2 / users 1 → "3 produk, 2 tarif pajak, 1 pengguna"); the passing assertions confirm the args formatting resolves exactly, not vacuously. Describe renamed to "rounds 90-92".
+
+**Verified:** i18nBundle 13/13 (table extended within the one test — no count change), full UI 4564/4564, typecheck, eslint 0/0, i18n lint clean.
+
+**Commits:** (round 94 — id pin extension)
+
+**Risks / follow-ups:** the en-side counterparts are still unpinned (a round-91 en "connection"→"wire" regression would not fail this table); every deliberate future copy change must update the pin (by design).
