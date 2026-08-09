@@ -1052,7 +1052,24 @@ export default function NodeTopologyEditor({
    *  Escape or any document mousedown outside the picker (the picker
    *  wrapper stops propagation, so slider drags never close it). */
   const [zoomPickerOpen, setZoomPickerOpen] = useState(false);
-  const [minimapVisible, setMinimapVisible] = useState(true);
+  /** Minimap visibility per diagram (branch) — mirrors the viewport memory's
+   *  per-branch key scheme so a branch switch (which remounts the editor)
+   *  restores the user's hide/show choice for that diagram instead of
+   *  resetting to a global default. 'unassigned' mirrors the viewport key's
+   *  fallback for diagrams with no selected branch. */
+  const minimapKey = `oz-topology-view-minimap:${branchId ?? 'unassigned'}`;
+  const [minimapVisible, setMinimapVisible] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(minimapKey) !== '0';
+    } catch { /* storage unavailable or corrupted — default visible */ }
+    return true;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(minimapKey, minimapVisible ? '1' : '0');
+    } catch { /* storage may be unavailable (private mode) — view pref only */ }
+  }, [minimapKey, minimapVisible]);
 
   useEffect(() => {
     if (!zoomPickerOpen) return;

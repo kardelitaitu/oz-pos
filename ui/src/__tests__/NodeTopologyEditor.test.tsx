@@ -5689,6 +5689,49 @@ describe('NodeTopologyEditor — minimap overview', () => {
     fireEvent.click(toggle);
     expect(screen.getByRole('button', { name: 'Show Minimap' })).toHaveAttribute('aria-pressed', 'false');
   });
+
+  describe('per-branch visibility persistence', () => {
+    // These tests write and read the minimap localStorage key, so scrub it
+    // around every test — a leftover '0' under the 'unassigned' key would
+    // hide the minimap for any later default-mount test in the suite.
+    beforeEach(() => localStorage.clear());
+    afterEach(() => localStorage.clear());
+
+    it('persists the visibility to the branch-scoped localStorage key', () => {
+      renderEditor({ branchId: 'branch-a' });
+
+      fireEvent.click(screen.getByText('Hide Minimap'));
+      expect(localStorage.getItem('oz-topology-view-minimap:branch-a')).toBe('0');
+
+      fireEvent.click(screen.getByText('Show Minimap'));
+      expect(localStorage.getItem('oz-topology-view-minimap:branch-a')).toBe('1');
+    });
+
+    it('restores a saved hidden minimap for the same branch on mount', () => {
+      localStorage.setItem('oz-topology-view-minimap:branch-a', '0');
+      renderEditor({ branchId: 'branch-a' });
+
+      expect(document.querySelector('.topology-minimap')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Show Minimap' })).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('writes only the active branch\'s key, leaving other branches untouched', () => {
+      localStorage.setItem('oz-topology-view-minimap:branch-a', '0');
+      renderEditor({ branchId: 'branch-a' });
+
+      fireEvent.click(screen.getByText('Show Minimap'));
+      expect(localStorage.getItem('oz-topology-view-minimap:branch-a')).toBe('1');
+      expect(localStorage.getItem('oz-topology-view-minimap:branch-b')).toBeNull();
+    });
+
+    it('falls back to visible when the saved value is corrupted', () => {
+      localStorage.setItem('oz-topology-view-minimap:branch-a', 'garbage');
+      renderEditor({ branchId: 'branch-a' });
+
+      expect(document.querySelector('.topology-minimap')).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Hide Minimap' })).toHaveAttribute('aria-pressed', 'true');
+    });
+  });
 });
 
 // ── F2 inline rename + HUD status readouts ──────────────────────

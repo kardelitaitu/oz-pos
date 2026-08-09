@@ -1883,3 +1883,13 @@ Test notes: the first aria-pressed query used `name: /minimap/i` and matched BOT
 Test counts: +2 (editor 329). Full UI 4365 (265 files). Gates: typecheck, eslint, i18n parity clean.
 
 Commits: this round, scoped to NodeTopologyEditor.tsx/.test.tsx + both FTL bundles + JOURNAL.md.
+
+### 2026-08-09 — Round 46: per-branch minimap visibility persistence
+
+Problem: The round-45 minimap toggle reset to visible every time the editor remounted — a branch switch (which remounts the editor keyed by branch) silently discarded a user's hide/show choice, and every diagram shared the same default. The viewport memory (pan/zoom per branch) already solved this class of problem; the minimap pref wasn't in it.
+
+Solution: Red→Green, mirroring the per-branch viewport memory (`oz-topology-viewport:<branchId|unassigned>`). Red: four tests in the minimap describe — persist on toggle ('0'/'1' under `oz-topology-view-minimap:<branch>`), restore a saved hidden state on mount, write only the active branch's key, and fall back to visible on a corrupted value. 3 failed for the right reasons (no write, no restore, no scoping); the corruption test passed as the spec guard constraining the implementation to stay default-visible. Green: `minimapKey` derived from `branchId ?? 'unassigned'`, lazy mount-time read with try/catch (default visible), and a write-back effect on `[minimapKey, minimapVisible]` — same shape as the snap/wire-labels prefs but branch-scoped like the viewport.
+
+Test counts: +4 (editor 333). Full UI 4369 (265 files). Gates: typecheck, eslint, i18n parity clean (no new FTL keys).
+
+Commits: this round, scoped to NodeTopologyEditor.tsx/.test.tsx + JOURNAL.md.
