@@ -2422,3 +2422,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 89 — capacity dedupe)
 
 **Risks / follow-ups:** first-wire-wins is deterministic but means the marker renders on one of several inbound wires — the round-74 marker affordance already shows the "don't route in" story, so acceptable; the reverse (missing-stock-routing) guard already dedupes structurally (one error per node by construction). Editor test hunks split from the agents' panMovedRef/zoom/pan/shortcuts/clipboard hunks.
+
+### 2026-08-09 — native-speaker pass on rounds 69-84 Indonesian FTL (round 90)
+
+**Problem (standing journaled follow-up since round 69):** the id bundle's topology values were best-effort translations, and three drifted from the current en source or from internal consistency.
+
+**Solution (copy-only, Verify + Commit):** reviewed every topology key added in rounds 69-84 against en. Most were already natural and correct (Kapasitas, Ambang Stok Menipis, tier-capacity-notice with "diberlakukan" for enforced, at-capacity/missing-stock-routing validation copy). Fixed three: (1) `topology-node-stock-wire-hint` used "ruang kerja" for workspace while `topology-validation-warehouse-missing-stock-routing` uses "workspace" untranslated — unified on "workspace"; (2) `topology-validation-dismiss` said "Abaikan masalah" (matches the OLD en "Dismiss issue") but en is now just "Dismiss" and the key is an icon-button aria-label/title — shortened to "Abaikan"; (3) `topology-toast-fallback-warehouse` dropped the "stock deduction" sense — now "untuk pengurangan stok". The low-stock badge and wire marker carry no FTL (numeric badge, "!" glyph), so no keys there.
+
+**Verified:** i18n lint (includes parity + FTL dedupe) clean, typecheck clean, full UI 4563/4563 unchanged (no en change, no key-set change). The dedupe-ftl.py script rewrites the whole locales dir, so it was skipped in the shared tree — lint:i18n already covers its check.
+
+**Commits:** (round 90 — id FTL pass)
+
+**Risks / follow-ups:** the id bundle still mixes "kabel" (wire toggle keys) and "koneksi" (validation keys) for wire — pre-existing, outside the rounds 69-84 key set; and the remaining id values beyond topology were not part of this pass.
