@@ -276,6 +276,8 @@ settings-sync-token-request-failed = Permintaan token gagal — periksa URL serv
 settings-sync-request-token = Minta Token
 settings-sync-requesting = Meminta…
 settings-sync-error = Sinkronisasi gagal
+settings-sync-plan-required = Sinkronisasi cloud membutuhkan paket berbayar
+settings-sync-plan-required-hint = Penjualan lokal tetap berjalan — tingkatkan paket untuk menyinkronkannya ke cloud.
 
 # ── Token expiry badge ──────────────────────────────────
 settings-sync-expiry-expired = Kedaluwarsa

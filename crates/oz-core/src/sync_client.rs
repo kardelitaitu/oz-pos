@@ -56,6 +56,11 @@ pub struct SyncAttemptResult {
     pub failed: usize,
     /// Error message if the entire sync failed (e.g. network error).
     pub error: Option<String>,
+    /// The server rejected the attempt because this tenant is on the
+    /// `free` plan (ADR sync-plan-gating). The UI shows an upgrade prompt
+    /// and queued items stay `pending` — they are valid, just gated.
+    #[serde(default)]
+    pub plan_required: bool,
 }
 
 /// Typed HTTP error from the sync client (ADR sync-auth-hardening P1/P4).
@@ -696,6 +701,7 @@ pub fn apply_sync_outcomes(
         synced,
         failed,
         error: global_error,
+        plan_required: false,
     })
 }
 
@@ -712,6 +718,7 @@ pub fn mark_all_failed(
         synced: 0,
         failed: pending.len(),
         error: Some(err_msg.into()),
+        plan_required: false,
     })
 }
 
@@ -728,6 +735,7 @@ pub fn sync_pending(store: &Store, config: &SyncConfig) -> Result<SyncAttemptRes
             synced: 0,
             failed: 0,
             error: None,
+            plan_required: false,
         });
     }
 
@@ -1610,6 +1618,7 @@ mod tests {
             synced: 5,
             failed: 1,
             error: Some("network error".into()),
+            plan_required: false,
         };
         let debug = format!("{:?}", result);
         assert!(debug.contains("synced: 5"));
@@ -1622,6 +1631,7 @@ mod tests {
             synced: 10,
             failed: 2,
             error: Some("timeout".into()),
+            plan_required: false,
         };
         let json = serde_json::to_string(&result).unwrap();
         let back: SyncAttemptResult = serde_json::from_str(&json).unwrap();
@@ -1636,6 +1646,7 @@ mod tests {
             synced: 0,
             failed: 0,
             error: None,
+            plan_required: false,
         };
         assert!(result.error.is_none());
     }

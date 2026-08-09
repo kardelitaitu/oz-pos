@@ -294,6 +294,7 @@ pub async fn sync_run(state: State<'_, AppState>) -> Result<SyncAttemptResult, A
                 synced: 0,
                 failed: 0,
                 error: Some("Sync is not configured or disabled".into()),
+                plan_required: false,
             });
         }
     };
@@ -303,6 +304,7 @@ pub async fn sync_run(state: State<'_, AppState>) -> Result<SyncAttemptResult, A
             synced: 0,
             failed: 0,
             error: None,
+            plan_required: false,
         });
     }
 
@@ -357,6 +359,15 @@ pub async fn sync_run(state: State<'_, AppState>) -> Result<SyncAttemptResult, A
             &pending_items,
             &outcomes,
         )?),
+        // ADR sync-plan-gating: a free tenant is gated, not broken. Do NOT
+        // mark the items failed — they stay `pending` and sync automatically
+        // once the tenant upgrades. The UI shows an upgrade prompt instead.
+        Err(sync_client::SyncHttpError::PlanRequired) => Ok(SyncAttemptResult {
+            synced: 0,
+            failed: 0,
+            error: Some("cloud sync requires a paid plan".into()),
+            plan_required: true,
+        }),
         Err(e) => Ok(sync_client::mark_all_failed(
             &store,
             &pending_items,
@@ -900,6 +911,71 @@ mod tests {
         assert_eq!(
             items[0].status,
             oz_core::offline::OfflineQueueStatus::Synced
+        );
+    }
+
+    #[tokio::test]
+    async fn sync_run_plan_required_keeps_items_pending_and_flags_upgrade() {
+        // ADR sync-plan-gating: when the server rejects with a structured
+        // 403 plan_required, sync_run must (a) report plan_required so the
+        // UI shows an upgrade prompt, (b) NOT mark items failed — they stay
+        // pending and sync automatically after an upgrade.
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let server_url = format!("http://{}", listener.local_addr().unwrap());
+        let task = tokio::spawn(async move {
+            let Ok((mut socket, _)) = listener.accept().await else {
+                return;
+            };
+            let mut buffer = vec![0_u8; 16 * 1024];
+            let _ = socket.read(&mut buffer).await;
+            let body = r#"{"error":"plan_required"}"#;
+            let response = format!(
+                "HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let _ = socket.write_all(response.as_bytes()).await;
+        });
+
+        let conn = oz_core::migrations::fresh_db();
+        update_sync_settings_data(
+            &conn,
+            &UpdateSyncSettingsArgs {
+                server_url: Some(server_url),
+                api_key: Some("test-jwt".into()),
+                enabled: true,
+            },
+        )
+        .unwrap();
+        {
+            let store = Store::new(&conn);
+            store
+                .enqueue_offline("complete_sale", r#"{"id":"plan-gate"}"#)
+                .unwrap();
+        }
+        let app = tauri::test::mock_builder()
+            .manage(AppState::for_test_with_conn(conn))
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result = sync_run(app.state()).await.unwrap();
+        task.await.unwrap();
+
+        assert!(result.plan_required, "must flag plan_required for the UI");
+        assert_eq!(result.synced, 0);
+        assert_eq!(result.failed, 0, "a plan gate is not a failure");
+
+        let state = app.state::<AppState>();
+        let db = state.db.lock().await;
+        let items = Store::new(&db).list_all_offline().unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(
+            items[0].status,
+            oz_core::offline::OfflineQueueStatus::Pending,
+            "plan-gated items must stay pending so they sync after upgrade"
         );
     }
 

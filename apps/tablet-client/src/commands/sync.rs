@@ -117,6 +117,7 @@ pub async fn sync_run(state: State<'_, AppState>) -> Result<SyncAttemptResult, A
                 synced: 0,
                 failed: 0,
                 error: Some("Sync is not configured or disabled".into()),
+                plan_required: false,
             });
         }
     };
@@ -126,6 +127,7 @@ pub async fn sync_run(state: State<'_, AppState>) -> Result<SyncAttemptResult, A
             synced: 0,
             failed: 0,
             error: None,
+            plan_required: false,
         });
     }
 

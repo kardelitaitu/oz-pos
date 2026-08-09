@@ -402,7 +402,21 @@ export default function SyncSection({
                     <span>Last sync: {syncResult.synced} synced, {syncResult.failed} failed</span>
                   </Localized>
                 </p>
-                {syncResult.error && (
+                {syncResult.planRequired && (
+                  <div className="settings-sync-plan-required" role="status">
+                    <p className="settings-hint settings-hint--error">
+                      <Localized id="settings-sync-plan-required">
+                        <span>Cloud sync requires a paid plan</span>
+                      </Localized>
+                    </p>
+                    <p className="settings-hint">
+                      <Localized id="settings-sync-plan-required-hint">
+                        <span>Your local sales keep working — upgrade to sync them to the cloud.</span>
+                      </Localized>
+                    </p>
+                  </div>
+                )}
+                {syncResult.error && !syncResult.planRequired && (
                   <p className="settings-hint settings-hint--error">{syncResult.error}</p>
                 )}
               </div>

@@ -157,6 +157,9 @@ export interface SyncAttemptResult {
   synced: number;
   failed: number;
   error: string | null;
+  /** The server rejected the attempt because this tenant is on the free
+   *  plan (ADR sync-plan-gating) — show an upgrade prompt. */
+  planRequired?: boolean;
 }
 
 /** Result of pulling data from the cloud server. */

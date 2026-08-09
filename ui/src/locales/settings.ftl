@@ -286,6 +286,8 @@ settings-sync-token-request-failed = Token request failed — check server URL
 settings-sync-request-token = Request Token
 settings-sync-requesting = Requesting…
 settings-sync-error = Sync failed
+settings-sync-plan-required = Cloud sync requires a paid plan
+settings-sync-plan-required-hint = Your local sales keep working — upgrade to sync them to the cloud.
 
 # ── Token expiry badge ──────────────────────────────────
 settings-sync-expiry-expired = Expired
