@@ -264,8 +264,62 @@ fn default_direction() -> WireDirection {
 // ── Free functions (testable without Tauri runtime) ────────────────
 
 const TOPOLOGY_SETTING_KEY: &str = "oz-pos/topology";
+const TOPOLOGY_RUNTIME_SETTING_KEY: &str = "oz-pos/topology-runtime";
 const TOPOLOGY_APPLY_RECOVERY_KEY: &str = "oz-pos/topology/apply-recovery";
 const TOPOLOGY_SCHEMA_VERSION: u64 = 1;
+
+/// Resolve the branch-scoped runtime plan key paired with a topology key.
+fn topology_runtime_setting_key(topology_key: &str) -> Result<String, AppError> {
+    if topology_key == TOPOLOGY_SETTING_KEY {
+        return Ok(TOPOLOGY_RUNTIME_SETTING_KEY.to_owned());
+    }
+    let prefix = format!("{TOPOLOGY_SETTING_KEY}/");
+    let branch_id = topology_key
+        .strip_prefix(&prefix)
+        .filter(|id| !id.is_empty())
+        .ok_or_else(|| AppError::Internal("invalid topology setting key".into()))?;
+    Ok(format!("{TOPOLOGY_RUNTIME_SETTING_KEY}/{branch_id}"))
+}
+
+/// Compile operational semantic wires into the runtime routing artifact.
+///
+/// Location ownership edges stay in the diagram contract; operational edges
+/// are copied into a branch-scoped manifest consumed by runtime adapters. The
+/// manifest deliberately keeps stable instance IDs and semantic port fields,
+/// never display names or canvas coordinates.
+fn compile_topology_runtime_plan(
+    nodes: &[Value],
+    wires: &[Value],
+    branch_id: Option<String>,
+) -> Value {
+    let node_ids: std::collections::HashSet<&str> = nodes
+        .iter()
+        .filter_map(|node| value_string(node, "id"))
+        .collect();
+    let routes: Vec<Value> = wires
+        .iter()
+        .filter(|wire| value_string(wire, "relationship_type") != Some("location"))
+        .filter(|wire| {
+            node_ids.contains(value_string(wire, "from_node_id").unwrap_or_default())
+                && node_ids.contains(value_string(wire, "to_node_id").unwrap_or_default())
+        })
+        .map(|wire| {
+            serde_json::json!({
+                "wire_id": value_string(wire, "id").unwrap_or_default(),
+                "source_instance_id": value_string(wire, "from_node_id").unwrap_or_default(),
+                "target_instance_id": value_string(wire, "to_node_id").unwrap_or_default(),
+                "from_port_id": value_string(wire, "from_port_id").unwrap_or_default(),
+                "to_port_id": value_string(wire, "to_port_id").unwrap_or_default(),
+                "relationship_type": value_string(wire, "relationship_type").unwrap_or_default(),
+            })
+        })
+        .collect();
+    serde_json::json!({
+        "schema_version": TOPOLOGY_SCHEMA_VERSION,
+        "branch_id": branch_id,
+        "routes": routes,
+    })
+}
 
 /// Resolve the settings key for one branch topology.
 ///
@@ -768,6 +822,14 @@ fn save_topology_json_at_key(
     // kinds. `branch-location` is a semantic alias, so normalize only the
     // temporary validation copy; the raw command payload is persisted intact.
     validate_diagram_payloads(&nodes, &wires)?;
+    let runtime_key = topology_runtime_setting_key(setting_key)?;
+    let runtime_branch_id = setting_key
+        .strip_prefix(&format!("{TOPOLOGY_SETTING_KEY}/"))
+        .map(str::to_owned);
+    let runtime_plan = compile_topology_runtime_plan(&nodes, &wires, runtime_branch_id);
+    let runtime_json = serde_json::to_string(&runtime_plan)
+        .map_err(|e| AppError::Internal(format!("serialize topology runtime plan: {e}")))?;
+
     let wires: Vec<Value> = wires
         .into_iter()
         .map(|mut wire| {
@@ -794,6 +856,7 @@ fn save_topology_json_at_key(
         .map_err(|e| AppError::Internal(format!("serialize topology: {e}")))?;
     let tx = conn.unchecked_transaction()?;
     oz_core::Settings::set(&tx, setting_key, &json)?;
+    oz_core::Settings::set(&tx, &runtime_key, &runtime_json)?;
     tx.commit()?;
     Ok(())
 }
@@ -1829,6 +1892,71 @@ mod tests {
     }
 
     #[test]
+    fn semantic_save_compiles_operational_wires_to_branch_runtime_plan() {
+        let conn = fresh_conn();
+        let branch_key = topology_setting_key(Some("default")).unwrap();
+        let mut resto = semantic_node("resto-pos", "workspace", None);
+        resto["metadata"] = serde_json::json!({ "typeKey": "restaurant-pos" });
+        let mut kds = semantic_node("kds", "workspace", None);
+        kds["metadata"] = serde_json::json!({ "typeKey": "kds" });
+        let operation_wire = serde_json::json!({
+            "id": "wire-resto-kds-runtime",
+            "from_node_id": "resto-pos",
+            "to_node_id": "kds",
+            "direction": "one-way",
+            "from_port_id": "operation-out",
+            "to_port_id": "operation-in",
+            "relationship_type": "generic",
+        });
+
+        save_topology_json_at_key(
+            &conn,
+            vec![
+                semantic_node("branch", "branch-location", Some("default")),
+                resto,
+                kds,
+            ],
+            vec![
+                semantic_location_wire("wire-resto-location", "resto-pos"),
+                operation_wire,
+            ],
+            &branch_key,
+        )
+        .unwrap();
+
+        let runtime_json = oz_core::Settings::get(&conn, "oz-pos/topology-runtime/default")
+            .unwrap()
+            .expect("semantic save must compile a runtime plan");
+        let runtime: Value = serde_json::from_str(&runtime_json).unwrap();
+        assert_eq!(runtime["schema_version"], TOPOLOGY_SCHEMA_VERSION);
+        assert_eq!(runtime["branch_id"], "default");
+        assert_eq!(runtime["routes"][0]["wire_id"], "wire-resto-kds-runtime");
+        assert_eq!(runtime["routes"][0]["source_instance_id"], "resto-pos");
+        assert_eq!(runtime["routes"][0]["target_instance_id"], "kds");
+        assert_eq!(runtime["routes"][0]["relationship_type"], "generic");
+
+        // A later save without operational wires replaces the manifest rather
+        // than leaving the removed route active.
+        save_topology_json_at_key(
+            &conn,
+            vec![
+                semantic_node("branch", "branch-location", Some("default")),
+                semantic_node("store-pos", "workspace", None),
+            ],
+            vec![semantic_location_wire("wire-store-location", "store-pos")],
+            &branch_key,
+        )
+        .unwrap();
+        let cleared: Value = serde_json::from_str(
+            &oz_core::Settings::get(&conn, "oz-pos/topology-runtime/default")
+                .unwrap()
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(cleared["routes"].as_array().unwrap().len(), 0);
+    }
+
+    #[test]
     fn branch_topology_settings_are_isolated() {
         let conn = fresh_conn();
         let branch_a_key = topology_setting_key(Some("branch-a")).unwrap();
@@ -1871,6 +1999,20 @@ mod tests {
         assert!(!a.contains("branch-b"));
         assert!(b.contains("branch-b"));
         assert!(!b.contains("branch-a"));
+        let runtime_a: Value = serde_json::from_str(
+            &oz_core::Settings::get(&conn, "oz-pos/topology-runtime/branch-a")
+                .unwrap()
+                .unwrap(),
+        )
+        .unwrap();
+        let runtime_b: Value = serde_json::from_str(
+            &oz_core::Settings::get(&conn, "oz-pos/topology-runtime/branch-b")
+                .unwrap()
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(runtime_a["branch_id"], "branch-a");
+        assert_eq!(runtime_b["branch_id"], "branch-b");
         assert!(
             oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)
                 .unwrap()
