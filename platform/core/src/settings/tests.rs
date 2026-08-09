@@ -1505,3 +1505,92 @@ fn remove_preserves_delta_history() {
         Some(2)
     );
 }
+
+/// Two connections race `Settings::write_delta` on the same
+/// (key, terminal_id) against a shared file DB. Migration 116's UNIQUE
+/// index makes a duplicate-version collision a hard constraint error, so
+/// both writers must succeed and the ledger must end gapless (1, 2, 3 — no
+/// duplicates, none dropped): the DB-08 retry contract made real.
+///
+/// The interleaving is deterministic: connection A holds a `BEGIN IMMEDIATE`
+/// write lock from before B starts, so B's allocation is guaranteed to read
+/// the same MAX as A and collide on its INSERT (A's lock blocks B's write).
+/// A wins the slot; B must retry and land the next version.
+#[test]
+fn write_delta_concurrent_same_pair_never_loses_delta() {
+    let dir = tempfile::tempdir().unwrap();
+    let db_path = dir.path().join("delta-race.sqlite");
+    {
+        let setup = Connection::open(&db_path).unwrap();
+        setup
+            .busy_timeout(std::time::Duration::from_secs(30))
+            .unwrap();
+        // Mirrors migrations 100 + 116: the delta ledger plus the UNIQUE
+        // (key, terminal_id, version) index that fails closed on a race.
+        setup
+            .execute_batch(
+                "CREATE TABLE setting_updated (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    key         TEXT    NOT NULL,
+                    value       TEXT    NOT NULL,
+                    terminal_id TEXT    NOT NULL DEFAULT 'unknown',
+                    version     INTEGER NOT NULL,
+                    created_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                );
+                CREATE UNIQUE INDEX idx_setting_updated_unique_version
+                    ON setting_updated(key, terminal_id, version);",
+            )
+            .unwrap();
+        // Seed version 1 so the race targets the next free slot.
+        Settings::write_delta(&setup, "receipt.footer", "seed", "term-race").unwrap();
+    }
+
+    // Connection A grabs the write lock and holds it while B races.
+    let conn_a = Connection::open(&db_path).unwrap();
+    conn_a
+        .busy_timeout(std::time::Duration::from_secs(30))
+        .unwrap();
+    conn_a.execute_batch("BEGIN IMMEDIATE").unwrap();
+
+    // Connection B computes the same MAX(version)+1 as A and its INSERT is
+    // blocked by A's lock — the guaranteed duplicate-version collision.
+    let conn_b = Connection::open(&db_path).unwrap();
+    conn_b
+        .busy_timeout(std::time::Duration::from_secs(30))
+        .unwrap();
+    let loser = std::thread::spawn(move || {
+        Settings::write_delta(&conn_b, "receipt.footer", "loser", "term-race")
+    });
+
+    // Give B time to reach its blocked write, then win the slot ourselves.
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    Settings::write_delta(&conn_a, "receipt.footer", "winner", "term-race").unwrap();
+    conn_a.execute_batch("COMMIT").unwrap();
+
+    let loser_result = loser.join().unwrap();
+    assert!(
+        loser_result.is_ok(),
+        "concurrent write_delta lost its delta: {loser_result:?}"
+    );
+
+    // seed (1) + winner (2) + loser (3): the ledger must be exactly
+    // versions 1..=3 with no duplicates and no gaps.
+    let conn = Connection::open(&db_path).unwrap();
+    let mut stmt = conn
+        .prepare(
+            "SELECT version FROM setting_updated
+             WHERE key = 'receipt.footer' AND terminal_id = 'term-race'
+             ORDER BY version",
+        )
+        .unwrap();
+    let versions: Vec<i64> = stmt
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(
+        versions,
+        vec![1, 2, 3],
+        "delta ledger must be gapless 1..=3"
+    );
+}

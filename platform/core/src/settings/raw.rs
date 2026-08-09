@@ -59,52 +59,59 @@ impl Settings {
 
     // ── Delta ledger methods ──────────────────────────────────────
 
-    /// Standalone delta writer — uses a savepoint for nesting safety.
+    /// Standalone delta writer — serialized allocation with a bounded retry.
     ///
     /// Computes `version = MAX(version) + 1` for the `(key, terminal_id)`
-    /// pair and inserts a new row. Uses a savepoint so the SELECT MAX +
-    /// INSERT are atomic and the call is safe from within an existing
-    /// transaction (no nested `BEGIN` error).
+    /// pair and inserts a new row.
     ///
     /// # Concurrency contract (DB-08, migration 116)
     ///
     /// Migration 116 adds `idx_setting_updated_unique_version`, a UNIQUE
     /// index on `(key, terminal_id, version)`. Two concurrent writers that
-    /// compute the same `MAX(version) + 1` now fail closed with a
-    /// constraint error instead of silently inserting a duplicate version.
-    /// `set_tracked` treats this as a non-fatal, logged delta failure; a
-    /// direct `write_delta` caller must treat the constraint error as the
-    /// signal to retry the version allocation under a serialized lock.
+    /// compute the same `MAX(version) + 1` collide: the loser's INSERT fails
+    /// with a constraint error. When called standalone (no outer
+    /// transaction), each attempt therefore runs in its own `BEGIN IMMEDIATE`
+    /// transaction — SQLite's reserved write lock serializes concurrent
+    /// allocations — and a constraint/busy collision retries with a fresh
+    /// snapshot, so the ledger records gapless sequential versions and no
+    /// delta is lost. Callers already inside a transaction take the
+    /// single-attempt savepoint path (`write_delta_nested`): their outer
+    /// transaction's earlier value write already serializes the allocation,
+    /// and a retry inside the same transaction could not observe the
+    /// winner's committed row anyway.
     pub fn write_delta(
         conn: &Connection,
         key: &str,
         value: &str,
         terminal_id: &str,
     ) -> Result<(), PlatformError> {
-        // Use a savepoint so this works both standalone and when called
-        // from within an existing transaction (e.g. set_tracked).
-        // `execute_batch` is used instead of `conn.savepoint()` because
-        // the latter requires `&mut Connection`.
+        if !conn.is_autocommit() {
+            Self::write_delta_nested(conn, key, value, terminal_id)
+        } else {
+            Self::write_delta_standalone(conn, key, value, terminal_id)
+        }
+    }
+
+    /// Single-attempt savepoint variant for callers already inside a
+    /// transaction. `execute_batch` is used instead of `conn.savepoint()`
+    /// because the latter requires `&mut Connection`. A collision surfaces
+    /// the constraint error (the caller's earlier value write has already
+    /// serialized the allocation, so this is not expected).
+    fn write_delta_nested(
+        conn: &Connection,
+        key: &str,
+        value: &str,
+        terminal_id: &str,
+    ) -> Result<(), PlatformError> {
         let sp = format!("_oz_delta_{}", std::process::id());
         conn.execute_batch(&format!("SAVEPOINT {sp}"))?;
-        let result = (|| -> Result<(), PlatformError> {
-            let version: i64 = conn
-                .query_row(
-                    "SELECT COALESCE(MAX(version), 0) + 1
-                     FROM setting_updated
-                     WHERE key = ?1 AND terminal_id = ?2",
-                    params![key, terminal_id],
-                    |row| row.get(0),
-                )
-                .unwrap_or(1);
-
-            conn.execute(
-                "INSERT INTO setting_updated (key, value, terminal_id, version)
-                 VALUES (?1, ?2, ?3, ?4)",
-                params![key, value, terminal_id, version],
-            )?;
-            Ok(())
-        })();
+        let result = Self::write_delta_row(
+            conn,
+            key,
+            value,
+            terminal_id,
+            Self::next_delta_version(conn, key, terminal_id),
+        );
         match result {
             Ok(()) => {
                 conn.execute_batch(&format!("RELEASE {sp}"))?;
@@ -118,6 +125,76 @@ impl Settings {
                 Err(e)
             }
         }
+    }
+
+    /// Per-attempt `BEGIN IMMEDIATE` variant with a bounded retry for
+    /// standalone callers (see the `write_delta` concurrency contract).
+    fn write_delta_standalone(
+        conn: &Connection,
+        key: &str,
+        value: &str,
+        terminal_id: &str,
+    ) -> Result<(), PlatformError> {
+        const MAX_ATTEMPTS: u32 = 32;
+        let mut attempt: u32 = 0;
+        loop {
+            let result = (|| -> Result<(), PlatformError> {
+                conn.execute_batch("BEGIN IMMEDIATE")?;
+                let version = Self::next_delta_version(conn, key, terminal_id);
+                Self::write_delta_row(conn, key, value, terminal_id, version)?;
+                conn.execute_batch("COMMIT")?;
+                Ok(())
+            })();
+            match result {
+                Ok(()) => return Ok(()),
+                Err(e) => {
+                    // End the attempt's transaction (a no-op when BEGIN failed).
+                    let _ = conn.execute_batch("ROLLBACK");
+                    let transient = matches!(
+                        &e,
+                        PlatformError::Db(rusqlite::Error::SqliteFailure(err, _))
+                            if err.code == rusqlite::ErrorCode::ConstraintViolation
+                                || err.code == rusqlite::ErrorCode::DatabaseBusy
+                    );
+                    if transient && attempt + 1 < MAX_ATTEMPTS {
+                        attempt += 1;
+                        continue;
+                    }
+                    if transient {
+                        tracing::warn!(key, terminal_id, error = %e, "delta write gave up after concurrent collisions");
+                    }
+                    return Err(e);
+                }
+            }
+        }
+    }
+
+    /// Compute the next version for a `(key, terminal_id)` pair.
+    fn next_delta_version(conn: &Connection, key: &str, terminal_id: &str) -> i64 {
+        conn.query_row(
+            "SELECT COALESCE(MAX(version), 0) + 1
+             FROM setting_updated
+             WHERE key = ?1 AND terminal_id = ?2",
+            params![key, terminal_id],
+            |row| row.get(0),
+        )
+        .unwrap_or(1)
+    }
+
+    /// Insert one versioned delta row.
+    fn write_delta_row(
+        conn: &Connection,
+        key: &str,
+        value: &str,
+        terminal_id: &str,
+        version: i64,
+    ) -> Result<(), PlatformError> {
+        conn.execute(
+            "INSERT INTO setting_updated (key, value, terminal_id, version)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![key, value, terminal_id, version],
+        )?;
+        Ok(())
     }
 
     /// Get the latest version number for a `(key, terminal_id)` pair.
@@ -198,20 +275,7 @@ impl Settings {
         value: &str,
         terminal_id: &str,
     ) -> Result<(), PlatformError> {
-        let version: i64 = tx
-            .query_row(
-                "SELECT COALESCE(MAX(version), 0) + 1
-                 FROM setting_updated
-                 WHERE key = ?1 AND terminal_id = ?2",
-                params![key, terminal_id],
-                |row| row.get(0),
-            )
-            .unwrap_or(1);
-        tx.execute(
-            "INSERT INTO setting_updated (key, value, terminal_id, version)
-             VALUES (?1, ?2, ?3, ?4)",
-            params![key, value, terminal_id, version],
-        )?;
-        Ok(())
+        let version = Self::next_delta_version(tx, key, terminal_id);
+        Self::write_delta_row(tx, key, value, terminal_id, version)
     }
 }
