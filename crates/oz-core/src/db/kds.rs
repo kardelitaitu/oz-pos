@@ -15,6 +15,7 @@ impl Store<'_> {
             id: row.get("id")?,
             sale_id: row.get("sale_id")?,
             store_id: row.get("store_id")?,
+            target_instance_id: row.get("target_instance_id")?,
             status: row.get("status")?,
             items_summary: row.get("items_summary")?,
             item_count: row.get("item_count")?,
@@ -33,6 +34,23 @@ impl Store<'_> {
 
     /// Create a KDS order from input, auto-incrementing the display number per day.
     pub fn create_kds_order(&self, input: CreateKdsOrderInput) -> Result<KdsOrder, CoreError> {
+        self.create_kds_order_with_target(input, None)
+    }
+
+    /// Create a KDS order and persist the topology-selected target instance.
+    pub fn create_kds_order_routed(
+        &self,
+        input: CreateKdsOrderInput,
+        target_instance_id: Option<&str>,
+    ) -> Result<KdsOrder, CoreError> {
+        self.create_kds_order_with_target(input, target_instance_id)
+    }
+
+    fn create_kds_order_with_target(
+        &self,
+        input: CreateKdsOrderInput,
+        target_instance_id: Option<&str>,
+    ) -> Result<KdsOrder, CoreError> {
         if input.sale_id.trim().is_empty() {
             return Err(CoreError::Validation {
                 field: "sale_id",
@@ -76,13 +94,14 @@ impl Store<'_> {
             .to_string();
 
         tx.execute(
-            "INSERT INTO kds_orders (id, sale_id, store_id, status, items_summary, item_count,
+            "INSERT INTO kds_orders (id, sale_id, store_id, target_instance_id, status, items_summary, item_count,
                                      display_number, received_at, kitchen_zone, notes, table_number, priority)
-             VALUES (?1, ?2, ?3, 'pending', ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+             VALUES (?1, ?2, ?3, ?4, 'pending', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
                 id,
                 input.sale_id,
                 input.store_id,
+                target_instance_id,
                 input.items_summary,
                 input.item_count,
                 display_number,
@@ -104,7 +123,7 @@ impl Store<'_> {
     /// List KDS orders, optionally filtered by status. Ordered by received_at DESC.
     pub fn list_kds_orders(&self, status_filter: Option<&str>) -> Result<Vec<KdsOrder>, CoreError> {
         let mut sql = String::from(
-            "SELECT id, sale_id, store_id, status, items_summary, item_count, display_number,
+            "SELECT id, sale_id, store_id, target_instance_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
                     prep_time_seconds, kitchen_zone, notes, table_number, priority
              FROM kds_orders",
@@ -127,7 +146,7 @@ impl Store<'_> {
     /// Get a single KDS order by its id.
     pub fn get_kds_order(&self, id: &str) -> Result<Option<KdsOrder>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, sale_id, store_id, status, items_summary, item_count, display_number,
+            "SELECT id, sale_id, store_id, target_instance_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
                     prep_time_seconds, kitchen_zone, notes, table_number, priority
              FROM kds_orders WHERE id = ?1",
@@ -143,7 +162,7 @@ impl Store<'_> {
     /// Get a KDS order by the originating sale id.
     pub fn get_kds_order_by_sale(&self, sale_id: &str) -> Result<Option<KdsOrder>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, sale_id, store_id, status, items_summary, item_count, display_number,
+            "SELECT id, sale_id, store_id, target_instance_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
                     prep_time_seconds, kitchen_zone, notes, table_number, priority
              FROM kds_orders WHERE sale_id = ?1",
@@ -265,7 +284,7 @@ impl Store<'_> {
     /// When `None`, all orders are returned (no zone filtering).
     pub fn get_kds_queue(&self, zone_filter: Option<&str>) -> Result<Vec<KdsOrder>, CoreError> {
         let mut sql = String::from(
-            "SELECT id, sale_id, store_id, status, items_summary, item_count, display_number,
+            "SELECT id, sale_id, store_id, target_instance_id, status, items_summary, item_count, display_number,
                     received_at, started_at, ready_at, served_at,
                     prep_time_seconds, kitchen_zone, notes, table_number, priority
              FROM kds_orders
@@ -313,6 +332,16 @@ impl Store<'_> {
         &self,
         sale_id: &str,
         store_id: Option<&str>,
+    ) -> Result<Vec<KdsOrder>, CoreError> {
+        self.complete_sale_to_kds_routed(sale_id, store_id, None)
+    }
+
+    /// Complete a sale to KDS orders routed to a topology-selected instance.
+    pub fn complete_sale_to_kds_routed(
+        &self,
+        sale_id: &str,
+        store_id: Option<&str>,
+        target_instance_id: Option<&str>,
     ) -> Result<Vec<KdsOrder>, CoreError> {
         let sale = self.get_sale(sale_id)?.ok_or_else(|| CoreError::NotFound {
             entity: "sale",
@@ -391,16 +420,19 @@ impl Store<'_> {
 
             let (items_summary, item_count) = Store::derive_kds_summary(&structured_items);
 
-            let order = self.create_kds_order(CreateKdsOrderInput {
-                sale_id: sale_id.to_owned(),
-                store_id: store_id.map(|s| s.to_owned()),
-                items_summary,
-                item_count,
-                kitchen_zone: zone,
-                notes: String::new(),
-                table_number: table_number.clone(),
-                priority: false,
-            })?;
+            let order = self.create_kds_order_routed(
+                CreateKdsOrderInput {
+                    sale_id: sale_id.to_owned(),
+                    store_id: store_id.map(|s| s.to_owned()),
+                    items_summary,
+                    item_count,
+                    kitchen_zone: zone,
+                    notes: String::new(),
+                    table_number: table_number.clone(),
+                    priority: false,
+                },
+                target_instance_id,
+            )?;
 
             // Create the structured line items in the new kds_line_items table.
             self.create_kds_line_items(&order.id, &structured_items)?;
@@ -1480,9 +1512,46 @@ mod tests {
         let sale = Sale::from_cart(&cart).unwrap();
         s.create_sale(&sale).unwrap();
 
-        let orders = s.complete_sale_to_kds(&sale.id, Some("store-1")).unwrap();
+        let orders = s
+            .complete_sale_to_kds_routed(&sale.id, Some("store-1"), Some("kds-main"))
+            .unwrap();
         assert_eq!(orders.len(), 1);
         assert_eq!(orders[0].store_id, Some("store-1".to_string()));
+        assert_eq!(orders[0].target_instance_id, Some("kds-main".to_string()));
+    }
+
+    #[test]
+    fn kds_order_has_runtime_target_instance_column() {
+        let conn = fresh();
+        let s = store(&conn);
+        seed_product(&conn, "BURGER", "Burger");
+
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("BURGER"), 1, price(500)))
+            .unwrap();
+        let sale = Sale::from_cart(&cart).unwrap();
+        s.create_sale(&sale).unwrap();
+        let order = s
+            .create_kds_order(CreateKdsOrderInput {
+                sale_id: sale.id,
+                store_id: Some("store-1".into()),
+                items_summary: "Burger".into(),
+                item_count: 1,
+                kitchen_zone: None,
+                notes: String::new(),
+                table_number: None,
+                priority: false,
+            })
+            .unwrap();
+
+        let target: Option<String> = conn
+            .query_row(
+                "SELECT target_instance_id FROM kds_orders WHERE id = ?1",
+                params![order.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(target, None);
     }
 
     #[test]

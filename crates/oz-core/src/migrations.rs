@@ -726,6 +726,11 @@ pub const ALL: &[Migration] = &[
         id: "122_workspace_instance_purpose.sql",
         sql: include_str!("../migrations/122_workspace_instance_purpose.sql"),
     },
+    // ── Topology runtime consumer: persist selected KDS target ────────
+    Migration {
+        id: "123_kds_target_instance.sql",
+        sql: include_str!("../migrations/123_kds_target_instance.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.

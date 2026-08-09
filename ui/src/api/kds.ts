@@ -35,6 +35,8 @@ export interface KdsOrder {
   sale_id: string;
   /** The store this order belongs to (ADR #8). Used for defense-in-depth filtering. */
   store_id: string | null;
+  /** Topology-selected KDS workspace instance, or null for legacy tickets. */
+  target_instance_id?: string | null;
   status: KdsStatus;
   items_summary: string;
   item_count: number;

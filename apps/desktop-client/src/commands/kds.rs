@@ -10,10 +10,55 @@ use tauri::{Emitter, State};
 use oz_core::KdsOrder;
 use oz_core::db::Store;
 use oz_core::permissions;
+use serde_json::Value;
 
 use crate::commands::authz::require_permission_for_user;
 use crate::error::AppError;
 use crate::state::AppState;
+
+const TOPOLOGY_RUNTIME_SETTING_KEY: &str = "oz-pos/topology-runtime";
+
+/// Select the KDS workspace instance targeted by a POS runtime route.
+///
+/// The topology compiler has already validated the semantic relationship;
+/// this consumer only matches the stable route fields needed at checkout.
+fn runtime_kds_target_instance(plan: &Value, source_instance_id: &str) -> Option<String> {
+    plan.get("routes")
+        .and_then(Value::as_array)
+        .and_then(|routes| {
+            routes.iter().find_map(|route| {
+                (route.get("source_instance_id").and_then(Value::as_str)
+                    == Some(source_instance_id)
+                    && route.get("from_port_id").and_then(Value::as_str) == Some("operation-out")
+                    && route.get("to_port_id").and_then(Value::as_str) == Some("operation-in")
+                    && route.get("relationship_type").and_then(Value::as_str) == Some("generic"))
+                .then(|| route.get("target_instance_id").and_then(Value::as_str))
+                .flatten()
+                .map(str::to_owned)
+            })
+        })
+}
+
+fn resolve_runtime_kds_target(
+    conn: &rusqlite::Connection,
+    store_id: &str,
+    source_instance_id: &str,
+) -> Result<Option<String>, AppError> {
+    let key = format!("{TOPOLOGY_RUNTIME_SETTING_KEY}/{store_id}");
+    let Some(json) = oz_core::Settings::get(conn, &key)? else {
+        return Ok(None);
+    };
+    let plan: Value = serde_json::from_str(&json)
+        .map_err(|e| AppError::Internal(format!("parse topology runtime plan: {e}")))?;
+    Ok(runtime_kds_target_instance(&plan, source_instance_id))
+}
+
+fn visible_to_kds_instance(order: &KdsOrder, instance_id: &str) -> bool {
+    order
+        .target_instance_id
+        .as_deref()
+        .is_none_or(|target| target == instance_id)
+}
 
 /// List KDS orders from the global database.
 ///
@@ -49,7 +94,11 @@ pub async fn list_kds_orders_scoped(
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     require_permission_for_user(&store, &session.user_id, permissions::KDS_VIEW)?;
-    let orders = store.list_kds_orders(status.as_deref())?;
+    let orders = store
+        .list_kds_orders(status.as_deref())?
+        .into_iter()
+        .filter(|order| visible_to_kds_instance(order, &session.instance_id))
+        .collect();
     drop(db);
     Ok(orders)
 }
@@ -88,7 +137,11 @@ pub async fn get_kds_queue_scoped(
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
     require_permission_for_user(&store, &session.user_id, permissions::KDS_VIEW)?;
-    let orders = store.get_kds_queue(kds_zone.as_deref())?;
+    let orders = store
+        .get_kds_queue(kds_zone.as_deref())?
+        .into_iter()
+        .filter(|order| visible_to_kds_instance(order, &session.instance_id))
+        .collect();
     drop(db);
     Ok(orders)
 }
@@ -240,6 +293,10 @@ pub async fn create_kds_order_from_sale_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<KdsOrder>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    let target_instance_id = {
+        let db = state.db.lock().await;
+        resolve_runtime_kds_target(&db, &session.store_id, &session.instance_id)?
+    };
     // Scope-limit the DB access so Store is dropped before .await.
     let orders = {
         let conn = state
@@ -251,7 +308,11 @@ pub async fn create_kds_order_from_sale_scoped(
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
         let store = Store::new(&db);
         require_permission_for_user(&store, &session.user_id, permissions::KDS_UPDATE)?;
-        store.complete_sale_to_kds(&sale_id, Some(&session.store_id))?
+        store.complete_sale_to_kds_routed(
+            &sale_id,
+            Some(&session.store_id),
+            target_instance_id.as_deref(),
+        )?
     }; // conn, db, store dropped here
 
     // Push real-time update to all KDS displays — skip if no kitchen items.
@@ -493,6 +554,24 @@ pub async fn try_auto_print_kds_chits(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn runtime_plan_selects_kds_target_for_pos_source() {
+        let plan = serde_json::json!({
+            "routes": [{
+                "source_instance_id": "pos-main",
+                "target_instance_id": "kds-main",
+                "from_port_id": "operation-out",
+                "to_port_id": "operation-in",
+                "relationship_type": "generic"
+            }]
+        });
+        assert_eq!(
+            runtime_kds_target_instance(&plan, "pos-main").as_deref(),
+            Some("kds-main")
+        );
+        assert_eq!(runtime_kds_target_instance(&plan, "other-pos"), None);
+    }
 
     #[test]
     fn kds_scoped_rejects_invalid_token() {
