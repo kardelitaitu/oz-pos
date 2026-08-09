@@ -125,6 +125,29 @@ fn classify_401(body: &str) -> SyncHttpError {
     }
 }
 
+/// Classify a non-2xx HTTP status into a typed [`SyncHttpError`]
+/// (ADR sync-auth-hardening P4 + ADR sync-plan-gating).
+///
+/// Used by both `send_items_to_server` and `fetch_snapshot_from_server` so
+/// the push and pull paths agree on 401/403 semantics:
+///
+/// - `401` → `AuthExpired` / `AuthInvalid` (refresh only on expiry).
+/// - `403` + `plan_required` → `PlanRequired` (terminal — no refresh,
+///   no retry, no quarantine).
+/// - anything else → `Server { status, body }`.
+fn classify_http_status(status: u16, body: &str) -> SyncHttpError {
+    if status == reqwest::StatusCode::UNAUTHORIZED.as_u16() {
+        classify_401(body)
+    } else if status == reqwest::StatusCode::FORBIDDEN.as_u16() && body.contains("plan_required") {
+        SyncHttpError::PlanRequired
+    } else {
+        SyncHttpError::Server {
+            status,
+            body: body.to_owned(),
+        }
+    }
+}
+
 /// Result of a `pull_snapshot` round-trip.
 ///
 /// The three counts tell the UI how many rows landed in the local
@@ -829,25 +852,10 @@ pub async fn send_items_to_server(
         .map_err(|e| SyncHttpError::Network(e.to_string()))?;
 
     if !resp.status().is_success() {
-        // Read the body once; both 401/403 classification and the generic
-        // Server error need it, and `text()` consumes the response.
+        // Read the body once; `text()` consumes the response.
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        // ADR sync-auth-hardening P1/P4: a 401 with `token_expired` means
-        // stale auth — the caller refreshes and retries once; `invalid_token`
-        // is a config problem that must not be masked.
-        if status == reqwest::StatusCode::UNAUTHORIZED {
-            return Err(classify_401(&body));
-        }
-        // ADR sync-plan-gating: a 403 plan_required is terminal — no
-        // refresh, no retry, no quarantine.
-        if status == reqwest::StatusCode::FORBIDDEN && body.contains("plan_required") {
-            return Err(SyncHttpError::PlanRequired);
-        }
-        return Err(SyncHttpError::Server {
-            status: status.as_u16(),
-            body,
-        });
+        return Err(classify_http_status(status.as_u16(), &body));
     }
 
     let push_resp: PushResponse = resp
@@ -1026,17 +1034,9 @@ pub async fn fetch_snapshot_from_server(config: &SyncConfig) -> Result<Snapshot,
         .map_err(|e| SyncHttpError::Network(e.to_string()))?;
 
     if !resp.status().is_success() {
-        // ADR sync-auth-hardening P1/P4: same stale-auth contract as push.
-        if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
-            let body = resp.text().await.unwrap_or_default();
-            return Err(classify_401(&body));
-        }
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        return Err(SyncHttpError::Server {
-            status: status.as_u16(),
-            body,
-        });
+        return Err(classify_http_status(status.as_u16(), &body));
     }
 
     let snapshot: Snapshot = resp
@@ -1649,6 +1649,50 @@ mod tests {
             plan_required: false,
         };
         assert!(result.error.is_none());
+    }
+
+    // ── classify_http_status (ADR sync-plan-gating) ───────────────
+
+    #[test]
+    fn classify_403_plan_required_is_plan_required() {
+        let err = classify_http_status(403, r#"{"error":"plan_required"}"#);
+        assert!(
+            matches!(err, SyncHttpError::PlanRequired),
+            "a 403 plan_required must classify as PlanRequired, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn classify_bare_403_is_server_error_not_plan() {
+        // A 403 without the plan_required body is a generic server error —
+        // never invent a plan gate from the status alone.
+        let err = classify_http_status(403, "Forbidden");
+        assert!(matches!(err, SyncHttpError::Server { status: 403, .. }));
+    }
+
+    #[test]
+    fn classify_401_expired_and_invalid_unchanged() {
+        assert!(matches!(
+            classify_http_status(401, r#"{"error":"token_expired"}"#),
+            SyncHttpError::AuthExpired
+        ));
+        assert!(matches!(
+            classify_http_status(401, r#"{"error":"invalid_token"}"#),
+            SyncHttpError::AuthInvalid
+        ));
+        assert!(matches!(
+            classify_http_status(401, "bare 401"),
+            SyncHttpError::AuthExpired
+        ));
+    }
+
+    #[test]
+    fn classify_500_is_server_error() {
+        let err = classify_http_status(500, "boom");
+        assert!(matches!(err, SyncHttpError::Server { status: 500, .. }));
+        if let SyncHttpError::Server { body, .. } = err {
+            assert_eq!(body, "boom");
+        }
     }
 
     // ── format_expiry tests ────────────────────────────────────
