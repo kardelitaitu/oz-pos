@@ -11,6 +11,7 @@ import {
   listRemoteFailures,
   requeueRemoteFailure,
   type OfflineQueueItemDto,
+  type OfflineQueueSummaryDto,
   type RemoteSyncFailureDto,
   type SyncResult,
 } from '@/api/offline';
@@ -59,6 +60,27 @@ function statusLabel(status: string): string {
   }
 }
 
+/** Relative-time label ("just now", "5m ago", …) for the summary panel. */
+function formatRelativeTime(iso: string | null): { fluentKey: string; fluentArgs: Record<string, number | string> } | null {
+  if (!iso) return null;
+  const ts = Date.parse(iso);
+  if (Number.isNaN(ts)) return null;
+  const diffMs = Math.max(0, Date.now() - ts);
+  if (diffMs < 60_000) {
+    return { fluentKey: 'offline-queue-time-just-now', fluentArgs: {} };
+  }
+  const mins = Math.floor(diffMs / 60_000);
+  const hours = Math.floor(diffMs / 3_600_000);
+  const days = Math.floor(diffMs / 86_400_000);
+  if (days >= 1) {
+    return { fluentKey: 'offline-queue-time-days-ago', fluentArgs: { count: days } };
+  }
+  if (hours >= 1) {
+    return { fluentKey: 'offline-queue-time-hours-ago', fluentArgs: { count: hours } };
+  }
+  return { fluentKey: 'offline-queue-time-minutes-ago', fluentArgs: { count: mins } };
+}
+
 // ── Component ───────────────────────────────────────────────────────
 
 /** Offline queue screen — view pending, synced, and failed offline operations with retry and delete capabilities. */
@@ -72,6 +94,9 @@ export default function OfflineQueueScreen() {
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [conflictCount, setConflictCount] = useState<number>(0);
+  // Detailed queue status (pending/synced/failed/conflicts + timestamps)
+  // surfaced from offline_queue_status_summary (P1-6 sync observability).
+  const [queueSummary, setQueueSummary] = useState<OfflineQueueSummaryDto | null>(null);
   // SYNC-11: remote items quarantined after repeated pull-application failures.
   const [failures, setFailures] = useState<RemoteSyncFailureDto[]>([]);
   const [requeueError, setRequeueError] = useState<string | null>(null);
@@ -97,7 +122,10 @@ export default function OfflineQueueScreen() {
       ]);
       setItems(data);
       setPendingCount(count);
-      if (summary) setConflictCount(summary.conflictCount);
+      if (summary) {
+        setConflictCount(summary.conflictCount);
+        setQueueSummary(summary);
+      }
       setFailures(remoteFailures);
     } catch {
       setError(l10n.getString('offline-queue-error'));
@@ -131,7 +159,10 @@ export default function OfflineQueueScreen() {
         ]);
         if (gen !== pollGenRef.current) return; // superseded or unmounted
         setPendingCount(count);
-        if (summary) setConflictCount(summary.conflictCount);
+        if (summary) {
+          setConflictCount(summary.conflictCount);
+          setQueueSummary(summary);
+        }
         pollFailuresRef.current = 0;
         setPollStale(false);
         setLastPolledAt(new Date());
@@ -232,6 +263,49 @@ export default function OfflineQueueScreen() {
           </Localized>
         </Button>
       </div>
+
+      {/* P1-6: detailed queue status — same numbers operators see in
+          Settings → Cloud Sync, surfaced here outside settings. */}
+      {queueSummary && (
+        <div className="offline-queue-summary" data-testid="offline-queue-summary">
+          <div className="offline-queue-summary-grid">
+            <span className="offline-queue-summary-item">
+              <strong>{queueSummary.pendingCount}</strong>
+              <Localized id="offline-queue-summary-pending"><span>pending</span></Localized>
+            </span>
+            <span className="offline-queue-summary-item">
+              <strong>{queueSummary.syncedCount}</strong>
+              <Localized id="offline-queue-summary-synced"><span>synced</span></Localized>
+            </span>
+            <span className="offline-queue-summary-item">
+              <strong>{queueSummary.failedCount}</strong>
+              <Localized id="offline-queue-summary-failed"><span>failed</span></Localized>
+            </span>
+            <span className="offline-queue-summary-item">
+              <strong>{queueSummary.conflictCount}</strong>
+              <Localized id="offline-queue-summary-conflicts"><span>conflicts</span></Localized>
+            </span>
+          </div>
+          <div className="offline-queue-summary-meta">
+            <span className="offline-queue-summary-time">
+              {(() => {
+                const rel = formatRelativeTime(queueSummary.lastSyncedAt);
+                return rel
+                  ? l10n.getString('offline-queue-last-synced', { time: l10n.getString(rel.fluentKey, rel.fluentArgs) })
+                  : l10n.getString('offline-queue-last-synced-never');
+              })()}
+            </span>
+            <span className="offline-queue-summary-time">
+              {(() => {
+                const rel = formatRelativeTime(queueSummary.oldestPendingAt);
+                return rel
+                  ? l10n.getString('offline-queue-oldest-pending', { time: l10n.getString(rel.fluentKey, rel.fluentArgs) })
+                  : l10n.getString('offline-queue-oldest-pending-none');
+              })()}
+            </span>
+          </div>
+        </div>
+      )}
 
       {conflictCount > 0 && (
         <div className="offline-queue-sync-result" role="alert" style={{ borderColor: 'var(--color-warning-border, #ffc107)' }}>

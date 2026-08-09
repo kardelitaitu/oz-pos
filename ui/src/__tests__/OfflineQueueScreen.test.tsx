@@ -293,6 +293,49 @@ describe('OfflineQueueScreen', () => {
     });
   });
 
+  it('renders the detailed queue status summary with counts and timestamps', async () => {
+    mockListAllOffline.mockResolvedValue([makeQueueItem()]);
+    mockPendingOfflineCount.mockResolvedValue(3);
+    mockOfflineQueueStatusSummary.mockResolvedValue({
+      pendingCount: 3,
+      syncedCount: 41,
+      failedCount: 2,
+      conflictCount: 1,
+      lastSyncedAt: new Date(Date.now() - 5 * 60_000).toISOString(), // 5m ago
+      oldestPendingAt: new Date(Date.now() - 2 * 3_600_000).toISOString(), // 2h ago
+    });
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('offline-queue-summary')).toBeInTheDocument();
+    });
+    // Counts from the summary DTO
+    expect(screen.getByText('3')).toBeInTheDocument();
+    expect(screen.getByText('41')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('1')).toBeInTheDocument();
+    // Relative timestamps
+    expect(screen.getByText(/Last synced/)).toBeInTheDocument();
+    expect(screen.getByText(/Oldest pending/)).toBeInTheDocument();
+  });
+
+  it('shows "never synced" / "queue empty" in the summary when timestamps are missing', async () => {
+    mockListAllOffline.mockResolvedValue([]);
+    mockPendingOfflineCount.mockResolvedValue(0);
+    // Summary with no timestamps (fresh queue)
+    mockOfflineQueueStatusSummary.mockResolvedValue({
+      pendingCount: 0, syncedCount: 0, failedCount: 0, conflictCount: 0,
+      lastSyncedAt: null, oldestPendingAt: null,
+    });
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('offline-queue-summary')).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Never synced/)).toBeInTheDocument();
+    expect(screen.getByText(/Queue empty/)).toBeInTheDocument();
+  });
+
   it('shows a stale notice after repeated poll failures (ERR-07)', async () => {
     vi.useFakeTimers();
     try {
