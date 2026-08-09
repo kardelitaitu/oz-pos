@@ -2798,3 +2798,19 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** `fb46fa57` (docs, split out of the settings agent's `a60c74bf` which swept it in via `git add -A` — re-created `12728584` settings + `fb46fa57` docs, combined tree identical). Second sweep of the session; both splits verified byte-equivalent.
 
 **Risks / follow-ups:** the wrapper's continued existence is now justified in-code; if test counts grow the abbreviation stays worthwhile. Nothing further.
+
+### 2026-08-10 — desktop-client dead-code scan: removed require_permission and the sales re-export module (round 116)
+
+**Problem:** scan `apps/desktop-client` for other dead-code warnings or unused compatibility wrappers like `save_topology_json`. `cargo check -p oz-pos-app` is already clean (round 114's fix was the only live lint), but the scan found two **latent** dead items the compiler cannot flag: they are `pub` in a lib crate, and rustc's `dead_code` lint exempts public items in lib targets by design.
+
+**Evidence:**
+- `commands::authz::require_permission` — zero callers anywhere in-crate: no production caller, no `#[cfg(test)]` caller (the tests module only exercises `require_permission_for_user`), no glob imports, not a `#[tauri::command]`, no references in `tests/`, docs, or skills. Its own module doc warned it "trusts the caller-supplied `role_id`" (forgery risk) and that "all new code should use `require_permission_for_user`" — an unused security-discouraged footgun kept only for hypothetical backward compat.
+- `commands::sales` re-export module — created when the monolithic sales.rs was split into pos/history/void ("re-exports everything for callers that haven't migrated yet"), but every internal caller migrated: the `invoke_handler!` registers `commands::pos::*`, `commands::history::*`, `commands::void::*` directly, and no file in the crate imports `commands::sales` or globs it. No crate depends on `oz-pos-app`, so there are no external consumers either.
+
+**Fix (mechanical, no Red/Green — dead-code removal rides the existing suite):** removed `require_permission` and rewrote the authz module doc to describe only `require_permission_for_user`; dropped `pub mod sales;` from `commands/mod.rs` and deleted `commands/sales.rs`.
+
+**Verified:** `cargo check -p oz-pos-app` (lib + bin) and `--tests` clean; zero `sales::` references remain in the crate. Full `cargo test -p oz-pos-app` still blocked: `oz-pos-app.exe` is held (post-commit graphify background rebuild / running app) — left running per the concurrent-tree rule; same limitation as rounds 114–115. `wiring_audit.rs` (parses the `generate_handler!` block) is unaffected — the handler was not touched.
+
+**Commits:** `ef7be27f` (3 files: authz.rs, mod.rs, sales.rs deleted).
+
+**Risks / follow-ups:** `apps/tablet-client` carries a twin `commands/sales.rs` re-export module (same split pattern) — same treatment is a candidate slice there; also, any other `_legacy`/`_compat` items found by the naming scan (topology's `legacy_topology_belongs_to_branch` and `ambiguous_legacy_wire`) are genuinely used in production, so they stay.
