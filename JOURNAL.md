@@ -2634,3 +2634,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 104 — plan-required CSS)
 
 **Risks / follow-ups:** the rule is visual-only (colors/margins) — the agents may restyle when their SyncSection lands; the reverse check logs a soft warning until then.
+
+### 2026-08-10 — pinned tier-limit node-scoped rendering in the editor (round 105)
+
+**Problem (round-103 follow-up):** round 103 scoped the contract's warehouse-tier-limit error to the second warehouse's nodeId, and the editor's generic bucketing upgraded it from a dead-end banner to a node-scoped card note + panel jump — but nothing pinned that rendering, so a future contract regression (dropping nodeId) would silently re-introduce the banner with no test failing.
+
+**Solution (test-only pin):** a new editor describe loads a 2-warehouse diagram on standard tier and asserts (1) no graph-level banner renders, (2) the message appears in exactly ONE node-scoped panel item — named "WH 2", not static — and (3) the item's jump button selects the WH 2 card and closes the panel. Mechanism proven live: temporarily stripping `nodeId` from the contract emission made the test fail at the first assertion (`expected <div class="topology-validation-banner">…</div> to be null`), then restored byte-exact.
+
+**Verified:** editor 452/452, full UI 4567/4567 (one non-reproducible flake observed in an earlier full run, two subsequent full runs green), tsc, eslint clean. The agent's in-flight editor hunks (context-menu pan, unrelated to the panel/jump) stay unstaged — my hunk is the file-end append, filtered at commit.
+
+**Commits:** (round 105 — tier-limit node-scoping pin)
+
+**Risks / follow-ups:** the multi-excess slice (flag every warehouse beyond the first) would extend the contract test, not this editor test; the observed one-off full-suite flake was not reproduced or identified.

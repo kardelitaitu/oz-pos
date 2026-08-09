@@ -8691,3 +8691,68 @@ describe('topology export / import / templates (clipboard + localStorage)', () =
     expect(localStorage.getItem('oz-topology-template:Import Me')).toBeNull();
   });
 });
+
+// ── Tier-limit error is node-scoped (round 103 follow-up) ─────────
+
+describe('NodeTopologyEditor — tier-limit error node scoping', () => {
+  // Round 103: the contract scopes warehouse-tier-limit to the SECOND
+  // warehouse, so the editor must render it as a node-scoped card note +
+  // panel item with a jump button — never the graph-level banner. This
+  // pins that bucketing; a regression to banner-level would re-introduce
+  // the dead-end banner this follow-up removed.
+  const twoWarehouseDiagram = {
+    nodes: [
+      { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+      { id: 'ws-1', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+      { id: 'wh-1', type: 'warehouse', name: 'WH 1', x: 680, y: 140 },
+      { id: 'wh-2', type: 'warehouse', name: 'WH 2', x: 680, y: 400 },
+    ],
+    wires: [
+      {
+        id: 'w-1',
+        from_node_id: 'store-1',
+        to_node_id: 'ws-1',
+        from_port_id: 'location-out',
+        to_port_id: 'location-in',
+        relationship_type: 'location',
+        direction: 'one-way',
+      },
+    ],
+  } as never;
+
+  it('renders the tier-limit error as a node-scoped panel item with a working jump', async () => {
+    mockLoadTopology.mockResolvedValueOnce(twoWarehouseDiagram);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(4));
+
+    // The error is node-scoped: no graph-level banner may appear.
+    expect(document.querySelector('.topology-validation-banner')).toBeNull();
+
+    // Open the validation panel via the Issues button.
+    fireEvent.click(document.querySelector('.topology-issues-btn')!);
+    const panel = document.querySelector('.topology-validation-panel');
+    expect(panel).not.toBeNull();
+
+    // The message lives in exactly ONE node-scoped item (named, not
+    // static), pointing at WH 2 — the second Stock Room the contract flags.
+    const matching = Array.from(panel!.querySelectorAll('.topology-validation-item')).filter((el) =>
+      el.textContent?.includes('Multiple Stock Rooms require a Pro Tier license.'),
+    );
+    expect(matching).toHaveLength(1);
+    const item = matching[0]!;
+    expect(item.querySelector('.topology-validation-item-node')?.textContent).toBe('WH 2');
+    expect(item.querySelector('.topology-validation-item-static')).toBeNull();
+
+    // The jump button selects WH 2 (the card gains node-selected) and
+    // closes the panel — the node is now front and center.
+    const wh2Card = Array.from(document.querySelectorAll('.topology-node')).find((el) =>
+      el.textContent?.includes('WH 2'),
+    )!;
+    expect(wh2Card.className).not.toContain('node-selected');
+
+    fireEvent.click(item.querySelector('.topology-validation-item-select')!);
+
+    expect(wh2Card.className).toContain('node-selected');
+    expect(document.querySelector('.topology-validation-panel')).toBeNull();
+  });
+});
