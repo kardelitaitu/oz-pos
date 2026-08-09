@@ -2294,3 +2294,17 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 79 — parent-gate parity pin)
 
 **Risks / follow-ups:** the pin covers only the at-capacity guard — the missing-stock-routing guard (round 75) and the invalid-semantic-connection class have no screen-level parity tests; the success toast is asserted by type only, so a future copy change won't break the pin.
+
+### 2026-08-09 — validation panel one-click "Add stock wire" guidance
+
+**Problem (round-75 follow-up):** the missing-stock-routing prompt rendered as a card note + a panel entry, but the panel entry was just another jump — the user still had to know to connect a workspace Stock Out into the Stock Room. No guidance bridged "this is wrong" and "here's the fix".
+
+**Solution (TDD Red→Green):** `nodeIssues` now carries the error `code`, and the panel renders an extra "Add stock wire" action button exclusively on `warehouse-missing-stock-routing` entries. Clicking it closes the panel, selects the warehouse, centers the canvas on it (`recenterViewOn`), and sets `addStockWireHintId` → the card shows an info-styled hint chip ("Connect a workspace's Stock Out to this Stock Room's Stock In.") stacked above the warning note. A clear effect drops the hint the moment the error resolves (a wire landed), so the chip can never outlive the problem it guides. The chip is action-driven only — a plain unwired warehouse shows the note but no chip. 2 new FTL keys per bundle — parity held; `.node-stock-wire-hint` and `.topology-validation-item-action` use only tokens (compliance clean).
+
+**TDD:** Red — 5 editor tests (action shown only on the missing-stock-routing entry; click jumps+selects+shows chip; chip hidden until the action; chip clears when a stock wire lands via the relationship picker). The hint text needed `TOPOLOGY_EN` in the test's `@fluent/react` stub (the editor suite stubs getString with that map) — added the key there too. One FTL wart: the en `topology-validation-dismiss` value was "Dismiss issue" and my prefix match dropped the orphan word — the value is now simply "Dismiss", matching id; nothing pinned the old text.
+
+**Verified:** editor + integration 453/453 (+5), full UI 4543/4543, typecheck, eslint 0/0, i18n lint clean, token compliance clean.
+
+**Commits:** (round 80 — add-stock-wire guidance)
+
+**Risks / follow-ups:** the action only guides — it doesn't auto-connect (no source heuristic; when exactly one workspace has an unused stock-out the editor could offer to wire it directly); the chip centers the warehouse but doesn't flash the stock-in port — a port highlight would complete the affordance; `free`/`one_time` tiers also show the action since the guard runs when tier is undefined (pure contract) — worth confirming the panel matches the tier gate.

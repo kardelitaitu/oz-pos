@@ -104,6 +104,7 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-validation-missing-branch': 'Add exactly one Branch Location node.',
   'topology-validation-multiple-branches': 'Keep exactly one Branch Location node in this graph.',
   'topology-validation-invalid-purpose': 'This workspace purpose is not supported by its technical type.',
+  'topology-node-stock-wire-hint': "Connect a workspace's Stock Out to this Stock Room's Stock In.",
   'topology-validation-unknown-wire-endpoint': 'This connection references a node that is not in the graph.',
   'topology-field-name': 'Name',
   'topology-field-name-aria': 'Edit name',
@@ -4193,6 +4194,97 @@ describe('NodeTopologyEditor — warehouse missing stock-routing prompt', () => 
   it('keeps the prompt off a warehouse without capacity metadata', async () => {
     await renderUnwiredWarehouse({ stock: 500 });
     expect(warehouseNote()).toBeNull();
+  });
+});
+
+// ── Validation panel stock-wire action ──────────────────────────
+
+describe('NodeTopologyEditor — validation panel stock-wire action', () => {
+  const renderUnwiredWarehouse = async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-1', type: 'workspace', name: 'Retail POS', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-1', type: 'warehouse', name: 'Main Stock Room', x: 680, y: 140, metadata: { stock: 500, capacity: 1000 } },
+      ],
+      wires: [
+        { id: 'w-loc', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+      ],
+    } as never);
+    renderEditor({ currentTier: 'pro' });
+    await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
+  };
+
+  const openPanel = async () => {
+    fireEvent.click(screen.getByText(/Issues \(1\)/));
+    return document.querySelector('.topology-validation-panel') as HTMLElement;
+  };
+
+  it('shows the Add stock wire action on the missing-stock-routing entry', async () => {
+    await renderUnwiredWarehouse();
+    const panel = await openPanel();
+
+    expect(within(panel).getByText('Add stock wire')).toBeInTheDocument();
+  });
+
+  it('keeps the action off other per-node issues', async () => {
+    // A workspace missing its Location In carries a per-node issue but has
+    // no stock-wire action.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-1', type: 'workspace', name: 'Retail POS', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(2));
+
+    fireEvent.click(screen.getByText(/Issues \(1\)/));
+    expect(document.querySelector('.topology-validation-item-action')).toBeNull();
+  });
+
+  it('clicking Add stock wire jumps to the warehouse and shows the hint chip', async () => {
+    await renderUnwiredWarehouse();
+    const panel = await openPanel();
+
+    fireEvent.click(within(panel).getByText('Add stock wire'));
+
+    // Panel closes and the warehouse becomes the sole selection.
+    expect(document.querySelector('.topology-validation-panel')).toBeNull();
+    const selected = [...document.querySelectorAll('.topology-node.node-selected')] as HTMLElement[];
+    expect(selected).toHaveLength(1);
+    expect(selected[0]!.className).toContain('node-type-warehouse');
+
+    // The one-click hint chip appears on the card.
+    const hint = document.querySelector('.node-stock-wire-hint');
+    expect(hint).not.toBeNull();
+    expect(hint?.textContent).toContain('Stock Out');
+  });
+
+  it('keeps the hint chip hidden until the action is used', async () => {
+    await renderUnwiredWarehouse();
+
+    // The error note is present, but no hint chip — the chip is the
+    // one-click affordance, not a duplicate of the note.
+    expect(document.querySelector('.node-validation-note')).not.toBeNull();
+    expect(document.querySelector('.node-stock-wire-hint')).toBeNull();
+  });
+
+  it('hides the hint chip once a stock wire resolves the issue', async () => {
+    await renderUnwiredWarehouse();
+    const panel = await openPanel();
+    fireEvent.click(within(panel).getByText('Add stock wire'));
+    expect(document.querySelector('.node-stock-wire-hint')).not.toBeNull();
+
+    // Wire ws-1 stock-out → wh-1 stock-in (via the relationship picker),
+    // resolving the prompt.
+    fireEvent.click(portOf(nodeAt(1), 'right'));
+    fireEvent.click(portOf(nodeAt(2), 'left'));
+    fireEvent.click(within(document.querySelector('.topology-relationship-picker') as HTMLElement).getByText('Stock routing'));
+    expect(getWireCount()).toBe(2);
+
+    await waitFor(() => expect(document.querySelector('.node-stock-wire-hint')).toBeNull());
   });
 });
 

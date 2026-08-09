@@ -1476,6 +1476,32 @@
   line-height: 1.35;
 }
 
+/* One-click "add stock wire" guidance chip (round 80) — info-styled,
+   stacked above the warning note so the two never overlap. */
+.node-stock-wire-hint {
+  position: absolute;
+  bottom: calc(var(--space-11) + var(--space-10));
+  left: var(--space-2);
+  right: var(--space-2);
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-info) 9%, var(--color-bg-subtle));
+  border: 1px solid color-mix(in srgb, var(--color-info) 45%, transparent);
+  color: var(--color-info);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+}
+
+.node-stock-wire-hint-icon {
+  flex: 0 0 auto;
+  color: var(--color-info);
+  font-weight: var(--font-weight-bold, 600);
+}
+
 .node-validation-icon {
   flex: 0 0 auto;
   width: 14px;
@@ -1592,6 +1618,21 @@
 
 /* Ghost dismiss button — deliberately shadow-free so the noise-dither
    registry (which covers shadowed surfaces) needs no new entry. */
+.topology-validation-item-action {
+  flex-shrink: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-info);
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+}
+
+.topology-validation-item-action:hover {
+  background: color-mix(in srgb, var(--color-info) 9%, var(--color-bg-subtle));
+}
+
 .topology-validation-item-dismiss {
   display: inline-flex;
   align-items: center;

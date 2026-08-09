@@ -3919,10 +3919,10 @@ export default function NodeTopologyEditor({
    *  first (actionable — clicking jumps to the node), then graph-level. */
   const [validationPanelOpen, setValidationPanelOpen] = useState(false);
   const nodeIssues = useMemo(() => {
-    const out: Array<{ nodeId: string; nodeName: string; messageId: string }> = [];
+    const out: Array<{ nodeId: string; nodeName: string; messageId: string; code: string }> = [];
     for (const [nodeId, errs] of liveValidation.byNode) {
       const nodeName = nodeMap.get(nodeId)?.name ?? nodeId;
-      for (const e of errs) out.push({ nodeId, nodeName, messageId: e.messageId });
+      for (const e of errs) out.push({ nodeId, nodeName, messageId: e.messageId, code: e.code });
     }
     return out;
   }, [liveValidation, nodeMap]);
@@ -3966,6 +3966,28 @@ export default function NodeTopologyEditor({
     [liveValidation, resolvedIssues],
   );
   const totalIssues = visibleNodeIssues.length + visibleGraphLevel.length;
+
+  /** One-click "Add stock wire" guidance (round 80): the validation panel
+   *  entry for a warehouse-missing-stock-routing issue jumps to the
+   *  warehouse, centers it, and sets this id so the card shows a hint chip
+   *  that tells the user exactly what to connect. The clear effect below
+   *  drops the hint the moment the error resolves (a wire landed), so the
+   *  chip can never outlive the problem it guides. */
+  const [addStockWireHintId, setAddStockWireHintId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!addStockWireHintId) return;
+    const stillMissing = liveValidation.byNode
+      .get(addStockWireHintId)
+      ?.some((e) => e.code === 'warehouse-missing-stock-routing');
+    if (!stillMissing) setAddStockWireHintId(null);
+  }, [liveValidation, addStockWireHintId]);
+  const handleAddStockWireHint = (nodeId: string) => {
+    setValidationPanelOpen(false);
+    const node = nodeMap.get(nodeId);
+    if (node) recenterViewOn(node.x + NODE_WIDTH / 2, node.y + NODE_HEIGHT / 2);
+    selectOnly(nodeId);
+    setAddStockWireHintId(nodeId);
+  };
 
   /** Per-card visible errors, memoized so the memoized node cards receive a
    *  STABLE nodeErrors prop (a per-render `.filter()` would defeat the memo
@@ -4924,6 +4946,15 @@ export default function NodeTopologyEditor({
                         <span className="topology-validation-item-node">{issue.nodeName}</span>
                         <span className="topology-validation-item-msg">{l10n.getString(issue.messageId)}</span>
                       </button>
+                      {issue.code === 'warehouse-missing-stock-routing' && (
+                        <button
+                          type="button"
+                          className="topology-validation-item-action"
+                          onClick={() => handleAddStockWireHint(issue.nodeId)}
+                        >
+                          <Localized id="topology-validation-add-stock-wire">Add stock wire</Localized>
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="topology-validation-item-dismiss"
@@ -5401,6 +5432,7 @@ export default function NodeTopologyEditor({
                 connectingFromPort={connectingFromPort}
                 hoveredTarget={hoveredTarget}
                 nodeErrors={nodeErrorsByNode.get(node.id) ?? EMPTY_ERRORS}
+                stockWireHint={addStockWireHintId === node.id}
                 isFresh={freshNodeIds.has(node.id)}
                 isDimmed={hoverConnections !== null && !hoverConnections.has(node.id)}
                 isRenameable={(node.type === 'store' && !!onRenameBranch) || (node.type === 'workspace' && !!onRenameWorkspace)}

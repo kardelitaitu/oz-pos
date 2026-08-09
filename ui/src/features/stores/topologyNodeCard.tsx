@@ -35,6 +35,11 @@ export interface TopologyNodeCardProps {
   connectingFromPort: PortName | null;
   hoveredTarget: { nodeId: string; port: PortName } | null;
   nodeErrors: TopologyValidationError[];
+  /** One-click "add stock wire" guidance (round 80): set while the
+   *  validation panel action is guiding the user to route stock into this
+   *  warehouse — renders an info chip on the card. The editor clears it the
+   *  moment the missing-stock-routing error resolves. */
+  stockWireHint: boolean;
   isFresh: boolean;
   isDimmed: boolean;
   isRenameable: boolean;
@@ -68,6 +73,7 @@ function TopologyNodeCardImpl({
   connectingFromPort,
   hoveredTarget,
   nodeErrors,
+  stockWireHint,
   isFresh,
   isDimmed,
   isRenameable,
@@ -227,6 +233,14 @@ function TopologyNodeCardImpl({
           <span className="node-validation-icon" aria-hidden="true">!</span>
           <span className="node-validation-text">
             {l10n.getString(nodeErrors[0]!.messageId)}
+          </span>
+        </div>
+      )}
+      {stockWireHint && (
+        <div className="node-stock-wire-hint" role="status">
+          <span className="node-stock-wire-hint-icon" aria-hidden="true">→</span>
+          <span className="node-stock-wire-hint-text">
+            {topologyUiString(l10n, 'topology-node-stock-wire-hint', null)}
           </span>
         </div>
       )}
