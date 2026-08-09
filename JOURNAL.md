@@ -1849,3 +1849,25 @@ Solution: Red→Green inside `apply_pulled_page`. Red: two tests — (1) a `stoc
 Verification: 269/269 crate tests (was 267; +2), clippy 0 warnings, `cargo fmt --check` clean.
 
 Commits: this round, scoped to `platform/sync/src/pg_daemon.rs` + JOURNAL.md.
+
+### 2026-08-09 — TDD hardening: dev-mock held-cart state validation
+
+Problem: The first held-cart slice trusted any JSON array from localStorage and generated ids from `Date.now()` plus array length. Corrupt persisted rows could reach the Retail POS UI, and deleting a row before another hold in the same clock tick could reuse its id.
+
+Solution: Red→Green. Added contract tests for malformed-row filtering and id reuse after deletion. The loader now accepts only structurally valid held-cart rows with safe integer totals/counts, parseable cart JSON, valid timestamps, and nullable customer/location fields. New ids use `crypto.randomUUID()` with a timestamp/random fallback for older preview runtimes.
+
+Verification: Held-cart/auth contract suite **26/26 passed**. The full pre-push gate had already passed before this slice; the focused suite is the required post-change check. No session/store isolation was added — the single-store browser mock remains an intentional simplification.
+
+Deliberately NOT done: browser E2E remains blocked by the shared Vite listener on port 1420 serving a session where the login screen is unavailable; PostgreSQL real-database integration remains gated on an explicitly approved disposable local stack.
+
+### 2026-08-09 — Round 44: PG daemon settings sink (SYNC-10 parity)
+
+Problem: The PG consistency review found the pull path never re-emitted settings changes. The SQLite daemon uses `apply_remote_atomic_full` and publishes `SettingsUpdated` through a sink so the UI refetches a setting changed on another terminal (SYNC-10); the PG daemon used `apply_remote_atomic` — which deliberately drops the settings-change report — and `PgSyncDaemon` had no sink at all. A settings update pulled from a remote PostgreSQL terminal updated the local DB but the running UI never learned.
+
+Solution: Red→Green. Red: threaded a `SettingsChangedSink` (shared `crate::daemon` type) through `PgSyncDaemon` (field + `start_with_sink` + `start_inner` split, mirroring `SyncDaemon`) and `apply_pulled_page`; added two recording-sink tests — a `settings.update` page must emit exactly one `SettingsUpdated { changed_keys, terminal_id }`, and a non-settings page must emit nothing. The emission test failed with 0 events captured. Green: `apply_pulled_page` now uses `apply_remote_atomic_full` and emits through the sink per applied settings change, after the tx commits (same contract + ordering as the SQLite daemon; replay skips are silent because the ledger path returns no settings_change).
+
+Verification: 271/271 crate tests (+2), pg_daemon suite 37/37, clippy 0 warnings, rustfmt clean.
+
+Deliberately NOT done: the daemon-level plumbing (start_with_sink → run_tick) is compile-verified but not runtime-tested — `run_tick`'s pull needs a live PG server, so the emission contract is pinned at the `apply_pulled_page` unit boundary, exactly like the stock-summary rebuild and the existing anchor tests. The desktop client wiring (emit `settings_updated` on the PG sink) awaits the PG daemon being started by the app at all (still unwired).
+
+Commits: this round, scoped to `platform/sync/src/pg_daemon.rs` + JOURNAL.md.

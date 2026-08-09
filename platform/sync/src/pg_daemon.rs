@@ -12,9 +12,11 @@ use std::time::Duration;
 use tokio::sync::{Mutex, RwLock, watch};
 
 use oz_core::db::Store;
+use oz_core::events::SettingsUpdated;
 use oz_core::offline::OfflineQueueItem;
 use oz_core::settings::Settings;
 
+use crate::daemon::SettingsChangedSink;
 use crate::pg_transport::PgTransport;
 use crate::queue::SyncQueue;
 use crate::{SyncError, SyncResult, import_snapshot};
@@ -55,6 +57,7 @@ pub struct PgSyncDaemon {
     interval: Duration,
     status: Arc<RwLock<PgDaemonStatus>>,
     shutdown_tx: Arc<Mutex<Option<watch::Sender<bool>>>>,
+    settings_sink: SettingsChangedSink,
 }
 
 impl PgSyncDaemon {
@@ -64,6 +67,7 @@ impl PgSyncDaemon {
             interval: DEFAULT_PG_SYNC_INTERVAL,
             status: Arc::new(RwLock::new(PgDaemonStatus::default())),
             shutdown_tx: Arc::new(Mutex::new(None)),
+            settings_sink: Arc::new(|_: &SettingsUpdated| {}),
         }
     }
 
@@ -73,6 +77,7 @@ impl PgSyncDaemon {
             interval,
             status: Arc::new(RwLock::new(PgDaemonStatus::default())),
             shutdown_tx: Arc::new(Mutex::new(None)),
+            settings_sink: Arc::new(|_: &SettingsUpdated| {}),
         }
     }
 
@@ -85,6 +90,24 @@ impl PgSyncDaemon {
     ///
     /// If the daemon is already running, this is a no-op.
     pub async fn start(&self, db: DbConnection) {
+        self.start_inner(db, self.settings_sink.clone()).await;
+    }
+
+    /// Start the background PG sync daemon with a custom settings-change
+    /// sink (SYNC-10 parity with the SQLite daemon).
+    ///
+    /// The sink is invoked after each remote `settings.update`/`settings.change`
+    /// the pull phase applies, carrying the changed key and its originating
+    /// terminal — the desktop client uses this to emit the `settings_updated`
+    /// Tauri event so the UI refetches a setting changed on a remote
+    /// PostgreSQL terminal.
+    pub async fn start_with_sink(&self, db: DbConnection, settings_sink: SettingsChangedSink) {
+        self.start_inner(db, settings_sink).await;
+    }
+
+    /// Shared start path used by [`PgSyncDaemon::start`] and
+    /// [`PgSyncDaemon::start_with_sink`].
+    async fn start_inner(&self, db: DbConnection, settings_sink: SettingsChangedSink) {
         if self.is_running().await {
             tracing::warn!("pg sync daemon is already running");
             return;
@@ -110,7 +133,7 @@ impl PgSyncDaemon {
             loop {
                 tokio::select! {
                     _ = tokio::time::sleep(interval) => {
-                        Self::run_tick(&db, &daemon_status).await;
+                        Self::run_tick(&db, &daemon_status, &settings_sink).await;
                     }
                     result = rx.changed() => {
                         if result.is_err() || *rx.borrow() {
@@ -127,7 +150,11 @@ impl PgSyncDaemon {
     }
 
     /// Run a single PG sync tick: read -> send -> apply.
-    async fn run_tick(db: &DbConnection, daemon_status: &Arc<RwLock<PgDaemonStatus>>) {
+    async fn run_tick(
+        db: &DbConnection,
+        daemon_status: &Arc<RwLock<PgDaemonStatus>>,
+        settings_sink: &SettingsChangedSink,
+    ) {
         // Phase 1: Read PG settings + pending items from local DB (blocking)
         let db_clone = db.clone();
         let (pg_config, pending, pull_since, pull_cursor, read_error) =
@@ -297,6 +324,7 @@ impl PgSyncDaemon {
                         // anchor; the outer loop re-owns the original for the
                         // next pull iteration.
                         let next_cursor_for_persist = next_cursor.clone();
+                        let settings_sink = settings_sink.clone();
                         let outcome = tokio::task::spawn_blocking(move || {
                             let conn = db_clone.blocking_lock();
                             let store = Store::new(&conn);
@@ -304,8 +332,12 @@ impl PgSyncDaemon {
                             // retained and pagination stops so the next cycle
                             // re-pulls the same page (`?` early-returns None
                             // from the closure).
-                            let new_since =
-                                apply_pulled_page(&store, &items, prev_since.as_deref())?;
+                            let new_since = apply_pulled_page(
+                                &store,
+                                &items,
+                                prev_since.as_deref(),
+                                &settings_sink,
+                            )?;
                             // SYNC-09: re-read the DURABLE pull state before
                             // advancing (parity with the SQLite daemon). An
                             // operator rewind (`requeue_remote_failure` sets
@@ -521,10 +553,16 @@ fn recover_pg_snapshot(
 /// rebuilt from the ledger before the anchor advances, and a rebuild
 /// failure retains the anchor so the next cycle re-pulls the same page and
 /// retries the derived-state rebuild.
+///
+/// SYNC-10 parity: a pulled `settings.update`/`settings.change` re-emits
+/// `SettingsUpdated` through `settings_sink` after its transaction commits
+/// (the same contract as the SQLite daemon), so the app can refetch a
+/// setting changed on a remote PostgreSQL terminal.
 fn apply_pulled_page(
     store: &Store<'_>,
     page: &[OfflineQueueItem],
     prev_since: Option<&str>,
+    settings_sink: &SettingsChangedSink,
 ) -> Option<String> {
     let queue = SyncQueue::new();
     let mut page_all_applied = true;
@@ -534,9 +572,20 @@ fn apply_pulled_page(
         if remote_item.action == "stock.movement" {
             has_stock_movements = true;
         }
-        match queue.apply_remote_atomic(store, remote_item) {
-            Ok(applied) => {
-                if !applied
+        match queue.apply_remote_atomic_full(store, remote_item) {
+            Ok(outcome) => {
+                // SYNC-10 parity: a settings change applied from a remote
+                // PostgreSQL terminal is re-emitted as `SettingsUpdated` so
+                // the UI refetches. The tx committed inside
+                // apply_remote_atomic_full before this runs.
+                if let Some((key, terminal_id)) = outcome.settings_change {
+                    let event = SettingsUpdated {
+                        changed_keys: vec![key],
+                        terminal_id,
+                    };
+                    settings_sink(&event);
+                }
+                if !outcome.applied
                     && store
                         .is_remote_failure_dead_lettered(&remote_item.id)
                         .unwrap_or(false)
@@ -722,7 +771,7 @@ mod tests {
             10,
             "2026-01-02T00:00:00.000Z",
         )];
-        let new_since = apply_pulled_page(&store, &page, None);
+        let new_since = apply_pulled_page(&store, &page, None, &noop_settings_sink());
 
         assert_eq!(store.get_stock("prod-coffee").unwrap(), 60);
         assert!(
@@ -751,7 +800,7 @@ mod tests {
             10,
             "2026-01-02T00:00:00.000Z",
         )];
-        let new_since = apply_pulled_page(&store, &page, None);
+        let new_since = apply_pulled_page(&store, &page, None, &noop_settings_sink());
 
         assert_eq!(store.get_stock("prod-coffee").unwrap(), 60);
         assert_eq!(
@@ -772,8 +821,8 @@ mod tests {
             "2026-01-02T00:00:00.000Z",
         )];
 
-        let _ = apply_pulled_page(&store, &page, None);
-        let _ = apply_pulled_page(&store, &page, None);
+        let _ = apply_pulled_page(&store, &page, None, &noop_settings_sink());
+        let _ = apply_pulled_page(&store, &page, None, &noop_settings_sink());
 
         assert_eq!(
             store.get_stock("prod-coffee").unwrap(),
@@ -788,7 +837,7 @@ mod tests {
         let store = Store::new(&conn);
         let page = vec![remote_poison_sale("pg-poison-1")];
 
-        let new_since = apply_pulled_page(&store, &page, None);
+        let new_since = apply_pulled_page(&store, &page, None, &noop_settings_sink());
         assert!(
             new_since.is_none(),
             "retryable failure must retain the pull anchor"
@@ -808,9 +857,9 @@ mod tests {
 
         // Attempts 1-2 retain the anchor; the 3rd dead-letters the item and
         // allows the page anchor to advance.
-        assert!(apply_pulled_page(&store, &page, None).is_none());
-        assert!(apply_pulled_page(&store, &page, None).is_none());
-        let new_since = apply_pulled_page(&store, &page, None);
+        assert!(apply_pulled_page(&store, &page, None, &noop_settings_sink()).is_none());
+        assert!(apply_pulled_page(&store, &page, None, &noop_settings_sink()).is_none());
+        let new_since = apply_pulled_page(&store, &page, None, &noop_settings_sink());
         assert!(
             new_since.is_some(),
             "dead-lettered item may advance the anchor"
@@ -832,8 +881,12 @@ mod tests {
         let later = remote_stock_adjustment("pg-item-b", 1, "2026-01-03T00:00:00.000Z");
 
         // A prior anchor newer than one page row must not regress.
-        let new_since =
-            apply_pulled_page(&store, &[earlier, later], Some("2026-01-02T00:00:00.000Z"));
+        let new_since = apply_pulled_page(
+            &store,
+            &[earlier, later],
+            Some("2026-01-02T00:00:00.000Z"),
+            &noop_settings_sink(),
+        );
         assert_eq!(new_since.as_deref(), Some("2026-01-03T00:00:00.000Z"));
     }
 
@@ -856,7 +909,12 @@ mod tests {
         item.id = "pg-item-movement-1".into();
         item.created_at = "2026-01-05T00:00:00.000Z".into();
 
-        let new_since = apply_pulled_page(&store, std::slice::from_ref(&item), None);
+        let new_since = apply_pulled_page(
+            &store,
+            std::slice::from_ref(&item),
+            None,
+            &noop_settings_sink(),
+        );
 
         assert_eq!(
             new_since.as_deref(),
@@ -896,10 +954,85 @@ mod tests {
         item.id = "pg-item-movement-2".into();
         item.created_at = "2026-01-06T00:00:00.000Z".into();
 
-        let new_since = apply_pulled_page(&store, std::slice::from_ref(&item), None);
+        let new_since = apply_pulled_page(
+            &store,
+            std::slice::from_ref(&item),
+            None,
+            &noop_settings_sink(),
+        );
         assert!(
             new_since.is_none(),
             "a failed summary rebuild must retain the pull anchor"
+        );
+    }
+
+    /// Helper: a no-op settings sink for call sites that do not assert on
+    /// SYNC-10 emission.
+    fn noop_settings_sink() -> SettingsChangedSink {
+        Arc::new(|_: &SettingsUpdated| {})
+    }
+
+    /// SYNC-10 parity: a pulled remote `settings.update` must re-emit
+    /// `SettingsUpdated` through the daemon's sink so the UI refetches — the
+    /// SQLite daemon publishes the changed key + originating terminal after
+    /// the tx commits; the PG path previously used `apply_remote_atomic`,
+    /// which drops the settings-change report entirely.
+    #[test]
+    fn apply_pulled_page_emits_settings_updated_after_settings_change() {
+        let conn = migrations::fresh_db();
+        let store = Store::new(&conn);
+
+        let emitted = Arc::new(std::sync::Mutex::new(Vec::<SettingsUpdated>::new()));
+        let sink: SettingsChangedSink = {
+            let emitted = Arc::clone(&emitted);
+            Arc::new(move |event: &SettingsUpdated| emitted.lock().unwrap().push(event.clone()))
+        };
+
+        let mut item = OfflineQueueItem::new(
+            "settings.update",
+            r#"{"key":"store.name","value":"Remote Acme","terminal_id":"term-remote","version":3}"#,
+        );
+        item.id = "pg-item-settings-1".into();
+        item.created_at = "2026-01-02T00:00:00.000Z".into();
+
+        let new_since = apply_pulled_page(&store, std::slice::from_ref(&item), None, &sink);
+
+        assert_eq!(new_since.as_deref(), Some("2026-01-02T00:00:00.000Z"));
+        let captured = emitted.lock().unwrap().clone();
+        assert_eq!(
+            captured.len(),
+            1,
+            "exactly one SettingsUpdated must be emitted per applied settings change"
+        );
+        assert_eq!(captured[0].changed_keys, vec!["store.name".to_string()]);
+        assert_eq!(captured[0].terminal_id, "term-remote");
+    }
+
+    /// SYNC-10 negative: pages without settings changes must not emit
+    /// anything through the sink.
+    #[test]
+    fn apply_pulled_page_is_silent_for_non_settings_pages() {
+        let conn = migrations::fresh_db();
+        seed_product_and_inventory(&conn);
+        let store = Store::new(&conn);
+
+        let emitted = Arc::new(std::sync::Mutex::new(Vec::<SettingsUpdated>::new()));
+        let sink: SettingsChangedSink = {
+            let emitted = Arc::clone(&emitted);
+            Arc::new(move |event: &SettingsUpdated| emitted.lock().unwrap().push(event.clone()))
+        };
+
+        let page = vec![remote_stock_adjustment(
+            "pg-item-silent",
+            10,
+            "2026-01-02T00:00:00.000Z",
+        )];
+        let new_since = apply_pulled_page(&store, &page, None, &sink);
+
+        assert!(new_since.is_some());
+        assert!(
+            emitted.lock().unwrap().is_empty(),
+            "no settings change in the page → no SettingsUpdated emission"
         );
     }
 
