@@ -16,6 +16,7 @@
 //! `send_items_to_server_blocking`) remain available only for
 //! `tokio::task::spawn_blocking` or non-async contexts.
 
+use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
 use crate::db::Store;
@@ -55,6 +56,39 @@ pub struct SyncAttemptResult {
     pub failed: usize,
     /// Error message if the entire sync failed (e.g. network error).
     pub error: Option<String>,
+}
+
+/// Typed HTTP error from the sync client (ADR sync-auth-hardening P1).
+///
+/// `AuthRejected` is a distinct variant so callers can refresh the stored
+/// token and retry exactly once instead of treating every failure alike.
+#[derive(Debug, thiserror::Error)]
+pub enum SyncHttpError {
+    /// The server rejected authentication (HTTP 401) — the stored token is
+    /// missing, expired, or invalid. Refresh the API key and retry once.
+    #[error("sync server rejected authentication (HTTP 401)")]
+    AuthRejected,
+
+    /// The server returned a non-2xx status other than 401.
+    #[error("sync server returned {status}: {body}")]
+    Server {
+        /// HTTP status code.
+        status: u16,
+        /// Response body for diagnostics.
+        body: String,
+    },
+
+    /// The request failed at the network layer (connect, timeout, DNS).
+    #[error("sync request failed: {0}")]
+    Network(String),
+
+    /// The response could not be parsed.
+    #[error("sync response parse failed: {0}")]
+    Parse(String),
+
+    /// The HTTP client could not be constructed.
+    #[error("failed to build HTTP client: {0}")]
+    Client(String),
 }
 
 /// Result of a `pull_snapshot` round-trip.
@@ -232,6 +266,33 @@ pub async fn request_token(_url: &str) -> TokenResult {
         status: "sync-http feature is disabled".into(),
         expires_at: None,
     }
+}
+
+/// Request a fresh token from the server (ADR sync-auth-hardening P1).
+///
+/// Async-only — performs no DB work, so callers can run it before taking
+/// the DB lock (the same three-phase split the sync commands use). Returns
+/// the new key on success, or `None` when the server refused to mint one.
+pub async fn request_refresh_token(server_url: &str) -> Option<String> {
+    let token = request_token(server_url).await;
+    if !token.ok {
+        tracing::warn!(
+            status = %token.status,
+            "token refresh failed — sync stays on the stored key"
+        );
+        return None;
+    }
+    token.token
+}
+
+/// Persist a freshly requested API key (ADR sync-auth-hardening P1).
+///
+/// Synchronous write; callers hold the DB lock only for this call so the
+/// guard never crosses an await point and Tauri command futures stay `Send`.
+pub fn persist_refreshed_api_key(conn: &Connection, key: &str) -> Result<(), CoreError> {
+    crate::settings::Settings::set_sync_api_key(conn, key)?;
+    tracing::info!("refreshed sync API key after auth rejection");
+    Ok(())
 }
 
 /// Ping the cloud server's `/health` endpoint to verify connectivity
@@ -473,13 +534,13 @@ fn send_items_to_server_blocking(
 pub async fn send_items_to_server(
     config: &SyncConfig,
     items: &[OfflineQueueItem],
-) -> Result<Vec<PushOutcome>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<Vec<PushOutcome>, SyncHttpError> {
     let url = format!("{}/api/sync/push", config.server_url.trim_end_matches('/'));
 
     let mut request = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
-        .map_err(|e| format!("failed to build HTTP client: {e}"))?
+        .map_err(|e| SyncHttpError::Client(e.to_string()))?
         .post(&url)
         .header("Content-Type", "application/json");
 
@@ -491,18 +552,26 @@ pub async fn send_items_to_server(
         .json(items)
         .send()
         .await
-        .map_err(|e| format!("sync HTTP request failed: {e}"))?;
+        .map_err(|e| SyncHttpError::Network(e.to_string()))?;
 
     if !resp.status().is_success() {
+        // ADR sync-auth-hardening P1: 401 means stale auth — the caller
+        // refreshes the API key and retries the operation exactly once.
+        if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
+            return Err(SyncHttpError::AuthRejected);
+        }
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        return Err(format!("sync server returned {status}: {body}").into());
+        return Err(SyncHttpError::Server {
+            status: status.as_u16(),
+            body,
+        });
     }
 
     let push_resp: PushResponse = resp
         .json()
         .await
-        .map_err(|e| format!("sync response parse failed: {e}"))?;
+        .map_err(|e| SyncHttpError::Parse(e.to_string()))?;
 
     tracing::info!(
         item_count = items.len(),
@@ -517,7 +586,7 @@ pub async fn send_items_to_server(
 pub async fn send_items_to_server(
     config: &SyncConfig,
     items: &[OfflineQueueItem],
-) -> Result<Vec<PushOutcome>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<Vec<PushOutcome>, SyncHttpError> {
     tracing::info!(
         item_count = items.len(),
         server = %config.server_url,
@@ -656,9 +725,7 @@ fn default_true() -> bool {
 
 /// Fetch a snapshot from the server via `GET /api/sync/snapshot` (async).
 #[cfg(feature = "sync-http")]
-pub async fn fetch_snapshot_from_server(
-    config: &SyncConfig,
-) -> Result<Snapshot, Box<dyn std::error::Error + Send + Sync>> {
+pub async fn fetch_snapshot_from_server(config: &SyncConfig) -> Result<Snapshot, SyncHttpError> {
     let url = format!(
         "{}/api/sync/snapshot",
         config.server_url.trim_end_matches('/')
@@ -674,28 +741,35 @@ pub async fn fetch_snapshot_from_server(
     let resp = request
         .send()
         .await
-        .map_err(|e| format!("snapshot HTTP request failed: {e}"))?;
+        .map_err(|e| SyncHttpError::Network(e.to_string()))?;
 
     if !resp.status().is_success() {
+        // ADR sync-auth-hardening P1: same stale-auth contract as push.
+        if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
+            return Err(SyncHttpError::AuthRejected);
+        }
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        return Err(format!("snapshot server returned {status}: {body}").into());
+        return Err(SyncHttpError::Server {
+            status: status.as_u16(),
+            body,
+        });
     }
 
     let snapshot: Snapshot = resp
         .json()
         .await
-        .map_err(|e| format!("snapshot JSON decode failed: {e}"))?;
+        .map_err(|e| SyncHttpError::Parse(e.to_string()))?;
 
     Ok(snapshot)
 }
 
 /// Stub used when `sync-http` feature is disabled.
 #[cfg(not(feature = "sync-http"))]
-pub async fn fetch_snapshot_from_server(
-    _config: &SyncConfig,
-) -> Result<Snapshot, Box<dyn std::error::Error + Send + Sync>> {
-    Err("sync-http feature is disabled; cannot pull snapshot from server".into())
+pub async fn fetch_snapshot_from_server(_config: &SyncConfig) -> Result<Snapshot, SyncHttpError> {
+    Err(SyncHttpError::Network(
+        "sync-http feature is disabled; cannot pull snapshot from server".into(),
+    ))
 }
 
 /// Apply a fetched snapshot to the local database inside a single

@@ -105,6 +105,88 @@ pub(crate) fn read_config_and_pending(
     (config, pending)
 }
 
+/// ADR sync-auth-hardening P1: request a fresh token and persist it as the
+/// API key. Returns `true` when a new key was stored. Callers invoke this
+/// once after an `AuthRejected` and never loop on it.
+async fn refresh_persisted_api_key(db: &DbConnection, server_url: &str) -> bool {
+    let token = oz_core::sync_client::request_token(server_url).await;
+    let Some(key) = token.token.filter(|_| token.ok) else {
+        tracing::warn!(
+            status = %token.status,
+            "sync token refresh failed — sync stays on the stored key"
+        );
+        return false;
+    };
+    let db_clone = db.clone();
+    tokio::task::spawn_blocking(move || {
+        let conn = db_clone.blocking_lock();
+        let store = Store::new(&conn);
+        match Settings::set_sync_api_key(store.conn(), &key) {
+            Ok(()) => true,
+            Err(e) => {
+                tracing::error!(error = %e, "persisting refreshed sync API key failed");
+                false
+            }
+        }
+    })
+    .await
+    .unwrap_or(false)
+}
+
+/// Apply push outcomes to the local queue (blocking DB work, spawned off the
+/// async runtime). Returns an error message when the apply phase itself
+/// failed (spawn panic); per-item failures are logged, mirroring the original
+/// inline apply block exactly.
+async fn apply_push_results(
+    db: &DbConnection,
+    pending: Vec<oz_core::offline::OfflineQueueItem>,
+    results: Vec<PushOutcome>,
+) -> Option<String> {
+    let db_clone = db.clone();
+    let outcome = tokio::task::spawn_blocking(move || {
+        let conn = db_clone.blocking_lock();
+        let store = Store::new(&conn);
+        let queue = SyncQueue::new();
+        for (local, outcome) in pending.iter().zip(results.iter()) {
+            match outcome {
+                PushOutcome::Accepted => {
+                    if let Err(e) = store.mark_offline_synced(&local.id) {
+                        tracing::error!(
+                            item_id = %local.id,
+                            error = %e,
+                            "sync daemon: failed to mark item synced"
+                        );
+                    }
+                }
+                PushOutcome::Rejected { reason } => {
+                    if let Err(e) = store.mark_offline_failed(&local.id, reason) {
+                        tracing::error!(
+                            item_id = %local.id,
+                            error = %e,
+                            "sync daemon: failed to mark item failed"
+                        );
+                    }
+                }
+                PushOutcome::Conflict(server_item) => {
+                    if let Err(e) = queue.apply_push_conflict(&store, local, server_item) {
+                        tracing::error!(
+                            item_id = %local.id,
+                            error = %e,
+                            "sync daemon: failed to apply conflict resolution"
+                        );
+                    }
+                }
+            }
+        }
+    })
+    .await;
+
+    match outcome {
+        Ok(()) => None,
+        Err(e) => Some(format!("apply push phase: {e}")),
+    }
+}
+
 impl SyncDaemon {
     /// Create a new sync daemon.
     pub fn new() -> Self {
@@ -310,54 +392,9 @@ impl SyncDaemon {
                             // so a conflict is resolved by the shared ADR #21
                             // conflict-application service — the same strategy the
                             // immediate SyncEngine uses, never a blanket LWW.
-                            let db_clone = db.clone();
-                            let local_items = pending;
-                            let outcome = tokio::task::spawn_blocking(move || {
-                            let conn = db_clone.blocking_lock();
-                            let store = Store::new(&conn);
-                            let queue = SyncQueue::new();
-                            for (local, outcome) in local_items.iter().zip(results.iter()) {
-                                match outcome {
-                                    PushOutcome::Accepted => {
-                                        if let Err(e) = store.mark_offline_synced(&local.id) {
-                                            tracing::error!(
-                                                item_id = %local.id,
-                                                error = %e,
-                                                "sync daemon: failed to mark item synced"
-                                            );
-                                        }
-                                    }
-                                    PushOutcome::Rejected { reason } => {
-                                        if let Err(e) = store.mark_offline_failed(&local.id, reason)
-                                        {
-                                            tracing::error!(
-                                                item_id = %local.id,
-                                                error = %e,
-                                                "sync daemon: failed to mark item failed"
-                                            );
-                                        }
-                                    }
-                                    PushOutcome::Conflict(server_item) => {
-                                        // SYNC-02: shared ADR #21 conflict-application
-                                        // path — version LWW / sale status DAG / stock
-                                        // CRDT merge, identical to the SyncEngine.
-                                        if let Err(e) =
-                                            queue.apply_push_conflict(&store, local, server_item)
-                                        {
-                                            tracing::error!(
-                                                item_id = %local.id,
-                                                error = %e,
-                                                "sync daemon: failed to apply conflict resolution"
-                                            );
-                                        }
-                                    }
-                                }
-                            }
-                        })
-                        .await;
-
-                            if let Err(e) = outcome {
-                                sync_error = Some(format!("apply push phase: {e}"));
+                            if let Some(apply_err) = apply_push_results(db, pending, results).await
+                            {
+                                sync_error = Some(apply_err);
                             }
                         }
                         Err(e) => {
@@ -375,7 +412,54 @@ impl SyncDaemon {
                                 .await;
                                 tracing::info!(new_url = %new_url, "server migrated — local config updated");
                             }
-                            sync_error = Some(e.to_string());
+                            // ADR sync-auth-hardening P1: stale auth — refresh
+                            // the key once and retry the push batch exactly once.
+                            if let SyncError::AuthRejected = e {
+                                tracing::warn!(
+                                    "push rejected (401) — refreshing API key and retrying once"
+                                );
+                                if refresh_persisted_api_key(db, &cfg.server_url).await {
+                                    let (retry_cfg, _) = {
+                                        let db_clone = db.clone();
+                                        tokio::task::spawn_blocking(move || {
+                                            let conn = db_clone.blocking_lock();
+                                            read_config_and_pending(&conn)
+                                        })
+                                        .await
+                                        .unwrap_or((None, Vec::new()))
+                                    };
+                                    if let Some(retry_cfg) = retry_cfg
+                                        && let Ok(transport) = SyncTransport::try_new(
+                                            &retry_cfg.server_url,
+                                            retry_cfg.api_key.as_deref(),
+                                        )
+                                    {
+                                        match transport.push_items(&pending).await {
+                                            Ok(results) => {
+                                                pushed = results.len();
+                                                if let Some(apply_err) =
+                                                    apply_push_results(db, pending, results).await
+                                                {
+                                                    sync_error = Some(apply_err);
+                                                }
+                                            }
+                                            Err(retry_err) => {
+                                                sync_error = Some(retry_err.to_string());
+                                            }
+                                        }
+                                    } else {
+                                        sync_error = Some(
+                                            "push rejected (401) and refreshed key is not usable"
+                                                .into(),
+                                        );
+                                    }
+                                } else {
+                                    sync_error =
+                                        Some("push rejected (401) and token refresh failed".into());
+                                }
+                            } else if sync_error.is_none() {
+                                sync_error = Some(e.to_string());
+                            }
                         }
                     }
                 }
@@ -695,7 +779,29 @@ impl SyncDaemon {
                                 .await;
                                 tracing::info!(new_url = %new_url, "server migrated — local config updated");
                             }
-                            if sync_error.is_none() {
+                            // ADR sync-auth-hardening P1: stale auth — refresh
+                            // the key once so the next cycle (60–120 s) pulls
+                            // with fresh credentials. No in-tick pull retry: the
+                            // pull apply block is anchor/quarantine-sensitive, so
+                            // a retry would duplicate ~150 lines of application
+                            // logic; recovery one cycle later is automatic.
+                            if let SyncError::AuthRejected = e {
+                                tracing::warn!(
+                                    "pull rejected (401) — refreshing API key for next cycle"
+                                );
+                                if sync_error.is_none() {
+                                    if refresh_persisted_api_key(db, &cfg.server_url).await {
+                                        sync_error = Some(
+                                            "pull rejected (401); key refreshed — will retry next cycle"
+                                                .into(),
+                                        );
+                                    } else {
+                                        sync_error = Some(
+                                            "pull rejected (401) and token refresh failed".into(),
+                                        );
+                                    }
+                                }
+                            } else if sync_error.is_none() {
                                 sync_error = Some(format!("pull phase: {e}"));
                             }
                         }

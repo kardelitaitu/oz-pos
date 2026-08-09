@@ -276,6 +276,12 @@ impl SyncTransport {
             .map_err(|e| SyncError::Transport(classify_transport_error(&e, &url)))?;
 
         if !resp.status().is_success() {
+            // ADR sync-auth-hardening P1: a 401 means stale/missing auth —
+            // the caller refreshes the token and retries once.
+            if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
+                return Err(SyncError::AuthRejected);
+            }
+
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
 
@@ -335,6 +341,11 @@ impl SyncTransport {
         }
 
         if !resp.status().is_success() {
+            // ADR sync-auth-hardening P1: same stale-auth contract as push.
+            if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
+                return Err(SyncError::AuthRejected);
+            }
+
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
 
@@ -409,6 +420,11 @@ impl SyncTransport {
             .map_err(|e| SyncError::Transport(classify_transport_error(&e, &url)))?;
 
         if !resp.status().is_success() {
+            // ADR sync-auth-hardening P1: same stale-auth contract as push.
+            if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
+                return Err(SyncError::AuthRejected);
+            }
+
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
 
@@ -1021,6 +1037,32 @@ mod tests {
             captured.as_deref(),
             Some("Bearer sk-test-123"),
             "the configured bearer token must reach the server (RUST-05)"
+        );
+    }
+
+    #[tokio::test]
+    async fn push_items_maps_401_to_auth_rejected() {
+        use axum::{Router, http::StatusCode, routing::post};
+
+        let listener = tokio::net::TcpListener::bind("localhost:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        async fn reject_push() -> StatusCode {
+            StatusCode::UNAUTHORIZED
+        }
+
+        let app = Router::new().route("/api/sync/push", post(reject_push));
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+
+        let transport =
+            SyncTransport::new(&format!("http://localhost:{port}"), Some("stale-token"));
+        let item = OfflineQueueItem::new("complete_sale", r#"{"id":3}"#);
+        let err = transport.push_items(&[item]).await.unwrap_err();
+
+        assert!(
+            matches!(err, SyncError::AuthRejected),
+            "a 401 from the push endpoint must surface as AuthRejected, got: {err:?}"
         );
     }
 

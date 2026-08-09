@@ -92,6 +92,12 @@ pub enum SyncError {
         new_url: String,
     },
 
+    /// The server rejected our authentication (HTTP 401) — the stored API
+    /// token is missing, expired, or invalid. Callers may refresh the token
+    /// and retry exactly once (ADR sync-auth-hardening P1).
+    #[error("sync server rejected authentication (HTTP 401)")]
+    AuthRejected,
+
     /// Database error from the underlying oz-core store.
     #[error("database error: {0}")]
     Database(#[from] oz_core::error::CoreError),

@@ -307,7 +307,28 @@ pub async fn sync_run(state: State<'_, AppState>) -> Result<SyncAttemptResult, A
     }
 
     // Phase 2: Async HTTP push (no DB lock held).
-    let outcomes = sync_client::send_items_to_server(&config, &pending_items).await;
+    let mut outcomes = sync_client::send_items_to_server(&config, &pending_items).await;
+
+    // ADR sync-auth-hardening P1: a 401 means the stored token is stale —
+    // refresh it once and retry the push exactly once (never in a loop).
+    if matches!(outcomes, Err(sync_client::SyncHttpError::AuthRejected)) {
+        // ADR sync-auth-hardening P1: request a fresh token (async, no DB
+        // lock), persist it under a brief lock, then retry exactly once.
+        if let Some(fresh_key) = sync_client::request_refresh_token(&config.server_url).await {
+            {
+                let db = state.db.lock().await;
+                sync_client::persist_refreshed_api_key(&db, &fresh_key)?;
+            }
+            let retry_config = {
+                let db = state.db.lock().await;
+                let store = Store::new(&db);
+                SyncConfig::from_settings(&store)?
+            };
+            if let Some(cfg) = retry_config {
+                outcomes = sync_client::send_items_to_server(&cfg, &pending_items).await;
+            }
+        }
+    }
 
     // Phase 3: Write outcomes back to DB (brief lock).
     let db = state.db.lock().await;
@@ -500,7 +521,28 @@ pub async fn sync_pull(
     };
 
     // Phase 2: Async HTTP fetch (no DB lock held).
-    let snapshot = sync_client::fetch_snapshot_from_server(&config).await;
+    let mut snapshot = sync_client::fetch_snapshot_from_server(&config).await;
+
+    // ADR sync-auth-hardening P1: refresh the token once and retry exactly
+    // once when the server rejects our authentication.
+    if matches!(snapshot, Err(sync_client::SyncHttpError::AuthRejected)) {
+        // ADR sync-auth-hardening P1: request a fresh token (async, no DB
+        // lock), persist it under a brief lock, then retry exactly once.
+        if let Some(fresh_key) = sync_client::request_refresh_token(&config.server_url).await {
+            {
+                let db = state.db.lock().await;
+                sync_client::persist_refreshed_api_key(&db, &fresh_key)?;
+            }
+            let retry_config = {
+                let db = state.db.lock().await;
+                let store = Store::new(&db);
+                SyncConfig::from_settings(&store)?
+            };
+            if let Some(cfg) = retry_config {
+                snapshot = sync_client::fetch_snapshot_from_server(&cfg).await;
+            }
+        }
+    }
 
     // Phase 3: Create a pre-pull backup (defence in depth — H-2).
     // The backup file is timestamped so operators can correlate it with
@@ -817,6 +859,109 @@ mod tests {
         let db = state.db.lock().await;
         let items = Store::new(&db).list_all_offline().unwrap();
         assert_eq!(items.len(), 1);
+        assert_eq!(
+            items[0].status,
+            oz_core::offline::OfflineQueueStatus::Synced
+        );
+    }
+
+    #[tokio::test]
+    async fn sync_run_refreshes_token_and_retries_once_after_401() {
+        // ADR sync-auth-hardening P1: when the server rejects the stored
+        // token with 401, the command must mint a fresh token, persist it,
+        // and retry the push exactly once — no operator action, no loop.
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let server_url = format!("http://{}", listener.local_addr().unwrap());
+        let retry_auth: Arc<tokio::sync::Mutex<Option<String>>> =
+            Arc::new(tokio::sync::Mutex::new(None));
+        let retry_auth_server = retry_auth.clone();
+        let task = tokio::spawn(async move {
+            let mut auth_of_retry: Option<String> = None;
+            for attempt in 0..3 {
+                let Ok((mut socket, _)) = listener.accept().await else {
+                    break;
+                };
+                let mut buffer = vec![0_u8; 16 * 1024];
+                let n = socket.read(&mut buffer).await.unwrap_or(0);
+                let request = String::from_utf8_lossy(&buffer[..n]).into_owned();
+                let path = request
+                    .lines()
+                    .next()
+                    .and_then(|l| l.split_whitespace().nth(1))
+                    .unwrap_or_default();
+                let response = if path == "/api/sync/push" && attempt == 0 {
+                    "HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                        .to_string()
+                } else if path == "/api/v1/tokens" {
+                    let body = r#"{"token":{"token":"fresh-jwt-456","expires_at":"2026-08-10T00:00:00Z","token_id":"uuid-1"}}"#;
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    )
+                } else {
+                    auth_of_retry = request
+                        .lines()
+                        .find(|l| l.to_ascii_lowercase().starts_with("authorization:"))
+                        .map(|l| l.to_string());
+                    let body = r#"{"results":[{"outcome":"accepted"}]}"#;
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    )
+                };
+                let _ = socket.write_all(response.as_bytes()).await;
+            }
+            *retry_auth_server.lock().await = auth_of_retry;
+        });
+
+        let conn = oz_core::migrations::fresh_db();
+        update_sync_settings_data(
+            &conn,
+            &UpdateSyncSettingsArgs {
+                server_url: Some(server_url),
+                api_key: Some("stale-jwt".into()),
+                enabled: true,
+            },
+        )
+        .unwrap();
+        {
+            let store = Store::new(&conn);
+            store
+                .enqueue_offline("phase1.refresh", r#"{"probe":true}"#)
+                .unwrap();
+        }
+        let app = tauri::test::mock_builder()
+            .manage(AppState::for_test_with_conn(conn))
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result = sync_run(app.state()).await.unwrap();
+        task.await.unwrap();
+
+        assert_eq!(result.synced, 1);
+        assert_eq!(result.failed, 0);
+        assert!(result.error.is_none());
+
+        // The retried push must carry the freshly minted token.
+        let auth = retry_auth.lock().await.clone().unwrap_or_default();
+        assert!(
+            auth.to_ascii_lowercase().contains("bearer fresh-jwt-456"),
+            "retried push did not carry the fresh token: {auth}"
+        );
+
+        // The refreshed key was persisted and the item reached synced.
+        let state = app.state::<AppState>();
+        let db = state.db.lock().await;
+        assert_eq!(
+            Settings::get_sync_api_key(&db).unwrap().as_deref(),
+            Some("fresh-jwt-456")
+        );
+        let items = Store::new(&db).list_all_offline().unwrap();
         assert_eq!(
             items[0].status,
             oz_core::offline::OfflineQueueStatus::Synced
