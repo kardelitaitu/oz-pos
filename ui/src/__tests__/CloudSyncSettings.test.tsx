@@ -16,7 +16,7 @@
  */
 
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
+import { screen, waitFor, cleanup, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
 import settingsFtl from '@/locales/settings.ftl?raw';
@@ -940,5 +940,47 @@ describe('CloudSyncSettings', () => {
 
     // Save button should show unsaved changes (Revert button visible)
     expect(screen.getByRole('button', { name: /revert settings/i })).toBeInTheDocument();
+  });
+
+  it('auto-refreshes the queue summary every 30s while the sync section is open', async () => {
+    vi.useFakeTimers();
+    try {
+      invokeMock.mockImplementation((cmd: string) => {
+        if (cmd === 'get_sync_settings_scoped') {
+          return Promise.resolve({ serverUrl: 'https://sync.example.com', hasApiKey: true, enabled: true });
+        }
+        return defaultImpl(cmd);
+      });
+
+      renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
+      // Flush initial async loads (settings payload etc.).
+      await act(async () => { await Promise.resolve(); });
+      navigateToSync();
+      // Initial summary load fires when the sync section mounts.
+      await act(async () => { await Promise.resolve(); });
+
+      const summaryCalls = () =>
+        invokeMock.mock.calls.filter(([cmd]) => cmd === 'offline_queue_status_summary').length;
+      const callsAfterMount = summaryCalls();
+      expect(callsAfterMount).toBeGreaterThanOrEqual(1);
+
+      // Advance past the 30s poll interval — the panel must refresh.
+      await act(async () => {
+        vi.advanceTimersByTime(30_000);
+        await Promise.resolve();
+      });
+      expect(summaryCalls()).toBeGreaterThan(callsAfterMount);
+
+      // Leaving the section stops the poll.
+      const callsBeforeLeave = summaryCalls();
+      fireEvent.click(screen.getByRole('treeitem', { name: /general/i }));
+      await act(async () => {
+        vi.advanceTimersByTime(60_000);
+        await Promise.resolve();
+      });
+      expect(summaryCalls()).toBe(callsBeforeLeave);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -1,4 +1,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo, lazy, Suspense } from 'react';
+
+/** Polling cadence for the Cloud Sync status panel while its section is open. */
+const SYNC_STATUS_POLL_MS = 30_000;
 import { Localized, useLocalization } from '@fluent/react';
 import {
   setReceiptSettings,
@@ -572,10 +575,17 @@ function SettingsPageContent() {
     }
   }, []);
 
+  // Poll the summary while the Cloud Sync section is open so the status
+  // panel (counts + last-synced) stays live without manual refreshes.
   useEffect(() => {
-    if (activeSection === 'sync') {
-      refreshQueueSummary();
+    if (activeSection !== 'sync') {
+      return;
     }
+    refreshQueueSummary();
+    const id = window.setInterval(() => {
+      void refreshQueueSummary();
+    }, SYNC_STATUS_POLL_MS);
+    return () => window.clearInterval(id);
   }, [activeSection, refreshQueueSummary]);
 
   // ── Keyboard shortcuts ────────────────────────────────────
