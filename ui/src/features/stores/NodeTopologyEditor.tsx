@@ -1229,6 +1229,16 @@ export default function NodeTopologyEditor({
   const inspectorHistoryPushedForRef = useRef<string | null>(null);
 
   const isProAllowed = useMemo(() => ['pro', 'enterprise'].includes(currentTier), [currentTier]);
+  /** True when adding `extra` warehouse nodes would exceed the tier cap
+   *  (one warehouse per install below Pro). The palette spawn, Ctrl+D,
+   *  Ctrl+V, Alt+drag, and the mid-drag Alt conversion ALL share this gate
+   *  so no creation path can bypass it. Reads nodesRef for freshness inside
+   *  callbacks with stable deps. */
+  const wouldExceedWarehouseCap = useCallback(
+    (extra: number) =>
+      !isProAllowed && nodesRef.current.filter((n) => n.type === 'warehouse').length + extra > 1,
+    [isProAllowed],
+  );
 
   /** O(1) node lookup by id — replaces `nodes.find` in hot paths (wire rendering, etc.). */
   const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
@@ -1957,6 +1967,13 @@ export default function NodeTopologyEditor({
     const start = dragStartRef.current;
     if (start.size === 0) return;
     const draggedIds = new Set(start.keys());
+    // Refuse the mid-drag conversion when it would duplicate a warehouse
+    // past the tier cap — the move simply stays a move, with the toast.
+    const whCopies = nodesRef.current.filter((n) => draggedIds.has(n.id) && n.type === 'warehouse').length;
+    if (whCopies > 0 && wouldExceedWarehouseCap(whCopies)) {
+      addToast({ message: l10n.getString('topology-toast-multi-warehouse'), type: 'warning' });
+      return;
+    }
     duplicateHistoryPushedRef.current = dragHasMovedRef.current;
 
     // Copies of the dragged set at their CURRENT (mid-drag) positions;
@@ -1998,7 +2015,7 @@ export default function NodeTopologyEditor({
     dragOffsetsRef.current = offsets;
     setDraggingNodeIds(new Set(duplicateCopyIdsRef.current));
     document.body.style.cursor = 'copy';
-  }, []);
+  }, [wouldExceedWarehouseCap, addToast, l10n]);
 
   /** Escape mid-MOVE (Figma semantics): the dragged nodes snap back to
    *  their pre-drag positions, the move's single history entry is popped
@@ -2367,8 +2384,16 @@ export default function NodeTopologyEditor({
    *  the selection (so repeated Ctrl+D cascades), all in one undo entry. */
   const duplicateSelection = useCallback(() => {
     if (selectedNodeIds.size === 0) return;
-    pushHistory();
     const ids = new Set(selectedNodeIds);
+    // The warehouse tier cap is shared with the palette spawn — a duplicate
+    // that would exceed it is refused BEFORE the history entry, so a blocked
+    // gesture leaves no undo record.
+    const whCopies = nodes.filter((n) => ids.has(n.id) && n.type === 'warehouse').length;
+    if (whCopies > 0 && wouldExceedWarehouseCap(whCopies)) {
+      addToast({ message: l10n.getString('topology-toast-multi-warehouse'), type: 'warning' });
+      return;
+    }
+    pushHistory();
     const idMap = new Map<string, string>();
     const copies = nodes.filter((n) => ids.has(n.id)).map((n) => {
       const newId = `${n.type}-${crypto.randomUUID()}`;
@@ -2395,7 +2420,7 @@ export default function NodeTopologyEditor({
     setSelectedNodeIds(new Set(copies.map((c) => c.id)));
     setSelectedNodeId(copies[0]?.id ?? null);
     setSelectedWireId(null);
-  }, [nodes, wires, selectedNodeIds, pushHistory, pan, zoom]);
+  }, [nodes, wires, selectedNodeIds, pushHistory, pan, zoom, wouldExceedWarehouseCap, addToast, l10n]);
 
   /** Paste the clipboard with a per-paste cascade offset; wires whose both
    *  endpoints were copied come along. The pasted copies become the
@@ -2403,6 +2428,13 @@ export default function NodeTopologyEditor({
   const pasteClipboard = useCallback(() => {
     const clip = clipboardRef.current;
     if (clip.nodes.length === 0) return;
+    // Same tier gate as the other creation paths — pasting warehouse nodes
+    // past the cap is refused before any history entry or cascade offset.
+    const whCopies = clip.nodes.filter((n) => n.type === 'warehouse').length;
+    if (whCopies > 0 && wouldExceedWarehouseCap(whCopies)) {
+      addToast({ message: l10n.getString('topology-toast-multi-warehouse'), type: 'warning' });
+      return;
+    }
     pushHistory();
     pasteCascadeRef.current += 1;
     const dx = pasteCascadeRef.current * GRID_SIZE;
@@ -2433,7 +2465,7 @@ export default function NodeTopologyEditor({
     setSelectedNodeIds(new Set(copies.map((c) => c.id)));
     setSelectedNodeId(copies[0]?.id ?? null);
     setSelectedWireId(null);
-  }, [pushHistory, pan, zoom]);
+  }, [pushHistory, pan, zoom, wouldExceedWarehouseCap, addToast, l10n]);
 
   /** Latest-ref for the spawn handler: the keydown effect runs earlier in
    *  the component body than `handleAddNode`'s const declaration, so a
@@ -2823,8 +2855,18 @@ export default function NodeTopologyEditor({
     // follow the cursor while the originals stay put; the drop commits them
     // as ONE undo entry, Escape discards them. Wires copy only when BOTH
     // endpoints are in the selection (mirrors duplicateSelection).
-    duplicateDragRef.current = e.altKey;
     const isDuplicateDrag = e.altKey;
+    // The warehouse tier cap applies to the duplicate paths too: an Alt+drag
+    // that would copy a warehouse past the cap is refused up front (no
+    // copies, no drag, no history entry) with the same toast as the palette.
+    if (isDuplicateDrag) {
+      const whCopies = nodes.filter((n) => selection.has(n.id) && n.type === 'warehouse').length;
+      if (whCopies > 0 && wouldExceedWarehouseCap(whCopies)) {
+        addToast({ message: l10n.getString('topology-toast-multi-warehouse'), type: 'warning' });
+        return;
+      }
+    }
+    duplicateDragRef.current = isDuplicateDrag;
     const originalToCopy = new Map<string, string>();
     let dragIds: string[];
     if (isDuplicateDrag) {
@@ -3273,7 +3315,7 @@ export default function NodeTopologyEditor({
   };
 
   const handleAddNode = (type: NodeType, at?: { x: number; y: number }) => {
-    if (type === 'warehouse' && !isProAllowed && nodes.filter((n) => n.type === 'warehouse').length >= 1) {
+    if (type === 'warehouse' && wouldExceedWarehouseCap(1)) {
       addToast({ message: l10n.getString('topology-toast-multi-warehouse'), type: 'warning' });
       return;
     }

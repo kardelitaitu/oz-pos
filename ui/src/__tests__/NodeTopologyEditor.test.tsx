@@ -5449,6 +5449,73 @@ describe('NodeTopologyEditor — clipboard & bulk duplication', () => {
     fireEvent.keyDown(document, { key: 'z', ctrlKey: true });
     await waitFor(() => expect(nodeCount()).toBe(3));
   });
+
+  // ── Warehouse Pro-tier cap on duplicate paths ────────────────────
+  // The palette spawn path already blocks a second warehouse on standard
+  // tier (test above); these pin that Ctrl+D / Ctrl+V / Alt+drag cannot
+  // silently bypass the same gate.
+  describe('warehouse Pro-tier cap on duplicate paths', () => {
+    // The retail preset ships ONE warehouse (wh-1) — the single warehouse a
+    // standard-tier install may have. These pin that the duplicate paths
+    // (Ctrl+D / Ctrl+V / Alt+drag) respect the same cap the palette spawn
+    // path enforces, instead of silently creating a second warehouse.
+    const warehouseCount = () =>
+      [...document.querySelectorAll('.topology-node')]
+        .filter((n) => n.classList.contains('node-type-warehouse')).length;
+    const selectWarehouse = () => {
+      const wh = [...document.querySelectorAll('.topology-node')]
+        .find((n) => n.classList.contains('node-type-warehouse')) as HTMLElement;
+      fireEvent.mouseDown(wh, { button: 0 });
+    };
+    const WH_TOAST = 'Multi-Warehouse storage locations require a Pro Tier license.';
+
+    it('blocks Ctrl+D duplicating the only warehouse on standard tier', async () => {
+      renderEditor();
+      expect(warehouseCount()).toBe(1);
+      selectWarehouse();
+
+      fireEvent.keyDown(document, { key: 'd', ctrlKey: true });
+
+      await waitFor(() => expect(screen.queryAllByText(WH_TOAST).length).toBeGreaterThanOrEqual(1));
+      expect(warehouseCount()).toBe(1);
+      expect(nodeCount()).toBe(3); // the preset set — no copy landed
+    });
+
+    it('blocks Ctrl+V pasting a copied warehouse on standard tier', async () => {
+      renderEditor();
+      selectWarehouse();
+      fireEvent.keyDown(document, { key: 'c', ctrlKey: true });
+
+      fireEvent.keyDown(document, { key: 'v', ctrlKey: true });
+
+      await waitFor(() => expect(screen.queryAllByText(WH_TOAST).length).toBeGreaterThanOrEqual(1));
+      expect(warehouseCount()).toBe(1);
+    });
+
+    it('blocks an Alt+drag duplicate of the warehouse on standard tier', () => {
+      renderEditor();
+      const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+      const wh = [...document.querySelectorAll('.topology-node')]
+        .find((n) => n.classList.contains('node-type-warehouse')) as HTMLElement;
+
+      fireEvent.mouseDown(wh, { button: 0, altKey: true, clientX: 0, clientY: 0 });
+      fireEvent.mouseMove(canvas, { clientX: 60, clientY: 40 });
+      fireEvent.mouseUp(canvas, { button: 0 });
+
+      expect(screen.queryAllByText(WH_TOAST).length).toBeGreaterThanOrEqual(1);
+      expect(warehouseCount()).toBe(1);
+    });
+
+    it('allows Ctrl+D on pro tier (the gate is tier-aware)', async () => {
+      renderEditor({ currentTier: 'pro' });
+      expect(warehouseCount()).toBe(1);
+      selectWarehouse();
+
+      fireEvent.keyDown(document, { key: 'd', ctrlKey: true });
+
+      await waitFor(() => expect(warehouseCount()).toBe(2));
+    });
+  });
 });
 
 // ── Per-branch viewport memory ──────────────────────────────────

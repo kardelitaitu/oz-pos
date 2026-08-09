@@ -1975,3 +1975,14 @@ Solution: Red→Green, the exact round-47 shape. Red: updated the two global-key
 Test counts: +10 (editor 353→363). Full UI 4405 (265 files). Gates: typecheck, eslint, i18n parity clean (no new FTL keys — no UI text changed).
 
 Commits: this round, scoped to NodeTopologyEditor.tsx + my test-file hunks + JOURNAL.md (staged via filtered git apply; the tree's other agent hunks — title-bar restructure, Resto→KDS, zoom-controls, contextmenu suppression, hover-focus, panMovedRef — stay unstaged in their batch).
+### 2026-08-09 — Round 54: close the warehouse Pro-tier gate bypass (P1, slice 1)
+
+Problem (from the node review): the palette spawn was the ONLY creation path enforcing the one-warehouse-per-install Pro-tier cap — Ctrl+D, Ctrl+V, Alt+drag, the context-menu Duplicate, and the mid-drag Alt conversion all copied nodes unchecked, and validateTopologyGraph has no warehouse rule. A standard-tier user could persist N warehouses.
+
+Solution: Red→Green. Red: 4 tests in the clipboard describe — Ctrl+D, Ctrl+V, and Alt+drag on the preset's single warehouse must be refused with the same 'Multi-Warehouse storage locations require a Pro Tier license.' toast (3 failed pre-fix: the duplicate landed), and Ctrl+D on pro tier must still work (passed pre-fix as the tier-awareness spec guard). Green: a shared `wouldExceedWarehouseCap(extra)` useCallback (reads nodesRef, stable on isProAllowed) now gates ALL five creation paths — the palette spawn (refactored to use it), duplicateSelection, pasteClipboard, the Alt+drag start (refused up front: no copies, no drag, no history entry), and convertDragToDuplicate (the move simply stays a move). Blocked gestures push NO history entry. Deps follow the file convention (addToast/l10n listed).
+
+Deliberately NOT done (slice 2, next): the Apply-gate rule — validateEditorGraph has no tier context today, so a non-Pro diagram that somehow gains 2+ warehouses (e.g. tier downgrade) still applies. A tier-aware Apply gate needs its own validation messageId + FTL keys.
+
+Test counts: +4 (editor 364→368; the +1 is another agent's test landing mid-round). Full UI 4413 (265 files). Gates: typecheck, eslint, i18n parity clean (no new FTL keys — toast reused).
+
+Commits: this round, scoped to NodeTopologyEditor.tsx + my test-file hunks + JOURNAL.md (filtered git apply; the tree's other agent hunks stay unstaged).
