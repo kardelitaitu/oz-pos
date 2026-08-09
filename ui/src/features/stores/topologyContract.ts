@@ -796,11 +796,19 @@ export function validateTopologyGraph(
   // Multi-warehouse tier cap (round 87): below Pro, a diagram may carry at
   // most one Stock Room. Appended LAST so semantic/integrity errors keep
   // their precedence — a broken diagram reports the break first, the
-  // license cap only after the graph itself is sound.
+  // license cap only after the graph itself is sound. Round 87 follow-up:
+  // the error is scoped to the SECOND warehouse — the node that pushes
+  // the count past the cap — so the editor renders it as a node-scoped
+  // card note with a jump target instead of a banner with nowhere to go.
+  // Deterministic by node order: index 1 is always the first excess.
   if (tierLimitEnforced) {
-    const warehouseCount = graph.nodes.filter((node) => node.kind === 'warehouse').length;
-    if (warehouseCount >= 2) {
-      errors.push({ code: 'warehouse-tier-limit', messageId: 'topology-toast-multi-warehouse' });
+    const warehouses = graph.nodes.filter((node) => node.kind === 'warehouse');
+    if (warehouses.length >= 2) {
+      errors.push({
+        code: 'warehouse-tier-limit',
+        messageId: 'topology-toast-multi-warehouse',
+        nodeId: warehouses[1]!.id,
+      });
     }
   }
 

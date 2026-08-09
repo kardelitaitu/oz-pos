@@ -870,7 +870,11 @@ describe('semantic topology contract', () => {
     );
 
     expect(validateTopologyGraph(normalized, 'standard')).toEqual(expect.arrayContaining([
-      expect.objectContaining({ code: 'warehouse-tier-limit' }),
+      // Round 87 follow-up: the cap is scoped to the SECOND warehouse — the
+      // one that pushes the count past the allowed single Stock Room — so
+      // the editor renders it as a node-scoped card note with a jump
+      // target instead of a banner with nowhere to go.
+      expect.objectContaining({ code: 'warehouse-tier-limit', nodeId: 'wh-sat' }),
     ]));
   });
 

@@ -2610,3 +2610,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** (round 102 — dead-attribute sweep)
 
 **Risks / follow-ups:** the multi-currency-gated (currency-selector/exchange/receipt) and error-gated (retry) attributes are fixed and pattern-consistent but not individually render-pinned (feature/error state needed); the agents' SyncSection CSS gap is theirs to close.
+
+### 2026-08-10 — tier-limit cap scoped to the second Stock Room (round 103)
+
+**Problem (round-87 follow-up):** the multi-warehouse tier cap emitted `warehouse-tier-limit` with no `nodeId`, so the editor rendered it as a banner with nowhere to go — a user blocked on standard tier with 2+ Stock Rooms could not jump to the offending node. Every other node-level error (cycle, at-capacity, missing-stock-routing) already carried a nodeId and got a card note + panel jump.
+
+**Solution (TDD Red→Green):** the contract now scopes the error to the SECOND warehouse in node order — the node that pushes the count past the allowed single Stock Room. Deterministic by array order (index 1 is always the first excess), so the editor's generic nodeId bucketing upgrades the error to a node-scoped card note with a jump target with zero editor changes. The screen's Apply toast is unaffected (it reads only code/messageId). Deliberate minimal scope: with 3+ warehouses only the first excess is flagged — pointing at all excess nodes is a future slice.
+
+**Verified:** contract 44/44 (+1 assertion pinned, no new tests), topology suites (contract + editor + screen) 529/529 — green against the agents' in-flight editor/screen work too, tsc, eslint clean. Full UI 4566 with ONE unrelated failure — the round-102 `settings-sync-plan-required` CSS gap in the sync agents' still-unstaged SyncSection.tsx, not mine.
+
+**Commits:** (round 103 — tier-limit scoping)
+
+**Risks / follow-ups:** multi-excess flagging (one error per warehouse beyond the first) is the natural next slice; the agents' SyncSection CSS gap remains theirs.
