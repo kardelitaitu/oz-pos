@@ -80,6 +80,7 @@ topology-compare-only-here = Hanya di sini: { $names }
 topology-compare-only-there = Hanya di { $otherBranch }: { $names }
 topology-compare-differing = Berbeda: { $names }
 topology-compare-none = Tidak ada perbedaan
+topology-compare-focus = Fokus pada perbedaan
 topology-shortcuts-aria = Pintasan keyboard
 topology-shortcuts-title = Pintasan
 topology-shortcuts-help = Tampilkan pintasan keyboard

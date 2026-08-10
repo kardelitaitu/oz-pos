@@ -109,6 +109,7 @@ let capturedEditorProps: {
   onLoadError?: (error: unknown) => void;
   onLoadSuccess?: () => void;
   compareOverlay?: unknown;
+  compareFocus?: boolean;
   canSave?: boolean;
 } = {};
 vi.mock('@/features/stores/NodeTopologyEditor', () => ({
@@ -123,6 +124,7 @@ vi.mock('@/features/stores/NodeTopologyEditor', () => ({
     onLoadError?: (error: unknown) => void;
     onLoadSuccess?: () => void;
     compareOverlay?: unknown;
+    compareFocus?: boolean;
     canSave?: boolean;
   }) => {
     capturedEditorProps = props;
@@ -608,6 +610,52 @@ describe('TopologyScreen', () => {
     // Closing the panel removes the overlay from the editor props.
     fireEvent.click(screen.getByRole('button', { name: 'topology-compare-close' }));
     await waitFor(() => expect(capturedEditorProps.compareOverlay).toBeNull());
+  });
+
+  it('the compare panel toggles focus mode and close resets it', async () => {
+    mockListWorkspacesScoped.mockResolvedValue([
+      { instance_id: 'ws-pos', type_key: 'store-pos', store_id: 'store-1', store_name: 'Main Street', purpose_key: 'checkout', name: 'Front Register', description: '', icon: 'pos', layout_mode: 'sidebar', colour: null, is_default: false },
+      { instance_id: 'ws-kds', type_key: 'kds', store_id: 'store-1', store_name: 'Main Street', purpose_key: 'kitchen', name: 'Kitchen Display', description: '', icon: 'kds', layout_mode: 'sidebar', colour: null, is_default: false },
+    ]);
+    mockListStores.mockResolvedValue([
+      { id: 'store-1', name: 'Main Street', is_primary: true, address: '', tax_id: '', currency: 'USD', timezone: 'UTC', created_at: '', updated_at: '' },
+      { id: 'store-2', name: 'Second Street', is_primary: false, address: '', tax_id: '', currency: 'USD', timezone: 'UTC', created_at: '', updated_at: '' },
+    ]);
+    mockLoadTopology.mockImplementation(async (branchId?: string) => {
+      if (branchId === 'store-1') {
+        return Promise.resolve({
+          nodes: [
+            { id: 'ws-pos', type: 'workspace', name: 'Front Register', x: 0, y: 0, metadata: { typeKey: 'store-pos' } },
+            { id: 'ws-kds', type: 'workspace', name: 'Kitchen Display', x: 0, y: 0, metadata: { typeKey: 'kds' } },
+          ],
+          wires: [{ id: 'w1', from_node_id: 'ws-pos', to_node_id: 'ws-kds', direction: 'one-way', relationship_type: 'generic' }],
+        });
+      }
+      if (branchId === 'store-2') {
+        return Promise.resolve({
+          nodes: [
+            { id: 'ws-pos', type: 'workspace', name: 'Front Register', x: 0, y: 0, metadata: { typeKey: 'store-pos' } },
+            { id: 'ws-wh', type: 'workspace', name: 'Stock Room', x: 0, y: 0, metadata: { typeKey: 'store-pos' } },
+          ],
+          wires: [{ id: 'w2', from_node_id: 'ws-pos', to_node_id: 'ws-wh', direction: 'one-way', relationship_type: 'stock-routing' }],
+        });
+      }
+      return Promise.resolve(null);
+    });
+    await renderReady(2);
+
+    fireEvent.click(screen.getByRole('button', { name: 'topology-compare-open' }));
+    await waitFor(() => expect(screen.getByText('topology-compare-focus')).toBeInTheDocument());
+
+    // Focus is OFF by default; the toggle flips it and the editor receives it.
+    expect(capturedEditorProps.compareFocus).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'topology-compare-focus' }));
+    await waitFor(() => expect(capturedEditorProps.compareFocus).toBe(true));
+
+    // Closing the panel resets focus along with the overlay.
+    fireEvent.click(screen.getByRole('button', { name: 'topology-compare-close' }));
+    await waitFor(() => expect(capturedEditorProps.compareOverlay).toBeNull());
+    expect(capturedEditorProps.compareFocus).toBe(false);
   });
 
   // ── #4: Atomic diff — single applyTopologyDiff call ────────────

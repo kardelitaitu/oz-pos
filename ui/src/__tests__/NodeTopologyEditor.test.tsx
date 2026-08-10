@@ -266,6 +266,7 @@ const renderEditor = (props?: {
     otherWires: Array<{ id: string; from_node_id: string; to_node_id: string; direction: string; relationship_type: string }>;
     sharedByOtherId: Array<{ otherId: string; currentId: string }>;
   } | null;
+  compareFocus?: boolean;
   canSave?: boolean;
 }) =>
   renderWithProvidersSync(<NodeTopologyEditor currentTier="standard" {...props} />, multiStoreFtl, sharedFtl);
@@ -562,6 +563,43 @@ describe('NodeTopologyEditor Component', () => {
     expect(line.getAttribute('y1')).toBe(String(gy + 120));
     expect(line.getAttribute('x2')).toBe(String(sx));
     expect(line.getAttribute('y2')).toBe(String(sy + 120));
+  });
+
+  it('compare focus dims only the shared-identical cards when enabled', () => {
+    // Overlay: ws-1 is shared-identical (dim); store-1 is only-here (keep
+    // bright); wh-1 is shared-but-differing (keep bright). The overlay ids
+    // are current-side card ids; ws-1 must be in sharedByOtherId but not
+    // in differing.
+    renderEditor({
+      compareFocus: true,
+      compareOverlay: {
+        ghosts: [],
+        onlyHere: ['store-1'],
+        differing: ['wh-1'],
+        otherWires: [],
+        sharedByOtherId: [{ otherId: 'ws-1', currentId: 'ws-1' }],
+      },
+    });
+
+    const ws1 = document.querySelector('.topology-node[data-node-id="ws-1"]') as HTMLElement;
+    expect(ws1.className).toContain('node-dimmed');
+    const store1 = document.querySelector('.topology-node[data-node-id="store-1"]') as HTMLElement;
+    expect(store1.className).not.toContain('node-dimmed');
+    const wh1 = document.querySelector('.topology-node[data-node-id="wh-1"]') as HTMLElement;
+    expect(wh1.className).not.toContain('node-dimmed');
+  });
+
+  it('compare focus dims nothing when disabled even with an overlay', () => {
+    renderEditor({
+      compareOverlay: {
+        ghosts: [],
+        onlyHere: [],
+        differing: [],
+        otherWires: [],
+        sharedByOtherId: [{ otherId: 'ws-1', currentId: 'ws-1' }],
+      },
+    });
+    expect(document.querySelectorAll('.topology-node.node-dimmed')).toHaveLength(0);
   });
 
   it('renders tool rack sidebar and preset buttons', () => {

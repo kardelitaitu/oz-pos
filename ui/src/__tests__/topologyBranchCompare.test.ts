@@ -8,7 +8,7 @@
 // editing either one.
 
 import { describe, expect, it } from 'vitest';
-import { compareBranchTopologies, buildTopologyOverlay, layoutGhosts, buildGhostWireStubs } from '@/features/stores/topologyBranchCompare';
+import { compareBranchTopologies, buildTopologyOverlay, layoutGhosts, buildGhostWireStubs, compareFocusDimIds } from '@/features/stores/topologyBranchCompare';
 import type { TopologyDiagram, GhostBounds } from '@/features/stores/topologyBranchCompare';
 import type { TopologyNodePayload, TopologyWirePayload } from '@/api/topology';
 
@@ -347,6 +347,28 @@ describe('compareBranchTopologies', () => {
     const current: TopologyDiagram = { nodes: [wsNode('ws-a', 'A')], wires: [] };
     const other: TopologyDiagram = { nodes: [wsNode('ws-b', 'B')], wires: [] };
     expect(buildTopologyOverlay(current, other).sharedByOtherId).toEqual([]);
+  });
+
+  it('focus dims only the shared-identical workspaces', () => {
+    // ws-pos: shared and identical → dim. ws-kds: shared but its wiring
+    // differs (the ghost attaches to it) → keep bright. ws-wh: only in
+    // the other branch (a ghost) → keep bright. ws-extra: only in the
+    // current branch → keep bright.
+    const current: TopologyDiagram = {
+      nodes: [wsNode('ws-pos', 'Front Register'), wsNode('ws-kds', 'KDS', 'kds'), wsNode('ws-extra', 'Extra')],
+      wires: [wire('ws-pos', 'ws-kds', 'generic')],
+    };
+    const other: TopologyDiagram = {
+      nodes: [wsNode('ws-pos', 'Front Register'), wsNode('ws-kds', 'KDS', 'kds'), wsNode('ws-wh', 'Stock Room')],
+      wires: [wire('ws-pos', 'ws-kds', 'generic'), wire('ws-kds', 'ws-wh', 'stock-routing')],
+    };
+    const overlay = buildTopologyOverlay(current, other);
+    expect(compareFocusDimIds(overlay)).toEqual(['ws-pos']);
+  });
+
+  it('focus dims nothing for a null/empty overlay', () => {
+    expect(compareFocusDimIds({ ghosts: [], onlyHere: [], differing: [], otherWires: [], sharedByOtherId: [] }))
+      .toEqual([]);
   });
 });
 

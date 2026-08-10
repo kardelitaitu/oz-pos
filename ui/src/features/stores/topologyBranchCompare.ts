@@ -266,6 +266,20 @@ function ghostBounds(g: GhostPlacement): GhostBounds {
   return { x: g.x, y: g.y, width: GHOST_WIDTH, height: GHOST_HEIGHT };
 }
 
+// ── Compare focus (round 162) ────────────────────────────────────
+//
+// The compare panel's "focus on differences" mode: every shared-
+// identical workspace dims so only the differences — only-here cards,
+// differing cards, ghosts, and their stubs — stay bright. Pure:
+// current-side ids, derived from the overlay's own classification.
+
+export function compareFocusDimIds(overlay: TopologyOverlay): string[] {
+  const differing = new Set(overlay.differing);
+  return overlay.sharedByOtherId
+    .map((p) => p.currentId)
+    .filter((id) => !differing.has(id));
+}
+
 export function buildGhostWireStubs(
   wires: TopologyWirePayload[],
   ghosts: GhostPlacement[],

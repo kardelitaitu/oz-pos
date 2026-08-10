@@ -136,6 +136,9 @@ export default function TopologyScreen() {
    *  as card markers. Computed from the same saved-vs-saved comparison the
    *  panel summarises, so the canvas and the name lists can never disagree. */
   const [compareOverlay, setCompareOverlay] = useState<TopologyOverlay | null>(null);
+  /** Compare-focus mode (round 162): dim shared-identical cards so only
+   *  the differences stay bright. Lives with the panel — cleared on close. */
+  const [compareFocus, setCompareFocus] = useState(false);
 
   /** Set once the first stores/listStores resolution lands — before that,
    *  the seeds must read as undefined ("not supplied yet") rather than the
@@ -229,6 +232,7 @@ export default function TopologyScreen() {
     setCompareOpen(false);
     setCompareResult(null);
     setCompareOverlay(null);
+    setCompareFocus(false);
   }, []);
 
   // Recompute when the user picks a different comparison target.
@@ -610,6 +614,7 @@ export default function TopologyScreen() {
         branchId={selectedBranchId ?? 'unassigned'}
         currentTier={licenseTier as 'free' | 'one_time' | 'standard' | 'pro' | 'premium' | 'enterprise'}
         compareOverlay={compareOverlay}
+        compareFocus={compareFocus}
         {...(workspaceSeed !== undefined ? { workspaceInstances: workspaceSeed } : {})}
         {...(branchLocationSeed !== undefined ? { branchLocations: branchLocationSeed } : {})}
         onRenameBranch={handleRenameBranch}
@@ -708,9 +713,18 @@ export default function TopologyScreen() {
         <div className="topology-compare-panel" role="region" aria-label={l10n.getString('topology-compare-title')}>
           <div className="topology-compare-header">
             <h3>{l10n.getString('topology-compare-title')}</h3>
-            <Button variant="secondary" onClick={() => closeCompare()}>
-              {l10n.getString('topology-compare-close')}
-            </Button>
+            <div className="topology-compare-header-actions">
+              <Button
+                variant="secondary"
+                aria-pressed={compareFocus}
+                onClick={() => setCompareFocus((f) => !f)}
+              >
+                {l10n.getString('topology-compare-focus')}
+              </Button>
+              <Button variant="secondary" onClick={() => closeCompare()}>
+                {l10n.getString('topology-compare-close')}
+              </Button>
+            </div>
           </div>
           <div className="topology-compare-other">
             <label htmlFor="topology-compare-other-select">

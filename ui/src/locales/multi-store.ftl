@@ -82,6 +82,7 @@ topology-compare-only-here = Only here: { $names }
 topology-compare-only-there = Only in { $otherBranch }: { $names }
 topology-compare-differing = Differing: { $names }
 topology-compare-none = No differences
+topology-compare-focus = Focus on differences
 topology-shortcuts-aria = Keyboard shortcuts
 topology-shortcuts-title = Shortcuts
 topology-shortcuts-help = Show keyboard shortcuts

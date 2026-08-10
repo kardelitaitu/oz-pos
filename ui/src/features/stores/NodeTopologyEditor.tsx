@@ -53,7 +53,7 @@ import {
 } from './topologyExport';
 import { TopologyNodeCard } from './topologyNodeCard';
 import type { TopologyOverlay } from './topologyBranchCompare';
-import { layoutGhosts, buildGhostWireStubs, GHOST_WIDTH, GHOST_HEIGHT } from './topologyBranchCompare';
+import { layoutGhosts, buildGhostWireStubs, compareFocusDimIds, GHOST_WIDTH, GHOST_HEIGHT } from './topologyBranchCompare';
 import { TopologyWireGroup } from './topologyWireGroup';
 import { planTopologyDiff, summarizeTopologyPlan } from './topologyDiff';
 import { cubicBezier, pointUnderCards, polylinePoint, wireUnderCardSegments } from './topologyWireGeometry';
@@ -346,6 +346,13 @@ export interface NodeTopologyEditorProps {
    *  ids get red / amber markers on their existing cards. Display-only —
    *  ghosts are pointer-events-none and nothing here writes back. */
   compareOverlay?: TopologyOverlay | null;
+  /**
+   * Compare-focus mode (round 162): when on, every shared-identical
+   * workspace dims so only the differences stay bright — the spatial
+   * diff becomes a review view instead of a snapshot. No effect without
+   * a compare overlay. Display-only.
+   */
+  compareFocus?: boolean;
   /**
    * Whether the session user is allowed to persist topology changes.
    * The backend gates `apply_topology_diff` on `staff:update` (granted to
@@ -729,6 +736,7 @@ export default function NodeTopologyEditor({
   onLoadError,
   onLoadSuccess,
   compareOverlay,
+  compareFocus = false,
   canSave = true,
 }: NodeTopologyEditorProps) {
   const { sessionToken } = useWorkspace();
@@ -1592,6 +1600,15 @@ export default function NodeTopologyEditor({
     () => buildGhostWireStubs(compareOverlay?.otherWires ?? [], laidOutGhosts, sharedFarEnds),
     [compareOverlay, laidOutGhosts, sharedFarEnds],
   );
+
+  /** Round 162: compare-focus dim set — the shared-identical live cards.
+   *  Only active while compareFocus is on AND an overlay is present;
+   *  hover-focus dimming (focusing one node's connections) composes with
+   *  it via OR at the card site. */
+  const compareDimSet = useMemo(() => {
+    if (!compareFocus || !compareOverlay) return new Set<string>();
+    return new Set(compareFocusDimIds(compareOverlay));
+  }, [compareFocus, compareOverlay]);
 
   /** The stub SVG must span the laid-out ghosts even when the current
    *  diagram is small — the ghost layer is inset to the viewport, so the
@@ -5952,7 +5969,7 @@ export default function NodeTopologyEditor({
                 stockWireHint={addStockWireHintId === node.id}
                 onDismissNodeIssue={handleDismissNodeIssue}
                 isFresh={freshNodeIds.has(node.id)}
-                isDimmed={hoverConnections !== null && !hoverConnections.has(node.id)}
+                isDimmed={(hoverConnections !== null && !hoverConnections.has(node.id)) || compareDimSet.has(node.id)}
                 isRenameable={(node.type === 'store' && !!onRenameBranch) || (node.type === 'workspace' && !!onRenameWorkspace)}
                 renaming={renamingNodeId === node.id}
                 renameDraft={renameDraft}
