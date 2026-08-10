@@ -3168,7 +3168,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** new test green standalone (0.53s) · topology module 230/230 (+1) · full `oz-pos-app` lib 883/883 (+1) · `cargo fmt --check` clean · `cargo clippy -p oz-pos-app --lib -- -D warnings` clean. `scripts/test-changed.sh` remains blocked by `oz-pos-app.exe` PID 34324 (the user's dev client) — third consecutive round; the process was left running per the multi-agent rule.
 
-**Commits:** TBD
+**Commits:** `4be6a2ed`
 
 **Deliberately NOT done:** no second end-to-end test forcing the conflict AT the save (the early revision gate catches stale applies first; a save-time conflict needs a concurrent writer, which the round-133 unit test pins deterministically). Did not add a lock-order lint/guard — the block-scoping discipline is already the convention; the round-136 fix restored it.
 
