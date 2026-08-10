@@ -8271,6 +8271,94 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn can_save_topology_probe_gates_on_staff_update_permission() {
+        // Round 145: the capability probe the editor uses to gate the Save
+        // toolbar (TopologyScreen -> canSaveTopology -> can_save_topology)
+        // must agree with the Apply gate: both resolve the session against
+        // the GLOBAL identity DB and require STAFF_UPDATE. A divergence
+        // (probe allows, Apply denies) would let the UI offer a Save that
+        // always fails; the reverse would hide editing from a manager who
+        // can apply. Until this test the command was the only registered
+        // topology command with no direct Rust coverage — the TS side is
+        // pinned by the api-ipc contract test, the Rust side was not.
+        let store_id = "store-cap";
+        let dir = tempdir().unwrap();
+        let global = oz_core::migrations::fresh_db();
+        {
+            let store = Store::new(&global);
+            store.seed_default_roles().unwrap();
+            for (id, username, role_id) in [
+                ("user-owner", "owner", "role-owner"),
+                ("user-cashier", "cashier", "role-cashier"),
+            ] {
+                global
+                    .execute(
+                        "INSERT INTO users (id, username, pin_hash, display_name, role_id, \
+                         is_active, created_at, updated_at) \
+                         VALUES (?1, ?2, 'hash', ?2, ?3, 1, \
+                                 '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+                        rusqlite::params![id, username, role_id],
+                    )
+                    .unwrap();
+            }
+            global
+                .execute(
+                    "INSERT OR IGNORE INTO store_profiles (id, name) VALUES (?1, ?2)",
+                    rusqlite::params![store_id, "Test Store"],
+                )
+                .unwrap();
+        }
+        let mut state = AppState::for_test_with_conn(global);
+        state.db_manager =
+            platform_core::StoreDatabaseManager::new(dir.path().to_path_buf(), migrations::ALL);
+        let owner_token = "token-owner".to_string();
+        let cashier_token = "token-cashier".to_string();
+        let mut sessions = state.session_store.write().unwrap();
+        sessions.insert(
+            owner_token.clone(),
+            SessionContext::new(
+                "user-owner".into(),
+                "role-owner".into(),
+                "terminal-1".into(),
+                store_id.into(),
+                "instance-1".into(),
+                "pos".into(),
+                None,
+                0,
+            ),
+        );
+        sessions.insert(
+            cashier_token.clone(),
+            SessionContext::new(
+                "user-cashier".into(),
+                "role-cashier".into(),
+                "terminal-2".into(),
+                store_id.into(),
+                "instance-2".into(),
+                "pos".into(),
+                None,
+                0,
+            ),
+        );
+        drop(sessions);
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        assert_eq!(
+            can_save_topology(owner_token, app.state()).await.unwrap(),
+            true,
+            "an owner session must be allowed to save topology"
+        );
+        let denied = can_save_topology(cashier_token, app.state()).await;
+        assert!(
+            matches!(denied, Err(AppError::PermissionDenied(_))),
+            "a cashier session must be denied by the capability probe, got {denied:?}"
+        );
+    }
+
     #[test]
     fn request_ledger_key_rejects_path_injection() {
         assert!(topology_apply_request_key("request/evil").is_err());
