@@ -3372,7 +3372,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** plan unit 4/4 · diff suite 14/14 · TopologyScreen integration 38/38 (payload builder refactor behavior-identical — the Apply payloads did not change) · editor suite 491/491 (+4) · **full UI suite 279 files / 4,727 tests (+8)** · typecheck ✓ · eslint 0 errors (8 pre-existing warnings) · lint:i18n clean (bundle parity counts the new key) · **mutation check**: flipping the create/update classification failed 6 pure + 1 integration test → restored, green. Drift guard clean.
 
-**Commits:** `TBD`
+**Commits:** `74620278`
 
 **Deliberately NOT done:** no rename-through-snapshot for the canvas fallback (demo mode has no backend truth to diff against — the canvas summary is the honest demo answer). No type-change count in the chip (a type change reads as 1 created + 1 archived — true to the backend vectors). No purpose-key drill-down on the chip. No plan-based refactor of TopologyScreen's diagram-payload building (that stays in the handler).
 
