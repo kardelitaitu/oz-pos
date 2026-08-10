@@ -3212,7 +3212,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** new test green · editor + dev-mock + new suites 476/476 · full UI suite 276 files / 4,677 tests (+1) · typecheck ✓ · eslint 0 errors on the new file. No production code changed (tauri-api.ts mutation reverted to the committed round-138 state — confirmed `git diff` empty).
 
-**Commits:** (ref back-filled after commit)
+**Commits:** `cc9ed3ee`
 
 **Deliberately NOT done:** no browser-Playwright E2E — the vitest jsdom chain already proves the wiring, and the dev server alias is identical; no TopologyScreen-level diff logic (creations/updates/archives) — that layer has its own coverage and would make the test a screen test, not a chain test.
 
