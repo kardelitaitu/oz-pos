@@ -3,22 +3,19 @@
 //! attacks without panicking or crashing the process.
 //!
 //! The sandbox strips dangerous globals (os, io, loadfile, etc.) and
-//! sets an instruction limit of 100K VM ops. This fuzz target ensures
-//! no combination of bytes can bypass the sandbox or cause a panic.
+//! enforces a 100K VM-op instruction limit and a 10 MiB memory limit. This
+//! fuzz target ensures no combination of bytes can bypass the sandbox or
+//! cause a panic.
 //
 // # Safety
 //
 // This fuzz target is `no_main` and compiled only with cargo-fuzz.
 // It does not use `unsafe` directly.
 //
-// The rlua library internally wraps a raw `*mut lua_State`, but the
-// `LuaRuntime` struct in oz-lua is always behind a Mutex in production.
-// In fuzz testing there is no concurrency, and rlua's internal locking
-// is the only synchronization concern.
-//
-// The instruction-limit hook uses rlua's `DebugEvent::Count` which is
-// safe to set from any thread. No other thread safety considerations
-// apply to single-threaded fuzzing.
+// oz-lua migrated from rlua to mlua 0.9 (vendored Lua 5.4); the sandbox
+// checks below use `mlua::Value` types. `LuaRuntime` is used behind a
+// Mutex in production; fuzzing is single-threaded, so no concurrency
+// concerns apply.
 
 #![no_main]
 
@@ -49,12 +46,12 @@ fuzz_target!(|data: &[u8]| {
                              "package", "debug", "rawget", "rawset",
                              "rawequal", "rawlen", "collectgarbage", "module", "load"];
             for name in &dangerous {
-                let val: rlua::Value = match globals.get(*name) {
+                let val: mlua::Value = match globals.get(*name) {
                     Ok(v) => v,
                     Err(_) => continue,
                 };
                 assert!(
-                    matches!(val, rlua::Value::Nil),
+                    matches!(val, mlua::Value::Nil),
                     "dangerous global '{name}' should be nil after malicious input"
                 );
             }

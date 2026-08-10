@@ -1,6 +1,9 @@
-//! Fuzz target for Cart + Sale JSON deserialization — feeds arbitrary
+//! Fuzz target for Cart JSON deserialization — feeds arbitrary
 //! JSON byte sequences to `serde_json::from_str` and verifies
 //! no panics during deserialization.
+//!
+//! The canonical cart types live in `foundation` (oz-core re-exports them;
+//! the former `oz_core::Sale` type was removed with the migration).
 //!
 //! Requires `oz-core-fuzz` feature (adds bundled SQLite via oz-core):
 //!   `cargo fuzz run --features oz-core-fuzz cart_deser`
@@ -15,9 +18,6 @@ fuzz_target!(|data: &[u8]| {
         // Attempt to deserialize a Cart from arbitrary JSON.
         // This must never panic — only return Err or Ok.
         let _result: Result<foundation::cart::Cart, _> = serde_json::from_str(s);
-
-        // Also try Sale deserialization (oz-core domain type).
-        let _sale: Result<oz_core::Sale, _> = serde_json::from_str(s);
     }
 });
 
