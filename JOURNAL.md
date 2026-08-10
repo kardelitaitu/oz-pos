@@ -3201,3 +3201,19 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Deliberately NOT done:** no simulated two-process race in the mock (the editor can only ever hold one revision; a conflict is exercised by editing outside the editor or a stale tab — the gate parity is what matters, not the concurrency mechanics). No UI change: the editor recovery from round 137 consumes this without modification.
 
 **Risks / follow-ups:** the mock now mirrors the gate, so the preview's conflict UX is testable in-browser (stale tab + Apply). Remaining: re-running `test-changed.sh` for a Rust-touching round (still unblocked — no Rust touched this round), and the audit's remaining smaller slices (Apply error-path e2e variants) tracked in earlier entries.
+
+### 2026-08-11 — editor revision-conflict recovery driven through the real dev-mock IPC (round 139)
+
+**Problem:** the round-138 follow-up — the recovery chain was proven in two disjoint halves: round 137 mocked the API at the editor boundary (onSave rejects with the typed shape) and round 138 pinned the dev-mock's gate in isolation, but nothing drove the editor through the REAL production chain (editor → `@/api/topology` → `loggedInvoke` → dev-mock handlers). A future drift in the middle — `parseAppError` no longer recognizing the mock's thrown plain object, `loggedInvoke` wrapping errors, the serve-mode alias changing — could break the browser preview's conflict recovery with neither existing test noticing.
+
+**Solution:** Red→Green (coverage completion — the chain was already correct). New file `NodeTopologyEditorDevMock.test.tsx` stiches the real chain: `vi.mock('@tauri-apps/api/core')` routes `invoke` to the REAL dev-mock module (the same alias `vite.config.ts` applies in serve mode; jsdom has no `__TAURI_INTERNALS__` so the mock routes to its in-memory handlers), and the editor's `onSave` is wired to the real `applyTopologyDiff` like `TopologyScreen.handleTopologySave` (minus the screen's diff/validation layer, which has its own coverage). Flow: snapshot the seeded dev-mock state → render → a concurrent writer applies a NEWER diagram (revision bumps) → the stale editor user spawns a node → Apply → the dev-mock gate rejects → the editor toasts, reloads, and the authoritative diagram replaces the canvas (user's stale spawn gone). Self-heals the seed diagram for watch re-runs.
+
+**Mutation check (the test was green from the start — it had to prove it pins the chain):** temporarily disabled the dev-mock's conflict throw; the test FAILED at the reload assertion (`Authoritative Branch` never appears — the stale Apply silently succeeds and the canvas stays stale). Restored the gate; green again. The integration between the gate (138) and the recovery (137) is now pinned end-to-end.
+
+**Verified:** new test green · editor + dev-mock + new suites 476/476 · full UI suite 276 files / 4,677 tests (+1) · typecheck ✓ · eslint 0 errors on the new file. No production code changed (tauri-api.ts mutation reverted to the committed round-138 state — confirmed `git diff` empty).
+
+**Commits:** (ref back-filled after commit)
+
+**Deliberately NOT done:** no browser-Playwright E2E — the vitest jsdom chain already proves the wiring, and the dev server alias is identical; no TopologyScreen-level diff logic (creations/updates/archives) — that layer has its own coverage and would make the test a screen test, not a chain test.
+
+**Risks / follow-ups:** the conflict loop is now proven through the real IPC chain in every surface. Remaining: a Rust-touching round to finally run the long-unblocked `test-changed.sh`, and the audit's remaining smaller slices tracked in earlier entries.
