@@ -3358,7 +3358,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** diff unit 10/10 · TopologyScreen integration 38/38 (behavior-identical extraction) · editor suite 487/487 + canvas-diff 5/5 · **full UI suite 279 files / 4,719 tests (+10)** · typecheck ✓ (exactOptionalPropertyTypes caught the legacy fixture) · eslint 0 errors (8 pre-existing warnings) · **mutation check**: inverting the archive-sweep condition failed 6 unit tests → restored, green. Drift guard clean.
 
-**Commits:** `TBD`
+**Commits:** `10d6412b`
 
 **Deliberately NOT done:** no UI change — the editor preview still shows the CANVAS diff (round 148); the workspace-instance preview would need the editor to compute the backend diff itself (cross-component). No change to the store_id resolution logic — moved verbatim, including the legacy compatibility boundary. No pure-function change to diagram payload building (that stays in the handler, where it owns the semantic wire identity).
 
