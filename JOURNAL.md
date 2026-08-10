@@ -2940,3 +2940,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** `3bfd896d`
 
 **Risks / follow-ups:** (1) the latent task-level hole above is worth a defensive `tokio::spawn`-wrap of the tick if a future change adds unwraps to run_tick's async body; (2) the prune counter has no label split by tenant — a per-tenant label would surface which tenant's queue is growing, at the cost of a high-cardinality series.
+
+### 2026-08-10 — Sync All shows fake success for free tenants (round 124)
+
+**Problem (round-123 follow-up):** the Offline Queue screen's Sync All handler rendered the count line ("Synced 0 items, 0 failed") from `retry_offline_sync` even when the server rejected the push — a free tenant's command resolves with `planRequired: true` (ADR sync-plan-gating: items stay pending, never marked failed), so the screen showed a fake success while the Cloud Sync settings toast (fixed in round 123) showed the upgrade prompt. The plan row on the screen covers discovery but the retry feedback lied about the outcome.
+
+**Red:** `shows the localized plan-required prompt instead of a fake success on Sync All` — mocks `retryOfflineSync` resolving with `{ syncedCount: 0, failedCount: 0, totalCount: 0, planRequired: true }`, clicks Sync All, and asserts the localized "Cloud sync requires a paid plan" renders and the "Synced 0 items, 0 failed" line does not. Failed pre-fix (waiting on the prompt that never appeared).
+
+**Green:** render the plan-required banner when `syncResult.planRequired` is set (title + hint, warning-styled, matching the settings panel's plan-required block) and keep the count line only for non-gated results. New en+id FTL keys `offline-queue-plan-required` / `offline-queue-plan-required-hint` (bundle parity clean).
+
+**Verified:** OfflineQueueScreen 27/27 (+1), typecheck ✓, eslint ✓, i18n lint + bundle parity ✓. Committed `4a85c203`.
+
+**Risks / follow-ups:** (1) the tablet client's Offline Queue screen is a separate React app — verify it has the same Sync All gap and apply the same fix; (2) `offline-queue-sync-result--plan` styling uses `--color-warning` var, which is a design-system assumption — fine now, but a dedicated warning-banner token would be cleaner.
