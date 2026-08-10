@@ -55,6 +55,26 @@ export interface SettingsState {
   appVersion: string;
 }
 
+/** Local development sync endpoint used when no server is configured. */
+export const DEFAULT_LOCAL_SYNC_SERVER_URL = 'http://localhost:3099';
+
+/**
+ * Give an unconfigured settings page a usable local-sync draft.
+ *
+ * A missing/blank URL means there is no target to connect to, regardless of
+ * whether an old API key was retained. Keep configured URLs and explicit
+ * enabled states untouched; this fallback only supplies the local defaults
+ * for the unconfigured settings surface.
+ */
+export function withSyncDefaults(sync: SyncSettingsDto): SyncSettingsDto {
+  if (sync.serverUrl?.trim()) return sync;
+  return {
+    ...sync,
+    serverUrl: DEFAULT_LOCAL_SYNC_SERVER_URL,
+    enabled: true,
+  };
+}
+
 /** Default state used before the initial fetch completes. */
 const DEFAULT_SETTINGS: SettingsState = {
   receipt: {
@@ -71,7 +91,11 @@ const DEFAULT_SETTINGS: SettingsState = {
     taxRoundingMode: 'half_up',
   },
   store: { name: '', address: '', taxId: '', currency: 'IDR', branch: '' },
-  sync: { serverUrl: null, hasApiKey: false, enabled: false },
+  sync: {
+    serverUrl: DEFAULT_LOCAL_SYNC_SERVER_URL,
+    hasApiKey: false,
+    enabled: true,
+  },
   brand: { colour: '#10b981', storeName: '' },
   preferences: { cardSize: 0, fontSize: 0, fontSmoothing: 'antialiased' },
   currencies: [],
@@ -266,7 +290,7 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
         hasAnyFailure = true;
       }
       if (syncR.status === 'fulfilled' && syncR.value) {
-        setSettings((prev) => ({ ...prev, sync: syncR.value }));
+        setSettings((prev) => ({ ...prev, sync: withSyncDefaults(syncR.value) }));
       } else {
         hasAnyFailure = true;
       }
@@ -361,7 +385,7 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
       tasks.push(
         getSyncSettingsScoped(sessionToken).then((v) => {
           if (!v) return;
-          setSettings((prev) => ({ ...prev, sync: v }));
+          setSettings((prev) => ({ ...prev, sync: withSyncDefaults(v) }));
         }),
       );
     }

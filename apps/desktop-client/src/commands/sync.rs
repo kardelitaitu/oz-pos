@@ -474,8 +474,8 @@ fn resolve_sync_probe_url(
     // The health indicator must be able to probe the local Docker server
     // before the asynchronous bootstrap has persisted URL/key settings.
     // Keep this fallback debug-only so production never probes localhost
-    // behind the operator's back. A cleared URL with a retained key and
-    // sync disabled is an explicit opt-out and must not be overridden.
+    // behind the operator's back. An empty URL is unconfigured; an explicit
+    // opt-out is represented by keeping a configured URL and disabling sync.
     #[cfg(debug_assertions)]
     if allow_local_fallback {
         return Some(LOCAL_DEV_SYNC_URL.to_string());
@@ -503,10 +503,11 @@ pub async fn test_sync_connection(
         } else {
             let db = state.db.lock().await;
             let saved = Settings::get_sync_server_url(&db)?;
-            let enabled = Settings::is_sync_enabled(&db)?;
-            let has_api_key =
-                Settings::get_sync_api_key(&db)?.is_some_and(|key| !key.trim().is_empty());
-            (saved, enabled || !has_api_key)
+            let allow_local_fallback = saved
+                .as_deref()
+                .map(|value| value.trim().is_empty())
+                .unwrap_or(true);
+            (saved, allow_local_fallback)
         };
     let resolved = resolve_sync_probe_url(url, saved, allow_local_fallback);
     match resolved {
@@ -693,6 +694,10 @@ mod tests {
     fn sync_probe_uses_local_dev_server_before_bootstrap_persists_settings() {
         let resolved = resolve_sync_probe_url(None, None, true);
         assert_eq!(resolved.as_deref(), Some("http://localhost:3099"));
+        assert_eq!(
+            resolve_sync_probe_url(None, Some(String::new()), true).as_deref(),
+            Some("http://localhost:3099")
+        );
         assert_eq!(resolve_sync_probe_url(None, None, false), None);
     }
 

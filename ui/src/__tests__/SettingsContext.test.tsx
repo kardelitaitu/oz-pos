@@ -220,6 +220,24 @@ describe('SettingsContext', () => {
     expect(result.current.settings.appVersion).toBe('0.0.19');
   });
 
+  it('defaults an unconfigured sync server to local development sync', async () => {
+    Object.assign(mocks.syncSettings, {
+      serverUrl: null,
+      hasApiKey: true,
+      enabled: false,
+    });
+
+    const { result } = renderHook(() => useSettings(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.settings.sync.serverUrl).toBe('http://localhost:3099');
+    expect(result.current.settings.sync.enabled).toBe(true);
+    expect(result.current.settings.sync.hasApiKey).toBe(true);
+  });
+
   it('starts with loading=true before APIs resolve', () => {
     const { result } = renderHook(() => useSettings(), { wrapper });
     expect(result.current.loading).toBe(true);

@@ -528,7 +528,7 @@ describe('SettingsPage', () => {
     expect(screen.getByText(/enable cloud sync/i)).toBeInTheDocument();
   });
 
-  it('shows not-configured hint when sync is unconfigured', async () => {
+  it('defaults unconfigured sync to the local server and enabled', async () => {
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
       expect(screen.getByRole('treeitem', { name: /operations/i })).toBeInTheDocument();
@@ -536,7 +536,9 @@ describe('SettingsPage', () => {
     fireEvent.click(screen.getByRole('treeitem', { name: /operations/i }));
     fireEvent.click(screen.getByRole('treeitem', { name: /cloud sync/i }));
 
-    expect(screen.getByText(/not configured/i)).toBeInTheDocument();
+    expect(screen.queryByText(/not configured/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/server url/i)).toHaveValue('http://localhost:3099');
+    expect(screen.getByRole('switch', { name: /toggle/i })).toBeChecked();
   });
 
   // ── About section ────────────────────────────────────────────

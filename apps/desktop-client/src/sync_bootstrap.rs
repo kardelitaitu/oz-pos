@@ -14,13 +14,11 @@
 //! `#[cfg(debug_assertions)]`-gated), so a production install's
 //! configuration can never be touched by a stray local server.
 //!
-//! **Row-presence invariant:** the "deliberately disabled" detection in
-//! [`should_auto_provision`] relies on `Settings::set_sync_server_url`
-//! writing an empty-string row when the URL is cleared (never deleting
-//! the row), together with retaining an existing API key. Keep both
-//! contracts intact — a cleared row with no key is treated as an
-//! unconfigured fresh install, while a cleared row with a key and sync
-//! disabled is a deliberate opt-out.
+//! **Configuration invariant:** an empty or missing URL is unconfigured,
+//! even when an old API key remains. The debug bootstrap repairs that state
+//! by restoring the local URL and enabling sync. To deliberately disable
+//! sync, keep the configured URL and turn off the enabled flag; that state
+//! is never overwritten.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -44,26 +42,23 @@ const PROBE_RETRY_DELAY: Duration = Duration::from_secs(2);
 
 /// Decide whether auto-provisioning should run.
 ///
-/// Returns `true` only when the install looks never-configured: no URL
-/// row exists, or a cleared URL row has no API key, or sync is still
-/// enabled (a broken half-configured state provisioning repairs). An
-/// explicit disable — a URL that was set then cleared while sync is off
-/// while retaining its API key — is respected.
+/// Returns `true` whenever no usable URL is configured. A retained API key
+/// does not make an empty URL usable: the bootstrap restores the local dev
+/// URL and enables sync. An explicit disable is preserved when a real URL
+/// remains configured and only the enabled flag is turned off.
 fn should_auto_provision(
     configured_url: Option<&str>,
-    sync_enabled: bool,
-    has_api_key: bool,
+    _sync_enabled: bool,
+    _has_api_key: bool,
 ) -> bool {
     match configured_url {
         // No settings row at all — a fresh install that has never been
         // configured. Provision regardless of the enabled flag (a fresh
         // DB ships with sync off but no URL row).
         None => true,
-        // The URL row exists but was cleared. A retained API key plus sync
-        // off means the user deliberately disabled it — respect that. No
-        // key means the install is still unconfigured; sync on is a broken
-        // half-configured state worth repairing.
-        Some(url) if url.trim().is_empty() => sync_enabled || !has_api_key,
+        // An empty URL is unconfigured, regardless of the enabled flag or
+        // whether an old API key remains. Restore the local dev connection.
+        Some(url) if url.trim().is_empty() => true,
         // A real URL is configured — never touch it.
         Some(_) => false,
     }
@@ -280,12 +275,11 @@ mod tests {
     }
 
     #[test]
-    fn should_not_provision_when_sync_was_deliberately_disabled() {
-        // The URL row exists but was cleared AND sync is off — the user's
-        // "off" switch. Auto-provision must NOT silently re-enable it on
-        // the next debug launch.
-        assert!(!should_auto_provision(Some(""), false, true));
-        assert!(!should_auto_provision(Some("   "), false, true));
+    fn should_provision_when_url_is_cleared_even_with_retained_key() {
+        // An old key without a target URL is still unconfigured. The local
+        // bootstrap must restore the URL and enable sync on startup.
+        assert!(should_auto_provision(Some(""), false, true));
+        assert!(should_auto_provision(Some("   "), false, true));
     }
 
     #[test]
@@ -451,33 +445,5 @@ mod tests {
         );
         assert!(!Settings::is_sync_enabled(&conn).unwrap());
         assert!(Settings::get_sync_api_key(&conn).unwrap().is_none());
-    }
-
-    #[tokio::test]
-    async fn orchestrator_does_not_reprovision_when_sync_was_disabled() {
-        // The user cleared the URL and turned sync off. The guard must
-        // fire BEFORE any network I/O, so this stays deterministic even
-        // with a live dev server on :3099: sync stays off, no key is
-        // injected, and the cleared URL row is untouched.
-        let db = Arc::new(Mutex::new(migrations::fresh_db()));
-        {
-            let conn = db.try_lock().unwrap();
-            Settings::set_sync_server_url(&conn, "").unwrap();
-            Settings::set_sync_api_key(&conn, "existing-token").unwrap();
-            Settings::set_sync_enabled(&conn, false).unwrap();
-        }
-
-        auto_provision_local_sync(db.clone()).await;
-
-        let conn = db.try_lock().unwrap();
-        assert_eq!(
-            Settings::get_sync_server_url(&conn).unwrap().as_deref(),
-            Some("")
-        );
-        assert!(!Settings::is_sync_enabled(&conn).unwrap());
-        assert_eq!(
-            Settings::get_sync_api_key(&conn).unwrap().as_deref(),
-            Some("existing-token")
-        );
     }
 }
