@@ -65,6 +65,34 @@ function wiringByNode(diagram: TopologyDiagram | null): Map<string, Set<string>>
   return map;
 }
 
+/**
+ * Incident connection keys per node id, with wire endpoints remapped
+ * through the drift pairing (other-side id → current-side id). A wire
+ * whose endpoint is a drifted workspace is compared against the
+ * current side's id so wiring can be judged on equal ground.
+ */
+function wiringByNodeRemapped(
+  diagram: TopologyDiagram | null,
+  drift: ReadonlyMap<string, string>,
+): Map<string, Set<string>> {
+  const map = new Map<string, Set<string>>();
+  if (!diagram) return map;
+  for (const wire of diagram.wires) {
+    const a = drift.get(wire.from_node_id) ?? wire.from_node_id;
+    const b = drift.get(wire.to_node_id) ?? wire.to_node_id;
+    const key = connectionKey(a, b);
+    for (const endpoint of [a, b]) {
+      let set = map.get(endpoint);
+      if (!set) {
+        set = new Set();
+        map.set(endpoint, set);
+      }
+      set.add(key);
+    }
+  }
+  return map;
+}
+
 function setsEqual(a: Set<string> | undefined, b: Set<string> | undefined): boolean {
   if (!a || !b) return (a?.size ?? 0) === (b?.size ?? 0);
   if (a.size !== b.size) return false;
@@ -72,6 +100,37 @@ function setsEqual(a: Set<string> | undefined, b: Set<string> | undefined): bool
     if (!b.has(key)) return false;
   }
   return true;
+}
+
+/**
+ * Pair drifted ids by semantic identity: same name AND same typeKey.
+ * A drifted pair is one other-side workspace whose id is absent on the
+ * current side but whose name + typeKey match a current-side workspace
+ * exactly. The match must be unambiguous — if two candidates share the
+ * same semantic identity, neither is paired (no guessing). Type is part
+ * of the key: a type change is a destructive recreate (round 152), i.e.
+ * a different instance, not the same workspace with a drifted id.
+ */
+function findDriftPairs(
+  currentNodes: Map<string, TopologyNodePayload>,
+  otherNodes: Map<string, TopologyNodePayload>,
+): Map<string, string> {
+  const drift = new Map<string, string>(); // other id → current id
+  for (const [currentId, currentNode] of currentNodes) {
+    if (otherNodes.has(currentId)) continue; // exact id match already covers it
+    const candidates = [...otherNodes].filter(([otherId, otherNode]) => {
+      if (currentNodes.has(otherId)) return false; // exact-matched on the other side
+      if (drift.has(otherId)) return false; // already claimed by a previous pair
+      return (
+        otherNode.name === currentNode.name &&
+        otherNode.metadata?.['typeKey'] === currentNode.metadata?.['typeKey']
+      );
+    });
+    if (candidates.length === 1) {
+      drift.set(candidates[0]![0], currentId);
+    }
+  }
+  return drift;
 }
 
 export function compareBranchTopologies(
@@ -89,29 +148,42 @@ export function compareBranchTopologies(
       .map((n) => [n.id, n] as const),
   );
 
+  // Pair drifted ids first so shared counting and wiring comparison see
+  // semantic identity, not raw ids.
+  const drift = findDriftPairs(currentNodes, otherNodes);
+
   const onlyInCurrent: BranchWorkspaceRef[] = [];
   const onlyInOther: BranchWorkspaceRef[] = [];
   const differing: DifferingWorkspace[] = [];
 
+  const matchedCurrent = new Set<string>(drift.values());
+  const matchedOther = new Set<string>(drift.keys());
+
   let shared = 0;
   for (const [id, node] of currentNodes) {
-    if (!otherNodes.has(id)) {
+    if (!otherNodes.has(id) && !matchedCurrent.has(id)) {
       onlyInCurrent.push({ id, name: node.name });
     }
   }
   for (const [id, node] of otherNodes) {
-    if (!currentNodes.has(id)) {
+    if (!currentNodes.has(id) && !matchedOther.has(id)) {
       onlyInOther.push({ id, name: node.name });
-    } else {
+    } else if (currentNodes.has(id)) {
       shared += 1;
     }
   }
+  shared += drift.size;
 
   const currentWiring = wiringByNode(current);
-  const otherWiring = wiringByNode(other);
+  const otherWiring = wiringByNodeRemapped(other, drift);
+
+  const otherIdByCurrentId = new Map<string, string>();
+  for (const [otherId, currentId] of drift) {
+    otherIdByCurrentId.set(currentId, otherId);
+  }
 
   for (const [id, node] of currentNodes) {
-    const otherNode = otherNodes.get(id);
+    const otherNode = otherNodes.get(id) ?? otherNodes.get(otherIdByCurrentId.get(id) ?? '');
     if (!otherNode) continue;
     const reasons: DifferingWorkspace['reasons'] = [];
     if (node.name !== otherNode.name) reasons.push('name');
