@@ -53,6 +53,7 @@ import {
 } from './topologyExport';
 import { TopologyNodeCard } from './topologyNodeCard';
 import { TopologyWireGroup } from './topologyWireGroup';
+import { computeCanvasDiff } from './topologyCanvasDiff';
 import { cubicBezier, pointUnderCards, polylinePoint, wireUnderCardSegments } from './topologyWireGeometry';
 import { useTopologyEditorGraph, type TopologyHistoryEntry } from './nodeTopologyEditorState';
 import { useTopologyEditorSaveLifecycle } from './nodeTopologyEditorSaveState';
@@ -4967,12 +4968,28 @@ export default function NodeTopologyEditor({
             <Localized id="topology-apply-changes">Apply Topology Changes</Localized>
           </Button>
 
-          {isDirty && (
-            <span className="topology-dirty-chip" role="status">
-              <span className="topology-dirty-dot" aria-hidden="true" />
-              <Localized id="topology-unsaved">Unsaved changes</Localized>
-            </span>
-          )}
+          {isDirty && (() => {
+            // Round 148: the dirty chip now previews what an Apply would
+            // commit — the canvas diff against the last committed snapshot
+            // plus the revision bump (from = last committed, to = next).
+            const snap = appliedSnapshotRef.current;
+            const diff = computeCanvasDiff(snap?.nodes ?? [], snap?.wires ?? [], nodes, wires);
+            return (
+              <span className="topology-dirty-chip" role="status">
+                <span className="topology-dirty-dot" aria-hidden="true" />
+                <Localized id="topology-unsaved">Unsaved changes</Localized>
+                <span className="topology-diff-summary">
+                  {l10n.getString('topology-apply-diff', {
+                    added: diff.nodesAdded + diff.wiresAdded,
+                    removed: diff.nodesRemoved + diff.wiresRemoved,
+                    moved: diff.nodesMoved,
+                    from: topologyRevision,
+                    to: topologyRevision + 1,
+                  })}
+                </span>
+              </span>
+            );
+          })()}
 
           <button
             ref={shortcutsBtnRef}

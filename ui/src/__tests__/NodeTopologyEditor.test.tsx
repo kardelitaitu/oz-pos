@@ -192,6 +192,7 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-toast-clipboard-unavailable': 'Clipboard is not available',
   'topology-toast-template-saved': 'Template saved',
   'topology-toast-template-deleted': 'Template deleted',
+  'topology-apply-diff': '{added} added · {removed} removed · {moved} moved · rev {from} → {to}',
 };
 
 vi.mock('@fluent/react', async () => {
@@ -201,9 +202,12 @@ vi.mock('@fluent/react', async () => {
     Localized: ({ children }: { id: string; children: React.ReactNode }) => <>{children}</>,
     useLocalization: () => ({
       l10n: {
-        getString: (id: string, vars?: { count?: number } | null) => {
-          const value = TOPOLOGY_EN[id] ?? id;
-          return typeof vars?.count === 'number' ? value.replace('{count}', String(vars.count)) : value;
+        getString: (id: string, vars?: Record<string, string | number> | null) => {
+          let value = TOPOLOGY_EN[id] ?? id;
+          for (const [key, val] of Object.entries(vars ?? {})) {
+            value = value.replaceAll(`{${key}}`, String(val));
+          }
+          return value;
         },
       },
     }),
@@ -6818,6 +6822,23 @@ describe('NodeTopologyEditor — unsaved-changes indicator', () => {
 
     fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
     expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
+  });
+
+  it('shows what the Apply would commit once the canvas is dirty', () => {
+    // Round 148: the dirty chip now carries the Apply change summary — the
+    // canvas diff vs the last committed snapshot plus the revision bump.
+    renderEditor();
+    const summary = () => document.querySelector('.topology-diff-summary')?.textContent ?? '';
+    // Fresh preset: the snapshot equals the canvas, so the chip is hidden.
+    expect(document.querySelector('.topology-diff-summary')).toBeNull();
+
+    // Spawning a Store node adds exactly one node and one revision step.
+    fireEvent.click(screen.getByText('+ Store Node'));
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+    expect(summary()).toContain('1 added');
+    expect(summary()).toContain('0 removed');
+    expect(summary()).toContain('0 moved');
+    expect(summary()).toContain('rev 0 → 1');
   });
 });
 
