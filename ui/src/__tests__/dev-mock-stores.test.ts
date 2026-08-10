@@ -7,7 +7,7 @@
 //     later serves, so a reload keeps the new name;
 //   - the rename must NEVER disturb the persisted topology diagram —
 //     node positions survive a reload, because the diagram is only
-//     rewritten by Apply (save_topology / apply_topology_diff), never
+//     rewritten by Apply (apply_topology_diff), never
 //     by a store-profile rename. The editor light-merges the new name
 //     onto the card from the live store list instead.
 // These pin the persistence contract without needing a live app.
@@ -137,7 +137,17 @@ describe('dev-mock store + topology round-trip', () => {
     expect(node?.name).toBe('RT Diagram Branch');
 
     // 6. Self-heal: restore the seed diagram for watch-mode re-runs.
-    await invoke('save_topology', { args: { nodes: initial.nodes, wires: initial.wires } });
+    await invoke('apply_topology_diff', {
+      args: {
+        sessionToken: 'test-session-token',
+        workspaceCreations: [],
+        workspaceUpdates: [],
+        workspaceArchives: [],
+        diagramNodes: initial.nodes,
+        diagramWires: initial.wires,
+        resolvedIssueKeys: [],
+      },
+    });
   });
 
   it('delete_store_profile removes the branch from subsequent list calls', async () => {

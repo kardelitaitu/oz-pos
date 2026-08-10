@@ -1051,13 +1051,6 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     nodes: mockTopology.nodes.map((n) => ({ ...n })),
     wires: mockTopology.wires.map((w) => ({ ...w })),
   }),
-  'save_topology': (args) => {
-    const { nodes, wires } = (args as { nodes?: MockTopologyNode[]; wires?: MockTopologyWire[] }) ?? {};
-    if (nodes) mockTopology.nodes = nodes.map((n) => ({ ...n }));
-    if (wires) mockTopology.wires = wires.map((w) => ({ ...w }));
-    saveMockTopology(mockTopology);
-    return null;
-  },
   // The editor's Apply button saves through this command. Mirror the real
   // backend's atomic diff: apply instance creates/updates/archives AND
   // persist the diagram (node positions included) so reloads keep both the

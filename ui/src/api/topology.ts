@@ -56,18 +56,6 @@ export interface TopologyData {
 export const canSaveTopology = (sessionToken: string): Promise<boolean> =>
   loggedInvoke<boolean>('can_save_topology', { sessionToken });
 
-/** Persist the topology graph for one branch. Overwrites that branch's save. */
-export const saveTopology = (
-  nodes: TopologyNodePayload[],
-  wires: TopologyWirePayload[],
-  branchId?: string,
-): Promise<void> =>
-  loggedInvoke('save_topology', {
-    nodes,
-    wires,
-    ...(branchId !== undefined ? { branchId } : {}),
-  });
-
 /** Load the persisted topology graph for a branch, or `null` if none saved yet. */
 export const loadTopology = (branchId?: string): Promise<TopologyData | null> =>
   loggedInvoke<TopologyData | null>(

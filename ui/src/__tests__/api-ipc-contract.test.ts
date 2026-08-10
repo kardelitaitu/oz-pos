@@ -218,7 +218,6 @@ describe('sales.ts IPC contract', () => {
 // ── topology.ts ───────────────────────────────────────────────────
 
 import {
-  saveTopology,
   loadTopology,
   applyTopologyDiff,
   canSaveTopology,
@@ -226,14 +225,6 @@ import {
 
 describe('topology.ts IPC contract', () => {
   beforeEach(() => mockInvoke.mockReset());
-
-  it('saveTopology invokes "save_topology" with nodes + wires', async () => {
-    mockInvoke.mockResolvedValue(undefined);
-    const nodes = [{ id: 'n1', type: 'store', name: 'Main', x: 0, y: 0 }];
-    const wires = [{ id: 'w1', from_node_id: 'n1', to_node_id: 'n2', direction: 'one-way' }];
-    await saveTopology(nodes, wires);
-    expect(mockInvoke).toHaveBeenCalledWith('save_topology', { nodes, wires });
-  });
 
   it('loadTopology invokes "load_topology" with no args', async () => {
     mockInvoke.mockResolvedValue(null);
@@ -245,18 +236,6 @@ describe('topology.ts IPC contract', () => {
     mockInvoke.mockResolvedValue(null);
     await loadTopology('branch-a');
     expect(mockInvoke).toHaveBeenCalledWith('load_topology', { branchId: 'branch-a' });
-  });
-
-  it('saveTopology invokes "save_topology" with a branch id', async () => {
-    mockInvoke.mockResolvedValue(undefined);
-    const nodes = [{ id: 'n1', type: 'store', name: 'Main', x: 0, y: 0 }];
-    const wires = [{ id: 'w1', from_node_id: 'n1', to_node_id: 'n2', direction: 'one-way' }];
-    await saveTopology(nodes, wires, 'branch-a');
-    expect(mockInvoke).toHaveBeenCalledWith('save_topology', {
-      nodes,
-      wires,
-      branchId: 'branch-a',
-    });
   });
 
   it('applyTopologyDiff invokes "apply_topology_diff" with full diff payload', async () => {
@@ -320,12 +299,6 @@ describe('topology.ts IPC contract', () => {
     expect(result).toBeNull();
   });
 
-  it('saveTopology propagates backend errors', async () => {
-    mockInvoke.mockRejectedValueOnce(new Error('duplicate node id: n1'));
-    await expect(
-      saveTopology([{ id: 'n1', type: 'store', name: 'X', x: 0, y: 0 }], []),
-    ).rejects.toThrow('duplicate node id');
-  });
 });
 
 // ── settings.ts ───────────────────────────────────────────────────

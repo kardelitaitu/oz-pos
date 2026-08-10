@@ -1156,6 +1156,7 @@ fn require_load_id(value: &Value, what: &str) -> Result<(), AppError> {
     Ok(())
 }
 
+#[cfg(test)]
 fn save_topology_json_at_key(
     conn: &Connection,
     nodes: Vec<Value>,
@@ -1832,9 +1833,15 @@ pub async fn can_save_topology(
     Ok(true)
 }
 
-/// Save the topology graph to the settings store.
-#[tauri::command]
-pub async fn save_topology(
+/// Test-only compatibility harness for the retired direct topology writer.
+///
+/// Production topology persistence is exclusively `apply_topology_diff`, which
+/// performs authorization, revision checks, workspace diffing, and recovery
+/// journaling. Keeping this helper under `cfg(test)` preserves low-level
+/// command round-trip coverage without exposing a second production write
+/// path through Tauri IPC.
+#[cfg(test)]
+async fn save_topology(
     nodes: Vec<Value>,
     wires: Vec<Value>,
     branch_id: Option<String>,
