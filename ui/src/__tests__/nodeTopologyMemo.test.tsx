@@ -3,7 +3,7 @@ import type { TopologyNodeCard as NodeCardComponent } from '../features/stores/t
 import type { TopologyWireGroup as WireGroupComponent } from '../features/stores/topologyWireGroup';
 import { fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
+import { renderWithProvidersSync, rerenderWithProviders } from '@/__tests__/test-utils/render';
 import NodeTopologyEditor from '../features/stores/NodeTopologyEditor';
 import { loadTopology } from '@/api/topology';
 import multiStoreFtl from '@/locales/multi-store.ftl?raw';
@@ -91,6 +91,11 @@ vi.mock('@/contexts/SettingsContext', () => ({
 
 const mockLoadTopology = vi.mocked(loadTopology);
 
+/** Render result of the last renderWithPreset — lets the round-157
+ *  regression test rerender with new props (the parent handing instances
+ *  after first visibility) to exercise the settle-aware baseline. */
+let renderResult: ReturnType<typeof renderWithProvidersSync> | null = null;
+
 /** Baseline = the counts accumulated during mount; tests assert interactions
  *  only change the elements they target. */
 const snapshot = () => ({ ...nodeCounts, ...wireCounts });
@@ -98,28 +103,72 @@ const snapshot = () => ({ ...nodeCounts, ...wireCounts });
 const nodeCount = (id: string, base: Record<string, number>) => (nodeCounts[id] ?? 0) - (base[id] ?? 0);
 const wireCount = (id: string, base: Record<string, number>) => (wireCounts[id] ?? 0) - (base[id] ?? 0);
 
+/** Total renders across every card and wire — the quiescence signal. */
+const totalRenders = () =>
+  Object.values(nodeCounts).reduce((sum, n) => sum + n, 0)
+  + Object.values(wireCounts).reduce((sum, n) => sum + n, 0);
+
+/**
+ * Wait for render-count quiescence: two consecutive samples 60ms apart with
+ * no growth. The editor's mount can settle AFTER first visibility — async
+ * settings invokes resolve on a ~50ms timer, and a parent can hand the
+ * editor real instances right after load (a re-apply that re-renders every
+ * wire). A baseline snapshotted mid-settle makes the exact-delta assertions
+ * below flaky under machine load (round 157: `expected 2 to be 1` in the
+ * cycle test). Each 60ms wait yields to the event loop, so pending timers
+ * fire inside the settle and their renders land in the baseline. The
+ * quiescence check alone is not enough — a timer armed just before the
+ * settle (the re-apply's 100ms load) can fire AFTER a single stable
+ * sample — so the settle also enforces a ~150ms floor, longer than the
+ * longest known mount-time timer (the 50ms settings invoke).
+ */
+const settleCounts = async (): Promise<void> => {
+  const startedAt = Date.now();
+  let previous = -1;
+  let current = totalRenders();
+  while (previous !== current || Date.now() - startedAt < 150) {
+    previous = current;
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    current = totalRenders();
+  }
+};
+
 describe('topology memoized render layers — hover/selection touch only the affected element', () => {
   // The load effect can fire more than once on mount (the editor shows a
   // placeholder preset while the async load resolves), so the mock ALWAYS
   // returns this diagram — every call resolves to the same nodes/wires.
   const renderWithPreset = async () => {
-    mockLoadTopology.mockResolvedValue({
-      nodes: [
-        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
-        { id: 'ws-1', type: 'workspace', name: 'POS 1', x: 380, y: 80 },
-        { id: 'ws-2', type: 'workspace', name: 'POS 2', x: 380, y: 260 },
-      ],
-      wires: [
-        { id: 'w1', from_node_id: 'store-1', to_node_id: 'ws-1', direction: 'one-way' },
-        { id: 'w2', from_node_id: 'store-1', to_node_id: 'ws-2', direction: 'one-way' },
-      ],
-    } as never);
-    renderWithProvidersSync(<NodeTopologyEditor currentTier="standard" />, multiStoreFtl, sharedFtl);
+    // Resolve on a ~100ms timer: the editor's mount (and the re-apply a
+    // parent can trigger by handing instances) settles on a MACROTASK, like
+    // the async settings invokes in the real tree. A baseline snapshotted
+    // before that settle lands is what flaked under load (round 157).
+    mockLoadTopology.mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve({
+        nodes: [
+          { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+          { id: 'ws-1', type: 'workspace', name: 'POS 1', x: 380, y: 80 },
+          { id: 'ws-2', type: 'workspace', name: 'POS 2', x: 380, y: 260 },
+        ],
+        wires: [
+          { id: 'w1', from_node_id: 'store-1', to_node_id: 'ws-1', direction: 'one-way' },
+          { id: 'w2', from_node_id: 'store-1', to_node_id: 'ws-2', direction: 'one-way' },
+        ],
+      } as never), 100)),
+    );
+    renderResult = renderWithProvidersSync(
+      <NodeTopologyEditor currentTier="standard" />,
+      multiStoreFtl,
+      sharedFtl,
+    );
     // Wait on a node id only THIS preset has (the placeholder is a retail
     // preset with wh-1, not ws-2), so the counts baseline is post-load.
     await waitFor(() =>
       expect(document.querySelector('.topology-node[data-node-id="ws-2"]')).not.toBeNull(),
     );
+    // Round 157: the naive baseline (taken at first visibility) could be
+    // followed by mount-time settling that inflated an interaction delta.
+    // Wait for quiescence so the baseline is stable under any load.
+    await settleCounts();
     return snapshot();
   };
 
@@ -168,5 +217,45 @@ describe('topology memoized render layers — hover/selection touch only the aff
     expect(nodeCount('store-1', base)).toBe(0);
     expect(nodeCount('ws-1', base)).toBe(0);
     expect(nodeCount('ws-2', base)).toBe(0);
+  });
+
+  it('baseline is settle-aware — a late mount-time re-apply cannot inflate an interaction delta', async () => {
+    // Round-157 full-suite flake: `expected 2 to be 1` in the cycle test —
+    // a legitimate mount-time render landed after the first-visibility
+    // baseline and inflated the click's delta by exactly one. The parent
+    // handing the editor real instances right after load is the same class:
+    // the load effect re-runs and re-applies the diagram, so every wire
+    // re-renders once. A naive baseline reads that re-apply as part of the
+    // click; a settle-aware baseline absorbs it.
+    const base = await renderWithPreset();
+
+    rerenderWithProviders(
+      renderResult!,
+      <NodeTopologyEditor
+        currentTier="standard"
+        workspaceInstances={[
+          { instanceId: 'ws-1', name: 'POS 1', typeKey: 'store-pos', purposeKey: 'general' },
+          { instanceId: 'ws-2', name: 'POS 2', typeKey: 'store-pos', purposeKey: 'general' },
+        ] as never}
+      />,
+      multiStoreFtl,
+      sharedFtl,
+    );
+    // The re-apply's renders must land inside the settle-aware baseline.
+    await settleCounts();
+    const settled = snapshot();
+
+    fireEvent.click(wireEl('w1'));
+
+    // A baseline captured before the re-apply reads the re-apply + click as
+    // 2 — the exact `expected 2 to be 1` signature of the round-157 flake.
+    expect(wireCount('w1', base)).toBe(2);
+    // The settle-aware baseline absorbs the re-apply: the click's true
+    // delta is 1, and nothing else moved.
+    expect(wireCount('w1', settled)).toBe(1);
+    expect(wireCount('w2', settled)).toBe(0);
+    expect(nodeCount('store-1', settled)).toBe(0);
+    expect(nodeCount('ws-1', settled)).toBe(0);
+    expect(nodeCount('ws-2', settled)).toBe(0);
   });
 });
