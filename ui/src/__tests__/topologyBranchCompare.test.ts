@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { compareBranchTopologies, buildTopologyOverlay, layoutGhosts, buildGhostWireStubs } from '@/features/stores/topologyBranchCompare';
-import type { TopologyDiagram } from '@/features/stores/topologyBranchCompare';
+import type { TopologyDiagram, GhostBounds } from '@/features/stores/topologyBranchCompare';
 import type { TopologyNodePayload, TopologyWirePayload } from '@/api/topology';
 
 // ── Fixtures ──────────────────────────────────────────────────────
@@ -286,8 +286,16 @@ describe('compareBranchTopologies', () => {
   it('returns an empty overlay for identical diagrams and null inputs', () => {
     const diagram: TopologyDiagram = { nodes: [wsNode('ws-pos', 'Front Register')], wires: [] };
 
-    expect(buildTopologyOverlay(diagram, diagram)).toEqual({ ghosts: [], onlyHere: [], differing: [], otherWires: [] });
-    expect(buildTopologyOverlay(null, null)).toEqual({ ghosts: [], onlyHere: [], differing: [], otherWires: [] });
+    // Identical diagrams SHARE every workspace (exact id matches); null
+    // inputs share nothing.
+    expect(buildTopologyOverlay(diagram, diagram)).toEqual({
+      ghosts: [],
+      onlyHere: [],
+      differing: [],
+      otherWires: [],
+      sharedByOtherId: [{ otherId: 'ws-pos', currentId: 'ws-pos' }],
+    });
+    expect(buildTopologyOverlay(null, null)).toEqual({ ghosts: [], onlyHere: [], differing: [], otherWires: [], sharedByOtherId: [] });
   });
 
   it('treats a drifted-id pair as shared — differing only when wiring differs', () => {
@@ -305,12 +313,40 @@ describe('compareBranchTopologies', () => {
       nodes: [...b.nodes, wsNode('ws-wh', 'Stock Room')],
     };
 
-    expect(buildTopologyOverlay(a, b)).toEqual({ ghosts: [], onlyHere: [], differing: [], otherWires: b.wires });
+    expect(buildTopologyOverlay(a, b)).toEqual({ ghosts: [], onlyHere: [], differing: [], otherWires: b.wires, sharedByOtherId: [{ otherId: 'ws-pos-v2', currentId: 'ws-pos' }, { otherId: 'ws-kds', currentId: 'ws-kds' }] });
     const overlay = buildTopologyOverlay(a, bWiredDifferently);
     expect(overlay.ghosts).toEqual([{ id: 'ws-wh', name: 'Stock Room', x: 0, y: 0 }]);
     expect(overlay.onlyHere).toEqual([]);
     expect(overlay.differing).toEqual(['ws-pos']);
     expect(overlay.otherWires).toEqual(bWiredDifferently.wires);
+  });
+
+  it('carries the shared-workspace id pairing for exact matches and drift pairs', () => {
+    const current: TopologyDiagram = {
+      nodes: [wsNode('ws-pos', 'Front Register'), wsNode('ws-kds', 'KDS', 'kds')],
+      wires: [],
+    };
+    const other: TopologyDiagram = {
+      // ws-pos-v2 is a drifted twin of ws-pos (same name + type); ws-kds is
+      // an exact id match; ws-wh is only in the other branch (a ghost).
+      nodes: [
+        wsNode('ws-pos-v2', 'Front Register'),
+        wsNode('ws-kds', 'KDS', 'kds'),
+        wsNode('ws-wh', 'Stock Room'),
+      ],
+      wires: [],
+    };
+    const overlay = buildTopologyOverlay(current, other);
+    expect(overlay.sharedByOtherId).toEqual([
+      { otherId: 'ws-pos-v2', currentId: 'ws-pos' },
+      { otherId: 'ws-kds', currentId: 'ws-kds' },
+    ]);
+  });
+
+  it('leaves sharedByOtherId empty when nothing is shared', () => {
+    const current: TopologyDiagram = { nodes: [wsNode('ws-a', 'A')], wires: [] };
+    const other: TopologyDiagram = { nodes: [wsNode('ws-b', 'B')], wires: [] };
+    expect(buildTopologyOverlay(current, other).sharedByOtherId).toEqual([]);
   });
 });
 
@@ -463,5 +499,46 @@ describe('buildGhostWireStubs', () => {
     expect(buildGhostWireStubs([wire('w-1', 'a', 'b')], [g('g-a', 0, 0)])).toEqual([]);
     expect(buildGhostWireStubs([], [g('g-a', 0, 0)])).toEqual([]);
     expect(buildGhostWireStubs([wire('w-1', 'g-a', 'g-b')], [])).toEqual([]);
+  });
+
+  it('connects a ghost to a SHARED workspace when the far end resolves', () => {
+    // The shared card is a live 240×240 card at (380, 80); the wire
+    // references it by its OTHER-side id, which the caller resolved to a
+    // live-card position in the far map.
+    const far = new Map<string, GhostBounds>([
+      ['ws-s', { x: 380, y: 80, width: 240, height: 240 }],
+    ]);
+    const [s] = buildGhostWireStubs(
+      [wire('w-1', 'g-a', 'ws-s')],
+      [g('g-a', 0, 300)],
+      far,
+    );
+    // g-a at (0,300)-(240,540); ws-s at (380,80)-(620,320): the shared card
+    // is to the RIGHT, so the stub exits the ghost's right edge midpoint
+    // (240, 300+120) and enters the shared card's left edge midpoint
+    // (380, 80+120).
+    expect(s).toMatchObject({ id: 'w-1', fromId: 'g-a', toId: 'ws-s', x1: 240, y1: 420, x2: 380, y2: 200 });
+  });
+
+  it('skips a ghost-to-shared wire when the shared card is not live', () => {
+    const stubs = buildGhostWireStubs(
+      [wire('w-1', 'g-a', 'ws-s')],
+      [g('g-a', 0, 300)],
+      new Map(), // no far position for ws-s — its current card is missing
+    );
+    expect(stubs).toEqual([]);
+  });
+
+  it('keeps ghost-to-ghost stubs alongside ghost-to-shared ones', () => {
+    const far = new Map<string, GhostBounds>([
+      ['ws-s', { x: 380, y: 80, width: 240, height: 240 }],
+    ]);
+    const stubs = buildGhostWireStubs(
+      [wire('w-1', 'g-a', 'g-b'), wire('w-2', 'g-b', 'ws-s')],
+      [g('g-a', 0, 300), g('g-b', 500, 300)],
+      far,
+    );
+    expect(stubs).toHaveLength(2);
+    expect(stubs.map((s) => s.id)).toEqual(['w-1', 'w-2']);
   });
 });

@@ -602,6 +602,7 @@ describe('TopologyScreen', () => {
       otherWires: [
         { id: 'w2', from_node_id: 'ws-pos', to_node_id: 'ws-wh', direction: 'one-way', relationship_type: 'stock-routing' },
       ],
+      sharedByOtherId: [{ otherId: 'ws-pos', currentId: 'ws-pos' }],
     });
 
     // Closing the panel removes the overlay from the editor props.

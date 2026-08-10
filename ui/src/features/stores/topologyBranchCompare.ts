@@ -156,6 +156,11 @@ export interface TopologyOverlay {
    *  160): the editor draws dashed connectors between ghost workspaces
    *  that are wired together in the other branch. */
   otherWires: TopologyWirePayload[];
+  /** Shared workspaces' other-side id → current-side id (round 161): both
+   *  exact id matches and drift pairs (round 155). The editor resolves
+   *  each current-side id to its LIVE card so a ghost's wire to a shared
+   *  workspace can draw a stub to the real card. */
+  sharedByOtherId: Array<{ otherId: string; currentId: string }>;
 }
 
 export function buildTopologyOverlay(
@@ -189,7 +194,20 @@ export function buildTopologyOverlay(
     .map((ref) => ref.id)
     .filter((id) => currentPos.has(id));
 
-  return { ghosts, onlyHere, differing, otherWires: other?.wires ?? [] };
+  // Shared workspace pairing for the ghost→shared stubs: drift pairs first
+  // (deterministic order), then exact id matches.
+  const sharedByOtherId: TopologyOverlay['sharedByOtherId'] = [];
+  const drift = findDriftPairs(currentPos, otherPos);
+  for (const [otherId, currentId] of drift) {
+    sharedByOtherId.push({ otherId, currentId });
+  }
+  for (const otherId of otherPos.keys()) {
+    if (currentPos.has(otherId)) {
+      sharedByOtherId.push({ otherId, currentId: otherId });
+    }
+  }
+
+  return { ghosts, onlyHere, differing, otherWires: other?.wires ?? [], sharedByOtherId };
 }
 
 // ── Ghost-wire stubs (round 160) ─────────────────────────────────
@@ -216,35 +234,42 @@ export interface GhostWireStub {
   y2: number;
 }
 
-/** Edge midpoints of card A facing card B, and vice versa. */
+/** Edge midpoints of card A facing card B, and vice versa. Cards are the
+ *  ghost/live-card bounds (all 240×240, so size is fixed by the constants). */
 function stubEndpoints(
-  a: GhostPlacement,
-  b: GhostPlacement,
+  a: GhostBounds,
+  b: GhostBounds,
 ): { x1: number; y1: number; x2: number; y2: number } {
-  const aCx = a.x + GHOST_WIDTH / 2;
-  const aCy = a.y + GHOST_HEIGHT / 2;
-  const bCx = b.x + GHOST_WIDTH / 2;
-  const bCy = b.y + GHOST_HEIGHT / 2;
+  const aCx = a.x + a.width / 2;
+  const aCy = a.y + a.height / 2;
+  const bCx = b.x + b.width / 2;
+  const bCy = b.y + b.height / 2;
   const dx = bCx - aCx;
   const dy = bCy - aCy;
 
   if (Math.abs(dx) >= Math.abs(dy)) {
     // Side-by-side: exit/enter on the facing left/right edge midpoints.
     if (dx >= 0) {
-      return { x1: a.x + GHOST_WIDTH, y1: aCy, x2: b.x, y2: bCy };
+      return { x1: a.x + a.width, y1: aCy, x2: b.x, y2: bCy };
     }
-    return { x1: a.x, y1: aCy, x2: b.x + GHOST_WIDTH, y2: bCy };
+    return { x1: a.x, y1: aCy, x2: b.x + b.width, y2: bCy };
   }
   // Above/below: exit/enter on the facing top/bottom edge midpoints.
   if (dy >= 0) {
-    return { x1: aCx, y1: a.y + GHOST_HEIGHT, x2: bCx, y2: b.y };
+    return { x1: aCx, y1: a.y + a.height, x2: bCx, y2: b.y };
   }
-  return { x1: aCx, y1: a.y, x2: bCx, y2: b.y + GHOST_HEIGHT };
+  return { x1: aCx, y1: a.y, x2: bCx, y2: b.y + b.height };
+}
+
+/** A ghost placement as a card bounds rect. */
+function ghostBounds(g: GhostPlacement): GhostBounds {
+  return { x: g.x, y: g.y, width: GHOST_WIDTH, height: GHOST_HEIGHT };
 }
 
 export function buildGhostWireStubs(
   wires: TopologyWirePayload[],
   ghosts: GhostPlacement[],
+  farByOtherId: ReadonlyMap<string, GhostBounds> = new Map(),
 ): GhostWireStub[] {
   if (ghosts.length === 0) return [];
   const ghostById = new Map(ghosts.map((g) => [g.id, g]));
@@ -252,12 +277,29 @@ export function buildGhostWireStubs(
   for (const wire of wires) {
     const a = ghostById.get(wire.from_node_id);
     const b = ghostById.get(wire.to_node_id);
-    if (!a || !b) continue; // both endpoints must be ghosts
+    if (a && b) {
+      // Ghost↔ghost (round 160): both endpoints are laid-out ghosts.
+      stubs.push({
+        id: wire.id,
+        fromId: a.id,
+        toId: b.id,
+        ...stubEndpoints(ghostBounds(a), ghostBounds(b)),
+      });
+      continue;
+    }
+    // Ghost→shared (round 161): exactly one endpoint is a ghost; the far
+    // end is a shared workspace the caller resolved to a LIVE card. No far
+    // position (card not on the canvas) → no stub.
+    const ghost = a ?? b;
+    if (!ghost) continue; // neither endpoint is a ghost
+    const farOtherId = a ? wire.to_node_id : wire.from_node_id;
+    const farBounds = farByOtherId.get(farOtherId);
+    if (!farBounds) continue;
     stubs.push({
       id: wire.id,
-      fromId: a.id,
-      toId: b.id,
-      ...stubEndpoints(a, b),
+      fromId: a ? a.id : farOtherId,
+      toId: a ? farOtherId : (b as GhostPlacement).id,
+      ...stubEndpoints(ghostBounds(ghost), farBounds),
     });
   }
   return stubs;

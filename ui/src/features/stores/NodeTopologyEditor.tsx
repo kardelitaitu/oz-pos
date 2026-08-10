@@ -1565,13 +1565,32 @@ export default function NodeTopologyEditor({
     );
   }, [compareOverlay, pan, zoom, nodes]);
 
-  /** Round 160: dashed stubs for the other branch's ghost-to-ghost wiring,
-   *  drawn between the LAID-OUT ghost positions — a missing satellite
-   *  cluster reads as a mini-topology instead of floating boxes. Wires
-   *  touching a shared/non-ghost workspace produce no stub (deferred). */
+  /** Round 161: shared workspaces as LIVE card bounds, keyed by their
+   *  OTHER-side id (what the other diagram's wires reference). A shared
+   *  workspace whose current card is not on the canvas (deleted unsaved)
+   *  resolves to nothing — its ghost→shared stub is skipped. */
+  const sharedFarEnds = useMemo(() => {
+    const byCurrentId = new Map(
+      nodes
+        .filter((n) => n.type === 'workspace')
+        .map((n) => [n.id, { x: n.x, y: n.y, width: NODE_WIDTH, height: NODE_HEIGHT }] as const),
+    );
+    const far = new Map<string, { x: number; y: number; width: number; height: number }>();
+    for (const { otherId, currentId } of compareOverlay?.sharedByOtherId ?? []) {
+      const bounds = byCurrentId.get(currentId);
+      if (bounds) far.set(otherId, bounds);
+    }
+    return far;
+  }, [compareOverlay, nodes]);
+
+  /** Round 160/161: dashed stubs for the other branch's wiring involving
+   *  ghosts — ghost↔ghost (between laid-out ghosts) and ghost→shared
+   *  (from a ghost card to the shared workspace's LIVE card). A missing
+   *  satellite — one workspace or a whole cluster — reads as a real
+   *  connection instead of a floating box. */
   const ghostStubs = useMemo(
-    () => buildGhostWireStubs(compareOverlay?.otherWires ?? [], laidOutGhosts),
-    [compareOverlay, laidOutGhosts],
+    () => buildGhostWireStubs(compareOverlay?.otherWires ?? [], laidOutGhosts, sharedFarEnds),
+    [compareOverlay, laidOutGhosts, sharedFarEnds],
   );
 
   /** The stub SVG must span the laid-out ghosts even when the current

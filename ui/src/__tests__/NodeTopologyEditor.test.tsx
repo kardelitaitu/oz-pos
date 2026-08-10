@@ -264,6 +264,7 @@ const renderEditor = (props?: {
     onlyHere: string[];
     differing: string[];
     otherWires: Array<{ id: string; from_node_id: string; to_node_id: string; direction: string; relationship_type: string }>;
+    sharedByOtherId: Array<{ otherId: string; currentId: string }>;
   } | null;
   canSave?: boolean;
 }) =>
@@ -405,6 +406,7 @@ describe('NodeTopologyEditor Component', () => {
         onlyHere: ['ws-1'],
         differing: ['store-1'],
         otherWires: [],
+        sharedByOtherId: [],
       },
     });
 
@@ -439,6 +441,7 @@ describe('NodeTopologyEditor Component', () => {
         onlyHere: [],
         differing: [],
         otherWires: [],
+        sharedByOtherId: [],
       },
     });
 
@@ -488,6 +491,7 @@ describe('NodeTopologyEditor Component', () => {
             relationship_type: 'generic',
           },
         ],
+        sharedByOtherId: [],
       },
     });
 
@@ -515,6 +519,49 @@ describe('NodeTopologyEditor Component', () => {
     expect(line.getAttribute('y1')).toBe(String(ay + 120));
     expect(line.getAttribute('x2')).toBe(String(bx));
     expect(line.getAttribute('y2')).toBe(String(by + 120));
+  });
+
+  it('draws a ghost-to-shared stub from a ghost card to the live shared workspace', () => {
+    renderEditor({
+      compareOverlay: {
+        ghosts: [{ id: 'ws-ghost-sat', name: 'Satellite Room', x: 0, y: 300 }],
+        onlyHere: [],
+        differing: [],
+        otherWires: [
+          {
+            id: 'w-ghost-shared',
+            from_node_id: 'ws-ghost-sat',
+            to_node_id: 'ws-other-side',
+            direction: 'one-way',
+            relationship_type: 'stock-routing',
+          },
+        ],
+        sharedByOtherId: [{ otherId: 'ws-other-side', currentId: 'ws-1' }],
+      },
+    });
+
+    const lines = Array.from(document.querySelectorAll('.topology-overlay-stub'));
+    expect(lines).toHaveLength(1);
+    const line = lines[0] as unknown as { getAttribute: (n: string) => string | null };
+
+    // The stub must connect the RENDERED ghost card to the LIVE ws-1 card
+    // (the retail preset's workspace) edge-to-edge. ws-1 is to the right of
+    // the ghost, so the ghost's right edge midpoint → ws-1's left edge
+    // midpoint. Both positions come from the rendered DOM, decoupled from
+    // the preset geometry.
+    const ghost = document.querySelector(
+      '.topology-overlay-ghost[data-overlay-node-id="ws-ghost-sat"]',
+    ) as HTMLElement;
+    const shared = document.querySelector('.topology-node[data-node-id="ws-1"]') as HTMLElement;
+    const gx = parseInt(ghost.style.left, 10);
+    const gy = parseInt(ghost.style.top, 10);
+    const sx = parseInt(shared.style.left, 10);
+    const sy = parseInt(shared.style.top, 10);
+    expect(sx).toBeGreaterThan(gx); // the shared card sits to the RIGHT
+    expect(line.getAttribute('x1')).toBe(String(gx + 240));
+    expect(line.getAttribute('y1')).toBe(String(gy + 120));
+    expect(line.getAttribute('x2')).toBe(String(sx));
+    expect(line.getAttribute('y2')).toBe(String(sy + 120));
   });
 
   it('renders tool rack sidebar and preset buttons', () => {
