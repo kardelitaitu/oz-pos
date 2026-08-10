@@ -192,7 +192,6 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-toast-clipboard-unavailable': 'Clipboard is not available',
   'topology-toast-template-saved': 'Template saved',
   'topology-toast-template-deleted': 'Template deleted',
-  'topology-apply-diff': '{added} added · {removed} removed · {moved} moved · rev {from} → {to}',
   'topology-apply-workspace-diff': '{created} created · {updated} updated · {archived} archived · {typeChanged} type-changed · rev {from} → {to}',
 };
 
@@ -6914,21 +6913,30 @@ describe('NodeTopologyEditor — unsaved-changes indicator', () => {
     expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
   });
 
-  it('shows what the Apply would commit once the canvas is dirty', () => {
-    // Round 148: the dirty chip now carries the Apply change summary — the
-    // canvas diff vs the last committed snapshot plus the revision bump.
+  it('previews the Apply summary on the standalone canvas (no instance seed)', () => {
+    // Round 153: the chip always uses the workspace-instance format — on a
+    // standalone canvas the before-side is synthesized from the committed
+    // snapshot (the demo preset), so a Store node (diagram-only) reads as
+    // zero workspace vectors while a spawned workspace counts as a
+    // creation, with the revision bump on every dirty change.
     renderEditor();
     const summary = () => document.querySelector('.topology-diff-summary')?.textContent ?? '';
     // Fresh preset: the snapshot equals the canvas, so the chip is hidden.
     expect(document.querySelector('.topology-diff-summary')).toBeNull();
 
-    // Spawning a Store node adds exactly one node and one revision step.
+    // Spawning a Store node is diagram-only — no workspace vector — but the
+    // revision still bumps.
     fireEvent.click(screen.getByText('+ Store Node'));
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
-    expect(summary()).toContain('1 added');
-    expect(summary()).toContain('0 removed');
-    expect(summary()).toContain('0 moved');
+    expect(summary()).toContain('0 created');
+    expect(summary()).toContain('0 updated');
+    expect(summary()).toContain('0 archived');
+    expect(summary()).toContain('0 type-changed');
     expect(summary()).toContain('rev 0 → 1');
+
+    // A spawned workspace counts as a creation against the snapshot.
+    fireEvent.click(screen.getByText('+ Retail POS'));
+    expect(summary()).toContain('1 created');
   });
 
   it('previews the workspace-instance diff when instances are seeded', async () => {

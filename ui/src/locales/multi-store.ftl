@@ -70,7 +70,6 @@ topology-zoom-slider-aria = Zoom level
 topology-empty-state-title = Build your store topology
 topology-empty-state-body = Drag tools from the palette onto the canvas, or press 1–4 to add a node. Connect nodes with the port sockets on each card.
 topology-unsaved = Unsaved changes
-topology-apply-diff = { added } added · { removed } removed · { moved } moved · rev { from } → { to }
 topology-apply-workspace-diff = { created } created · { updated } updated · { archived } archived · { typeChanged } type-changed · rev { from } → { to }
 topology-shortcuts-aria = Keyboard shortcuts
 topology-shortcuts-title = Shortcuts

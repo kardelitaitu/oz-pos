@@ -68,7 +68,6 @@ topology-zoom-slider-aria = Tingkat zoom
 topology-empty-state-title = Bangun topologi toko Anda
 topology-empty-state-body = Seret alat dari palet ke kanvas, atau tekan 1–4 untuk menambahkan node. Hubungkan node dengan soket port di setiap kartu.
 topology-unsaved = Perubahan belum disimpan
-topology-apply-diff = { added } ditambahkan · { removed } dihapus · { moved } dipindah · rev { from } → { to }
 topology-apply-workspace-diff = { created } dibuat · { updated } diperbarui · { archived } diarsipkan · { typeChanged } diubah jenisnya · rev { from } → { to }
 topology-shortcuts-aria = Pintasan keyboard
 topology-shortcuts-title = Pintasan

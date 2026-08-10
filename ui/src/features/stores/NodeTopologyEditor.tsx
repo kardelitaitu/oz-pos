@@ -53,7 +53,6 @@ import {
 } from './topologyExport';
 import { TopologyNodeCard } from './topologyNodeCard';
 import { TopologyWireGroup } from './topologyWireGroup';
-import { computeCanvasDiff } from './topologyCanvasDiff';
 import { planTopologyDiff, summarizeTopologyPlan } from './topologyDiff';
 import { cubicBezier, pointUnderCards, polylinePoint, wireUnderCardSegments } from './topologyWireGeometry';
 import { useTopologyEditorGraph, type TopologyHistoryEntry } from './nodeTopologyEditorState';
@@ -4970,60 +4969,48 @@ export default function NodeTopologyEditor({
           </Button>
 
           {isDirty && (() => {
-            // Round 150: when real instances are seeded, preview what an
-            // Apply would commit — the workspace-instance vectors
-            // (create/update/archive) plus the revision bump, computed by
-            // the SAME planTopologyDiff the save path's payload builder is
-            // built on, so the preview can never drift from the Apply. The
-            // plan is total: a workspace mid-wiring (no store ownership
-            // yet) still counts as a creation instead of crashing the chip.
-            if (workspaceInstances !== undefined) {
-              const plan = planTopologyDiff(
-                nodes,
-                workspaceInstances.map((s) => ({
-                  instance_id: s.instanceId,
-                  type_key: s.typeKey,
-                  // exactOptionalPropertyTypes: omit the key, never set
-                  // it to undefined.
-                  ...(s.purposeKey !== undefined ? { purpose_key: s.purposeKey } : {}),
-                  name: s.name,
-                })),
-              );
-              // Round 152: a type change is a destructive recreate (archive
-              // + fresh-id create) — surface it separately so the chip never
-              // reads one as a routine create + archive.
-              const summary = summarizeTopologyPlan(plan);
-              return (
-                <span className="topology-dirty-chip" role="status">
-                  <span className="topology-dirty-dot" aria-hidden="true" />
-                  <Localized id="topology-unsaved">Unsaved changes</Localized>
-                  <span className="topology-diff-summary">
-                    {l10n.getString('topology-apply-workspace-diff', {
-                      created: summary.created,
-                      updated: summary.updated,
-                      archived: summary.archived,
-                      typeChanged: summary.typeChanged,
-                      from: topologyRevision,
-                      to: topologyRevision + 1,
-                    })}
-                  </span>
-                </span>
-              );
-            }
-            // Round 148 fallback (demo/dev canvas without an instance
-            // seed): the canvas diff against the last committed snapshot
-            // plus the revision bump (from = last committed, to = next).
+            // Round 153: the chip always previews the workspace-instance
+            // diff through the SAME planTopologyDiff the save path's payload
+            // builder is built on, so the preview can never drift from the
+            // Apply. With real instances the before-side is the loaded
+            // backend instances (round 150); on a standalone/demo canvas it
+            // is synthesized from the committed snapshot (the preset or the
+            // last-loaded diagram) — the workspace format is the single
+            // honest signal everywhere. The plan is total: a workspace
+            // mid-wiring (no store ownership yet) still counts as a
+            // creation instead of crashing the chip (round 152: a type
+            // change surfaces as a destructive recreate, not a plain
+            // create + archive).
             const snap = appliedSnapshotRef.current;
-            const diff = computeCanvasDiff(snap?.nodes ?? [], snap?.wires ?? [], nodes, wires);
+            const beforeInstances = workspaceInstances !== undefined
+              ? workspaceInstances.map((s) => ({
+                instance_id: s.instanceId,
+                type_key: s.typeKey,
+                // exactOptionalPropertyTypes: omit the key, never set
+                // it to undefined.
+                ...(s.purposeKey !== undefined ? { purpose_key: s.purposeKey } : {}),
+                name: s.name,
+              }))
+              : (snap?.nodes ?? [])
+                .filter((n) => n.type === 'workspace')
+                .map((n) => ({
+                  instance_id: n.id,
+                  type_key: (n.metadata?.['typeKey'] as string) ?? 'store-pos',
+                  purpose_key: (n.metadata?.['purposeKey'] as string) ?? 'general',
+                  name: n.name,
+                }));
+            const plan = planTopologyDiff(nodes, beforeInstances);
+            const summary = summarizeTopologyPlan(plan);
             return (
               <span className="topology-dirty-chip" role="status">
                 <span className="topology-dirty-dot" aria-hidden="true" />
                 <Localized id="topology-unsaved">Unsaved changes</Localized>
                 <span className="topology-diff-summary">
-                  {l10n.getString('topology-apply-diff', {
-                    added: diff.nodesAdded + diff.wiresAdded,
-                    removed: diff.nodesRemoved + diff.wiresRemoved,
-                    moved: diff.nodesMoved,
+                  {l10n.getString('topology-apply-workspace-diff', {
+                    created: summary.created,
+                    updated: summary.updated,
+                    archived: summary.archived,
+                    typeChanged: summary.typeChanged,
                     from: topologyRevision,
                     to: topologyRevision + 1,
                   })}
