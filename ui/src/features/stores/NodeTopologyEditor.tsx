@@ -52,6 +52,7 @@ import {
   deleteTemplate,
 } from './topologyExport';
 import { TopologyNodeCard } from './topologyNodeCard';
+import type { TopologyOverlay } from './topologyBranchCompare';
 import { TopologyWireGroup } from './topologyWireGroup';
 import { planTopologyDiff, summarizeTopologyPlan } from './topologyDiff';
 import { cubicBezier, pointUnderCards, polylinePoint, wireUnderCardSegments } from './topologyWireGeometry';
@@ -338,6 +339,12 @@ export interface NodeTopologyEditorProps {
   onLoadError?: (error: unknown) => void;
   /** Reports that the authoritative topology request completed successfully. */
   onLoadSuccess?: () => void;
+  /** Spatial branch-diff overlay (round 158): the compare panel's
+   *  classification rendered over the canvas. Other-only workspaces become
+   *  ghost cards at their saved positions; current-only and shared-differing
+   *  ids get red / amber markers on their existing cards. Display-only —
+   *  ghosts are pointer-events-none and nothing here writes back. */
+  compareOverlay?: TopologyOverlay | null;
   /**
    * Whether the session user is allowed to persist topology changes.
    * The backend gates `apply_topology_diff` on `staff:update` (granted to
@@ -720,6 +727,7 @@ export default function NodeTopologyEditor({
   onDirtyChange,
   onLoadError,
   onLoadSuccess,
+  compareOverlay,
   canSave = true,
 }: NodeTopologyEditorProps) {
   const { sessionToken } = useWorkspace();
@@ -4309,6 +4317,18 @@ export default function NodeTopologyEditor({
     [nodes],
   );
 
+  /** Per-card overlay marker (round 158): current-only workspaces get the
+   *  red 'only-here' marker, shared-but-differing ones the amber 'differing'
+   *  marker. Derived from the compare panel's classification — the canvas
+   *  and the name lists can never disagree. Null keeps the memo boundary
+   *  clean when no comparison is active. */
+  const overlayMarkerById = useMemo(() => {
+    const map = new Map<string, 'only-here' | 'differing'>();
+    for (const id of compareOverlay?.onlyHere ?? []) map.set(id, 'only-here');
+    for (const id of compareOverlay?.differing ?? []) map.set(id, 'differing');
+    return map;
+  }, [compareOverlay]);
+
   /** Forget a dismissal once its issue is genuinely gone. Gated on
    *  topologyLoaded so the preset placeholder shown during the async load
    *  can never wipe restored dismissals (see the load effect's finally). */
@@ -5890,8 +5910,31 @@ export default function NodeTopologyEditor({
                 onHoverNode={hoverNode}
                 getTelemetry={getTelemetry}
                 isPortCompatible={isPortCompatible}
+                overlayMarker={overlayMarkerById.get(node.id) ?? null}
               />
             ))}
+
+            {/* Round 158: the compare panel's spatial diff. Other-only
+                workspaces render as ghost cards at their SAVED positions in
+                the other branch's diagram — a spatial hint of what that
+                location has that this one does not. Decorative: pointer-
+                events-none and aria-hidden, so the ghost never steals
+                clicks, hover, or focus from a card below. */}
+            {(compareOverlay?.ghosts.length ?? 0) > 0 && (
+              <div className="topology-overlay-ghost-layer" aria-hidden="true">
+                {compareOverlay!.ghosts.map((g) => (
+                  <div
+                    key={g.id}
+                    className="topology-overlay-ghost"
+                    data-overlay-node-id={g.id}
+                    aria-hidden="true"
+                    style={{ left: `${g.x}px`, top: `${g.y}px` }}
+                  >
+                    <span className="topology-overlay-ghost-name">{g.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Round 146: the under-card segments of wires that cross a card
                 they do not connect to, drawn on top so the wire reads as

@@ -259,6 +259,7 @@ const renderEditor = (props?: {
   allowLegacyApply?: boolean;
   branchId?: string;
   onDirtyChange?: (dirty: boolean) => void;
+  compareOverlay?: { ghosts: Array<{ id: string; name: string; x: number; y: number }>; onlyHere: string[]; differing: string[] } | null;
   canSave?: boolean;
 }) =>
   renderWithProvidersSync(<NodeTopologyEditor currentTier="standard" {...props} />, multiStoreFtl, sharedFtl);
@@ -390,6 +391,36 @@ describe('NodeTopologyEditor Component', () => {
     expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
     expect(screen.getByText('Retail POS #1')).toBeInTheDocument();
     expect(screen.getByText('Main Stock Room')).toBeInTheDocument();
+  });
+
+  it('renders the branch-diff overlay: ghost cards and card markers', () => {
+    renderEditor({
+      compareOverlay: {
+        ghosts: [{ id: 'ws-ghost', name: 'Stock Room', x: 480, y: 360 }],
+        onlyHere: ['ws-1'],
+        differing: ['store-1'],
+      },
+    });
+
+    // Other-only workspaces render as ghost cards at the other diagram's
+    // saved position — decorative (never a real, interactive card).
+    const ghost = document.querySelector(
+      '.topology-overlay-ghost[data-overlay-node-id="ws-ghost"]',
+    ) as HTMLElement | null;
+    expect(ghost).not.toBeNull();
+    expect(ghost!.style.left).toBe('480px');
+    expect(ghost!.style.top).toBe('360px');
+    expect(ghost!.textContent).toContain('Stock Room');
+    expect(ghost!.getAttribute('aria-hidden')).toBe('true');
+
+    // Current-only cards get the red marker, shared-differing ones the amber
+    // marker; cards outside the classification keep their plain look.
+    const ws1 = document.querySelector('.topology-node[data-node-id="ws-1"]') as HTMLElement;
+    expect(ws1.className).toContain('topology-node--overlay-only-here');
+    const store1 = document.querySelector('.topology-node[data-node-id="store-1"]') as HTMLElement;
+    expect(store1.className).toContain('topology-node--overlay-differing');
+    const wh1 = document.querySelector('.topology-node[data-node-id="wh-1"]') as HTMLElement;
+    expect(wh1.className).not.toContain('topology-node--overlay-');
   });
 
   it('renders tool rack sidebar and preset buttons', () => {

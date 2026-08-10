@@ -108,6 +108,7 @@ let capturedEditorProps: {
   onDirtyChange?: (dirty: boolean) => void;
   onLoadError?: (error: unknown) => void;
   onLoadSuccess?: () => void;
+  compareOverlay?: unknown;
   canSave?: boolean;
 } = {};
 vi.mock('@/features/stores/NodeTopologyEditor', () => ({
@@ -121,6 +122,7 @@ vi.mock('@/features/stores/NodeTopologyEditor', () => ({
     onDirtyChange?: (dirty: boolean) => void;
     onLoadError?: (error: unknown) => void;
     onLoadSuccess?: () => void;
+    compareOverlay?: unknown;
     canSave?: boolean;
   }) => {
     capturedEditorProps = props;
@@ -546,6 +548,62 @@ describe('TopologyScreen', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'topology-compare-close' }));
     expect(screen.queryByText('No differences')).not.toBeInTheDocument();
+  });
+
+  it('compare panel renders the spatial overlay: ghosts and markers on the canvas', async () => {
+    // Instances back the two workspace cards the diagrams share/reference,
+    // so they actually render on the canvas (the editor never resurrects a
+    // workspace node without a live instance).
+    mockListWorkspacesScoped.mockResolvedValue([
+      { instance_id: 'ws-pos', type_key: 'store-pos', store_id: 'store-1', store_name: 'Main Street', purpose_key: 'checkout', name: 'Front Register', description: '', icon: 'pos', layout_mode: 'sidebar', colour: null, is_default: false },
+      { instance_id: 'ws-kds', type_key: 'kds', store_id: 'store-1', store_name: 'Main Street', purpose_key: 'kitchen', name: 'Kitchen Display', description: '', icon: 'kds', layout_mode: 'sidebar', colour: null, is_default: false },
+    ]);
+    mockListStores.mockResolvedValue([
+      { id: 'store-1', name: 'Main Street', is_primary: true, address: '', tax_id: '', currency: 'USD', timezone: 'UTC', created_at: '', updated_at: '' },
+      { id: 'store-2', name: 'Second Street', is_primary: false, address: '', tax_id: '', currency: 'USD', timezone: 'UTC', created_at: '', updated_at: '' },
+    ]);
+    mockLoadTopology.mockImplementation((branchId?: string) => {
+      if (branchId === 'store-1') {
+        return Promise.resolve({
+          nodes: [
+            { id: 'ws-pos', type: 'workspace', name: 'Front Register', x: 100, y: 100, metadata: { typeKey: 'store-pos' } },
+            { id: 'ws-kds', type: 'workspace', name: 'Kitchen Display', x: 400, y: 100, metadata: { typeKey: 'kds' } },
+          ],
+          wires: [{ id: 'w1', from_node_id: 'ws-pos', to_node_id: 'ws-kds', direction: 'one-way', relationship_type: 'generic' }],
+        });
+      }
+      if (branchId === 'store-2') {
+        return Promise.resolve({
+          nodes: [
+            { id: 'ws-pos', type: 'workspace', name: 'Front Register', x: 10, y: 20, metadata: { typeKey: 'store-pos' } },
+            { id: 'ws-wh', type: 'workspace', name: 'Stock Room', x: 480, y: 360, metadata: { typeKey: 'store-pos' } },
+          ],
+          wires: [{ id: 'w2', from_node_id: 'ws-pos', to_node_id: 'ws-wh', direction: 'one-way', relationship_type: 'stock-routing' }],
+        });
+      }
+      return Promise.resolve(null);
+    });
+    await renderReady(2);
+
+    fireEvent.click(screen.getByRole('button', { name: 'topology-compare-open' }));
+    await waitFor(() =>
+      expect(screen.getByText('1 workspaces only here · 1 only in Second Street · 1 differ')).toBeInTheDocument(),
+    );
+
+    // The spatial overlay is derived from the SAME saved-vs-saved
+    // comparison the summary shows: the other-only workspace becomes a
+    // ghost at ITS diagram's position; the current-only and shared-differing
+    // ids become card markers. (The editor is mocked here — the canvas
+    // rendering of ghosts/markers is pinned in the editor suite.)
+    expect(capturedEditorProps.compareOverlay).toEqual({
+      ghosts: [{ id: 'ws-wh', name: 'Stock Room', x: 480, y: 360 }],
+      onlyHere: ['ws-kds'],
+      differing: ['ws-pos'],
+    });
+
+    // Closing the panel removes the overlay from the editor props.
+    fireEvent.click(screen.getByRole('button', { name: 'topology-compare-close' }));
+    await waitFor(() => expect(capturedEditorProps.compareOverlay).toBeNull());
   });
 
   // ── #4: Atomic diff — single applyTopologyDiff call ────────────

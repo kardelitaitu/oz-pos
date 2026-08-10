@@ -51,6 +51,11 @@ export interface TopologyNodeCardProps {
    *  warehouse — renders an info chip on the card. The editor clears it the
    *  moment the missing-stock-routing error resolves. */
   stockWireHint: boolean;
+  /** Branch-diff overlay marker (round 158): 'only-here' tints the card red
+   *  (the workspace exists in this branch's saved diagram only),
+   *  'differing' amber (shared but wired/named/retyped differently). Null
+   *  on every other card keeps the memo boundary clean. */
+  overlayMarker?: 'only-here' | 'differing' | null;
   isFresh: boolean;
   isDimmed: boolean;
   isRenameable: boolean;
@@ -93,6 +98,7 @@ function TopologyNodeCardImpl({
   countBadge,
   hasOverlap,
   stockWireHint,
+  overlayMarker,
   isFresh,
   isDimmed,
   isRenameable,
@@ -126,7 +132,7 @@ function TopologyNodeCardImpl({
         if (isRenameable) onStartRename(node.id, node.name);
       }}
       data-node-id={node.id}
-      className={`topology-node node-type-${node.type} ${isSelected ? 'node-selected' : ''} ${isConnectingSource ? 'node-connecting-source' : ''}${isFresh ? ' node-fresh' : ''}${isDimmed ? ' node-dimmed' : ''}`}
+      className={`topology-node node-type-${node.type} ${isSelected ? 'node-selected' : ''} ${isConnectingSource ? 'node-connecting-source' : ''}${isFresh ? ' node-fresh' : ''}${isDimmed ? ' node-dimmed' : ''}${overlayMarker ? ` topology-node--overlay-${overlayMarker}` : ''}`}
       style={{ left: `${node.x}px`, top: `${node.y}px` }}
       role="group"
       // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- the selectable card is focusable so Enter/Space select it from the keyboard

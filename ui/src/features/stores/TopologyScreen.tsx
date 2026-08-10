@@ -34,7 +34,9 @@ import {
 } from './topologyContract';
 import { computeTopologyDiff } from './topologyDiff';
 import {
+  buildTopologyOverlay,
   compareBranchTopologies,
+  type TopologyOverlay,
   type BranchTopologyComparison,
 } from './topologyBranchCompare';
 
@@ -128,6 +130,12 @@ export default function TopologyScreen() {
   const [compareOtherBranchId, setCompareOtherBranchId] = useState<string | null>(null);
   const [compareResult, setCompareResult] = useState<BranchTopologyComparison | null>(null);
   const [compareLoading, setCompareLoading] = useState(false);
+  /** Spatial overlay (round 158): the other branch's topology rendered over
+   *  the canvas while the compare panel is open — other-only workspaces as
+   *  ghost cards at their saved positions, current-only and differing ones
+   *  as card markers. Computed from the same saved-vs-saved comparison the
+   *  panel summarises, so the canvas and the name lists can never disagree. */
+  const [compareOverlay, setCompareOverlay] = useState<TopologyOverlay | null>(null);
 
   /** Set once the first stores/listStores resolution lands — before that,
    *  the seeds must read as undefined ("not supplied yet") rather than the
@@ -197,6 +205,7 @@ export default function TopologyScreen() {
         loadTopology(otherBranchId),
       ]);
       setCompareResult(compareBranchTopologies(currentData, otherData));
+      setCompareOverlay(buildTopologyOverlay(currentData, otherData));
     } catch (err) {
       setCompareResult(null);
       addToast({
@@ -219,6 +228,7 @@ export default function TopologyScreen() {
   const closeCompare = useCallback(() => {
     setCompareOpen(false);
     setCompareResult(null);
+    setCompareOverlay(null);
   }, []);
 
   // Recompute when the user picks a different comparison target.
@@ -599,6 +609,7 @@ export default function TopologyScreen() {
         key={selectedBranchId ?? 'unassigned'}
         branchId={selectedBranchId ?? 'unassigned'}
         currentTier={licenseTier as 'free' | 'one_time' | 'standard' | 'pro' | 'premium' | 'enterprise'}
+        compareOverlay={compareOverlay}
         {...(workspaceSeed !== undefined ? { workspaceInstances: workspaceSeed } : {})}
         {...(branchLocationSeed !== undefined ? { branchLocations: branchLocationSeed } : {})}
         onRenameBranch={handleRenameBranch}

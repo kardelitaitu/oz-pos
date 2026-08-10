@@ -133,6 +133,61 @@ function findDriftPairs(
   return drift;
 }
 
+// ── Canvas overlay descriptors (round 158) ───────────────────────
+//
+// The Compare panel's spatial diff: the other branch's topology rendered
+// over the canvas. Other-only workspaces become ghost cards at their
+// SAVED positions in the other diagram; current-only workspaces get a red
+// marker on their existing card; shared-but-differing workspaces an amber
+// one. Pure and display-only — the editor consumes the descriptor list
+// and never writes anything back.
+
+export interface TopologyOverlay {
+  /** Other-only workspaces: render as ghost cards at the other diagram's
+   *  saved positions (its coordinates, not the current side's). */
+  ghosts: Array<{ id: string; name: string; x: number; y: number }>;
+  /** Current-only workspace ids: a red marker on the existing card. */
+  onlyHere: string[];
+  /** Shared-but-differing workspace ids: an amber marker on the existing
+   *  card. A drifted-id pair (round 155) is shared — it lands here only
+   *  when its wiring actually differs. */
+  differing: string[];
+}
+
+export function buildTopologyOverlay(
+  current: TopologyDiagram | null,
+  other: TopologyDiagram | null,
+): TopologyOverlay {
+  const comparison = compareBranchTopologies(current, other);
+
+  const otherPos = new Map(
+    (other?.nodes ?? [])
+      .filter((n) => n.type === 'workspace')
+      .map((n) => [n.id, n] as const),
+  );
+  const currentPos = new Map(
+    (current?.nodes ?? [])
+      .filter((n) => n.type === 'workspace')
+      .map((n) => [n.id, n] as const),
+  );
+
+  const ghosts: TopologyOverlay['ghosts'] = [];
+  for (const ref of comparison.onlyInOther) {
+    const node = otherPos.get(ref.id);
+    if (!node) continue;
+    ghosts.push({ id: ref.id, name: ref.name, x: node.x, y: node.y });
+  }
+
+  const onlyHere = comparison.onlyInCurrent
+    .map((ref) => ref.id)
+    .filter((id) => currentPos.has(id));
+  const differing = comparison.differing
+    .map((ref) => ref.id)
+    .filter((id) => currentPos.has(id));
+
+  return { ghosts, onlyHere, differing };
+}
+
 export function compareBranchTopologies(
   current: TopologyDiagram | null,
   other: TopologyDiagram | null,

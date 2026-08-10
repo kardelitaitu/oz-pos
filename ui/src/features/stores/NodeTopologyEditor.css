@@ -599,6 +599,53 @@
   box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-accent), var(--shadow-md);
 }
 
+/* Round 158: branch-diff overlay markers. The compare panel classifies
+   the saved diagrams; the markers tint the LIVE cards so an operator sees
+   WHERE locations differ — red for a workspace only this branch has,
+   amber for one that is shared but wired/named/retyped differently. */
+/* Flat ring markers (no --shadow-*: these are in-canvas surfaces, not
+   elevated cards, and the ring alone reads clearly at small sizes). */
+.topology-node--overlay-only-here {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-danger);
+}
+
+.topology-node--overlay-differing {
+  border-color: var(--color-warning);
+  box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-warning);
+}
+
+/* Ghost cards: other-only workspaces from the compared branch, placed at
+   their SAVED positions in that diagram. Decorative hints — never
+   interactive, never focusable — so the overlay cannot steal a click,
+   hover, or keyboard stop from a real card below. */
+.topology-overlay-ghost-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.topology-overlay-ghost {
+  position: absolute;
+  width: 240px;
+  height: 240px;
+  box-sizing: border-box;
+  border: 2px dashed var(--color-success, #10b981);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-success, #10b981) 12%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 8px;
+}
+
+.topology-overlay-ghost-name {
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  color: var(--color-success-fg, var(--color-fg));
+}
+
 .node-connecting-source {
   border-color: var(--color-warning) !important;
 }
