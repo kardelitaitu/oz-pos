@@ -3182,7 +3182,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** new test green standalone · editor suite 471/471 (+1) · full UI suite 275 files / 4,675 tests (+1) · a11y 8/8 · typecheck ✓ · eslint 7 pre-existing warnings (0 new) · bundle parity 0 missing keys · `scripts/verify-bundle-parity.py` clean.
 
-**Commits:** TBD
+**Commits:** `a47a46bb`
 
 **Deliberately NOT done:** no rebase/merge of the stale edits onto the authoritative revision (the edits were REJECTED by the backend — adopting the newer topology and letting the user re-apply is the honest recovery; a merge would need an operational conflict-resolution UX). No dev-mock revision-conflict simulation (the vitest harness mocks the API directly; the browser-mock gap is a separate follow-up for the preview build).
 
