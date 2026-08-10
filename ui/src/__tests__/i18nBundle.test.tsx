@@ -17,7 +17,7 @@ import { renderInAct } from '@/test-utils/renderInAct';
 import { screen } from '@testing-library/react';
 import { Localized, LocalizationProvider, ReactLocalization } from '@fluent/react';
 import { getBundle, getAvailableLocales } from '@/i18n';
-import { scanLocaleFiles, scanLocalizedVars } from '@/i18n/barePlaceholderScan';
+import { scanLocaleFiles, scanLocalizedVars, scanTranslationVars } from '@/i18n/barePlaceholderScan';
 import { withFluentLocale } from '@/locales/test-utils';
 import sharedId from '@/locales/shared.id.ftl?raw';
 import sharedEn from '@/locales/shared.ftl?raw';
@@ -508,5 +508,17 @@ describe('i18n bare-placeholder scan (round 156)', () => {
 describe('i18n Localized-vars cross-check (round 164)', () => {
   it('finds no vars mismatches across every Localized site and en bundle', () => {
     expect(scanLocalizedVars()).toEqual([]);
+  });
+});
+
+// Round 165: the translation-var drift check. The en-side gate (above)
+// aligns every site to the en contract, so an id translation referencing
+// a var its en counterpart never declares renders a literal `{$var}`
+// placeholder for Indonesian users. Subset direction: a translation
+// dropping a var is safe, only drift is flagged. Same gate, so a
+// regression fails closed.
+describe('i18n translation-var drift scan (round 165)', () => {
+  it('finds no var drift across every id bundle against its en counterpart', () => {
+    expect(scanTranslationVars()).toEqual([]);
   });
 });

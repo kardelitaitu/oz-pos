@@ -362,3 +362,89 @@ export function scanLocalizedVars(): LocalizedVarsHit[] {
   }
   return hits;
 }
+
+// ── Translation var drift (round 165) ────────────────────────────
+//
+// The en-side gate (above) aligns every `<Localized>` site to the en
+// contract, so a site can only provide the vars the en message
+// declares. An id translation referencing any OTHER variable name
+// therefore renders a literal `{$var}` placeholder for Indonesian
+// users. This scan checks the SUBSET direction: a translation DROPPING
+// a var is safe in Fluent (unused vars are ignored) — only drift (a
+// var the en counterpart never declares) is a defect. No skip list is
+// needed: legitimate omissions are safe by construction.
+
+export interface TranslationVarDriftHit {
+  file: string;
+  line: number;
+  id: string;
+  /** `value` or the attribute name carrying the drifted var(s). */
+  attr: string;
+  /** The var(s) the id message references that en never declares. */
+  vars: string[];
+}
+
+/**
+ * Pure drift decision: the id contract's vars must be a SUBSET of the
+ * en counterpart's, compared per value and per attribute (attributes
+ * only when present in BOTH — an id-only attribute is never localized,
+ * an en-only attribute is a separate omission defect class). Returns
+ * one entry per drifted value/attribute with the offending var names.
+ */
+export function translationVarDrift(
+  idContract: MessageVarContract,
+  enContract: MessageVarContract,
+): Array<{ attr: string; vars: string[] }> {
+  const drift: Array<{ attr: string; vars: string[] }> = [];
+  const enValue = new Set(enContract.value);
+  const idValueDrift = idContract.value.filter((v) => !enValue.has(v));
+  if (idValueDrift.length > 0) drift.push({ attr: 'value', vars: idValueDrift });
+  for (const [attr, idVars] of idContract.attributes) {
+    const enVars = enContract.attributes.get(attr);
+    if (enVars === undefined) continue; // id-only attribute — never localized
+    const enAttr = new Set(enVars);
+    const drifted = idVars.filter((v) => !enAttr.has(v));
+    if (drifted.length > 0) drift.push({ attr, vars: drifted });
+  }
+  return drift;
+}
+
+/**
+ * Repo-wide drift scan: every message in every `*.id.ftl` bundle that
+ * also exists in the en bundles must reference only vars its en
+ * counterpart declares. Missing id keys, en-only keys, and id-only
+ * attributes are the parity gate's / a separate defect class's job.
+ */
+export function scanTranslationVars(): TranslationVarDriftHit[] {
+  const ftlModules = import.meta.glob(['../locales/*.ftl', '!../locales/*.id.ftl'], {
+    query: '?raw',
+    import: 'default',
+    eager: true,
+  });
+  const enDeclared = new Map<string, MessageVarContract>();
+  for (const source of Object.values(ftlModules)) {
+    for (const [id, contract] of messageDeclaredVars(source as string)) {
+      enDeclared.set(id, contract);
+    }
+  }
+
+  const idModules = import.meta.glob('../locales/*.id.ftl', {
+    query: '?raw',
+    import: 'default',
+    eager: true,
+  });
+  const hits: TranslationVarDriftHit[] = [];
+  for (const [path, source] of Object.entries(idModules)) {
+    const text = source as string;
+    for (const [id, idContract] of messageDeclaredVars(text)) {
+      const enContract = enDeclared.get(id);
+      if (enContract === undefined) continue; // id-only key — the parity gate owns that
+      const drift = translationVarDrift(idContract, enContract);
+      for (const entry of drift) {
+        const line = text.slice(0, text.indexOf(`${id} =`)).split('\n').length;
+        hits.push({ file: path, line, id, ...entry });
+      }
+    }
+  }
+  return hits;
+}

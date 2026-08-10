@@ -17,7 +17,10 @@ import {
   messageDeclaredVars,
   findLocalizedSites,
   scanLocalizedVars,
+  scanTranslationVars,
+  translationVarDrift,
   varsMismatch,
+  type MessageVarContract,
 } from '@/i18n/barePlaceholderScan';
 
 describe('findBarePlaceholders', () => {
@@ -212,6 +215,75 @@ describe('varsMismatch', () => {
 
   it('does not charge attribute vars when attrs are unresolvable (null)', () => {
     expect(varsMismatch(['name'], contract, null)).toBeNull();
+  });
+});
+
+// ── Translation var drift (round 165) ────────────────────────────
+//
+// The round-164 gate aligns every <Localized> site to the EN contract,
+// so a site can only ever provide the vars the en message declares.
+// An id translation that references ANY other variable name therefore
+// renders a literal `{$var}` placeholder for Indonesian users. The
+// check is subset-direction: a translation DROPPING a var is fine in
+// Fluent (unused vars are ignored) — only drift (a var the en
+// counterpart never declares) is a defect. That is why no skip list is
+// needed: legitimate omissions are already safe by construction.
+
+describe('translationVarDrift', () => {
+  const en: MessageVarContract = {
+    value: ['number', 'count'],
+    attributes: new Map([['aria-label', ['number']]]),
+  };
+
+  it('is clean when the translation mirrors the en contract', () => {
+    expect(
+      translationVarDrift(
+        { value: ['number', 'count'], attributes: new Map([['aria-label', ['number']]]) },
+        en,
+      ),
+    ).toEqual([]);
+  });
+
+  it('allows a translation to DROP a var (subset direction — unused vars are safe)', () => {
+    expect(translationVarDrift({ value: ['count'], attributes: new Map() }, en)).toEqual([]);
+  });
+
+  it('flags a value var the en message never declares (name drift)', () => {
+    expect(translationVarDrift({ value: ['count', 'nomor'], attributes: new Map() }, en)).toEqual([
+      { attr: 'value', vars: ['nomor'] },
+    ]);
+  });
+
+  it('flags an attribute var the en attribute never declares', () => {
+    expect(
+      translationVarDrift(
+        { value: [], attributes: new Map([['aria-label', ['nomor']]]) },
+        en,
+      ),
+    ).toEqual([{ attr: 'aria-label', vars: ['nomor'] }]);
+  });
+
+  it('ignores an id-only attribute (never localized — the site picks attrs from en)', () => {
+    expect(
+      translationVarDrift(
+        { value: [], attributes: new Map([['title', ['nomor']]]) },
+        en,
+      ),
+    ).toEqual([]);
+  });
+
+  it('ignores an en-only attribute (attribute omission is a separate defect class)', () => {
+    expect(translationVarDrift({ value: [], attributes: new Map() }, en)).toEqual([]);
+  });
+});
+
+describe('scanTranslationVars (repo integrity)', () => {
+  it('finds no var drift across every id bundle against its en counterpart', () => {
+    // An id message referencing a var its en counterpart never declares
+    // renders a literal placeholder for Indonesian users — the site can
+    // only provide the en contract's vars (round 164 gates that). This
+    // runs in the same gate as the en-side cross-check.
+    expect(scanTranslationVars()).toEqual([]);
   });
 });
 
