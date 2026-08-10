@@ -2,18 +2,34 @@
 REM ============================================================================
 REM  run-hfuzz-overnight.bat — launches the honggfuzz overnight campaign.
 REM
-REM  Runs fuzz/hfuzz/run_overnight.sh (the "run while you sleep" fuzzing
-REM  campaign) inside WSL, in a minimized console, so this .bat returns
-REM  immediately and you can close it / go to sleep. Equivalent to:
+REM  Two modes:
+REM
+REM    run-hfuzz-overnight.bat            launcher (default, double-click):
+REM                                       starts the campaign in a MINIMIZED
+REM                                       WSL console and returns immediately,
+REM                                       so you can close this window and go
+REM                                       to sleep. Closing THIS window does NOT
+REM                                       stop the campaign — close the minimized
+REM                                       console (or Ctrl-C / pkill inside WSL)
+REM                                       to stop it.
+REM
+REM    run-hfuzz-overnight.bat foreground runs the campaign in THIS window
+REM                                       with live output. Closing this window
+REM                                       kills wsl.exe and stops the fuzzing —
+REM                                       regular .bat behavior.
+REM
+REM  Both modes run fuzz/hfuzz/run_overnight.sh (the "run while you sleep"
+REM  fuzzing campaign) inside WSL. Equivalent to:
 REM
 REM      cd fuzz/hfuzz && ./run_overnight.sh > /tmp/hfuzz-overnight.out 2>&1
 REM
 REM  Why a minimized console instead of `nohup ... &`? On WSL2, background
 REM  processes are killed when the wsl.exe session that spawned them exits,
-REM  so the campaign is run in the FOREGROUND of a minimized wsl.exe console
-REM  (start /min). That keeps the WSL VM alive for the whole campaign and the
-REM  .bat returns immediately. Keep the minimized window open; closing it
-REM  stops the campaign. All output goes to /tmp/hfuzz-overnight.out.
+REM  so the launcher runs the campaign in the FOREGROUND of a minimized
+REM  wsl.exe console (start /min). That keeps the WSL VM alive for the whole
+REM  campaign and the .bat returns immediately. Keep the minimized window
+REM  open; closing it stops the campaign. All output goes to
+REM  /tmp/hfuzz-overnight.out.
 REM
 REM  Why WSL: honggfuzz does not build or run on native Windows — the whole
 REM  fuzz/hfuzz/ crate is Linux/macOS/WSL-only (see fuzz/hfuzz/README.md).
@@ -41,6 +57,11 @@ REM  DO NOT remove `pause`: the console closes on exit and hides errors.
 REM ============================================================================
 setlocal EnableDelayedExpansion
 
+REM Mode: launcher (default) or foreground.
+set "MODE=launcher"
+if /i "%~1"=="foreground" set "MODE=foreground"
+if /i "%~1"=="fg"         set "MODE=foreground"
+
 REM Repo root = one level above this bat's directory (scripts/).
 set "ROOT=%~dp0.."
 
@@ -66,15 +87,25 @@ for %%V in (HFUZZ_RUN_TIME HFUZZ_TARGETS HFUZZ_THREADS HFUZZ_WORKSPACE HFUZZ_REP
     )
 )
 
-REM Launch the campaign in a minimized WSL console; the console keeps WSL
-REM alive for the whole run, and this bat returns immediately.
+REM Launch the campaign.
 echo Launching overnight honggfuzz campaign...
-echo   minimized console: keep it open until the campaign finishes
+if "%MODE%"=="foreground" (
+    echo   running in THIS window - close it to stop the campaign
+) else (
+    echo   minimized console: keep it open until the campaign finishes
+)
 echo   campaign log (inside WSL): /tmp/hfuzz-overnight.out
-start "OZ-POS hfuzz overnight" /min wsl.exe %DISTRO_ARGS% bash -lc "!EXPORTS! cd '!WSL_ROOT!/fuzz/hfuzz' && ./run_overnight.sh > /tmp/hfuzz-overnight.out 2>&1"
-
-echo [OK] Launched. This window can be closed.
-echo   watch progress from WSL:  tail -f /tmp/hfuzz-overnight.out
+if "%MODE%"=="foreground" (
+    REM Foreground: run in this window with live output. Closing the
+    REM window kills wsl.exe and stops the fuzzing.
+    wsl.exe %DISTRO_ARGS% bash -lc "!EXPORTS! cd '!WSL_ROOT!/fuzz/hfuzz' && ./run_overnight.sh"
+    echo [OK] Campaign finished - this window can be closed.
+) else (
+    REM Launcher: hand off to a minimized wsl.exe console, return now.
+    start "OZ-POS hfuzz overnight" /min wsl.exe %DISTRO_ARGS% bash -lc "!EXPORTS! cd '!WSL_ROOT!/fuzz/hfuzz' && ./run_overnight.sh > /tmp/hfuzz-overnight.out 2>&1"
+    echo [OK] Launched. This window can be closed.
+    echo   watch progress from WSL:  tail -f /tmp/hfuzz-overnight.out
+)
 echo   next morning:             cd fuzz/hfuzz ^&^& ./triage_crashes.sh
 pause
 endlocal
