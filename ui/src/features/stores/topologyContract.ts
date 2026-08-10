@@ -656,9 +656,13 @@ export function validateTopologyGraph(
 
   // Warehouse capacity guard: a stock-bearing wire into a Stock Room
   // (stock-routing, or inventory-transfer — round 83, hub-and-spoke) is
-  // only routable while the target has room. The design-time metadata
-  // numbers (rounds 70-71) drive it — no capacity metadata means no
-  // check, so legacy graphs with no numbers stay unflagged.
+  // only routable while the target has room. Only wires landing on the
+  // shared operational input ports (stock-in/transfer-in) count — the
+  // backend capacity guard filters on the same set, and a stock-bearing
+  // wire on the ownership port (location-in) is an invalid connection, not
+  // a capacity event (round 135). The design-time metadata numbers
+  // (rounds 70-71) drive it — no capacity metadata means no check, so
+  // legacy graphs with no numbers stay unflagged.
   if (capacityEnforced) {
     // Round 89: the at-capacity error is a property of the TARGET warehouse,
     // not of each inbound wire — a full room fed by two stock-bearing wires
@@ -668,6 +672,7 @@ export function validateTopologyGraph(
     for (const wire of graph.wires) {
       if (wire.relationshipType !== 'stock-routing'
         && wire.relationshipType !== 'inventory-transfer') continue;
+      if (!isWarehouseOperationalInputPort(wire.toPortId)) continue;
       const target = graph.nodes.find((node) => node.id === wire.toNodeId);
       if (!target || target.kind !== 'warehouse') continue;
       if (target.capacity === undefined || target.stock === undefined) continue;
@@ -685,12 +690,13 @@ export function validateTopologyGraph(
 
     // Reverse guard: a warehouse configured with room but NO incoming
     // stock-bearing wire is an unserviced Stock Room — prompt the user to
-    // route stock in. ANY inbound stock-bearing wire services the prompt:
-    // stock-routing (workspace → warehouse) OR inventory-transfer
-    // (warehouse → warehouse, round 82 — hub-and-spoke models where a
-    // satellite is fed by a hub). Skipped when the warehouse is full
-    // (stock >= capacity; nothing should route in then) or has no capacity
-    // metadata (legacy graphs with no design-time numbers stay unflagged).
+    // route stock in. Only an inbound stock-bearing wire on an operational
+    // input port (stock-in/transfer-in) services the prompt — a stock wire
+    // on the ownership port is an invalid connection, not a route (round
+    // 135, mirroring the backend servicing guard). Skipped when the
+    // warehouse is full (stock >= capacity; nothing should route in then)
+    // or has no capacity metadata (legacy graphs with no design-time
+    // numbers stay unflagged).
     for (const node of graph.nodes) {
       if (node.kind !== 'warehouse') continue;
       if (node.capacity === undefined) continue;
@@ -698,7 +704,8 @@ export function validateTopologyGraph(
       const hasStockInbound = graph.wires.some(
         (wire) =>
           (wire.relationshipType === 'stock-routing' || wire.relationshipType === 'inventory-transfer')
-          && wire.toNodeId === node.id,
+          && wire.toNodeId === node.id
+          && isWarehouseOperationalInputPort(wire.toPortId),
       );
       if (hasStockInbound) continue;
       errors.push({

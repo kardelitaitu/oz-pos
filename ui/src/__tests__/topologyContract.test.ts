@@ -679,6 +679,48 @@ describe('semantic topology contract', () => {
     }));
   });
 
+  it('does not flag warehouse-at-capacity for a stock wire on a non-operational port', () => {
+    // Round 135: the backend capacity guard only counts wires landing on
+    // the shared operational input ports (stock-in/transfer-in) — a
+    // stock-routing wire on the ownership port (location-in) is an invalid
+    // connection, not a capacity event, so the backend surfaces
+    // invalid-semantic-connection and never warehouse-at-capacity. The
+    // frontend contract must agree, or a direct-IPC payload reports a
+    // different error set than the backend accepts.
+    const normalized = graph(
+      [branch(), workspace('ws-1'), warehouseWith('wh-1', { stock: 1000, capacity: 1000 })],
+      [
+        warehouseScopeWire('w-scope', 'wh-1'),
+        { ...stockWire('w-badport', 'ws-1', 'wh-1'), toPortId: 'location-in' },
+      ],
+      { addWarehouseScope: false },
+    );
+
+    const errors = validateTopologyGraph(normalized, 'pro');
+    expect(errors.filter((e) => e.code === 'warehouse-at-capacity')).toEqual([]);
+  });
+
+  it('flags warehouse-missing-stock-routing when the only inbound stock wire is on a non-operational port', () => {
+    // Round 135 reverse guard: the backend servicing rule requires the
+    // inbound stock-bearing wire on an operational input port; a stock
+    // wire on the ownership port does NOT service the room, so the backend
+    // rejects with warehouse-missing-stock-routing. The frontend must
+    // agree, or it blesses a diagram the backend rejects.
+    const normalized = graph(
+      [branch(), workspace('ws-1'), warehouseWith('wh-1', { stock: 100, capacity: 1000 })],
+      [
+        warehouseScopeWire('w-scope', 'wh-1'),
+        { ...stockWire('w-badport', 'ws-1', 'wh-1'), toPortId: 'location-in' },
+      ],
+      { addWarehouseScope: false },
+    );
+
+    const errors = validateTopologyGraph(normalized, 'pro');
+    expect(errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'warehouse-missing-stock-routing', nodeId: 'wh-1' }),
+    ]));
+  });
+
   it('keeps a three-warehouse transfer chain clean end to end (deep hub-and-spoke)', () => {
     // Round 85: hub ← workspace (stock), mid ← hub (transfer), leaf ← mid
     // (transfer). Every warehouse has an inbound stock-bearing wire and
