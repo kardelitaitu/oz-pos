@@ -3015,3 +3015,19 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Deliberately NOT done:** the port-snap `hoveredTarget` stays in the component — it is connection-drag-scoped (the connection machine's preview), not a canvas-hover affordance, and its lifetime is already coupled to `connectingFromNodeId` by an effect. The context-menu / confirm-dialog / finder modals are single-writer states (one opener, one closer each) — a reducer would add ceremony without a drift class to fix.
 
 **Risks / follow-ups:** the marquee, alignment guides, and fresh-node animation are the remaining transient UI states; they are each already carefully paired with ref mirrors and self-clearing effects, so no machine extraction is warranted without a demonstrated drift.
+
+### 2026-08-10 — Space-pan stays armed across window blur (round 127)
+
+**Problem (evidence from round-126 follow-up hunt):** the editor's Space-pan arming had exactly two writers — a `keydown` handler that sets `spaceDownRef.current = true` + `setSpacePanArmed(true)`, and a `keyup` handler that clears both. No `blur`/`visibilitychange` reset existed. When the window loses focus while Space is held (alt-tab, devtools, an OS dialog, another window), the browser delivers the `keyup` to the NEW focus target — the editor never sees it — so `spacePanArmed` stuck `true`. The canvas kept the `canvas-space-pan` cursor class and, worse, the next left-drag took the pan branch (`handleCanvasMouseDown`: `e.button === 0 && (spaceDownRef.current || panToolActive)`) instead of the marquee-selector branch. The pan mode lingered until the user pressed and released Space again. Alt-duplicate was checked and is safe (gated on an in-flight drag, cleared by mouseup), so space-pan was the only sticky key-held state.
+
+**Red:** `window blur disarms a held Space so the next left-drag still marquees` — arm with Space keydown, assert `canvas-space-pan` is present, fire `blur` on window, assert the class is gone AND a left-drag over two retail nodes selects 2 with the viewport still at `translate(0px, 0px)` (a pan would move the viewport). Failed pre-fix: `expected 'node-canvas-container canvas-space-pan' not to contain 'canvas-space-pan'`.
+
+**Green:** the space-pan effect's cleanup/teardown gained a `disarm()` (clears the ref + state) wired to both `window blur` and `document visibilitychange → hidden`. The keyup handler is unchanged; the disarm is idempotent so a normal keyup path is unaffected.
+
+**Verified:** editor 463/463 (+1), **full UI suite 275 files / 4,662 tests** (+1), a11y 8/8, typecheck ✓, eslint ✓.
+
+**Commits:** `<pending>`
+
+**Deliberately NOT done:** only Space-pan needed the blur disarm — the pan-tool toggle is a real button state (not key-held), the Alt-duplicate is gesture-scoped, and the marquee/alignment-guide/fresh-node states are already self-clearing. No reducer extraction was warranted for a one-slot sticky boolean.
+
+**Risks / follow-ups:** the same blur-disarm pattern is worth an audit pass over the other clients' canvas/tablet gestures if any other editor keeps a key-held modifier in a plain useState — the tablet shares this component, so this fix already covers it.

@@ -1039,11 +1039,26 @@ export default function NodeTopologyEditor({
       spaceDownRef.current = false;
       setSpacePanArmed(false);
     };
+    // Window blur / tab-hidden: the browser delivers keyup to the NEW focus
+    // target, so a Space held across alt-tab (or a dialog stealing focus)
+    // never reaches this page. Without this disarm the pan would stay armed
+    // and the next left-drag would pan instead of marquee-selecting.
+    const disarm = () => {
+      spaceDownRef.current = false;
+      setSpacePanArmed(false);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') disarm();
+    };
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
+    window.addEventListener('blur', disarm);
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
       window.removeEventListener('keydown', down);
       window.removeEventListener('keyup', up);
+      window.removeEventListener('blur', disarm);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);
   /** Cancels an in-flight node drag when the pointer is released outside

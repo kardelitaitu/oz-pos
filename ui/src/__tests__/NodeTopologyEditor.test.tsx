@@ -4874,9 +4874,7 @@ describe('NodeTopologyEditor — canvas pan', () => {
     expect(viewport.style.transform).toContain('translate(50px, 30px)');
     expect(document.querySelector('.topology-marquee')).toBeNull();
     expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(1);
-  });
-
-  it('turning the Pan tool off restores the left-drag marquee', () => {
+  });  it('turning the Pan tool off restores the left-drag marquee', () => {
     renderEditor();
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
 
@@ -4890,6 +4888,34 @@ describe('NodeTopologyEditor — canvas pan', () => {
     fireEvent.mouseUp(canvas, { button: 0 });
 
     expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(2);
+
+  });
+
+  it('window blur disarms a held Space so the next left-drag still marquees', () => {
+    // Regression: the Space arming only had keydown/keyup writers. If the
+    // window loses focus while Space is held (alt-tab, devtools, an OS
+    // dialog), the browser delivers keyup to the NEW window — the editor
+    // never sees it — so spacePanArmed stuck true, the canvas kept the pan
+    // cursor, and the next left-drag PANNED instead of marquee-selecting.
+    renderEditor();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    const viewport = document.querySelector('.node-canvas-viewport') as HTMLElement;
+
+    // Arm the pan (Space held), then lose window focus without a keyup.
+    fireEvent.keyDown(window, { code: 'Space', key: ' ' });
+    expect(canvas.className).toContain('canvas-space-pan');
+    fireEvent.blur(window);
+
+    // The pan must disarm: cursor class gone, and a left-drag on empty
+    // canvas opens a marquee instead of panning the viewport.
+    expect(canvas.className).not.toContain('canvas-space-pan');
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 650, clientY: 420 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+
+    expect(document.querySelector('.topology-marquee')).toBeNull(); // marquee is transient; released already
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(2);
+    expect(viewport.style.transform).toContain('translate(0px, 0px)');
   });
 });
 
