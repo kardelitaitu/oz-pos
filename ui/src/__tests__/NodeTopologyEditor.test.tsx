@@ -13,7 +13,7 @@ import {
   NODE_PORT_Y,
   NODE_WIDTH,
 } from '../features/stores/nodeTopologyClamp';
-import { loadTopology, saveTopology } from '@/api/topology';
+import { loadTopology } from '@/api/topology';
 import multiStoreFtl from '@/locales/multi-store.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
@@ -24,7 +24,6 @@ vi.mock('@/api/topology', () => ({
   // Sibling describes are otherwise order-dependent: a bare vi.fn()
   // returns undefined and crashes the load effect's `.then` on mount.
   loadTopology: vi.fn(() => Promise.resolve(null)),
-  saveTopology: vi.fn(() => Promise.resolve(undefined)),
 }));
 
 // Passthrough mock: keep real LocalizationProvider/ReactLocalization so
@@ -242,7 +241,6 @@ vi.mock('@/contexts/SettingsContext', () => ({
 }));
 
 const mockLoadTopology = vi.mocked(loadTopology);
-const mockSaveTopology = vi.mocked(saveTopology);
 
 type TopologyTier = Exclude<ComponentProps<typeof NodeTopologyEditor>['currentTier'], undefined>;
 
@@ -376,7 +374,6 @@ describe('NodeTopologyEditor Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockLoadTopology.mockResolvedValue(null);
-    mockSaveTopology.mockResolvedValue(undefined);
   });
 
   it('renders tier badge and default retail preset nodes', () => {
@@ -1203,7 +1200,7 @@ describe('NodeTopologyEditor Component', () => {
     expect(screen.getByText('Apply Topology Changes')).not.toBeDisabled();
   });
 
-  it('calls saveTopology with correct payload when Apply Topology Changes clicked', async () => {
+  it('delegates the Apply payload when Apply Topology Changes is clicked', async () => {
     const onSave = vi.fn();
     renderEditor({ onSave });
 
@@ -1221,7 +1218,7 @@ describe('NodeTopologyEditor Component', () => {
     expect(nodes[0].name).toBe('Downtown Branch');
   });
 
-  it('calls saveTopology via onSave with all node fields mapped', async () => {
+  it('passes all node fields through onSave', async () => {
     const onSave = vi.fn();
     renderEditor({ onSave });
 
@@ -2923,9 +2920,9 @@ function BranchDeleteHarness() {
     expect(getNodeCount()).toBe(nodeCountAfterAdd);
   });
 
-  // ── Delegation regression: no direct saveTopology when onSave is provided ──
+  // ── Delegation regression: Apply always uses the parent callback ────────
 
-  it('does not call saveTopology directly when onSave is provided (delegation)', async () => {
+  it('delegates Apply to onSave when the parent callback is provided', async () => {
     const onSave = vi.fn();
     renderEditor({ onSave });
 
@@ -2935,10 +2932,8 @@ function BranchDeleteHarness() {
       expect(onSave).toHaveBeenCalledTimes(1);
     });
 
-    // The editor must delegate entirely to onSave — never invoke the
-    // old saveTopology directly. This verifies the boundary between
-    // the editor and the TopologyScreen parent.
-    expect(mockSaveTopology).not.toHaveBeenCalled();
+    // The editor delegates entirely to onSave, preserving the single-writer
+    // boundary owned by TopologyScreen.
   });
 
   // ── Undo sequence resilience (#6) ───────────────────────────────
@@ -6870,7 +6865,6 @@ describe('NodeTopologyEditor — per-branch viewport memory', () => {
     localStorage.clear();
     vi.clearAllMocks();
     mockLoadTopology.mockResolvedValue(null);
-    mockSaveTopology.mockResolvedValue(undefined);
   });
 
   const zoomLevel = () => document.querySelector('.canvas-zoom-level')?.textContent;
@@ -6913,7 +6907,6 @@ describe('NodeTopologyEditor — node finder', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockLoadTopology.mockResolvedValue(null);
-    mockSaveTopology.mockResolvedValue(undefined);
   });
 
   const openFinder = () => fireEvent.keyDown(document, { key: 'f', ctrlKey: true });
@@ -6980,7 +6973,6 @@ describe('NodeTopologyEditor — auto-layout', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockLoadTopology.mockResolvedValue(null);
-    mockSaveTopology.mockResolvedValue(undefined);
   });
 
   const posOf = (name: string) => {

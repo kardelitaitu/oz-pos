@@ -64,7 +64,6 @@ vi.mock('../features/stores/topologyWireGroup', async (importOriginal) => {
 
 vi.mock('@/api/topology', () => ({
   loadTopology: vi.fn(() => Promise.resolve(null)),
-  saveTopology: vi.fn(() => Promise.resolve(undefined)),
 }));
 
 vi.mock('@fluent/react', async () => {

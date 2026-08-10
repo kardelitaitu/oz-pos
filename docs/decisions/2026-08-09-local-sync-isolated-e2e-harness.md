@@ -21,5 +21,5 @@ The test does not depend on Docker, the running Tauri process, a fixed port, or 
 
 - Isolated desktop harness: **2 sync-run tests passed** (empty persisted queue and one accepted item).
 - Rust formatting passed.
-- The existing `save_topology_json` dead-code warning remains unrelated to this harness.
+- Topology persistence is unrelated to this harness; production writes use the authorized Apply command.
 - Temporary Cargo target artifacts were removed after verification.

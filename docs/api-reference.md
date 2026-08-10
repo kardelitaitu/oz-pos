@@ -836,7 +836,6 @@ Iterates the target store's database, restores suspended instance... |
 | `resolve_boot_store` | Resolve the active store and instance from device binding.
 
 This is called once at boot time (before authentication). It does not use |
-| `save_topology` | Save the topology graph to the settings store. |
 | `set_user_workspace_instances_scoped` | Replace all instance assignments for a user. Caller permission from session. ADR #7. |
 | `set_user_workspaces` | Replace all workspace assignments for a user (legacy tables).
 

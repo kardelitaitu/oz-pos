@@ -8,7 +8,6 @@ import sharedFtl from '@/locales/shared.ftl?raw';
 
 vi.mock('@/api/topology', () => ({
   loadTopology: vi.fn(),
-  saveTopology: vi.fn(),
 }));
 
 const TOPOLOGY_EN: Record<string, string> = {

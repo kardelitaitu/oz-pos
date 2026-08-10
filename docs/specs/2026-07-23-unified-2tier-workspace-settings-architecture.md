@@ -184,7 +184,7 @@ Peripherals belong strictly to workspace cards, with strict separation between S
 | **Global Store Settings** | SQLite DB (`store_settings`) | `set_store_settings_scoped` | Store Name, Address, Tax ID, Currency |
 | **Receipt & Print Settings** | SQLite DB (`receipt_settings`) | `set_receipt_settings_scoped` | Paper width (58mm/80mm), Footer, Margins |
 | **Terminal Hardware Bindings** | Device File / `localStorage` | `terminal_profile.json` | Printer IP/USB path, Scale COM port |
-| **Topology Connections** | SQLite DB (`workspace_instances`) | `save_topology_diagram` | Node positions, stock deduction priority wires |
+| **Topology Connections** | SQLite DB (`workspace_instances`) | `apply_topology_diff` | Node positions, stock deduction priority wires |
 | **User Display Preferences** | SQLite DB (`user_preferences`) | `set_user_preference` | KDS layout mode (`kanban`/`focus`), Table toggles |
 | **Local Terminal Preferences** | `localStorage` | `localStorage.setItem(...)` | Sound volume, Dark/Light theme, Scale Zeroing |
 | **Settings Delta Ledger** | SQLite DB (`setting_updated`) | `write_setting_delta` (in `platform/core/src/settings.rs`) | LWW version column, setting key, new value, terminal_id, timestamp |
