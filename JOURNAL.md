@@ -3094,7 +3094,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** editor 469/469 (+3) · **full UI suite 275 files / 4,671 tests** (+3) · a11y 8/8 · typecheck ✓ · eslint ✓ (8 pre-existing warnings, none new).
 
-**Commits:** `<pending>`
+**Commits:** `5946a1bd`
 
 **Deliberately NOT done:** `cancelBendDrag` restores the bend position and pops the drag's undo entry on the OLD wire array — the load path replaces wires right after, so the restore is overwritten and history is cleared; harmless but slightly redundant (a load-scoped variant could skip the restore). The fresh-node id set is still cleared only by `loadPreset`, not the load effect — a stale spawn ring could survive a reload; deferred as minor.
 
