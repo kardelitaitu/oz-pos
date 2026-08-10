@@ -180,6 +180,7 @@ const SCREENS: ScreenEntry[] = [
     tsx: 'offline/OfflineQueueScreen.tsx',
     css: ['offline/OfflineQueueScreen.css'],
     dynamicClassPrefixes: ['status-'],
+    knownDynamicFragments: ['free'],
   },
 
   // ── Promotions ────────────────────────────────────────
@@ -211,6 +212,7 @@ const SCREENS: ScreenEntry[] = [
       'settings-sync-token-actions',
       'settings-sync-status-text',
       'topology',
+      'free',
     ],
     externalClasses: [
       'card',
