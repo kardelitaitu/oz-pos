@@ -8,7 +8,7 @@
 //
 // All assertions are hard (no conditionals) per E2E convention.
 
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import { loginAs, selectWorkspace, WORKSPACES, navigateTo } from './helpers';
 
 // ── F10 modal → Admin Settings shortcut (Priority §9 gate) ────
@@ -73,6 +73,13 @@ test.describe('ADR #22 — F10 modal → Admin Settings shortcut', () => {
 
 test.describe('ADR #22 — Topology canvas', () => {
   test.beforeEach(async ({ page }) => {
+    // Park the DevToolbar off-screen before the app boots: it floats
+    // bottom-right by default and swallows the tail of a canvas marquee
+    // drag (the mousemove/mouseup land on it, freezing the box mid-drag
+    // and capturing nothing). Its stored position is honored when valid.
+    await page.addInitScript(() => {
+      localStorage.setItem('oz-pos-dev-toolbar-pos', JSON.stringify({ x: -400, y: -400 }));
+    });
     await loginAs(page, 'admin', '9999');
     await selectWorkspace(page, WORKSPACES.ADMIN);
     await navigateTo(page, 'settings');
@@ -253,6 +260,192 @@ test.describe('ADR #22 — Topology canvas', () => {
     const _inspectorVisible = await inspector.first().isVisible({ timeout: 5_000 }).catch(() => false);
     // At minimum, the topology screen should still be visible after interaction.
     await expect(page.locator('.node-topology-editor')).toBeVisible({ timeout: 5_000 });
+  });
+
+  // ── Direction-aware marquee (ADR #22 Pillar E + round-12/13 work) ──
+  //
+  // A FORWARD drag (left→right) selects only FULLY CONTAINED cards; a
+  // BACKWARD drag (right→left) selects every card the box touches. The
+  // diagram itself is not deterministic here (the editor may settle on
+  // either the retail preset or the dev-mock seed depending on load
+  // timing), so all geometry is derived from the RENDERED cards: pick the
+  // leftmost pair as the contained targets, the card nearest their union's
+  // bottom-right corner as the poking-out one, build the box, then assert
+  // the live selection equals exactly the containment/touch predicates.
+
+  /** Measure the canvas cards (container-relative px), waiting for the
+   *  diagram to settle (the instance merge can rename/rebuild once after
+   *  load). Returns the canvas box + cards. */
+  async function measureCanvasCards(page: Page, canvas: Locator) {
+    const canvasBox = await canvas.boundingBox();
+    expect(canvasBox).not.toBeNull();
+    let prev = '';
+    let cards: Array<{ id: string; x0: number; y0: number; x1: number; y1: number }> = [];
+    for (let i = 0; i < 10; i++) {
+      const rows: string[] = [];
+      const count = await page.locator('.topology-node').count();
+      for (let j = 0; j < count; j++) {
+        const el = page.locator('.topology-node').nth(j);
+        const id = await el.getAttribute('data-node-id');
+        const b = await el.boundingBox();
+        if (id && b) rows.push(`${id}:${Math.round(b.x)}:${Math.round(b.y)}:${Math.round(b.width)}:${Math.round(b.height)}`);
+      }
+      const sig = rows.sort().join('|');
+      if (sig && sig === prev) {
+        cards = rows.map((r) => {
+          const [id, x, y, w, h] = r.split(':') as [string, string, string, string, string];
+          return {
+            id,
+            x0: Number(x) - canvasBox!.x,
+            y0: Number(y) - canvasBox!.y,
+            x1: Number(x) + Number(w) - canvasBox!.x,
+            y1: Number(y) + Number(h) - canvasBox!.y,
+          };
+        });
+        break;
+      }
+      prev = sig;
+      await page.waitForTimeout(500);
+    }
+    // Both known diagrams render at least three cards.
+    expect(cards.length).toBeGreaterThanOrEqual(3);
+    return { canvasBox, cards };
+  }
+
+  /** Build a marquee box whose contained set ⊂ touched set: A = leftmost
+   *  card, B = its row-mate (leftmost card overlapping A's row), C = the
+   *  card nearest the A∪B union's bottom-right corner. C pokes out of the
+   *  box (right edge, or bottom when it sits below the union). */
+  function buildMarqueeBox(cards: Array<{ id: string; x0: number; y0: number; x1: number; y1: number }>) {
+    const byLeft = [...cards].sort((a, b) => (a.x0 - b.x0) || (a.y0 - b.y0));
+    const A = byLeft[0]!;
+    const rowMates = byLeft.filter((c) => c.id !== A.id && c.y0 <= A.y1 && c.y1 >= A.y0);
+    const B = (rowMates.length > 0 ? rowMates : byLeft.filter((c) => c.id !== A.id))[0]!;
+    const unionX1 = Math.max(A.x1, B.x1);
+    const unionY1 = Math.max(A.y1, B.y1);
+    const C = cards
+      .filter((c) => c.id !== A.id && c.id !== B.id)
+      .map((c) => ({ ...c, d: Math.max(0, c.x0 - unionX1) + Math.max(0, c.y0 - unionY1) }))
+      .sort((a, b) => a.d - b.d)[0]!;
+    const startX = Math.max(8, Math.min(...cards.map((c) => c.x0)) - 40);
+    const startY = Math.max(8, Math.min(...cards.map((c) => c.y0)) - 40);
+    let endX: number;
+    let endY: number;
+    if (C.x0 >= unionX1 - 40) {
+      // C pokes out to the right: reach into it, short of its right edge.
+      endX = C.x0 + 40;
+      endY = unionY1 + 40;
+    } else {
+      // C sits below the union: reach into its top, short of its bottom.
+      endX = unionX1 + 40;
+      endY = C.y0 + 40;
+    }
+    return {
+      box: { x0: startX, y0: startY, x1: endX, y1: endY },
+      contained: cards
+        .filter((c) => c.x0 >= startX && c.x1 <= endX && c.y0 >= startY && c.y1 <= endY)
+        .map((c) => c.id),
+      touched: cards
+        .filter((c) => c.x1 >= startX && c.x0 <= endX && c.y1 >= startY && c.y0 <= endY)
+        .map((c) => c.id),
+    };
+  }
+
+  /** Assert each card's node-selected class matches its membership in the
+   *  expected id set (auto-retrying via expect). */
+  async function assertSelection(page: Page, cards: Array<{ id: string; x0: number; y0: number; x1: number; y1: number }>, expected: string[]) {
+    for (const c of cards) {
+      const loc = page.locator(`.topology-node[data-node-id="${c.id}"]`);
+      if (expected.includes(c.id)) {
+        await expect(loc).toHaveClass(/node-selected/);
+      } else {
+        await expect(loc).not.toHaveClass(/node-selected/);
+      }
+    }
+  }
+
+  test('forward marquee selects contained cards only (partial overlaps excluded)', async ({ page }, testInfo) => {
+    // Tablet now auto-fits overflowing diagrams (round 23), but the
+    // preset-vs-seed load race still makes the fitted geometry variable
+    // there, so containment math is only asserted on the desktop project.
+    test.skip(testInfo.project.name !== 'desktop', 'tablet load race keeps fitted geometry variable');
+
+    const managementHeader = page.locator('.settings-sidebar-section-header')
+      .filter({ hasText: 'Management' });
+    const isExpanded = await managementHeader
+      .getAttribute('aria-expanded')
+      .then((v) => v === 'true')
+      .catch(() => false);
+    if (!isExpanded) {
+      await managementHeader.click();
+      await page.waitForTimeout(300);
+    }
+
+    const topologyNav = page.locator('.settings-nav-item')
+      .filter({ hasText: /topology/i });
+    await topologyNav.click();
+    await page.waitForTimeout(2_000);
+
+    const canvas = page.locator('.node-canvas-container');
+    await expect(canvas).toBeVisible({ timeout: 8_000 });
+    const { canvasBox, cards } = await measureCanvasCards(page, canvas);
+
+    const { box, contained, touched } = buildMarqueeBox(cards);
+    // The box must be real: A+B fully inside, C poking out (contained ⊂ touched).
+    expect(contained.length).toBeGreaterThanOrEqual(2);
+    expect(touched.filter((id) => !contained.includes(id))).not.toHaveLength(0);
+    // The drag must stay inside the canvas (an off-canvas release freezes the box).
+    expect(box.x1).toBeLessThan(canvasBox!.width);
+    expect(box.y1).toBeLessThan(canvasBox!.height);
+
+    // Drag FORWARD (left→right) over the box.
+    await page.mouse.move(canvasBox!.x + box.x0, canvasBox!.y + box.y0);
+    await page.mouse.down();
+    await page.mouse.move(canvasBox!.x + box.x1, canvasBox!.y + box.y1, { steps: 10 });
+    await page.mouse.up();
+
+    // Exactly the fully-contained cards are selected; the poking-out card is NOT.
+    await assertSelection(page, cards, contained);
+  });
+
+  test('backward marquee selects every card the box touches', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop', 'tablet load race keeps fitted geometry variable');
+
+    const managementHeader = page.locator('.settings-sidebar-section-header')
+      .filter({ hasText: 'Management' });
+    const isExpanded = await managementHeader
+      .getAttribute('aria-expanded')
+      .then((v) => v === 'true')
+      .catch(() => false);
+    if (!isExpanded) {
+      await managementHeader.click();
+      await page.waitForTimeout(300);
+    }
+
+    const topologyNav = page.locator('.settings-nav-item')
+      .filter({ hasText: /topology/i });
+    await topologyNav.click();
+    await page.waitForTimeout(2_000);
+
+    const canvas = page.locator('.node-canvas-container');
+    await expect(canvas).toBeVisible({ timeout: 8_000 });
+    const { canvasBox, cards } = await measureCanvasCards(page, canvas);
+
+    const { box, contained, touched } = buildMarqueeBox(cards);
+    expect(contained.length).toBeGreaterThanOrEqual(2);
+    expect(touched.filter((id) => !contained.includes(id))).not.toHaveLength(0);
+    expect(box.x1).toBeLessThan(canvasBox!.width);
+    expect(box.y1).toBeLessThan(canvasBox!.height);
+
+    // Drag BACKWARD (right→left) over the SAME box: cards poking out of it
+    // must still be selected (touch semantics).
+    await page.mouse.move(canvasBox!.x + box.x1, canvasBox!.y + box.y1);
+    await page.mouse.down();
+    await page.mouse.move(canvasBox!.x + box.x0, canvasBox!.y + box.y0, { steps: 10 });
+    await page.mouse.up();
+
+    // Exactly the touched cards (contained AND poking) are selected.
+    await assertSelection(page, cards, touched);
   });
 });
 
