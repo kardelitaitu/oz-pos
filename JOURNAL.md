@@ -3428,7 +3428,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** compare engine 7/7 · screen integration 40/40 (2 new) · editor suite 495/495 · i18nBundle 15/15 (1 new) · **full UI suite 279 files / 4,741 tests (+10)** · typecheck ✓ · eslint 0 errors (8 pre-existing warnings, unchanged) · lint:i18n clean · **mutation checks**: making `setsEqual` always-true killed the wiring-difference test; reverting `{ $created }` → `{ created }` in the id bundle failed the real-bundle regression test → both restored, green. Drift guard clean.
 
-**Commits:** (see git log — round 154)
+**Commits:** `29113c52` (feat(topology): compare branch topologies, fix Fluent placeholders)
 
 **Deliberately NOT done:** no backend/apply integration — the comparison is display-only by design; no side-by-side canvas rendering (the summary panel lists names; a visual overlay diff is a future round); no compare against the live unsaved canvas (the panel fetches the SAVED states — honest about what's persisted). The pre-existing bare-placeholder style elsewhere in the codebase (outside topology) was not touched — scope was the two topology keys.
 
