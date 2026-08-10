@@ -55,8 +55,6 @@ pub mod promotions;
 pub mod refunds;
 /// Reporting commands.
 pub mod reports;
-/// Sale / transaction commands.
-pub mod sales;
 /// Weight-scale commands.
 pub mod scale;
 /// Settings CRUD commands.

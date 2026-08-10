@@ -2900,3 +2900,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Verified:** oz-cloud-server **130/130** (round 119's 129 + this +1, plan-gate tests still green with real UUIDs), `cargo clippy -p oz-cloud-server -- -D warnings` clean, `cargo fmt --check` clean. Committed `539df8b3` — note: a concurrently-committing agent's staged JOURNAL.md hunk (their round-119 prune entry, `<pending>` → `855e7bc0`) rode along in the same commit; working tree is clean.
 
 **Risks / follow-ups:** (1) still no server-side transition of pushed `pending` items to `synced`/`failed` — the other agent's prune commit `855e7bc0` addressed retention by pruning regardless of status, but the P-1 promise "items > 90 days deleted" now holds while terminal-driven transitions remain client-side; (2) the id check accepts any UUID version (v1-v8), not just v7 — fine for now, strictness could be added later.
+
+### 2026-08-10 — tablet-client dead sales.rs re-export module removed (round 122)
+
+**Problem (round-116 follow-up):** the desktop-client sweep removed `commands::sales` when every caller migrated to the split `pos`/`history`/`void` modules, but noted the tablet client carries a twin re-export module. `apps/tablet-client/src/commands/sales.rs` is a pure backward-compat shim (`pub use super::{pos,history,void}::...`) with **zero importers**: no file references `commands::sales`/`mod sales`/`sales::` outside the file itself, the `generate_handler!` registers `commands::history::list_sales` etc. directly, and there is no `tests/` dir to reference it. The compiler can't flag it (pub item in a lib target), so it sat as dead weight with a stale "callers that haven't migrated yet" promise.
+
+**Change (mechanical — no behavior change, so Verify + Journal + Commit per the skill):** removed `pub mod sales;` + its doc comment from `commands/mod.rs` and deleted `sales.rs`.
+
+**Verified:** `cargo check -p oz-pos-tablet` clean, `cargo clippy -p oz-pos-tablet -- -D warnings` clean, `cargo test -p oz-pos-tablet --lib` **422/422**.
+
+**Commits:** `<pending>`
+
+**Risks / follow-ups:** none new — this closes the last known `_compat`/`_legacy` re-export module from the naming scans (rounds 114-116). A wider sweep for other pub-but-unused lib items would need a different tool than rustc's dead_code (which exempts pub items) — e.g. a `cargo-public-api`-style diff or an import-graph script.
