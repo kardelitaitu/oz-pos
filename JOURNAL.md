@@ -3316,7 +3316,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** integration 2/2 (crossing renders the overlay with pointer-events-none; retail preset renders none) · pure unit 6/6 (bezier crossing, empty, elbow exact clip, flush not-under, multi-box, dimensions) · editor suite 485/485 · full UI suite 278 files / 4,699 tests (+9) · typecheck ✓ · eslint 0 errors (8 pre-existing warnings) · **mutation check**: shifted every box left by 99999 → 3 crossing unit tests failed, restored → green. Drift guard clean.
 
-**Commits:** `TODO`
+**Commits:** `73152086`
 
 **Deliberately NOT done:** no auto-routing around cards — the legibility overlay is the minimal fix; obstacle-avoiding routing remains a possible future capability. No hover/selected state on the overlay — the under-card segment keeps the base accent while the exposed parts brighten (subtle, deliberate). No pulse/label ride on the overlay — the simulation pulse still passes under the card transiently (visible pre/post); a follow-up if it reads poorly in the browser.
 
