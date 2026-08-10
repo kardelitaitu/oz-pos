@@ -2924,3 +2924,19 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Verified:** SyncSection 39/39 (+1), CloudSyncSettings 37/37 (real SettingsPage integration), typecheck ✓, eslint ✓, i18n lint + bundle parity ✓. Committed `b4eaf864`.
 
 **Risks / follow-ups:** the Offline Queue retry flow (`retry_offline_sync`) also returns `SyncAttemptResult` with `planRequired` but renders only the synced/failed counts inline — it never surfaces the plan gate as a toast. The plan row there covers discovery, but a dedicated upgrade toast on retry would be consistent with this fix.
+
+### 2026-08-10 — prune retention counter + daemon panic-containment verified (round 123)
+
+**Slice (round-121 follow-up):** retention was unobservable — the hourly cloud prune deletes `offline_queue` rows but nothing surfaced the count, so an operator could not tell whether old rows were being aged out. Added `prune_queue_deleted_total` (Prometheus counter, exposed on `/metrics`).
+
+**Red:** `prune_records_deleted_rows_on_retention_counter` — seeds 2 old rows + 1 fresh, runs `run_prune_cycle`, asserts the counter delta is 2. Failed with `left: 0, right: 2`. The three prune-cycle tests are `#[serial]`-annotated (new `serial_test` dev-dep, already in the workspace lock) so the shared static counter can't race.
+
+**Green:** `metrics::PRUNE_QUEUE_DELETED_TOTAL.inc_by(deleted as f64)` after each batch delete (prometheus `Counter::inc_by` takes `f64`; `get()` returns `f64` — two small type gotchas). Counter increments per batch, so a 500-row batch records 500.
+
+**Verified:** oz-cloud-server **131/131** (+1), clippy `-D warnings` clean, my files fmt-clean (the workspace fmt diff is an agent's in-flight `authz.rs`, untouched).
+
+**Also this round — daemon sink-panic premise disproven (positive verification):** the interrupted round's suspicion was that a panic in the sync daemon task (e.g. a panicking settings sink) would wedge the daemon with `running=true` forever (the spawned loop task's JoinHandle is discarded and `running=false` only runs at the loop's normal end). I wrote the injection test (`start_with_sink` + panicking sink, 50ms interval, mock server returning one `settings.update`) and it **disproved the wedge**: the sink runs inside the pull-apply `spawn_blocking` closure (daemon.rs:552), so its panic surfaces as a JoinError that the SYNC-01 handling (round-117-era) records in `sync_error`/`last_error` and the next tick recovers from (idempotency ledger skips the re-applied item, clearing `last_error`). `stop()` still ends the daemon cleanly. The test was discarded (it failed only on the transient `last_error` being cleared by recovery — the wrong reason), and daemon.rs was reverted to HEAD. Conclusion: the daemon's realistic panic surface is already contained; the remaining latent hole (a panic in `run_tick`'s async body *outside* spawn_blocking would still kill the loop and leave `running=true`) has no current reachable source and no deterministic injection seam.
+
+**Commits:** `<pending>`
+
+**Risks / follow-ups:** (1) the latent task-level hole above is worth a defensive `tokio::spawn`-wrap of the tick if a future change adds unwraps to run_tick's async body; (2) the prune counter has no label split by tenant — a per-tenant label would surface which tenant's queue is growing, at the cost of a high-cardinality series.

@@ -52,6 +52,21 @@ pub static SYNC_PULL_ROW_DECODE_FAILURES_TOTAL: LazyLock<Counter> = LazyLock::ne
     c
 });
 
+/// Total number of `offline_queue` rows deleted by the hourly prune loop
+/// (P-1 Retention). A rising count over time confirms old rows are being
+/// aged out; a flat count while rows age past the 90-day horizon signals
+/// the retention path is not covering them (round 121 made the prune
+/// status-agnostic, so this counter is the observability counterpart).
+pub static PRUNE_QUEUE_DELETED_TOTAL: LazyLock<Counter> = LazyLock::new(|| {
+    let c = Counter::new(
+        "prune_queue_deleted_total",
+        "Total offline_queue rows deleted by the hourly prune",
+    )
+    .unwrap(); // SAFETY: static metric name/opts are compile-time constants; construction cannot fail
+    REGISTRY.register(Box::new(c.clone())).unwrap(); // SAFETY: static registration of a freshly-constructed metric cannot fail
+    c
+});
+
 // ── Histograms ────────────────────────────────────────────────────────
 
 /// Duration of push requests in milliseconds.

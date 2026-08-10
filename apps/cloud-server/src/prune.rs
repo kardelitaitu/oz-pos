@@ -10,6 +10,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::metrics;
 use oz_core::db::Store;
 use rusqlite::Connection;
 use tokio::sync::Mutex;
@@ -110,6 +111,11 @@ async fn run_prune_cycle(db: &Arc<Mutex<Connection>>) {
             };
 
             queue_deleted += deleted;
+            // Retention observability (round 123): surface the deleted count
+            // on a counter so operators can confirm old rows are being aged
+            // out — a flat counter while rows age past the horizon signals
+            // the retention path is not covering them.
+            metrics::PRUNE_QUEUE_DELETED_TOTAL.inc_by(deleted as f64);
 
             // Reclaim freed pages (P-1: incremental_vacuum after each batch).
             if let Err(e) = conn.execute_batch("PRAGMA incremental_vacuum(50);") {
@@ -140,12 +146,14 @@ async fn run_prune_cycle(db: &Arc<Mutex<Connection>>) {
 mod tests {
     use super::*;
     use rusqlite::params;
+    use serial_test::serial;
 
     /// The prune DELETE must treat ids as data, never as SQL. The cloud
     /// server accepts client-supplied ids verbatim in `push_handler` (no
     /// UUID validation), so a hostile id sitting in an old synced row must
     /// not execute arbitrary statements when the hourly prune runs — the
     /// "IDs are UUIDv7 — safe" comment is an assumption, not an invariant.
+    #[serial]
     #[test]
     fn prune_delete_treats_hostile_id_as_data() {
         let conn = oz_core::migrations::fresh_db();
@@ -185,6 +193,7 @@ mod tests {
     /// bound. Retention applies to every status: rows older than the 90-day
     /// horizon are pruned (the anchor_expired -> snapshot recovery path is
     /// the designed guardrail for stragglers), recent rows survive.
+    #[serial]
     #[test]
     fn prune_ages_out_old_pending_rows_like_synced_ones() {
         let conn = oz_core::migrations::fresh_db();
@@ -213,6 +222,36 @@ mod tests {
             remaining,
             vec!["recent-pending".to_string()],
             "old pending and old synced rows must be pruned; the recent pending row survives"
+        );
+    }
+    /// The prune must record every deleted row on the retention counter so
+    /// operators can observe that old queue rows are actually being aged
+    /// out (round-121 follow-up: retention observability).
+    #[serial]
+    #[test]
+    fn prune_records_deleted_rows_on_retention_counter() {
+        let conn = oz_core::migrations::fresh_db();
+        conn.execute_batch(
+            "INSERT INTO offline_queue (id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id, priority) VALUES
+             ('old-1', 'act', '{}', 'pending', 0, NULL, '2025-01-01T00:00:00Z', NULL, 't1', 1),
+             ('old-2', 'act', '{}', 'synced', 0, NULL, '2025-01-02T00:00:00Z', '2025-01-03T00:00:00Z', 't1', 1),
+             ('fresh', 'act', '{}', 'pending', 0, NULL, '2026-08-09T00:00:00Z', NULL, 't1', 1)"
+        )
+        .unwrap();
+
+        // Delta around the cycle: other prune tests (serialized via
+        // #[serial]) may have incremented the shared counter earlier.
+        let before = crate::metrics::PRUNE_QUEUE_DELETED_TOTAL.get();
+        let db = Arc::new(Mutex::new(conn));
+        tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(run_prune_cycle(&db));
+        let after = crate::metrics::PRUNE_QUEUE_DELETED_TOTAL.get();
+
+        assert_eq!(
+            (after - before) as u64,
+            2,
+            "the prune must record the two deleted rows on the retention counter"
         );
     }
 }
