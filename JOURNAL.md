@@ -3344,7 +3344,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** integration 1/1 (fresh preset: chip hidden because the snapshot equals the canvas — `appliedSnapshotRef` initializes to the preset; spawn + Store Node → chip shows `1 added · 0 removed · 0 moved · rev 0 → 1`) · pure unit 5/5 (identical→zeros, add/remove/move split, wire add/remove, wire-endpoint rewrite is NOT a change — id is identity, never-committed → everything added) · editor suite 487/487 · full UI suite 278 files / 4,709 tests (+6) · typecheck ✓ · eslint 0 errors (8 pre-existing warnings) · lint:i18n clean · **mutation check**: inverting the added/removed predicate failed 3 unit tests, restored → green. Drift guard clean.
 
-**Commits:** `TODO`
+**Commits:** `a047829e`
 
 **Deliberately NOT done:** no workspace-instance semantics (create/update/archive counts) — those live in the parent; the editor-scoped canvas diff is the honest first slice, and the pure function is the foundation a future preview can build on. No type-change remap preview. No "moved" differentiation for wires (a wire is identified by id; endpoint rewrites read as no-change by design).
 
