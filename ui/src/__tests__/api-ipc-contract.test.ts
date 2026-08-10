@@ -276,7 +276,19 @@ describe('topology.ts IPC contract', () => {
       diagramWires: wires,
       baseRevision: 7,
       requestId: 'request-1',
+      resolvedIssueKeys: [],
     });
+  });
+
+  it('applyTopologyDiff persists branch-scoped resolved issue keys', async () => {
+    mockInvoke.mockResolvedValue({ revision: 8 });
+    await applyTopologyDiff(
+      'tok', [], [], [], [], [], 'branch-a', 7, 'request-3',
+      ['node:wh-1:topology-validation-warehouse-missing-stock-routing'],
+    );
+    expect(mockInvoke).toHaveBeenCalledWith('apply_topology_diff', expect.objectContaining({
+      resolvedIssueKeys: ['node:wh-1:topology-validation-warehouse-missing-stock-routing'],
+    }));
   });
 
   it('applyTopologyDiff includes the active branch id and revision controls', async () => {
@@ -292,6 +304,7 @@ describe('topology.ts IPC contract', () => {
       branchId: 'branch-a',
       baseRevision: 3,
       requestId: 'request-2',
+      resolvedIssueKeys: [],
     });
   });
 

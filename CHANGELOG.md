@@ -37,6 +37,7 @@ The 100 commits from **2026-08-07 through 2026-08-09** form the final 0.0.25 har
 
 ### Changed
 
+- **Topology P2 contract hardening** — Shared semantic metadata now distinguishes Warehouse primary ownership inputs from operational stock/transfer feeds; branch-scoped validation dismissals are stored with the topology document instead of browser-local state; and the editor graph/history transitions run through a reducer boundary.
 - **Local sync defaults** — Empty or missing sync configuration now falls back to `http://localhost:3099` with Cloud Sync enabled in Settings and debug startup. Explicit opt-out remains respected when a real server URL is configured and sync is disabled.
 - **Warehouse topology contract** — Warehouse nodes now use exactly one primary inbound scope: Branch Location or Retail POS Operation. The editor, backend save validation, runtime plan, presets, and localized errors all enforce the same rule while preserving legacy operational transfer routes.
 - **Topology Apply reliability** — Applies now use branch revisions, request fingerprints, an in-flight lock, and a durable pre-mutation recovery journal. Interrupted cross-database Applies recover at startup, while stale editors and mismatched request retries are rejected safely.

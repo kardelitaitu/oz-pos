@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { TopologyNodeData, TopologyWireData } from '@/features/stores/NodeTopologyEditor';
 import {
   TOPOLOGY_SCHEMA_VERSION,
+  WAREHOUSE_PRIMARY_INPUT_PORTS,
+  WAREHOUSE_OPERATIONAL_INPUT_PORTS,
+  isWarehousePrimaryInputPort,
+  isWarehouseOperationalInputPort,
   normalizeTopologyGraph,
   normalizeWireDirection,
   validateTopologyGraph,
@@ -109,6 +113,15 @@ function graph(
 }
 
 describe('semantic topology contract', () => {
+  it('keeps warehouse ownership scope separate from operational routing', () => {
+    expect(WAREHOUSE_PRIMARY_INPUT_PORTS).toEqual(['location-in', 'operation-in']);
+    expect(WAREHOUSE_OPERATIONAL_INPUT_PORTS).toEqual(['stock-in', 'transfer-in']);
+    expect(isWarehousePrimaryInputPort('operation-in')).toBe(true);
+    expect(isWarehousePrimaryInputPort('stock-in')).toBe(false);
+    expect(isWarehouseOperationalInputPort('transfer-in')).toBe(true);
+    expect(isWarehouseOperationalInputPort('location-in')).toBe(false);
+  });
+
   it('normalizes legacy Store → Workspace geometry into semantic ownership ports', () => {
     const normalized = graph(
       [branch(), workspace('ws-1')],

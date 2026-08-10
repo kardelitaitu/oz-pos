@@ -78,7 +78,7 @@ vi.mock('@fluent/react', () => {
 // Capture the props the screen passes to the editor so tests can drive
 // the save-diff logic without the real canvas.
 let capturedEditorProps: {
-  onSave?: (nodes: unknown[], wires: unknown[], baseRevision?: number) => Promise<{ revision: number; idMap?: Record<string, string> } | Record<string, string> | void>;
+  onSave?: (nodes: unknown[], wires: unknown[], baseRevision?: number, resolvedIssueKeys?: string[]) => Promise<{ revision: number; idMap?: Record<string, string> } | Record<string, string> | void>;
   workspaceInstances?: unknown[];
   branchToolbar?: unknown;
   branchLocations?: unknown[];
@@ -147,9 +147,10 @@ async function triggerSave(
   workspaceNodes: unknown[],
   wires: unknown[] = [],
   nonWorkspaceNodes: unknown[] = [],
+  resolvedIssueKeys: string[] = [],
 ) {
   const allNodes = [...nonWorkspaceNodes, ...workspaceNodes];
-  await capturedEditorProps.onSave!(allNodes, wires);
+  await capturedEditorProps.onSave!(allNodes, wires, undefined, resolvedIssueKeys);
 }
 
 /** Minimal workspace node factory. */
@@ -801,10 +802,9 @@ describe('TopologyScreen', () => {
 
   // ══ Intentionally-empty warehouse (dismissed prompt) ══════════
 
-  // The editor persists dismissed issues to this key (branch-scoped); the
-  // screen's Apply gate must honor the same store so a warehouse staged
-  // empty can be saved.
-  const unwiredWarehouseSave = () =>
+  // The editor sends dismissed issue keys with the branch topology document;
+  // the screen's Apply gate must honor that same payload.
+  const unwiredWarehouseSave = (resolvedIssueKeys: string[] = []) =>
     triggerSave(
       [
         storeNode(),
@@ -822,6 +822,8 @@ describe('TopologyScreen', () => {
         locationWire('store-1', 'ws-pos', 'w-loc'),
         locationWire('store-1', 'wh-1', 'w-wh-scope'),
       ],
+      undefined,
+      resolvedIssueKeys,
     );
 
   it('blocks an unwired capacity warehouse on Pro tier', async () => {
@@ -900,16 +902,9 @@ describe('TopologyScreen', () => {
 
   it('applies the same diagram once the prompt is dismissed (intentionally empty)', async () => {
     mockLicenseTier = 'pro';
-    // Simulate the editor having dismissed the prompt for wh-1: the issue
-    // is in the branch's resolved store (the screen auto-selects the first
-    // store as the branch), so Apply must not block on it.
-    localStorage.setItem(
-      'oz-topology-resolved-issues:store-1',
-      JSON.stringify(['node:wh-1:topology-validation-warehouse-missing-stock-routing']),
-    );
     await renderReady();
 
-    await unwiredWarehouseSave();
+    await unwiredWarehouseSave(['node:wh-1:topology-validation-warehouse-missing-stock-routing']);
 
     expect(mockApplyTopologyDiff).toHaveBeenCalledTimes(1);
     expect(mockAddToast).not.toHaveBeenCalledWith({

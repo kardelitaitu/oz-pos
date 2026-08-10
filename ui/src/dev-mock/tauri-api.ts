@@ -730,6 +730,7 @@ interface MockTopologyWire {
 }
 interface MockTopology {
   revision?: number;
+  resolved_issue_keys?: string[];
   nodes: MockTopologyNode[];
   wires: MockTopologyWire[];
 }
@@ -742,6 +743,7 @@ const MOCK_TOPOLOGY_KEY = 'oz-dev-mock:topology';
  *  first-run canvas demonstrates the labeled-wire UX instead of empty pills. */
 const MOCK_TOPOLOGY_SEED: MockTopology = {
   revision: 0,
+  resolved_issue_keys: [],
   nodes: [
     { id: 'store-1', type: 'store', name: 'TOKO TEST', subtitle: 'Primary Store', x: 80, y: 80 },
     { id: 'ws-1', type: 'workspace', name: 'Store POS', subtitle: 'Point of Sale', x: 380, y: 80, metadata: { typeKey: 'store-pos', persisted: true } },
@@ -1045,6 +1047,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'can_save_topology': () => true,
   'load_topology': () => ({
     revision: mockTopology.revision ?? 0,
+    resolved_issue_keys: [...(mockTopology.resolved_issue_keys ?? [])],
     nodes: mockTopology.nodes.map((n) => ({ ...n })),
     wires: mockTopology.wires.map((w) => ({ ...w })),
   }),
@@ -1060,12 +1063,13 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // persist the diagram (node positions included) so reloads keep both the
   // node layout and the workspace instances.
   'apply_topology_diff': (args) => {
-    const { workspaceCreations, workspaceUpdates, workspaceArchives, diagramNodes, diagramWires } = (args as {
+    const { workspaceCreations, workspaceUpdates, workspaceArchives, diagramNodes, diagramWires, resolvedIssueKeys } = (args as {
       workspaceCreations?: Array<{ id: string; type_key: string; store_id: string; name: string; description?: string; colour?: string }>;
       workspaceUpdates?: Array<{ id: string; name: string }>;
       workspaceArchives?: string[];
       diagramNodes?: MockTopologyNode[];
       diagramWires?: MockTopologyWire[];
+      resolvedIssueKeys?: string[];
     }) ?? {};
     for (const c of workspaceCreations ?? []) {
       mockWorkspaces.push({
@@ -1094,6 +1098,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     }
     if (diagramNodes) mockTopology.nodes = diagramNodes.map((n) => ({ ...n }));
     if (diagramWires) mockTopology.wires = diagramWires.map((w) => ({ ...w }));
+    if (resolvedIssueKeys) mockTopology.resolved_issue_keys = [...resolvedIssueKeys];
     mockTopology.revision = (mockTopology.revision ?? 0) + 1;
     saveMockTopology(mockTopology);
     return { revision: mockTopology.revision };

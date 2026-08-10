@@ -9,6 +9,7 @@ use rusqlite::Connection;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+use std::sync::OnceLock;
 use tauri::State;
 
 use oz_core::db::Store;
@@ -269,6 +270,8 @@ const TOPOLOGY_RUNTIME_SETTING_KEY: &str = "oz-pos/topology-runtime";
 const TOPOLOGY_APPLY_RECOVERY_KEY: &str = "oz-pos/topology/apply-recovery";
 const TOPOLOGY_APPLY_REQUEST_PREFIX: &str = "oz-pos/topology/apply-request/";
 const TOPOLOGY_SCHEMA_VERSION: u64 = 1;
+const SHARED_TOPOLOGY_SEMANTICS_JSON: &str =
+    include_str!("../../../../ui/src/features/stores/topologySemantics.json");
 
 /// Resolve the branch-scoped runtime plan key paired with a topology key.
 fn topology_runtime_setting_key(topology_key: &str) -> Result<String, AppError> {
@@ -354,6 +357,32 @@ fn topology_setting_key(branch_id: Option<&str>) -> Result<String, AppError> {
     Ok(format!("{TOPOLOGY_SETTING_KEY}/{branch_id}"))
 }
 
+fn shared_topology_semantics() -> &'static Value {
+    static CONTRACT: OnceLock<Value> = OnceLock::new();
+    CONTRACT.get_or_init(|| {
+        serde_json::from_str(SHARED_TOPOLOGY_SEMANTICS_JSON)
+            .expect("shared topology semantics JSON must be valid")
+    })
+}
+
+fn shared_port_set_contains(path: &str, port_id: Option<&str>) -> bool {
+    let Some(port_id) = port_id else {
+        return false;
+    };
+    shared_topology_semantics()
+        .pointer(path)
+        .and_then(Value::as_array)
+        .is_some_and(|ports| ports.iter().any(|port| port.as_str() == Some(port_id)))
+}
+
+fn is_warehouse_primary_input_port(port_id: Option<&str>) -> bool {
+    shared_port_set_contains("/warehouse/primaryInputs", port_id)
+}
+
+fn is_warehouse_operational_input_port(port_id: Option<&str>) -> bool {
+    shared_port_set_contains("/warehouse/operationalInputs", port_id)
+}
+
 fn topology_apply_request_key(request_id: &str) -> Result<String, AppError> {
     if request_id.trim().is_empty()
         || request_id.len() > 200
@@ -380,6 +409,7 @@ fn topology_apply_fingerprint(
     workspace_archives: &[String],
     diagram_nodes: &[Value],
     diagram_wires: &[Value],
+    resolved_issue_keys: &[String],
 ) -> Result<String, AppError> {
     let payload = serde_json::json!({
         "store_id": store_id,
@@ -390,6 +420,7 @@ fn topology_apply_fingerprint(
         "workspace_archives": workspace_archives,
         "diagram_nodes": diagram_nodes,
         "diagram_wires": diagram_wires,
+        "resolved_issue_keys": resolved_issue_keys,
     });
     let bytes = serde_json::to_vec(&payload)
         .map_err(|e| AppError::Internal(format!("serialize topology request: {e}")))?;
@@ -419,6 +450,7 @@ fn topology_envelope_json(
     nodes: &[Value],
     wires: &[Value],
     revision: u64,
+    resolved_issue_keys: &[String],
 ) -> Result<String, AppError> {
     let wires: Vec<Value> = wires
         .iter()
@@ -440,6 +472,7 @@ fn topology_envelope_json(
         "revision": revision,
         "nodes": nodes,
         "wires": wires,
+        "resolved_issue_keys": resolved_issue_keys,
     }))
     .map_err(|e| AppError::Internal(format!("serialize topology: {e}")))
 }
@@ -993,6 +1026,7 @@ fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), AppErr
             .filter(|wire| {
                 value_string(wire, "relationship_type") == Some("location")
                     && value_string(wire, "to_node_id") == Some(warehouse_id)
+                    && is_warehouse_primary_input_port(value_string(wire, "to_port_id"))
                     && value_string(wire, "to_port_id") == Some("location-in")
             })
             .collect();
@@ -1001,6 +1035,7 @@ fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), AppErr
             .filter(|wire| {
                 value_string(wire, "relationship_type") == Some("generic")
                     && value_string(wire, "to_node_id") == Some(warehouse_id)
+                    && is_warehouse_primary_input_port(value_string(wire, "to_port_id"))
                     && value_string(wire, "to_port_id") == Some("operation-in")
             })
             .collect();
@@ -1127,7 +1162,7 @@ fn save_topology_json_at_key(
     wires: Vec<Value>,
     setting_key: &str,
 ) -> Result<u64, AppError> {
-    save_topology_json_at_key_with_revision(conn, nodes, wires, setting_key, None, None)
+    save_topology_json_at_key_with_revision(conn, nodes, wires, setting_key, &[], None, None)
 }
 
 fn save_topology_json_at_key_with_revision(
@@ -1135,6 +1170,7 @@ fn save_topology_json_at_key_with_revision(
     nodes: Vec<Value>,
     wires: Vec<Value>,
     setting_key: &str,
+    resolved_issue_keys: &[String],
     expected_revision: Option<u64>,
     request: Option<(&str, &str)>,
 ) -> Result<u64, AppError> {
@@ -1163,7 +1199,7 @@ fn save_topology_json_at_key_with_revision(
     let runtime_plan = compile_topology_runtime_plan(&nodes, &wires, runtime_branch_id);
     let runtime_json = serde_json::to_string(&runtime_plan)
         .map_err(|e| AppError::Internal(format!("serialize topology runtime plan: {e}")))?;
-    let json = topology_envelope_json(&nodes, &wires, revision)?;
+    let json = topology_envelope_json(&nodes, &wires, revision, resolved_issue_keys)?;
     let tx = conn.unchecked_transaction()?;
     oz_core::Settings::set(&tx, setting_key, &json)?;
     oz_core::Settings::set(&tx, &runtime_key, &runtime_json)?;
@@ -1515,6 +1551,7 @@ fn validate_warehouse_capacity(
         }
         if let Some(wire) = wires.iter().find(|wire| {
             value_string(wire, "to_node_id") == value_string(warehouse, "id")
+                && is_warehouse_operational_input_port(value_string(wire, "to_port_id"))
                 && matches!(
                     value_string(wire, "relationship_type"),
                     Some("stock-routing" | "inventory-transfer")
@@ -1929,12 +1966,14 @@ pub async fn apply_topology_diff(
     branch_id: Option<String>,
     base_revision: u64,
     request_id: String,
+    resolved_issue_keys: Option<Vec<String>>,
     state: State<'_, AppState>,
 ) -> Result<TopologyApplyResult, AppError> {
     let session = state.resolve_session(&session_token)?;
     let _apply_guard = state.topology_apply_lock.lock().await;
     let topology_key = topology_setting_key(branch_id.as_deref())?;
     let request_key = topology_apply_request_key(&request_id)?;
+    let resolved_issue_keys = resolved_issue_keys.unwrap_or_default();
     let request_fingerprint = topology_apply_fingerprint(
         &session.store_id,
         branch_id.as_deref(),
@@ -1944,6 +1983,7 @@ pub async fn apply_topology_diff(
         &workspace_archives,
         &diagram_nodes,
         &diagram_wires,
+        &resolved_issue_keys,
     )?;
 
     // Authorization: workspace topology changes require admin access. The
@@ -2030,6 +2070,7 @@ pub async fn apply_topology_diff(
         &diagram_nodes,
         &diagram_wires,
         base_revision.saturating_add(1),
+        &resolved_issue_keys,
     )?;
 
     // Snapshot all pre-existing rows that a later compensation may need to restore.
@@ -2311,6 +2352,7 @@ pub async fn apply_topology_diff(
         diagram_nodes,
         diagram_wires,
         &topology_key,
+        &resolved_issue_keys,
         Some(base_revision),
         Some((&request_key, &request_fingerprint)),
     ) {
@@ -2427,6 +2469,49 @@ mod tests {
         assert_eq!(value["wires"][0]["from_port_id"], "location-out");
         assert_eq!(value["wires"][0]["to_port_id"], "location-in");
         assert_eq!(value["wires"][0]["relationship_type"], "location");
+    }
+
+    #[test]
+    fn semantic_save_persists_and_clears_resolved_issue_keys() {
+        let conn = fresh_conn();
+        let nodes = vec![
+            semantic_node("branch", "branch-location", Some("default")),
+            semantic_node("ws-1", "workspace", None),
+        ];
+        let wires = vec![semantic_location_wire("wire-1", "ws-1")];
+        let issue = "node:wh-1:topology-validation-warehouse-missing-stock-routing".to_string();
+
+        save_topology_json_at_key_with_revision(
+            &conn,
+            nodes.clone(),
+            wires.clone(),
+            TOPOLOGY_SETTING_KEY,
+            std::slice::from_ref(&issue),
+            None,
+            None,
+        )
+        .unwrap();
+        let raw = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)
+            .unwrap()
+            .unwrap();
+        let value: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(value["resolved_issue_keys"], serde_json::json!([issue]));
+
+        save_topology_json_at_key_with_revision(
+            &conn,
+            nodes,
+            wires,
+            TOPOLOGY_SETTING_KEY,
+            &[],
+            None,
+            None,
+        )
+        .unwrap();
+        let raw = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)
+            .unwrap()
+            .unwrap();
+        let value: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(value["resolved_issue_keys"], serde_json::json!([]));
     }
 
     #[test]
@@ -7573,6 +7658,7 @@ mod tests {
             nodes.clone(),
             vec![],
             TOPOLOGY_SETTING_KEY,
+            &[],
             Some(0),
             None,
         )
@@ -7583,6 +7669,7 @@ mod tests {
             nodes.clone(),
             vec![],
             TOPOLOGY_SETTING_KEY,
+            &[],
             Some(0),
             None,
         );
@@ -7606,6 +7693,18 @@ mod tests {
     }
 
     #[test]
+    fn shared_topology_contract_matches_backend_warehouse_roles() {
+        let contract = shared_topology_semantics();
+        assert_eq!(contract["schemaVersion"], TOPOLOGY_SCHEMA_VERSION);
+        assert!(is_warehouse_primary_input_port(Some("location-in")));
+        assert!(is_warehouse_primary_input_port(Some("operation-in")));
+        assert!(is_warehouse_operational_input_port(Some("stock-in")));
+        assert!(is_warehouse_operational_input_port(Some("transfer-in")));
+        assert!(!is_warehouse_primary_input_port(Some("stock-in")));
+        assert!(!is_warehouse_operational_input_port(Some("operation-in")));
+    }
+
+    #[test]
     fn request_fingerprint_binds_store_branch_revision_and_graph_payload() {
         let first = topology_apply_fingerprint(
             "store-1",
@@ -7615,6 +7714,7 @@ mod tests {
             &[],
             &[],
             &[serde_json::json!({ "id": "node-1" })],
+            &[],
             &[],
         )
         .unwrap();
@@ -7627,6 +7727,7 @@ mod tests {
             &[],
             &[serde_json::json!({ "id": "node-2" })],
             &[],
+            &[],
         )
         .unwrap();
         let changed_scope = topology_apply_fingerprint(
@@ -7637,6 +7738,7 @@ mod tests {
             &[],
             &[],
             &[serde_json::json!({ "id": "node-1" })],
+            &[],
             &[],
         )
         .unwrap();

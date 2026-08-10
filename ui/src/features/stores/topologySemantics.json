@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "warehouse": {
+    "primaryInputs": ["location-in", "operation-in"],
+    "operationalInputs": ["stock-in", "transfer-in"],
+    "primaryRelationships": ["location", "generic"],
+    "operationalRelationships": ["stock-routing", "inventory-transfer"]
+  },
+  "workspaceTypeKeys": ["store-pos", "restaurant-pos", "kds"],
+  "nodeKinds": ["branch-location", "workspace", "warehouse", "hardware"]
+}

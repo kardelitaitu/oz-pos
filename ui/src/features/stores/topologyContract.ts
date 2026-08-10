@@ -1,4 +1,5 @@
 import type { TopologyNodeData, TopologyWireData } from './NodeTopologyEditor';
+import topologySemantics from './topologySemantics.json';
 import { isSemanticWireCompatible } from './topologyCard';
 import type { SemanticPortId } from './topologyCard';
 
@@ -11,31 +12,25 @@ type TopologyWireInput = TopologyWireData & {
 
 
 /** Version of the semantic topology contract understood by this client. */
-export const TOPOLOGY_SCHEMA_VERSION = 1;
+export const TOPOLOGY_SCHEMA_VERSION = topologySemantics.schemaVersion;
+
+/** Warehouse inputs are deliberately split into primary ownership scope and
+ * operational routing. Stock/transfer feeds never satisfy the one-of primary
+ * ownership rule, even though all four inputs share the visual left rail. */
+export const WAREHOUSE_PRIMARY_INPUT_PORTS = topologySemantics.warehouse.primaryInputs as readonly ['location-in', 'operation-in'];
+export const WAREHOUSE_OPERATIONAL_INPUT_PORTS = topologySemantics.warehouse.operationalInputs as readonly ['stock-in', 'transfer-in'];
+export type WarehousePrimaryInputPort = (typeof WAREHOUSE_PRIMARY_INPUT_PORTS)[number];
+export type WarehouseOperationalInputPort = (typeof WAREHOUSE_OPERATIONAL_INPUT_PORTS)[number];
+export const isWarehousePrimaryInputPort = (portId?: string): portId is WarehousePrimaryInputPort =>
+  WAREHOUSE_PRIMARY_INPUT_PORTS.includes(portId as WarehousePrimaryInputPort);
+export const isWarehouseOperationalInputPort = (portId?: string): portId is WarehouseOperationalInputPort =>
+  WAREHOUSE_OPERATIONAL_INPUT_PORTS.includes(portId as WarehouseOperationalInputPort);
 
 /** Stable occurrence key for a per-node validation issue. Shared by the
  *  editor (mark-issue-resolved) and the screen's Apply gate so a dismissed
  *  issue is identified identically in both — the round-81 "intentionally
  *  empty" bypass reads the same store both sides write. */
 export const topologyIssueKey = (nodeId: string, messageId: string) => `node:${nodeId}:${messageId}`;
-
-/** Parse the editor's persisted resolved-issue store. The screen's Apply
- *  gate reads the SAME localStorage key the editor writes (branch-scoped,
- *  `oz-topology-resolved-issues:<branch>`), so a dismissal that unblocks
- *  the editor also unblocks the parent gate — the two can never disagree.
- *  Corrupted values start empty, mirroring the editor's read path. */
-export function readResolvedIssueKeys(storageKey: string): Set<string> {
-  try {
-    const raw = localStorage.getItem(storageKey);
-    if (raw) {
-      const parsed = JSON.parse(raw) as unknown;
-      if (Array.isArray(parsed)) {
-        return new Set(parsed.filter((k): k is string => typeof k === 'string'));
-      }
-    }
-  } catch { /* corrupted — start empty */ }
-  return new Set();
-}
 
 /** Closed node kinds used by the first ownership slice. */
 export type SemanticNodeKind = 'branch-location' | 'workspace' | 'warehouse' | 'hardware';
@@ -60,6 +55,8 @@ export interface SemanticPortDefinition {
   relationshipType: SemanticRelationshipType;
   required: boolean;
   cardinality: 'one' | 'many';
+  /** Distinguishes ownership scope from operational routing on warehouses. */
+  role?: 'primary-scope' | 'operational-routing';
 }
 
 /** Node definition for the first semantic ownership graph. */
@@ -198,6 +195,7 @@ export const WAREHOUSE_DEFINITION: SemanticNodeDefinition = {
       relationshipType: 'location',
       required: false,
       cardinality: 'one',
+      role: 'primary-scope',
     },
     {
       id: 'operation-in',
@@ -206,6 +204,7 @@ export const WAREHOUSE_DEFINITION: SemanticNodeDefinition = {
       relationshipType: 'generic',
       required: false,
       cardinality: 'one',
+      role: 'primary-scope',
     },
   ],
 };
@@ -847,10 +846,12 @@ export function validateTopologyGraph(
   for (const warehouse of warehouseNodes) {
     const locationInputs = ownership.filter(
       (wire) => wire.toNodeId === warehouse.id
+        && isWarehousePrimaryInputPort(wire.toPortId)
         && wire.toPortId === 'location-in',
     );
     const operationInputs = graph.wires.filter(
       (wire) => wire.toNodeId === warehouse.id
+        && isWarehousePrimaryInputPort(wire.toPortId)
         && wire.toPortId === 'operation-in'
         && wire.relationshipType === 'generic',
     );

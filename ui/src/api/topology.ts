@@ -46,6 +46,8 @@ export interface TopologyData {
   schema_version?: number;
   /** Optimistic-concurrency revision assigned by the backend. */
   revision?: number;
+  /** Branch-scoped business-rule dismissals persisted with the diagram. */
+  resolved_issue_keys?: string[];
   nodes: TopologyNodePayload[];
   wires: TopologyWirePayload[];
 }
@@ -122,6 +124,7 @@ export const applyTopologyDiff = (
   branchId?: string,
   baseRevision = 0,
   requestId = crypto.randomUUID(),
+  resolvedIssueKeys: string[] = [],
 ): Promise<TopologyApplyResult> =>
   loggedInvoke<TopologyApplyResult>('apply_topology_diff', {
     sessionToken,
@@ -133,4 +136,8 @@ export const applyTopologyDiff = (
     ...(branchId !== undefined ? { branchId } : {}),
     baseRevision,
     requestId,
+    // Always send the field, including an empty array: clearing the last
+    // dismissal must overwrite the branch document instead of leaving a
+    // previously persisted key behind on the backend.
+    resolvedIssueKeys,
   });

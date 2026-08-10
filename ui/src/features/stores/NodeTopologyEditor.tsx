@@ -52,10 +52,10 @@ import {
 import { TopologyNodeCard } from './topologyNodeCard';
 import { TopologyWireGroup } from './topologyWireGroup';
 import { cubicBezier, polylinePoint } from './topologyWireGeometry';
+import { useTopologyEditorGraph, type TopologyHistoryEntry } from './nodeTopologyEditorState';
 import {
   normalizeTopologyGraph,
   normalizeWireDirection,
-  readResolvedIssueKeys,
   topologyIssueKey,
   validateTopologyGraph,
   type TopologyValidationError,
@@ -293,6 +293,7 @@ export interface NodeTopologyEditorProps {
     nodes: TopologyNodeData[],
     wires: TopologyWireData[],
     baseRevision?: number,
+    resolvedIssueKeys?: string[],
   ) => Promise<(TopologyApplyResult & { idMap?: Record<string, string> }) | Record<string, string> | void>;
   /**
    * Real workspace instances to seed the canvas with. When provided, the
@@ -552,8 +553,6 @@ function leftPortDy(_node: TopologyNodeData, _variantIndex: number): number {
 /** Evaluate a cubic bezier at parameter t (0-1). */
 const GRID_SIZE = 24;
 const snap = (v: number) => Math.round(v / GRID_SIZE) * GRID_SIZE;
-type HistoryEntry = { nodes: TopologyNodeData[]; wires: TopologyWireData[] };
-
 /** Stable keys identifying a validation issue for mark-issue-resolved
  *  persistence: a node issue is scoped by its card + message, a graph-level
  *  issue by its message alone. Module-scope so every surface (panel, banner,
@@ -720,7 +719,17 @@ export default function NodeTopologyEditor({
   const { settings } = useSettings();
   const canvasRef = useRef<HTMLDivElement>(null);
 
-  const [nodes, setNodes] = useState<TopologyNodeData[]>(PRESET_RETAIL.nodes);
+  const {
+    nodes,
+    wires,
+    history,
+    redo,
+    setNodes,
+    setWires,
+    setHistory,
+    setRedo,
+  } = useTopologyEditorGraph<TopologyNodeData, TopologyWireData>(PRESET_RETAIL.nodes, PRESET_RETAIL.wires);
+  type HistoryEntry = TopologyHistoryEntry<TopologyNodeData, TopologyWireData>;
   /** True once the first authoritative topology load has settled. The editor
    *  mounts on the retail preset while the async load is in flight, and the
    *  validation-issue dismissal forget-effect must not treat that placeholder
@@ -732,7 +741,8 @@ export default function NodeTopologyEditor({
   /** Prevent concurrent Apply requests from racing their workspace diffs. */
   const saveInFlightRef = useRef(false);
   const [saving, setSaving] = useState(false);
-  const [wires, setWires] = useState<TopologyWireData[]>(PRESET_RETAIL.wires);
+  /** Branch-scoped issue dismissals loaded from and saved with the topology. */
+  const [resolvedIssues, setResolvedIssues] = useState<Set<string>>(new Set());
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   /** Full multi-selection set; selectedNodeId is the primary (inspector
@@ -1039,11 +1049,9 @@ export default function NodeTopologyEditor({
   /** Nearest target port while dragging a connection, for snap-to-port preview. */
   const [hoveredTarget, setHoveredTarget] = useState<{ nodeId: string; port: PortName; variantIndex: number } | null>(null);
 
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
   /** Mirror of `history` state for synchronous reads in undo/redo handlers. */
   const historyRef = useRef<HistoryEntry[]>([]);
   historyRef.current = history;
-  const [redo, setRedo] = useState<HistoryEntry[]>([]);
 
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   /** Batch delete confirmation (2+ nodes). Single nodes keep confirmDelete
@@ -1507,6 +1515,7 @@ export default function NodeTopologyEditor({
       .then((data) => {
         if (cancelled) return;
         onLoadSuccess?.();
+        setResolvedIssues(new Set(data?.resolved_issue_keys ?? []));
         // Build a lookup of saved node positions/metadata (the diagram layer).
         const savedById = new Map<string, TopologyNodeData>();
         setTopologyRevision(data?.revision ?? 0);
@@ -3971,20 +3980,10 @@ export default function NodeTopologyEditor({
     return out;
   }, [liveValidation, nodeMap]);
 
-  /** Mark-issue-resolved: dismissals of validation issues, persisted per
-   *  diagram (branch) so a dismissal survives reloads and branch switches.
-   *  Dismissals are OCCURRENCE-scoped — the forget effect below drops a
-   *  stored key once the issue leaves the live set, so a genuinely NEW
-   *  occurrence later surfaces again instead of staying hidden forever.
-   *  Cosmetic for every issue EXCEPT warehouse-missing-stock-routing: a
-   *  dismissed "route stock in" prompt is the round-81 "intentionally
-   *  empty" escape hatch, so the Apply gate (editor AND screen — they
-   *  share this store) skips that error when its key is resolved. All
-   *  other issues still hard-block Apply. */
-  const resolvedIssuesKey = `oz-topology-resolved-issues:${branchId ?? 'unassigned'}`;
-  const [resolvedIssues, setResolvedIssues] = useState<Set<string>>(() =>
-    readResolvedIssueKeys(resolvedIssuesKey),
-  );
+  /** Mark-issue-resolved: dismissals of validation issues live in the
+   *  branch topology document, not browser-local storage. Dismissals are
+   *  occurrence-scoped — the forget effect drops a key once the issue leaves
+   *  the live set, so a genuinely new occurrence surfaces again. */
   // useCallback: the card consumes this via the memoized TopologyNodeCard
   // (round 66 boundary) — an unstable identity would re-render every card.
   const dismissIssue = useCallback(
@@ -4139,11 +4138,6 @@ export default function NodeTopologyEditor({
     });
   }, [liveValidation, topologyLoaded]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(resolvedIssuesKey, JSON.stringify([...resolvedIssues]));
-    } catch { /* storage unavailable — dismissal is session-only */ }
-  }, [resolvedIssuesKey, resolvedIssues]);
 
   /** Create one wire from an ADR #34 relationship option — the single path
    *  for both unambiguous drops (auto-commit) and picker choices.
@@ -4705,7 +4699,7 @@ export default function NodeTopologyEditor({
                 let savedNodes = nodes;
                 let savedWires = wires;
                 try {
-                  const result = await onSave?.(nodes, wires, topologyRevision);
+                  const result = await onSave?.(nodes, wires, topologyRevision, [...resolvedIssues]);
                   const idMap = result && 'idMap' in result
                     ? result.idMap
                     : result && 'revision' in result

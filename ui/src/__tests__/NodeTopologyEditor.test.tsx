@@ -7681,8 +7681,8 @@ describe('NodeTopologyEditor — validation panel & view prefs', () => {
       fireEvent.click(screen.getByText(/Issues \(2\)/));
       return document.querySelector('.topology-validation-panel') as HTMLElement;
     };
-    // The parent describe clears localStorage before each test; scrub after
-    // too so a leftover resolved key can't hide issues in later describes.
+    // The parent describe still clears localStorage for the viewport tests;
+    // dismissals themselves no longer use browser storage.
     afterEach(() => localStorage.clear());
 
     it('dismissing an issue removes it from the panel and decrements the count', async () => {
@@ -7703,26 +7703,27 @@ describe('NodeTopologyEditor — validation panel & view prefs', () => {
       expect(document.querySelectorAll('.node-validation-note')).toHaveLength(1);
     });
 
-    it('persists the dismissal key to localStorage', async () => {
-      mockLoadTopology.mockResolvedValue(twoIssueFixture);
+    it('loads dismissal state from the branch topology document', async () => {
+      mockLoadTopology.mockResolvedValue({
+        ...twoIssueFixture,
+        resolved_issue_keys: ['node:ws-1:topology-validation-missing-location'],
+      });
       renderEditor();
       await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
 
-      const panel = await openPanel();
-      fireEvent.click(panel.querySelectorAll('.topology-validation-item-dismiss')[0] as HTMLElement);
-
-      const stored = JSON.parse(localStorage.getItem('oz-topology-resolved-issues:unassigned') ?? '[]') as string[];
-      expect(stored).toHaveLength(1);
-      expect(stored[0]).toMatch(/^node:ws-[12]:/);
+      await waitFor(() => expect(screen.getByText(/Issues \(1\)/)).toBeInTheDocument());
+      expect(document.querySelectorAll('.node-validation-note')).toHaveLength(1);
+      expect(localStorage.getItem('oz-topology-resolved-issues:unassigned')).toBeNull();
     });
 
     it('keeps a dismissed issue dismissed across a remount', async () => {
-      mockLoadTopology.mockResolvedValue(twoIssueFixture);
+      mockLoadTopology.mockResolvedValue({
+        ...twoIssueFixture,
+        resolved_issue_keys: ['node:ws-1:topology-validation-missing-location'],
+      });
       const { unmount } = renderEditor();
       await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
 
-      const panel = await openPanel();
-      fireEvent.click(panel.querySelectorAll('.topology-validation-item-dismiss')[0] as HTMLElement);
       await waitFor(() => expect(screen.getByText(/Issues \(1\)/)).toBeInTheDocument());
 
       unmount();
@@ -7753,24 +7754,20 @@ describe('NodeTopologyEditor — validation panel & view prefs', () => {
 
       const panel = await openPanel();
       fireEvent.click(panel.querySelectorAll('.topology-validation-item-dismiss')[0] as HTMLElement);
-      expect(
-        JSON.parse(localStorage.getItem('oz-topology-resolved-issues:unassigned') ?? '[]'),
-      ).toHaveLength(1);
-
-      // A clean diagram (no issues) drops the dismissal — a genuine
+      // A clean diagram (no issues) drops the dismissal in memory — a genuine
       // recurrence later will surface again instead of staying hidden.
       unmount();
       mockLoadTopology.mockResolvedValue(null);
       renderEditor();
       await waitFor(() => expect(document.querySelector('.topology-issues-btn')).toBeNull());
-      expect(
-        JSON.parse(localStorage.getItem('oz-topology-resolved-issues:unassigned') ?? '[]'),
-      ).toHaveLength(0);
+      expect(screen.queryByText(/Issues \(/)).toBeNull();
     });
 
-    it('starts empty when the stored value is corrupted', async () => {
-      localStorage.setItem('oz-topology-resolved-issues:unassigned', 'garbage');
-      mockLoadTopology.mockResolvedValue(twoIssueFixture);
+    it('ignores unknown dismissal keys from the topology document', async () => {
+      mockLoadTopology.mockResolvedValue({
+        ...twoIssueFixture,
+        resolved_issue_keys: ['garbage'],
+      });
       renderEditor();
       await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
       expect(screen.getByText(/Issues \(2\)/)).toBeInTheDocument();

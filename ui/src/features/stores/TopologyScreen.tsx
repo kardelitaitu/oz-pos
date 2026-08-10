@@ -31,7 +31,6 @@ import NodeTopologyEditor, {
 } from './NodeTopologyEditor';
 import {
   normalizeTopologyGraph,
-  readResolvedIssueKeys,
   topologyIssueKey,
   validateTopologyGraph,
 } from './topologyContract';
@@ -380,6 +379,7 @@ export default function TopologyScreen() {
       nodes: TopologyNodeData[],
       wires: TopologyWireData[],
       baseRevision = 0,
+      resolvedIssueKeys: string[] = [],
     ): Promise<TopologyApplyResult & { idMap?: Record<string, string> }> => {
       const idMap: Record<string, string> = {};
 
@@ -394,10 +394,10 @@ export default function TopologyScreen() {
       // legacy primary/default fallback to survive into workspace mutation.
       const validationErrors = validateTopologyGraph(semanticGraph, licenseTier);
       // Round 81: a DISMISSED missing-stock-routing prompt (intentionally
-      // empty warehouse) stops blocking — the editor persisted the
-      // dismissal to this same branch-scoped store, so the parent gate
-      // honors it and the two gates can never disagree.
-      const resolvedIssues = readResolvedIssueKeys(`oz-topology-resolved-issues:${selectedBranchId ?? 'unassigned'}`);
+      // empty warehouse) stops blocking. The editor sends the same
+      // branch-document dismissal set through this callback, so the local
+      // validation gate and backend Apply payload cannot disagree.
+      const resolvedIssues = new Set(resolvedIssueKeys);
       const blockingErrors = validationErrors.filter(
         (e) => !(e.code === 'warehouse-missing-stock-routing' && e.nodeId && resolvedIssues.has(topologyIssueKey(e.nodeId, e.messageId))),
       );
@@ -615,6 +615,7 @@ export default function TopologyScreen() {
           selectedBranchId ?? undefined,
           baseRevision,
           crypto.randomUUID(),
+          resolvedIssueKeys,
         );
         if (!result || !Number.isSafeInteger(result.revision) || result.revision < 0) {
           throw new Error('topology Apply returned no committed revision');
