@@ -3300,7 +3300,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** new test standalone (0.17s) · topology module 231/231 (+1) · **`scripts/test-changed.sh` COMPLETED — 5,982 tests passed, 7 skipped — the first time it has run to completion since round 133** (the exe lock is gone; it detected the full `origin/main..HEAD` Rust delta including rounds 133-136) · `cargo fmt --all -- --check` clean · `cargo clippy -p oz-pos-app --lib -- -D warnings` clean. UI untouched (its contract was already pinned).
 
-**Commits:** `TODO`
+**Commits:** `28b9e34d`
 
 **Deliberately NOT done:** no production change — the probe was already correct; the round is the missing pin. No UI test — `api-ipc-contract.test.ts` already pins the TS wrapper's invoke shape. No test of the unknown-token path (shared `resolve_session` infrastructure, covered elsewhere).
 
