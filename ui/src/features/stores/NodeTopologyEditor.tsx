@@ -5969,7 +5969,12 @@ export default function NodeTopologyEditor({
                 stockWireHint={addStockWireHintId === node.id}
                 onDismissNodeIssue={handleDismissNodeIssue}
                 isFresh={freshNodeIds.has(node.id)}
-                isDimmed={(hoverConnections !== null && !hoverConnections.has(node.id)) || compareDimSet.has(node.id)}
+                /* Hover focus is the transient, specific intent: while it is
+                   active it fully takes over, so the inspected card and its
+                   connections light up even when compare focus would dim
+                   them (round 163). Compare dimming applies outside hover. */
+                isDimmed={(hoverConnections !== null && !hoverConnections.has(node.id))
+                  || (compareDimSet.has(node.id) && hoverConnections === null)}
                 isRenameable={(node.type === 'store' && !!onRenameBranch) || (node.type === 'workspace' && !!onRenameWorkspace)}
                 renaming={renamingNodeId === node.id}
                 renameDraft={renameDraft}

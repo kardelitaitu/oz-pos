@@ -3552,3 +3552,18 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Deliberately NOT done:** no focus-scoped WIRE dimming — wires stay full-strength because they carry topology meaning beyond the card classification (the round-155 wiring comparison is per-workspace, so a wire's "shared-identical" status isn't defined); no dimming of ghost stubs' shared far-end anchors — a ghost→shared stub pointing at a dimmed card still reads (the connection is legible, just quieter); no persistence of the toggle across sessions (it resets when the panel closes — a deliberate choice; reopening the panel starts fresh).
 
 **Risks / follow-ups:** hover-focus (round-146 era) and compare-focus compose by OR — when both are active, a card dims if EITHER mode dims it, which is correct but untested in combination (the hover tests run without an overlay); the dim-set memo rebuilds per overlay/nodes change — trivial cost. This closes the eight-round compare series (154-162): classification, drift pairing, ghosts + markers, in-view layout, ghost↔ghost + ghost→shared stubs, and now focus mode.
+### 2026-08-11 — hover inspection beats compare-focus dimming (round 163)
+
+**Problem:** the round-162 journal recorded a risk: the hover-focus and compare-focus dim modes compose by OR but were never tested together. Writing that test exposed a real interaction bug, not just a gap — hovering a shared-identical card under compare focus kept the INSPECTED card dimmed. `hoverConnections` includes the hovered node itself, and the OR expression `(hoverConnections !== null && !has(node)) || compareDimSet.has(node)` re-applied the compare dim to a card the operator was actively inspecting. The same hit any compare-dimmed neighbour of the hovered card.
+
+**Solution:** hover focus is the transient, specific intent — while active it fully takes over: `isDimmed = (hoverConnections !== null && !hoverConnections.has(node.id)) || (compareDimSet.has(node.id) && hoverConnections === null)`. Compare dimming applies outside hover; during hover the connected subgraph lights up exactly as hover-focus has always behaved. One-line semantic change, no CSS, no state.
+
+**TDD:** Red = 2 editor tests (hovering the compare-dimmed card itself lights it back up, and restoring dim on leave; hovering a CONNECTED card also lights the compare-dimmed neighbour). Both failed for the right reason (`node-dimmed` still present). Green = the composed expression — all 3 round-162 focus tests, the hover-focus suite, and the full editor suite stayed green. Mutation caught (reverting to the naive OR fails the first regression test).
+
+**Verify:** editor 503/503 (+2) · engine 40/40 · screen 42/42 · **full UI 280 files / 4,794 tests (+2)** · typecheck ✓ · eslint 0 errors · drift guard clean.
+
+**Commits:** (added below after commit)
+
+**Deliberately NOT done:** no change to hover-focus wire dimming (wires were never compare-dimmed — round 162's deliberate choice stands); no persistence of compare focus across hovers (the toggle stays as set; hover is a transient overlay on it); no test for compare-dimmed + hover-dimmed simultaneously (a card both not-connected under hover AND shared-identical is dimmed by both — visually identical, one assertion would be redundant).
+
+**Risks / follow-ups:** the FTL `vars`-cross-check guard remains the open defect-class item from the round-163 recommendation — `<Localized>` sites whose `vars` keys don't match an FTL message's `$vars` render the raw id at runtime, invisible to bundle parity (which counts keys, not variables). Same shape as the round-156 bare-placeholder gate.

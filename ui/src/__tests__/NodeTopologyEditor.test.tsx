@@ -602,6 +602,54 @@ describe('NodeTopologyEditor Component', () => {
     expect(document.querySelectorAll('.topology-node.node-dimmed')).toHaveLength(0);
   });
 
+  it('hover inspection lights the inspected card back up despite compare-focus dimming', () => {
+    // Round 163 regression: compare focus dims ws-1 (shared-identical), but
+    // hovering ws-1 itself must LIGHT it up — the operator is inspecting
+    // this exact card, and hover focus is the transient, specific intent.
+    // The naive OR of the two dim modes kept the inspected card dimmed.
+    renderEditor({
+      compareFocus: true,
+      compareOverlay: {
+        ghosts: [],
+        onlyHere: [],
+        differing: [],
+        otherWires: [],
+        sharedByOtherId: [{ otherId: 'ws-1', currentId: 'ws-1' }],
+      },
+    });
+
+    const ws = document.querySelector('.topology-node[data-node-id="ws-1"]') as HTMLElement;
+    expect(ws.className).toContain('node-dimmed');
+
+    fireEvent.mouseEnter(ws);
+    expect(ws.className).not.toContain('node-dimmed');
+
+    fireEvent.mouseLeave(ws);
+    expect(ws.className).toContain('node-dimmed');
+  });
+
+  it('hovering a connected card also lights a compare-dimmed neighbour', () => {
+    renderEditor({
+      compareFocus: true,
+      compareOverlay: {
+        ghosts: [],
+        onlyHere: [],
+        differing: [],
+        otherWires: [],
+        sharedByOtherId: [{ otherId: 'ws-1', currentId: 'ws-1' }],
+      },
+    });
+
+    // Retail preset: store-1 → ws-1. Hovering the store keeps its direct
+    // neighbour (ws-1) lit even though compare focus dims ws-1.
+    const store = document.querySelector('.topology-node[data-node-id="store-1"]') as HTMLElement;
+    const ws = document.querySelector('.topology-node[data-node-id="ws-1"]') as HTMLElement;
+    expect(ws.className).toContain('node-dimmed');
+
+    fireEvent.mouseEnter(store);
+    expect(ws.className).not.toContain('node-dimmed');
+  });
+
   it('renders tool rack sidebar and preset buttons', () => {
     renderEditor();
 
