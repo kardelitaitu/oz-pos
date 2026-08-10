@@ -365,7 +365,21 @@ export default function OfflineQueueScreen() {
         </div>
       )}
 
-      {syncResult && (
+      {syncResult && syncResult.planRequired && (
+        <div className="offline-queue-sync-result offline-queue-sync-result--plan" role="status">
+          <p className="offline-queue-plan-required-title">
+            <Localized id="offline-queue-plan-required">
+              <span>Cloud sync requires a paid plan</span>
+            </Localized>
+          </p>
+          <p className="offline-queue-plan-required-hint">
+            <Localized id="offline-queue-plan-required-hint">
+              <span>Your local sales keep working — upgrade to sync them to the cloud.</span>
+            </Localized>
+          </p>
+        </div>
+      )}
+      {syncResult && !syncResult.planRequired && (
         <div className="offline-queue-sync-result" role="status">
           <Localized
             id="offline-queue-sync-success"

@@ -497,4 +497,33 @@ describe('OfflineQueueScreen', () => {
     // No undefined counts leak into the message.
     expect(screen.queryByText(/Synced undefined/)).toBeNull();
   });
+
+  it('shows the localized plan-required prompt instead of a fake success on Sync All (ADR sync-plan-gating)', async () => {
+    // A free tenant's retry_offline_sync resolves with planRequired:true.
+    // The screen must surface the upgrade prompt — never a misleading
+    // "Synced 0 items, 0 failed." success line.
+    mockListAllOffline.mockResolvedValue([makeQueueItem()]);
+    mockPendingOfflineCount.mockResolvedValue(1);
+    mockRetryOfflineSync.mockResolvedValue({
+      syncedCount: 0,
+      failedCount: 0,
+      totalCount: 0,
+      planRequired: true,
+    });
+
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('Sync All')).not.toBeDisabled();
+    });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByText('Sync All'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Cloud sync requires a paid plan')).toBeInTheDocument();
+    });
+    // The misleading success line must NOT render for a gated tenant.
+    expect(screen.queryByText(/Synced 0 items, 0 failed/)).toBeNull();
+  });
 });
