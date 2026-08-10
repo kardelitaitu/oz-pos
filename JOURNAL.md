@@ -3562,7 +3562,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verify:** editor 503/503 (+2) · engine 40/40 · screen 42/42 · **full UI 280 files / 4,794 tests (+2)** · typecheck ✓ · eslint 0 errors · drift guard clean.
 
-**Commits:** (added below after commit)
+**Commits:** `8d7fd565` (fix(topology): hover inspection lights up despite compare-focus dim)
 
 **Deliberately NOT done:** no change to hover-focus wire dimming (wires were never compare-dimmed — round 162's deliberate choice stands); no persistence of compare focus across hovers (the toggle stays as set; hover is a transient overlay on it); no test for compare-dimmed + hover-dimmed simultaneously (a card both not-connected under hover AND shared-identical is dimmed by both — visually identical, one assertion would be redundant).
 
