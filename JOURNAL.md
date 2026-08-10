@@ -3414,7 +3414,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** standalone-chip integration 1/1 (rewritten) · seeded-chip 4/4 unchanged · editor suite 495/495 · diff suite 19/19 · TopologyScreen 38/38 · **full UI suite 278 files / 4,731 tests** (−1 file, −5 deleted tests) · typecheck ✓ · eslint 0 errors (8 pre-existing warnings) · lint:i18n clean · **mutation check**: synthesizing the standalone seed from the LIVE canvas (instead of the snapshot) made a spawned workspace invisible to the chip (`0 created`) — failed the rewritten test → restored, green. Drift guard clean.
 
-**Commits:** `TBD`
+**Commits:** `9aedb551`
 
 **Deliberately NOT done:** no keep-dead-code — computeCanvasDiff was fully superseded and deleted with its tests (the branch-compare idea can build on planTopologyDiff + wireGeometry instead). No change to the seeded path (instances remain the before-side when provided). No standalone-specific revision semantics — the `rev {from} → {to}` bump reads the same everywhere.
 
