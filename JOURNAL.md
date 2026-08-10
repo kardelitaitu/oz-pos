@@ -3047,3 +3047,19 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Deliberately NOT done:** the touch cleanup ref has no test of its own — the marquee regression pins the shared unmount-teardown path, and the three disarms are one line each in the same effect. A per-gesture unmount test would be near-duplicate ceremony.
 
 **Risks / follow-ups:** this closes the gesture-listener leak class on the desktop editor; the tablet shares this component, so it is covered too. The same audit lens (unmount must disarm every document listener the component arms) is worth applying to any other long-lived canvas component.
+
+### 2026-08-10 — Premium tier treated as Standard by the topology contract (round 129)
+
+**Problem (evidence):** the TS topology contract's Pro set was `['pro', 'enterprise']` in three places — `capacityEnforced`/`tierLimitEnforced` (`topologyContract.ts`), the editor's `isProAllowed` spawn gate, and the tier-downgrade notice condition — and the `TopologyScreen` prop union omitted `'premium'` entirely. The backend treats Premium as Pro-equivalent (`SubscriptionTier::max_warehouses`: `Pro | Premium | Enterprise => None`; `validate_warehouse_capacity`: same three tiers). So on a Premium install the editor showed the standard-tier `warehouse-tier-limit` banner for a second Stock Room, blocked the palette/duplicate spawn, skipped the capacity guards, and showed the "not enforced on your current plan" notice — while the backend would have accepted the diagram and enforced capacity. A live-badge/Apply disagreement, exactly the audit's P0/P1 class.
+
+**Red:** three contract tests — `premium` allows two warehouses (no `warehouse-tier-limit`), enforces `warehouse-at-capacity`, and enforces `warehouse-missing-stock-routing` — all failed pre-fix (tierLimitEnforced true / capacityEnforced false). Plus one editor regression: a two-warehouse diagram on `currentTier: 'premium'` must show no tier banner and Apply must call `onSave` (verified: reverting the contract fix makes it fail).
+
+**Green:** added `'premium'` to the contract's Pro set (with a comment citing the backend equivalence), the editor's `isProAllowed`, the tier-downgrade notice condition (now `!isProAllowed`), and both `NodeTopologyEditorProps.currentTier` declarations + the `TopologyScreen` prop union.
+
+**Verified:** contract 51/51 (+3) · editor 465/465 (+1) · editor+contract+screen 554/554 · **full UI suite 275 files / 4,667 tests** (+4) · a11y 8/8 · typecheck ✓ · eslint ✓.
+
+**Commits:** `<pending>`
+
+**Deliberately NOT done:** the backend already had Premium in its Pro sets (this was a TS-only drift), so no Rust change was needed; the `free`/`one_time` tiers were verified to map consistently (`max_warehouses` Some(1) ↔ `tierLimitEnforced` true on both sides).
+
+**Risks / follow-ups:** this is the same class as the audit's "generated contract" item — the tier lists still live as literals in `topologyContract.ts`/`NodeTopologyEditor.tsx`/`TopologyScreen.tsx` plus `subscription.rs`. A shared generated tier matrix (single source consumed by both languages) is the durable fix; this round closes the concrete Premium drift, not the generation gap.

@@ -280,7 +280,7 @@ export interface WorkspaceInstanceSeed {
 }
 
 export interface NodeTopologyEditorProps {
-  currentTier?: 'free' | 'one_time' | 'standard' | 'pro' | 'enterprise';
+  currentTier?: 'free' | 'one_time' | 'standard' | 'pro' | 'premium' | 'enterprise';
   /**
    * Optional toolbar content rendered inside the topology header, above the
    * title/actions row. The parent screen uses this slot to merge its branch
@@ -1366,7 +1366,10 @@ export default function NodeTopologyEditor({
    * entry per keystroke. Reset on selection change and undo/redo. */
   const inspectorHistoryPushedForRef = useRef<string | null>(null);
 
-  const isProAllowed = useMemo(() => ['pro', 'enterprise'].includes(currentTier), [currentTier]);
+  // Premium is Pro-equivalent (backend max_warehouses / capacity both
+  // include it) — the spawn gate and the live validation must agree with
+  // the Apply boundary or a Premium install blocks its second Stock Room.
+  const isProAllowed = useMemo(() => ['pro', 'premium', 'enterprise'].includes(currentTier), [currentTier]);
   /** True when adding `extra` warehouse nodes would exceed the tier cap
    *  (one warehouse per install below Pro). The palette spawn, Ctrl+D,
    *  Ctrl+V, Alt+drag, and the mid-drag Alt conversion ALL share this gate
@@ -5083,7 +5086,7 @@ export default function NodeTopologyEditor({
               ))}
             </div>
           )}
-          {!['pro', 'enterprise'].includes(currentTier) && hasCapacityMetadata && (
+          {!isProAllowed && hasCapacityMetadata && (
             <div className="topology-tier-notice" role="status" onMouseDown={(e) => e.stopPropagation()}>
               <WarningIcon size={14} />
               <span>

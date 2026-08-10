@@ -1041,4 +1041,52 @@ describe('semantic topology contract', () => {
     const errors = validateTopologyGraph(normalized, 'standard');
     expect(errors.filter((e) => e.code === 'warehouse-missing-stock-routing')).toHaveLength(0);
   });
+
+  it('allows two warehouses on Premium tier (Pro-equivalent, mirrors the backend)', () => {
+    // Regression: the TS contract's Pro set was ['pro', 'enterprise'], but
+    // the backend treats Premium as Pro-equivalent (max_warehouses None,
+    // capacity enforced). On Premium the contract therefore flagged the
+    // second Stock Room as warehouse-tier-limit and blocked Apply, while
+    // the backend would have accepted it — a live-badge/Apply disagreement.
+    const normalized = graph(
+      [
+        branch(),
+        workspace('ws-1'),
+        warehouseWith('wh-hub', { stock: 300, capacity: 1000 }),
+        warehouseWith('wh-sat', { stock: 200, capacity: 500 }),
+      ],
+      [
+        ownershipWire('w-owner', 'ws-1'),
+        stockWire('w-stock', 'ws-1', 'wh-hub'),
+        transferWire('w-transfer', 'wh-hub', 'wh-sat'),
+      ],
+    );
+
+    const tierErrors = validateTopologyGraph(normalized, 'premium').filter(
+      (e) => e.code === 'warehouse-tier-limit',
+    );
+    expect(tierErrors).toEqual([]);
+  });
+
+  it('enforces the at-capacity guard on Premium tier (Pro-equivalent)', () => {
+    const normalized = graph(
+      [branch(), workspace('ws-1'), warehouseWith('wh-1', { stock: 1000, capacity: 1000 })],
+      [ownershipWire('w-owner', 'ws-1'), stockWire('w-stock', 'ws-1', 'wh-1')],
+    );
+
+    expect(validateTopologyGraph(normalized, 'premium')).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'warehouse-at-capacity' }),
+    ]));
+  });
+
+  it('enforces the missing-stock-routing prompt on Premium tier (Pro-equivalent)', () => {
+    const normalized = graph(
+      [branch(), workspace('ws-1'), warehouseWith('wh-1', { stock: 500, capacity: 1000 })],
+      [ownershipWire('w-owner', 'ws-1')],
+    );
+
+    expect(validateTopologyGraph(normalized, 'premium')).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'warehouse-missing-stock-routing' }),
+    ]));
+  });
 });

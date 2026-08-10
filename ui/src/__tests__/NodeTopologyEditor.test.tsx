@@ -1509,6 +1509,22 @@ describe('NodeTopologyEditor Component', () => {
       fireEvent.click(screen.getByText('Apply Topology Changes'));
       await waitFor(() => expect(onSave).toHaveBeenCalled());
     });
+
+    it('allows two warehouses on a Premium-tier diagram (Pro-equivalent)', async () => {
+      // Regression: the editor's Pro set was ['pro', 'enterprise'] and the
+      // screen's tier union omitted 'premium', so a Premium install saw the
+      // standard-tier warehouse-tier-limit banner and Apply gate even though
+      // the backend treats Premium as Pro (unlimited warehouses).
+      mockLoadTopology.mockResolvedValueOnce(twoWarehouseDiagram);
+      const onSave = vi.fn();
+      renderEditor({ currentTier: 'premium', onSave });
+      await waitFor(() => expect(getNodeCount()).toBe(4));
+
+      expect(screen.queryByText('Multiple Stock Rooms require a Pro Tier license.')).toBeNull();
+
+      fireEvent.click(screen.getByText('Apply Topology Changes'));
+      await waitFor(() => expect(onSave).toHaveBeenCalled());
+    });
   });
 
   // ── Store spawn in strict mode (P1/P2) ─────────────────────────

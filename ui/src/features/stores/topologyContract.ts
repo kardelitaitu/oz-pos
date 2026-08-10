@@ -546,8 +546,13 @@ export function validateTopologyGraph(
   // checks and hit the warehouse-tier-limit cap instead. One source of
   // truth for both, so the editor's live gate and the screen's Apply
   // boundary can never disagree (round 87).
-  const capacityEnforced = tier === undefined || ['pro', 'enterprise'].includes(tier);
-  const tierLimitEnforced = tier === undefined || !['pro', 'enterprise'].includes(tier);
+  // Pro, Premium, and Enterprise are the capacity-aware tiers — the backend
+  // treats Premium as Pro-equivalent (SubscriptionTier::max_warehouses /
+  // validate_warehouse_capacity both include it), so the contract must too,
+  // or a Premium install would flag its second Stock Room and skip the
+  // capacity guards while the backend accepted the diagram.
+  const capacityEnforced = tier === undefined || ['pro', 'premium', 'enterprise'].includes(tier);
+  const tierLimitEnforced = tier === undefined || !['pro', 'premium', 'enterprise'].includes(tier);
   if (graph.schemaVersion !== TOPOLOGY_SCHEMA_VERSION) {
     errors.push({
       code: 'unsupported-schema-version',

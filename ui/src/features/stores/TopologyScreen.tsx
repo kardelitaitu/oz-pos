@@ -661,7 +661,7 @@ export default function TopologyScreen() {
       <NodeTopologyEditor
         key={selectedBranchId ?? 'unassigned'}
         branchId={selectedBranchId ?? 'unassigned'}
-        currentTier={licenseTier as 'free' | 'one_time' | 'standard' | 'pro' | 'enterprise'}
+        currentTier={licenseTier as 'free' | 'one_time' | 'standard' | 'pro' | 'premium' | 'enterprise'}
         {...(workspaceSeed !== undefined ? { workspaceInstances: workspaceSeed } : {})}
         {...(branchLocationSeed !== undefined ? { branchLocations: branchLocationSeed } : {})}
         onRenameBranch={handleRenameBranch}
