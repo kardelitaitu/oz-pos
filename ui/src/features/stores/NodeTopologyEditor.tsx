@@ -1721,6 +1721,12 @@ export default function NodeTopologyEditor({
           // effect's cleanup clear the 30ms interval.
           setIsSimulating(false);
           setSimPulseStep(0);
+          // Same canvas-replacement rule: an in-flight marquee or bend-drag
+          // is armed at document level and would fire against the new
+          // canvas — the box would linger and the next release would commit
+          // a stale selection, so cancel both.
+          cancelMarquee();
+          cancelBendDrag();
           // A reloaded node with a surviving id must start a fresh inspector
           // edit session, or its next edit would silently skip pushHistory.
           inspectorHistoryPushedForRef.current = null;
@@ -1749,6 +1755,10 @@ export default function NodeTopologyEditor({
           // never outlive the canvas it was run against.
           setIsSimulating(false);
           setSimPulseStep(0);
+          // Same canvas-replacement rule: cancel an in-flight marquee or
+          // bend-drag so it cannot fire against the emptied canvas.
+          cancelMarquee();
+          cancelBendDrag();
           inspectorHistoryPushedForRef.current = null;
           commitSnapshot({ nodes: [], wires: [] });
           return;
@@ -1784,6 +1794,7 @@ export default function NodeTopologyEditor({
             direction: normalizeWireDirection(w.direction),
           };
           if (w.label !== undefined) wire.label = w.label;
+          if (w.bends !== undefined) wire.bends = w.bends;
           if (w.from_port != null) wire.fromPort = normalizeVisualPort(w.from_port, 'right');
           if (w.to_port != null) wire.toPort = normalizeVisualPort(w.to_port, 'left');
           if (w.from_port_id !== undefined) wire.fromPortId = w.from_port_id;
@@ -1806,6 +1817,12 @@ export default function NodeTopologyEditor({
         // effect's cleanup clear the 30ms interval.
         setIsSimulating(false);
         setSimPulseStep(0);
+        // Same canvas-replacement rule: an in-flight marquee or bend-drag
+        // is armed at document level and would fire against the new
+        // canvas — the box would linger and the next release would commit
+        // a stale selection, so cancel both.
+        cancelMarquee();
+        cancelBendDrag();
         // A reloaded node with a surviving id must start a fresh inspector
         // edit session, or its next edit would silently skip pushHistory.
         inspectorHistoryPushedForRef.current = null;
@@ -2302,6 +2319,18 @@ export default function NodeTopologyEditor({
    *  history entry, so a cancelled gesture leaves no undo record. Mirrors
    *  cancelNodeMove for node drags. Defined before the keydown effect that
    *  calls it (the effect's deps evaluate this binding eagerly). */
+  /** Cancel an in-flight marquee: clear the box state/refs AND disarm the
+   *  document finalizer. A release after a canvas replacement must not
+   *  commit a stale selection, and the box must never linger on a new
+   *  canvas — clearing only the listener (marqueeCleanupRef) would leave
+   *  the rendered box behind. */
+  const cancelMarquee = useCallback(() => {
+    marqueeStartRef.current = null;
+    marqueeRef.current = null;
+    setMarquee(null);
+    marqueeCleanupRef.current?.();
+  }, [setMarquee]);
+
   const cancelBendDrag = useCallback(() => {
     const d = bendDragRef.current;
     if (!d) return;
@@ -2443,6 +2472,12 @@ export default function NodeTopologyEditor({
     // makes the interval effect's cleanup clear the 30ms interval.
     setIsSimulating(false);
     setSimPulseStep(0);
+    // Same canvas-replacement rule: an in-flight marquee or bend-drag is
+    // armed at document level and would fire against the new canvas — the
+    // box would linger and the next release would commit a stale selection,
+    // so cancel both.
+    cancelMarquee();
+    cancelBendDrag();
     setFreshNodeIds(new Set());
     // The preset is now the applied state — the canvas matches it exactly,
     // so a subsequent preset click must not confirm.
@@ -2851,10 +2886,7 @@ export default function NodeTopologyEditor({
         // from a cancelled marquee (the box would otherwise linger until
         // the next mousedown/mouseup cycle).
         if (marqueeStartRef.current) {
-          marqueeStartRef.current = null;
-          marqueeRef.current = null;
-          setMarquee(null);
-          marqueeCleanupRef.current?.();
+          cancelMarquee();
           return;
         }
         cancelConnection();

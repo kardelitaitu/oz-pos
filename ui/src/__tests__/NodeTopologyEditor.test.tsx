@@ -5216,6 +5216,76 @@ describe('NodeTopologyEditor — multi-select & marquee', () => {
     expect(mouseUpRemovals.length).toBeGreaterThan(0);
   });
 
+  it('an authoritative reload cancels an in-flight marquee (canvas-replacement rule)', async () => {
+    // Regression: the load effect cancels connection/hover/simulation on
+    // canvas replacement but NOT the in-flight marquee — its document
+    // mouseup finalizer stayed armed and the box stayed rendered. A reload
+    // mid-marquee (branch switch, instance refresh) left a phantom
+    // selection box on the NEW canvas that the next page-wide release
+    // committed against stale coordinates.
+    mockLoadTopology.mockResolvedValue({
+      nodes: [
+        { id: 'ws-1', type: 'workspace', name: 'POS One', x: 80, y: 120, metadata: { typeKey: 'store-pos' } },
+        { id: 'ws-2', type: 'workspace', name: 'POS Two', x: 240, y: 80, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [],
+    });
+
+    renderWithProvidersSync(
+      <ReloadingHarness
+        next={[
+          { instanceId: 'ws-1', typeKey: 'store-pos', name: 'POS Reloaded' },
+          { instanceId: 'ws-2', typeKey: 'store-pos', name: 'POS Two' },
+        ]}
+      />,
+      multiStoreFtl,
+      sharedFtl,
+    );
+
+    // Initial legacy load renders the fixture (POS One/POS Two); POS
+    // Reloaded only appears after the authoritative rebuild, so it is the
+    // reload-complete marker.
+    await waitFor(() => expect(screen.getByText('POS One')).toBeInTheDocument());
+    mockCanvasSize(1200, 800);
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    // Arm and render the marquee.
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 650, clientY: 420 });
+    expect(document.querySelector('.topology-marquee')).not.toBeNull();
+
+    // Canvas replaced mid-marquee — the box must not linger on the new
+    // canvas.
+    fireEvent.click(screen.getByText('reload-instances'));
+    await waitFor(() => expect(screen.getByText('POS Reloaded')).toBeInTheDocument());
+    expect(document.querySelector('.topology-marquee')).toBeNull();
+
+    // A release after the reload must NOT commit a phantom selection from
+    // the pre-reload box (both rebuilt ws nodes sit inside it pre-fix).
+    fireEvent.mouseUp(document, { button: 0 });
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(0);
+  });
+
+  it('a preset load cancels an in-flight marquee (canvas-replacement rule)', () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    // Arm and render the marquee over the preset's store/workspace nodes.
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 650, clientY: 420 });
+    expect(document.querySelector('.topology-marquee')).not.toBeNull();
+
+    // The preset replaces the canvas — the box must go, and a release must
+    // not commit a phantom selection on the preset's nodes.
+    fireEvent.click(screen.getByText('Resto & KDS Preset'));
+    expect(screen.getByText('Grand Bistro')).toBeInTheDocument();
+    expect(document.querySelector('.topology-marquee')).toBeNull();
+
+    fireEvent.mouseUp(document, { button: 0 });
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(0);
+  });
+
   it('left→right marquee selects only fully-contained nodes (excludes partial overlaps)', () => {
     renderEditor();
     mockCanvasSize(1200, 800);
@@ -5946,6 +6016,60 @@ describe('NodeTopologyEditor — wire bend editing', () => {
     fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
     expect(document.querySelector('.wire-bend-handle')).toBeNull();
     expect(path.getAttribute('data-direction')).toBe('one-way');
+  });
+
+  it('an authoritative reload disarms an in-flight bend-drag (canvas-replacement rule)', async () => {
+    // Regression: the load effect cancels connection/hover/simulation on
+    // canvas replacement but NOT the in-flight bend-drag — its document
+    // mousemove/mouseup listeners stayed armed, so a reload mid-drag left
+    // the drag hanging on the new canvas: the next move wrote bend
+    // coordinates to a wire by stale id and the release never restored the
+    // pre-gesture bend position.
+    mockLoadTopology.mockResolvedValue({
+      nodes: [
+        { id: 'ws-1', type: 'workspace', name: 'POS One', x: 80, y: 120, metadata: { typeKey: 'store-pos' } },
+        { id: 'ws-2', type: 'workspace', name: 'POS Two', x: 240, y: 80, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [
+        { id: 'w-1', from_node_id: 'ws-1', to_node_id: 'ws-2', direction: 'one-way', bends: [{ x: 200, y: 200 }] },
+      ],
+    });
+
+    renderWithProvidersSync(
+      <ReloadingHarness
+        next={[
+          { instanceId: 'ws-1', typeKey: 'store-pos', name: 'POS Reloaded' },
+          { instanceId: 'ws-2', typeKey: 'store-pos', name: 'POS Two' },
+        ]}
+      />,
+      multiStoreFtl,
+      sharedFtl,
+    );
+
+    // Initial legacy load renders the fixture (POS One/POS Two); the
+    // reload rebuilds from instances (POS Reloaded marks completion).
+    await waitFor(() => expect(screen.getByText('POS One')).toBeInTheDocument());
+
+    // Select the wire so its bend handle renders, then start the drag.
+    // (This also pins the legacy-load bend preservation — the fixture's
+    // bend must survive the initial saved-diagram load or the handle
+    // never renders.)
+    fireEvent.click(document.querySelector('.wire-hitbox') as Element);
+    const handle = document.querySelector('.wire-bend-handle') as Element;
+    expect(handle).not.toBeNull();
+    fireEvent.mouseDown(handle, { button: 0, clientX: 200, clientY: 200 });
+    fireEvent.mouseMove(document, { clientX: 220, clientY: 180 });
+
+    // Spy AFTER arming so only reload-time removals are attributed.
+    const removeSpy = vi.spyOn(document, 'removeEventListener');
+    fireEvent.click(screen.getByText('reload-instances'));
+    await waitFor(() => expect(screen.getByText('POS Reloaded')).toBeInTheDocument());
+
+    const gestureRemovals = removeSpy.mock.calls.filter(
+      ([type]) => type === 'mousemove' || type === 'mouseup',
+    );
+    removeSpy.mockRestore();
+    expect(gestureRemovals.length).toBeGreaterThan(0);
   });
 
   it('reveals midpoint bend ghosts on hover without selecting the wire', () => {

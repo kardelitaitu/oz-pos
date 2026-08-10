@@ -3076,8 +3076,26 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** editor 466/466 (+1) · **full UI suite 275 files / 4,668 tests** (+1) · a11y 8/8 · typecheck ✓ · eslint ✓ (8 pre-existing warnings, none new).
 
-**Commits:** `<pending>`
+**Commits:** `b2a559a6`
 
 **Deliberately NOT done:** the rename-merge reload path (same instance ids, names refreshed) is not a canvas replacement, so the pulse legitimately survives it — worth a test if the semantics are ever questioned. The preset path and the three load paths now share the rule by convention; a shared `resetTransientCanvasState()` helper would remove the duplication but was left out to keep the diff minimal.
 
 **Risks / follow-ups:** the audit's remaining items are unchanged — the generated TS↔Rust semantic contract (the capacity rules still live in both `topologyContract.ts` and `topology.rs`), crash-injection recovery tests, and process-safe revision locking.
+
+### 2026-08-10 — canvas replacement leaves marquee/bend-drag armed (round 131)
+
+**Problem (evidence):** rounds 124–130 wired the canvas-replacement rule into connection, hover, simulation, undo/redo, and the inspector session — but the two remaining document-armed gestures were skipped. The load effect's three canvas-replacement paths and `loadPreset` all call `cancelConnection(); setHoveredTarget(null); clearHover(); setIsSimulating(false); setSimPulseStep(0)` — none touch the in-flight marquee or bend-drag. A marquee started and then reloaded (branch switch, instance refresh) left the box rendered on the NEW canvas and its document `mouseup` finalizer armed: the next page-wide release committed a phantom selection from stale coordinates. A bend-drag mid-reload left its document `mousemove`/`mouseup` armed: the next move wrote bend coordinates by stale wire id and the release never restored the pre-gesture position. (Round 128 fixed the UNMOUNT case only.)
+
+**Bonus finding:** writing the bend-drag regression exposed a second bug in the same load effect — the LEGACY saved-diagram path maps wires and preserves label/ports/port-ids/relationship-type but silently dropped `w.bends` (the workspace-rebuild path preserved them). A standalone/legacy reload of a saved diagram with bends erased every bend. The regression test's fixture bend pinned it: pre-fix the handle never rendered.
+
+**Red:** three tests — `an authoritative reload cancels an in-flight marquee` (box lingers after reload, then a release commits a 2-node phantom selection), `a preset load cancels an in-flight marquee` (same on the preset path), and `an authoritative reload disarms an in-flight bend-drag` (spy: document mousemove/mouseup not removed on reload). The first two failed on the lingering box; the third failed on the missing bend handle (the legacy-bends drop).
+
+**Green:** added `cancelMarquee()` (clears `marqueeStartRef`/`marqueeRef`/`setMarquee(null)` AND disarms the document finalizer — `marqueeCleanupRef.current?.()` alone only removed the listener, leaving the box rendered) and routed the Escape handler through it; added `cancelMarquee(); cancelBendDrag();` to all four canvas-replacement reset blocks; and added `w.bends` preservation to the legacy wire mapping.
+
+**Verified:** editor 469/469 (+3) · **full UI suite 275 files / 4,671 tests** (+3) · a11y 8/8 · typecheck ✓ · eslint ✓ (8 pre-existing warnings, none new).
+
+**Commits:** `<pending>`
+
+**Deliberately NOT done:** `cancelBendDrag` restores the bend position and pops the drag's undo entry on the OLD wire array — the load path replaces wires right after, so the restore is overwritten and history is cleared; harmless but slightly redundant (a load-scoped variant could skip the restore). The fresh-node id set is still cleared only by `loadPreset`, not the load effect — a stale spawn ring could survive a reload; deferred as minor.
+
+**Risks / follow-ups:** with connection, hover, sim, marquee, and bend-drag all reset by the same five blocks, the duplication is now five-fold — the `resetTransientCanvasState()` helper is overdue and would make the rule structural. The audit's remaining items are unchanged: the generated TS↔Rust semantic contract, crash-injection recovery tests, and process-safe revision locking.
