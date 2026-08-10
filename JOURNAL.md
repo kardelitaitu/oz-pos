@@ -3228,7 +3228,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** editor suite 477/477 (+6: 2 integration + 4 pure) · memo 3/3 · touch 4/4 · full UI suite 276 files / 4,683 tests (+6) · typecheck ✓ · eslint 0 errors (8 pre-existing warnings).
 
-**Commits:** (ref back-filled after commit)
+**Commits:** `e5594bdf`
 
 **Deliberately NOT done:** no nudge blocking (arrow keys can still step a node into a neighbour — nudges are 1px/8-24px steps where auto-resolving to a 24px-away spot would be jarring; blocking is a small follow-up); no loaded-diagram overlap repair (pre-existing overlap from saved data is left alone until the user moves the node — a silent jump on load would be worse); no overlap warning indicator.
 
