@@ -2870,3 +2870,19 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** `36ed773c`
 
 **Risks / follow-ups:** a deliberate "plan unknown" state (grey badge + tooltip with the status string) would be more informative than an absent row, but that needs new FTL keys and a design decision — the fail-closed absence is the safe default.
+
+### 2026-08-10 — cloud prune now honors P-1 retention for API-pushed rows (round 121)
+
+**Problem (round-119 follow-up #2, confirmed against spec):** `push_handler` persists every accepted item with status `pending`, and nothing ever transitions it server-side — there is no server-side `UPDATE offline_queue`, no ack endpoint, and stateless pulls can't signal delivery. The hourly prune's `status IN ('synced','failed')` filter therefore exempted the entire push path: API-pushed rows accumulated forever, breaking the P-1 retention contract whose acceptance criterion is plainly "Items > 90 days deleted" (`p1-sync-batching-compression-retention.md`). Unbounded cloud `offline_queue` growth = disk growth + ever-slower pulls.
+
+**Why pruning `pending` rows is safe:** the server can't distinguish "delivered to every terminal" from "never delivered" (pulls are stateless, `since` comes from the client), so the retention horizon + recovery is the designed answer: a terminal whose anchor falls behind the horizon already gets `410 anchor_expired` → full snapshot recovery (P-3). That guardrail already exists for pruned `synced`/`failed` rows; extending retention to `pending` makes behavior uniform instead of creating a new class of loss.
+
+**Red:** `prune_ages_out_old_pending_rows_like_synced_ones` — seeds an old `pending` row (exactly what push creates), an old `synced` row, and a recent `pending` row; runs `run_prune_cycle`; asserts only the recent row survives. Failed with `left: ["old-pending", "recent-pending"]` — the old pending row survived while the old synced row was pruned.
+
+**Green:** the retention SELECT dropped the status filter (`WHERE created_at < ?1`), so the 90-day horizon applies to every status; batch size, parameterized DELETE, per-batch implicit transactions, and incremental_vacuum are untouched. Comments updated to state the uniform-retention contract.
+
+**Verified:** oz-cloud-server **130/130** (+1), `cargo clippy -p oz-cloud-server -- -D warnings` clean, `cargo fmt --check` clean, CRLF preserved.
+
+**Commits:** `<pending>`
+
+**Risks / follow-ups:** (1) the anchor-expiry horizon and the retention horizon are both 90 days — a terminal that stays offline >90 days always re-snapshots; the P-3 spec's snapshot covers products/tax-rates/users but not sales deltas, so the 90-day loss horizon for sale deltas is a business-level decision worth an explicit call-out; (2) a metrics counter for pruned rows per cycle would make retention observable.

@@ -4,8 +4,8 @@
 //! to consolidate delta ledger rows older than 90 days into the archive
 //! table (ADR #6 Q4 / P-1 Ledger Retention).
 //!
-//! Also prunes the `offline_queue` table — deleting synced and failed
-//! items older than 90 days (P-1 Retention).
+//! Also prunes the `offline_queue` table — deleting items older than
+//! 90 days regardless of status (P-1 Retention).
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -19,7 +19,7 @@ use tracing::{error, info};
 ///
 /// Spawns a `tokio` task that runs every hour. Each cycle:
 /// 1. Archives `stock_movements` rows older than 90 days via rollup consolidation.
-/// 2. Deletes `offline_queue` rows older than 90 days (synced/failed status only).
+/// 2. Deletes `offline_queue` rows older than 90 days, regardless of status.
 ///
 /// The task runs independently of the HTTP server and does not block requests.
 /// The `DbConnection` type must match the one used by the sync daemon.
@@ -70,8 +70,7 @@ async fn run_prune_cycle(db: &Arc<Mutex<Connection>>) {
             // Select up to 500 old IDs in a stable order.
             let mut stmt = match conn.prepare(
                 "SELECT id FROM offline_queue
-                 WHERE status IN ('synced', 'failed')
-                   AND created_at < ?1
+                 WHERE created_at < ?1
                  ORDER BY id
                  LIMIT 500",
             ) {
@@ -96,8 +95,8 @@ async fn run_prune_cycle(db: &Arc<Mutex<Connection>>) {
             }
 
             // Delete the batch. The ids are bound as parameters — never
-            // interpolated — because they originate from unvalidated client
-            // pushes (push_handler accepts any id string). Each DELETE runs
+            // interpolated — because they originate from client pushes and
+            // must always be treated as data, never SQL. Each DELETE runs
             // in its own implicit transaction, so a failure won't leave a
             // dangling transaction on the shared connection.
             let placeholders = vec!["?"; ids.len()].join(", ");
@@ -177,6 +176,43 @@ mod tests {
         assert_eq!(
             hacked, 0,
             "hostile id must never execute SQL in the prune DELETE"
+        );
+    }
+    /// P-1 retention must cover API-pushed rows. `push_handler` persists
+    /// every accepted item with status `pending` and nothing ever
+    /// transitions it server-side, so the old `status IN ('synced','failed')`
+    /// filter exempted the entire push path — the cloud queue grew without
+    /// bound. Retention applies to every status: rows older than the 90-day
+    /// horizon are pruned (the anchor_expired -> snapshot recovery path is
+    /// the designed guardrail for stragglers), recent rows survive.
+    #[test]
+    fn prune_ages_out_old_pending_rows_like_synced_ones() {
+        let conn = oz_core::migrations::fresh_db();
+        conn.execute_batch(
+            "INSERT INTO offline_queue (id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id, priority) VALUES
+             ('old-pending', 'act', '{}', 'pending', 0, NULL, '2025-01-01T00:00:00Z', NULL, 't1', 1),
+             ('old-synced', 'act', '{}', 'synced', 0, NULL, '2025-01-02T00:00:00Z', '2025-01-03T00:00:00Z', 't1', 1),
+             ('recent-pending', 'act', '{}', 'pending', 0, NULL, '2026-08-09T00:00:00Z', NULL, 't1', 1)"
+        )
+        .unwrap();
+
+        let db = Arc::new(Mutex::new(conn));
+        tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(run_prune_cycle(&db));
+
+        let conn = db.blocking_lock();
+        let remaining: Vec<String> = conn
+            .prepare("SELECT id FROM offline_queue ORDER BY id")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        assert_eq!(
+            remaining,
+            vec!["recent-pending".to_string()],
+            "old pending and old synced rows must be pruned; the recent pending row survives"
         );
     }
 }
