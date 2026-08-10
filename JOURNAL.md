@@ -3456,7 +3456,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** scanner 8/8 · i18nBundle 25/25 (+1) · **full UI suite 279 files / 4,755 tests (+9)** · typecheck ✓ · eslint clean on changed files · lint-i18n clean · **mutation proof (end-to-end)**: injecting `bare-placeholder-mut = { created } created` into `shared.ftl` (a) failed the repo-integrity test naming file+line, and (b) failed the actual `lint-i18n.sh` gate with exit=1 (the round-156 scan assertion) — restored, green. Drift guard clean.
 
-**Commits:** `(pending)`
+**Commits:** `fffc4771` (fix(i18n): gate bare Fluent placeholders across all locale bundles)
 
 **Deliberately NOT done:** no python duplicate scanner in lint-i18n.sh — the vitest placement covers both the UI CI step and the gate with one code path; no scan of OTHER codebases' placeholder conventions (scope was the defect family that shipped). The `nodeTopologyMemo.test.tsx` render-count test failed once under full-suite load then passed in isolation + a clean re-run — pre-existing intermittent flakiness, journaled, not caused by this round.
 
