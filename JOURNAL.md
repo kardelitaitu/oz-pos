@@ -3547,7 +3547,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verify:** engine 40/40 (+2) · editor 501/501 (+2) · screen 42/42 (+1) · i18n bundle 16/16 (new key passes parity) · **full UI 280 files / 4,792 tests (+5)** · typecheck ✓ · eslint 0 errors · drift guard clean.
 
-**Commits:** (added below after commit)
+**Commits:** `bbfb5e39` (feat(topology): compare focus dims identical cards for a review view)
 
 **Deliberately NOT done:** no focus-scoped WIRE dimming — wires stay full-strength because they carry topology meaning beyond the card classification (the round-155 wiring comparison is per-workspace, so a wire's "shared-identical" status isn't defined); no dimming of ghost stubs' shared far-end anchors — a ghost→shared stub pointing at a dimmed card still reads (the connection is legible, just quieter); no persistence of the toggle across sessions (it resets when the panel closes — a deliberate choice; reopening the panel starts fresh).
 
