@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { computeAutoLayout, LAYOUT_GRID } from '@/features/stores/nodeTopologyLayout';
+import { computeAutoLayout, LAYOUT_GRID, type NodePlacement } from '@/features/stores/nodeTopologyLayout';
+import { NODE_HEIGHT, NODE_WIDTH } from '@/features/stores/nodeTopologyClamp';
 
 // The topology editor's one-click Auto-layout: a layered wire-direction
 // engine. Sources rank 0, each wire target ranks one deeper (BFS), every
@@ -188,5 +189,51 @@ describe('computeAutoLayout — grid snapping (snapToGrid)', () => {
     // The natural layout lands off-grid (the anchor midpoint rarely aligns
     // with the 24px lattice) — that is the curved-routing behavior.
     expect(placed.some((p) => p.x % LAYOUT_GRID !== 0 || p.y % LAYOUT_GRID !== 0)).toBe(true);
+  });
+
+  it('never produces overlapping cards — with AND without grid snapping', () => {
+    // Round-142 invariant guard. The engine's minimum origin gaps are
+    // structural — rows 288px (NODE_HEIGHT + LAYOUT_GAP_Y), columns 304px
+    // (NODE_WIDTH + LAYOUT_GAP_X), bands 400px — and every gap snaps to at
+    // least NODE_WIDTH on the 24px lattice, so the layout is collision-free
+    // by construction in both modes. This test pins that invariant so a
+    // future engine change (smaller gaps, tighter bands, per-node snap)
+    // cannot silently start stacking cards — Auto-layout must never hand
+    // the canvas an overlap the movement paths (rounds 140-141) then refuse
+    // to create or fix.
+    //
+    // Deliberately tangled: one 3-rank tree with a converging-roots column
+    // (ranks 0/1/2 → exercises column AND row gaps) plus an independent
+    // second tree (exercises the band gap), positions scattered so the
+    // anchor translation lands mid-layout rather than on a lattice edge.
+    const nodes = [
+      { id: 'a', x: 0, y: 400 },
+      { id: 'b', x: 300, y: 100 },
+      { id: 'c', x: 700, y: 300 },
+      { id: 'd', x: 200, y: 500 },
+      { id: 'e', x: 1000, y: 150 },
+      { id: 'f', x: 1300, y: 350 },
+    ];
+    const wires = [
+      { id: 'w1', fromNodeId: 'a', toNodeId: 'b' },
+      { id: 'w2', fromNodeId: 'a', toNodeId: 'c' },
+      { id: 'w3', fromNodeId: 'c', toNodeId: 'd' },
+      { id: 'w4', fromNodeId: 'e', toNodeId: 'f' },
+    ];
+    const boxesOverlap = (p: NodePlacement, q: NodePlacement) =>
+      p.x < q.x + NODE_WIDTH && p.x + NODE_WIDTH > q.x
+      && p.y < q.y + NODE_HEIGHT && p.y + NODE_HEIGHT > q.y;
+
+    for (const snapToGrid of [false, true]) {
+      const placed = computeAutoLayout(nodes, wires, { snapToGrid });
+      for (let i = 0; i < placed.length; i += 1) {
+        for (let j = i + 1; j < placed.length; j += 1) {
+          expect(
+            boxesOverlap(placed[i]!, placed[j]!),
+            `${placed[i]!.id}/${placed[j]!.id} overlap (snapToGrid=${snapToGrid})`,
+          ).toBe(false);
+        }
+      }
+    }
   });
 });

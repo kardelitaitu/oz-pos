@@ -3249,3 +3249,17 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Deliberately NOT done:** no auto-nudge/settle for the keyboard path (the wall is the design — auto-resolving a 1px step to a 24px-away spot would be jarring); no duplicate-commit settle (duplicate-in-place copies still overlap their originals by design — the creation-gesture exception from round 140 carries over to the keyboard; Ctrl+D places copies one grid step away, which the wall does not affect).
 
 **Risks / follow-ups:** the no-overlap invariant now holds for drags AND nudges. Remaining movement paths: `computeAutoLayout` output is not guaranteed collision-free (the same `resolveDropOverlaps` primitive could settle it — suggested as a follow-up), and loaded diagrams with pre-existing overlaps are still left alone until the user moves the node (deliberate).
+
+### 2026-08-11 — auto-layout no-overlap invariant pinned (round 142)
+
+**Problem:** the round-141 follow-up claimed `computeAutoLayout` output was "not guaranteed collision-free" and suggested settling it with `resolveDropOverlaps`. Investigation DISPROVED the claim: the engine's minimum origin gaps are structural — rows 288px (`NODE_HEIGHT + LAYOUT_GAP_Y`), columns 304px (`NODE_WIDTH + LAYOUT_GAP_X`), component bands 400px — and on the 24px lattice every gap snaps to at least `NODE_WIDTH` (288/304/400 → snapped 288/312/384-or-408, all ≥ 240). The anchor translation is rigid (same dx/dy for every node), so it cannot introduce relative overlap, and a lone node's Math.round keeps ≥303px gaps. The engine is collision-free by construction in BOTH snap modes — no production fix was needed.
+
+**Solution:** coverage completion — a property test pins the invariant as a regression guard so a future engine change (smaller gaps, tighter bands, per-node snap) cannot silently start stacking cards that the movement paths (rounds 140–141) then refuse to create or fix. The fixture deliberately exercises every gap class: a 3-rank tree with a converging-roots column (row AND column gaps) plus an independent second tree (band gap), with scattered input positions so the anchor lands mid-layout. Runs the full pairwise no-overlap check with `snapToGrid: false` AND `true`. Two mutation checks: (1) collapsing `LAYOUT_GAP_X` to 8 did NOT trip it — columns at 248px snap to exactly flush (240, zero gap, not an overlap — good, the strict test is honest); (2) collapsing the row formula to `NODE_HEIGHT − 40` DID trip it (`b/c overlap (snapToGrid=false)`), proving the guard genuinely catches overlap regressions.
+
+**Verified:** layout suite 11/11 (+1) · editor suite 479/479 · full UI suite 276 files / 4,686 tests (+1) · typecheck ✓ · eslint 0 errors. No production code changed (`nodeTopologyLayout.ts` mutations reverted — confirmed empty `git diff`).
+
+**Commits:** (ref back-filled after commit)
+
+**Deliberately NOT done:** no `resolveDropOverlaps` settle on the layout output — the engine cannot produce overlaps, so settling would add a state write that never fires (dead code with a misleading purpose). No warning badge for pre-existing loaded overlaps (a separate UX slice, still open).
+
+**Risks / follow-ups:** every movement path now provably preserves the no-overlap invariant (spawns, loads, drops, nudges, auto-layout). Open: a load-time indicator for pre-existing overlaps from saved diagrams (the invariant only guards NEW movement), and the long-deferred Rust-touching round to finally run `test-changed.sh`.
