@@ -7880,6 +7880,258 @@ mod tests {
         );
     }
 
+    // ── Crash-injection: Apply recovery journal ──────────────────────
+    //
+    // `apply_topology_diff` writes a durable recovery journal BEFORE the
+    // store transaction, then commits the store, then saves the global
+    // topology (clearing the journal atomically inside the save tx). A
+    // process crash can therefore leave the system in one of three on-disk
+    // states; each test below constructs the exact state a crash would
+    // leave behind and asserts `recover_pending_topology_apply` heals to
+    // the correct end state. The journal is the only durable record of an
+    // interrupted cross-database Apply, so this contract is safety-critical.
+
+    /// Build an AppState whose global DB is migrated and whose store DBs
+    /// live in an isolated temp dir (mirrors the production layout). The
+    /// TempDir is returned so it outlives the state's lazy store opens.
+    fn state_with_store() -> (tempfile::TempDir, AppState) {
+        let dir = tempdir().unwrap();
+        let global = oz_core::migrations::fresh_db();
+        let mut state = AppState::for_test_with_conn(global);
+        state.db_manager =
+            platform_core::StoreDatabaseManager::new(dir.path().to_path_buf(), migrations::ALL);
+        (dir, state)
+    }
+
+    fn crash_creation(store_id: &str, id: &str) -> CreateInstanceRequest {
+        CreateInstanceRequest {
+            id: id.into(),
+            type_key: "pos".into(),
+            store_id: store_id.into(),
+            name: format!("Crash {id}"),
+            purpose_key: Some("general".into()),
+            description: None,
+            colour: None,
+        }
+    }
+
+    /// Commit the exact INSERT the Apply store transaction performs, so the
+    /// store DB byte-matches the state a crash after the store commit would
+    /// leave behind.
+    fn commit_creation_to_store(state: &AppState, creation: &CreateInstanceRequest) {
+        let store_conn = state.db_manager.open_store(&creation.store_id).unwrap();
+        let store = store_conn.lock().unwrap();
+        let tx = store.unchecked_transaction().unwrap();
+        // The store DB seeds its own `store_profiles` row when provisioned;
+        // the workspace FKs require both it and the type row before any
+        // instance can be inserted.
+        tx.execute(
+            "INSERT OR IGNORE INTO store_profiles (id, name) VALUES (?1, ?2)",
+            rusqlite::params![creation.store_id, "Test Store"],
+        )
+        .unwrap();
+        tx.execute(
+            "INSERT OR IGNORE INTO workspace_types \
+             (key, name, description, layout_mode, icon, sort_order, accent_colour) \
+             VALUES ('pos', 'POS', '', 'fullscreen', '', 0, '')",
+            [],
+        )
+        .unwrap();
+        tx.execute(
+            "INSERT INTO workspace_instances \
+             (id, type_key, store_id, name, description, colour, purpose_key, status, \
+              last_accessed_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'active', \
+                     strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+            rusqlite::params![
+                creation.id,
+                creation.type_key,
+                creation.store_id,
+                creation.name,
+                creation.description.as_deref().unwrap_or(""),
+                creation.colour.as_deref(),
+                creation.purpose_key.as_deref().unwrap_or("general"),
+            ],
+        )
+        .unwrap();
+        tx.commit().unwrap();
+    }
+
+    fn store_has_instance(state: &AppState, store_id: &str, id: &str) -> bool {
+        let store_conn = state.db_manager.open_store(store_id).unwrap();
+        let store = store_conn.lock().unwrap();
+        let count: i64 = store
+            .query_row(
+                "SELECT COUNT(*) FROM workspace_instances WHERE id = ?1",
+                rusqlite::params![id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        count > 0
+    }
+
+    #[tokio::test]
+    async fn crash_before_store_commit_heals_to_exact_prior_state() {
+        // Crash point 1: journal persisted, store transaction never began.
+        // Recovery must be a no-op on both databases — no compensation
+        // damage, previous topology restored, journal cleared.
+        let store_id = "store-crash-1";
+        let (_dir, state) = state_with_store();
+        let previous = topology_envelope_json(&[], &[], 0, &[]).unwrap();
+        let desired = topology_envelope_json(&[], &[], 1, &[]).unwrap();
+        let creation = crash_creation(store_id, "ws-crash-1");
+        {
+            let db = state.db.lock().await;
+            oz_core::Settings::set(&db, TOPOLOGY_SETTING_KEY, &previous).unwrap();
+            persist_topology_recovery(
+                &db,
+                &TopologyApplyRecovery {
+                    store_id: store_id.into(),
+                    topology_branch_id: None,
+                    creations: vec![creation],
+                    snapshots: vec![],
+                    previous_topology: Some(previous.clone()),
+                    desired_topology: Some(desired),
+                },
+            )
+            .unwrap();
+        }
+        // Store is untouched by the crash — assert recovery leaves it that way.
+        recover_pending_topology_apply(&state, store_id)
+            .await
+            .unwrap();
+        let db = state.db.lock().await;
+        assert!(
+            oz_core::Settings::get(&db, TOPOLOGY_APPLY_RECOVERY_KEY)
+                .unwrap()
+                .is_none(),
+            "recovery journal must be cleared after healing"
+        );
+        assert_eq!(
+            oz_core::Settings::get(&db, TOPOLOGY_SETTING_KEY)
+                .unwrap()
+                .unwrap(),
+            previous,
+            "global topology must be restored to the exact prior envelope"
+        );
+        drop(db);
+        assert!(!store_has_instance(&state, store_id, "ws-crash-1"));
+    }
+
+    #[tokio::test]
+    async fn crash_after_store_commit_compensates_both_databases() {
+        // Crash point 2: store transaction committed, global save never ran.
+        // Recovery must delete the created instance, restore the previous
+        // global topology, and clear the journal.
+        let store_id = "store-crash-2";
+        let (_dir, state) = state_with_store();
+        let previous = topology_envelope_json(&[], &[], 0, &[]).unwrap();
+        let desired = topology_envelope_json(&[], &[], 1, &[]).unwrap();
+        let creation = crash_creation(store_id, "ws-crash-2");
+        {
+            let db = state.db.lock().await;
+            oz_core::Settings::set(&db, TOPOLOGY_SETTING_KEY, &previous).unwrap();
+            persist_topology_recovery(
+                &db,
+                &TopologyApplyRecovery {
+                    store_id: store_id.into(),
+                    topology_branch_id: None,
+                    creations: vec![creation.clone()],
+                    snapshots: vec![],
+                    previous_topology: Some(previous.clone()),
+                    desired_topology: Some(desired),
+                },
+            )
+            .unwrap();
+        }
+        // The crash landed between the store commit and the global save:
+        // the created instance IS present in the store DB.
+        commit_creation_to_store(&state, &creation);
+        assert!(store_has_instance(&state, store_id, "ws-crash-2"));
+
+        recover_pending_topology_apply(&state, store_id)
+            .await
+            .unwrap();
+
+        let db = state.db.lock().await;
+        assert!(
+            oz_core::Settings::get(&db, TOPOLOGY_APPLY_RECOVERY_KEY)
+                .unwrap()
+                .is_none(),
+            "recovery journal must be cleared after healing"
+        );
+        assert_eq!(
+            oz_core::Settings::get(&db, TOPOLOGY_SETTING_KEY)
+                .unwrap()
+                .unwrap(),
+            previous,
+            "global topology must be restored to the exact prior envelope"
+        );
+        drop(db);
+        assert!(
+            !store_has_instance(&state, store_id, "ws-crash-2"),
+            "created instance must be compensated (deleted) from the store"
+        );
+    }
+
+    #[tokio::test]
+    async fn recovery_finalizes_without_compensating_a_completed_apply() {
+        // Crash point 3: global save committed (current == desired) but the
+        // journal is still present. In the current Apply flow the journal is
+        // cleared atomically inside the save transaction, so this state is
+        // defensive — but the recovery contract explicitly promises NOT to
+        // compensate a completed Apply. Pinning it prevents a regression if
+        // the journal clear ever moves out of the save transaction.
+        let store_id = "store-crash-3";
+        let (_dir, state) = state_with_store();
+        let previous = topology_envelope_json(&[], &[], 0, &[]).unwrap();
+        let desired = topology_envelope_json(&[], &[], 1, &[]).unwrap();
+        let creation = crash_creation(store_id, "ws-crash-3");
+        {
+            let db = state.db.lock().await;
+            // The global save DID commit: current == desired.
+            oz_core::Settings::set(&db, TOPOLOGY_SETTING_KEY, &desired).unwrap();
+            persist_topology_recovery(
+                &db,
+                &TopologyApplyRecovery {
+                    store_id: store_id.into(),
+                    topology_branch_id: None,
+                    creations: vec![creation.clone()],
+                    snapshots: vec![],
+                    previous_topology: Some(previous),
+                    desired_topology: Some(desired.clone()),
+                },
+            )
+            .unwrap();
+        }
+        commit_creation_to_store(&state, &creation);
+        assert!(store_has_instance(&state, store_id, "ws-crash-3"));
+
+        recover_pending_topology_apply(&state, store_id)
+            .await
+            .unwrap();
+
+        let db = state.db.lock().await;
+        assert!(
+            oz_core::Settings::get(&db, TOPOLOGY_APPLY_RECOVERY_KEY)
+                .unwrap()
+                .is_none(),
+            "recovery journal must be cleared after finalizing"
+        );
+        assert_eq!(
+            oz_core::Settings::get(&db, TOPOLOGY_SETTING_KEY)
+                .unwrap()
+                .unwrap(),
+            desired,
+            "completed Apply must NOT be rolled back"
+        );
+        drop(db);
+        assert!(
+            store_has_instance(&state, store_id, "ws-crash-3"),
+            "completed Apply's store mutations must NOT be compensated"
+        );
+    }
+
     #[test]
     fn request_ledger_key_rejects_path_injection() {
         assert!(topology_apply_request_key("request/evil").is_err());
