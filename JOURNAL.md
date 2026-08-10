@@ -2909,6 +2909,6 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** `cargo check -p oz-pos-tablet` clean, `cargo clippy -p oz-pos-tablet -- -D warnings` clean, `cargo test -p oz-pos-tablet --lib` **422/422**.
 
-**Commits:** `<pending>`
+**Commits:** `6b1ff1f3` (the pre-commit hook needed a follow-up fix to handle staged deletions — `a78e0597`).
 
 **Risks / follow-ups:** none new — this closes the last known `_compat`/`_legacy` re-export module from the naming scans (rounds 114-116). A wider sweep for other pub-but-unused lib items would need a different tool than rustc's dead_code (which exempts pub items) — e.g. a `cargo-public-api`-style diff or an import-graph script.
