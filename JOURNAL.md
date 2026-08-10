@@ -2856,3 +2856,17 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** `bdf63361`
 
 **Risks / follow-ups:** (1) defense-in-depth — `push_handler` still accepts any id string; rejecting non-UUID ids at push is the natural next slice; (2) observed during analysis: the cloud server never transitions API-pushed items to `synced`/`failed` (no `UPDATE offline_queue` anywhere server-side), so the prune's `status IN ('synced','failed')` filter may never match API-pushed rows — the P-1 retention promise for those rows deserves a dedicated look.
+
+### 2026-08-10 — plan row must not paint a failed read as "Free" (round 120)
+
+**Problem:** both sync status panels render the tenant plan row when `syncPlan` is truthy — but `fetch_tenant_plan` resolves with `ok:false, plan:null` on **any** failed read (old server 404, network error, unparseable response, sync unconfigured), and a truthy-but-failed object painted a misleading **"Free"** badge. An operator whose server is unreachable or running a pre-`/tenants/me/plan` binary saw "Free" (and on the settings panel a downgrade-style styling) instead of "unknown".
+
+**Red:** `does NOT render a plan row when the plan read failed (ok=false)` in both `SyncSection.test.tsx` and `OfflineQueueScreen.test.tsx` — assert no plan row, no "Free" text, no upgrade hint when the plan result is `{ ok:false, plan:null }`. Both failed pre-fix (Free badge rendered).
+
+**Green:** gate both rows on `syncPlan?.ok && syncPlan.plan` so an unavailable read renders nothing. No new FTL keys needed (no new user-visible string — absence is the correct state).
+
+**Verified:** SyncSection 38/38, OfflineQueueScreen 26/26, CloudSyncSettings 37/37 (real SettingsPage integration), typecheck ✓, eslint ✓, i18n lint + bundle parity ✓.
+
+**Commits:** `36ed773c`
+
+**Risks / follow-ups:** a deliberate "plan unknown" state (grey badge + tooltip with the status string) would be more informative than an absent row, but that needs new FTL keys and a design decision — the fail-closed absence is the safe default.
