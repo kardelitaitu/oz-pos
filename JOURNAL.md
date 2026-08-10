@@ -2952,3 +2952,13 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Verified:** OfflineQueueScreen 27/27 (+1), typecheck ✓, eslint ✓, i18n lint + bundle parity ✓. Committed `4a85c203`.
 
 **Risks / follow-ups:** (1) the tablet client's Offline Queue screen is a separate React app — verify it has the same Sync All gap and apply the same fix; (2) `offline-queue-sync-result--plan` styling uses `--color-warning` var, which is a design-system assumption — fine now, but a dedicated warning-banner token would be cleaner.
+
+### 2026-08-10 — tablet has no separate Offline Queue screen; round-124 fix already covers it (round 125)
+
+**Verification (closes the round-124 follow-up):** the round-124 entry's follow-up assumed "the tablet client's Offline Queue screen is a separate React app" with the same Sync All gap. **Disproven — the tablet is the same shared `ui/` React app.** `apps/tablet-client/tauri.conf.json` builds `frontendDist: ../../ui/dist-tablet` from `ui/index.tablet.html` → `src/main.tablet.tsx`, which calls `registerAllFeatures()` (same `features/index.ts` that registers `registerOfflineFeature`); the tablet shell's `getPage(route)` resolves the same registered `OfflineQueueScreen` component. No tablet-specific sync/offline widget exists under `frontend/shell/tablet/` (only layout/shell/css). The round-124 fix (`4a85c203`) is therefore already live on the tablet, pinned by `OfflineQueueScreen.test.tsx` (27/27), with the new FTL keys present in the shared `offline.ftl`/`offline.id.ftl` bundles that `locales/index.ts` feeds both entries.
+
+**Verified:** `npm run typecheck` ✓ (whole tree, both entries compile the same source), OfflineQueueScreen 27/27 ✓, keys in both bundles ✓. No code change was needed — this round is a record correction only.
+
+**Commits:** none (verification only) — the round-124 fix commit `4a85c203` stands.
+
+**Risks / follow-ups:** the tablet and desktop share the entire feature surface, so any future plan-gate UI work is inherently cross-client; there is no per-client variant to maintain. If a tablet-only product decision ever splits the feature set, the offline/plan-gate pair (screen + SyncSection) should be the first to get a dedicated tablet review.
