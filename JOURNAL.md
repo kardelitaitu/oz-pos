@@ -2912,3 +2912,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** `6b1ff1f3` (the pre-commit hook needed a follow-up fix to handle staged deletions — `a78e0597`).
 
 **Risks / follow-ups:** none new — this closes the last known `_compat`/`_legacy` re-export module from the naming scans (rounds 114-116). A wider sweep for other pub-but-unused lib items would need a different tool than rustc's dead_code (which exempts pub items) — e.g. a `cargo-public-api`-style diff or an import-graph script.
+
+### 2026-08-10 — Sync Now toast leaks raw backend plan string (round 123)
+
+**Problem:** the Cloud Sync section's Sync Now toast logic checked `result.error` before `result.planRequired`. A free tenant's `sync_run` returns `{ error: "cloud sync requires a paid plan", planRequired: true }`, so the toast showed the **raw backend English string** while the inline result block (which checks `planRequired` first) showed the localized upgrade prompt — inconsistent, unlocalized, and it violated the UI convention that every user-visible string goes through FTL.
+
+**Red:** `shows the localized plan-required toast when syncRun reports planRequired` — mocks `syncRun` resolving with error + planRequired, clicks Sync Now, and asserts the toast message is the localized `settings-sync-plan-required` value ("Cloud sync requires a paid plan") and does **not** contain the raw backend string. Failed pre-fix with `Received: "cloud sync requires a paid plan"`.
+
+**Green:** check `result.planRequired` first in the toast branch and toast `l10n.getString('settings-sync-plan-required')`. No new FTL keys needed — both en and id bundles already carry it.
+
+**Verified:** SyncSection 39/39 (+1), CloudSyncSettings 37/37 (real SettingsPage integration), typecheck ✓, eslint ✓, i18n lint + bundle parity ✓. Committed `b4eaf864`.
+
+**Risks / follow-ups:** the Offline Queue retry flow (`retry_offline_sync`) also returns `SyncAttemptResult` with `planRequired` but renders only the synced/failed counts inline — it never surfaces the plan gate as a toast. The plan row there covers discovery, but a dedicated upgrade toast on retry would be consistent with this fix.
