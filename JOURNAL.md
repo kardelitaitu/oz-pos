@@ -3582,7 +3582,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verify:** gate files 45/45 (i18nBundle 17/17 incl. new gate test) · **full UI 280 files / 4,815 tests (+21)** · typecheck ✓ · eslint 0 errors (dead `VAR_PLACEHOLDER` regex removed after the real-parser rewrite) · `lint:i18n.sh` clean end-to-end · drift guard clean.
 
-**Commits:** (to be back-filled)
+**Commits:** `88eb4bb8` (feat(i18n): gate Localized-vars against FTL $vars, fix 3 real defects)
 
 **Deliberately NOT done:** no `id.ftl` var cross-check (a translation legitimately dropping `$var` is correct FTL, not a defect — only en is canonical); no check of the `attrs` values against the message's declared attributes (a site localizing a nonexistent attribute is the parity gate's key-level job; the round-164 terminal fix needed a NEW key lookup, not the vars scan); no dynamic-vars sites (non-literal `vars={expr}` are skipped as unresolvable — documented, none problematic in the tree).
 
