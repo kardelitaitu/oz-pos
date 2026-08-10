@@ -3597,7 +3597,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verify:** gate files 53/53 (i18nBundle 18/18 incl. new gate test) · **full UI 280 files / 4,823 tests (+8)** · typecheck ✓ · eslint 0 errors · `lint:i18n.sh` clean end-to-end · drift guard clean.
 
-**Commits:** (to be back-filled)
+**Commits:** `c2770f5e` (feat(i18n): gate id translations against en $vars for var drift)
 
 **Deliberately NOT done:** no en-only-attribute check (an id translation omitting an attribute the site localizes silently leaves it unset for Indonesian users — a real a11y gap but a separate defect class; the round-164 journal already scoped it out, still open); no id-only-key check (the parity gate owns key presence); no attribute-presence parity between en and id (same omission class).
 
