@@ -1,4 +1,15 @@
 
+## 2026-08-10 — TDD cycle: topology editor selection state machine
+
+### A wire could stay selected alongside a node — the toolbar Delete path for wires was unreachable
+**Problem:** The editor kept selection in three loose `useState` pairs (`selectedNodeId`, `selectedNodeIds`, `selectedWireId`) and the node/wire mutual-exclusion rule was only convention. Most node-selection sites cleared the wire, but `selectOnly` did not, so a wire could remain selected alongside a node. The toolbar Delete handler checks `selectedNodeIds.size > 0` **before** `selectedWireId`, which made the wire-delete path unreachable whenever both were set. Six call sites also duplicated `setSelectedWireId(wireId); clearSelection();` by hand.
+
+**Solution:** Red→Green. Added a typed selection reducer (`nodeTopologyEditorSelectionState.ts`) that owns all three selection fields and makes mutual exclusion structural: every node-selection action atomically clears the wire, `select-wire` atomically clears the node selection, and `clear-nodes`/`clear-wire`/`clear-all`/`prune` cover the remaining primitives. The editor now consumes `useTopologyEditorSelection()`; the six duplicated wire-select pairs became one `selectWire(wireId)` call and every direct `setSelectedNodeId(s)`/`setSelectedWireId` write was routed through the reducer.
+
+**Validation:** selection reducer 12/12 · NodeTopologyEditor + TopologyScreen 511/511 · full UI suite 272 files / 4,627 tests · a11y 8/8 · typecheck · eslint clean.
+
+**Deliberately NOT done:** drag/picker/live-validation state still lives in the component — selection was the next slice of the audit's state-machine recommendation; the same extraction pattern applies to the remaining interaction state.
+
 ## 2026-08-09 — TDD cycle: restore legacy Restaurant POS → KDS operation connections
 
 ### Reloaded Resto POS → KDS wires rendered as connected but still showed a missing Location warning

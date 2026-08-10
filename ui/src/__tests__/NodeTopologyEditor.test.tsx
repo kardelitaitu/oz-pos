@@ -13,7 +13,7 @@ import {
   NODE_PORT_Y,
   NODE_WIDTH,
 } from '../features/stores/nodeTopologyClamp';
-import { loadTopology } from '@/api/topology';
+import { loadTopology, type TopologyData } from '@/api/topology';
 import multiStoreFtl from '@/locales/multi-store.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
@@ -405,8 +405,8 @@ describe('NodeTopologyEditor Component', () => {
     fireEvent.click(screen.getByText('+ KDS'));
     fireEvent.click(screen.getByText('+ Warehouse'));
 
-    expect(document.querySelectorAll('.node-type-workspace')).toHaveLength(4);
-    expect(document.querySelectorAll('.node-type-warehouse')).toHaveLength(2);
+    expect(document.querySelectorAll('.topology-node.node-type-workspace')).toHaveLength(4);
+    expect(document.querySelectorAll('.topology-node.node-type-warehouse')).toHaveLength(2);
     expect(screen.getByLabelText('Restaurant POS')).toBeInTheDocument();
     expect(screen.getByLabelText('Retail POS')).toBeInTheDocument();
     expect(screen.getByLabelText('Kitchen Display (KDS)')).toBeInTheDocument();
@@ -4494,7 +4494,7 @@ describe('NodeTopologyEditor — missing-stock-routing dismiss', () => {
       { id: 'w-loc', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
       { id: 'w-scope', from_node_id: 'store-1', to_node_id: 'wh-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
     ],
-  } as never;
+  } as TopologyData;
 
   const renderUnwired = async (props?: Parameters<typeof renderEditor>[0]) => {
     mockLoadTopology.mockResolvedValueOnce(unwiredFixture);
@@ -4550,7 +4550,10 @@ describe('NodeTopologyEditor — missing-stock-routing dismiss', () => {
     // Reload the same branch — the persisted dismissal must still hide the
     // note and keep Apply unblocked.
     cleanup();
-    mockLoadTopology.mockResolvedValueOnce(unwiredFixture);
+    mockLoadTopology.mockResolvedValueOnce({
+      ...unwiredFixture,
+      resolved_issue_keys: ['node:wh-1:topology-validation-warehouse-missing-stock-routing'],
+    });
     renderEditor({ currentTier: 'pro', onSave, branchId: 'b-dismiss' });
     await waitFor(() => expect(document.querySelectorAll('.topology-node')).toHaveLength(3));
 
@@ -6396,7 +6399,7 @@ describe('NodeTopologyEditor — empty-state onboarding', () => {
 
 describe('NodeTopologyEditor — unsaved-changes indicator', () => {
   it('shows the chip after an edit and clears it on Apply', async () => {
-    renderEditor();
+    renderEditor({ onSave: async () => undefined });
     expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
 
     // A name edit is validation-safe (unlike adding a second branch), so
@@ -7661,14 +7664,14 @@ describe('NodeTopologyEditor — validation panel & view prefs', () => {
 
   describe('mark-issue-resolved persistence', () => {
     // Two unwired workspaces → two per-node "connect this workspace" issues.
-    const twoIssueFixture = {
+    const twoIssueFixture: TopologyData = {
       nodes: [
         { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
         { id: 'ws-1', type: 'workspace', name: 'Retail POS #1', x: 380, y: 80, metadata: { typeKey: 'store-pos' } },
         { id: 'ws-2', type: 'workspace', name: 'KDS #1', x: 380, y: 240, metadata: { typeKey: 'kds' } },
       ],
       wires: [],
-    } as never;
+    };
     const openPanel = async () => {
       fireEvent.click(screen.getByText(/Issues \(2\)/));
       return document.querySelector('.topology-validation-panel') as HTMLElement;

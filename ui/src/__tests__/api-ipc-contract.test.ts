@@ -245,7 +245,7 @@ describe('topology.ts IPC contract', () => {
     const creations = [{ id: 'ws-1', type_key: 'restaurant-pos', store_id: 's1', name: 'POS' }];
     const updates = [{ id: 'ws-2', name: 'Renamed' }];
     const archives = ['ws-old'];
-    await applyTopologyDiff('tok', creations, updates, archives, nodes, wires, undefined, 7, 'request-1');
+    await applyTopologyDiff('tok', creations, updates, archives, nodes, wires, undefined, 7, '00000000-0000-4000-8000-000000000001');
     expect(mockInvoke).toHaveBeenCalledWith('apply_topology_diff', {
       sessionToken: 'tok',
       workspaceCreations: creations,
@@ -254,7 +254,7 @@ describe('topology.ts IPC contract', () => {
       diagramNodes: nodes,
       diagramWires: wires,
       baseRevision: 7,
-      requestId: 'request-1',
+      requestId: '00000000-0000-4000-8000-000000000001',
       resolvedIssueKeys: [],
     });
   });
@@ -262,7 +262,7 @@ describe('topology.ts IPC contract', () => {
   it('applyTopologyDiff persists branch-scoped resolved issue keys', async () => {
     mockInvoke.mockResolvedValue({ revision: 8 });
     await applyTopologyDiff(
-      'tok', [], [], [], [], [], 'branch-a', 7, 'request-3',
+      'tok', [], [], [], [], [], 'branch-a', 7, '00000000-0000-4000-8000-000000000003',
       ['node:wh-1:topology-validation-warehouse-missing-stock-routing'],
     );
     expect(mockInvoke).toHaveBeenCalledWith('apply_topology_diff', expect.objectContaining({
@@ -272,7 +272,7 @@ describe('topology.ts IPC contract', () => {
 
   it('applyTopologyDiff includes the active branch id and revision controls', async () => {
     mockInvoke.mockResolvedValue(undefined);
-    await applyTopologyDiff('tok', [], [], [], [], [], 'branch-a', 3, 'request-2');
+    await applyTopologyDiff('tok', [], [], [], [], [], 'branch-a', 3, '00000000-0000-4000-8000-000000000002');
     expect(mockInvoke).toHaveBeenCalledWith('apply_topology_diff', {
       sessionToken: 'tok',
       workspaceCreations: [],
@@ -282,7 +282,7 @@ describe('topology.ts IPC contract', () => {
       diagramWires: [],
       branchId: 'branch-a',
       baseRevision: 3,
-      requestId: 'request-2',
+      requestId: '00000000-0000-4000-8000-000000000002',
       resolvedIssueKeys: [],
     });
   });

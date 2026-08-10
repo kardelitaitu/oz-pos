@@ -13,6 +13,7 @@ import {
   WarehouseIcon,
   PrinterIcon,
 } from './NodeTopologyIcons';
+import topologySemantics from './topologySemantics.json';
 
 // ── Registry contract ─────────────────────────────────────────────
 //
@@ -272,15 +273,7 @@ interface SemanticPairingRow {
  *  the Resto preset's loaded kds→printer wire (ticket-out/ticket-in) is also
  *  authorable. Other unused semantic members remain contract-level and
  *  future-facing rather than authorable today. */
-const SEMANTIC_PORT_PAIRINGS: readonly SemanticPairingRow[] = [
-  { source: 'location-out', target: 'location-in', relationshipType: 'location', labelId: 'topology-relationship-location' },
-  { source: 'operation-out', target: 'operation-in', relationshipType: 'generic', labelId: 'topology-relationship-operation' },
-  { source: 'stock-out', target: 'stock-in', relationshipType: 'stock-routing', labelId: 'topology-relationship-stock-routing' },
-  { source: 'transfer-out', target: 'transfer-in', relationshipType: 'inventory-transfer', labelId: 'topology-relationship-inventory-transfer' },
-  { source: 'ticket-out', target: 'ticket-in', relationshipType: 'ticket-routing', labelId: 'topology-relationship-ticket-routing' },
-  { source: 'device-out', target: 'generic-in', relationshipType: 'hardware-connection', labelId: 'topology-relationship-hardware-connection' },
-  { source: 'generic-out', target: 'generic-in', relationshipType: 'generic', labelId: 'topology-relationship-generic' },
-];
+const SEMANTIC_PORT_PAIRINGS = topologySemantics.semanticPairings as readonly SemanticPairingRow[];
 
 /** True when the source semantic may feed the target semantic under the
  *  typed pairing table. Unknown or input-side sources always return false

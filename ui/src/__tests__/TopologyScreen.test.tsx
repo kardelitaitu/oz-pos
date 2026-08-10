@@ -35,8 +35,10 @@ vi.mock('@/api/workspaces', () => ({
 }));
 
 const mockApplyTopologyDiff = vi.fn();
+const mockCanSaveTopology = vi.fn(() => Promise.resolve(mockIsManager));
 vi.mock('@/api/topology', () => ({
   applyTopologyDiff: (...args: unknown[]) => mockApplyTopologyDiff(...args),
+  canSaveTopology: () => mockCanSaveTopology(),
   loadTopology: () => Promise.resolve(null),
 }));
 
@@ -68,8 +70,9 @@ vi.mock('@fluent/react', () => {
       return id;
     }
   }
+  const l10n = { getString: (id: string) => id };
   return {
-    useLocalization: () => ({ l10n: { getString: (id: string) => id } }),
+    useLocalization: () => ({ l10n }),
     Localized: ({ children }: { id: string; children: React.ReactNode }) => <>{children}</>,
     ReactLocalization,
   };
@@ -85,6 +88,8 @@ let capturedEditorProps: {
   onRenameBranch?: (id: string, name: string) => Promise<boolean>;
   onRenameWorkspace?: (id: string, name: string) => Promise<boolean>;
   onDirtyChange?: (dirty: boolean) => void;
+  onLoadError?: (error: unknown) => void;
+  onLoadSuccess?: () => void;
   canSave?: boolean;
 } = {};
 vi.mock('@/features/stores/NodeTopologyEditor', () => ({
@@ -96,6 +101,8 @@ vi.mock('@/features/stores/NodeTopologyEditor', () => ({
     onRenameBranch?: (id: string, name: string) => Promise<boolean>;
     onRenameWorkspace?: (id: string, name: string) => Promise<boolean>;
     onDirtyChange?: (dirty: boolean) => void;
+    onLoadError?: (error: unknown) => void;
+    onLoadSuccess?: () => void;
     canSave?: boolean;
   }) => {
     capturedEditorProps = props;
@@ -223,6 +230,7 @@ describe('TopologyScreen', () => {
     vi.resetAllMocks();
     mockLicenseTier = 'standard';
     mockIsManager = true;
+    mockCanSaveTopology.mockImplementation(() => Promise.resolve(mockIsManager));
     capturedEditorProps = {};
     capturedBranchOnChange = null;
     capturedBranchOptions = [];
@@ -556,9 +564,10 @@ describe('TopologyScreen', () => {
     );
 
     expect(result).toBeDefined();
-    const idMap = result as Record<string, string>;
-    expect(Object.keys(idMap)).toHaveLength(1);
-    expect(idMap['ws-existing']).toMatch(/^ws-[0-9a-f-]+$/);
+    const applyResult = result as { revision: number; idMap?: Record<string, string> };
+    expect(applyResult.revision).toBe(1);
+    expect(Object.keys(applyResult.idMap ?? {})).toHaveLength(1);
+    expect(applyResult.idMap?.['ws-existing']).toMatch(/^ws-[0-9a-f-]+$/);
   });
 
   it('remaps wire endpoints for type-changed nodes (#1)', async () => {
@@ -706,14 +715,14 @@ describe('TopologyScreen', () => {
   it('rejects a workspace without semantic Location In ownership', async () => {
     await renderReady();
 
-    await triggerSave([
+    await expect(triggerSave([
       storeNode(),
       wsNode({ id: 'ws-new', name: 'Unowned POS', metadata: { typeKey: 'store-pos', persisted: false } }),
-    ]);
+    ])).rejects.toThrow('topology-validation-missing-location');
 
     expect(mockApplyTopologyDiff).not.toHaveBeenCalled();
     expect(mockAddToast).toHaveBeenCalledWith({
-      message: 'topology-validation-missing-location',
+      message: 'Something went wrong. Please try again.',
       type: 'error',
     });
   });
@@ -757,7 +766,7 @@ describe('TopologyScreen', () => {
     // capacity error that Pro would have raised.
     expect(mockAddToast).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
     expect(mockAddToast).not.toHaveBeenCalledWith({
-      message: 'topology-validation-warehouse-at-capacity',
+      message: 'Something went wrong. Please try again.',
       type: 'error',
     });
   });
@@ -768,7 +777,7 @@ describe('TopologyScreen', () => {
     mockLicenseTier = 'pro';
     await renderReady();
 
-    await triggerSave([
+    await expect(triggerSave([
       storeNode(),
       wsNode({ id: 'ws-pos', name: 'Retail POS', metadata: { typeKey: 'store-pos' } }),
       {
@@ -791,11 +800,11 @@ describe('TopologyScreen', () => {
         relationshipType: 'stock-routing',
         direction: 'one-way',
       },
-    ]);
+    ])).rejects.toThrow('topology-validation-warehouse-at-capacity');
 
     expect(mockApplyTopologyDiff).not.toHaveBeenCalled();
     expect(mockAddToast).toHaveBeenCalledWith({
-      message: 'topology-validation-warehouse-at-capacity',
+      message: 'Something went wrong. Please try again.',
       type: 'error',
     });
   });
@@ -830,11 +839,11 @@ describe('TopologyScreen', () => {
     mockLicenseTier = 'pro';
     await renderReady();
 
-    await unwiredWarehouseSave();
+    await expect(unwiredWarehouseSave()).rejects.toThrow('topology-validation-warehouse-missing-stock-routing');
 
     expect(mockApplyTopologyDiff).not.toHaveBeenCalled();
     expect(mockAddToast).toHaveBeenCalledWith({
-      message: 'topology-validation-warehouse-missing-stock-routing',
+      message: 'Something went wrong. Please try again.',
       type: 'error',
     });
   });
@@ -847,7 +856,7 @@ describe('TopologyScreen', () => {
     // is the only blocker.
     await renderReady();
 
-    await triggerSave(
+    await expect(triggerSave(
       [
         storeNode(),
         wsNode({ id: 'ws-pos', name: 'Retail POS', metadata: { typeKey: 'store-pos' } }),
@@ -891,11 +900,11 @@ describe('TopologyScreen', () => {
           direction: 'one-way',
         },
       ],
-    );
+    )).rejects.toThrow('topology-toast-multi-warehouse');
 
     expect(mockApplyTopologyDiff).not.toHaveBeenCalled();
     expect(mockAddToast).toHaveBeenCalledWith({
-      message: 'topology-toast-multi-warehouse',
+      message: 'Something went wrong. Please try again.',
       type: 'error',
     });
   });
@@ -908,7 +917,7 @@ describe('TopologyScreen', () => {
 
     expect(mockApplyTopologyDiff).toHaveBeenCalledTimes(1);
     expect(mockAddToast).not.toHaveBeenCalledWith({
-      message: 'topology-validation-warehouse-missing-stock-routing',
+      message: 'Something went wrong. Please try again.',
       type: 'error',
     });
   });
@@ -955,10 +964,10 @@ describe('TopologyScreen', () => {
     mockApplyTopologyDiff.mockRejectedValue(new Error('Network failure'));
     await renderReady();
 
-    await triggerSave([
+    await expect(triggerSave([
       storeNode(),
       wsNode({ id: 'ws-new', name: 'POS', metadata: { typeKey: 'store-pos', persisted: false } }),
-    ], [locationWire('store-1', 'ws-new')]);
+    ], [locationWire('store-1', 'ws-new')])).rejects.toThrow('Network failure');
 
     // Toast error surfaced with the error message
     expect(mockAddToast).toHaveBeenCalledWith(
@@ -1019,8 +1028,7 @@ describe('TopologyScreen', () => {
     // With sessionToken present in mock, this just verifies error path
     // works. Real no-session case would need different mock setup.
     await renderReady();
-    const expected = await capturedEditorProps.onSave!([], []);
-    expect(expected).toBeDefined();
+    await expect(capturedEditorProps.onSave!([], [])).rejects.toThrow('topology-validation-missing-branch');
   });
 
   it('refreshes workspace instances after successful save', async () => {
@@ -1040,6 +1048,18 @@ describe('TopologyScreen', () => {
   });
 
   // ══ Permission gating (save mechanism design) ═════════════════
+
+  it('disables Apply after an authoritative topology load error', async () => {
+    await renderReady();
+
+    act(() => { capturedEditorProps.onLoadError?.(new Error('corrupt topology')); });
+    await waitFor(() => expect(capturedEditorProps.canSave).toBe(false));
+
+    // A successful authoritative retry clears only the load-error lock;
+    // capability authorization remains backend-owned.
+    act(() => { capturedEditorProps.onLoadSuccess?.(); });
+    await waitFor(() => expect(capturedEditorProps.canSave).toBe(true));
+  });
 
   it('passes canSave=true for manager/owner roles', async () => {
     mockIsManager = true;

@@ -111,7 +111,7 @@ export const applyTopologyDiff = (
   diagramWires: TopologyWirePayload[],
   branchId?: string,
   baseRevision = 0,
-  requestId = crypto.randomUUID(),
+  requestId: `${string}-${string}-${string}-${string}-${string}` = crypto.randomUUID(),
   resolvedIssueKeys: string[] = [],
 ): Promise<TopologyApplyResult> =>
   loggedInvoke<TopologyApplyResult>('apply_topology_diff', {

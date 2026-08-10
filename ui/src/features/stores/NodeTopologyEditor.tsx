@@ -13,7 +13,6 @@ import {
 } from '@/features/settings/workspace-cards';
 import {
   StoreIcon,
-  PosIcon,
   WarehouseIcon,
   PrinterIcon,
   FlaskIcon,
@@ -53,6 +52,8 @@ import { TopologyNodeCard } from './topologyNodeCard';
 import { TopologyWireGroup } from './topologyWireGroup';
 import { cubicBezier, polylinePoint } from './topologyWireGeometry';
 import { useTopologyEditorGraph, type TopologyHistoryEntry } from './nodeTopologyEditorState';
+import { useTopologyEditorSaveLifecycle } from './nodeTopologyEditorSaveState';
+import { useTopologyEditorSelection } from './nodeTopologyEditorSelectionState';
 import {
   normalizeTopologyGraph,
   normalizeWireDirection,
@@ -730,44 +731,48 @@ export default function NodeTopologyEditor({
     setRedo,
   } = useTopologyEditorGraph<TopologyNodeData, TopologyWireData>(PRESET_RETAIL.nodes, PRESET_RETAIL.wires);
   type HistoryEntry = TopologyHistoryEntry<TopologyNodeData, TopologyWireData>;
-  /** True once the first authoritative topology load has settled. The editor
-   *  mounts on the retail preset while the async load is in flight, and the
-   *  validation-issue dismissal forget-effect must not treat that placeholder
-   *  graph as the real diagram (it would drop restored dismissals on every
-   *  reload). Set in the load chain's finally, after every branch settles. */
-  const [topologyLoaded, setTopologyLoaded] = useState(false);
-  /** Revision of the canonical branch document loaded from the backend. */
-  const [topologyRevision, setTopologyRevision] = useState(0);
-  /** Prevent concurrent Apply requests from racing their workspace diffs. */
-  const saveInFlightRef = useRef(false);
-  const [saving, setSaving] = useState(false);
+  /** Save/apply lifecycle: load settling, branch document revision, and the
+   *  Apply in-flight guard now live in one typed state machine instead of
+   *  scattered booleans. `settled` keeps the dismissal forget-effect gated on
+   *  the first authoritative load (the editor mounts on the retail preset
+   *  while the async load is in flight — that placeholder graph must never be
+   *  treated as the real diagram). */
+  const {
+    revision: topologyRevision,
+    busy: saving,
+    settled: topologyLoaded,
+    loadSuccess,
+    loadFailure,
+    beginApply,
+    finishApply,
+    failApply,
+  } = useTopologyEditorSaveLifecycle();
   /** Branch-scoped issue dismissals loaded from and saved with the topology. */
   const [resolvedIssues, setResolvedIssues] = useState<Set<string>>(new Set());
 
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  /** Full multi-selection set; selectedNodeId is the primary (inspector
-   *  target / last-picked). All selection writes go through selectOnly /
-   *  clearSelection so the two can never disagree. */
-  const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
+  /** Selection (primary node, multi-selection set, wire) lives in one
+   *  typed reducer — node and wire selection are mutually exclusive by
+   *  construction, so a stray wire can never shadow the toolbar Delete
+   *  path or leave the inspector showing a phantom target. */
+  const {
+    nodeId: selectedNodeId,
+    nodeIds: selectedNodeIds,
+    wireId: selectedWireId,
+    selectOnly,
+    selectMany,
+    addToSelection,
+    selectWire,
+    clearSelection,
+    clearWire,
+    clearAll,
+    pruneSelection,
+  } = useTopologyEditorSelection();
   /** Render-time mirror so the memoized card handlers read the CURRENT
    *  selection without taking it as a useCallback dep (a dep would churn
    *  the handler identity on every selection change and defeat the card
    *  memo for unrelated cards). */
   const selectedNodeIdsRef = useRef<Set<string>>(selectedNodeIds);
   selectedNodeIdsRef.current = selectedNodeIds;
-  const [selectedWireId, setSelectedWireId] = useState<string | null>(null);
-
-  /** Replace the whole node selection with a single primary node. */
-  const selectOnly = useCallback((id: string) => {
-    setSelectedNodeIds(new Set([id]));
-    setSelectedNodeId(id);
-  }, []);
-  /** Clear the node selection entirely (wire selection untouched). Stable
-   *  so the memoized wire/card layers can receive it as a prop. */
-  const clearSelection = useCallback(() => {
-    setSelectedNodeIds(new Set());
-    setSelectedNodeId(null);
-  }, []);
 
   const [isSimulating, setIsSimulating] = useState(false);
   const [simPulseStep, setSimPulseStep] = useState(0);
@@ -1325,10 +1330,8 @@ export default function NodeTopologyEditor({
 
   /** Select every node on the canvas (context menu action). */
   const selectAllNodes = useCallback(() => {
-    setSelectedNodeIds(new Set(nodes.map((n) => n.id)));
-    setSelectedNodeId(null);
-    setSelectedWireId(null);
-  }, [nodes]);
+    selectMany(nodes.map((n) => n.id), null);
+  }, [selectMany, nodes]);
 
   /**
    * Node id for which an inspector edit already pushed an undo entry in
@@ -1518,7 +1521,7 @@ export default function NodeTopologyEditor({
         setResolvedIssues(new Set(data?.resolved_issue_keys ?? []));
         // Build a lookup of saved node positions/metadata (the diagram layer).
         const savedById = new Map<string, TopologyNodeData>();
-        setTopologyRevision(data?.revision ?? 0);
+        loadSuccess(data?.revision ?? 0);
         if (data && data.nodes) {
           for (const n of data.nodes) {
             const node: TopologyNodeData = {
@@ -1771,12 +1774,9 @@ export default function NodeTopologyEditor({
           type: 'error',
         });
         onLoadError?.(err);
-      })
-      .finally(() => {
-        // Every .then branch returns, so this runs once the first
-        // authoritative load (saved diagram, empty graph, or preset fallback)
-        // has been applied — the gate for the dismissal forget-effect.
-        if (!cancelled) setTopologyLoaded(true);
+        // An authoritative load failure moves the lifecycle to `load-error`
+        // (Apply disabled) until a later load settles successfully.
+        loadFailure();
       });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1864,7 +1864,7 @@ export default function NodeTopologyEditor({
       return;
     }
     renameBaselineRef.current = trimmed;
-  }, [nodes, onRenameBranch, onRenameWorkspace]);
+  }, [nodes, onRenameBranch, onRenameWorkspace, setNodes]);
 
   const commitNodeRename = useCallback(async (nodeId: string, fromKeyboard = false) => {
     if (renameSaving || renameCancelledRef.current) return;
@@ -1899,7 +1899,7 @@ export default function NodeTopologyEditor({
     } finally {
       setRenameSaving(false);
     }
-  }, [renameSaving, renameDraft, nodes, onRenameBranch, onRenameWorkspace]);
+  }, [renameSaving, renameDraft, nodes, onRenameBranch, onRenameWorkspace, setNodes]);
 
   // ── Inline wire rename: floating input at the wire's midpoint ──
   const [renamingWireId, setRenamingWireId] = useState<string | null>(null);
@@ -1990,7 +1990,7 @@ export default function NodeTopologyEditor({
       if (next.length > 50) next.shift();
       return next;
     });
-  }, []);
+  }, [setHistory, setRedo]);
   /** Mirror so the memoized wire handlers (cycle/bends) can call pushHistory
    *  without taking it as a dep — pushHistory re-keys whenever nodes/wires
    *  change, which would churn the handler identity and re-render every wire
@@ -2020,7 +2020,7 @@ export default function NodeTopologyEditor({
     // the property away so the wires leave with NO bends key at all.
     setWires((prev) => prev.map(({ bends: _bends, ...rest }) => rest));
     setLiveAnnouncement(l10nRef.current.getString('topology-layout-announce'));
-  }, [nodes, wires, pushHistory, snapEnabled, wireRouting]);
+  }, [nodes, wires, pushHistory, snapEnabled, wireRouting, setNodes, setWires]);
 
   /** Copy the diagram to the clipboard as the versioned JSON envelope.
    *  Guards a missing clipboard API (insecure context / WebView) with an
@@ -2062,7 +2062,7 @@ export default function NodeTopologyEditor({
     setNodes(payload.nodes.map((n) => ({ ...n })));
     setWires(payload.wires.map((w) => ({ ...w })));
     addToast({ message: l10nRef.current.getString('topology-toast-import-ok'), type: 'info' });
-  }, [pushHistory, addToast]);
+  }, [pushHistory, addToast, setNodes, setWires]);
 
   /** Save the diagram under `name`; an empty name keeps the popover open
    *  (the pure helper refuses it — nothing to save). */
@@ -2082,7 +2082,7 @@ export default function NodeTopologyEditor({
     setWires(payload.wires.map((w) => ({ ...w })));
     setTemplatesOpen(false);
     addToast({ message: l10nRef.current.getString('topology-toast-import-ok'), type: 'info' });
-  }, [pushHistory, addToast]);
+  }, [pushHistory, addToast, setNodes, setWires]);
 
   /** Delete a saved template and re-list, so the popover reflects the
    *  deletion immediately. */
@@ -2129,13 +2129,11 @@ export default function NodeTopologyEditor({
           return next;
         });
       }
-      setSelectedNodeIds(new Set(copyIds));
-      setSelectedNodeId(copyIds[0] ?? null);
-      setSelectedWireId(null);
+      selectMany(copyIds, copyIds[0] ?? null);
       setLiveAnnouncement(l10nRef.current.getString('topology-duplicate-announce'));
     }
     document.body.style.cursor = '';
-  }, []);
+  }, [setHistory, setRedo]);
 
   /** Escape during an Alt+drag: discard the preview copies and the drag
    *  itself (originals stay selected, no history entry). When the drag was
@@ -2164,7 +2162,7 @@ export default function NodeTopologyEditor({
     setAlignmentGuide(null);
     setLiveAnnouncement(l10nRef.current.getString('topology-duplicate-cancel-announce'));
     dragCleanupRef.current?.();
-  }, []);
+  }, [setHistory, setNodes, setWires]);
 
   /** Alt pressed MID-move (Figma semantics): the drag becomes a duplicate
    *  drag. The originals snap back to their pre-drag positions, fresh copies
@@ -2228,7 +2226,7 @@ export default function NodeTopologyEditor({
     dragOffsetsRef.current = offsets;
     setDraggingNodeIds(new Set(duplicateCopyIdsRef.current));
     document.body.style.cursor = 'copy';
-  }, [duplicateRefusal, addToast, l10n]);
+  }, [duplicateRefusal, addToast, l10n, setNodes, setWires]);
 
   /** Escape mid-MOVE (Figma semantics): the dragged nodes snap back to
    *  their pre-drag positions, the move's single history entry is popped
@@ -2249,7 +2247,7 @@ export default function NodeTopologyEditor({
     dragOffsetsRef.current.clear();
     setAlignmentGuide(null);
     dragCleanupRef.current?.();
-  }, []);
+  }, [setHistory, setNodes]);
 
   /** Escape mid-bend-drag: restore the bend to its start position (a
    *  ghost-created bend is removed entirely) and pop the drag's single
@@ -2278,7 +2276,7 @@ export default function NodeTopologyEditor({
       setHistory((prev) => prev.slice(0, -1));
     }
     bendDragCleanupRef.current?.();
-  }, []);
+  }, [setHistory, setWires]);
 
   /** Align or distribute the current multi-selection. One undo entry per
    *  action; the reference geometry is the selection's own bounding box,
@@ -2324,7 +2322,7 @@ export default function NodeTopologyEditor({
         }
       });
     });
-  }, [selectedNodeIds, pushHistory]);
+  }, [selectedNodeIds, pushHistory, setNodes]);
 
   /**
    * Push history at most once per node selection session when an
@@ -2352,27 +2350,19 @@ export default function NodeTopologyEditor({
    * entries, so clear it; a still-valid selection is preserved.
    */
   useEffect(() => {
-    if (selectedNodeId && !nodeMap.has(selectedNodeId)) {
-      setSelectedNodeIds(new Set());
-      setSelectedNodeId(null);
-    } else {
-      // Prune any multi-selection members that no longer exist.
-      setSelectedNodeIds((prev) => {
-        if (prev.size === 0) return prev;
-        const next = new Set([...prev].filter((id) => nodeMap.has(id)));
-        return next.size === prev.size ? prev : next;
-      });
-    }
-    if (selectedWireId && !wires.some((w) => w.id === selectedWireId)) {
-      setSelectedWireId(null);
-    }
+    // Prune dangling node ids and the wire selection in one reducer pass:
+    // a primary that no longer exists is cleared, multi-selection members
+    // that vanished are dropped, and a wire that was deleted is deselected.
+    const validNodeIds = new Set(nodeMap.keys());
+    const validWireId = wires.some((w) => w.id === selectedWireId) ? selectedWireId : null;
+    pruneSelection(validNodeIds, validWireId);
     // A picker whose target node vanished (preset load, workspace reload,
     // batch delete) must close — otherwise its keyboard guard would keep
     // swallowing canvas shortcuts even though the popover is unrenderable.
     if (relationshipPicker && !nodeMap.has(relationshipPicker.toNodeId)) {
       setRelationshipPicker(null);
     }
-  }, [selectedNodeId, selectedWireId, nodeMap, wires, relationshipPicker]);
+  }, [selectedNodeId, selectedWireId, nodeMap, wires, relationshipPicker, pruneSelection]);
 
   const loadPreset = useCallback((preset: 'retail' | 'restaurant') => {
     // A wholesale canvas replacement invalidates any in-flight relationship
@@ -2416,7 +2406,7 @@ export default function NodeTopologyEditor({
     } else if (selectedWireId && !data.wires.some((w) => w.id === selectedWireId)) {
       addToast({ message: l10n.getString('topology-toast-selection-dropped'), type: 'info' });
     }
-  }, [pushHistory, selectedNodeId, selectedWireId, addToast, l10n, commitSnapshot]);
+  }, [pushHistory, selectedNodeId, selectedWireId, addToast, l10n, commitSnapshot, setNodes, setWires]);
 
   const popUndo = useCallback(() => {
     const stack = historyRef.current;
@@ -2445,7 +2435,7 @@ export default function NodeTopologyEditor({
     if (restoredNodes.length === 1) {
       selectOnly(restoredNodes[0]!.id);
     }
-  }, [nodes, wires, selectOnly]);
+  }, [nodes, wires, selectOnly, setHistory, setNodes, setRedo, setWires]);
 
   const popRedo = useCallback(() => {
     if (redo.length === 0) return;
@@ -2459,7 +2449,7 @@ export default function NodeTopologyEditor({
     // is clean; redo to anything else confirms on the next preset click.
     // A post-redo edit is a fresh session — it must push a new entry.
     inspectorHistoryPushedForRef.current = null;
-  }, [redo, nodes, wires]);
+  }, [redo, nodes, wires, setHistory, setNodes, setRedo, setWires]);
 
   // Clean up pan/drag listeners and fresh-node timers on unmount
   useEffect(() => {
@@ -2489,9 +2479,8 @@ export default function NodeTopologyEditor({
     pushHistory();
     setNodes((prev) => prev.filter((n) => !doomed.has(n.id)));
     setWires((prev) => prev.filter((w) => !doomed.has(w.fromNodeId) && !doomed.has(w.toNodeId)));
-    setSelectedNodeIds(new Set());
-    setSelectedNodeId(null);
-  }, [pushHistory]);
+    clearSelection();
+  }, [pushHistory, setNodes, setWires, clearSelection]);
 
   /** Fit the whole diagram into the viewport (clamped 40%..200%). */
   const zoomToFit = useCallback(() => {
@@ -2633,10 +2622,8 @@ export default function NodeTopologyEditor({
       }));
     setNodes((prev) => [...prev, ...copies]);
     setWires((prev) => [...prev, ...wireCopies]);
-    setSelectedNodeIds(new Set(copies.map((c) => c.id)));
-    setSelectedNodeId(copies[0]?.id ?? null);
-    setSelectedWireId(null);
-  }, [nodes, wires, selectedNodeIds, pushHistory, pan, zoom, duplicateRefusal, addToast, l10n]);
+    selectMany(copies.map((c) => c.id), copies[0]?.id ?? null);
+  }, [nodes, wires, selectedNodeIds, pushHistory, pan, zoom, duplicateRefusal, addToast, l10n, setNodes, setWires, selectMany]);
 
   /** Paste the clipboard with a per-paste cascade offset; wires whose both
    *  endpoints were copied come along. The pasted copies become the
@@ -2682,10 +2669,8 @@ export default function NodeTopologyEditor({
       }));
     setNodes((prev) => [...prev, ...copies]);
     setWires((prev) => [...prev, ...wireCopies]);
-    setSelectedNodeIds(new Set(copies.map((c) => c.id)));
-    setSelectedNodeId(copies[0]?.id ?? null);
-    setSelectedWireId(null);
-  }, [pushHistory, pan, zoom, duplicateRefusal, addToast, l10n]);
+    selectMany(copies.map((c) => c.id), copies[0]?.id ?? null);
+  }, [pushHistory, pan, zoom, duplicateRefusal, addToast, l10n, setNodes, setWires, selectMany]);
 
   /** Latest-ref for the spawn handler: the keydown effect runs earlier in
    *  the component body than `handleAddNode`'s const declaration, so a
@@ -2811,8 +2796,7 @@ export default function NodeTopologyEditor({
         }
         setConnectingFromNodeId(null);
         setConnectingFromPort(null);
-        clearSelection();
-        setSelectedWireId(null);
+        clearAll();
         return;
       }
       if ((e.key === 'Delete' || e.key === 'Backspace') && (selectedNodeIds.size > 0 || selectedWireId)) {
@@ -2995,7 +2979,7 @@ export default function NodeTopologyEditor({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedNodeIds, selectedWireId, wires, pushHistory, popUndo, popRedo, confirmDelete, confirmDeleteMany, confirmPreset, pan, zoom, deleteNodes, relationshipPicker, cancelRelationshipPicker, selectAllNodes, duplicateSelection, copySelection, pasteClipboard, nodes, onRenameBranch, onRenameWorkspace, zoomToFit, zoomBy, resetView, snapEnabled, cancelDuplicateDrag, cancelNodeMove, convertDragToDuplicate, cancelBendDrag, finderOpen, clearSelection]);
+  }, [selectedNodeIds, selectedWireId, wires, pushHistory, popUndo, popRedo, confirmDelete, confirmDeleteMany, confirmPreset, pan, zoom, deleteNodes, relationshipPicker, cancelRelationshipPicker, selectAllNodes, duplicateSelection, copySelection, pasteClipboard, nodes, onRenameBranch, onRenameWorkspace, zoomToFit, zoomBy, resetView, snapEnabled, cancelDuplicateDrag, cancelNodeMove, convertDragToDuplicate, cancelBendDrag, finderOpen, clearSelection, setNodes]);
 
   const executePresetLoad = useCallback(() => {
     if (confirmPreset) {
@@ -3039,13 +3023,13 @@ export default function NodeTopologyEditor({
         }
         pushHistory();
         setWires((prev) => prev.filter((w) => w.id !== selectedWireId));
-        setSelectedWireId(null);
+        clearWire();
       }
     } else if (confirmDelete) {
       deleteNodes([confirmDelete]);
     }
     setConfirmDelete(null);
-  }, [confirmDelete, confirmDeleteMany, selectedWireId, connectingFromNodeId, connectingFromPort, wires, pushHistory, deleteNodes]);
+  }, [confirmDelete, confirmDeleteMany, selectedWireId, connectingFromNodeId, connectingFromPort, wires, pushHistory, deleteNodes, setWires]);
 
   /** End an in-flight node drag (release / document mouseup / touch up):
    *  commit any Alt-drag copies, clear the drag set and offsets, and drop
@@ -3078,7 +3062,7 @@ export default function NodeTopologyEditor({
   ) => {
     userInteractedRef.current = true;
     setRelationshipPicker(null);
-    setSelectedWireId(null);
+    clearWire();
     // Alt+drag = Figma-style DUPLICATE drag: the dragged set is replaced by
     // fresh copies (new ids, starting at the originals' positions) that
     // follow the cursor while the originals stay put; the drop commits them
@@ -3185,7 +3169,7 @@ export default function NodeTopologyEditor({
         dragStartRef.current.set(id, { x: n.x, y: n.y });
       }
     }
-  }, [duplicateRefusal, addToast, l10n, finalizeNodeDrag]);
+  }, [duplicateRefusal, addToast, l10n, finalizeNodeDrag, setNodes, setWires]);
 
   const handleNodeMouseDown = useCallback((e: React.MouseEvent, nodeId: string) => {
     e.stopPropagation();
@@ -3203,8 +3187,7 @@ export default function NodeTopologyEditor({
     if (e.shiftKey && !wasSelected) {
       selection = new Set(currentSelection);
       selection.add(nodeId);
-      setSelectedNodeIds(selection);
-      setSelectedNodeId(nodeId);
+      addToSelection(nodeId);
     } else if (!wasSelected) {
       selection = new Set([nodeId]);
       selectOnly(nodeId);
@@ -3498,13 +3481,10 @@ export default function NodeTopologyEditor({
         // closure is from that render, so it still holds the pre-drag set).
         const union = new Set(selectedNodeIds);
         for (const n of hit) union.add(n.id);
-        setSelectedNodeIds(union);
+        selectMany([...union], hit[hit.length - 1]!.id);
       } else {
-        setSelectedNodeIds(new Set(hit.map((n) => n.id)));
+        selectMany(hit.map((n) => n.id), hit[hit.length - 1]!.id);
       }
-      // The primary (inspector target) is the last node in render order.
-      setSelectedNodeId(hit[hit.length - 1]!.id);
-      setSelectedWireId(null);
     } else if (!additive) {
       clearSelection();
     }
@@ -3551,7 +3531,7 @@ export default function NodeTopologyEditor({
     setContextMenu(null);
     const targetEl = e.target as HTMLElement;
     if (targetEl === e.currentTarget || targetEl.classList.contains('node-canvas-viewport') || targetEl.tagName === 'svg') {
-      setSelectedWireId(null);
+      clearWire();
       if (e.button === 0 && (spaceDownRef.current || panToolActive)) {
         // Space+drag (or the active Pan tool) pans like the middle/right
         // button, but Figma-style it preserves the current selection
@@ -3656,8 +3636,7 @@ export default function NodeTopologyEditor({
       // A tap on empty canvas is the touch equivalent of a plain click
       // (the mouse path finalizes an empty marquee, which clears the
       // selection). Node taps already selected at pointerdown.
-      clearSelection();
-      setSelectedWireId(null);
+      clearAll();
     }
     touchPointersRef.current.clear();
     touchGestureRef.current = null;
@@ -3778,7 +3757,7 @@ export default function NodeTopologyEditor({
           // node keeps the group so it can be dragged as a whole.
           const wasSelected = selectedNodeIds.has(nodeId);
           if (!wasSelected) selectOnly(nodeId);
-          setSelectedWireId(null);
+          clearWire();
           touchGestureRef.current = {
             mode: 'none',
             startX: e.clientX,
@@ -4061,8 +4040,7 @@ export default function NodeTopologyEditor({
     if (from && to) {
       recenterViewOn((from.x + to.x) / 2 + NODE_WIDTH / 2, (from.y + to.y) / 2 + NODE_HEIGHT / 2);
     }
-    setSelectedWireId(wireId);
-    clearSelection();
+    selectWire(wireId);
     // Keyboard parity (round 112): land focus on the wire's hitbox
     // (tabIndex=0) so the keyboard user can act immediately — cycle
     // direction, Delete, relabel — instead of hunting for the wire after
@@ -4319,8 +4297,7 @@ export default function NodeTopologyEditor({
     if (e.button !== 0) return;
     e.stopPropagation();
     e.preventDefault();
-    setSelectedWireId(wireId);
-    clearSelection();
+    selectWire(wireId);
     bendDragCleanupRef.current?.();
     const drag = { wireId, index, moved: false, startX, startY, created };
     bendDragRef.current = drag;
@@ -4361,7 +4338,7 @@ export default function NodeTopologyEditor({
       bendDragCleanupRef.current = null;
       bendDragRef.current = null;
     };
-  }, [clearSelection, pan, zoom, setSelectedWireId, canvasRef, setWires]);
+  }, [clearSelection, pan, zoom, selectWire, canvasRef, setWires]);
 
   /** Drag on a midpoint ghost: insert a bend there, then drag the new
    *  bend — one gesture creates and positions it. */
@@ -4369,8 +4346,7 @@ export default function NodeTopologyEditor({
     if (e.button !== 0) return;
     e.stopPropagation();
     e.preventDefault();
-    setSelectedWireId(wireId);
-    clearSelection();
+    selectWire(wireId);
     // Insert the bend at the ghost's midpoint, then drag that fresh bend.
     setWires((prev) =>
       prev.map((w) => {
@@ -4381,7 +4357,7 @@ export default function NodeTopologyEditor({
       }),
     );
     startBendDrag(e, wireId, segmentIndex, mx, my, true);
-  }, [setSelectedWireId, clearSelection, setWires, startBendDrag]);
+  }, [selectWire, setWires, startBendDrag]);
 
   /** Double-click a bend handle to remove it (one undo entry). Stable so
    *  the memoized wire groups can receive it as a prop. */
@@ -4412,10 +4388,9 @@ export default function NodeTopologyEditor({
    *  memoized wire groups can receive it as a prop. */
   const handleWireClick = useCallback((e: { stopPropagation(): void }, wireId: string) => {
     e.stopPropagation();
-    setSelectedWireId(wireId);
-    clearSelection();
+    selectWire(wireId);
     handleCycleWireDirection(wireId);
-  }, [setSelectedWireId, clearSelection, handleCycleWireDirection]);
+  }, [selectWire, handleCycleWireDirection]);
 
   /** Wire context menu (right-click): object-scoped wire menu (direction +
    *  delete) instead of the canvas menu. Stable. */
@@ -4423,23 +4398,22 @@ export default function NodeTopologyEditor({
     e.preventDefault();
     e.stopPropagation();
     const rect = canvasRef.current?.getBoundingClientRect();
-    setSelectedWireId(wireId);
-    clearSelection();
+    selectWire(wireId);
     setContextMenu({ x: e.clientX - (rect?.left ?? 0), y: e.clientY - (rect?.top ?? 0), wireId });
-  }, [setSelectedWireId, clearSelection, canvasRef, setContextMenu]);
+  }, [selectWire, canvasRef, setContextMenu]);
 
   /** Stable name/enabled writers for the memoized workspace cards. */
   const handleSetNodeName = useCallback((nodeId: string, name: string) => {
     beginInspectorEdit(nodeId);
     setNodes((prev) => prev.map((n) => (n.id === nodeId ? { ...n, name } : n)));
-  }, [beginInspectorEdit]);
+  }, [beginInspectorEdit, setNodes]);
 
   const handleSetNodeEnabled = useCallback((nodeId: string, enabled: boolean) => {
     beginInspectorEdit(nodeId);
     setNodes((prev) => prev.map((n) => (n.id === nodeId
       ? { ...n, metadata: { ...n.metadata, enabled } }
       : n)));
-  }, [beginInspectorEdit]);
+  }, [beginInspectorEdit, setNodes]);
 
   /** Stable metadata writer for the warehouse settings card (capacity,
    *  low-stock threshold). Keeps edits in the beginInspectorEdit dirty
@@ -4449,7 +4423,7 @@ export default function NodeTopologyEditor({
     setNodes((prev) => prev.map((n) => (n.id === nodeId
       ? { ...n, metadata: { ...n.metadata, ...patch } }
       : n)));
-  }, [beginInspectorEdit]);
+  }, [beginInspectorEdit, setNodes]);
 
   const handleDeleteRequest = () => {
     if (selectedNodeIds.size > 0) {
@@ -4689,24 +4663,28 @@ export default function NodeTopologyEditor({
                   });
                   return;
                 }
-                if (saveInFlightRef.current) return;
-                saveInFlightRef.current = true;
-                setSaving(true);
+                if (!beginApply()) return;
                 skipNextLoadRef.current = true;
                 // Hoisted ABOVE the try: the snapshot below is written after
                 // the catch, and let/const are block-scoped to the try — a
                 // declaration inside would ReferenceError on success.
                 let savedNodes = nodes;
                 let savedWires = wires;
+                // Revision returned by the backend on success; hoisted above
+                // the try so the deferred finishApply (setTimeout below) can
+                // read it — same block-scoping rule as savedNodes/savedWires.
+                let nextRevision: number | undefined;
                 try {
                   const result = await onSave?.(nodes, wires, topologyRevision, [...resolvedIssues]);
-                  const idMap = result && 'idMap' in result
-                    ? result.idMap
-                    : result && 'revision' in result
-                      ? undefined
-                      : result;
-                  if (result && 'revision' in result) {
-                    setTopologyRevision(result.revision);
+                  const idMap: Record<string, string> | undefined = result && typeof result === 'object' && 'idMap' in result
+                    ? (result.idMap && typeof result.idMap === 'object'
+                      ? result.idMap as Record<string, string>
+                      : undefined)
+                    : result && typeof result === 'object' && !('revision' in result)
+                      ? result as Record<string, string>
+                      : undefined;
+                  if (result && typeof result === 'object' && 'revision' in result && typeof result.revision === 'number') {
+                    nextRevision = result.revision;
                   }
                   if (idMap && Object.keys(idMap).length > 0) {
                     // Remap old UUIDs to new UUIDs from archive+recreate
@@ -4715,8 +4693,7 @@ export default function NodeTopologyEditor({
                     // and drop the undo/redo stacks — every pre-save entry
                     // holds the OLD ids, which no longer exist on the canvas
                     // or in the DB. Undo must not restore dangling ids.
-                    clearSelection();
-                    setSelectedWireId(null);
+                    clearAll();
                     setHistory([]);
                     setRedo([]);
                     savedNodes = nodes.map((n) => {
@@ -4747,8 +4724,7 @@ export default function NodeTopologyEditor({
                     type: 'error',
                   });
                   skipNextLoadRef.current = false;
-                  saveInFlightRef.current = false;
-                  setSaving(false);
+                  failApply();
                   return;
                 }
                 // Save succeeded — the canvas now matches the backend, so a
@@ -4761,8 +4737,7 @@ export default function NodeTopologyEditor({
                 // preventing post-save reload from clobbering in-flight edits (#8).
                 setTimeout(() => {
                   skipNextLoadRef.current = false;
-                  saveInFlightRef.current = false;
-                  setSaving(false);
+                  finishApply(nextRevision ?? topologyRevision);
                 }, 0);
               }}
               icon={<CheckIcon size={16} />}
@@ -5605,8 +5580,7 @@ export default function NodeTopologyEditor({
                   onMouseDown={(e) => e.stopPropagation()}
                   onClick={(e) => {
                     e.stopPropagation();
-                    setSelectedWireId(wire.id);
-                    clearSelection();
+                    selectWire(wire.id);
                     startWireRename(wire.id);
                   }}
                 >

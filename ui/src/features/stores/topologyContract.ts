@@ -17,8 +17,8 @@ export const TOPOLOGY_SCHEMA_VERSION = topologySemantics.schemaVersion;
 /** Warehouse inputs are deliberately split into primary ownership scope and
  * operational routing. Stock/transfer feeds never satisfy the one-of primary
  * ownership rule, even though all four inputs share the visual left rail. */
-export const WAREHOUSE_PRIMARY_INPUT_PORTS = topologySemantics.warehouse.primaryInputs as readonly ['location-in', 'operation-in'];
-export const WAREHOUSE_OPERATIONAL_INPUT_PORTS = topologySemantics.warehouse.operationalInputs as readonly ['stock-in', 'transfer-in'];
+export const WAREHOUSE_PRIMARY_INPUT_PORTS = topologySemantics.warehouse.primaryInputs as unknown as readonly ['location-in', 'operation-in'];
+export const WAREHOUSE_OPERATIONAL_INPUT_PORTS = topologySemantics.warehouse.operationalInputs as unknown as readonly ['stock-in', 'transfer-in'];
 export type WarehousePrimaryInputPort = (typeof WAREHOUSE_PRIMARY_INPUT_PORTS)[number];
 export type WarehouseOperationalInputPort = (typeof WAREHOUSE_OPERATIONAL_INPUT_PORTS)[number];
 export const isWarehousePrimaryInputPort = (portId?: string): portId is WarehousePrimaryInputPort =>

@@ -361,6 +361,10 @@ fn shared_topology_semantics() -> &'static Value {
     static CONTRACT: OnceLock<Value> = OnceLock::new();
     CONTRACT.get_or_init(|| {
         serde_json::from_str(SHARED_TOPOLOGY_SEMANTICS_JSON)
+            // INVARIANT: topologySemantics.json is a checked-in compile-time
+            // contract; malformed JSON is a developer/build error, not runtime
+            // user data, so initialization must fail closed.
+            // INVARIANT: checked-in contract JSON is validated at build time.
             .expect("shared topology semantics JSON must be valid")
     })
 }
@@ -381,6 +385,24 @@ fn is_warehouse_primary_input_port(port_id: Option<&str>) -> bool {
 
 fn is_warehouse_operational_input_port(port_id: Option<&str>) -> bool {
     shared_port_set_contains("/warehouse/operationalInputs", port_id)
+}
+
+fn shared_semantic_pairing_contains(
+    from_port_id: Option<&str>,
+    to_port_id: Option<&str>,
+    relationship_type: Option<&str>,
+) -> bool {
+    let Some(pairings) = shared_topology_semantics()
+        .get("semanticPairings")
+        .and_then(Value::as_array)
+    else {
+        return false;
+    };
+    pairings.iter().any(|pairing| {
+        value_string(pairing, "source") == from_port_id
+            && value_string(pairing, "target") == to_port_id
+            && value_string(pairing, "relationshipType") == relationship_type
+    })
 }
 
 fn topology_apply_request_key(request_id: &str) -> Result<String, AppError> {
@@ -680,6 +702,9 @@ fn semantic_wire_matches_contract(wire: &Value, from_node: &Value, to_node: &Val
     let from_port = value_string(wire, "from_port_id");
     let to_port = value_string(wire, "to_port_id");
     let relationship = value_string(wire, "relationship_type");
+    if !shared_semantic_pairing_contains(from_port, to_port, relationship) {
+        return false;
+    }
     let from_type_key = semantic_type_key(from_node);
     let to_type_key = semantic_type_key(to_node);
     let from_type = semantic_node_type(from_node);
@@ -693,9 +718,10 @@ fn semantic_wire_matches_contract(wire: &Value, from_node: &Value, to_node: &Val
                     || from_type == Some("warehouse"))
         }
         (Some("transfer-out"), Some("transfer-in"), Some("inventory-transfer")) => {
-            from_type == Some("workspace")
-                && matches!(from_type_key, "store-pos" | "restaurant-pos")
-                && to_type == Some("warehouse")
+            to_type == Some("warehouse")
+                && ((from_type == Some("workspace")
+                    && matches!(from_type_key, "store-pos" | "restaurant-pos"))
+                    || from_type == Some("warehouse"))
         }
         (Some("ticket-out"), Some("ticket-in"), Some("ticket-routing")) => {
             from_type == Some("workspace") && from_type_key == "kds" && to_type == Some("hardware")
@@ -1494,8 +1520,19 @@ fn validate_apply_gate(
     nodes: &[Value],
     wires: &[Value],
 ) -> Result<(), AppError> {
-    // Reject malformed graphs before any workspace mutation. Legacy
-    // geometric payloads remain accepted during the migration window.
+    // Production Apply is the strict semantic boundary. Legacy geometric
+    // payloads remain readable by the low-level load/save compatibility
+    // helpers, but they must not bypass ownership and entitlement checks on
+    // the authenticated mutation command.
+    if !has_semantic_fields(nodes, wires) {
+        return Err(topology_validation(
+            "semantic-contract-required",
+            None,
+            None,
+            None,
+            "topology Apply requires canonical semantic node and wire fields",
+        ));
+    }
     validate_semantic_ownership(conn, nodes, wires)?;
     validate_diagram_payloads(nodes, wires)
 }
@@ -1525,6 +1562,7 @@ fn validate_warehouse_capacity(
     nodes: &[Value],
     wires: &[Value],
     tier: &oz_core::subscription::SubscriptionTier,
+    resolved_issue_keys: &[String],
 ) -> Result<(), AppError> {
     if !matches!(
         tier,
@@ -1547,27 +1585,58 @@ fn validate_warehouse_capacity(
         let Some(capacity) = metadata.get("capacity").and_then(Value::as_f64) else {
             continue;
         };
-        if stock < capacity {
-            continue;
-        }
-        if let Some(wire) = wires.iter().find(|wire| {
-            value_string(wire, "to_node_id") == value_string(warehouse, "id")
-                && is_warehouse_operational_input_port(value_string(wire, "to_port_id"))
-                && matches!(
-                    value_string(wire, "relationship_type"),
-                    Some("stock-routing" | "inventory-transfer")
-                )
-        }) {
+        let warehouse_id = value_string(warehouse, "id");
+        if stock >= capacity
+            && let Some(wire) = wires.iter().find(|wire| {
+                value_string(wire, "to_node_id") == warehouse_id
+                    && is_warehouse_operational_input_port(value_string(wire, "to_port_id"))
+                    && matches!(
+                        value_string(wire, "relationship_type"),
+                        Some("stock-routing" | "inventory-transfer")
+                    )
+            })
+        {
             return Err(topology_validation(
                 "warehouse-at-capacity",
-                value_string(warehouse, "id"),
+                warehouse_id,
                 value_string(wire, "id"),
                 value_string(wire, "to_port_id"),
                 format!(
                     "warehouse {} is at capacity ({stock}/{capacity})",
-                    value_string(warehouse, "id").unwrap_or("<unknown>")
+                    warehouse_id.unwrap_or("<unknown>")
                 ),
             ));
+        }
+
+        // A capacity-aware warehouse with room must have an operational
+        // stock/transfer route unless the user explicitly dismissed this
+        // branch-scoped prompt in the topology document. This mirrors the
+        // frontend contract but remains authoritative for direct IPC callers.
+        if stock < capacity {
+            let has_operational_route = wires.iter().any(|wire| {
+                value_string(wire, "to_node_id") == warehouse_id
+                    && is_warehouse_operational_input_port(value_string(wire, "to_port_id"))
+                    && matches!(
+                        value_string(wire, "relationship_type"),
+                        Some("stock-routing" | "inventory-transfer")
+                    )
+            });
+            let issue_key = format!(
+                "node:{}:topology-validation-warehouse-missing-stock-routing",
+                warehouse_id.unwrap_or_default()
+            );
+            if !has_operational_route && !resolved_issue_keys.iter().any(|key| key == &issue_key) {
+                return Err(topology_validation(
+                    "warehouse-missing-stock-routing",
+                    warehouse_id,
+                    None,
+                    None,
+                    format!(
+                        "warehouse {} has capacity but no operational stock or transfer route",
+                        warehouse_id.unwrap_or("<unknown>")
+                    ),
+                ));
+            }
         }
     }
     Ok(())
@@ -2138,7 +2207,12 @@ pub async fn apply_topology_diff(
         subscription.effective_tier()
     };
     validate_warehouse_quota(&diagram_nodes, &effective_tier)?;
-    validate_warehouse_capacity(&diagram_nodes, &diagram_wires, &effective_tier)?;
+    validate_warehouse_capacity(
+        &diagram_nodes,
+        &diagram_wires,
+        &effective_tier,
+        &resolved_issue_keys,
+    )?;
 
     // The journal is written BEFORE any store mutation. If the process
     // crashes after the store commit, startup/next Apply can compare the
@@ -2175,6 +2249,15 @@ pub async fn apply_topology_diff(
         // standalone workspace-create command. The topology diff must not
         // become an entitlement bypass just because it batches mutations.
         for creation in &workspace_creations {
+            if creation.id.trim().is_empty()
+                || creation.type_key.trim().is_empty()
+                || creation.store_id.trim().is_empty()
+                || creation.name.trim().is_empty()
+            {
+                return Err(AppError::Invalid(
+                    "workspace creation requires non-empty id, type_key, store_id, and name".into(),
+                ));
+            }
             if creation.store_id != session.store_id {
                 return Err(AppError::PermissionDenied(format!(
                     "workspace {} targets a different store",
@@ -2952,6 +3035,38 @@ mod tests {
     }
 
     #[test]
+    fn semantic_save_accepts_warehouse_to_warehouse_transfer_route() {
+        let conn = fresh_conn();
+        let hub = semantic_node("warehouse-hub", "warehouse", None);
+        let satellite = semantic_node("warehouse-satellite", "warehouse", None);
+        let transfer_wire = serde_json::json!({
+            "id": "wire-warehouse-transfer",
+            "from_node_id": "warehouse-hub",
+            "to_node_id": "warehouse-satellite",
+            "direction": "one-way",
+            "from_port_id": "transfer-out",
+            "to_port_id": "transfer-in",
+            "relationship_type": "inventory-transfer",
+        });
+
+        let result = save_topology_json(
+            &conn,
+            vec![
+                semantic_node("branch", "branch-location", Some("default")),
+                hub,
+                satellite,
+            ],
+            vec![
+                semantic_location_wire("wire-hub-scope", "warehouse-hub"),
+                semantic_location_wire("wire-satellite-scope", "warehouse-satellite"),
+                transfer_wire,
+            ],
+        );
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
     fn semantic_save_accepts_warehouse_location_or_retail_pos_operation() {
         let conn = fresh_conn();
         let mut retail_pos = semantic_node("retail-pos", "workspace", None);
@@ -3152,10 +3267,12 @@ mod tests {
         // hard boundary that can catch them.
         let conn = fresh_conn();
         let nodes = vec![
+            semantic_node("branch", "branch-location", Some("default")),
             semantic_node("ws-1", "workspace", None),
             semantic_node("ws-1", "workspace", None),
         ];
-        let result = validate_apply_gate(&conn, &nodes, &[]);
+        let wires = vec![semantic_location_wire("wire-1", "ws-1")];
+        let result = validate_apply_gate(&conn, &nodes, &wires);
         assert!(result.is_err(), "gate must reject duplicate node ids");
         let err = result.unwrap_err().to_string();
         assert!(
@@ -7709,6 +7826,11 @@ mod tests {
         assert!(is_warehouse_operational_input_port(Some("transfer-in")));
         assert!(!is_warehouse_primary_input_port(Some("stock-in")));
         assert!(!is_warehouse_operational_input_port(Some("operation-in")));
+        assert!(shared_semantic_pairing_contains(
+            Some("transfer-out"),
+            Some("transfer-in"),
+            Some("inventory-transfer"),
+        ));
     }
 
     #[test]
@@ -7767,6 +7889,34 @@ mod tests {
     }
 
     #[test]
+    fn backend_warehouse_capacity_requires_operational_route_or_dismissal() {
+        let nodes = vec![serde_json::json!({
+            "id": "wh-1",
+            "type": "warehouse",
+            "metadata": { "stock": 5, "capacity": 10 }
+        })];
+
+        let result = validate_warehouse_capacity(
+            &nodes,
+            &[],
+            &oz_core::subscription::SubscriptionTier::Pro,
+            &[],
+        );
+        assert!(
+            matches!(result, Err(AppError::TopologyValidation { code, .. }) if code == "warehouse-missing-stock-routing")
+        );
+
+        let issue_key = "node:wh-1:topology-validation-warehouse-missing-stock-routing".to_string();
+        let dismissed = validate_warehouse_capacity(
+            &nodes,
+            &[],
+            &oz_core::subscription::SubscriptionTier::Pro,
+            &[issue_key],
+        );
+        assert!(dismissed.is_ok());
+    }
+
+    #[test]
     fn backend_warehouse_capacity_rejects_stock_routing_into_full_pro_room() {
         let nodes = vec![serde_json::json!({
             "id": "wh-1",
@@ -7783,6 +7933,7 @@ mod tests {
             &nodes,
             &wires,
             &oz_core::subscription::SubscriptionTier::Pro,
+            &[],
         );
         assert!(
             matches!(result, Err(AppError::TopologyValidation { code, .. }) if code == "warehouse-at-capacity")

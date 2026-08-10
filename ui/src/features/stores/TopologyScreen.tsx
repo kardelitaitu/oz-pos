@@ -14,7 +14,6 @@ import {
   type TopologyApplyResult,
 } from '@/api/topology';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
-import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
 import { checkLicenseStatus } from '@/api/license';
@@ -68,7 +67,6 @@ export default function TopologyScreen() {
   const { l10n } = useLocalization();
   /** Whether the session user may persist topology changes. The backend
    *  capability probe is authoritative for Apply and rename actions. */
-  const { isManager } = useAuth();
   const [canSaveTopology, setCanSaveTopology] = useState(false);
   const [storesUnavailable, setStoresUnavailable] = useState(false);
   const [instancesUnavailable, setInstancesUnavailable] = useState(false);
@@ -85,18 +83,11 @@ export default function TopologyScreen() {
       setCanSaveTopology(false);
       return () => { cancelled = true; };
     }
-    // Keep a compatibility fallback for isolated standalone test harnesses
-    // that predate the capability command. Production registers the command,
-    // so real UI authorization always comes from the backend permission check.
-    if (typeof checkTopologySaveCapability !== 'function') {
-      setCanSaveTopology(isManager);
-      return () => { cancelled = true; };
-    }
     void checkTopologySaveCapability(sessionToken)
       .then((allowed) => { if (!cancelled) setCanSaveTopology(allowed); })
       .catch(() => { if (!cancelled) setCanSaveTopology(false); });
     return () => { cancelled = true; };
-  }, [sessionToken, isManager]);
+  }, [sessionToken]);
   const [licenseTier, setLicenseTier] = useState('standard');
   /** Real workspace instances loaded from the backend, used to seed the editor. */
   const [workspaceInstances, setWorkspaceInstances] = useState<WorkspaceDto[]>([]);
@@ -168,6 +159,7 @@ export default function TopologyScreen() {
     }
     try {
       setWorkspaceInstances((await listWorkspacesScoped(sessionToken)).filter(isTopologyInstance));
+      instancesResolvedRef.current = true;
       setInstancesUnavailable(false);
     } catch (err) {
       // Never turn a transient workspace-list failure into an authoritative
@@ -385,7 +377,7 @@ export default function TopologyScreen() {
 
       if (!sessionToken) {
         const error = new Error(l10n.getString('topology-toast-no-session'));
-        addToast({ message: error.message, type: 'error' });
+        addToast({ message: plainErrorMessage(error), type: 'error' });
         throw error;
       }
 
@@ -404,7 +396,7 @@ export default function TopologyScreen() {
       if (blockingErrors.length > 0) {
         const firstError = blockingErrors[0]!;
         const error = new Error(l10n.getString(firstError.messageId));
-        addToast({ message: error.message, type: 'error' });
+        addToast({ message: plainErrorMessage(error), type: 'error' });
         throw error;
       }
 
