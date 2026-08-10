@@ -3058,8 +3058,26 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** contract 51/51 (+3) · editor 465/465 (+1) · editor+contract+screen 554/554 · **full UI suite 275 files / 4,667 tests** (+4) · a11y 8/8 · typecheck ✓ · eslint ✓.
 
-**Commits:** `<pending>`
+**Commits:** `3f025a49`
 
 **Deliberately NOT done:** the backend already had Premium in its Pro sets (this was a TS-only drift), so no Rust change was needed; the `free`/`one_time` tiers were verified to map consistently (`max_warehouses` Some(1) ↔ `tierLimitEnforced` true on both sides).
 
 **Risks / follow-ups:** this is the same class as the audit's "generated contract" item — the tier lists still live as literals in `topologyContract.ts`/`NodeTopologyEditor.tsx`/`TopologyScreen.tsx` plus `subscription.rs`. A shared generated tier matrix (single source consumed by both languages) is the durable fix; this round closes the concrete Premium drift, not the generation gap.
+
+### 2026-08-10 — authoritative reload leaves the simulation pulse running (round 130)
+
+**Problem (evidence):** the canvas-replacement rule (rounds 124–129) resets transient editor state on every canvas replacement — in-flight connection, hover, undo/redo, inspector session, and the simulation pulse. But it was only wired into `loadPreset` (and the preset path's contract comment pinned it: "a PRESET LOAD STOPS the simulation"). The **authoritative reload** effect (branch switch, `workspaceInstances` refresh after Apply, unassigned-branch wipe) replaced the canvas in three paths (workspace-instance rebuild, unassigned empty graph, legacy saved-diagram) without stopping the simulation — so a running "Test Order" pulse kept animating the OLD wire geometry against the newly loaded canvas, the exact hazard the preset rule guards against (a pulse on a topology it was never run against). Verified pre-fix: sim on, reload, the pulse dot persists on the new canvas.
+
+**Red:** `an authoritative reload stops the simulation (canvas-replacement rule)` — start the sim on a workspace-wire fixture, push fresh `workspaceInstances` through the `ReloadingHarness`, assert zero `.wire-simulation-pulse` nodes and the sim button flipped back to START. Failed pre-fix: `expected 1 to be +0`. (The first assertion form — `toBeNull()` on a present SVG element — trips a vitest diff serializer that reads `.name` and masks the real assertion; switched to the length form so Red fails on the actual bug.)
+
+**Green:** mirrored the preset rule (`setIsSimulating(false); setSimPulseStep(0)`) into all three canvas-replacing load-effect paths, right beside the existing `cancelConnection(); setHoveredTarget(null); clearHover()` block, with the same comment. The same-ids rename-merge path deliberately does NOT stop the sim (no canvas replacement).
+
+**Bonus fix (suite pollution):** the new test's placement exposed a latent fake-timer leak — the preset test and the never-leaks test used `vi.useFakeTimers({ toFake: ['setInterval', ...] })`, and in this vitest version `useRealTimers()` after a scoped `toFake` call leaves timer internals in a state that wedges the NEXT test's awaited `requestAnimationFrame`. Reproduced on baseline (stashed): `loading a preset stops the simulation` + the F2/HUD rAF-wait describe = 3 timeouts; the full suite masked it only because the ~40s of intermediate tests absorbed the pending act. Switched both to plain `vi.useFakeTimers()` (matching their full-fake siblings) — the suite is deterministic again, 466/466 with the new test.
+
+**Verified:** editor 466/466 (+1) · **full UI suite 275 files / 4,668 tests** (+1) · a11y 8/8 · typecheck ✓ · eslint ✓ (8 pre-existing warnings, none new).
+
+**Commits:** `<pending>`
+
+**Deliberately NOT done:** the rename-merge reload path (same instance ids, names refreshed) is not a canvas replacement, so the pulse legitimately survives it — worth a test if the semantics are ever questioned. The preset path and the three load paths now share the rule by convention; a shared `resetTransientCanvasState()` helper would remove the duplication but was left out to keep the diff minimal.
+
+**Risks / follow-ups:** the audit's remaining items are unchanged — the generated TS↔Rust semantic contract (the capacity rules still live in both `topologyContract.ts` and `topology.rs`), crash-injection recovery tests, and process-safe revision locking.

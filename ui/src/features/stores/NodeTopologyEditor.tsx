@@ -1714,6 +1714,13 @@ export default function NodeTopologyEditor({
           cancelConnection();
           setHoveredTarget(null);
           clearHover();
+          // Same canvas-replacement rule as preset loads: the simulation
+          // pulse animates the OLD wire geometry, so stop it — a "test
+          // order" pulse must never animate a topology it was never run
+          // against. Flipping isSimulating false makes the interval
+          // effect's cleanup clear the 30ms interval.
+          setIsSimulating(false);
+          setSimPulseStep(0);
           // A reloaded node with a surviving id must start a fresh inspector
           // edit session, or its next edit would silently skip pushHistory.
           inspectorHistoryPushedForRef.current = null;
@@ -1738,6 +1745,10 @@ export default function NodeTopologyEditor({
           cancelConnection();
           setHoveredTarget(null);
           clearHover();
+          // Same canvas-replacement rule as preset loads — the pulse must
+          // never outlive the canvas it was run against.
+          setIsSimulating(false);
+          setSimPulseStep(0);
           inspectorHistoryPushedForRef.current = null;
           commitSnapshot({ nodes: [], wires: [] });
           return;
@@ -1788,6 +1799,13 @@ export default function NodeTopologyEditor({
         cancelConnection();
         setHoveredTarget(null);
         clearHover();
+        // Same canvas-replacement rule as preset loads: the simulation
+        // pulse animates the OLD wire geometry, so stop it — a "test
+        // order" pulse must never animate a topology it was never run
+        // against. Flipping isSimulating false makes the interval
+        // effect's cleanup clear the 30ms interval.
+        setIsSimulating(false);
+        setSimPulseStep(0);
         // A reloaded node with a surviving id must start a fresh inspector
         // edit session, or its next edit would silently skip pushHistory.
         inspectorHistoryPushedForRef.current = null;

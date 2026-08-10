@@ -5537,6 +5537,10 @@ describe('NodeTopologyEditor — simulation pulse', () => {
 describe('NodeTopologyEditor — simulation pulse vs canvas mutations', () => {
   afterEach(() => {
     vi.useRealTimers();
+    // This describe has no beforeEach mock reset (the Component describe
+    // owns one) — a persistent mockResolvedValue here would poison every
+    // later test in the file, so restore the null default on the way out.
+    mockLoadTopology.mockResolvedValue(null);
   });
 
   const pulseCount = () => document.querySelectorAll('.wire-simulation-pulse').length;
@@ -5591,10 +5595,12 @@ describe('NodeTopologyEditor — simulation pulse vs canvas mutations', () => {
   });
 
   it('loading a preset stops the simulation: pulse gone, interval cleared', () => {
-    // Scoped timers keep getTimerCount() to real timers only — the default
-    // also fakes queueMicrotask/nextTick, so a stray promise resolution could
-    // shift the baseline between the delta assertions.
-    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] });
+    // Plain (full) fake timers, NOT a scoped toFake list: in this vitest
+    // version, useRealTimers() after a scoped { toFake: [...] } call leaves
+    // the timer internals in a state that wedges the NEXT test's awaited
+    // requestAnimationFrame (the F2/HUD rAF-wait suite times out when the
+    // preset test precedes it). The full-fake siblings restore cleanly.
+    vi.useFakeTimers();
     renderEditor();
     const timerBaseline = vi.getTimerCount();
 
@@ -5611,6 +5617,48 @@ describe('NodeTopologyEditor — simulation pulse vs canvas mutations', () => {
     // The sim button shows the START label — the simulation stopped.
     expect(screen.getByText('Test Order Simulation')).toBeInTheDocument();
     expect(vi.getTimerCount()).toBe(timerBaseline);
+  });  it('an authoritative reload stops the simulation (canvas-replacement rule)', async () => {
+    // Regression: only the PRESET path stopped the simulation — the
+    // authoritative reload (branch switch, workspaceInstances refresh) did
+    // not, so a running pulse kept animating the OLD wire geometry against
+    // the newly loaded canvas, the exact hazard the preset rule guards
+    // against (a "test order" pulse on a topology it was never run against).
+    mockLoadTopology.mockResolvedValue({
+      nodes: [
+        { id: 'ws-1', type: 'workspace', name: 'POS One', x: 80, y: 120, metadata: { typeKey: 'store-pos' } },
+        { id: 'ws-2', type: 'workspace', name: 'POS Two', x: 240, y: 80, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [
+        { id: 'w-1', from_node_id: 'ws-1', to_node_id: 'ws-2', direction: 'one-way' },
+      ],
+    });
+
+    renderWithProvidersSync(
+      <ReloadingHarness
+        next={[
+          { instanceId: 'ws-1', typeKey: 'store-pos', name: 'POS One' },
+          { instanceId: 'ws-2', typeKey: 'store-pos', name: 'POS Two' },
+        ]}
+      />,
+      multiStoreFtl,
+      sharedFtl,
+    );
+
+    await waitFor(() => expect(screen.getByText('POS One')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Test Order Simulation'));
+    expect(pulseCount()).toBeGreaterThan(0);
+
+    // Parent pushes a fresh workspaceInstances array → non-skip reload.
+    fireEvent.click(screen.getByText('reload-instances'));
+
+    await waitFor(() => expect(screen.getByText('POS Two')).toBeInTheDocument());
+    // Canvas replaced — the pulse must be gone and the sim stopped. Number/
+    // null assertion forms: toBeNull on a PRESENT SVG element trips a vitest
+    // diff serializer that reads .name and masks the real assertion, so a
+    // pre-fix run fails on the pulse count itself (the actual bug).
+    expect(document.querySelectorAll('.wire-simulation-pulse').length).toBe(0);
+    expect(screen.queryByText('Test Order Simulation')).not.toBeNull();
   });
 
   it('never leaks the 30ms interval: stop and unmount both clear it', () => {
@@ -5618,7 +5666,7 @@ describe('NodeTopologyEditor — simulation pulse vs canvas mutations', () => {
     // workspace, React scheduling) arms unrelated timers, and vitest's
     // default fake timers also fake queueMicrotask/nextTick — so only the
     // interval added by starting the simulation is attributable.
-    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] });
+    vi.useFakeTimers();
     const { unmount } = renderEditor();
     const timerBaseline = vi.getTimerCount();
 
