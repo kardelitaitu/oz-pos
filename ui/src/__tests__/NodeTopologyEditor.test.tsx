@@ -7047,6 +7047,59 @@ describe('NodeTopologyEditor — align & distribute toolbar', () => {
       .sort((a, b) => a - b);
     expect(ys[1]! - ys[0]!).toBe(ys[2]! - ys[1]!);
   });
+
+  it('settles a card that an align would stack onto a same-row neighbour', () => {
+    renderEditor();
+    // store-1 (80, 140) and wh-1 (680, 140) share a row — Align left
+    // collapses both to x=80, stacking the moved card EXACTLY over the
+    // anchor. The no-overlap invariant (rounds 140-143) must hold here
+    // too: the moved card settles into a free spot instead of hiding
+    // under its anchor, while the anchor keeps the alignment line.
+    const nodes = [...document.querySelectorAll('.topology-node')] as HTMLElement[];
+    fireEvent.mouseDown(nodes[0]!, { button: 0 }); // store-1
+    fireEvent.mouseDown(nodes[2]!, { button: 0, shiftKey: true }); // wh-1
+
+    fireEvent.click(screen.getByRole('button', { name: 'Align left' }));
+
+    const rect = (el: HTMLElement) => ({
+      x: parseInt(el.style.left, 10),
+      y: parseInt(el.style.top, 10),
+    });
+    const anchor = rect(nodes[0]!);
+    const moved = rect(nodes[2]!);
+    const overlaps = anchor.x < moved.x + NODE_WIDTH && anchor.x + NODE_WIDTH > moved.x
+      && anchor.y < moved.y + NODE_HEIGHT && anchor.y + NODE_HEIGHT > moved.y;
+    expect(overlaps).toBe(false);
+    // The anchor stays on the line; only the moved card settled away.
+    expect(anchor).toEqual({ x: 80, y: 140 });
+  });
+
+  it('settles BOTH cards when a center-align collapses the pair onto the unselected neighbour', () => {
+    renderEditor();
+    // store-1 (80,140) and wh-1 (680,140): Align hcenter moves BOTH to
+    // x=380 — colliding with each other AND with the unselected ws-1
+    // (380,80) parked on the same column. Every card must stay visible.
+    const nodes = [...document.querySelectorAll('.topology-node')] as HTMLElement[];
+    fireEvent.mouseDown(nodes[0]!, { button: 0 }); // store-1
+    fireEvent.mouseDown(nodes[2]!, { button: 0, shiftKey: true }); // wh-1
+
+    fireEvent.click(screen.getByRole('button', { name: 'Align horizontal centers' }));
+
+    const rect = (el: HTMLElement) => ({
+      x: parseInt(el.style.left, 10),
+      y: parseInt(el.style.top, 10),
+    });
+    const boxes = [rect(nodes[0]!), rect(nodes[1]!), rect(nodes[2]!)];
+    for (let i = 0; i < boxes.length; i += 1) {
+      for (let j = i + 1; j < boxes.length; j += 1) {
+        const a = boxes[i]!;
+        const b = boxes[j]!;
+        const overlaps = a.x < b.x + NODE_WIDTH && a.x + NODE_WIDTH > b.x
+          && a.y < b.y + NODE_HEIGHT && a.y + NODE_HEIGHT > b.y;
+        expect(overlaps).toBe(false);
+      }
+    }
+  });
 });
 
 // ── Clipboard & bulk duplication ────────────────────────────────

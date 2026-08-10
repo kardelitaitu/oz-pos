@@ -2381,7 +2381,7 @@ export default function NodeTopologyEditor({
       const maxX = Math.max(...sel.map((n) => n.x + NODE_WIDTH));
       const minY = Math.min(...sel.map((n) => n.y));
       const maxY = Math.max(...sel.map((n) => n.y + NODE_HEIGHT));
-      return prev.map((n) => {
+      const aligned = prev.map((n) => {
         if (!ids.has(n.id)) return n;
         switch (mode) {
           case 'left': return { ...n, x: minX };
@@ -2406,6 +2406,31 @@ export default function NodeTopologyEditor({
           }
           default: return n;
         }
+      });
+      // The no-overlap invariant (rounds 140-143) holds for every movement
+      // path — an align can collapse two same-row cards onto the same spot
+      // (e.g. Align left on two stores at one y) and stack one invisibly
+      // under its anchor, exactly the defect the invariant exists to stop.
+      // Settle ONLY the cards whose position actually changed: the anchor
+      // that was already on the line keeps it, while a moved card that now
+      // intersects anything finds the nearest free spot (the round-140
+      // spiral — flush alignment is not an overlap, so tidy layouts stay).
+      const beforeById = new Map(prev.map((n) => [n.id, n]));
+      const alignedById = new Map(aligned.map((n) => [n.id, n]));
+      const movedIds = new Set<string>();
+      for (const id of ids) {
+        const before = beforeById.get(id);
+        const after = alignedById.get(id);
+        if (before && after && (after.x !== before.x || after.y !== before.y)) {
+          movedIds.add(id);
+        }
+      }
+      const resolved = movedIds.size > 0 ? resolveDropOverlaps(aligned, movedIds) : null;
+      if (!resolved) return aligned;
+      const resolvedById = new Map(resolved.map((r) => [r.id, r]));
+      return prev.map((n) => {
+        const r = resolvedById.get(n.id);
+        return r ? { ...n, x: r.x, y: r.y } : n;
       });
     });
   }, [selectedNodeIds, pushHistory, setNodes]);
