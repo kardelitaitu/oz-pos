@@ -3286,7 +3286,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** align suite 5/5 (+2) · editor suite 483/483 (+2) · full UI suite 276 files / 4,690 tests (+2) · typecheck ✓ · eslint 0 errors (8 pre-existing warnings) · drift guard clean · pre-commit hook clean.
 
-**Commits:** `TODO`
+**Commits:** `10cf77d0`
 
 **Deliberately NOT done:** no block-on-align (unlike the round-141 nudge wall) — a silently-doing-nothing "Align left" with no feedback is more confusing than a settle; the settle mirrors the established drag semantics. No settling of pre-existing overlaps among stationary cards — only moved cards resolve, so a stacked pair the user is NOT touching stays put (badge still shows it). No second pure unit test — `resolveDropOverlaps` is already unit-tested from round 140; the two integration tests pin the align-specific behavior (anchor-keeps-line, both-moved-vs-stationary).
 
