@@ -2883,6 +2883,8 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** oz-cloud-server **130/130** (+1), `cargo clippy -p oz-cloud-server -- -D warnings` clean, `cargo fmt --check` clean, CRLF preserved.
 
-**Commits:** `<pending>`
+**Commits:** `855e7bc0`
+
+**Also this round:** the pre-commit hook's `git add $CHANGED` (all working-tree-modified .rs files, not just fmt's) swept an agent's in-flight `main.rs`/`sync_api.rs` into the first prune commit twice. Split both times (soft reset + re-commit, agent files returned to unstaged), then fixed the hook: it now re-stages only `git diff --cached --name-only -- '*.rs'` — the commit's own Rust files. Commit `c300bb64`.
 
 **Risks / follow-ups:** (1) the anchor-expiry horizon and the retention horizon are both 90 days — a terminal that stays offline >90 days always re-snapshots; the P-3 spec's snapshot covers products/tax-rates/users but not sales deltas, so the 90-day loss horizon for sale deltas is a business-level decision worth an explicit call-out; (2) a metrics counter for pruned rows per cycle would make retention observable.

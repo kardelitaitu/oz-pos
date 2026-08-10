@@ -720,12 +720,17 @@ mod tests {
         let rate_limiter = crate::rate_limit::RateLimiterState::new();
         let app = build_router(state.clone(), rate_limiter);
 
-        // Tenant A pushes two items
-        let push_body = r#"[
-            {"id":"a-item-1","action":"sale.create","payload":"{\"total\":100}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null},
-            {"id":"a-item-2","action":"sale.void","payload":"{\"reason\":\"test\"}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-02T00:00:00Z","synced_at":null}
-        ]"#;
-        let push_req = authed_post("/api/sync/push", push_body, Some("tenant-a"));
+        // Tenant A pushes two items (real UUID ids — push_handler rejects
+        // non-UUID ids; see round 121)
+        let a_id_1 = uuid::Uuid::now_v7().to_string();
+        let a_id_2 = uuid::Uuid::now_v7().to_string();
+        let push_body = format!(
+            r#"[
+                {{"id":"{a_id_1}","action":"sale.create","payload":"{{\"total\":100}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}},
+                {{"id":"{a_id_2}","action":"sale.void","payload":"{{\"reason\":\"test\"}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-02T00:00:00Z","synced_at":null}}
+            ]"#
+        );
+        let push_req = authed_post("/api/sync/push", &push_body, Some("tenant-a"));
         let push_resp = app.clone().oneshot(push_req).await.unwrap();
         assert_eq!(push_resp.status(), StatusCode::OK);
 
@@ -747,8 +752,8 @@ mod tests {
         let body_a = resp_a.into_body().collect().await.unwrap().to_bytes();
         let json_a: serde_json::Value = serde_json::from_slice(&body_a).unwrap();
         assert_eq!(json_a["items"].as_array().unwrap().len(), 2);
-        assert_eq!(json_a["items"][0]["id"], "a-item-1");
-        assert_eq!(json_a["items"][1]["id"], "a-item-2");
+        assert_eq!(json_a["items"][0]["id"], a_id_1);
+        assert_eq!(json_a["items"][1]["id"], a_id_2);
     }
 
     #[tokio::test]
@@ -763,41 +768,47 @@ mod tests {
         let rate_limiter = crate::rate_limit::RateLimiterState::new();
         let app = build_router(state.clone(), rate_limiter);
 
-        // Tenant A pushes one item
+        // Tenant A pushes one item (real UUID id)
+        let id_a = uuid::Uuid::now_v7().to_string();
         let push_a = authed_post(
             "/api/sync/push",
-            r#"[{"id":"only-a","action":"act","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}]"#,
+            &format!(
+                r#"[{{"id":"{id_a}","action":"act","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}}]"#
+            ),
             Some("tenant-a"),
         );
         let r = app.clone().oneshot(push_a).await.unwrap();
         assert_eq!(r.status(), StatusCode::OK);
 
-        // Tenant B pushes one item
+        // Tenant B pushes one item (real UUID id)
+        let id_b = uuid::Uuid::now_v7().to_string();
         let push_b = authed_post(
             "/api/sync/push",
-            r#"[{"id":"only-b","action":"act","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}]"#,
+            &format!(
+                r#"[{{"id":"{id_b}","action":"act","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}}]"#
+            ),
             Some("tenant-b"),
         );
         let r = app.clone().oneshot(push_b).await.unwrap();
         assert_eq!(r.status(), StatusCode::OK);
 
-        // Tenant A should see ONLY 'only-a'
+        // Tenant A should see ONLY its own item
         let pull_a = authed_post("/api/sync/pull", r#"{"since":null}"#, Some("tenant-a"));
         let r_a = app.clone().oneshot(pull_a).await.unwrap();
         let b_a = r_a.into_body().collect().await.unwrap().to_bytes();
         let j_a: serde_json::Value = serde_json::from_slice(&b_a).unwrap();
         let items_a = j_a["items"].as_array().unwrap();
         assert_eq!(items_a.len(), 1, "Tenant A sees only its own items");
-        assert_eq!(items_a[0]["id"], "only-a");
+        assert_eq!(items_a[0]["id"], id_a);
 
-        // Tenant B should see ONLY 'only-b'
+        // Tenant B should see ONLY its own item
         let pull_b = authed_post("/api/sync/pull", r#"{"since":null}"#, Some("tenant-b"));
         let r_b = app.oneshot(pull_b).await.unwrap();
         let b_b = r_b.into_body().collect().await.unwrap().to_bytes();
         let j_b: serde_json::Value = serde_json::from_slice(&b_b).unwrap();
         let items_b = j_b["items"].as_array().unwrap();
         assert_eq!(items_b.len(), 1, "Tenant B sees only its own items");
-        assert_eq!(items_b[0]["id"], "only-b");
+        assert_eq!(items_b[0]["id"], id_b);
     }
 
     #[tokio::test]
@@ -812,23 +823,27 @@ mod tests {
         let rate_limiter = crate::rate_limit::RateLimiterState::new();
         let app = build_router(state.clone(), rate_limiter);
 
-        // Tenant A pushes 3 items
-        let push_a = authed_post(
-            "/api/sync/push",
+        // Tenant A pushes 3 items (real UUID ids)
+        let a_ids: Vec<String> = (0..3).map(|_| uuid::Uuid::now_v7().to_string()).collect();
+        let push_a_body = format!(
             r#"[
-                {"id":"a-1","action":"act","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null},
-                {"id":"a-2","action":"act","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null},
-                {"id":"a-3","action":"act","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}
+                {{"id":"{0}","action":"act","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}},
+                {{"id":"{1}","action":"act","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}},
+                {{"id":"{2}","action":"act","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}}
             ]"#,
-            Some("tenant-a"),
+            a_ids[0], a_ids[1], a_ids[2]
         );
+        let push_a = authed_post("/api/sync/push", &push_a_body, Some("tenant-a"));
         let r = app.clone().oneshot(push_a).await.unwrap();
         assert_eq!(r.status(), StatusCode::OK);
 
-        // Tenant B pushes 1 item
+        // Tenant B pushes 1 item (real UUID id)
+        let b_id = uuid::Uuid::now_v7().to_string();
         let push_b = authed_post(
             "/api/sync/push",
-            r#"[{"id":"b-1","action":"act","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}]"#,
+            &format!(
+                r#"[{{"id":"{b_id}","action":"act","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}}]"#
+            ),
             Some("tenant-b"),
         );
         let r = app.clone().oneshot(push_b).await.unwrap();
@@ -861,10 +876,13 @@ mod tests {
         let rate_limiter = crate::rate_limit::RateLimiterState::new();
         let app = build_router(state.clone(), rate_limiter);
 
-        // Push items as default tenant
+        // Push items as default tenant (real UUID id)
+        let def_id = uuid::Uuid::now_v7().to_string();
         let push_d = authed_post(
             "/api/sync/push",
-            r#"[{"id":"def-item","action":"act","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}]"#,
+            &format!(
+                r#"[{{"id":"{def_id}","action":"act","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-06-01T00:00:00Z","synced_at":null}}]"#
+            ),
             None,
         );
         let r = app.clone().oneshot(push_d).await.unwrap();
@@ -887,6 +905,6 @@ mod tests {
         let b_d = r_d.into_body().collect().await.unwrap().to_bytes();
         let j_d: serde_json::Value = serde_json::from_slice(&b_d).unwrap();
         assert_eq!(j_d["items"].as_array().unwrap().len(), 1);
-        assert_eq!(j_d["items"][0]["id"], "def-item");
+        assert_eq!(j_d["items"][0]["id"], def_id);
     }
 }

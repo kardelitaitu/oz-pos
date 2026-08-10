@@ -177,6 +177,19 @@ async fn push_handler(
     metrics::SYNC_BATCH_SIZE_BYTES.observe(batch_bytes);
 
     for item in &items {
+        // Defense-in-depth (round 119): ids are client-supplied strings that
+        // end up in the prune DELETE path. Reject anything that is not a
+        // well-formed UUID before it reaches the INSERT so hostile values
+        // never enter the table. Real clients always send Uuid::now_v7().
+        if uuid::Uuid::parse_str(&item.id).is_err() {
+            metrics::SYNC_PUSHES_TOTAL
+                .with_label_values(&["rejected"])
+                .inc();
+            results.push(PushOutcome::Rejected {
+                reason: format!("invalid id: {}", item.id),
+            });
+            continue;
+        }
         match conn.execute(
             "INSERT INTO offline_queue (id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
@@ -1083,11 +1096,15 @@ mod tests {
         };
         let app = test_router_with_state(state.clone());
 
-        let body = r#"[
-            {"id":"a1","action":"create","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null},
-            {"id":"a2","action":"update","payload":"{\"x\":1}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:01:00Z","synced_at":null}
-        ]"#;
-        let req = authed_post("/api/sync/push", body, None);
+        let id1 = uuid::Uuid::now_v7().to_string();
+        let id2 = uuid::Uuid::now_v7().to_string();
+        let body = format!(
+            r#"[
+                {{"id":"{id1}","action":"create","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}},
+                {{"id":"{id2}","action":"update","payload":"{{\"x\":1}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:01:00Z","synced_at":null}}
+            ]"#
+        );
+        let req = authed_post("/api/sync/push", &body, None);
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
@@ -1101,8 +1118,8 @@ mod tests {
         let conn = state.db.lock().await;
         let count: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM offline_queue WHERE id IN ('a1','a2')",
-                [],
+                "SELECT COUNT(*) FROM offline_queue WHERE id IN (?1, ?2)",
+                rusqlite::params![id1, id2],
                 |r| r.get(0),
             )
             .unwrap();
@@ -1118,20 +1135,24 @@ mod tests {
         };
         let app = test_router_with_state(state.clone());
 
+        let dup_id = uuid::Uuid::now_v7().to_string();
+
         // Insert first item directly (with explicit tenant_id)
         {
             let conn = state.db.lock().await;
             conn.execute(
                 "INSERT INTO offline_queue (id, action, payload, status, created_at, tenant_id)
-                 VALUES ('dup', 'test', '{}', 'pending', '2026-01-01T00:00:00Z', 'default')",
-                [],
+                 VALUES (?1, 'test', '{}', 'pending', '2026-01-01T00:00:00Z', 'default')",
+                [&dup_id],
             )
             .unwrap();
         }
 
         // Try to push a duplicate
-        let body = r#"[{"id":"dup","action":"create","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}]"#;
-        let req = authed_post("/api/sync/push", body, None);
+        let body = format!(
+            r#"[{{"id":"{dup_id}","action":"create","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}}]"#
+        );
+        let req = authed_post("/api/sync/push", &body, None);
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
 
@@ -1451,11 +1472,11 @@ mod tests {
     #[tokio::test]
     async fn pro_tenant_push_accepted_when_enforced() {
         let app = test_router_with_plan("tenant-pro", "pro", true).await;
-        let req = authed_post(
-            "/api/sync/push",
-            r#"[{"id":"plan-pro-1","action":"complete_sale","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}]"#,
-            Some("tenant-pro"),
+        let id = uuid::Uuid::now_v7().to_string();
+        let body = format!(
+            r#"[{{"id":"{id}","action":"complete_sale","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}}]"#
         );
+        let req = authed_post("/api/sync/push", &body, Some("tenant-pro"));
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(
             resp.status(),
@@ -1468,11 +1489,11 @@ mod tests {
     async fn free_tenant_push_allowed_when_not_enforced() {
         // Dev mode: OZ_ENFORCE_PLANS unset — everything works as before.
         let app = test_router_with_plan("tenant-free", "free", false).await;
-        let req = authed_post(
-            "/api/sync/push",
-            r#"[{"id":"plan-off-1","action":"complete_sale","payload":"{}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}]"#,
-            Some("tenant-free"),
+        let id = uuid::Uuid::now_v7().to_string();
+        let body = format!(
+            r#"[{{"id":"{id}","action":"complete_sale","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}}]"#
         );
+        let req = authed_post("/api/sync/push", &body, Some("tenant-free"));
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(
             resp.status(),
