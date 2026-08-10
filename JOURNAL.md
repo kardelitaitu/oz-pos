@@ -1,4 +1,15 @@
 
+## 2026-08-10 — TDD cycle: topology editor drag lifecycle state machine
+
+### A cancelled drag could keep moving on touch — the ref mirror was cleared only at some sites
+**Problem:** The drag lifecycle used a render `draggingNodeIds` state plus a synchronous `draggingNodeIdsRef` mirror read by the touch gesture loop and the document move handler inside stale down-time closures. The mirror was updated by hand at only some transition sites: `beginNodeDrag` and `finalizeNodeDrag` synced it, but `cancelNodeMove` and `cancelDuplicateDrag` cleared only the render state. A touch move arriving before the next React render saw the stale non-empty set and kept moving a drag the user had already cancelled with Escape.
+
+**Solution:** Red→Green. Added a typed drag reducer (`nodeTopologyEditorDragState.ts`) owning the drag set; the hook exposes `beginDrag`/`endDrag`/`cancelDrag`, each writing the reducer state AND the ref mirror in the same call, making the two-face invariant structural. The editor now consumes `useTopologyEditorDrag()`; all five drag-transition sites route through it.
+
+**Validation:** drag reducer/hook 9/9 · NodeTopologyEditor + selection/drag suites 482/482 · full UI suite 273 files / 4,636 tests · a11y 8/8 · typecheck · eslint clean.
+
+**Deliberately NOT done:** the duplicate-drag bookkeeping refs (`duplicateDragRef`, `duplicateCopyIdsRef`, `duplicateHistoryPushedRef`) and the bend-drag refs are gesture-scoped, non-render state — they have no render twin, so the reducer boundary would add ceremony without fixing a drift. The picker and live-validation state remain the last interaction state still living in the component.
+
 ## 2026-08-10 — TDD cycle: topology editor selection state machine
 
 ### A wire could stay selected alongside a node — the toolbar Delete path for wires was unreachable

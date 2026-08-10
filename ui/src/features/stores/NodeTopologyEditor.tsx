@@ -54,6 +54,7 @@ import { cubicBezier, polylinePoint } from './topologyWireGeometry';
 import { useTopologyEditorGraph, type TopologyHistoryEntry } from './nodeTopologyEditorState';
 import { useTopologyEditorSaveLifecycle } from './nodeTopologyEditorSaveState';
 import { useTopologyEditorSelection } from './nodeTopologyEditorSelectionState';
+import { useTopologyEditorDrag } from './nodeTopologyEditorDragState';
 import {
   normalizeTopologyGraph,
   normalizeWireDirection,
@@ -777,9 +778,16 @@ export default function NodeTopologyEditor({
   const [isSimulating, setIsSimulating] = useState(false);
   const [simPulseStep, setSimPulseStep] = useState(0);
 
-  /** Set of node ids being dragged together (a multi-selection drags as
-   *  one group; each node keeps its own pointer offset). */
-  const [draggingNodeIds, setDraggingNodeIds] = useState<Set<string>>(new Set());
+  /** Drag lifecycle (render set + synchronous ref mirror) lives in one
+   *  typed reducer — every begin/end/cancel writes both faces together, so
+   *  the touch gesture loop's stale-closure reads can never see a drag
+   *  that was already cancelled. */
+  const {
+    draggingNodeIdsRef,
+    beginDrag,
+    endDrag,
+    cancelDrag,
+  } = useTopologyEditorDrag();
   const dragOffsetsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   /** Alt+drag duplicate mode: true while an in-flight drag is duplicating
    *  (the copies follow the cursor, the originals stay). Committed (one
@@ -1149,12 +1157,6 @@ export default function NodeTopologyEditor({
   nodesRef.current = nodes;
   const wiresRef = useRef<TopologyWireData[]>(wires);
   wiresRef.current = wires;
-  /** Mirror of the dragging set for the touch gesture loop: the document
-   *  pointer listeners installed at pointerdown run in a stale closure, so
-   *  state reads there must go through refs (drag moves would otherwise see
-   *  the pre-drag empty set forever). */
-  const draggingNodeIdsRef = useRef<Set<string>>(draggingNodeIds);
-  draggingNodeIdsRef.current = draggingNodeIds;
   /** Pan mirror for the same stale-closure reason as draggingNodeIdsRef:
    *  applyDragMove auto-pans the viewport mid-drag, so the drag math must
    *  always read the CURRENT pan (a down-time closure would compute targets
@@ -2155,7 +2157,7 @@ export default function NodeTopologyEditor({
       setHistory((prev) => prev.slice(0, -1));
     }
     document.body.style.cursor = '';
-    setDraggingNodeIds(new Set());
+    cancelDrag();
     dragHasMovedRef.current = false;
     dragOffsetsRef.current.clear();
     dragStartRef.current.clear();
@@ -2224,9 +2226,9 @@ export default function NodeTopologyEditor({
       if (copyId) offsets.set(copyId, off);
     }
     dragOffsetsRef.current = offsets;
-    setDraggingNodeIds(new Set(duplicateCopyIdsRef.current));
+    beginDrag(new Set(duplicateCopyIdsRef.current));
     document.body.style.cursor = 'copy';
-  }, [duplicateRefusal, addToast, l10n, setNodes, setWires]);
+  }, [duplicateRefusal, addToast, l10n, setNodes, setWires, beginDrag]);
 
   /** Escape mid-MOVE (Figma semantics): the dragged nodes snap back to
    *  their pre-drag positions, the move's single history entry is popped
@@ -2243,11 +2245,11 @@ export default function NodeTopologyEditor({
       setHistory((prev) => prev.slice(0, -1));
     }
     dragHasMovedRef.current = false;
-    setDraggingNodeIds(new Set());
+    cancelDrag();
     dragOffsetsRef.current.clear();
     setAlignmentGuide(null);
     dragCleanupRef.current?.();
-  }, [setHistory, setNodes]);
+  }, [setHistory, setNodes, cancelDrag]);
 
   /** Escape mid-bend-drag: restore the bend to its start position (a
    *  ghost-created bend is removed entirely) and pop the drag's single
@@ -3037,14 +3039,13 @@ export default function NodeTopologyEditor({
    *  onMouseUp, and the touch gesture loop. */
   const finalizeNodeDrag = useCallback(() => {
     commitDuplicateDrag();
-    setDraggingNodeIds(new Set());
-    draggingNodeIdsRef.current = new Set();
+    endDrag();
     dragHasMovedRef.current = false;
     dragOffsetsRef.current.clear();
     dragStartRef.current.clear();
     setAlignmentGuide(null);
     lastDragMovePosRef.current = null;
-  }, [commitDuplicateDrag]);
+  }, [commitDuplicateDrag, endDrag]);
 
   /** Arm a node drag (mouse mousedown or the touch gesture loop): set the
    *  dragging set, compute each node's grip offset from the pointer, and —
@@ -3123,8 +3124,7 @@ export default function NodeTopologyEditor({
     // event handler, before React re-renders and the render-time mirror
     // (draggingNodeIdsRef.current = draggingNodeIds) would catch up.
     const nextDragSet = new Set(dragIds);
-    setDraggingNodeIds(nextDragSet);
-    draggingNodeIdsRef.current = nextDragSet;
+    beginDrag(nextDragSet);
     dragHasMovedRef.current = false;
     // Seed the edge auto-pan direction baseline at the grip point.
     lastDragMovePosRef.current = { x: clientX, y: clientY };
@@ -3169,7 +3169,7 @@ export default function NodeTopologyEditor({
         dragStartRef.current.set(id, { x: n.x, y: n.y });
       }
     }
-  }, [duplicateRefusal, addToast, l10n, finalizeNodeDrag, setNodes, setWires]);
+  }, [duplicateRefusal, addToast, l10n, finalizeNodeDrag, beginDrag, setNodes, setWires]);
 
   const handleNodeMouseDown = useCallback((e: React.MouseEvent, nodeId: string) => {
     e.stopPropagation();
