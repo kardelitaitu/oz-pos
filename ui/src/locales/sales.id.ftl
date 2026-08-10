@@ -116,9 +116,8 @@ pos-shift-notes = Catatan
 pos-shift-summary-done = Selesai
 
 payment-title = Pembayaran
-payment-table-number =
+payment-table-number = Meja { $number }
     .aria-label = Nomor meja
-    Meja { $number }
 payment-cash = Tunai
 payment-card = Kartu
 payment-other = Lainnya

@@ -17,7 +17,7 @@ import { renderInAct } from '@/test-utils/renderInAct';
 import { screen } from '@testing-library/react';
 import { Localized, LocalizationProvider, ReactLocalization } from '@fluent/react';
 import { getBundle, getAvailableLocales } from '@/i18n';
-import { scanLocaleFiles } from '@/i18n/barePlaceholderScan';
+import { scanLocaleFiles, scanLocalizedVars } from '@/i18n/barePlaceholderScan';
 import { withFluentLocale } from '@/locales/test-utils';
 import sharedId from '@/locales/shared.id.ftl?raw';
 import sharedEn from '@/locales/shared.ftl?raw';
@@ -497,5 +497,16 @@ describe('i18n topology placeholder resolution (round 154)', () => {
 describe('i18n bare-placeholder scan (round 156)', () => {
   it('finds no bare `{}` placeholders in any locale bundle', () => {
     expect(scanLocaleFiles()).toEqual([]);
+  });
+});
+
+// Round 164: the Localized-vars cross-check. Bundle parity counts keys,
+// not variables — a `<Localized id="…" vars={{ … }}>` site missing a
+// declared `$var` renders the raw id in the real runtime, invisible to
+// mocked Fluent. This runs in the same gate so a vars mismatch fails
+// closed with the file/line/id and the missing/extra names.
+describe('i18n Localized-vars cross-check (round 164)', () => {
+  it('finds no vars mismatches across every Localized site and en bundle', () => {
+    expect(scanLocalizedVars()).toEqual([]);
   });
 });

@@ -620,7 +620,7 @@ export default function FastPINOverlay({ open, onClose, onVerified }: FastPINOve
               </p>
             )}
 
-            <Localized id="fastpin-enter-pin">
+            <Localized id="fastpin-enter-pin" vars={{ user: username.trim() }}>
               <p className="fastpin-step-label">
                 Enter PIN for {username.trim()}
               </p>

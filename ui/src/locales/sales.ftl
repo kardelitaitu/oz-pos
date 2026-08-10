@@ -44,9 +44,8 @@ pos-toast-receipt-settings-failed = Failed to load receipt settings
 payment-dialog-aria =
     .aria-label = Payment
 payment-title = Complete Order
-payment-table-number =
+payment-table-number = Table { $number }
     .aria-label = Table number
-    Table { $number }
 payment-close-aria =
     .aria-label = Cancel payment
 payment-done-title = Sale Complete
