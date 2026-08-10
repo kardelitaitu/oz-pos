@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NODE_HEIGHT, NODE_WIDTH } from '../features/stores/nodeTopologyClamp';
-import { wireUnderCardSegments } from '../features/stores/topologyWireGeometry';
+import { pointUnderCards, wireUnderCardSegments } from '../features/stores/topologyWireGeometry';
 
 /** A horizontal store→warehouse wire at port height (NODE_PORT_Y = 224). */
 function horizontalWire(y = 140) {
@@ -71,5 +71,27 @@ describe('wireUnderCardSegments', () => {
   it('respects the real card dimensions via the shared constants', () => {
     expect(NODE_WIDTH).toBe(240);
     expect(NODE_HEIGHT).toBe(240);
+  });
+});
+
+describe('pointUnderCards', () => {
+  it('is true for a point inside a card box (strict interior)', () => {
+    expect(pointUnderCards({ x: 500, y: 364 }, [{ x: 380, y: 260 }])).toBe(true);
+  });
+
+  it('is false for a point outside all boxes', () => {
+    expect(pointUnderCards({ x: 100, y: 100 }, [{ x: 380, y: 260 }])).toBe(false);
+  });
+
+  it('is false for a point exactly on a card edge (flush)', () => {
+    // The card spans [380,620]×[260,500]; a point on the right edge or the
+    // bottom edge is flush, not under — the same strict-interior semantic
+    // as the wire segments.
+    expect(pointUnderCards({ x: 620, y: 364 }, [{ x: 380, y: 260 }])).toBe(false);
+    expect(pointUnderCards({ x: 500, y: 500 }, [{ x: 380, y: 260 }])).toBe(false);
+  });
+
+  it('handles multiple boxes', () => {
+    expect(pointUnderCards({ x: 500, y: 364 }, [{ x: 80, y: 140 }, { x: 380, y: 260 }])).toBe(true);
   });
 });

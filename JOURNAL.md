@@ -3321,3 +3321,17 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Deliberately NOT done:** no auto-routing around cards — the legibility overlay is the minimal fix; obstacle-avoiding routing remains a possible future capability. No hover/selected state on the overlay — the under-card segment keeps the base accent while the exposed parts brighten (subtle, deliberate). No pulse/label ride on the overlay — the simulation pulse still passes under the card transiently (visible pre/post); a follow-up if it reads poorly in the browser.
 
 **Risks / follow-ups:** the overlay is geometry-derived, so it updates live as cards/wires move — a drag that clears the crossing removes the segment immediately. Remaining: the pulse-under-card transient and hover-state mismatch are both worth a manual browser look; branch-diff preview remains the leading new-capability candidate.
+
+### 2026-08-11 — simulation pulse rides the crossing overlay (round 147)
+
+**Problem:** round 146 made crossing WIRES read continuous over cards, but left the simulation PULSE on the base path — at the moment it passed under a card it blinked out and re-emerged, breaking exactly the continuity the overlay just restored. The restaurant template's w-3 simulation is the live case: the pulse travels y=364 through the middle POS card's box. This was the round-146 journal's explicitly-flagged follow-up ("worth a manual browser look rather than more code" — investigation showed it was a real, reproducible visual defect, so it got the fix instead).
+
+**Solution:** Red→Green. A pure `pointUnderCards(pt, boxes)` helper in `topologyWireGeometry.ts` (strict interior, matching the round-146 segment semantic — flush is never under). In the editor, the pulse point is now computed ONCE per render into a `pulsePoints` map (previously the wires.map computed it inline); any pulse point strictly inside another card's box collects into `hiddenPulseDots` and renders on the crossing overlay as a `wire-simulation-pulse` circle (same class → same info-blue dot, pointer-events-none). The overlay now gates on paths OR hidden dots. Recomputed every render (the pulse advances on a 30ms interval — deliberately NOT a memo). One test-design lesson: `vi.useFakeTimers()` set BEFORE the async load made `waitFor` hang (frozen time) — the fake timers are armed only after `getWireCount()===1` settles.
+
+**Verified:** integration 1/1 (pulse at t=0.5 sits at (500,364) — inside ws-1's box — the overlay shows the dot; advanced to t=0.95 (x≈662, clear) the dot vanishes) · pure unit 4/4 (inside, outside, flush edges, multi-box) · editor suite 486/486 · full UI suite 277 files / 4,703 tests · typecheck ✓ · eslint 0 errors (8 pre-existing warnings) · **mutation check**: shifting every box left by 99999 failed the two crossing unit tests, restored → green. Drift guard clean.
+
+**Commits:** `TODO`
+
+**Deliberately NOT done:** no hover/selected-state on the overlay segment (the round-146 note stands — the under-card segment keeps the base accent while exposed parts brighten; a deliberate, subtle tradeoff). No pulse on the label pill. No branch-diff preview this round — it remains the leading new-capability candidate.
+
+**Risks / follow-ups:** the wire/overlay story is now visually continuous end to end (wire + pulse). The overlay hover mismatch remains the one open cosmetic item; branch-diff preview is the headline new-capability candidate for a future round.

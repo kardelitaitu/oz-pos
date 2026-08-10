@@ -53,7 +53,7 @@ import {
 } from './topologyExport';
 import { TopologyNodeCard } from './topologyNodeCard';
 import { TopologyWireGroup } from './topologyWireGroup';
-import { cubicBezier, polylinePoint, wireUnderCardSegments } from './topologyWireGeometry';
+import { cubicBezier, pointUnderCards, polylinePoint, wireUnderCardSegments } from './topologyWireGeometry';
 import { useTopologyEditorGraph, type TopologyHistoryEntry } from './nodeTopologyEditorState';
 import { useTopologyEditorSaveLifecycle } from './nodeTopologyEditorSaveState';
 import { useTopologyEditorSelection } from './nodeTopologyEditorSelectionState';
@@ -1495,6 +1495,33 @@ export default function NodeTopologyEditor({
     }
     return m;
   }, [wireGeometries, wires, nodes]);
+
+  /** Pulse dots that would be HIDDEN under a card (round 147): the
+   *  simulation pulse travels the base wire path, so at the moment it
+   *  passes under a card it would blink out — breaking the continuity the
+   *  round-146 overlay just restored for the wire itself. Any pulse point
+   *  strictly inside another card's box is rendered on the crossing overlay
+   *  instead (same class, same info-blue dot) and disappears the moment it
+   *  clears the box. Recomputed every render — the pulse advances on a
+   *  30ms interval, so this cannot be a memo. */
+  const pulsePoints = new Map<string, { x: number; y: number }>();
+  const hiddenPulseDots: Array<{ x: number; y: number }> = [];
+  if (isSimulating) {
+    const t = simPulseStep / 100;
+    for (const wire of wires) {
+      const geo = wireGeometries.get(wire.id);
+      if (!geo) continue;
+      const pt = geo.polyline
+        ? polylinePoint(geo.polyline, t)
+        : {
+            x: cubicBezier(t, geo.x1, geo.x1 + geo.dx, geo.x2 - geo.dx, geo.x2),
+            y: cubicBezier(t, geo.y1, geo.y1, geo.y2, geo.y2),
+          };
+      pulsePoints.set(wire.id, pt);
+      const others = nodes.filter((n) => n.id !== wire.fromNodeId && n.id !== wire.toNodeId);
+      if (pointUnderCards(pt, others)) hiddenPulseDots.push(pt);
+    }
+  }
 
   /** Dynamic SVG bounds derived from node positions — replaces fixed 5000×5000px clipping. */
   const svgBounds = useMemo(() => {
@@ -5669,13 +5696,10 @@ export default function NodeTopologyEditor({
                 if (!geo) return null;
                 // Pulse rides the wire's actual geometry: the cubic bezier
                 // by default, or the elbow polyline when orthogonal routing
-                // is on. Computed here (not inside the memoized wire group)
-                // so `pulse` is a plain {x, y} prop — null while the
-                // simulation is idle keeps the memo boundary effective.
-                const t = simPulseStep / 100;
-                const pulsePoint = geo.polyline
-                  ? polylinePoint(geo.polyline, t)
-                  : { x: cubicBezier(t, geo.x1, geo.x1 + geo.dx, geo.x2 - geo.dx, geo.x2), y: cubicBezier(t, geo.y1, geo.y1, geo.y2, geo.y2) };
+                // is on. Computed once per render above (round 147) so the
+                // crossing overlay can render the same point when it would
+                // be hidden under a card.
+                const pulsePoint = pulsePoints.get(wire.id) ?? null;
                 return (
                   <TopologyWireGroup
                     key={wire.id}
@@ -5826,12 +5850,17 @@ export default function NodeTopologyEditor({
 
             {/* Round 146: the under-card segments of wires that cross a card
                 they do not connect to, drawn on top so the wire reads as
-                continuous. Pointer-events-none: the overlay never steals
-                clicks or hover from the card below. */}
-            {wireUnderCardPaths.size > 0 && (
+                continuous. Round 147: the simulation pulse, when it would
+                be hidden under a card, rides the overlay too. Both are
+                pointer-events-none — the overlay never steals clicks or
+                hover from the card below. */}
+            {(wireUnderCardPaths.size > 0 || hiddenPulseDots.length > 0) && (
               <svg className="node-wires-crossing" style={{ width: svgBounds.width, height: svgBounds.height }}>
                 {[...wireUnderCardPaths.entries()].map(([wireId, d]) => (
                   <path key={wireId} d={d} pointerEvents="none" />
+                ))}
+                {hiddenPulseDots.map((p, i) => (
+                  <circle key={`hidden-pulse-${i}`} cx={p.x} cy={p.y} r="6" className="wire-simulation-pulse" pointerEvents="none" />
                 ))}
               </svg>
             )}

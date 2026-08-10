@@ -5,6 +5,24 @@
 import { NODE_HEIGHT, NODE_WIDTH } from './nodeTopologyClamp';
 
 /**
+ * True when a point lies strictly inside any of the given card boxes
+ * (round 147). The strict-interior semantic mirrors the wire segments:
+ * a point exactly on an edge is flush, never under. The wire's own
+ * endpoint cards must be excluded by the caller (ports sit on the edge).
+ */
+export function pointUnderCards(
+  pt: { x: number; y: number },
+  boxes: Array<{ x: number; y: number }>,
+): boolean {
+  return boxes.some((b) => (
+    pt.x > b.x
+    && pt.x < b.x + NODE_WIDTH
+    && pt.y > b.y
+    && pt.y < b.y + NODE_HEIGHT
+  ));
+}
+
+/**
  * SVG sub-paths of a wire that pass UNDER an unrelated node card (round 146).
  *
  * Wires render beneath the cards, so a wire crossing a card it does not
