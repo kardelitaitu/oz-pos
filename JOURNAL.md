@@ -3442,7 +3442,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** engine suite 12/12 (+5) · screen integration + diff suite 59/59 (interface unchanged) · **full UI suite 279 files / 4,746 tests (+5)** · typecheck ✓ · eslint clean on the changed files · **mutation checks**: neutering `findDriftPairs` failed the 3 drift tests; loosening the semantic key to name-only failed the type-mismatch boundary test → both restored, green. Drift guard clean.
 
-**Commits:** `(pending)`
+**Commits:** `895ec186` (feat(topology): tolerate id drift in the branch comparison)
 
 **Deliberately NOT done:** no name-only matching (renames are common; too many false merges); no matching by wiring similarity (wire endpoints carry the drifted ids — circular); no UI change — the panel renders the same summary, it just stops lying about drifted workspaces. A genuine type change on a drifted id still reads as only-in-both (honest: it IS a different instance).
 
