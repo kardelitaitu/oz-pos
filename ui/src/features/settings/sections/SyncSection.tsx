@@ -315,7 +315,7 @@ export default function SyncSection({
             </div>
 
             {/* ── Tenant plan (ADR sync-plan-gating) ── */}
-            {syncPlan && (
+            {syncPlan?.ok && syncPlan.plan && (
               <div
                 className={`settings-sync-plan-row${syncPlan.plan === 'free' ? ' settings-sync-plan-row--free' : ''}`}
                 data-testid="sync-plan-row"

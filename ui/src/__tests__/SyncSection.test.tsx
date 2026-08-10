@@ -359,6 +359,18 @@ describe('SyncSection', () => {
     expect(screen.getByText(/Upgrade to sync/)).toBeInTheDocument();
   });
 
+  it('does NOT render a plan row when the plan read failed (ok=false)', () => {
+    // A failed read (old server 404, network error) carries ok:false,
+    // plan:null — it must not paint as a known "Free" plan.
+    renderSection({
+      sync: { serverUrl: 'https://sync.example.com', hasApiKey: true, enabled: true },
+      syncPlan: { ok: false, plan: null, status: 'Server returned 404 Not Found' },
+    });
+    expect(screen.queryByTestId('sync-plan-row')).toBeNull();
+    expect(screen.queryByText('Free')).toBeNull();
+    expect(screen.queryByText(/Upgrade to sync/)).toBeNull();
+  });
+
   it('renders request token button', () => {
     renderSection();
     expect(screen.getByText('Request Token')).toBeInTheDocument();

@@ -275,7 +275,7 @@ export default function OfflineQueueScreen() {
 
       {/* ADR sync-plan-gating: show the tenant's plan so operators see
           free/pro and the upgrade prompt without running a sync. */}
-      {syncPlan && (
+      {syncPlan?.ok && syncPlan.plan && (
         <div
           className={`offline-queue-plan-row${syncPlan.plan === 'free' ? ' offline-queue-plan-row--free' : ''}`}
           data-testid="offline-queue-plan-row"

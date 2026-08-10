@@ -362,6 +362,24 @@ describe('OfflineQueueScreen', () => {
     expect(screen.getByText(/Upgrade to sync/)).toBeInTheDocument();
   });
 
+  it('does NOT render a plan row when the plan read failed (ok=false)', async () => {
+    // A 404 from an old server or a network error resolves with ok:false,
+    // plan:null — the UI must not paint that as a known "Free" plan.
+    mockGetSyncPlan.mockResolvedValue({
+      ok: false,
+      plan: null,
+      status: 'Server returned 404 Not Found',
+    });
+    renderScreen();
+
+    await waitFor(() => {
+      expect(mockGetSyncPlan).toHaveBeenCalled();
+    });
+    expect(screen.queryByTestId('offline-queue-plan-row')).toBeNull();
+    expect(screen.queryByText('Free')).toBeNull();
+    expect(screen.queryByText(/Upgrade to sync/)).toBeNull();
+  });
+
   it('shows a stale notice after repeated poll failures (ERR-07)', async () => {
     vi.useFakeTimers();
     try {
