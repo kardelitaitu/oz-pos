@@ -3031,3 +3031,19 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Deliberately NOT done:** only Space-pan needed the blur disarm — the pan-tool toggle is a real button state (not key-held), the Alt-duplicate is gesture-scoped, and the marquee/alignment-guide/fresh-node states are already self-clearing. No reducer extraction was warranted for a one-slot sticky boolean.
 
 **Risks / follow-ups:** the same blur-disarm pattern is worth an audit pass over the other clients' canvas/tablet gestures if any other editor keeps a key-held modifier in a plain useState — the tablet shares this component, so this fix already covers it.
+
+### 2026-08-10 — unmount leaves marquee/bend/touch document listeners armed (round 128)
+
+**Problem (evidence):** the editor's unmount teardown effect cleaned `panCleanupRef`, `dragCleanupRef`, `minimapDragCleanupRef`, and fresh-node timers — but **not** `marqueeCleanupRef`, `bendDragCleanupRef`, or `touchCleanupRef`. All three arm document-level pointer listeners (marquee's page-wide `mouseup` finalizer in `handleCanvasMouseDown`; the bend drag's document move/up; the touch gesture layer's document pointer listeners). If the editor unmounts mid-gesture (branch switch, screen navigation, the parent swapping instances), the armed listener survives and fires its finalize/cancel closure against an unmounted editor on the next page-wide pointer event — the same leak class as the Space-pan blur bug (round 127), but on the gesture side.
+
+**Red:** `unmount disarms the marquee document finalizer (no leaked mouseup listener)` — arm a marquee, `vi.spyOn(document, 'removeEventListener')`, unmount, and assert at least one `mouseup` removal happened during teardown. Failed pre-fix: `expected 0 to be greater than 0`.
+
+**Green:** the unmount effect now calls `marqueeCleanupRef.current?.()`, `bendDragCleanupRef.current?.()`, and `touchCleanupRef.current?.()` alongside the existing pan/drag/minimap disarms. The effect body references `touchCleanupRef` declared later in the component body — safe because the cleanup closure runs on unmount, after the ref binding initializes (typecheck + eslint clean).
+
+**Verified:** editor 464/464 (+1), **full UI suite 275 files / 4,663 tests** (+1), a11y 8/8, typecheck ✓, eslint ✓.
+
+**Commits:** `<pending>`
+
+**Deliberately NOT done:** the touch cleanup ref has no test of its own — the marquee regression pins the shared unmount-teardown path, and the three disarms are one line each in the same effect. A per-gesture unmount test would be near-duplicate ceremony.
+
+**Risks / follow-ups:** this closes the gesture-listener leak class on the desktop editor; the tablet shares this component, so it is covered too. The same audit lens (unmount must disarm every document listener the component arms) is worth applying to any other long-lived canvas component.

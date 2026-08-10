@@ -2486,13 +2486,20 @@ export default function NodeTopologyEditor({
     inspectorHistoryPushedForRef.current = null;
   }, [redo, nodes, wires, setHistory, setNodes, setRedo, setWires]);
 
-  // Clean up pan/drag listeners and fresh-node timers on unmount
+  // Clean up pan/drag/marquee/bend/touch listeners and fresh-node timers on
+  // unmount. Every document-level gesture listener must be disarmed here — a
+  // branch switch or screen navigation mid-gesture otherwise leaves the
+  // listener attached, firing finalize/cancel closures against an unmounted
+  // editor on the next page-wide pointer event.
   useEffect(() => {
     const timers = freshTimersRef.current;
     return () => {
       panCleanupRef.current?.();
       dragCleanupRef.current?.();
       minimapDragCleanupRef.current?.();
+      marqueeCleanupRef.current?.();
+      bendDragCleanupRef.current?.();
+      touchCleanupRef.current?.();
       timers.forEach(clearTimeout);
       timers.clear();
     };

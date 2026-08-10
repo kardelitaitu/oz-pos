@@ -5175,6 +5175,31 @@ describe('NodeTopologyEditor — multi-select & marquee', () => {
     expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(2);
   });
 
+  it('unmount disarms the marquee document finalizer (no leaked mouseup listener)', () => {
+    // Regression: the unmount effect cleaned pan/drag/minimap listeners and
+    // fresh-node timers, but NOT marqueeCleanupRef — a marquee started and
+    // then unmounted (branch switch, screen navigation) left its document
+    // mouseup listener armed. The leaked listener fired finalizeMarquee
+    // against an unmounted editor on the next page-wide release.
+    const { unmount } = renderEditor();
+    mockCanvasSize(1200, 800);
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    // Arm the marquee: the document mouseup finalizer is attached.
+    fireEvent.mouseDown(canvas, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 650, clientY: 420 });
+    expect(document.querySelector('.topology-marquee')).not.toBeNull();
+
+    // Spy AFTER arming so only unmount-time removals are attributed.
+    const removeSpy = vi.spyOn(document, 'removeEventListener');
+    unmount();
+
+    // The marquee's mouseup finalizer must be removed by unmount teardown.
+    const mouseUpRemovals = removeSpy.mock.calls.filter(([type]) => type === 'mouseup');
+    removeSpy.mockRestore();
+    expect(mouseUpRemovals.length).toBeGreaterThan(0);
+  });
+
   it('left→right marquee selects only fully-contained nodes (excludes partial overlaps)', () => {
     renderEditor();
     mockCanvasSize(1200, 800);
