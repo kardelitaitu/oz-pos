@@ -44,6 +44,14 @@ vi.mock('@/contexts/WorkspaceContext', () => ({
   useWorkspace: () => ({ sessionToken: 'test-session-token' }),
 }));
 
+// The editor's Apply gate mirrors the backend `staff:update` permission via
+// the session role. Switchable per test so the view-only behavior can be
+// pinned.
+let mockIsManager: boolean = true;
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({ isManager: mockIsManager }),
+}));
+
 const mockAddToast = vi.fn();
 vi.mock('@/frontend/shared/Toast', () => ({
   useToast: () => ({ addToast: mockAddToast }),
@@ -77,6 +85,7 @@ let capturedEditorProps: {
   onRenameBranch?: (id: string, name: string) => Promise<boolean>;
   onRenameWorkspace?: (id: string, name: string) => Promise<boolean>;
   onDirtyChange?: (dirty: boolean) => void;
+  canSave?: boolean;
 } = {};
 vi.mock('@/features/stores/NodeTopologyEditor', () => ({
   default: (props: {
@@ -87,6 +96,7 @@ vi.mock('@/features/stores/NodeTopologyEditor', () => ({
     onRenameBranch?: (id: string, name: string) => Promise<boolean>;
     onRenameWorkspace?: (id: string, name: string) => Promise<boolean>;
     onDirtyChange?: (dirty: boolean) => void;
+    canSave?: boolean;
   }) => {
     capturedEditorProps = props;
     // The branch (graph) selector toolbar is rendered via the editor's
@@ -211,6 +221,7 @@ describe('TopologyScreen', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mockLicenseTier = 'standard';
+    mockIsManager = true;
     capturedEditorProps = {};
     capturedBranchOnChange = null;
     capturedBranchOptions = [];
@@ -1027,5 +1038,39 @@ describe('TopologyScreen', () => {
     await waitFor(() => {
       expect(mockListWorkspacesScoped).toHaveBeenCalledTimes(2);
     });
+  });
+
+  // ══ Permission gating (save mechanism design) ═════════════════
+
+  it('passes canSave=true for manager/owner roles', async () => {
+    mockIsManager = true;
+    await renderReady();
+    expect(capturedEditorProps.canSave).toBe(true);
+  });
+
+  it('renders view-only (canSave=false) for non-manager roles', async () => {
+    mockIsManager = false;
+    await renderReady();
+    expect(capturedEditorProps.canSave).toBe(false);
+  });
+
+  it('blocks renames for non-manager roles with a permission toast', async () => {
+    mockIsManager = false;
+    await renderReady();
+
+    const branchResult = await capturedEditorProps.onRenameBranch!('store-1', 'Renamed');
+    expect(branchResult).toBe(false);
+    expect(mockUpdateStore).not.toHaveBeenCalled();
+    expect(mockAddToast).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'error', message: 'topology-rename-permission-error' }),
+    );
+
+    mockAddToast.mockClear();
+    const wsResult = await capturedEditorProps.onRenameWorkspace!('ws-existing', 'Renamed');
+    expect(wsResult).toBe(false);
+    expect(mockUpdateWorkspace).not.toHaveBeenCalled();
+    expect(mockAddToast).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'error', message: 'topology-rename-permission-error' }),
+    );
   });
 });

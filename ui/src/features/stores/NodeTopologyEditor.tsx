@@ -319,6 +319,15 @@ export interface NodeTopologyEditorProps {
    *  against silently discarding unsaved edits — the editor cannot veto its
    *  own remount, so the guard must live in the parent. */
   onDirtyChange?: (dirty: boolean) => void;
+  /**
+   * Whether the session user is allowed to persist topology changes.
+   * The backend gates `apply_topology_diff` on `staff:update` (granted to
+   * Owner/Manager/Staff presets); when false the editor renders in view-only
+   * mode — Apply is disabled with an explanatory tooltip and a header notice.
+   * Defaults to true so standalone editor usages (tests, dev presets) keep
+   * their current behavior.
+   */
+  canSave?: boolean;
 }
 
 /** Valid workspace type keys selectable when creating a workspace node.
@@ -684,6 +693,7 @@ export default function NodeTopologyEditor({
   branchToolbar,
   branchId,
   onDirtyChange,
+  canSave = true,
 }: NodeTopologyEditorProps) {
   const { sessionToken } = useWorkspace();
   const { addToast } = useToast();
@@ -4575,6 +4585,13 @@ export default function NodeTopologyEditor({
           <h2 className="sr-only">Visual Store & Workspace Topology Builder</h2>
         </Localized>
         {branchToolbar}
+        {!canSave && (
+          <div className="topology-readonly-note" role="status">
+            <Localized id="topology-readonly-note">
+              <span>View-only — only managers and owners can save topology changes.</span>
+            </Localized>
+          </div>
+        )}
         <span className={`topology-tier-badge tier-${currentTier}`}>
           <Localized id="topology-tier-suffix" vars={{ tier: currentTier.toUpperCase() }}>
             <span>{currentTier.toUpperCase()} TIER</span>
@@ -4607,12 +4624,12 @@ export default function NodeTopologyEditor({
             icon={<UtensilsIcon size={16} />}
           >
             <Localized id="topology-preset-restaurant">Resto & KDS Preset</Localized>
-          </Button>
-
-          <Button variant="secondary" onClick={autoLayout}>
+          </Button>            <Button variant="secondary" onClick={autoLayout}>
             <Localized id="topology-auto-layout">Auto-layout</Localized>
           </Button>            <Button
               variant="primary"
+              disabled={!canSave}
+              title={canSave ? undefined : l10n.getString('topology-apply-permission-tooltip')}
               onClick={async () => {
                 // Same gate as the live badge surface — shared helper keeps
                 // the Apply toast and the on-canvas badges in lockstep. A

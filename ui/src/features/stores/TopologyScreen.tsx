@@ -12,6 +12,7 @@ import {
   type UpdateInstanceRequest,
 } from '@/api/topology';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/frontend/shared/Toast';
 import { requiredLocalized } from '@/frontend/shared';
 import { checkLicenseStatus } from '@/api/license';
@@ -64,6 +65,12 @@ export default function TopologyScreen() {
   const { sessionToken, resolvedStoreId } = useWorkspace();
   const { addToast } = useToast();
   const { l10n } = useLocalization();
+  /** Whether the session user may persist topology changes. The backend
+   *  gates `apply_topology_diff` on `staff:update`, which the built-in
+   *  Owner/Manager/Staff role presets grant — `isManager` is the role-name
+   *  mirror of that permission, so the editor renders view-only (Apply
+   *  disabled) for roles that could never save. */
+  const { isManager } = useAuth();
   const [licenseTier, setLicenseTier] = useState('standard');
   /** Real workspace instances loaded from the backend, used to seed the editor. */
   const [workspaceInstances, setWorkspaceInstances] = useState<WorkspaceDto[]>([]);
@@ -260,6 +267,10 @@ export default function TopologyScreen() {
    *  card. Returns true on success so the card can close its inline form;
    *  false keeps the draft open for a retry. */
   const handleRenameBranch = useCallback(async (id: string, name: string): Promise<boolean> => {
+    if (!isManager) {
+      addToast({ message: l10n.getString('topology-rename-permission-error'), type: 'error' });
+      return false;
+    }
     const store = stores.find((s) => s.id === id);
     if (!store) return false;
     const trimmed = name.trim();
@@ -282,11 +293,15 @@ export default function TopologyScreen() {
       });
       return false;
     }
-  }, [stores, addToast, l10n]);
+  }, [stores, isManager, addToast, l10n]);
 
   /** Persist a workspace instance rename (the live row, not just the canvas
    *  label) from the editor's card. Same contract as handleRenameBranch. */
   const handleRenameWorkspace = useCallback(async (instanceId: string, name: string): Promise<boolean> => {
+    if (!isManager) {
+      addToast({ message: l10n.getString('topology-rename-permission-error'), type: 'error' });
+      return false;
+    }
     const ws = workspaceInstances.find((w) => w.instance_id === instanceId);
     if (!ws || !sessionToken) return false;
     const trimmed = name.trim();
@@ -308,7 +323,7 @@ export default function TopologyScreen() {
       });
       return false;
     }
-  }, [workspaceInstances, sessionToken, addToast, l10n]);
+  }, [workspaceInstances, sessionToken, isManager, addToast, l10n]);
 
   /**
    * Persist topology edits atomically (Critical #4 + #5):
@@ -617,6 +632,7 @@ export default function TopologyScreen() {
         onRenameWorkspace={handleRenameWorkspace}
         allowLegacyApply={false}
         onSave={handleTopologySave}
+        canSave={isManager}
         onDirtyChange={handleEditorDirtyChange}
         branchToolbar={(
           /* ── Branch (graph) selector toolbar, merged into the editor header ── */

@@ -243,6 +243,7 @@ const renderEditor = (props?: {
   allowLegacyApply?: boolean;
   branchId?: string;
   onDirtyChange?: (dirty: boolean) => void;
+  canSave?: boolean;
 }) =>
   renderWithProvidersSync(<NodeTopologyEditor currentTier="standard" {...props} />, multiStoreFtl, sharedFtl);
 
@@ -1151,6 +1152,25 @@ describe('NodeTopologyEditor Component', () => {
   });
 
   // ── Save topology ─────────────────────────────────────────────
+
+  it('disables Apply and shows the view-only note when canSave=false', async () => {
+    const onSave = vi.fn();
+    renderEditor({ onSave, canSave: false });
+
+    const applyBtn = screen.getByText('Apply Topology Changes');
+    expect(applyBtn).toBeDisabled();
+    expect(screen.getByText(/View-only/)).toBeInTheDocument();
+
+    // A disabled button never fires the save path.
+    fireEvent.click(applyBtn);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('enables Apply by default (canSave=true)', async () => {
+    renderEditor({ onSave: vi.fn() });
+    expect(screen.getByText('Apply Topology Changes')).not.toBeDisabled();
+  });
 
   it('calls saveTopology with correct payload when Apply Topology Changes clicked', async () => {
     const onSave = vi.fn();
