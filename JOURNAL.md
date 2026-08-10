@@ -3187,3 +3187,17 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Deliberately NOT done:** no rebase/merge of the stale edits onto the authoritative revision (the edits were REJECTED by the backend — adopting the newer topology and letting the user re-apply is the honest recovery; a merge would need an operational conflict-resolution UX). No dev-mock revision-conflict simulation (the vitest harness mocks the API directly; the browser-mock gap is a separate follow-up for the preview build).
 
 **Risks / follow-ups:** the revision-conflict UX loop is now closed end-to-end (backend rejects → editor adopts). Remaining: re-running `test-changed.sh` (now unblocked — the dev client is closed) for a Rust-touching round, and the dev-mock revision-conflict simulation for the browser preview.
+
+### 2026-08-11 — dev-mock rejects stale Apply base revisions like the backend gate (round 138)
+
+**Problem:** the round-137 follow-up — the browser dev-mock could not exercise the revision-conflict recovery the editor gained in round 137. `apply_topology_diff` in `ui/src/dev-mock/tauri-api.ts` ignored `baseRevision` entirely and always accepted + bumped, so a stale editor in the plain-browser preview never saw the conflict — the recovery path was only reachable through the vitest harness (which mocks the API directly) or a real backend. The real command (topology.rs revision gate, round 133) rejects any Apply whose `base_revision` ≠ committed revision, serialized as `{ kind: 'topologyValidation', code: 'topology-revision-conflict', ... }`.
+
+**Solution:** Red→Green. New test in `dev-mock-stores.test.ts` pinning the parity contract: snapshot the seeded revision, apply at the CURRENT revision (succeeds, bumps), then re-apply with the now-stale base — pre-fix the mock resolved `{ revision: 4 }` instead of rejecting (Red); post-fix it rejects with the typed conflict shape AND leaves revision + diagram untouched, then self-heals the seed diagram for watch-mode re-runs. Fix: the mock now reads `baseRevision` from the apply args and, when present and ≠ current revision, throws the exact `TopologyValidation` object the editor's `isTopologyRevisionConflict` (via `parseAppError`) detects. The guard is skipped when the field is absent — the real command requires `base_revision`, so only callers that send the field opt into optimistic concurrency; this keeps the older direct-mock invocations (which omit it) working unchanged.
+
+**Verified:** new test green standalone · dev-mock-stores 4/4 · editor suite 475/475 (round-137 recovery test still green) · full UI suite 275 files / 4,676 tests (+1) · typecheck ✓ · eslint 0 errors on changed files.
+
+**Commits:** (ref back-filled after commit)
+
+**Deliberately NOT done:** no simulated two-process race in the mock (the editor can only ever hold one revision; a conflict is exercised by editing outside the editor or a stale tab — the gate parity is what matters, not the concurrency mechanics). No UI change: the editor recovery from round 137 consumes this without modification.
+
+**Risks / follow-ups:** the mock now mirrors the gate, so the preview's conflict UX is testable in-browser (stale tab + Apply). Remaining: re-running `test-changed.sh` for a Rust-touching round (still unblocked — no Rust touched this round), and the audit's remaining smaller slices (Apply error-path e2e variants) tracked in earlier entries.

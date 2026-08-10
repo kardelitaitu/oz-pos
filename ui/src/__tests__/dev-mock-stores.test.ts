@@ -164,3 +164,77 @@ describe('dev-mock store + topology round-trip', () => {
     expect(list.some((s) => s.id === 'store-1')).toBe(true);
   });
 });
+
+// ── Dev-mock revision-conflict parity (round 138) ────────────────
+//
+// The backend rejects any Apply whose baseRevision differs from the
+// committed revision (topology.rs revision gate, round 133) — a stale
+// editor can NEVER retry successfully, so the editor adopts the
+// authoritative topology instead (round 137). The mock previously ignored
+// baseRevision and always accepted, so browser previews could not exercise
+// that recovery path. Pin the parity here: a stale base must reject with
+// the typed conflict shape AND leave the diagram + revision untouched.
+// When baseRevision is absent (legacy direct callers), the guard is
+// skipped — matching the real command's required-field contract where
+// only callers that send the field opt into optimistic concurrency.
+describe('dev-mock apply_topology_diff revision-conflict parity', () => {
+  it('rejects a stale baseRevision with the typed conflict and leaves state intact', async () => {
+    // Snapshot the seeded diagram + revision first so the test self-heals
+    // across watch-mode re-runs (the mock persists both to localStorage).
+    const initial = await invoke<{ revision: number; nodes: MockTopologyNodeRow[]; wires: MockTopologyWireRow[] }>('load_topology');
+    const base = initial.revision;
+
+    // A fresh Apply at the CURRENT revision succeeds and bumps the counter.
+    await invoke('apply_topology_diff', {
+      args: {
+        sessionToken: 'test-session-token',
+        workspaceCreations: [],
+        workspaceUpdates: [],
+        workspaceArchives: [],
+        diagramNodes: initial.nodes,
+        diagramWires: initial.wires,
+        baseRevision: base,
+      },
+    });
+    const after = await invoke<{ revision: number; nodes: MockTopologyNodeRow[]; wires: MockTopologyWireRow[] }>('load_topology');
+    expect(after.revision).toBe(base + 1);
+
+    // The SAME base is now stale — the mock must reject with the typed
+    // shape the editor's recovery path detects (kind topologyValidation +
+    // code topology-revision-conflict, mirroring the Rust serialization).
+    await expect(invoke('apply_topology_diff', {
+      args: {
+        sessionToken: 'test-session-token',
+        workspaceCreations: [],
+        workspaceUpdates: [],
+        workspaceArchives: [],
+        diagramNodes: initial.nodes,
+        diagramWires: initial.wires,
+        baseRevision: base,
+      },
+    })).rejects.toMatchObject({
+      kind: 'topologyValidation',
+      code: 'topology-revision-conflict',
+    });
+
+    // Rejection is a no-op: revision unchanged, diagram untouched.
+    const still = await invoke<{ revision: number; nodes: MockTopologyNodeRow[]; wires: MockTopologyWireRow[] }>('load_topology');
+    expect(still.revision).toBe(base + 1);
+    expect(still.nodes).toEqual(after.nodes);
+    expect(still.wires).toEqual(after.wires);
+
+    // Self-heal: restore the seed diagram for watch-mode re-runs.
+    await invoke('apply_topology_diff', {
+      args: {
+        sessionToken: 'test-session-token',
+        workspaceCreations: [],
+        workspaceUpdates: [],
+        workspaceArchives: [],
+        diagramNodes: initial.nodes,
+        diagramWires: initial.wires,
+        baseRevision: still.revision,
+        resolvedIssueKeys: [],
+      },
+    });
+  });
+});

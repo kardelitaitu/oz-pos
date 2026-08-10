@@ -1056,14 +1056,31 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   // persist the diagram (node positions included) so reloads keep both the
   // node layout and the workspace instances.
   'apply_topology_diff': (args) => {
-    const { workspaceCreations, workspaceUpdates, workspaceArchives, diagramNodes, diagramWires, resolvedIssueKeys } = (args as {
+    const { workspaceCreations, workspaceUpdates, workspaceArchives, diagramNodes, diagramWires, resolvedIssueKeys, baseRevision } = (args as {
       workspaceCreations?: Array<{ id: string; type_key: string; store_id: string; name: string; description?: string; colour?: string }>;
       workspaceUpdates?: Array<{ id: string; name: string }>;
       workspaceArchives?: string[];
       diagramNodes?: MockTopologyNode[];
       diagramWires?: MockTopologyWire[];
       resolvedIssueKeys?: string[];
+      baseRevision?: number;
     }) ?? {};
+    // Mirror the backend's optimistic-concurrency gate (topology.rs, round
+    // 133): a stale baseRevision can NEVER retry successfully, so reject
+    // with the typed conflict the editor's recovery path detects (round
+    // 137). Skipped when the field is absent — the real command requires
+    // base_revision, so only callers that send it opt into the guard.
+    const currentRevision = mockTopology.revision ?? 0;
+    if (baseRevision !== undefined && baseRevision !== currentRevision) {
+      throw {
+        kind: 'topologyValidation',
+        code: 'topology-revision-conflict',
+        nodeId: null,
+        wireId: null,
+        portId: null,
+        message: `topology revision conflict: expected ${baseRevision}, current ${currentRevision}`,
+      };
+    }
     for (const c of workspaceCreations ?? []) {
       mockWorkspaces.push({
         instance_id: c.id,
