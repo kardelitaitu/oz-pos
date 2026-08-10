@@ -178,6 +178,30 @@ export function nodeBoxesOverlap(
 }
 
 /**
+ * The ids of every node whose card box intersects another node's box
+ * (round 143). Used for the non-destructive overlap badge on cards that
+ * loaded stacked — movement paths can no longer CREATE overlaps (rounds
+ * 140-142), but saved diagrams may still carry them, and the indicator is
+ * the honest surface (auto-moving on load would be a silent jump).
+ * Derived from live geometry, so dragging a card clear drops it from the
+ * set automatically.
+ */
+export function findOverlappingNodeIds(
+  nodes: Array<{ id: string; x: number; y: number }>,
+): Set<string> {
+  const result = new Set<string>();
+  for (let i = 0; i < nodes.length; i += 1) {
+    for (let j = i + 1; j < nodes.length; j += 1) {
+      if (nodeBoxesOverlap(nodes[i]!, nodes[j]!)) {
+        result.add(nodes[i]!.id);
+        result.add(nodes[j]!.id);
+      }
+    }
+  }
+  return result;
+}
+
+/**
  * Resolve overlaps introduced by a node drag drop (round 140).
  *
  * The editor's invariant is that node cards never overlap — palette spawns

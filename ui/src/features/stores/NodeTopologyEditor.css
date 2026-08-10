@@ -933,6 +933,25 @@
   color: var(--color-danger);
 }
 
+/* Non-destructive overlap indicator (round 143): a warning chip on cards
+   that overlap a neighbour in the loaded diagram. The invariant guards
+   new movement, so the badge only ever surfaces pre-existing data
+   quality problems — never an auto-jump. */
+.node-overlap-badge {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  width: fit-content;
+  background: var(--color-warning-subtle);
+  color: var(--color-warning);
+  border: 1px solid var(--color-warning);
+}
+
 /* Wire-scoped validation marker — a warning badge at the midpoint of a
    flagged wire (warehouse-at-capacity and other wire-level errors). */
 .wire-validation-marker {

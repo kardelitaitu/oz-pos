@@ -38,6 +38,7 @@ import {
   NODE_PORT_Y,
   nodeBoxesOverlap,
   resolveDropOverlaps,
+  findOverlappingNodeIds,
 } from './nodeTopologyClamp';
 import { computeAutoLayout } from './nodeTopologyLayout';
 import { WarehouseSettingsCard } from './topologyWarehouseCard';
@@ -4223,6 +4224,16 @@ export default function NodeTopologyEditor({
     return m;
   }, [wires]);
 
+  /** Pre-existing overlaps in the loaded diagram (round 143): the
+   *  no-overlap invariant guards spawns, drops (140), nudges (141) and
+   *  auto-layout (142), but old saved diagrams can still load stacked.
+   *  Flag the offending cards non-destructively — a badge, never an
+   *  auto-jump (a silent move on load would be a worse surprise). */
+  const overlappingNodeIds = useMemo(
+    () => findOverlappingNodeIds(nodes),
+    [nodes],
+  );
+
   /** Forget a dismissal once its issue is genuinely gone. Gated on
    *  topologyLoaded so the preset placeholder shown during the async load
    *  can never wipe restored dismissals (see the load effect's finally). */
@@ -5737,6 +5748,7 @@ export default function NodeTopologyEditor({
                 hoveredTarget={hoveredTarget}
                 nodeErrors={nodeErrorsByNode.get(node.id) ?? EMPTY_ERRORS}
                 countBadge={excessBadgeByNode.get(node.id) ?? null}
+                hasOverlap={overlappingNodeIds.has(node.id)}
                 stockWireHint={addStockWireHintId === node.id}
                 onDismissNodeIssue={handleDismissNodeIssue}
                 isFresh={freshNodeIds.has(node.id)}

@@ -3263,3 +3263,17 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Deliberately NOT done:** no `resolveDropOverlaps` settle on the layout output — the engine cannot produce overlaps, so settling would add a state write that never fires (dead code with a misleading purpose). No warning badge for pre-existing loaded overlaps (a separate UX slice, still open).
 
 **Risks / follow-ups:** every movement path now provably preserves the no-overlap invariant (spawns, loads, drops, nudges, auto-layout). Open: a load-time indicator for pre-existing overlaps from saved diagrams (the invariant only guards NEW movement), and the long-deferred Rust-touching round to finally run `test-changed.sh`.
+
+### 2026-08-11 — pre-existing overlap badge on loaded cards (round 143)
+
+**Problem:** the round-142 follow-up (load-time indicator for pre-existing overlaps) was the last open editor slice. The no-overlap invariant guards NEW movement — spawns settle, drops settle (140), nudges hit a wall (141), auto-layout is structurally collision-free (142) — but old saved diagrams can still LOAD stacked, and the bottom card becomes unselectable except by its exposed grip. The invariant can't fix a loaded diagram silently (an auto-jump on load would be a worse surprise, per the round-140 design note), so the honest behavior is a non-destructive indicator: a badge on the offending cards, gone the moment the user drags one clear.
+
+**Solution:** `findOverlappingNodeIds` in `nodeTopologyClamp.ts` (strict pairwise `nodeBoxesOverlap` → set of offender ids, the same zero-gap semantics the movement paths use — flush is not an overlap, so a guide-snapped layout never badges). A `hasOverlap: boolean` prop on the memoized `TopologyNodeCard` (stable boolean keeps the memo boundary clean), rendered as a warning chip in the body-status row with `role="status"`, FTL `topology-overlap-badge` in both bundles, and CSS. The editor derives it from a `useMemo` over live node positions, so it disappears the moment a drag settles clear.
+
+**Verified:** editor suite 481/481 (+2: badge shows on an overlapping card, and dragging the card clear removes it) · full UI suite 276 files / 4,688 tests (+2) · typecheck ✓ · eslint 0 errors (one new-error caught and fixed: the badge span's stopPropagation needed the file's standard jsx-a11y disable-with-reason, mirroring the validation-note pattern) · lint:i18n clean (bundle parity) · drift guard clean.
+
+**Commits:** `TODO`
+
+**Deliberately NOT done:** no auto-settle on load — a silent position change on load would fight the user's saved layout and the round-140 design note explicitly avoided it. No overlap count on the badge ("2 cards overlap" localization churn for marginal value — the badge marks each offender). No badge for the duplicate-drag creation gesture — copies deliberately overlap their originals (round-140 exception).
+
+**Risks / follow-ups:** the badge is geometry-derived and static while selected-drag ghosts float (transient visual overlap mid-drag is expected and never badged). Open: the long-deferred Rust-touching round so `test-changed.sh` finally runs in a cycle's verification.

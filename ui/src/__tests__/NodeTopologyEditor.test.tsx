@@ -9732,3 +9732,69 @@ describe('NodeTopologyEditor — nudge-overlap blocking', () => {
     expect(nodeA.style.left).toBe('81px');
   });
 });
+
+// ── Pre-existing overlap indicator (round 143) ───────────────────
+//
+// Rounds 140-142 guard NEW movement (drops settle, nudges block, layout is
+// collision-free), but a SAVED diagram can still load with cards stacked —
+// the invariant only prevents creating new overlaps, never repairs old
+// data. Auto-moving on load would be a silent jump (deliberately avoided),
+// so the least-surprising surface is a non-destructive badge on each
+// offending card. It is derived from live geometry, so dragging a card
+// clear makes its badge disappear.
+describe('NodeTopologyEditor — pre-existing overlap indicator', () => {
+  beforeEach(() => {
+    mockLoadTopology.mockResolvedValue(null);
+  });
+
+  const canvas = () => document.querySelector('.node-canvas-container') as HTMLElement;
+  const nodeBy = (id: string) =>
+    document.querySelector(`.topology-node[data-node-id="${id}"]`) as HTMLElement;
+  const badgeCount = () => document.querySelectorAll('.node-overlap-badge').length;
+
+  it('badges cards that overlap from a saved diagram, without moving them', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'a', type: 'store', name: 'A', x: 80, y: 80 },
+        // b overlaps a: b [200..440]×[80..320] vs a [80..320]×[80..320].
+        { id: 'b', type: 'workspace', name: 'B', x: 200, y: 80, metadata: { typeKey: 'store-pos' } },
+        { id: 'c', type: 'warehouse', name: 'C', x: 680, y: 80 },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+
+    // Both members of the overlapping pair are badged; the clear card is not.
+    expect(badgeCount()).toBe(2);
+    expect(nodeBy('a').querySelector('.node-overlap-badge')).not.toBeNull();
+    expect(nodeBy('b').querySelector('.node-overlap-badge')).not.toBeNull();
+    expect(nodeBy('c').querySelector('.node-overlap-badge')).toBeNull();
+    // Non-destructive: positions are untouched (no silent auto-move).
+    expect(nodeBy('a').style.left).toBe('80px');
+    expect(nodeBy('b').style.left).toBe('200px');
+  });
+
+  it('clears the badge once the user drags the node clear', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'a', type: 'store', name: 'A', x: 80, y: 80 },
+        { id: 'b', type: 'workspace', name: 'B', x: 200, y: 80, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    mockCanvasSize(1200, 800);
+    expect(badgeCount()).toBe(2);
+
+    // Drag B clear of A (offset −200,−80; drop at 600,0 → lands ~(792,72),
+    // well outside A's box). The badge must disappear — the indicator is
+    // derived from live geometry, not load state.
+    fireEvent.mouseDown(nodeBy('b'), { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 600, clientY: 0 });
+    fireEvent.mouseUp(canvas(), { button: 0 });
+
+    expect(badgeCount()).toBe(0);
+  });
+});

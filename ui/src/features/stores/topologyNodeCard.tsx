@@ -40,6 +40,12 @@ export interface TopologyNodeCardProps {
    *  note on nodes pinned by a tier-limit / extra-branch error. Null on
    *  every other card keeps the memo boundary clean. */
   countBadge?: string | null;
+  /** Non-destructive overlap indicator (round 143): true when this card's
+   *  box intersects another card's — a saved diagram can load stacked even
+   *  though movement paths can no longer create overlaps. Renders a small
+   *  badge; derived from live geometry, so it disappears when the user
+   *  drags the card clear. A stable boolean keeps the memo boundary clean. */
+  hasOverlap: boolean;
   /** One-click "add stock wire" guidance (round 80): set while the
    *  validation panel action is guiding the user to route stock into this
    *  warehouse — renders an info chip on the card. The editor clears it the
@@ -85,6 +91,7 @@ function TopologyNodeCardImpl({
   hoveredTarget,
   nodeErrors,
   countBadge,
+  hasOverlap,
   stockWireHint,
   isFresh,
   isDimmed,
@@ -187,6 +194,17 @@ function TopologyNodeCardImpl({
               </span>
             );
           })()}
+          {hasOverlap && (
+            // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- stopPropagation keeps a click on the badge from starting a node drag
+            <span
+              className="node-overlap-badge"
+              role="status"
+              title={topologyUiString(l10n, 'topology-overlap-badge', null)}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              {topologyUiString(l10n, 'topology-overlap-badge', null)}
+            </span>
+          )}
           {isRenameable && !renaming && (
             <button
               type="button"
