@@ -3472,7 +3472,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** memo suite 4/4 (+1 regression) · editor suite + test-utils 499/499 · **full UI suite 279 files / 4,756 tests (+1)** · typecheck ✓ · eslint clean on changed files · **mutation check**: neutering `settleCounts` failed the regression test with the exact flake signature (`expected 1 to be 2`) → restored, green · drift guard clean.
 
-**Commits:** `(pending)`
+**Commits:** `605bfdf4` (test(topology): settle-aware baseline de-flakes the memo render-count harness)
 
 **Deliberately NOT done:** no production change — the memo boundary is sound (1000-click probe proves it); no weakening of the exact-delta assertions — the settle removes the race by construction instead; no change to the other two render-count tests' semantics (the settle only delays their baseline). The 100ms mock delay adds ~300ms per test file — accepted for determinism.
 
