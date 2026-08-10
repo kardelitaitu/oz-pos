@@ -2485,10 +2485,13 @@ pub async fn apply_topology_diff(
         return Err(save_error);
     }
 
-    let revision = {
-        let db = state.db.lock().await;
-        current_topology_revision(&db, &topology_key)?
-    };
+    // The `global_db` guard from the save is still held on the success path
+    // — re-locking `state.db` here would deadlock (tokio::sync::Mutex is not
+    // reentrant), so read the committed revision through the guard we
+    // already own. (Latent since the success path was first built; no test
+    // exercised the real command end-to-end until round 136.)
+    let revision = current_topology_revision(&global_db, &topology_key)?;
+    drop(global_db);
     let result = TopologyApplyResult { revision };
     tracing::info!(
         created,
@@ -2509,6 +2512,7 @@ pub async fn apply_topology_diff(
 mod tests {
     use super::*;
     use oz_core::migrations;
+    use oz_core::session::SessionContext;
     use rusqlite::Connection;
     use tempfile::tempdir;
 
@@ -8129,6 +8133,141 @@ mod tests {
         assert!(
             store_has_instance(&state, store_id, "ws-crash-3"),
             "completed Apply's store mutations must NOT be compensated"
+        );
+    }
+
+    #[tokio::test]
+    async fn stale_revision_apply_is_rejected_without_residue_end_to_end() {
+        // Round 136: exercise `apply_topology_diff` end-to-end through the
+        // real command harness (session, permission, subscription, store
+        // DB). A stale base revision is rejected at the command's early
+        // revision gate — before the journal or store transaction — so the
+        // failure must leave no recovery journal, no request ledger, and
+        // must not disturb the committed revision 1 envelope. This test
+        // also pins the SUCCESS path of the first Apply, which previously
+        // deadlocked: the revision read-back re-locked the still-held
+        // `state.db` tokio mutex (tokio::sync::Mutex is not reentrant).
+        let store_id = "store-e2e";
+        let dir = tempdir().unwrap();
+        let global = oz_core::migrations::fresh_db();
+        {
+            let store = Store::new(&global);
+            store.seed_default_roles().unwrap();
+            global
+                .execute(
+                    "INSERT INTO users (id, username, pin_hash, display_name, role_id, \
+                     is_active, created_at, updated_at) \
+                     VALUES ('user-owner', 'owner', 'hash', 'Owner', 'role-owner', 1, \
+                             '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+                    [],
+                )
+                .unwrap();
+            global
+                .execute(
+                    "INSERT OR IGNORE INTO store_profiles (id, name) VALUES (?1, ?2)",
+                    rusqlite::params![store_id, "Test Store"],
+                )
+                .unwrap();
+            global
+                .execute(
+                    "INSERT OR IGNORE INTO tenant_subscription \
+                     (tenant_id, tier_key, status, expires_at, max_stores, max_pos_instances, \
+                      allowed_types_json, signature, signed_payload, api_key, updated_at) \
+                     VALUES ('default', 'pro', 'active', NULL, 2, 3, '[]', 'BOOTSTRAP_FREE', \
+                             '', '', '2026-08-10T00:00:00.000Z')",
+                    [],
+                )
+                .unwrap();
+        }
+        let mut state = AppState::for_test_with_conn(global);
+        state.db_manager =
+            platform_core::StoreDatabaseManager::new(dir.path().to_path_buf(), migrations::ALL);
+        let token = "token-owner".to_string();
+        state.session_store.write().unwrap().insert(
+            token.clone(),
+            SessionContext::new(
+                "user-owner".into(),
+                "role-owner".into(),
+                "terminal-1".into(),
+                store_id.into(),
+                "instance-1".into(),
+                "pos".into(),
+                None,
+                0,
+            ),
+        );
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let nodes = vec![serde_json::json!({
+            "id": "branch-1",
+            "type": "branch-location",
+            "name": "Branch",
+            "store_profile_id": store_id,
+            "x": 0.0,
+            "y": 0.0,
+        })];
+        let wires: Vec<Value> = vec![];
+
+        // First Apply from the fresh base revision — succeeds, lands revision 1.
+        let first = apply_topology_diff(
+            token.clone(),
+            vec![],
+            vec![],
+            vec![],
+            nodes.clone(),
+            wires.clone(),
+            None,
+            0,
+            "request-e2e-1".into(),
+            None,
+            app.state(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(first.revision, 1);
+
+        // Second Apply replays the STALE base revision (0) while the document
+        // is already at 1 — the save rejects AFTER the store transaction
+        // commits, so the live error path must compensate and restore.
+        let second = apply_topology_diff(
+            token.clone(),
+            vec![],
+            vec![],
+            vec![],
+            nodes,
+            wires,
+            None,
+            0,
+            "request-e2e-2".into(),
+            None,
+            app.state(),
+        )
+        .await;
+        assert!(
+            matches!(second, Err(AppError::TopologyValidation { ref code, .. }) if code == "topology-revision-conflict"),
+            "stale Apply must be rejected with a revision conflict, got {second:?}"
+        );
+
+        let app_state = app.state::<AppState>();
+        let db = app_state.db.lock().await;
+        assert!(
+            oz_core::Settings::get(&db, TOPOLOGY_APPLY_RECOVERY_KEY)
+                .unwrap()
+                .is_none(),
+            "the recovery journal must be cleared after a compensated failure"
+        );
+        assert_eq!(
+            current_topology_revision(&db, TOPOLOGY_SETTING_KEY).unwrap(),
+            1,
+            "the first Apply's revision 1 envelope must survive the failed retry"
+        );
+        let request_key = topology_apply_request_key("request-e2e-2").unwrap();
+        assert!(
+            oz_core::Settings::get(&db, &request_key).unwrap().is_none(),
+            "the failed Apply must not leave a request ledger"
         );
     }
 
