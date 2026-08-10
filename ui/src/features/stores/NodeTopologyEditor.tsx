@@ -36,6 +36,7 @@ import {
   NODE_WIDTH,
   NODE_HEIGHT,
   NODE_PORT_Y,
+  resolveDropOverlaps,
 } from './nodeTopologyClamp';
 import { computeAutoLayout } from './nodeTopologyLayout';
 import { WarehouseSettingsCard } from './topologyWarehouseCard';
@@ -3110,6 +3111,10 @@ export default function NodeTopologyEditor({
    *  the alignment guide. Shared by the mouse document listener, the canvas
    *  onMouseUp, and the touch gesture loop. */
   const finalizeNodeDrag = useCallback(() => {
+    // Capture the dragged set + duplicate flag BEFORE commit/end clear them.
+    const dragged = new Set(draggingNodeIdsRef.current);
+    const isDuplicate = duplicateDragRef.current;
+    const moved = dragHasMovedRef.current;
     commitDuplicateDrag();
     endDrag();
     dragHasMovedRef.current = false;
@@ -3117,7 +3122,32 @@ export default function NodeTopologyEditor({
     dragStartRef.current.clear();
     setAlignmentGuide(null);
     lastDragMovePosRef.current = null;
-  }, [commitDuplicateDrag, endDrag]);
+    // Drop-overlap resolution (round 140): the editor's invariant is that
+    // node cards never overlap (spawns settle, loads spread on a grid), but
+    // a drag can stack a node on top of another card, hiding it. Settle
+    // each MOVED node into the nearest collision-free spot. Gated on the
+    // drag actually moving: a plain click (no move) must never yank a card
+    // that merely overlaps a neighbour — pre-existing overlap from a loaded
+    // diagram is data quality, not a gesture. Skipped for Alt+drag
+    // duplicates — the copies start at the originals' positions and their
+    // landing spot IS the intent (a deliberate creation gesture with its
+    // own pinned contract). Flush alignment (0 gap, guide landing) is not
+    // an overlap and survives. The resolution is part of the drag's own
+    // undo entry (the drag already pushed history on first movement).
+    if (!isDuplicate && dragged.size > 0 && moved) {
+      const resolved = resolveDropOverlaps(nodesRef.current, dragged);
+      if (resolved) {
+        // Merge only the resolved positions back onto the full nodes — the
+        // helper is position-focused, and replacing the objects wholesale
+        // would strip type/name/metadata off every card.
+        const byId = new Map(resolved.map((p) => [p.id, p]));
+        setNodes((prev) => prev.map((n) => {
+          const p = byId.get(n.id);
+          return p ? { ...n, x: p.x, y: p.y } : n;
+        }));
+      }
+    }
+  }, [commitDuplicateDrag, endDrag, setNodes]);
 
   /** Arm a node drag (mouse mousedown or the touch gesture loop): set the
    *  dragging set, compute each node's grip offset from the pointer, and —

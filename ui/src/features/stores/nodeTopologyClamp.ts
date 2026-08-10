@@ -162,3 +162,90 @@ export function findFreeSpawnSpot(
   }
   return best;
 }
+
+/**
+ * True when two uniform node-card boxes (NODE_WIDTH × NODE_HEIGHT) at the
+ * given origins intersect. Flush edges (zero gap) are NOT an overlap — that
+ * is the exact landing the alignment guides produce deliberately, so a drop
+ * resolution must never nudge a guide-aligned node apart.
+ */
+export function nodeBoxesOverlap(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+): boolean {
+  return a.x < b.x + NODE_WIDTH && a.x + NODE_WIDTH > b.x
+    && a.y < b.y + NODE_HEIGHT && a.y + NODE_HEIGHT > b.y;
+}
+
+/**
+ * Resolve overlaps introduced by a node drag drop (round 140).
+ *
+ * The editor's invariant is that node cards never overlap — palette spawns
+ * settle via findFreeSpawnSpot and loads spread on a grid — but a drag can
+ * drop a node on top of another card, stacking it invisibly. Each dragged
+ * node whose box intersects ANY other node settles into the nearest
+ * collision-free spot, scanning a square spiral outward in 24px (grid)
+ * steps from its drop position — the same settle semantics as spawns, but
+ * with a STRICT zero-gap intersection test so flush alignment (the guide
+ * landing) is preserved. Iterates to convergence (a settled node can never
+ * land on a fellow dragged node's resolved spot) and returns `null` when
+ * nothing moved so callers can skip the state write entirely. When the
+ * spiral is exhausted (pathological diagrams) the drop position is kept
+ * rather than jumping the node arbitrarily far.
+ */
+export function resolveDropOverlaps(
+  nodes: Array<{ id: string; x: number; y: number }>,
+  draggedIds: ReadonlySet<string>,
+  opts: { maxSteps?: number } = {},
+): Array<{ id: string; x: number; y: number }> | null {
+  const step = 24;
+  const maxSteps = opts.maxSteps ?? 64;
+  const positions = new Map(nodes.map((n) => [n.id, { x: n.x, y: n.y }]));
+  const others = (id: string) =>
+    [...positions.entries()].filter(([oid]) => oid !== id).map(([, p]) => p);
+  let changed = false;
+  // Bounded passes: each pass resolves every currently-overlapping dragged
+  // node; a settled node may create a NEW overlap with another dragged
+  // node's resolved spot, so re-scan until stable (maxSteps rings bound the
+  // distance, this bounds the chain length).
+  for (let pass = 0; pass < 4; pass += 1) {
+    let anyMoved = false;
+    for (const id of draggedIds) {
+      const pos = positions.get(id);
+      if (!pos) continue;
+      const rest = others(id);
+      if (!rest.some((o) => nodeBoxesOverlap(pos, o))) continue;
+      let free = pos;
+      for (let ring = 1; ring <= maxSteps; ring += 1) {
+        let found: { x: number; y: number } | null = null;
+        for (let dy = -ring; dy <= ring; dy += 1) {
+          for (let dx = -ring; dx <= ring; dx += 1) {
+            if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+            const p = { x: pos.x + dx * step, y: pos.y + dy * step };
+            if (!rest.some((o) => nodeBoxesOverlap(p, o))) {
+              found = p;
+              break;
+            }
+          }
+          if (found) break;
+        }
+        if (found) {
+          free = found;
+          break;
+        }
+      }
+      if (free.x !== pos.x || free.y !== pos.y) {
+        positions.set(id, free);
+        changed = true;
+        anyMoved = true;
+      }
+    }
+    if (!anyMoved) break;
+  }
+  if (!changed) return null;
+  return nodes.map((n) => ({
+    id: n.id,
+    x: positions.get(n.id)!.x,
+    y: positions.get(n.id)!.y,
+  }));
+}

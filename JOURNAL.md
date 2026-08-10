@@ -3217,3 +3217,19 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Deliberately NOT done:** no browser-Playwright E2E — the vitest jsdom chain already proves the wiring, and the dev server alias is identical; no TopologyScreen-level diff logic (creations/updates/archives) — that layer has its own coverage and would make the test a screen test, not a chain test.
 
 **Risks / follow-ups:** the conflict loop is now proven through the real IPC chain in every surface. Remaining: a Rust-touching round to finally run the long-unblocked `test-changed.sh`, and the audit's remaining smaller slices tracked in earlier entries.
+
+### 2026-08-11 — drag drops settle clear of other node cards (round 140)
+
+**Problem:** the editor's explicit invariant is that node cards never overlap — palette spawns settle into a collision-free spot (`findFreeSpawnSpot`) and loads spread on a grid — but a DRAG could drop a node on top of another card, stacking it invisibly. The bottom card became unselectable except by grabbing its exposed grip. Nothing enforced the invariant on movement, and no test covered it.
+
+**Solution:** Red→Green. New integration test: drag node A onto node B (A's box lands inside B's), drop, assert the cards don't intersect — pre-fix the drop landed stacked (Red). New pure helpers in `nodeTopologyClamp.ts`: `nodeBoxesOverlap` (strict zero-gap box intersection) and `resolveDropOverlaps` (each overlapping MOVED node settles into the nearest collision-free spot via a 24px outward spiral from its drop position, iterating to convergence; returns `null` when nothing moves so the caller skips the state write). `finalizeNodeDrag` hooks it in — capture the dragged set + duplicate flag + moved flag BEFORE `commitDuplicateDrag`/`endDrag` clear them, then resolve and merge only the positions back onto the full nodes (a first attempt at `setNodes(resolved)` replaced whole objects and crashed the card render — the helper is position-focused by design).
+
+**Three deliberate behavior gates, each found by a broken existing test:** (1) DUPLICATE drags are excluded — Alt+drag copies start at the originals' positions and the group-copy test pins copies overlapping originals at exact coordinates; the landing spot of a deliberate creation gesture is the intent. (2) FLUSH alignment (zero gap, produced by the alignment guides) is NOT an overlap and survives — the drop-overlap test for a guide-landed drop passes unchanged. (3) The resolution only fires when the drag actually MOVED — the memo test's fixture stacks ws-1/ws-2 by 60px, and a plain click re-rendering ws-1 twice exposed that a no-move click must never yank a pre-existing overlap (that's data quality, not a gesture). Two other existing tests were UPDATED to the new contract because their drags genuinely landed 4px into the preset's Retail POS card — their coordinate assertions were incidental (the purposes — off-grid placement; committed move survives Escape — are preserved).
+
+**Verified:** editor suite 477/477 (+6: 2 integration + 4 pure) · memo 3/3 · touch 4/4 · full UI suite 276 files / 4,683 tests (+6) · typecheck ✓ · eslint 0 errors (8 pre-existing warnings).
+
+**Commits:** (ref back-filled after commit)
+
+**Deliberately NOT done:** no nudge blocking (arrow keys can still step a node into a neighbour — nudges are 1px/8-24px steps where auto-resolving to a 24px-away spot would be jarring; blocking is a small follow-up); no loaded-diagram overlap repair (pre-existing overlap from saved data is left alone until the user moves the node — a silent jump on load would be worse); no overlap warning indicator.
+
+**Risks / follow-ups:** the movement invariant now holds for drags (mouse + touch share `finalizeNodeDrag`). Follow-ups: blocking nudges that would overlap (the keyboard path), and a sweep for other movement paths that bypass the resolver (e.g., duplicate-commit settle, if the duplicate-in-place UX is ever revisited).

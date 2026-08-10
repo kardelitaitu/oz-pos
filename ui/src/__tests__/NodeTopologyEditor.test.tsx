@@ -12,6 +12,7 @@ import {
   NODE_PORT_MARKER,
   NODE_PORT_Y,
   NODE_WIDTH,
+  resolveDropOverlaps,
 } from '../features/stores/nodeTopologyClamp';
 import { loadTopology, type TopologyData } from '@/api/topology';
 import multiStoreFtl from '@/locales/multi-store.ftl?raw';
@@ -7958,8 +7959,23 @@ describe('NodeTopologyEditor — live preview & snap toggle', () => {
     fireEvent.mouseMove(canvas(), { clientX: 123, clientY: 100 });
     fireEvent.mouseUp(canvas(), { button: 0 });
 
-    // raw 203px (unsnapped) vs 192px if it had snapped to the 24px grid
-    expect(node.style.left).toBe('203px');
+    // The raw unsnapped landing (203px) overlaps the preset's Retail POS
+    // card, so the drop settles into the nearest free spot (round 140) —
+    // the resolution steps in 24px increments FROM the raw landing, so the
+    // off-grid character survives: 203 → 131 (both off the 24px grid).
+    const left = parseFloat(node.style.left);
+    expect(left % 24).not.toBe(0);
+    // …and the settled card must not intersect any other preset card.
+    const top = parseFloat(node.style.top);
+    const others = [...document.querySelectorAll('.topology-node')].slice(1);
+    const overlaps = others.some((o) => {
+      const el = o as HTMLElement;
+      const ox = parseFloat(el.style.left);
+      const oy = parseFloat(el.style.top);
+      return left < ox + NODE_WIDTH && left + NODE_WIDTH > ox
+        && top < oy + NODE_HEIGHT && top + NODE_HEIGHT > oy;
+    });
+    expect(overlaps).toBe(false);
   });
 
   it('the canvas menu spawn respects the snap toggle', () => {
@@ -8909,12 +8925,16 @@ describe('NodeTopologyEditor — Escape cancels a move', () => {
     fireEvent.mouseDown(node(), { button: 0, clientX: 0, clientY: 0 });
     fireEvent.mouseMove(canvas(), { clientX: 70, clientY: 70 });
     fireEvent.mouseUp(canvas(), { button: 0 });
-    expect(node().style.left).toBe('144px');
+    // The raw landing (144px) overlaps the preset's Retail POS card, so the
+    // drop settles clear of it (round 140) — capture the committed value.
+    const settledLeft = node().style.left;
+    const settledTop = node().style.top;
 
     fireEvent.keyDown(canvas(), { key: 'Escape' });
 
     // The move was committed — a later Escape must NOT yank it back.
-    expect(node().style.left).toBe('144px');
+    expect(node().style.left).toBe(settledLeft);
+    expect(node().style.top).toBe(settledTop);
   });
 
   it('a plain Escape with no drag in flight still clears the selection', () => {
@@ -9499,5 +9519,136 @@ describe('NodeTopologyEditor — wire-level validation panel jump', () => {
       el.textContent?.includes('This wire uses an incompatible port and relationship type.'),
     )!;
     expect(wireItem.querySelector('.topology-validation-item-select')).not.toBeNull();
+  });
+});
+
+// ── Drop-overlap resolution (round 140) ───────────────────────────
+//
+// The editor's own invariant is that node cards never overlap: palette
+// spawns settle into a collision-free spot (findFreeSpawnSpot) and loads
+// spread on a grid. But a DRAG could drop a node on top of another card,
+// stacking it invisibly (the bottom card becomes unselectable except by
+// grip). The drop must settle the dragged node into the nearest
+// collision-free spot — flush alignment (0 gap, produced deliberately by
+// the alignment guides) is NOT an overlap and must survive.
+describe('NodeTopologyEditor — drop-overlap resolution', () => {
+  beforeEach(() => {
+    mockLoadTopology.mockResolvedValue(null);
+  });
+
+  const canvas = () => document.querySelector('.node-canvas-container') as HTMLElement;
+  const nodeBy = (id: string) =>
+    document.querySelector(`.topology-node[data-node-id="${id}"]`) as HTMLElement;
+  const boxesOverlap = (a: HTMLElement, b: HTMLElement) => {
+    const ax = parseFloat(a.style.left);
+    const ay = parseFloat(a.style.top);
+    const bx = parseFloat(b.style.left);
+    const by = parseFloat(b.style.top);
+    return ax < bx + NODE_WIDTH && ax + NODE_WIDTH > bx
+      && ay < by + NODE_HEIGHT && ay + NODE_HEIGHT > by;
+  };
+
+  it('settles a node dropped onto another node into the nearest free spot', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'a', type: 'store', name: 'A', x: 80, y: 80 },
+        { id: 'b', type: 'workspace', name: 'B', x: 380, y: 80, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    mockCanvasSize(1200, 800);
+
+    // Drag A from (0,0) — offset (−80,−80). Dropping at (400,100) lands A
+    // at snap(480, 180) = (480, 192): box [480..720]×[192..432], which
+    // intersects B's box [380..620]×[80..320]. Pre-fix the drop leaves the
+    // cards stacked.
+    fireEvent.mouseDown(nodeBy('a'), { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 400, clientY: 100 });
+    fireEvent.mouseUp(canvas(), { button: 0 });
+
+    // The drop must settle A clear of B (the exact landing spot is the
+    // nearest free cell — assert the invariant, not the coordinate).
+    expect(boxesOverlap(nodeBy('a'), nodeBy('b'))).toBe(false);
+  });
+
+  it('leaves a flush-aligned drop (alignment guide landing) untouched', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'a', type: 'store', name: 'A', x: 200, y: 200 },
+        { id: 'b', type: 'workspace', name: 'B', x: 440, y: 200, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    mockCanvasSize(1200, 800);
+
+    // B sits flush against A's right edge (B.x === A.x + NODE_WIDTH) — the
+    // exact geometry the alignment guide produces deliberately. A drag of B
+    // that lands it back flush must NOT be nudged away.
+    fireEvent.mouseDown(nodeBy('b'), { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 0, clientY: 0 });
+    fireEvent.mouseUp(canvas(), { button: 0 });
+
+    expect(nodeBy('b').style.left).toBe('440px');
+    expect(nodeBy('b').style.top).toBe('200px');
+  });
+});
+
+// ── resolveDropOverlaps (round 140) ──────────────────────────────
+describe('resolveDropOverlaps (drop-overlap resolution)', () => {
+  it('returns null when nothing overlaps (no state write needed)', () => {
+    const nodes = [
+      { id: 'a', x: 80, y: 80 },
+      { id: 'b', x: 380, y: 80 },
+    ];
+    expect(resolveDropOverlaps(nodes, new Set(['a']))).toBeNull();
+  });
+
+  it('treats flush alignment (zero gap) as NOT an overlap — the guide landing survives', () => {
+    const nodes = [
+      { id: 'a', x: 200, y: 200 },
+      // B flush against A's right edge: B.x === A.x + NODE_WIDTH.
+      { id: 'b', x: 200 + NODE_WIDTH, y: 200 },
+    ];
+    expect(resolveDropOverlaps(nodes, new Set(['b']))).toBeNull();
+  });
+
+  it('settles an overlapping dragged node to a collision-free spot and reports the change', () => {
+    const nodes = [
+      { id: 'a', x: 80, y: 80 },
+      // A dropped onto B: A's box [480..720]×[192..432] intersects B's.
+      { id: 'a-moved', x: 480, y: 192 },
+      { id: 'b', x: 380, y: 80 },
+    ];
+    const result = resolveDropOverlaps(nodes, new Set(['a-moved']));
+    expect(result).not.toBeNull();
+    const moved = result!.find((n) => n.id === 'a-moved')!;
+    const overlaps = moved.x < 380 + NODE_WIDTH && moved.x + NODE_WIDTH > 380
+      && moved.y < 80 + NODE_HEIGHT && moved.y + NODE_HEIGHT > 80;
+    expect(overlaps).toBe(false);
+    // The other nodes are untouched and the result keeps every node.
+    expect(result!.find((n) => n.id === 'a')).toEqual({ id: 'a', x: 80, y: 80 });
+    expect(result!.find((n) => n.id === 'b')).toEqual({ id: 'b', x: 380, y: 80 });
+  });
+
+  it('moves only the dragged member that overlaps — a group member clear of others stays put', () => {
+    const nodes = [
+      { id: 'a', x: 80, y: 80 },
+      { id: 'b', x: 380, y: 80 },
+      // 'c' dropped onto 'a' (overlap), 'd' moved but clear of everything.
+      { id: 'c', x: 100, y: 100 },
+      { id: 'd', x: 700, y: 300 },
+    ];
+    const result = resolveDropOverlaps(nodes, new Set(['c', 'd']));
+    expect(result).not.toBeNull();
+    const c = result!.find((n) => n.id === 'c')!;
+    const overlapsA = c.x < 80 + NODE_WIDTH && c.x + NODE_WIDTH > 80
+      && c.y < 80 + NODE_HEIGHT && c.y + NODE_HEIGHT > 80;
+    expect(overlapsA).toBe(false);
+    expect(result!.find((n) => n.id === 'd')).toEqual({ id: 'd', x: 700, y: 300 });
+    expect(result!.find((n) => n.id === 'b')).toEqual({ id: 'b', x: 380, y: 80 });
   });
 });
