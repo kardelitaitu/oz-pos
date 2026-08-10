@@ -5,7 +5,7 @@
 //! command returns `None` so the front-end falls back to the built-in
 //! retail preset.
 
-use rusqlite::Connection;
+use rusqlite::{Connection, Transaction, TransactionBehavior};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -1206,7 +1206,16 @@ fn save_topology_json_at_key_with_revision(
     // kinds. `branch-location` is a semantic alias, so normalize only the
     // temporary validation copy; the raw command payload is persisted intact.
     validate_diagram_payloads(&nodes, &wires)?;
-    let current_revision = current_topology_revision(conn, setting_key)?;
+    // IMMEDIATE transaction: BEGIN takes the reserved write lock up front, so
+    // the revision read + conflict check below are atomic against peer
+    // writers. Previously the read ran outside any lock (TOCTOU) — a
+    // concurrent writer could commit between this read and this save's
+    // commit, and both saves would succeed, silently dropping the peer's
+    // revision (lost update). Serializing writers at BEGIN means a save that
+    // blocks on a peer re-reads the fresh revision after the peer commits and
+    // is rejected with a conflict.
+    let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
+    let current_revision = current_topology_revision(&tx, setting_key)?;
     if let Some(expected) = expected_revision
         && expected != current_revision
     {
@@ -1227,7 +1236,6 @@ fn save_topology_json_at_key_with_revision(
     let runtime_json = serde_json::to_string(&runtime_plan)
         .map_err(|e| AppError::Internal(format!("serialize topology runtime plan: {e}")))?;
     let json = topology_envelope_json(&nodes, &wires, revision, resolved_issue_keys)?;
-    let tx = conn.unchecked_transaction()?;
     oz_core::Settings::set(&tx, setting_key, &json)?;
     oz_core::Settings::set(&tx, &runtime_key, &runtime_json)?;
     if let Some((request_key, fingerprint)) = request {
@@ -7805,6 +7813,71 @@ mod tests {
             .unwrap();
         let value: Value = serde_json::from_str(&raw).unwrap();
         assert_eq!(value["revision"], 1);
+    }
+
+    #[test]
+    fn in_flight_peer_writer_is_not_silently_overwritten() {
+        // TOCTOU race: the revision read + expected check happened OUTSIDE
+        // any write lock, so a save whose read landed before a peer's commit
+        // silently overwrote the peer (lost update). This test holds an
+        // IMMEDIATE write lock (conn B) while conn A saves with
+        // expected=0: A's read sees 0 (B's newer envelope is uncommitted),
+        // A passes the check, then blocks on B's lock; B commits revision 1;
+        // A's write proceeds. Pre-fix A commits revision 1 on top of B's —
+        // both writers succeed, B's data lost. With the read inside an
+        // IMMEDIATE transaction A re-reads after B's commit and must be
+        // rejected with a revision conflict.
+        let dir = tempdir().unwrap();
+        let db_path = dir.path().join("rev_lock.db");
+        {
+            let mut setup = Connection::open(&db_path).unwrap();
+            migrations::run(&mut setup).unwrap();
+        }
+        let path_str = db_path.to_string_lossy().to_string();
+
+        // Writer B holds the write lock and commits a newer revision after
+        // a controlled delay so A's save is already in flight.
+        let b_conn = Connection::open(&db_path).unwrap();
+        let tx_b =
+            rusqlite::Transaction::new_unchecked(&b_conn, rusqlite::TransactionBehavior::Immediate)
+                .unwrap();
+
+        // Writer A saves on a second connection with a busy timeout so its
+        // write attempt waits for B instead of erroring immediately.
+        let p = path_str.clone();
+        let a_handle = std::thread::spawn(move || {
+            let conn = Connection::open(&p).unwrap();
+            conn.busy_timeout(std::time::Duration::from_secs(5))
+                .unwrap();
+            let nodes = vec![serde_json::json!({
+                "id": "a-1", "type": "store", "name": "A", "x": 0.0, "y": 0.0
+            })];
+            save_topology_json_at_key_with_revision(
+                &conn,
+                nodes,
+                vec![],
+                TOPOLOGY_SETTING_KEY,
+                &[],
+                Some(0),
+                None,
+            )
+        });
+
+        // Give A time to read revision 0 and block on B's lock, then commit
+        // the newer revision from B's side.
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        let b_nodes = vec![serde_json::json!({
+            "id": "b-1", "type": "store", "name": "B", "x": 0.0, "y": 0.0
+        })];
+        let b_envelope = topology_envelope_json(&b_nodes, &[], 1, &[]).unwrap();
+        oz_core::Settings::set(&tx_b, TOPOLOGY_SETTING_KEY, &b_envelope).unwrap();
+        tx_b.commit().unwrap();
+
+        let a = a_handle.join().expect("writer A panicked");
+        assert!(
+            matches!(a, Err(AppError::TopologyValidation { ref code, .. }) if code == "topology-revision-conflict"),
+            "writer A silently overwrote in-flight writer B: {a:?}"
+        );
     }
 
     #[test]
