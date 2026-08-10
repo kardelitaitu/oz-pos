@@ -473,6 +473,26 @@
   stroke-linecap: round;
 }
 
+/* Round 151: the overlay must mirror the base wire's interaction states
+   (.wire-group:hover .wire-path brightens + thickens, .wire-selected
+   turns info-blue, .wire-group.wire-dimmed fades) or the wire visibly
+   splits again under the card the moment the user hovers or selects it.
+   Hover is declared LAST so it wins the tie against selected, matching
+   the base hover rule's higher specificity. */
+.node-wires-crossing path.node-wires-crossing-selected {
+  stroke: var(--color-info);
+  stroke-width: 4px;
+}
+
+.node-wires-crossing path.node-wires-crossing-dimmed {
+  opacity: 0.25;
+}
+
+.node-wires-crossing path.node-wires-crossing-hover {
+  stroke: var(--color-accent-hover);
+  stroke-width: 4px;
+}
+
 .wire-group .wire-end-dot {
   fill: var(--color-accent);
   transition: fill 0.2s ease;

@@ -5909,9 +5909,25 @@ export default function NodeTopologyEditor({
                 hover from the card below. */}
             {(wireUnderCardPaths.size > 0 || hiddenPulseDots.length > 0) && (
               <svg className="node-wires-crossing" style={{ width: svgBounds.width, height: svgBounds.height }}>
-                {[...wireUnderCardPaths.entries()].map(([wireId, d]) => (
-                  <path key={wireId} d={d} pointerEvents="none" />
-                ))}
+                {[...wireUnderCardPaths.entries()].map(([wireId, d]) => {
+                  // Round 151: the overlay must mirror the base wire's
+                  // interaction states (hover brightens, selected turns
+                  // info-blue, hover-focus mode dims) or the wire visibly
+                  // splits again the moment the user interacts with it —
+                  // the exact continuity defect round 146 fixed, but on
+                  // hover/selection instead of the static render.
+                  const crossingWire = wires.find((w) => w.id === wireId);
+                  const dimmed = hoverConnections !== null
+                    && (crossingWire === undefined
+                      || (crossingWire.fromNodeId !== hoveredNodeId
+                        && crossingWire.toNodeId !== hoveredNodeId));
+                  const cls = [
+                    hoveredWireId === wireId ? 'node-wires-crossing-hover' : null,
+                    selectedWireId === wireId ? 'node-wires-crossing-selected' : null,
+                    dimmed ? 'node-wires-crossing-dimmed' : null,
+                  ].filter(Boolean).join(' ') || undefined;
+                  return <path key={wireId} d={d} className={cls} pointerEvents="none" />;
+                })}
                 {hiddenPulseDots.map((p, i) => (
                   <circle key={`hidden-pulse-${i}`} cx={p.x} cy={p.y} r="6" className="wire-simulation-pulse" pointerEvents="none" />
                 ))}

@@ -6362,6 +6362,95 @@ describe('NodeTopologyEditor — wire crossing under cards', () => {
       vi.useRealTimers();
     }
   });
+
+  it('mirrors the base wire hover on the under-card overlay segment', async () => {
+    // Round 151: the base wire brightens + thickens on hover
+    // (.wire-group:hover .wire-path) but the round-146 overlay path had no
+    // hover treatment — so hovering a crossing wire re-broke the continuity
+    // the overlay exists to provide (exposed parts brighten, the under-card
+    // segment stays dim, the wire visibly splits again).
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        { id: 'ws-1', type: 'workspace', name: 'POS', x: 380, y: 260, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-1', type: 'warehouse', name: 'Stock', x: 680, y: 140 },
+      ],
+      wires: [
+        {
+          id: 'w-cross', from_node_id: 'store-1', from_port: 'right', to_node_id: 'wh-1', to_port: 'left',
+          from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location',
+          direction: 'one-way', label: 'Binds Store',
+        },
+      ],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getWireCount()).toBe(1));
+    const overlayPath = document.querySelector('.node-wires-crossing path') as Element;
+    expect(overlayPath.getAttribute('class')).toBeNull();
+
+    const hitbox = document.querySelector('.wire-hitbox') as Element;
+    fireEvent.mouseEnter(hitbox.parentElement as Element); // the wire group
+
+    expect(overlayPath.getAttribute('class')).toContain('node-wires-crossing-hover');
+  });
+
+  it('mirrors the base wire selection on the under-card overlay segment', async () => {
+    // The same continuity rule as hover: clicking a crossing wire selects
+    // it, and the base path turns info-blue + thickens — the under-card
+    // segment must follow or the selected wire reads as two pieces.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        { id: 'ws-1', type: 'workspace', name: 'POS', x: 380, y: 260, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-1', type: 'warehouse', name: 'Stock', x: 680, y: 140 },
+      ],
+      wires: [
+        {
+          id: 'w-cross', from_node_id: 'store-1', from_port: 'right', to_node_id: 'wh-1', to_port: 'left',
+          from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location',
+          direction: 'one-way', label: 'Binds Store',
+        },
+      ],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getWireCount()).toBe(1));
+    const overlayPath = document.querySelector('.node-wires-crossing path') as Element;
+
+    const hitbox = document.querySelector('.wire-hitbox') as Element;
+    fireEvent.click(hitbox);
+
+    expect(overlayPath.getAttribute('class')).toContain('node-wires-crossing-selected');
+  });
+
+  it('dims the under-card overlay segment with the base wire in hover-focus mode', async () => {
+    // Hover-focus mode (a node hovered) dims non-neighbourhood wires
+    // (.wire-group.wire-dimmed). The crossing store→warehouse wire is not
+    // connected to the middle POS card, so hovering that card dims the
+    // wire — the under-card segment must dim with it or it glows while
+    // the rest of the wire fades.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        { id: 'ws-1', type: 'workspace', name: 'POS', x: 380, y: 260, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-1', type: 'warehouse', name: 'Stock', x: 680, y: 140 },
+      ],
+      wires: [
+        {
+          id: 'w-cross', from_node_id: 'store-1', from_port: 'right', to_node_id: 'wh-1', to_port: 'left',
+          from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location',
+          direction: 'one-way', label: 'Binds Store',
+        },
+      ],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getWireCount()).toBe(1));
+    const overlayPath = document.querySelector('.node-wires-crossing path') as Element;
+
+    // Hover the middle POS card — the crossing wire is not connected to it.
+    fireEvent.mouseEnter(nodeAt(1));
+
+    expect(overlayPath.getAttribute('class')).toContain('node-wires-crossing-dimmed');
+  });
 });
 
 // ── Fresh-node animation pulse ──────────────────────────────────
