@@ -17,9 +17,21 @@ fi
 # owner's own commit; the hook is a check, not a silent re-stage.
 STAGED_RS=$(git diff --cached --name-only -- '*.rs')
 if [ -n "$STAGED_RS" ]; then
-    echo "cargo fmt applied changes to:"
-    echo "$STAGED_RS"
-    git add $STAGED_RS
+    # Re-add only the .rs files that still exist in the worktree.
+    # cargo fmt can only modify existing files, and `git add` on a
+    # staged deletion (or any missing path) exits non-zero, which
+    # `set -e` turns into an aborted commit.
+    EXISTING_RS=""
+    for f in $STAGED_RS; do
+        if [ -f "$f" ]; then
+            EXISTING_RS="$EXISTING_RS $f"
+        fi
+    done
+    if [ -n "$EXISTING_RS" ]; then
+        echo "cargo fmt applied changes to:"
+        echo "$EXISTING_RS"
+        git add $EXISTING_RS
+    fi
 fi
 # ── i18n lint ──────────────────────────────────────────────────────────────
 # Runs the local i18n quality gate (mirrors `.github/workflows/ci.yml#ui
