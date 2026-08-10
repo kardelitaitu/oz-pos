@@ -3400,7 +3400,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** summary unit 5/5 · diff suite 19/19 · TopologyScreen integration 38/38 (payload builder untouched — this is display-only) · editor suite 495/495 (+1) · **full UI suite 279 files / 4,736 tests (+6)** · typecheck ✓ · eslint 0 errors (8 pre-existing warnings) · lint:i18n clean (bundle parity counts the extended key) · **mutation check**: pinning typeChanged to 0 failed 2 pure + 1 integration test → restored, green. Drift guard clean.
 
-**Commits:** `TBD`
+**Commits:** `92ea6d10`
 
 **Deliberately NOT done:** no change to the plan or payload builder — the recreate split is a pure display concern (created/archived/typeChanged always sum to the true vectors). No per-node recreate badge on cards. No warning styling on the chip for recreates (the count carries the signal; a browser pass could add emphasis later).
 
