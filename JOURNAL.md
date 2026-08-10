@@ -3126,7 +3126,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** new test green standalone (0.96s) · topology module 226/226 · full `oz-pos-app` lib 879/879 · `cargo fmt --check` clean · `cargo clippy -p oz-pos-app --lib -- -D warnings` clean. `scripts/test-changed.sh` could not complete: the workspace build hits `Access is denied` removing `target/debug/oz-pos-app.exe` — PID 34324 (the user's running dev client) holds the file. Per the multi-agent rule the process was left running; the conflict is environmental, not a code failure, and is noted here for the next agent (re-run `test-changed.sh` once the client is closed).
 
-**Commits:** TBD
+**Commits:** `02307173`
 
 **Deliberately NOT done:** no `BEGIN EXCLUSIVE` and no SQL compare-and-swap — `IMMEDIATE` serializes writers (the actual contention) while keeping readers on the snapshot, which is the minimal correct fix. The runtime-plan compile and envelope serialization stay inside the transaction (pure CPU on the payload, negligible hold time).
 
