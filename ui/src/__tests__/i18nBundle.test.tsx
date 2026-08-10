@@ -17,6 +17,7 @@ import { renderInAct } from '@/test-utils/renderInAct';
 import { screen } from '@testing-library/react';
 import { Localized, LocalizationProvider, ReactLocalization } from '@fluent/react';
 import { getBundle, getAvailableLocales } from '@/i18n';
+import { scanLocaleFiles } from '@/i18n/barePlaceholderScan';
 import { withFluentLocale } from '@/locales/test-utils';
 import sharedId from '@/locales/shared.id.ftl?raw';
 import sharedEn from '@/locales/shared.ftl?raw';
@@ -484,5 +485,17 @@ describe('i18n topology placeholder resolution (round 154)', () => {
         expect(errors, `${key} (${locale})`).toEqual([]);
       }
     }
+  });
+});
+
+// Round 156: the bare-`{}` placeholder guard. Rounds 150–152 shipped
+// `{ created }` / `{name}` placeholders (treated by Fluent as message
+// references) that rendered literally — invisible to mocked Fluent.
+// Every locale bundle must stay free of bare placeholders whose ident
+// is not a defined message; this test runs inside the `lint:i18n` gate
+// (which executes this file via vitest) so a regression fails closed.
+describe('i18n bare-placeholder scan (round 156)', () => {
+  it('finds no bare `{}` placeholders in any locale bundle', () => {
+    expect(scanLocaleFiles()).toEqual([]);
   });
 });
