@@ -3140,7 +3140,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** new tests 3/3 standalone · topology module 229/229 (+3) · full `oz-pos-app` lib 882/882 (+3) · `cargo fmt --check` clean · `cargo clippy -p oz-pos-app --lib -- -D warnings` clean. `scripts/test-changed.sh` still cannot complete: `oz-pos-app.exe` PID 34324 (the user's running dev client) holds the exe file; the process was left running per the multi-agent rule. Re-run `test-changed.sh` once the client is closed — this is now the SECOND round blocked by the same lock (round 133 noted it first).
 
-**Commits:** TBD
+**Commits:** `6320961a`
 
 **Deliberately NOT done:** no end-to-end test of the live Apply error path (save fails → compensate → restore → clear) — it exercises the same three functions the crash tests pin, and building it needs the full session/token command harness; noted as a follow-up. The round-133 runtime-key TOCTOU sweep was checked: the runtime plan is written only inside the now-serialized save transaction (plus one test-only path in pos.rs), so there is no gap to fix.
 
