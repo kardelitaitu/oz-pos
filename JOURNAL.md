@@ -3196,7 +3196,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** new test green standalone · dev-mock-stores 4/4 · editor suite 475/475 (round-137 recovery test still green) · full UI suite 275 files / 4,676 tests (+1) · typecheck ✓ · eslint 0 errors on changed files.
 
-**Commits:** (ref back-filled after commit)
+**Commits:** `1e6f87b6`
 
 **Deliberately NOT done:** no simulated two-process race in the mock (the editor can only ever hold one revision; a conflict is exercised by editing outside the editor or a stale tab — the gate parity is what matters, not the concurrency mechanics). No UI change: the editor recovery from round 137 consumes this without modification.
 
