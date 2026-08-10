@@ -1,4 +1,15 @@
 
+## 2026-08-10 — TDD cycle: topology editor connection/picker state machine
+
+### Dismissing the relationship picker left the armed connection alive — a later port click could complete a wire from the stale source
+**Problem:** The in-flight wire connection (`connectingFromNodeId`/`connectingFromPort`) and the relationship picker (ADR #34) were separate `useState`s with hand-rolled cleanup that disagreed. Escape and the picker's Cancel button went through `cancelRelationshipPicker` (cleared BOTH), but dismissing the picker via canvas click, node drag, or touch cleared only `setRelationshipPicker(null)` — leaving the armed connection alive, so the ghost preview stayed and a later port click could complete a wire from the stale source. The load chain guarded against exactly this hazard ("a later port click cannot complete a wire from a stale source"), but the dismissal paths did not.
+
+**Solution:** Red→Green. Added a typed reducer (`nodeTopologyEditorConnectionState.ts`) owning the connection and the picker as one gesture. `begin` always closes any open picker; `cancel` atomically clears both; `dismiss-picker` clears both ONLY when a picker is open — a plain armed connection (no picker) survives a canvas click so the user can pan to a distant target (carry behavior, pinned by test). The editor now consumes `useTopologyEditorConnection()`; the four dismissal sites (canvas mousedown, node mousedown/drag start, touch) route through `dismissPicker`, and all load-chain/prune/preset/Escape/delete-confirm clears use `cancelConnection`.
+
+**Validation:** connection reducer/hook 12/12 · NodeTopologyEditor + connection suites 473/473 (with the background-click regression now asserting the ghost is gone) · full UI suite 274 files / 4,648 tests · a11y 8/8 · typecheck · eslint clean.
+
+**Deliberately NOT done:** `hoveredTarget` and `previewCursor` remain separate states (they are render-only previews, not part of the gesture's cancel contract). The live-validation pipeline is the last interaction state still living in the component.
+
 ## 2026-08-10 — TDD cycle: topology editor drag lifecycle state machine
 
 ### A cancelled drag could keep moving on touch — the ref mirror was cleared only at some sites

@@ -807,6 +807,10 @@ describe('NodeTopologyEditor Component', () => {
     fireEvent.mouseUp(canvas, { button: 0 });
     expect(document.querySelector('.topology-relationship-picker')).toBeNull();
     expect(getWireCount()).toBe(0);
+    // The in-flight connection was cancelled with it — dismissing the picker
+    // must clear the armed connection, or a later port click could complete
+    // a wire from the stale source.
+    expect(previewLine()).toBeNull();
   });
 
   it('the Cancel button dismisses the picker and cancels the connection', async () => {

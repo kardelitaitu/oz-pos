@@ -55,6 +55,7 @@ import { useTopologyEditorGraph, type TopologyHistoryEntry } from './nodeTopolog
 import { useTopologyEditorSaveLifecycle } from './nodeTopologyEditorSaveState';
 import { useTopologyEditorSelection } from './nodeTopologyEditorSelectionState';
 import { useTopologyEditorDrag } from './nodeTopologyEditorDragState';
+import { useTopologyEditorConnection } from './nodeTopologyEditorConnectionState';
 import {
   normalizeTopologyGraph,
   normalizeWireDirection,
@@ -662,14 +663,6 @@ const ValidationIssuesLabel = memo(function ValidationIssuesLabel({ count }: { c
 /** An ambiguous wire drop in flight: the source socket and the target
  *  socket admit MULTIPLE relationships (ADR #34), so the editor asks the
  *  user which one the wire means before drawing anything. */
-interface RelationshipPickerState {
-  fromNodeId: string;
-  fromPort: PortName;
-  toNodeId: string;
-  toPort: PortName;
-  options: WireRelationshipOption[];
-}
-
 /** Validate the editor's RAW canvas under the Apply gate. Legacy/demo
  *  canvases (no canonical branch identity) keep their non-blocking path
  *  unless the real topology screen opts into strict validation
@@ -1057,8 +1050,19 @@ export default function NodeTopologyEditor({
    *  the node would keep following the cursor on re-entry (ghost drag). */
   const dragCleanupRef = useRef<(() => void) | null>(null);
 
-  const [connectingFromNodeId, setConnectingFromNodeId] = useState<string | null>(null);
-  const [connectingFromPort, setConnectingFromPort] = useState<PortName | null>(null);
+  /** In-flight wire connection + relationship picker live in one typed
+   *  reducer — dismissing the picker always clears the armed connection
+   *  (a stale source port click must never complete a wire after the
+   *  choice was abandoned). */
+  const {
+    fromNodeId: connectingFromNodeId,
+    fromPort: connectingFromPort,
+    picker: relationshipPicker,
+    beginConnection,
+    openPicker,
+    cancelConnection,
+    dismissPicker,
+  } = useTopologyEditorConnection();
   /** Nearest target port while dragging a connection, for snap-to-port preview. */
   const [hoveredTarget, setHoveredTarget] = useState<{ nodeId: string; port: PortName; variantIndex: number } | null>(null);
 
@@ -1070,10 +1074,6 @@ export default function NodeTopologyEditor({
   /** Batch delete confirmation (2+ nodes). Single nodes keep confirmDelete
    *  so the established single-node dialog text stays untouched. */
   const [confirmDeleteMany, setConfirmDeleteMany] = useState<string[] | null>(null);
-  /** An ambiguous drop awaiting a relationship choice (ADR #34): the
-   *  socket pair admits 2+ semantics, so no wire is drawn until the user
-   *  picks one. The in-flight connection stays visible meanwhile. */
-  const [relationshipPicker, setRelationshipPicker] = useState<RelationshipPickerState | null>(null);
   const [confirmPreset, setConfirmPreset] = useState<'retail' | 'restaurant' | null>(null);
 
   /** Shortcuts help popover (header "?" button) — KDS pattern: Escape or an
@@ -1112,14 +1112,13 @@ export default function NodeTopologyEditor({
 
   /** Cancel the relationship picker AND the in-flight connection it
    *  belongs to (same cleanup as an incompatible drop). Declared early so
-   *  the keyboard effect's deps can reference it (const TDZ). */
+   *  the keyboard effect's deps can reference it (const TDZ). The reducer's
+   *  cancel is atomic — picker and connection always clear together. */
   const cancelRelationshipPicker = useCallback(() => {
-    setRelationshipPicker(null);
-    setConnectingFromNodeId(null);
-    setConnectingFromPort(null);
+    cancelConnection();
     // Return focus to the canvas so keyboard users resume where they left off.
     canvasRef.current?.focus();
-  }, []);
+  }, [cancelConnection, canvasRef]);
 
   /** Move focus into the picker (first option) when it opens, so keyboard
    *  users land on the choice instead of Tab-ing blindly. */
@@ -1489,8 +1488,7 @@ export default function NodeTopologyEditor({
       if (removedLocationIds.size > 0) {
         // A removed branch card may host an in-flight wire preview — cancel
         // it like the rebuild path does, so no stale preview can complete.
-        setConnectingFromNodeId(null);
-        setConnectingFromPort(null);
+        cancelConnection();
         setHoveredTarget(null);
       }
       return;
@@ -1683,8 +1681,7 @@ export default function NodeTopologyEditor({
           setRedo([]);
           // Same rule as preset loads: cancel any in-flight port connection
           // so a later port click cannot complete a wire from a stale source.
-          setConnectingFromNodeId(null);
-          setConnectingFromPort(null);
+          cancelConnection();
           setHoveredTarget(null);
           // A reloaded node with a surviving id must start a fresh inspector
           // edit session, or its next edit would silently skip pushHistory.
@@ -1707,8 +1704,7 @@ export default function NodeTopologyEditor({
           setWires([]);
           setHistory([]);
           setRedo([]);
-          setConnectingFromNodeId(null);
-          setConnectingFromPort(null);
+          cancelConnection();
           setHoveredTarget(null);
           inspectorHistoryPushedForRef.current = null;
           commitSnapshot({ nodes: [], wires: [] });
@@ -1757,8 +1753,7 @@ export default function NodeTopologyEditor({
         setHistory([]);
         setRedo([]);
         // Same rule as preset loads: cancel any in-flight port connection.
-        setConnectingFromNodeId(null);
-        setConnectingFromPort(null);
+        cancelConnection();
         setHoveredTarget(null);
         // A reloaded node with a surviving id must start a fresh inspector
         // edit session, or its next edit would silently skip pushHistory.
@@ -2361,17 +2356,17 @@ export default function NodeTopologyEditor({
     // A picker whose target node vanished (preset load, workspace reload,
     // batch delete) must close — otherwise its keyboard guard would keep
     // swallowing canvas shortcuts even though the popover is unrenderable.
+    // The reducer's cancel also clears the armed connection, so a later
+    // port click cannot complete a wire from the stale source either.
     if (relationshipPicker && !nodeMap.has(relationshipPicker.toNodeId)) {
-      setRelationshipPicker(null);
+      cancelConnection();
     }
-  }, [selectedNodeId, selectedWireId, nodeMap, wires, relationshipPicker, pruneSelection]);
+  }, [selectedNodeId, selectedWireId, nodeMap, wires, relationshipPicker, pruneSelection, cancelConnection]);
 
   const loadPreset = useCallback((preset: 'retail' | 'restaurant') => {
     // A wholesale canvas replacement invalidates any in-flight relationship
     // choice — close the picker (and its connection) before nodes change.
-    setRelationshipPicker(null);
-    setConnectingFromNodeId(null);
-    setConnectingFromPort(null);
+    cancelConnection();
     const data = preset === 'retail' ? PRESET_RETAIL : PRESET_RESTAURANT;
     pushHistory();
     setNodes(data.nodes);
@@ -2380,8 +2375,7 @@ export default function NodeTopologyEditor({
     // later port click starts a fresh connection instead of completing a
     // wire from a stale source node (the preset ids overlap, so the stale
     // source could otherwise survive and mis-wire the new canvas).
-    setConnectingFromNodeId(null);
-    setConnectingFromPort(null);
+    cancelConnection();
     setHoveredTarget(null);
     // Same canvas-replacement rule: the simulation pulse animates the OLD
     // wire geometry, so stop it — a pulse must never animate a "test order"
@@ -2796,8 +2790,7 @@ export default function NodeTopologyEditor({
           marqueeCleanupRef.current?.();
           return;
         }
-        setConnectingFromNodeId(null);
-        setConnectingFromPort(null);
+        cancelConnection();
         clearAll();
         return;
       }
@@ -3020,8 +3013,7 @@ export default function NodeTopologyEditor({
             || (deleted.toNodeId === connectingFromNodeId
               && (deleted.toPort ?? 'left') === connectingFromPort))
         ) {
-          setConnectingFromNodeId(null);
-          setConnectingFromPort(null);
+          cancelConnection();
         }
         pushHistory();
         setWires((prev) => prev.filter((w) => w.id !== selectedWireId));
@@ -3062,7 +3054,9 @@ export default function NodeTopologyEditor({
     gesture: 'mouse' | 'touch',
   ) => {
     userInteractedRef.current = true;
-    setRelationshipPicker(null);
+    // Dismissing an open picker by grabbing a node cancels the whole
+    // gesture; a plain armed connection (no picker) survives the drag.
+    dismissPicker();
     clearWire();
     // Alt+drag = Figma-style DUPLICATE drag: the dragged set is replaced by
     // fresh copies (new ids, starting at the originals' positions) that
@@ -3169,11 +3163,11 @@ export default function NodeTopologyEditor({
         dragStartRef.current.set(id, { x: n.x, y: n.y });
       }
     }
-  }, [duplicateRefusal, addToast, l10n, finalizeNodeDrag, beginDrag, setNodes, setWires]);
+  }, [duplicateRefusal, addToast, l10n, finalizeNodeDrag, beginDrag, dismissPicker, setNodes, setWires]);
 
   const handleNodeMouseDown = useCallback((e: React.MouseEvent, nodeId: string) => {
     e.stopPropagation();
-    setRelationshipPicker(null);
+    dismissPicker();
     if (e.button !== 0) return;
     // Multi-select rules: shift+mousedown ADDS the node to the selection;
     // a plain mousedown on an unselected node collapses to just it; a
@@ -3195,7 +3189,7 @@ export default function NodeTopologyEditor({
       selection = new Set(currentSelection);
     }
     beginNodeDrag(e.clientX, e.clientY, selection, e.altKey, 'mouse');
-  }, [selectOnly, beginNodeDrag]);
+  }, [selectOnly, beginNodeDrag, dismissPicker]);
 
   /** Apply one drag-move to the dragged group (mouse canvas mousemove and
    *  the touch gesture loop share this). Reads the dragging set and nodes
@@ -3527,7 +3521,10 @@ export default function NodeTopologyEditor({
 
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
     userInteractedRef.current = true;
-    setRelationshipPicker(null);
+    // A background click dismisses an open picker (full cancel, like
+    // Escape); a plain armed connection with no picker survives so the
+    // user can pan to a distant target.
+    dismissPicker();
     setContextMenu(null);
     const targetEl = e.target as HTMLElement;
     if (targetEl === e.currentTarget || targetEl.classList.contains('node-canvas-viewport') || targetEl.tagName === 'svg') {
@@ -3740,7 +3737,7 @@ export default function NodeTopologyEditor({
     // spawn a ghost marquee and a touch node-tap would double-arm a drag.
     e.preventDefault();
     userInteractedRef.current = true;
-    setRelationshipPicker(null);
+    dismissPicker();
     setContextMenu(null);
     touchPointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const g = touchGestureRef.current;
@@ -4214,45 +4211,39 @@ export default function NodeTopologyEditor({
 
   const handlePortClick = useCallback((e: React.MouseEvent, nodeId: string, port: PortName, variantIndex = 0) => {
     e.stopPropagation();
-    setRelationshipPicker(null);
 
     if (!connectingFromNodeId) {
       if (portDirection(port) !== 'output') {
         addToast({ message: l10n.getString('topology-port-input-only'), type: 'info' });
         return;
       }
-      setConnectingFromNodeId(nodeId);
-      setConnectingFromPort(port);
+      beginConnection(nodeId, port);
       setPreviewCursor(null);
       return;
     }
 
     if (connectingFromNodeId === nodeId) {
-      setConnectingFromNodeId(null);
-      setConnectingFromPort(null);
+      cancelConnection();
       return;
     }
 
     if (!isPortCompatible(nodeId, port, variantIndex)) {
       addToast({ message: l10n.getString('topology-wire-incompatible'), type: 'warning' });
-      setConnectingFromNodeId(null);
-      setConnectingFromPort(null);
+      cancelConnection();
       return;
     }
 
     const fromNode = nodeMap.get(connectingFromNodeId);
     const toNode = nodeMap.get(nodeId);
     if (!fromNode || !toNode) {
-      setConnectingFromNodeId(null);
-      setConnectingFromPort(null);
+      cancelConnection();
       return;
     }
 
     const options = wireRelationshipOptions(fromNode, connectingFromPort!, toNode, port, variantIndex);
     if (options.length === 0) {
       addToast({ message: l10n.getString('topology-wire-incompatible'), type: 'warning' });
-      setConnectingFromNodeId(null);
-      setConnectingFromPort(null);
+      cancelConnection();
       return;
     }
 
@@ -4261,7 +4252,7 @@ export default function NodeTopologyEditor({
     // wire means. The in-flight connection stays visible (ghost + source
     // highlight) until the choice lands or is cancelled.
     if (options.length > 1) {
-      setRelationshipPicker({
+      openPicker({
         fromNodeId: connectingFromNodeId,
         fromPort: connectingFromPort!,
         toNodeId: nodeId,
@@ -4272,7 +4263,7 @@ export default function NodeTopologyEditor({
     }
 
     commitWire(fromNode, connectingFromPort!, toNode, port, options[0]!);
-  }, [connectingFromNodeId, connectingFromPort, nodeMap, isPortCompatible, commitWire, addToast, l10n, setRelationshipPicker, setConnectingFromNodeId, setConnectingFromPort, setPreviewCursor, portDirection]);
+  }, [connectingFromNodeId, connectingFromPort, nodeMap, isPortCompatible, commitWire, addToast, l10n, beginConnection, cancelConnection, openPicker, setPreviewCursor, portDirection]);
 
   /** Cycle a wire's visual flow: one-way → reverse → two-way → one-way.
    *  Clicking the wire itself is the affordance; the from/to ownership is
