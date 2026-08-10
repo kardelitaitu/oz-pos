@@ -3517,7 +3517,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verify:** engine 33/33 (+5) · editor 498/498 (+1) · screen 41/41 (overlay shape updated) · **full UI 280 files / 4,781 tests (+6)** · typecheck ✓ · eslint 0 errors · drift guard clean.
 
-**Commits:** (added below after commit)
+**Commits:** `b7454b9f` (feat(topology): ghost-wire stubs connect the compared branch's ghosts)
 
 **Deliberately NOT done:** no ghost→shared stubs — a ghost wired to a SHARED workspace would need drift-resolved, live-position far ends (the shared card's position on the current canvas, resolved through the round-155 pairing); that's a real follow-up, sketched below; no wire labels or relationship-type styling on stubs (they are decorative hints, not inspectable wires); no stub clipping when a ghost pair is far apart (the SVG spans the ghost extents, so stubs between far-apart ghosts draw across the canvas — acceptable for a decorative layer).
 
