@@ -3258,7 +3258,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** layout suite 11/11 (+1) · editor suite 479/479 · full UI suite 276 files / 4,686 tests (+1) · typecheck ✓ · eslint 0 errors. No production code changed (`nodeTopologyLayout.ts` mutations reverted — confirmed empty `git diff`).
 
-**Commits:** (ref back-filled after commit)
+**Commits:** `6782261b`
 
 **Deliberately NOT done:** no `resolveDropOverlaps` settle on the layout output — the engine cannot produce overlaps, so settling would add a state write that never fires (dead code with a misleading purpose). No warning badge for pre-existing loaded overlaps (a separate UX slice, still open).
 
