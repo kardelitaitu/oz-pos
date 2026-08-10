@@ -3110,7 +3110,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** editor 470/470 (+1) · **full UI suite 275 files / 4,672 tests** (+1) · a11y 8/8 · typecheck ✓ · eslint ✓ (7 pre-existing warnings, one removed by the refactor).
 
-**Commits:** `<pending>`
+**Commits:** `64410ccf`
 
 **Deliberately NOT done:** the fresh-node id set (`setFreshNodeIds`) stays outside the helper — it is cleared by loadPreset but not the load effect; verified unobservable (canvas rebuilds drop every in-memory spawned id, so a stale ring can never render) so it was left as-is rather than adding a line with no testable effect. The finder modal is single-writer and unreachable mid-reload.
 
