@@ -2888,3 +2888,15 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Also this round:** the pre-commit hook's `git add $CHANGED` (all working-tree-modified .rs files, not just fmt's) swept an agent's in-flight `main.rs`/`sync_api.rs` into the first prune commit twice. Split both times (soft reset + re-commit, agent files returned to unstaged), then fixed the hook: it now re-stages only `git diff --cached --name-only -- '*.rs'` — the commit's own Rust files. Commit `c300bb64`.
 
 **Risks / follow-ups:** (1) the anchor-expiry horizon and the retention horizon are both 90 days — a terminal that stays offline >90 days always re-snapshots; the P-3 spec's snapshot covers products/tax-rates/users but not sales deltas, so the 90-day loss horizon for sale deltas is a business-level decision worth an explicit call-out; (2) a metrics counter for pruned rows per cycle would make retention observable.
+
+### 2026-08-10 — push_handler rejects non-UUID ids (round 121)
+
+**Problem:** round 119 parameterized the prune DELETE, but `push_handler` still persisted any client-supplied id verbatim — hostile strings still entered `offline_queue` and only the DELETE was safe. Real clients always send `Uuid::now_v7()`, so a non-UUID id at push is either hostile or erroneous and has no legitimate use.
+
+**Red:** `push_rejects_invalid_non_uuid_id` — pushes the round-119 injection string `x'); CREATE TABLE hacked(id TEXT);--` alongside a well-formed UUIDv7 in one batch; asserts the hostile item is `Rejected` with reason containing "invalid id", the valid UUID is `Accepted`, the hostile id is never persisted (COUNT=0), and the injected `CREATE TABLE` never executed. Pre-fix: hostile id was `Accepted` and persisted.
+
+**Green:** `push_handler` now runs `uuid::Uuid::parse_str(&item.id)` before the INSERT and rejects non-UUIDs with `invalid id: {id}` (same `rejected` metric label as DB errors). Updated the push tests that used placeholder ids (`a1`/`a2`/`dup`, `a-item-*`, `only-a`/`only-b`, `a-1..3`/`b-1`, `def-item`, `plan-pro-1`/`plan-off-1`) to real `Uuid::now_v7()` ids so they keep testing push mechanics rather than validation.
+
+**Verified:** oz-cloud-server **130/130** (round 119's 129 + this +1, plan-gate tests still green with real UUIDs), `cargo clippy -p oz-cloud-server -- -D warnings` clean, `cargo fmt --check` clean. Committed `539df8b3` — note: a concurrently-committing agent's staged JOURNAL.md hunk (their round-119 prune entry, `<pending>` → `855e7bc0`) rode along in the same commit; working tree is clean.
+
+**Risks / follow-ups:** (1) still no server-side transition of pushed `pending` items to `synced`/`failed` — the other agent's prune commit `855e7bc0` addressed retention by pruning regardless of status, but the P-1 promise "items > 90 days deleted" now holds while terminal-driven transitions remain client-side; (2) the id check accepts any UUID version (v1-v8), not just v7 — fine for now, strictness could be added later.
