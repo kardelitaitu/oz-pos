@@ -963,6 +963,10 @@ export default function NodeTopologyEditor({
    *  owns its own listener and rAF. */
   const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const isPanningRef = useRef(false);
+  /** Right-button drags emit a native contextmenu after mouseup. Track
+   *  whether the pan actually moved so that gesture is suppressed while a
+   *  stationary right-click still opens the canvas menu. */
+  const panMovedRef = useRef(false);
   const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const panCleanupRef = useRef<(() => void) | null>(null);
   /** Space held → the next left-drag pans (Figma-style) instead of
@@ -3468,12 +3472,14 @@ export default function NodeTopologyEditor({
    *  tracking even when the pointer leaves the canvas. */
   const startPan = (e: React.MouseEvent, clearSelectionFirst: boolean) => {
     if (clearSelectionFirst) clearSelection();
+    panMovedRef.current = false;
     isPanningRef.current = true;
     panStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
     document.body.style.cursor = 'grabbing';
 
     const handleMouseMove = (ev: MouseEvent) => {
       if (!isPanningRef.current) return;
+      panMovedRef.current = true;
       setPan({
         x: ev.clientX - panStartRef.current.x,
         y: ev.clientY - panStartRef.current.y,

@@ -1147,6 +1147,78 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn push_rejects_invalid_non_uuid_id() {
+        let state = SyncState {
+            db: Arc::new(Mutex::new(fresh_db())),
+            snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
+            rate_limiter: RateLimiterState::new(),
+        };
+        let app = test_router_with_state(state.clone());
+
+        // A hostile id (the round-119 injection string) must be rejected at
+        // push, never persisted — defense-in-depth so only UUID ids ever
+        // reach the prune DELETE path. A well-formed UUIDv7 in the same
+        // batch must still be accepted (valid clients are not blocked).
+        let hostile = "x'); CREATE TABLE hacked(id TEXT);--";
+        let valid = uuid::Uuid::now_v7().to_string();
+        let body = format!(
+            r#"[
+                {{"id":"{hostile}","action":"create","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}},
+                {{"id":"{valid}","action":"create","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}}
+            ]"#
+        );
+        let req = authed_post("/api/sync/push", &body, None);
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let body_bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let push_resp: PushResponse = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(push_resp.results.len(), 2);
+        match &push_resp.results[0] {
+            PushOutcome::Rejected { reason } => {
+                assert!(
+                    reason.contains("invalid id"),
+                    "expected invalid-id rejection, got: {reason}"
+                );
+            }
+            other => panic!("expected Rejected for hostile id, got: {other:?}"),
+        }
+        assert!(
+            matches!(push_resp.results[1], PushOutcome::Accepted),
+            "valid UUID must be accepted: {:?}",
+            push_resp.results[1]
+        );
+
+        // The hostile id must never be persisted; the valid one must be.
+        let conn = state.db.lock().await;
+        let hostile_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM offline_queue WHERE id = ?1",
+                [hostile],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(hostile_count, 0, "hostile id was persisted!");
+        let valid_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM offline_queue WHERE id = ?1",
+                [&valid],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(valid_count, 1, "valid UUID should be persisted");
+        // The injected CREATE TABLE must never have executed.
+        let hacked: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE name = 'hacked'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(hacked, 0, "injected CREATE TABLE executed!");
+    }
+
+    #[tokio::test]
     async fn pull_returns_items_for_tenant() {
         let state = SyncState {
             db: Arc::new(Mutex::new(fresh_db())),

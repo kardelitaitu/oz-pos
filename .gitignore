@@ -1,6 +1,9 @@
 # Build artifacts
 /target/
 /crates/*/target/
+# Temporary isolated Cargo targets used by topology-phase verification.
+/target-topology-phase10/
+/target-plan-e3/
 /apps/*/gen/
 /apps/license-server/license-server.exe
 /ui/playwright-report

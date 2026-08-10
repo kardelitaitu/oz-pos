@@ -456,7 +456,7 @@ describe('TopologyScreen', () => {
     const nodes = [
       storeNode(),
       wsNode({ id: 'ws-existing', name: 'Front Register', metadata: { typeKey: 'store-pos', persisted: true } }),
-      wsNode({ id: 'ws-new', name: 'New Register', metadata: { typeKey: 'kds', persisted: false } }),
+      wsNode({ id: 'ws-new', name: 'New Register', metadata: { typeKey: 'store-pos', persisted: false } }),
     ];
     await triggerSave(nodes, [locationWire('store-1', 'ws-existing', 'location-existing'), locationWire('store-1', 'ws-new', 'location-new')]);
 
@@ -465,7 +465,7 @@ describe('TopologyScreen', () => {
     expect(a.sessionToken).toBe('test-session-token');
     expect(a.creations).toHaveLength(1);
     expect(a.creations[0]!.id).toBe('ws-new');
-    expect(a.creations[0]!.type_key).toBe('kds');
+    expect(a.creations[0]!.type_key).toBe('store-pos');
     expect(a.creations[0]!.name).toBe('New Register');
     expect(a.updates).toHaveLength(0);
     expect(a.archives).toHaveLength(0);
@@ -519,14 +519,14 @@ describe('TopologyScreen', () => {
 
     await triggerSave([
       storeNode(),
-      wsNode({ id: 'ws-existing', name: 'Front Register', metadata: { typeKey: 'kds', persisted: true } }),
+      wsNode({ id: 'ws-existing', name: 'Front Register', metadata: { typeKey: 'restaurant-pos', persisted: true } }),
     ], [locationWire('store-1', 'ws-existing')]);
 
     const a = appliedArgs();
     expect(a.archives).toHaveLength(1);
     expect(a.archives[0]).toBe('ws-existing');
     expect(a.creations).toHaveLength(1);
-    expect(a.creations[0]!.type_key).toBe('kds');
+    expect(a.creations[0]!.type_key).toBe('restaurant-pos');
     expect(a.creations[0]!.name).toBe('Front Register');
     expect(a.creations[0]!.id).not.toBe('ws-existing');
     expect(a.creations[0]!.id).toMatch(/^ws-[0-9a-f-]+$/);
@@ -553,7 +553,7 @@ describe('TopologyScreen', () => {
     await renderReady();
 
     const store = storeNode({ id: 'store-1', name: 'Main Street' });
-    const ws = wsNode({ id: 'ws-existing', name: 'Front Register', metadata: { typeKey: 'kds', persisted: true } });
+    const ws = wsNode({ id: 'ws-existing', name: 'Front Register', metadata: { typeKey: 'restaurant-pos', persisted: true } });
     const wires = [locationWire('store-1', 'ws-existing', 'w-1')];
 
     await capturedEditorProps.onSave!([store, ws], wires);
@@ -610,7 +610,7 @@ describe('TopologyScreen', () => {
     await capturedEditorProps.onSave!(
       [
         storeNode(),
-        wsNode({ id: 'ws-a', name: 'A', metadata: { typeKey: 'kds', persisted: true } }),
+        wsNode({ id: 'ws-a', name: 'A', metadata: { typeKey: 'restaurant-pos', persisted: true } }),
         wsNode({ id: 'ws-b', name: 'B', metadata: { typeKey: 'restaurant-pos', persisted: true } }),
       ],
       [locationWire('store-1', 'ws-a', 'location-a'), locationWire('store-1', 'ws-b', 'location-b')],
@@ -647,6 +647,48 @@ describe('TopologyScreen', () => {
     const a = appliedArgs();
     expect(a.creations).toHaveLength(1);
     expect(a.creations[0]!.store_id).toBe('store-b');
+  });
+
+  it('accepts and persists a legacy Restaurant POS → KDS operation wire', async () => {
+    await renderReady();
+
+    const resto = wsNode({
+      id: 'resto-pos',
+      name: 'Restaurant POS',
+      metadata: { typeKey: 'restaurant-pos', purposeKey: 'dining-room', persisted: false },
+    });
+    const kds = wsNode({
+      id: 'kds',
+      name: 'Kitchen Display',
+      metadata: { typeKey: 'kds', purposeKey: 'kitchen-hot-line', persisted: false },
+    });
+    await triggerSave(
+      [storeNode(), resto, kds],
+      [
+        locationWire('store-1', 'resto-pos', 'location-resto'),
+        {
+          id: 'operation-resto-kds',
+          fromNodeId: 'resto-pos',
+          toNodeId: 'kds',
+          fromPort: 'right',
+          toPort: 'left',
+          direction: 'one-way',
+        },
+      ],
+    );
+
+    expect(mockApplyTopologyDiff).toHaveBeenCalledTimes(1);
+    const a = appliedArgs();
+    expect(a.creations.map((creation) => creation.type_key).sort()).toEqual(['kds', 'restaurant-pos']);
+    expect(a.creations.every((creation) => creation.store_id === 'store-1')).toBe(true);
+    expect(a.diagramWires).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'operation-resto-kds',
+        from_port_id: 'operation-out',
+        to_port_id: 'operation-in',
+        relationship_type: 'generic',
+      }),
+    ]));
   });
 
   it('rejects a workspace without semantic Location In ownership', async () => {
@@ -948,7 +990,7 @@ describe('TopologyScreen', () => {
 
     await triggerSave([
       storeNode(),
-      wsNode({ id: 'ws-existing', name: 'Front Register', metadata: { typeKey: 'kds', persisted: true } }),
+      wsNode({ id: 'ws-existing', name: 'Front Register', metadata: { typeKey: 'restaurant-pos', persisted: true } }),
     ], [locationWire('store-1', 'ws-existing')]);
 
     const a = appliedArgs();

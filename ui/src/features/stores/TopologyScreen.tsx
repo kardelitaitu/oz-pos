@@ -360,9 +360,10 @@ export default function TopologyScreen() {
       const canvasIds = new Set(wsNodes.map((n) => n.id));
 
       // ── Semantic store_id resolution ────────────────────────────────
-      // The validator has already established exactly one Branch Location
-      // parent per workspace. Resolve from the stable node reference or the
-      // canonical store_profile_id; never use names, primary, or default.
+      // The validator has already established one Branch Location parent
+      // for ordinary workspaces, and a Restaurant POS operation source for
+      // KDS. Resolve from the stable node reference or canonical
+      // store_profile_id; never use names, primary, or default.
       const semanticNodes = new Map(semanticGraph.nodes.map((node) => [node.id, node]));
       const resolveStoreId = (node: TopologyNodeData): string => {
         const semanticWire = semanticGraph.wires.find(
@@ -375,6 +376,20 @@ export default function TopologyScreen() {
           ?? node.storeProfileId
           ?? (node.metadata?.['storeProfileId'] as string | undefined);
         if (storeId) return storeId;
+
+        // KDS nodes are operational children of a POS node rather than
+        // direct Branch Location children. Follow the Operation feed back
+        // to its source so the KDS inherits the same store scope without
+        // inventing a second Location wire on its single input socket.
+        const operationSource = semanticGraph.wires
+          .find((wire) => wire.toNodeId === node.id
+            && wire.toPortId === 'operation-in'
+            && wire.relationshipType === 'generic');
+        if (operationSource && operationSource.fromNodeId !== node.id) {
+          const sourceNode = nodes.find((candidate) => candidate.id === operationSource.fromNodeId);
+          if (sourceNode) return resolveStoreId(sourceNode);
+        }
+
         // Compatibility boundary for legacy CRUD-only calls. Resolve a
         // legacy Store node by its stable node ID when it is a real store
         // profile ID; never match by display name.
@@ -516,9 +531,21 @@ export default function TopologyScreen() {
         if (w.bends !== undefined) payload.bends = w.bends;
         if (w.fromPort !== undefined) payload.from_port = w.fromPort;
         if (w.toPort !== undefined) payload.to_port = w.toPort;
-        if (w.fromPortId !== undefined) payload.from_port_id = w.fromPortId;
-        if (w.toPortId !== undefined) payload.to_port_id = w.toPortId;
-        if (w.relationshipType !== undefined) payload.relationship_type = w.relationshipType;
+
+        // Persist the normalized semantic identity, not only the visual
+        // geometry. This upgrades legacy Restaurant POS → KDS wires on the
+        // next Apply so the backend and the reloaded editor both retain the
+        // required Operation feed instead of showing a stale Location error.
+        const semanticWire = semanticGraph.wires.find((candidate) => candidate.id === w.id);
+        if (semanticWire) {
+          payload.from_port_id = semanticWire.fromPortId;
+          payload.to_port_id = semanticWire.toPortId;
+          payload.relationship_type = semanticWire.relationshipType;
+        } else {
+          if (w.fromPortId !== undefined) payload.from_port_id = w.fromPortId;
+          if (w.toPortId !== undefined) payload.to_port_id = w.toPortId;
+          if (w.relationshipType !== undefined) payload.relationship_type = w.relationshipType;
+        }
         return payload;
       });
 

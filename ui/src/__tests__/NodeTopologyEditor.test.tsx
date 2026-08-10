@@ -410,24 +410,24 @@ describe('NodeTopologyEditor Component', () => {
     expect(workspace.querySelector('.node-port-label-right')).not.toBeNull();
   });
 
-  it('keeps telemetry badges in the header so they never collide with connector labels', () => {
+  it('keeps only the icon and node name in the title bar', () => {
     renderEditor();
 
-    // The status badge (e.g. "Receipt ✓" / "KDS Ready" / "Active") is a
-    // header chip. If it ever returns to the body it sits immediately above
-    // the connector rail and visually collides with the left/right port
-    // labels — this test pins the ownership contract.
     for (let i = 0; i < 3; i += 1) {
       const card = nodeAt(i);
-      const header = card.querySelector('.node-header');
+      const header = card.querySelector('.node-titlebar');
       const body = card.querySelector('.node-body');
-      const badge = card.querySelector('.node-telemetry-badge');
-      expect(header, `node ${i} header exists`).not.toBeNull();
+      expect(header, `node ${i} title bar exists`).not.toBeNull();
       expect(body, `node ${i} body exists`).not.toBeNull();
-      if (badge) {
-        expect(header?.contains(badge), `node ${i} badge lives in the header`).toBe(true);
-        expect(body?.contains(badge), `node ${i} badge is NOT in the body`).toBe(false);
-      }
+      expect(header?.querySelector('.node-type-icon')).not.toBeNull();
+      expect(header?.querySelector('.node-title')).not.toBeNull();
+      expect(header?.querySelector('.node-type-accent')).toBeNull();
+      expect(header?.querySelector('.node-grip')).toBeNull();
+      expect(header?.querySelector('.node-card-rename-btn')).toBeNull();
+      expect(header?.querySelector('.node-telemetry-badge')).toBeNull();
+      expect(body?.querySelector('.node-grip')).not.toBeNull();
+      const badge = card.querySelector('.node-telemetry-badge');
+      if (badge) expect(body?.contains(badge)).toBe(true);
     }
   });
 
@@ -693,6 +693,48 @@ describe('NodeTopologyEditor Component', () => {
     expect(getWireCount()).toBe(1);
     const wire = document.querySelector('.wire-group');
     expect(wire?.querySelector('.wire-hitbox title')?.textContent).toContain('Ticket Print');
+  });
+
+  it('connects Restaurant POS output to the KDS Operation input', async () => {
+    // Restaurant POS emits the operational feed consumed by a KDS. This
+    // regression test exercises the actual socket click path, not only the
+    // semantic pairing helper, so the editor cannot silently gate the valid
+    // Resto → KDS connection closed.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        { id: 'ws-resto', type: 'workspace', name: 'Restaurant POS', x: 380, y: 140, metadata: { typeKey: 'restaurant-pos' } },
+        { id: 'ws-kds', type: 'workspace', name: 'Kitchen Display', x: 680, y: 140, metadata: { typeKey: 'kds' } },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+
+    fireEvent.click(portOf(nodeAt(1), 'right'));
+    fireEvent.click(portOf(nodeAt(2), 'left'));
+
+    expect(getWireCount()).toBe(1);
+    expect(document.querySelector('.topology-relationship-picker')).toBeNull();
+  });
+
+  it('does not flag a KDS connected to Restaurant POS as missing Location', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', store_profile_id: 'store-1', x: 80, y: 140 },
+        { id: 'ws-resto', type: 'workspace', name: 'Restaurant POS', x: 380, y: 140, metadata: { typeKey: 'restaurant-pos' } },
+        { id: 'ws-kds', type: 'workspace', name: 'Kitchen Display', x: 680, y: 140, metadata: { typeKey: 'kds' } },
+      ],
+      wires: [
+        { id: 'w-location', from_node_id: 'store-1', to_node_id: 'ws-resto', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+        { id: 'w-operation', from_node_id: 'ws-resto', to_node_id: 'ws-kds', from_port_id: 'operation-out', to_port_id: 'operation-in', relationship_type: 'generic', direction: 'one-way' },
+      ],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+
+    expect(within(nodeAt(2)).queryByText('Connect this workspace to a Branch Location using Location In.')).toBeNull();
+    expect(within(nodeAt(2)).queryByText('Connect this KDS to a Restaurant POS using Operation In.')).toBeNull();
   });
 
   it('rejects a second KDS→printer wire against the preset-loaded one as a duplicate', async () => {
@@ -4642,6 +4684,10 @@ describe('NodeTopologyEditor — zoom controls behavior', () => {
 // ── Canvas pan ──────────────────────────────────────────────────
 
 describe('NodeTopologyEditor — canvas pan', () => {
+  beforeEach(() => {
+    mockLoadTopology.mockResolvedValue(null);
+  });
+
   it('pans the viewport when middle-button dragging on empty canvas background', () => {
     renderEditor();
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
@@ -4656,6 +4702,20 @@ describe('NodeTopologyEditor — canvas pan', () => {
     fireEvent.mouseUp(document, { button: 1 });
 
     expect(viewport.style.transform).toContain('translate(50px, 30px)');
+  });
+
+  it('does not open the context menu after a right-button pan drag', () => {
+    renderEditor();
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+
+    fireEvent.mouseDown(canvas, { button: 2, clientX: 100, clientY: 100 });
+    fireEvent.mouseMove(document, { clientX: 150, clientY: 130 });
+    fireEvent.mouseUp(document, { button: 2 });
+    // Browsers dispatch contextmenu after the right-button mouseup. A drag
+    // must suppress that event; a stationary right-click remains a menu.
+    fireEvent.contextMenu(canvas, { clientX: 150, clientY: 130 });
+
+    expect(document.querySelector('.topology-context-menu')).toBeNull();
   });
 
   it('dragging a node moves the node and leaves the viewport translation untouched', () => {
@@ -6339,6 +6399,16 @@ describe('NodeTopologyEditor — shortcuts help popover', () => {
 // ── Hover focus mode ─────────────────────────────────────────────
 
 describe('NodeTopologyEditor — hover focus mode', () => {
+  it('preserves the selected state while hovering a card', () => {
+    renderEditor();
+    const store = document.querySelector('.topology-node') as HTMLElement;
+
+    fireEvent.mouseDown(store, { button: 0 });
+    expect(store.classList.contains('node-selected')).toBe(true);
+    fireEvent.mouseEnter(store);
+    expect(store.classList.contains('node-selected')).toBe(true);
+  });
+
   it('dims non-connected nodes while hovering a card and restores on leave', () => {
     renderEditor();
     const nodes = [...document.querySelectorAll('.topology-node')] as HTMLElement[];
@@ -6722,6 +6792,7 @@ describe('NodeTopologyEditor — clipboard & bulk duplication', () => {
       await waitFor(() => expect(warehouseCount()).toBe(2));
     });
   });
+
 });
 
 // ── Per-branch viewport memory ──────────────────────────────────

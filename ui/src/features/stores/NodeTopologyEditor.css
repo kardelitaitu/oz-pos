@@ -527,19 +527,7 @@
   box-sizing: border-box;
   overflow: visible;
   cursor: move;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .topology-node:hover {
-    transform: none;
-  }
-}
-
-.topology-node:hover {
-  border-color: var(--color-accent);
-  box-shadow: var(--shadow-md), 0 4px 14px rgba(0, 0, 0, 0.10);
-  transform: translateY(-1px);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .topology-node:focus-visible {
@@ -620,7 +608,8 @@
   background-color: color-mix(in srgb, var(--color-warning) 9%, var(--color-bg-subtle));
 }
 
-/* Drag grip — 6-dot pattern, visible on hover */
+/* Drag grip — always visible in the node body now that the title bar is
+   reserved for the icon and node name. */
 .node-grip {
   display: inline-flex;
   align-items: center;
@@ -629,15 +618,9 @@
   height: 14px;
   flex-shrink: 0;
   color: var(--color-fg-tertiary);
-  opacity: 0;
-  transition: opacity 0.15s ease;
+  opacity: 0.6;
   cursor: move;
   margin-left: var(--space-1);
-}
-
-.topology-node:hover .node-grip,
-.topology-node:focus-within .node-grip {
-  opacity: 0.6;
 }
 
 .node-grip:hover {
@@ -1243,7 +1226,6 @@
   transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
-.topology-node:hover .node-port-sockets-group,
 .node-connecting-source .node-port-sockets-group,
 .node-port-sockets-group:focus-within {
   z-index: 2;
@@ -1925,7 +1907,7 @@
    selection ring and connection pulses; pointer events are untouched so
    a dimmed card remains draggable. */
 .topology-node {
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, opacity 0.15s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.15s ease;
 }
 
 .topology-node.node-dimmed {
