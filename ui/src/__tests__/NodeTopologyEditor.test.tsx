@@ -46,6 +46,16 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-new-hardware': 'New Hardware',
   'topology-new-hardware-subtitle': 'Peripheral',
   'topology-new-ready': 'Ready',
+  'topology-workspace-types-title': 'Workspace Types',
+  'topology-other-nodes-title': 'Other Nodes',
+  'topology-tool-restaurant-pos': '+ Restaurant POS',
+  'topology-tool-restaurant-pos-desc': 'Restaurant checkout workspace',
+  'topology-tool-retail-pos': '+ Retail POS',
+  'topology-tool-retail-pos-desc': 'Retail checkout workspace',
+  'topology-tool-kds': '+ KDS',
+  'topology-tool-kds-desc': 'Kitchen display workspace',
+  'topology-tool-warehouse-workspace': '+ Warehouse',
+  'topology-tool-warehouse-workspace-desc': 'Inventory storage workspace',
   'topology-toast-multi-warehouse': 'Multiple Stock Rooms require a Pro Tier license.',
   'topology-warehouse-excess-badge': '{count} Stock Rooms — 1 allowed',
   'topology-branch-excess-badge': '{count} Branch Locations — 1 allowed',
@@ -384,10 +394,25 @@ describe('NodeTopologyEditor Component', () => {
     renderEditor();
 
     expect(screen.getByText('+ Store Node')).toBeInTheDocument();
-    expect(screen.getByText('+ Workspace Node')).toBeInTheDocument();
-    expect(screen.getByText('+ Stock Room')).toBeInTheDocument();
+    expect(screen.getByText('+ Retail POS')).toBeInTheDocument();
+    expect(screen.getByText('+ Warehouse')).toBeInTheDocument();
     expect(screen.getByText('+ Hardware Node')).toBeInTheDocument();
     expect(screen.getByText('Test Order Simulation')).toBeInTheDocument();
+  });
+
+  it('adds each of the four supported workspace types from the palette', () => {
+    renderEditor({ currentTier: 'pro' });
+
+    fireEvent.click(screen.getByText('+ Restaurant POS'));
+    fireEvent.click(screen.getByText('+ Retail POS'));
+    fireEvent.click(screen.getByText('+ KDS'));
+    fireEvent.click(screen.getByText('+ Warehouse'));
+
+    expect(document.querySelectorAll('.node-type-workspace')).toHaveLength(4);
+    expect(document.querySelectorAll('.node-type-warehouse')).toHaveLength(2);
+    expect(screen.getByLabelText('Restaurant POS')).toBeInTheDocument();
+    expect(screen.getByLabelText('Retail POS')).toBeInTheDocument();
+    expect(screen.getByLabelText('Kitchen Display (KDS)')).toBeInTheDocument();
   });
 
   it('renders the UX-first titlebar, left/right labeled ports, textbox, and toggle', () => {
@@ -868,7 +893,7 @@ describe('NodeTopologyEditor Component', () => {
     renderEditor();
     // Add a second workspace via the tool rack so a workspace output can
     // target a workspace input.
-    fireEvent.click(screen.getByText('+ Workspace Node'));
+    fireEvent.click(screen.getByText('+ Retail POS'));
     const newWs = nodeAt(3);
     fireEvent.click(portOf(nodeAt(1), 'right'));
     fireEvent.click(portOf(newWs, 'left'));
@@ -1492,7 +1517,7 @@ describe('NodeTopologyEditor Component', () => {
       renderEditor({ allowLegacyApply: false });
 
       expect(screen.queryByText('+ Store Node')).toBeNull();
-      expect(screen.getByText('+ Workspace Node')).toBeInTheDocument();
+      expect(screen.getByText('+ Retail POS')).toBeInTheDocument();
     });
 
     it('keeps the Store palette slot in legacy mode', () => {
@@ -1521,8 +1546,8 @@ describe('NodeTopologyEditor Component', () => {
   it('prevents adding second warehouse on standard tier', () => {
     renderEditor();
 
-    fireEvent.click(screen.getByText('+ Stock Room'));
-    fireEvent.click(screen.getByText('+ Stock Room'));
+    fireEvent.click(screen.getByText('+ Warehouse'));
+    fireEvent.click(screen.getByText('+ Warehouse'));
 
     const warningToasts = screen.queryAllByText(
       'Multiple Stock Rooms require a Pro Tier license.',
@@ -3332,7 +3357,7 @@ describe('NodeTopologyEditor — wire creation', () => {
     renderEditor();
     // A fresh workspace gives the canvas a non-duplicate authorable pair
     // (store Location out → new workspace Location in) under typed gating.
-    fireEvent.click(screen.getByText('+ Workspace Node'));
+    fireEvent.click(screen.getByText('+ Retail POS'));
     const baseline = getWireCount();
 
     fireEvent.click(portOf(nodeAt(0), 'right'));
@@ -3343,7 +3368,7 @@ describe('NodeTopologyEditor — wire creation', () => {
 
   it('rejects a duplicate connection with a toast and no new wire', () => {
     renderEditor();
-    fireEvent.click(screen.getByText('+ Workspace Node'));
+    fireEvent.click(screen.getByText('+ Retail POS'));
     const baseline = getWireCount();
 
     fireEvent.click(portOf(nodeAt(0), 'right'));
@@ -3370,7 +3395,7 @@ describe('NodeTopologyEditor — wire creation', () => {
 
   it('undoes a created wire in a single undo step', () => {
     renderEditor();
-    fireEvent.click(screen.getByText('+ Workspace Node'));
+    fireEvent.click(screen.getByText('+ Retail POS'));
     const baseline = getWireCount();
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
 
@@ -3387,7 +3412,7 @@ describe('NodeTopologyEditor — wire creation', () => {
     const baseline = getWireCount();
 
     // Add a second workspace, then connect it to the existing warehouse.
-    fireEvent.click(screen.getByText('+ Workspace Node'));
+    fireEvent.click(screen.getByText('+ Retail POS'));
     fireEvent.click(portOf(nodeAt(3), 'right'));
     fireEvent.click(portOf(nodeAt(2), 'left'));
 
@@ -3756,7 +3781,7 @@ describe('NodeTopologyEditor — wire deletion keeps an in-flight connection', (
 
     // Start a connection from the store output — a fresh workspace gives
     // the canvas a non-duplicate authorable target under typed gating.
-    fireEvent.click(screen.getByText('+ Workspace Node'));
+    fireEvent.click(screen.getByText('+ Retail POS'));
     fireEvent.click(portOf(nodeAt(0), 'right'));
     expect(nodeAt(0).className).toContain('node-connecting-source');
     expect(previewLine()).not.toBeNull();
@@ -3874,7 +3899,7 @@ describe('NodeTopologyEditor — Escape connection-cancel flow', () => {
 
     // Select a node so the inspector (with its text input) is open.
     selectFirstNode();
-    fireEvent.click(screen.getByText('+ Workspace Node'));
+    fireEvent.click(screen.getByText('+ Retail POS'));
     fireEvent.click(portOf(nodeAt(0), 'right'));
     expect(previewLine()).not.toBeNull();
 
@@ -3901,7 +3926,7 @@ describe('NodeTopologyEditor — Pro-tier warehouse fallback label', () => {
 
     // Add a second warehouse, then connect the workspace to it. The retail
     // preset already has one warehouse wire, so this is fallback priority 2.
-    fireEvent.click(screen.getByText('+ Stock Room'));
+    fireEvent.click(screen.getByText('+ Warehouse'));
     fireEvent.click(portOf(nodeAt(1), 'right'));
     fireEvent.click(portOf(nodeAt(3), 'left'));
     // Both stock-routing and transfer are admissible — choose the stock one.
@@ -3974,7 +3999,7 @@ describe('NodeTopologyEditor — warehouse tool-card tier lock', () => {
     expect(locked!.textContent).toContain('Pro');
 
     const before = getNodeCount();
-    fireEvent.click(screen.getByText('+ Stock Room'));
+    fireEvent.click(screen.getByText('+ Warehouse'));
     // handleAddNode guards the tier: toast, no new node.
     expect(getNodeCount()).toBe(before);
     expect(
@@ -3988,7 +4013,7 @@ describe('NodeTopologyEditor — warehouse tool-card tier lock', () => {
     expect(document.querySelector('.tool-card.locked')).toBeNull();
 
     const before = getNodeCount();
-    fireEvent.click(screen.getByText('+ Stock Room'));
+    fireEvent.click(screen.getByText('+ Warehouse'));
     expect(getNodeCount()).toBe(before + 1);
   });
 });
@@ -5476,7 +5501,7 @@ describe('NodeTopologyEditor — simulation pulse vs canvas mutations', () => {
 
     // Create a third wire (store → new workspace), then undo it
     // mid-simulation.
-    fireEvent.click(screen.getByText('+ Workspace Node'));
+    fireEvent.click(screen.getByText('+ Retail POS'));
     fireEvent.click(portOf(nodeAt(0), 'right'));
     fireEvent.click(portOf(nodeAt(3), 'left'));
     expect(getWireCount()).toBe(3);
@@ -6016,7 +6041,7 @@ describe('NodeTopologyEditor — direction cycle undo/redo', () => {
 describe('NodeTopologyEditor — connected wire label', () => {
   it('labels a regular store→workspace wire as connected', () => {
     renderEditor();
-    fireEvent.click(screen.getByText('+ Workspace Node'));
+    fireEvent.click(screen.getByText('+ Retail POS'));
     const baseline = getWireCount();
 
     fireEvent.click(portOf(nodeAt(0), 'right'));
@@ -6135,7 +6160,7 @@ describe('NodeTopologyEditor — wire click keeps an in-flight connection', () =
 
     // Start a connection from the store's output — ghost preview + source
     // highlight. A fresh workspace gives a non-duplicate authorable target.
-    fireEvent.click(screen.getByText('+ Workspace Node'));
+    fireEvent.click(screen.getByText('+ Retail POS'));
     fireEvent.click(portOf(nodeAt(0), 'right'));
     expect(previewLine()).not.toBeNull();
     expect(nodeAt(0).className).toContain('node-connecting-source');
@@ -6167,7 +6192,7 @@ describe('NodeTopologyEditor — wire click keeps an in-flight connection', () =
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
     const baseline = getWireCount();
 
-    fireEvent.click(screen.getByText('+ Workspace Node'));
+    fireEvent.click(screen.getByText('+ Retail POS'));
     fireEvent.click(portOf(nodeAt(0), 'right'));
     expect(previewLine()).not.toBeNull();
 
@@ -6704,7 +6729,7 @@ describe('NodeTopologyEditor — clipboard & bulk duplication', () => {
     renderEditor();
     // Retail preset already wires store→ws and ws→wh (2 wires); add a fresh
     // workspace and wire it store→new-ws so the pair is authorable.
-    fireEvent.click(screen.getByText('+ Workspace Node'));
+    fireEvent.click(screen.getByText('+ Retail POS'));
     fireEvent.click(portOf(nodeAt(0), 'right'));
     fireEvent.click(portOf(nodeAt(3), 'left'));
     expect(getWireCount()).toBe(3);
@@ -6722,7 +6747,7 @@ describe('NodeTopologyEditor — clipboard & bulk duplication', () => {
 
   it('does not duplicate a wire when only one endpoint is selected', async () => {
     renderEditor();
-    fireEvent.click(screen.getByText('+ Workspace Node'));
+    fireEvent.click(screen.getByText('+ Retail POS'));
     fireEvent.click(portOf(nodeAt(0), 'right'));
     fireEvent.click(portOf(nodeAt(3), 'left'));
     expect(getWireCount()).toBe(3);
@@ -7388,7 +7413,7 @@ describe('NodeTopologyEditor — node context menu & double-click rename', () =>
 
   it('the node menu deletes an unwired node immediately', () => {
     renderEditor();
-    fireEvent.click(screen.getByText('+ Workspace Node'));
+    fireEvent.click(screen.getByText('+ Retail POS'));
     expect(getNodeCount()).toBe(4);
 
     rightClickNode(3); // the fresh unwired workspace

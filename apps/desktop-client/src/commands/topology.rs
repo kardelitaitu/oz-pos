@@ -8,6 +8,7 @@
 use rusqlite::Connection;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use tauri::State;
 
 use oz_core::db::Store;
@@ -266,6 +267,7 @@ fn default_direction() -> WireDirection {
 const TOPOLOGY_SETTING_KEY: &str = "oz-pos/topology";
 const TOPOLOGY_RUNTIME_SETTING_KEY: &str = "oz-pos/topology-runtime";
 const TOPOLOGY_APPLY_RECOVERY_KEY: &str = "oz-pos/topology/apply-recovery";
+const TOPOLOGY_APPLY_REQUEST_PREFIX: &str = "oz-pos/topology/apply-request/";
 const TOPOLOGY_SCHEMA_VERSION: u64 = 1;
 
 /// Resolve the branch-scoped runtime plan key paired with a topology key.
@@ -350,6 +352,96 @@ fn topology_setting_key(branch_id: Option<&str>) -> Result<String, AppError> {
         ));
     }
     Ok(format!("{TOPOLOGY_SETTING_KEY}/{branch_id}"))
+}
+
+fn topology_apply_request_key(request_id: &str) -> Result<String, AppError> {
+    if request_id.trim().is_empty()
+        || request_id.len() > 200
+        || request_id.chars().any(|ch| ch.is_control() || ch == '/')
+    {
+        return Err(AppError::Invalid(
+            "topology request id contains invalid characters".into(),
+        ));
+    }
+    Ok(format!("{TOPOLOGY_APPLY_REQUEST_PREFIX}{request_id}"))
+}
+
+fn topology_revision_from_json(value: &Value) -> u64 {
+    value.get("revision").and_then(Value::as_u64).unwrap_or(0)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn topology_apply_fingerprint(
+    store_id: &str,
+    branch_id: Option<&str>,
+    base_revision: u64,
+    workspace_creations: &[CreateInstanceRequest],
+    workspace_updates: &[UpdateInstanceRequest],
+    workspace_archives: &[String],
+    diagram_nodes: &[Value],
+    diagram_wires: &[Value],
+) -> Result<String, AppError> {
+    let payload = serde_json::json!({
+        "store_id": store_id,
+        "branch_id": branch_id,
+        "base_revision": base_revision,
+        "workspace_creations": workspace_creations,
+        "workspace_updates": workspace_updates,
+        "workspace_archives": workspace_archives,
+        "diagram_nodes": diagram_nodes,
+        "diagram_wires": diagram_wires,
+    });
+    let bytes = serde_json::to_vec(&payload)
+        .map_err(|e| AppError::Internal(format!("serialize topology request: {e}")))?;
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    Ok(hex::encode(hasher.finalize()))
+}
+
+fn topology_apply_ledger_json(revision: u64, fingerprint: &str) -> Result<String, AppError> {
+    serde_json::to_string(&serde_json::json!({
+        "revision": revision,
+        "fingerprint": fingerprint,
+    }))
+    .map_err(|e| AppError::Internal(format!("serialize topology request ledger: {e}")))
+}
+
+fn current_topology_revision(conn: &Connection, setting_key: &str) -> Result<u64, AppError> {
+    let Some(raw) = oz_core::Settings::get(conn, setting_key)? else {
+        return Ok(0);
+    };
+    let value: Value = serde_json::from_str(&raw)
+        .map_err(|e| AppError::Internal(format!("invalid topology JSON: {e}")))?;
+    Ok(topology_revision_from_json(&value))
+}
+
+fn topology_envelope_json(
+    nodes: &[Value],
+    wires: &[Value],
+    revision: u64,
+) -> Result<String, AppError> {
+    let wires: Vec<Value> = wires
+        .iter()
+        .cloned()
+        .map(|mut wire| {
+            if let Some(object) = wire.as_object_mut() {
+                object
+                    .entry("from_port")
+                    .or_insert_with(|| Value::String("right".into()));
+                object
+                    .entry("to_port")
+                    .or_insert_with(|| Value::String("left".into()));
+            }
+            wire
+        })
+        .collect();
+    serde_json::to_string(&serde_json::json!({
+        "schema_version": TOPOLOGY_SCHEMA_VERSION,
+        "revision": revision,
+        "nodes": nodes,
+        "wires": wires,
+    }))
+    .map_err(|e| AppError::Internal(format!("serialize topology: {e}")))
 }
 
 fn value_string<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
@@ -564,12 +656,12 @@ fn semantic_wire_matches_contract(wire: &Value, from_node: &Value, to_node: &Val
         (Some("stock-out"), Some("stock-in"), Some("stock-routing")) => {
             to_type == Some("warehouse")
                 && ((from_type == Some("workspace")
-                    && matches!(from_type_key, "store-pos" | "restaurant-pos" | "inventory"))
+                    && matches!(from_type_key, "store-pos" | "restaurant-pos"))
                     || from_type == Some("warehouse"))
         }
         (Some("transfer-out"), Some("transfer-in"), Some("inventory-transfer")) => {
             from_type == Some("workspace")
-                && matches!(from_type_key, "store-pos" | "restaurant-pos" | "inventory")
+                && matches!(from_type_key, "store-pos" | "restaurant-pos")
                 && to_type == Some("warehouse")
         }
         (Some("ticket-out"), Some("ticket-in"), Some("ticket-routing")) => {
@@ -796,11 +888,11 @@ fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), AppErr
             (purpose_key, type_key),
             (
                 "general",
-                "store-pos" | "restaurant-pos" | "kds" | "inventory" | "warehouse"
+                "store-pos" | "restaurant-pos" | "kds" | "warehouse"
             ) | ("checkout" | "returns", "store-pos")
                 | ("dining-room", "restaurant-pos")
                 | ("kitchen-hot-line", "kds")
-                | ("stock-control" | "receiving", "inventory" | "warehouse")
+                | ("stock-control" | "receiving", "warehouse")
         );
         if !purpose_valid {
             return Err(topology_validation(
@@ -1034,12 +1126,36 @@ fn save_topology_json_at_key(
     nodes: Vec<Value>,
     wires: Vec<Value>,
     setting_key: &str,
-) -> Result<(), AppError> {
+) -> Result<u64, AppError> {
+    save_topology_json_at_key_with_revision(conn, nodes, wires, setting_key, None, None)
+}
+
+fn save_topology_json_at_key_with_revision(
+    conn: &Connection,
+    nodes: Vec<Value>,
+    wires: Vec<Value>,
+    setting_key: &str,
+    expected_revision: Option<u64>,
+    request: Option<(&str, &str)>,
+) -> Result<u64, AppError> {
     validate_semantic_ownership(conn, &nodes, &wires)?;
     // The legacy typed structs validate geometry and known serialized node
     // kinds. `branch-location` is a semantic alias, so normalize only the
     // temporary validation copy; the raw command payload is persisted intact.
     validate_diagram_payloads(&nodes, &wires)?;
+    let current_revision = current_topology_revision(conn, setting_key)?;
+    if let Some(expected) = expected_revision
+        && expected != current_revision
+    {
+        return Err(topology_validation(
+            "topology-revision-conflict",
+            None,
+            None,
+            None,
+            format!("topology revision conflict: expected {expected}, current {current_revision}"),
+        ));
+    }
+    let revision = current_revision.saturating_add(1);
     let runtime_key = topology_runtime_setting_key(setting_key)?;
     let runtime_branch_id = setting_key
         .strip_prefix(&format!("{TOPOLOGY_SETTING_KEY}/"))
@@ -1047,36 +1163,17 @@ fn save_topology_json_at_key(
     let runtime_plan = compile_topology_runtime_plan(&nodes, &wires, runtime_branch_id);
     let runtime_json = serde_json::to_string(&runtime_plan)
         .map_err(|e| AppError::Internal(format!("serialize topology runtime plan: {e}")))?;
-
-    let wires: Vec<Value> = wires
-        .into_iter()
-        .map(|mut wire| {
-            if let Some(object) = wire.as_object_mut() {
-                object
-                    .entry("from_port")
-                    .or_insert_with(|| Value::String("right".into()));
-                object
-                    .entry("to_port")
-                    .or_insert_with(|| Value::String("left".into()));
-            }
-            wire
-        })
-        .collect();
-
-    // The command envelope below is the only database write, so semantic
-    // fields cannot be discarded.
-    let envelope = serde_json::json!({
-        "schema_version": TOPOLOGY_SCHEMA_VERSION,
-        "nodes": nodes,
-        "wires": wires,
-    });
-    let json = serde_json::to_string(&envelope)
-        .map_err(|e| AppError::Internal(format!("serialize topology: {e}")))?;
+    let json = topology_envelope_json(&nodes, &wires, revision)?;
     let tx = conn.unchecked_transaction()?;
     oz_core::Settings::set(&tx, setting_key, &json)?;
     oz_core::Settings::set(&tx, &runtime_key, &runtime_json)?;
+    if let Some((request_key, fingerprint)) = request {
+        let ledger = topology_apply_ledger_json(revision, fingerprint)?;
+        oz_core::Settings::set(&tx, request_key, &ledger)?;
+        oz_core::Settings::remove(&tx, TOPOLOGY_APPLY_RECOVERY_KEY)?;
+    }
     tx.commit()?;
-    Ok(())
+    Ok(revision)
 }
 
 #[cfg(test)]
@@ -1095,7 +1192,7 @@ fn save_topology_json(
     nodes: Vec<Value>,
     wires: Vec<Value>,
 ) -> Result<(), AppError> {
-    save_topology_json_at_key(conn, nodes, wires, TOPOLOGY_SETTING_KEY)
+    save_topology_json_at_key(conn, nodes, wires, TOPOLOGY_SETTING_KEY).map(|_| ())
 }
 
 /// Snapshot of a workspace row touched by a topology Apply.
@@ -1117,6 +1214,12 @@ struct TopologyApplyRecovery {
     creations: Vec<CreateInstanceRequest>,
     snapshots: Vec<WorkspaceApplySnapshot>,
     previous_topology: Option<String>,
+    /// Exact canonical diagram JSON expected after the Apply. Recovery uses
+    /// it to distinguish a crash before the global write from a crash after
+    /// it, because the workspace and global databases cannot share a SQLite
+    /// transaction.
+    #[serde(default)]
+    desired_topology: Option<String>,
 }
 
 /// Restore the topology setting after a compensating Apply failure.
@@ -1164,6 +1267,20 @@ fn clear_topology_recovery(conn: &Connection) -> Result<(), AppError> {
 /// new mutation. The journal is intentionally retained until both databases
 /// are restored, making compensation retryable after a process crash or
 /// transient database lock.
+pub async fn recover_pending_topology_apply_at_startup(state: &AppState) -> Result<(), AppError> {
+    let expected_store_id = {
+        let db = state.db.lock().await;
+        let Some(raw) = oz_core::Settings::get(&db, TOPOLOGY_APPLY_RECOVERY_KEY)? else {
+            return Ok(());
+        };
+        serde_json::from_str::<TopologyApplyRecovery>(&raw)
+            .map(|recovery| recovery.store_id)
+            .map_err(|e| AppError::Internal(format!("invalid topology recovery journal: {e}")))?
+    };
+    let _apply_guard = state.topology_apply_lock.lock().await;
+    recover_pending_topology_apply(state, &expected_store_id).await
+}
+
 async fn recover_pending_topology_apply(
     state: &AppState,
     expected_store_id: &str,
@@ -1183,6 +1300,21 @@ async fn recover_pending_topology_apply(
             "topology Apply recovery is pending for store {}, not {}",
             recovery.store_id, expected_store_id
         )));
+    }
+    // If the desired diagram is already present, the process crashed after
+    // the global commit but before clearing the journal. Do not compensate a
+    // successful Apply; simply finalize the journal.
+    if let Some(desired) = recovery.desired_topology.as_deref() {
+        let current = {
+            let db = state.db.lock().await;
+            let key = topology_setting_key(recovery.topology_branch_id.as_deref())?;
+            oz_core::Settings::get(&db, &key)?
+        };
+        if current.as_deref() == Some(desired) {
+            let db = state.db.lock().await;
+            clear_topology_recovery(&db)?;
+            return Ok(());
+        }
     }
     compensate_workspace_diff(
         state,
@@ -1329,6 +1461,78 @@ fn validate_apply_gate(
     // geometric payloads remain accepted during the migration window.
     validate_semantic_ownership(conn, nodes, wires)?;
     validate_diagram_payloads(nodes, wires)
+}
+
+fn validate_warehouse_quota(
+    nodes: &[Value],
+    tier: &oz_core::subscription::SubscriptionTier,
+) -> Result<(), AppError> {
+    if let Some(limit) = tier.max_warehouses()
+        && nodes
+            .iter()
+            .filter(|node| value_string(node, "type") == Some("warehouse"))
+            .count() as i64
+            > limit
+    {
+        return Err(AppError::PermissionDenied(format!(
+            "topology warehouse quota exceeded: limit {limit}"
+        )));
+    }
+    Ok(())
+}
+
+/// Enforce the backend-owned warehouse capacity invariant for tiers that
+/// expose capacity-aware routing. UI validation remains useful feedback, but
+/// a direct IPC caller must not be able to route stock into a full warehouse.
+fn validate_warehouse_capacity(
+    nodes: &[Value],
+    wires: &[Value],
+    tier: &oz_core::subscription::SubscriptionTier,
+) -> Result<(), AppError> {
+    if !matches!(
+        tier,
+        oz_core::subscription::SubscriptionTier::Pro
+            | oz_core::subscription::SubscriptionTier::Premium
+            | oz_core::subscription::SubscriptionTier::Enterprise
+    ) {
+        return Ok(());
+    }
+    for warehouse in nodes
+        .iter()
+        .filter(|node| semantic_node_type(node) == Some("warehouse"))
+    {
+        let Some(metadata) = warehouse.get("metadata") else {
+            continue;
+        };
+        let Some(stock) = metadata.get("stock").and_then(Value::as_f64) else {
+            continue;
+        };
+        let Some(capacity) = metadata.get("capacity").and_then(Value::as_f64) else {
+            continue;
+        };
+        if stock < capacity {
+            continue;
+        }
+        if let Some(wire) = wires.iter().find(|wire| {
+            value_string(wire, "to_node_id") == value_string(warehouse, "id")
+                && matches!(
+                    value_string(wire, "relationship_type"),
+                    Some("stock-routing" | "inventory-transfer")
+                )
+        }) {
+            return Err(topology_validation(
+                "warehouse-at-capacity",
+                value_string(warehouse, "id"),
+                value_string(wire, "id"),
+                value_string(wire, "to_port_id"),
+                format!(
+                    "warehouse {} is at capacity ({stock}/{capacity})",
+                    value_string(warehouse, "id").unwrap_or("<unknown>")
+                ),
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Parse raw diagram values into the legacy typed payloads and run the
@@ -1577,6 +1781,20 @@ pub fn load_topology_data(conn: &Connection) -> Result<Option<TopologyData>, App
 
 // ── Commands ───────────────────────────────────────────────────────
 
+/// Return whether the authenticated session can save topology changes.
+///
+/// The frontend uses this capability probe for UI gating; the Apply command
+/// repeats the permission check server-side and remains authoritative.
+#[tauri::command]
+pub async fn can_save_topology(
+    session_token: String,
+    state: State<'_, AppState>,
+) -> Result<bool, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::STAFF_UPDATE).await?;
+    Ok(true)
+}
+
 /// Save the topology graph to the settings store.
 #[tauri::command]
 pub async fn save_topology(
@@ -1587,7 +1805,7 @@ pub async fn save_topology(
 ) -> Result<(), AppError> {
     let setting_key = topology_setting_key(branch_id.as_deref())?;
     let conn = state.db.lock().await;
-    save_topology_json_at_key(&conn, nodes, wires, &setting_key)
+    save_topology_json_at_key(&conn, nodes, wires, &setting_key).map(|_| ())
 }
 
 /// Load the persisted topology graph.
@@ -1667,6 +1885,13 @@ pub struct UpdateInstanceRequest {
     pub purpose_key: Option<String>,
 }
 
+/// Result returned after a topology Apply commits.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TopologyApplyResult {
+    /// Revision assigned to the committed branch topology.
+    pub revision: u64,
+}
+
 /// Apply a full topology diff atomically (Critical #4).
 ///
 /// Creates, updates, and archives workspace instances within a single
@@ -1702,11 +1927,24 @@ pub async fn apply_topology_diff(
     diagram_nodes: Vec<Value>,
     diagram_wires: Vec<Value>,
     branch_id: Option<String>,
+    base_revision: u64,
+    request_id: String,
     state: State<'_, AppState>,
-) -> Result<(), AppError> {
+) -> Result<TopologyApplyResult, AppError> {
     let session = state.resolve_session(&session_token)?;
+    let _apply_guard = state.topology_apply_lock.lock().await;
     let topology_key = topology_setting_key(branch_id.as_deref())?;
-    recover_pending_topology_apply(&state, &session.store_id).await?;
+    let request_key = topology_apply_request_key(&request_id)?;
+    let request_fingerprint = topology_apply_fingerprint(
+        &session.store_id,
+        branch_id.as_deref(),
+        base_revision,
+        &workspace_creations,
+        &workspace_updates,
+        &workspace_archives,
+        &diagram_nodes,
+        &diagram_wires,
+    )?;
 
     // Authorization: workspace topology changes require admin access. The
     // session user's identity + role live in the GLOBAL identity DB — the
@@ -1715,6 +1953,55 @@ pub async fn apply_topology_diff(
     // store connection would deny every caller — owner included — with
     // "user not found".)
     require_permission_for_session(&state, &session, permissions::STAFF_UPDATE).await?;
+
+    // A retried request returns the original result without repeating any
+    // workspace mutation. The process-wide Apply lock also makes the
+    // revision check and this ledger lookup deterministic.
+    {
+        let global_db = state.db.lock().await;
+        if let Some(raw) = oz_core::Settings::get(&global_db, &request_key)? {
+            let value: Value = serde_json::from_str(&raw)
+                .map_err(|e| AppError::Internal(format!("invalid topology request ledger: {e}")))?;
+            if let Some(stored_fingerprint) = value.get("fingerprint").and_then(Value::as_str) {
+                if stored_fingerprint != request_fingerprint {
+                    return Err(AppError::Invalid(
+                        "topology request id was already used for a different Apply".into(),
+                    ));
+                }
+                let revision = value
+                    .get("revision")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| {
+                        AppError::Internal("topology request ledger has no revision".into())
+                    })?;
+                return Ok(TopologyApplyResult { revision });
+            }
+            // A pre-fingerprint ledger entry can only come from an interrupted
+            // development build. Remove it rather than treating an unbound
+            // request id as an idempotent success for an unrelated payload.
+            oz_core::Settings::remove(&global_db, &request_key)?;
+        }
+    }
+
+    // Finish any prior cross-database Apply before comparing revisions. A
+    // prior process may have committed the diagram but not cleared its
+    // journal, in which case recovery must finalize it first.
+    recover_pending_topology_apply(&state, &session.store_id).await?;
+    {
+        let global_db = state.db.lock().await;
+        let current_revision = current_topology_revision(&global_db, &topology_key)?;
+        if current_revision != base_revision {
+            return Err(topology_validation(
+                "topology-revision-conflict",
+                None,
+                None,
+                None,
+                format!(
+                    "topology revision conflict: expected {base_revision}, current {current_revision}"
+                ),
+            ));
+        }
+    }
 
     // Reject malformed graphs before any workspace mutation. Legacy
     // geometric payloads remain accepted during the migration window.
@@ -1739,6 +2026,11 @@ pub async fn apply_topology_diff(
         let global_db = state.db.lock().await;
         oz_core::Settings::get(&global_db, &topology_key)?
     };
+    let desired_topology = topology_envelope_json(
+        &diagram_nodes,
+        &diagram_wires,
+        base_revision.saturating_add(1),
+    )?;
 
     // Snapshot all pre-existing rows that a later compensation may need to restore.
     let workspace_snapshot = snapshot_workspace_rows(
@@ -1797,6 +2089,24 @@ pub async fn apply_topology_diff(
         subscription.verify_signature()?;
         subscription.effective_tier()
     };
+    validate_warehouse_quota(&diagram_nodes, &effective_tier)?;
+    validate_warehouse_capacity(&diagram_nodes, &diagram_wires, &effective_tier)?;
+
+    // The journal is written BEFORE any store mutation. If the process
+    // crashes after the store commit, startup/next Apply can compare the
+    // desired diagram and compensate deterministically.
+    let recovery = TopologyApplyRecovery {
+        store_id: session.store_id.clone(),
+        topology_branch_id: branch_id.clone(),
+        creations: workspace_creations.clone(),
+        snapshots: workspace_snapshot.clone(),
+        previous_topology: previous_topology.clone(),
+        desired_topology: Some(desired_topology.clone()),
+    };
+    {
+        let db = state.db.lock().await;
+        persist_topology_recovery(&db, &recovery)?;
+    }
 
     // ── Workspace CRUD in a single transaction ────────────────────────
     //
@@ -1996,29 +2306,17 @@ pub async fn apply_topology_diff(
     // This `.await` is now safe — all non-`Send` types from the store
     // DB block have been dropped.
     let global_db = state.db.lock().await;
-    if let Err(save_error) =
-        save_topology_json_at_key(&global_db, diagram_nodes, diagram_wires, &topology_key)
-    {
+    if let Err(save_error) = save_topology_json_at_key_with_revision(
+        &global_db,
+        diagram_nodes,
+        diagram_wires,
+        &topology_key,
+        Some(base_revision),
+        Some((&request_key, &request_fingerprint)),
+    ) {
         drop(global_db);
-        // Journal the compensation before attempting it. If the process or a
-        // database lock interrupts recovery, the next Apply retries the exact
-        // same restoration instead of leaving an undiagnosed partial state.
-        let recovery = TopologyApplyRecovery {
-            store_id: session.store_id.clone(),
-            topology_branch_id: branch_id.clone(),
-            creations: workspace_creations.clone(),
-            snapshots: workspace_snapshot.clone(),
-            previous_topology: previous_topology.clone(),
-        };
-        let journal = {
-            let db = state.db.lock().await;
-            persist_topology_recovery(&db, &recovery)
-        };
-        if let Err(journal_error) = journal {
-            return Err(AppError::Internal(format!(
-                "topology save failed ({save_error}); recovery journal failed ({journal_error})"
-            )));
-        }
+        // The durable recovery journal was written before the workspace
+        // transaction. Keep it until both databases have been compensated.
         if let Err(compensation_error) = compensate_workspace_diff(
             &state,
             &session.store_id,
@@ -2047,16 +2345,22 @@ pub async fn apply_topology_diff(
         return Err(save_error);
     }
 
+    let revision = {
+        let db = state.db.lock().await;
+        current_topology_revision(&db, &topology_key)?
+    };
+    let result = TopologyApplyResult { revision };
     tracing::info!(
         created,
         updated,
         archived,
         nodes = node_count,
         wires = wire_count,
+        revision = result.revision,
         "topology diff applied"
     );
 
-    Ok(())
+    Ok(result)
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────
@@ -7256,5 +7560,123 @@ mod tests {
         let meta = loaded.nodes[0].metadata.as_ref().unwrap();
         assert_eq!(meta["persisted"], false);
         assert_eq!(meta["typeKey"], "store-pos");
+    }
+
+    #[test]
+    fn revision_aware_save_increments_and_rejects_stale_writer() {
+        let conn = fresh_conn();
+        let nodes = vec![serde_json::json!({
+            "id": "store-1", "type": "store", "name": "Store", "x": 0.0, "y": 0.0
+        })];
+        let first = save_topology_json_at_key_with_revision(
+            &conn,
+            nodes.clone(),
+            vec![],
+            TOPOLOGY_SETTING_KEY,
+            Some(0),
+            None,
+        )
+        .unwrap();
+        assert_eq!(first, 1);
+        let second = save_topology_json_at_key_with_revision(
+            &conn,
+            nodes.clone(),
+            vec![],
+            TOPOLOGY_SETTING_KEY,
+            Some(0),
+            None,
+        );
+        assert!(
+            matches!(second, Err(AppError::TopologyValidation { code, .. }) if code == "topology-revision-conflict")
+        );
+        let raw = oz_core::Settings::get(&conn, TOPOLOGY_SETTING_KEY)
+            .unwrap()
+            .unwrap();
+        let value: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(value["revision"], 1);
+    }
+
+    #[test]
+    fn request_ledger_key_rejects_path_injection() {
+        assert!(topology_apply_request_key("request/evil").is_err());
+        assert_eq!(
+            topology_apply_request_key("request-1").unwrap(),
+            "oz-pos/topology/apply-request/request-1"
+        );
+    }
+
+    #[test]
+    fn request_fingerprint_binds_store_branch_revision_and_graph_payload() {
+        let first = topology_apply_fingerprint(
+            "store-1",
+            Some("branch-1"),
+            4,
+            &[],
+            &[],
+            &[],
+            &[serde_json::json!({ "id": "node-1" })],
+            &[],
+        )
+        .unwrap();
+        let changed_graph = topology_apply_fingerprint(
+            "store-1",
+            Some("branch-1"),
+            4,
+            &[],
+            &[],
+            &[],
+            &[serde_json::json!({ "id": "node-2" })],
+            &[],
+        )
+        .unwrap();
+        let changed_scope = topology_apply_fingerprint(
+            "store-1",
+            Some("branch-2"),
+            4,
+            &[],
+            &[],
+            &[],
+            &[serde_json::json!({ "id": "node-1" })],
+            &[],
+        )
+        .unwrap();
+        assert_ne!(first, changed_graph);
+        assert_ne!(first, changed_scope);
+    }
+
+    #[test]
+    fn backend_warehouse_quota_rejects_multiple_standard_warehouses() {
+        let nodes = vec![
+            serde_json::json!({ "id": "wh-1", "type": "warehouse" }),
+            serde_json::json!({ "id": "wh-2", "type": "warehouse" }),
+        ];
+        let result =
+            validate_warehouse_quota(&nodes, &oz_core::subscription::SubscriptionTier::Standard);
+        assert!(
+            matches!(result, Err(AppError::PermissionDenied(message)) if message.contains("limit 1"))
+        );
+    }
+
+    #[test]
+    fn backend_warehouse_capacity_rejects_stock_routing_into_full_pro_room() {
+        let nodes = vec![serde_json::json!({
+            "id": "wh-1",
+            "type": "warehouse",
+            "metadata": { "stock": 10, "capacity": 10 }
+        })];
+        let wires = vec![serde_json::json!({
+            "id": "wire-1",
+            "to_node_id": "wh-1",
+            "relationship_type": "stock-routing",
+            "to_port_id": "stock-in"
+        })];
+        let result = validate_warehouse_capacity(
+            &nodes,
+            &wires,
+            &oz_core::subscription::SubscriptionTier::Pro,
+        );
+        assert!(
+            matches!(result, Err(AppError::TopologyValidation { code, .. }) if code == "warehouse-at-capacity")
+        );
     }
 }

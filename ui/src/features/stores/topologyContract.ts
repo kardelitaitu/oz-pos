@@ -467,7 +467,7 @@ function semanticNodesMatchWire(
     case 'stock-out|stock-in|stock-routing':
       return toNode.kind === 'warehouse'
         && ((fromNode.kind === 'workspace'
-          && ['store-pos', 'restaurant-pos', 'inventory'].includes(fromTypeKey))
+          && ['store-pos', 'restaurant-pos'].includes(fromTypeKey))
           || fromNode.kind === 'warehouse');
     case 'transfer-out|transfer-in|inventory-transfer':
       // Round 82: a warehouse may feed another warehouse (hub-and-spoke).
@@ -475,7 +475,7 @@ function semanticNodesMatchWire(
       return toNode.kind === 'warehouse'
         && ((fromNode.kind === 'warehouse')
           || (fromNode.kind === 'workspace'
-            && ['store-pos', 'restaurant-pos', 'inventory'].includes(fromTypeKey)));
+            && ['store-pos', 'restaurant-pos'].includes(fromTypeKey)));
     case 'ticket-out|ticket-in|ticket-routing':
       return fromNode.kind === 'workspace'
         && fromTypeKey === 'kds'

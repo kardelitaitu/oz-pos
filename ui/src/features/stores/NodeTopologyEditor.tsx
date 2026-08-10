@@ -5,7 +5,7 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Button } from '@/components/Button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import { loadTopology } from '@/api/topology';
+import { loadTopology, type TopologyApplyResult } from '@/api/topology';
 import { useSettings } from '@/contexts/SettingsContext';
 import {
   StoreInfoCard,
@@ -79,6 +79,7 @@ import './NodeTopologyEditor.css';
 const EMPTY_ERRORS: TopologyValidationError[] = [];
 
 export type NodeType = 'store' | 'workspace' | 'warehouse' | 'hardware';
+export type WorkspaceTypeKey = 'store-pos' | 'restaurant-pos' | 'kds';
 /** Visual flow state of a wire, cycled by clicking it.
  *  'one-way' → left-to-right, 'reverse' → right-to-left,
  *  'two-way' → both. The from/to node ownership is unchanged — this is a
@@ -288,7 +289,11 @@ export interface NodeTopologyEditorProps {
    * optional `oldId -> newId` map so the editor can remap its local
    * state when archive+recreate assigns new UUIDs (Critical #1).
    */
-  onSave?: (nodes: TopologyNodeData[], wires: TopologyWireData[]) => Promise<Record<string, string> | void>;
+  onSave?: (
+    nodes: TopologyNodeData[],
+    wires: TopologyWireData[],
+    baseRevision?: number,
+  ) => Promise<(TopologyApplyResult & { idMap?: Record<string, string> }) | Record<string, string> | void>;
   /**
    * Real workspace instances to seed the canvas with. When provided, the
    * editor renders one workspace node per instance (positions restored from
@@ -319,6 +324,11 @@ export interface NodeTopologyEditorProps {
    *  against silently discarding unsaved edits — the editor cannot veto its
    *  own remount, so the guard must live in the parent. */
   onDirtyChange?: (dirty: boolean) => void;
+  /** Reports an authoritative topology load failure so the parent can keep
+   *  Apply disabled instead of allowing a preset to overwrite unknown data. */
+  onLoadError?: (error: unknown) => void;
+  /** Reports that the authoritative topology request completed successfully. */
+  onLoadSuccess?: () => void;
   /**
    * Whether the session user is allowed to persist topology changes.
    * The backend gates `apply_topology_diff` on `staff:update` (granted to
@@ -696,6 +706,8 @@ export default function NodeTopologyEditor({
   branchToolbar,
   branchId,
   onDirtyChange,
+  onLoadError,
+  onLoadSuccess,
   canSave = true,
 }: NodeTopologyEditorProps) {
   const { sessionToken } = useWorkspace();
@@ -715,6 +727,11 @@ export default function NodeTopologyEditor({
    *  graph as the real diagram (it would drop restored dismissals on every
    *  reload). Set in the load chain's finally, after every branch settles. */
   const [topologyLoaded, setTopologyLoaded] = useState(false);
+  /** Revision of the canonical branch document loaded from the backend. */
+  const [topologyRevision, setTopologyRevision] = useState(0);
+  /** Prevent concurrent Apply requests from racing their workspace diffs. */
+  const saveInFlightRef = useRef(false);
+  const [saving, setSaving] = useState(false);
   const [wires, setWires] = useState<TopologyWireData[]>(PRESET_RETAIL.wires);
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -1488,8 +1505,11 @@ export default function NodeTopologyEditor({
     let cancelled = false;
     loadTopology(branchId)
       .then((data) => {
+        if (cancelled) return;
+        onLoadSuccess?.();
         // Build a lookup of saved node positions/metadata (the diagram layer).
         const savedById = new Map<string, TopologyNodeData>();
+        setTopologyRevision(data?.revision ?? 0);
         if (data && data.nodes) {
           for (const n of data.nodes) {
             const node: TopologyNodeData = {
@@ -1741,6 +1761,7 @@ export default function NodeTopologyEditor({
           message: `${l10n.getString('topology-toast-load-error')}: ${plainErrorMessage(err)}`,
           type: 'error',
         });
+        onLoadError?.(err);
       })
       .finally(() => {
         // Every .then branch returns, so this runs once the first
@@ -3800,7 +3821,11 @@ export default function NodeTopologyEditor({
     armTouchDocumentListeners();
   };
 
-  const handleAddNode = (type: NodeType, at?: { x: number; y: number }) => {
+  const handleAddNode = (
+    type: NodeType,
+    at?: { x: number; y: number },
+    workspaceTypeKey: WorkspaceTypeKey = 'store-pos',
+  ) => {
     // Strict mode (the real topology screen) builds the branch card from
     // the authoritative branchLocations list — a palette-spawned store has
     // no storeProfileId and nothing can attach one, so it could never be
@@ -3847,8 +3872,12 @@ export default function NodeTopologyEditor({
     const newNode: TopologyNodeData = {
       id,
       type,
-      name: l10n.getString(`topology-new-${type}`),
-      subtitle: l10n.getString(`topology-new-${type}-subtitle`),
+      name: type === 'workspace'
+        ? workspaceTypeLabel(workspaceTypeKey, (id, vars) => topologyUiString(l10n, id, vars ?? null))
+        : l10n.getString(`topology-new-${type}`),
+      subtitle: type === 'workspace'
+        ? l10n.getString('topology-new-workspace-subtitle')
+        : l10n.getString(`topology-new-${type}-subtitle`),
       x: placed.x,
       y: placed.y,
       telemetryBadge: l10n.getString('topology-new-ready'),
@@ -3856,7 +3885,7 @@ export default function NodeTopologyEditor({
       // New workspace nodes default to the retail POS type until the user
       // picks another in the inspector. `persisted: false` marks it as not
       // yet backed by a workspace_instances row so onSave will create it.
-      ...(type === 'workspace' ? { metadata: { typeKey: 'store-pos', purposeKey: 'general', persisted: false } } : {}),
+      ...(type === 'workspace' ? { metadata: { typeKey: workspaceTypeKey, purposeKey: 'general', persisted: false } } : {}),
     };
 
     setNodes((prev) => [...prev, newNode]);
@@ -4648,8 +4677,8 @@ export default function NodeTopologyEditor({
             <Localized id="topology-auto-layout">Auto-layout</Localized>
           </Button>            <Button
               variant="primary"
-              disabled={!canSave}
-              title={canSave ? undefined : l10n.getString('topology-apply-permission-tooltip')}
+              disabled={!canSave || saving || !onSave}
+              title={canSave && onSave ? undefined : l10n.getString('topology-apply-permission-tooltip')}
               onClick={async () => {
                 // Same gate as the live badge surface — shared helper keeps
                 // the Apply toast and the on-canvas badges in lockstep. A
@@ -4666,6 +4695,9 @@ export default function NodeTopologyEditor({
                   });
                   return;
                 }
+                if (saveInFlightRef.current) return;
+                saveInFlightRef.current = true;
+                setSaving(true);
                 skipNextLoadRef.current = true;
                 // Hoisted ABOVE the try: the snapshot below is written after
                 // the catch, and let/const are block-scoped to the try — a
@@ -4673,7 +4705,15 @@ export default function NodeTopologyEditor({
                 let savedNodes = nodes;
                 let savedWires = wires;
                 try {
-                  const idMap = await onSave?.(nodes, wires);
+                  const result = await onSave?.(nodes, wires, topologyRevision);
+                  const idMap = result && 'idMap' in result
+                    ? result.idMap
+                    : result && 'revision' in result
+                      ? undefined
+                      : result;
+                  if (result && 'revision' in result) {
+                    setTopologyRevision(result.revision);
+                  }
                   if (idMap && Object.keys(idMap).length > 0) {
                     // Remap old UUIDs to new UUIDs from archive+recreate
                     // operations so the canvas stays in sync with the backend.
@@ -4713,6 +4753,8 @@ export default function NodeTopologyEditor({
                     type: 'error',
                   });
                   skipNextLoadRef.current = false;
+                  saveInFlightRef.current = false;
+                  setSaving(false);
                   return;
                 }
                 // Save succeeded — the canvas now matches the backend, so a
@@ -4723,7 +4765,11 @@ export default function NodeTopologyEditor({
                 commitSnapshot({ nodes: savedNodes, wires: savedWires });
                 // Defer reset so React commits state updates + fires effects first,
                 // preventing post-save reload from clobbering in-flight edits (#8).
-                setTimeout(() => { skipNextLoadRef.current = false; }, 0);
+                setTimeout(() => {
+                  skipNextLoadRef.current = false;
+                  saveInFlightRef.current = false;
+                  setSaving(false);
+                }, 0);
               }}
               icon={<CheckIcon size={16} />}
             >
@@ -4789,37 +4835,54 @@ export default function NodeTopologyEditor({
             </button>
           )}
 
-          <button type="button" className="tool-card" onClick={() => handleAddNode('workspace')}>
-            <span className="tool-card-icon"><PosIcon size={22} /></span>
+          <div className="tool-rack-subsection-title">{l10n.getString('topology-workspace-types-title')}</div>
+
+          <button type="button" className="tool-card" onClick={() => handleAddNode('workspace', undefined, 'restaurant-pos')}>
+            <span className="tool-card-icon"><UtensilsIcon size={22} /></span>
             <div className="tool-card-info">
-              <strong><Localized id="topology-tool-workspace">+ Workspace Node</Localized></strong>
-              <span><Localized id="topology-tool-workspace-desc">POS / Register Instance</Localized></span>
+              <strong><Localized id="topology-tool-restaurant-pos">+ Restaurant POS</Localized></strong>
+              <span><Localized id="topology-tool-restaurant-pos-desc">Restaurant checkout workspace</Localized></span>
             </div>
-            <kbd className="tool-card-shortcut" aria-hidden="true">2</kbd>
+          </button>
+
+          <button type="button" className="tool-card" onClick={() => handleAddNode('workspace', undefined, 'store-pos')}>
+            <span className="tool-card-icon"><CartIcon size={22} /></span>
+            <div className="tool-card-info">
+              <strong><Localized id="topology-tool-retail-pos">+ Retail POS</Localized></strong>
+              <span><Localized id="topology-tool-retail-pos-desc">Retail checkout workspace</Localized></span>
+            </div>
+          </button>
+
+          <button type="button" className="tool-card" onClick={() => handleAddNode('workspace', undefined, 'kds')}>
+            <span className="tool-card-icon"><NodesIcon size={22} /></span>
+            <div className="tool-card-info">
+              <strong><Localized id="topology-tool-kds">+ KDS</Localized></strong>
+              <span><Localized id="topology-tool-kds-desc">Kitchen display workspace</Localized></span>
+            </div>
           </button>
 
           <button
+            type="button"
             className={`tool-card ${!isProAllowed && nodes.some((n) => n.type === 'warehouse') ? 'locked' : ''}`}
             onClick={() => handleAddNode('warehouse')}
           >
             <span className="tool-card-icon"><WarehouseIcon size={22} /></span>
             <div className="tool-card-info">
-              <strong><Localized id="topology-tool-warehouse">+ Stock Room</Localized></strong>
-              <span><Localized id="topology-tool-warehouse-desc">Storage Location</Localized></span>
+              <strong><Localized id="topology-tool-warehouse-workspace">+ Warehouse</Localized></strong>
+              <span><Localized id="topology-tool-warehouse-workspace-desc">Inventory storage workspace</Localized></span>
             </div>
-            <kbd className="tool-card-shortcut" aria-hidden="true">3</kbd>
             {!isProAllowed && nodes.some((n) => n.type === 'warehouse') && (
               <span className="lock-badge"><LockIcon size={12} /> <Localized id="topology-lock-pro">Pro</Localized></span>
             )}
           </button>
 
+          <div className="tool-rack-subsection-title"><Localized id="topology-other-nodes-title">Other Nodes</Localized></div>
           <button type="button" className="tool-card" onClick={() => handleAddNode('hardware')}>
             <span className="tool-card-icon"><PrinterIcon size={22} /></span>
             <div className="tool-card-info">
               <strong><Localized id="topology-tool-hardware">+ Hardware Node</Localized></strong>
               <span><Localized id="topology-tool-hardware-desc">Printer / KDS Peripheral</Localized></span>
             </div>
-            <kbd className="tool-card-shortcut" aria-hidden="true">4</kbd>
           </button>
           </div>
 

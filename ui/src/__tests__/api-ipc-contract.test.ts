@@ -221,6 +221,7 @@ import {
   saveTopology,
   loadTopology,
   applyTopologyDiff,
+  canSaveTopology,
 } from '@/api/topology';
 
 describe('topology.ts IPC contract', () => {
@@ -265,7 +266,7 @@ describe('topology.ts IPC contract', () => {
     const creations = [{ id: 'ws-1', type_key: 'restaurant-pos', store_id: 's1', name: 'POS' }];
     const updates = [{ id: 'ws-2', name: 'Renamed' }];
     const archives = ['ws-old'];
-    await applyTopologyDiff('tok', creations, updates, archives, nodes, wires);
+    await applyTopologyDiff('tok', creations, updates, archives, nodes, wires, undefined, 7, 'request-1');
     expect(mockInvoke).toHaveBeenCalledWith('apply_topology_diff', {
       sessionToken: 'tok',
       workspaceCreations: creations,
@@ -273,12 +274,14 @@ describe('topology.ts IPC contract', () => {
       workspaceArchives: archives,
       diagramNodes: nodes,
       diagramWires: wires,
+      baseRevision: 7,
+      requestId: 'request-1',
     });
   });
 
-  it('applyTopologyDiff includes the active branch id when provided', async () => {
+  it('applyTopologyDiff includes the active branch id and revision controls', async () => {
     mockInvoke.mockResolvedValue(undefined);
-    await applyTopologyDiff('tok', [], [], [], [], [], 'branch-a');
+    await applyTopologyDiff('tok', [], [], [], [], [], 'branch-a', 3, 'request-2');
     expect(mockInvoke).toHaveBeenCalledWith('apply_topology_diff', {
       sessionToken: 'tok',
       workspaceCreations: [],
@@ -287,7 +290,15 @@ describe('topology.ts IPC contract', () => {
       diagramNodes: [],
       diagramWires: [],
       branchId: 'branch-a',
+      baseRevision: 3,
+      requestId: 'request-2',
     });
+  });
+
+  it('canSaveTopology invokes the backend capability probe', async () => {
+    mockInvoke.mockResolvedValue(true);
+    await expect(canSaveTopology('tok')).resolves.toBe(true);
+    expect(mockInvoke).toHaveBeenCalledWith('can_save_topology', { sessionToken: 'tok' });
   });
 
   it('loadTopology returns null when no topology saved', async () => {

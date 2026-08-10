@@ -44,9 +44,15 @@ export interface TopologyWirePayload {
 export interface TopologyData {
   /** Version of the semantic graph envelope. Legacy payloads omit this. */
   schema_version?: number;
+  /** Optimistic-concurrency revision assigned by the backend. */
+  revision?: number;
   nodes: TopologyNodePayload[];
   wires: TopologyWirePayload[];
 }
+
+/** Probe the backend capability used to gate topology editing UI. */
+export const canSaveTopology = (sessionToken: string): Promise<boolean> =>
+  loggedInvoke<boolean>('can_save_topology', { sessionToken });
 
 /** Persist the topology graph for one branch. Overwrites that branch's save. */
 export const saveTopology = (
@@ -94,18 +100,17 @@ export interface UpdateInstanceRequest {
   purpose_key?: string;
 }
 
+/** Result returned after the backend commits a topology Apply. */
+export interface TopologyApplyResult {
+  revision: number;
+}
+
 /**
  * Apply a full topology diff atomically.
  *
- * Creates, updates, and archives workspace instances within a single
- * SQLite transaction on the store database, then saves the topology
- * diagram (nodes + wires) on the global database under the selected branch
- * identity.
- *
- * Replaces the previous pattern of 4+ sequential `await` calls
- * (createWorkspaceInstanceScoped, updateWorkspaceInstanceScoped,
- * archiveWorkspaceInstanceScoped, saveTopology) with a single atomic
- * round-trip. If any workspace mutation fails, all are rolled back.
+ * `baseRevision` prevents stale editors from overwriting a newer branch
+ * diagram. `requestId` makes retries and accidental double-submits safe to
+ * deduplicate on the backend.
  */
 export const applyTopologyDiff = (
   sessionToken: string,
@@ -115,8 +120,10 @@ export const applyTopologyDiff = (
   diagramNodes: TopologyNodePayload[],
   diagramWires: TopologyWirePayload[],
   branchId?: string,
-): Promise<void> =>
-  loggedInvoke('apply_topology_diff', {
+  baseRevision = 0,
+  requestId = crypto.randomUUID(),
+): Promise<TopologyApplyResult> =>
+  loggedInvoke<TopologyApplyResult>('apply_topology_diff', {
     sessionToken,
     workspaceCreations,
     workspaceUpdates,
@@ -124,4 +131,6 @@ export const applyTopologyDiff = (
     diagramNodes,
     diagramWires,
     ...(branchId !== undefined ? { branchId } : {}),
+    baseRevision,
+    requestId,
   });

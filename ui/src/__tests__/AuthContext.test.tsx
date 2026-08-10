@@ -161,9 +161,9 @@ describe('AuthContext', () => {
     });
   });
 
-  it('isOwner=true and isManager=true for owner role', async () => {
+  it('isOwner=true and isManager=true for the backend Owner role name', async () => {
     mockStaffLogin.mockResolvedValue({
-      session: { display_name: 'Eve', role_name: 'owner', user_id: 'u3', role_id: 'r3' },
+      session: { display_name: 'Eve', role_name: 'Owner', user_id: 'u3', role_id: 'role-owner' },
       picker_ticket: 'ticket-3',
     });
     await renderProvider();
@@ -172,6 +172,20 @@ describe('AuthContext', () => {
     await waitFor(() => {
       expect(screen.getByTestId('isOwner').textContent).toBe('true');
       expect(screen.getByTestId('isManager').textContent).toBe('true');
+    });
+  });
+
+  it('normalizes the backend Manager role name for permission gates', async () => {
+    mockStaffLogin.mockResolvedValue({
+      session: { display_name: 'Mia', role_name: 'Manager', user_id: 'u4', role_id: 'role-manager' },
+      picker_ticket: 'ticket-4',
+    });
+    await renderProvider();
+    fireEvent.click(screen.getByTestId('login-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('isManager').textContent).toBe('true');
+      expect(screen.getByTestId('isOwner').textContent).toBe('false');
     });
   });
 

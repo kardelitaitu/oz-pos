@@ -129,16 +129,21 @@ export function AuthProvider({ children, onLogin }: AuthProviderProps) {
     setError(null);
   }, []);
 
+  // The backend returns display names from the seeded roles ("Owner",
+  // "Manager", "Staff"), while older clients and tests may provide the
+  // stable lowercase role keys. Normalize once so authorization-sensitive UI
+  // gates behave identically for either representation.
+  const normalizedRoleName = session?.role_name.trim().toLowerCase();
   const isManager =
-    session?.role_name === "manager" ||
-    session?.role_name === "owner" ||
-    session?.role_name === "staff" ||
-    session?.role_name === "role-manager" ||
-    session?.role_name === "role-owner" ||
-    session?.role_name === "role-staff";
+    normalizedRoleName === "manager" ||
+    normalizedRoleName === "owner" ||
+    normalizedRoleName === "staff" ||
+    normalizedRoleName === "role-manager" ||
+    normalizedRoleName === "role-owner" ||
+    normalizedRoleName === "role-staff";
   const isOwner =
-    session?.role_name === "owner" ||
-    session?.role_name === "role-owner";
+    normalizedRoleName === "owner" ||
+    normalizedRoleName === "role-owner";
 
   const value = useMemo<AuthContextValue>(
     () => ({

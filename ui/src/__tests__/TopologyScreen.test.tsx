@@ -78,7 +78,7 @@ vi.mock('@fluent/react', () => {
 // Capture the props the screen passes to the editor so tests can drive
 // the save-diff logic without the real canvas.
 let capturedEditorProps: {
-  onSave?: (nodes: unknown[], wires: unknown[]) => Promise<Record<string, string> | void>;
+  onSave?: (nodes: unknown[], wires: unknown[], baseRevision?: number) => Promise<{ revision: number; idMap?: Record<string, string> } | Record<string, string> | void>;
   workspaceInstances?: unknown[];
   branchToolbar?: unknown;
   branchLocations?: unknown[];
@@ -227,7 +227,7 @@ describe('TopologyScreen', () => {
     capturedBranchOptions = [];
     mockListStores.mockResolvedValue(sampleStores);
     mockListWorkspacesScoped.mockResolvedValue(loadedInstances);
-    mockApplyTopologyDiff.mockResolvedValue(undefined);
+    mockApplyTopologyDiff.mockResolvedValue({ revision: 1 });
     mockDeleteStore.mockResolvedValue(undefined);
   });
 
@@ -938,17 +938,14 @@ describe('TopologyScreen', () => {
     expect(a.diagramWires[0]!.bends).toEqual([{ x: 350, y: 334 }, { x: 400, y: 300 }]);
   });
 
-  it('surfaces applyTopologyDiff errors via toast and returns empty idMap', async () => {
+  it('surfaces applyTopologyDiff errors and rejects the save', async () => {
     mockApplyTopologyDiff.mockRejectedValue(new Error('DB locked'));
     await renderReady();
 
-    const result = await capturedEditorProps.onSave!(
+    await expect(capturedEditorProps.onSave!(
       [storeNode(), wsNode({ id: 'ws-new', name: 'POS', metadata: { typeKey: 'store-pos', persisted: false } })],
       [locationWire('store-1', 'ws-new')],
-    );
-
-    // Returns empty idMap on error (no crash)
-    expect(result).toEqual({});
+    )).rejects.toThrow('DB locked');
 
     // Toast error surfaced
     expect(mockAddToast).toHaveBeenCalledWith(

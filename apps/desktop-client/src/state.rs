@@ -164,6 +164,11 @@ pub struct AppState {
     /// never persisted — there is nothing to leak from the OS keyring
     /// and a restart simply invalidates outstanding tickets.
     pub picker_ticket_secret: Vec<u8>,
+
+    /// Serializes topology Applies within this process. The topology diff
+    /// spans the global and store databases, so concurrent Applies cannot
+    /// safely compare revisions or recover partial work independently.
+    pub topology_apply_lock: Mutex<()>,
 }
 
 impl AppState {
@@ -310,6 +315,7 @@ impl AppState {
             session_ttl_seconds,
             terminal_id,
             picker_ticket_secret: uuid::Uuid::new_v4().as_bytes().to_vec(),
+            topology_apply_lock: Mutex::new(()),
         })
     }
 }
@@ -673,6 +679,7 @@ impl AppState {
             session_ttl_seconds: 86400,
             terminal_id: Arc::new(Mutex::new(None)),
             picker_ticket_secret: b"test-picker-ticket-secret".to_vec(),
+            topology_apply_lock: Mutex::new(()),
         }
     }
 

@@ -8,8 +8,10 @@ import {
 } from '@/api/workspaces';
 import {
   applyTopologyDiff,
+  canSaveTopology as checkTopologySaveCapability,
   type CreateInstanceRequest,
   type UpdateInstanceRequest,
+  type TopologyApplyResult,
 } from '@/api/topology';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -66,11 +68,36 @@ export default function TopologyScreen() {
   const { addToast } = useToast();
   const { l10n } = useLocalization();
   /** Whether the session user may persist topology changes. The backend
-   *  gates `apply_topology_diff` on `staff:update`, which the built-in
-   *  Owner/Manager/Staff role presets grant — `isManager` is the role-name
-   *  mirror of that permission, so the editor renders view-only (Apply
-   *  disabled) for roles that could never save. */
+   *  capability probe is authoritative for Apply and rename actions. */
   const { isManager } = useAuth();
+  const [canSaveTopology, setCanSaveTopology] = useState(false);
+  const [storesUnavailable, setStoresUnavailable] = useState(false);
+  const [instancesUnavailable, setInstancesUnavailable] = useState(false);
+  const [topologyUnavailable, setTopologyUnavailable] = useState(false);
+  const handleTopologyLoadError = useCallback(() => {
+    setTopologyUnavailable(true);
+  }, []);
+  const handleTopologyLoadSuccess = useCallback(() => {
+    setTopologyUnavailable(false);
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    if (!sessionToken) {
+      setCanSaveTopology(false);
+      return () => { cancelled = true; };
+    }
+    // Keep a compatibility fallback for isolated standalone test harnesses
+    // that predate the capability command. Production registers the command,
+    // so real UI authorization always comes from the backend permission check.
+    if (typeof checkTopologySaveCapability !== 'function') {
+      setCanSaveTopology(isManager);
+      return () => { cancelled = true; };
+    }
+    void checkTopologySaveCapability(sessionToken)
+      .then((allowed) => { if (!cancelled) setCanSaveTopology(allowed); })
+      .catch(() => { if (!cancelled) setCanSaveTopology(false); });
+    return () => { cancelled = true; };
+  }, [sessionToken, isManager]);
   const [licenseTier, setLicenseTier] = useState('standard');
   /** Real workspace instances loaded from the backend, used to seed the editor. */
   const [workspaceInstances, setWorkspaceInstances] = useState<WorkspaceDto[]>([]);
@@ -115,12 +142,18 @@ export default function TopologyScreen() {
       ]);
       setLicenseTier(licStatus.tier.toLowerCase());
       setStores(storeData);
-    } catch {
-      /* non-fatal — the editor still renders with the preset fallback */
-    } finally {
+      setStoresUnavailable(false);
       storesResolvedRef.current = true;
+    } catch (err) {
+      // A failed authoritative fetch is not an empty store list. Preserve
+      // last-known data and disable Apply until the user can retry safely.
+      setStoresUnavailable(true);
+      addToast({
+        message: `${l10n.getString('topology-toast-load-error')}: ${plainErrorMessage(err)}`,
+        type: 'error',
+      });
     }
-  }, []);
+  }, [addToast, l10n]);
 
   /** Fetch the workspace instances for the selected branch. Runs on mount
    *  AND whenever the branch selector changes: each branch owns its own
@@ -136,12 +169,17 @@ export default function TopologyScreen() {
     }
     try {
       setWorkspaceInstances((await listWorkspacesScoped(sessionToken)).filter(isTopologyInstance));
-    } catch {
-      setWorkspaceInstances([]);
-    } finally {
-      instancesResolvedRef.current = true;
+      setInstancesUnavailable(false);
+    } catch (err) {
+      // Never turn a transient workspace-list failure into an authoritative
+      // empty list; that could make Apply persist an incomplete graph.
+      setInstancesUnavailable(true);
+      addToast({
+        message: `${l10n.getString('topology-toast-load-error')}: ${plainErrorMessage(err)}`,
+        type: 'error',
+      });
     }
-  }, [sessionToken]);
+  }, [sessionToken, addToast, l10n]);
 
   useEffect(() => { void load(); }, [load]);
   // Mount: load the default branch's instances once.
@@ -267,7 +305,7 @@ export default function TopologyScreen() {
    *  card. Returns true on success so the card can close its inline form;
    *  false keeps the draft open for a retry. */
   const handleRenameBranch = useCallback(async (id: string, name: string): Promise<boolean> => {
-    if (!isManager) {
+    if (!canSaveTopology) {
       addToast({ message: l10n.getString('topology-rename-permission-error'), type: 'error' });
       return false;
     }
@@ -293,12 +331,12 @@ export default function TopologyScreen() {
       });
       return false;
     }
-  }, [stores, isManager, addToast, l10n]);
+  }, [stores, canSaveTopology, addToast, l10n]);
 
   /** Persist a workspace instance rename (the live row, not just the canvas
    *  label) from the editor's card. Same contract as handleRenameBranch. */
   const handleRenameWorkspace = useCallback(async (instanceId: string, name: string): Promise<boolean> => {
-    if (!isManager) {
+    if (!canSaveTopology) {
       addToast({ message: l10n.getString('topology-rename-permission-error'), type: 'error' });
       return false;
     }
@@ -323,7 +361,7 @@ export default function TopologyScreen() {
       });
       return false;
     }
-  }, [workspaceInstances, sessionToken, isManager, addToast, l10n]);
+  }, [workspaceInstances, sessionToken, canSaveTopology, addToast, l10n]);
 
   /**
    * Persist topology edits atomically (Critical #4 + #5):
@@ -341,12 +379,14 @@ export default function TopologyScreen() {
     async (
       nodes: TopologyNodeData[],
       wires: TopologyWireData[],
-    ): Promise<Record<string, string>> => {
+      baseRevision = 0,
+    ): Promise<TopologyApplyResult & { idMap?: Record<string, string> }> => {
       const idMap: Record<string, string> = {};
 
       if (!sessionToken) {
-        addToast({ message: l10n.getString('topology-toast-no-session'), type: 'error' });
-        return idMap;
+        const error = new Error(l10n.getString('topology-toast-no-session'));
+        addToast({ message: error.message, type: 'error' });
+        throw error;
       }
 
       const semanticGraph = normalizeTopologyGraph(nodes, wires);
@@ -363,11 +403,9 @@ export default function TopologyScreen() {
       );
       if (blockingErrors.length > 0) {
         const firstError = blockingErrors[0]!;
-        addToast({
-          message: l10n.getString(firstError.messageId),
-          type: 'error',
-        });
-        return idMap;
+        const error = new Error(l10n.getString(firstError.messageId));
+        addToast({ message: error.message, type: 'error' });
+        throw error;
       }
 
       const wsNodes = nodes.filter((n) => n.type === 'workspace');
@@ -567,7 +605,7 @@ export default function TopologyScreen() {
       // ── Atomic apply ─────────────────────────────────────────────────
 
       try {
-        await applyTopologyDiff(
+        const result = await applyTopologyDiff(
           sessionToken,
           creations,
           updates,
@@ -575,7 +613,12 @@ export default function TopologyScreen() {
           diagramNodes,
           diagramWires,
           selectedBranchId ?? undefined,
+          baseRevision,
+          crypto.randomUUID(),
         );
+        if (!result || !Number.isSafeInteger(result.revision) || result.revision < 0) {
+          throw new Error('topology Apply returned no committed revision');
+        }
 
         const created = creations.length;
         const updated = updates.length;
@@ -601,13 +644,13 @@ export default function TopologyScreen() {
           /* non-fatal */
         }
 
-        return idMap;
+        return { ...result, ...(Object.keys(idMap).length > 0 ? { idMap } : {}) };
       } catch (err) {
         addToast({
           message: `${l10n.getString('topology-toast-save-error')}: ${plainErrorMessage(err)}`,
           type: 'error',
         });
-        return {};
+        throw err;
       }
     },
     [sessionToken, workspaceInstances, stores, addToast, l10n, licenseTier, selectedBranchId],
@@ -632,8 +675,10 @@ export default function TopologyScreen() {
         onRenameWorkspace={handleRenameWorkspace}
         allowLegacyApply={false}
         onSave={handleTopologySave}
-        canSave={isManager}
+        canSave={canSaveTopology && !storesUnavailable && !instancesUnavailable && !topologyUnavailable}
         onDirtyChange={handleEditorDirtyChange}
+        onLoadError={handleTopologyLoadError}
+        onLoadSuccess={handleTopologyLoadSuccess}
         branchToolbar={(
           /* ── Branch (graph) selector toolbar, merged into the editor header ── */
           <div className="topology-branch-toolbar">

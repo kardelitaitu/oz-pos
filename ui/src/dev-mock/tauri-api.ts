@@ -729,6 +729,7 @@ interface MockTopologyWire {
   to_port?: string;
 }
 interface MockTopology {
+  revision?: number;
   nodes: MockTopologyNode[];
   wires: MockTopologyWire[];
 }
@@ -740,6 +741,7 @@ const MOCK_TOPOLOGY_KEY = 'oz-dev-mock:topology';
  *  columns 80/380) that never overlaps on load. Wires carry labels so the
  *  first-run canvas demonstrates the labeled-wire UX instead of empty pills. */
 const MOCK_TOPOLOGY_SEED: MockTopology = {
+  revision: 0,
   nodes: [
     { id: 'store-1', type: 'store', name: 'TOKO TEST', subtitle: 'Primary Store', x: 80, y: 80 },
     { id: 'ws-1', type: 'workspace', name: 'Store POS', subtitle: 'Point of Sale', x: 380, y: 80, metadata: { typeKey: 'store-pos', persisted: true } },
@@ -1040,7 +1042,9 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'save_report_schedule': () => null,
   'send_test_report': () => 'Email sent',
 
+  'can_save_topology': () => true,
   'load_topology': () => ({
+    revision: mockTopology.revision ?? 0,
     nodes: mockTopology.nodes.map((n) => ({ ...n })),
     wires: mockTopology.wires.map((w) => ({ ...w })),
   }),
@@ -1090,8 +1094,9 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     }
     if (diagramNodes) mockTopology.nodes = diagramNodes.map((n) => ({ ...n }));
     if (diagramWires) mockTopology.wires = diagramWires.map((w) => ({ ...w }));
+    mockTopology.revision = (mockTopology.revision ?? 0) + 1;
     saveMockTopology(mockTopology);
-    return null;
+    return { revision: mockTopology.revision };
   },
 
   'set_receipt_settings_scoped': () => null,

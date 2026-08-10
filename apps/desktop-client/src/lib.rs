@@ -101,6 +101,17 @@ pub fn run() {
 
             app.manage(state);
 
+            // Recover a journaled cross-database topology Apply at startup,
+            // before the user can issue another mutation. The Apply mutex
+            // also serializes this recovery with any early UI request.
+            let recovery_app_handle = app.handle().clone();
+            platform_startup::spawn_daemon("topology recovery", async move {
+                let state = recovery_app_handle.state::<AppState>();
+                if let Err(error) = commands::topology::recover_pending_topology_apply_at_startup(&state).await {
+                    tracing::error!(error = %error, "topology recovery failed; Apply remains blocked until recovery succeeds");
+                }
+            });
+
             // ── Show the main window after state restore ────────────
             // The window starts with visible:false to prevent initial
             // position flash while window-state restores its position/size.
@@ -692,8 +703,11 @@ pub fn run() {
             commands::license::renew_license,
             commands::license::get_license_status,
             commands::license::check_license_status,
-            commands::topology::save_topology,
+            // The legacy unscoped save_topology command is intentionally not
+            // registered. All production writes use the authenticated,
+            // revision-aware apply_topology_diff command.
             commands::topology::load_topology,
+            commands::topology::can_save_topology,
             commands::topology::apply_topology_diff,
         ])
         .run(tauri::generate_context!())
