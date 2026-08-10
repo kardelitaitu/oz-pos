@@ -3532,7 +3532,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verify:** engine 38/38 (+5) · editor 499/499 (+1) · screen 41/41 (overlay shape updated) · **full UI 280 files / 4,787 tests (+6)** · typecheck ✓ · eslint 0 errors · drift guard clean.
 
-**Commits:** (added below after commit)
+**Commits:** `5cb928e1` (feat(topology): ghost-to-shared stubs reach the live shared card)
 
 **Deliberately NOT done:** no stub LABELS or relationship styling (stubs stay decorative hints — a live-wire label would imply inspectability); no stub for a ghost wired to a non-workspace (hardware) — the far end isn't a shared workspace, so there's nothing to anchor to; no handling for the rare ghost whose far shared card was dragged unsaved — the LIVE card position is used, which is exactly what the operator sees.
 
