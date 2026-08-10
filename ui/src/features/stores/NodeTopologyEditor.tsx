@@ -53,7 +53,7 @@ import {
 } from './topologyExport';
 import { TopologyNodeCard } from './topologyNodeCard';
 import type { TopologyOverlay } from './topologyBranchCompare';
-import { layoutGhosts } from './topologyBranchCompare';
+import { layoutGhosts, buildGhostWireStubs, GHOST_WIDTH, GHOST_HEIGHT } from './topologyBranchCompare';
 import { TopologyWireGroup } from './topologyWireGroup';
 import { planTopologyDiff, summarizeTopologyPlan } from './topologyDiff';
 import { cubicBezier, pointUnderCards, polylinePoint, wireUnderCardSegments } from './topologyWireGeometry';
@@ -1564,6 +1564,27 @@ export default function NodeTopologyEditor({
         .map((n) => ({ x: n.x, y: n.y, width: NODE_WIDTH, height: NODE_HEIGHT })),
     );
   }, [compareOverlay, pan, zoom, nodes]);
+
+  /** Round 160: dashed stubs for the other branch's ghost-to-ghost wiring,
+   *  drawn between the LAID-OUT ghost positions — a missing satellite
+   *  cluster reads as a mini-topology instead of floating boxes. Wires
+   *  touching a shared/non-ghost workspace produce no stub (deferred). */
+  const ghostStubs = useMemo(
+    () => buildGhostWireStubs(compareOverlay?.otherWires ?? [], laidOutGhosts),
+    [compareOverlay, laidOutGhosts],
+  );
+
+  /** The stub SVG must span the laid-out ghosts even when the current
+   *  diagram is small — the ghost layer is inset to the viewport, so the
+   *  stubs need their own full-cover bounds (ghost extents + margin). */
+  const stubSvgBounds = useMemo(() => {
+    const w = laidOutGhosts.reduce((acc, g) => Math.max(acc, g.x + GHOST_WIDTH), 0);
+    const h = laidOutGhosts.reduce((acc, g) => Math.max(acc, g.y + GHOST_HEIGHT), 0);
+    return {
+      width: Math.max(w + 200, svgBounds.width),
+      height: Math.max(h + 200, svgBounds.height),
+    };
+  }, [laidOutGhosts, svgBounds]);
 
   // Load persisted topology on mount, fall back to retail preset.
   useEffect(() => {
@@ -5946,6 +5967,23 @@ export default function NodeTopologyEditor({
                 clicks, hover, or focus from a card below. */}
             {laidOutGhosts.length > 0 && (
               <div className="topology-overlay-ghost-layer" aria-hidden="true">
+                {ghostStubs.length > 0 && (
+                  <svg
+                    className="topology-overlay-stub-layer"
+                    style={{ width: stubSvgBounds.width, height: stubSvgBounds.height }}
+                  >
+                    {ghostStubs.map((s) => (
+                      <line
+                        key={s.id}
+                        className="topology-overlay-stub"
+                        x1={s.x1}
+                        y1={s.y1}
+                        x2={s.x2}
+                        y2={s.y2}
+                      />
+                    ))}
+                  </svg>
+                )}
                 {laidOutGhosts.map((g) => (
                   <div
                     key={g.id}

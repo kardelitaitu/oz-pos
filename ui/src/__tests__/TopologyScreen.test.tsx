@@ -599,6 +599,9 @@ describe('TopologyScreen', () => {
       ghosts: [{ id: 'ws-wh', name: 'Stock Room', x: 480, y: 360 }],
       onlyHere: ['ws-kds'],
       differing: ['ws-pos'],
+      otherWires: [
+        { id: 'w2', from_node_id: 'ws-pos', to_node_id: 'ws-wh', direction: 'one-way', relationship_type: 'stock-routing' },
+      ],
     });
 
     // Closing the panel removes the overlay from the editor props.

@@ -152,6 +152,10 @@ export interface TopologyOverlay {
    *  card. A drifted-id pair (round 155) is shared — it lands here only
    *  when its wiring actually differs. */
   differing: string[];
+  /** The other diagram's wires, carried for the ghost-wire stubs (round
+   *  160): the editor draws dashed connectors between ghost workspaces
+   *  that are wired together in the other branch. */
+  otherWires: TopologyWirePayload[];
 }
 
 export function buildTopologyOverlay(
@@ -185,7 +189,78 @@ export function buildTopologyOverlay(
     .map((ref) => ref.id)
     .filter((id) => currentPos.has(id));
 
-  return { ghosts, onlyHere, differing };
+  return { ghosts, onlyHere, differing, otherWires: other?.wires ?? [] };
+}
+
+// ── Ghost-wire stubs (round 160) ─────────────────────────────────
+//
+// Ghost cards alone read as floating boxes. Stubs draw the other
+// branch's ghost-to-ghost wiring as dashed connectors between the LAID-
+// OUT ghost positions, so a missing satellite cluster (several
+// workspaces wired together, none present here) reads as a recognizable
+// mini-topology. Ghost→shared-workspace connections are deliberately
+// NOT drawn: the far end lives on the live canvas and would need drift-
+// resolved, position-aware endpoints — a separate slice. Pure,
+// display-only, deterministic.
+
+export interface GhostWireStub {
+  /** The other diagram's wire id — the stable render key. */
+  id: string;
+  /** Ghost endpoint ids as authored in the other diagram. */
+  fromId: string;
+  toId: string;
+  /** Card-edge midpoint endpoints, computed from the laid-out ghosts. */
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+/** Edge midpoints of card A facing card B, and vice versa. */
+function stubEndpoints(
+  a: GhostPlacement,
+  b: GhostPlacement,
+): { x1: number; y1: number; x2: number; y2: number } {
+  const aCx = a.x + GHOST_WIDTH / 2;
+  const aCy = a.y + GHOST_HEIGHT / 2;
+  const bCx = b.x + GHOST_WIDTH / 2;
+  const bCy = b.y + GHOST_HEIGHT / 2;
+  const dx = bCx - aCx;
+  const dy = bCy - aCy;
+
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    // Side-by-side: exit/enter on the facing left/right edge midpoints.
+    if (dx >= 0) {
+      return { x1: a.x + GHOST_WIDTH, y1: aCy, x2: b.x, y2: bCy };
+    }
+    return { x1: a.x, y1: aCy, x2: b.x + GHOST_WIDTH, y2: bCy };
+  }
+  // Above/below: exit/enter on the facing top/bottom edge midpoints.
+  if (dy >= 0) {
+    return { x1: aCx, y1: a.y + GHOST_HEIGHT, x2: bCx, y2: b.y };
+  }
+  return { x1: aCx, y1: a.y, x2: bCx, y2: b.y + GHOST_HEIGHT };
+}
+
+export function buildGhostWireStubs(
+  wires: TopologyWirePayload[],
+  ghosts: GhostPlacement[],
+): GhostWireStub[] {
+  if (ghosts.length === 0) return [];
+  const ghostById = new Map(ghosts.map((g) => [g.id, g]));
+  const stubs: GhostWireStub[] = [];
+  for (const wire of wires) {
+    const a = ghostById.get(wire.from_node_id);
+    const b = ghostById.get(wire.to_node_id);
+    if (!a || !b) continue; // both endpoints must be ghosts
+    stubs.push({
+      id: wire.id,
+      fromId: a.id,
+      toId: b.id,
+      ...stubEndpoints(a, b),
+    });
+  }
+  return stubs;
 }
 
 // ── Ghost layout (round 159) ──────────────────────────────────────
@@ -260,7 +335,6 @@ export function layoutGhosts(
 
   const placed: GhostBounds[] = [...occupied];
   return ghosts.map((g) => {
-    // MUTATION: no clamping
     let x = clampCard(g.x, left, right, GHOST_WIDTH);
     let y = clampCard(g.y, top, bottom, GHOST_HEIGHT);
 

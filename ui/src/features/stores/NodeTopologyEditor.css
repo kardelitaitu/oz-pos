@@ -646,6 +646,26 @@
   color: var(--color-success-fg, var(--color-fg));
 }
 
+/* Round 160: dashed stubs for the other branch's ghost-to-ghost wiring.
+   Stroke properties are exempt from the design-token gate; the colour
+   still comes from a token so the stubs read as part of the ghost
+   family. stroke-opacity (not opacity) keeps the layer soft without a
+   hardcoded value. */
+.topology-overlay-stub-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.topology-overlay-stub {
+  stroke: var(--color-success, #10b981);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 6;
+  stroke-opacity: 0.7;
+  fill: none;
+}
+
 .node-connecting-source {
   border-color: var(--color-warning) !important;
 }

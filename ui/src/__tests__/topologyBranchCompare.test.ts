@@ -8,7 +8,7 @@
 // editing either one.
 
 import { describe, expect, it } from 'vitest';
-import { compareBranchTopologies, buildTopologyOverlay, layoutGhosts } from '@/features/stores/topologyBranchCompare';
+import { compareBranchTopologies, buildTopologyOverlay, layoutGhosts, buildGhostWireStubs } from '@/features/stores/topologyBranchCompare';
 import type { TopologyDiagram } from '@/features/stores/topologyBranchCompare';
 import type { TopologyNodePayload, TopologyWirePayload } from '@/api/topology';
 
@@ -286,8 +286,8 @@ describe('compareBranchTopologies', () => {
   it('returns an empty overlay for identical diagrams and null inputs', () => {
     const diagram: TopologyDiagram = { nodes: [wsNode('ws-pos', 'Front Register')], wires: [] };
 
-    expect(buildTopologyOverlay(diagram, diagram)).toEqual({ ghosts: [], onlyHere: [], differing: [] });
-    expect(buildTopologyOverlay(null, null)).toEqual({ ghosts: [], onlyHere: [], differing: [] });
+    expect(buildTopologyOverlay(diagram, diagram)).toEqual({ ghosts: [], onlyHere: [], differing: [], otherWires: [] });
+    expect(buildTopologyOverlay(null, null)).toEqual({ ghosts: [], onlyHere: [], differing: [], otherWires: [] });
   });
 
   it('treats a drifted-id pair as shared — differing only when wiring differs', () => {
@@ -305,11 +305,12 @@ describe('compareBranchTopologies', () => {
       nodes: [...b.nodes, wsNode('ws-wh', 'Stock Room')],
     };
 
-    expect(buildTopologyOverlay(a, b)).toEqual({ ghosts: [], onlyHere: [], differing: [] });
+    expect(buildTopologyOverlay(a, b)).toEqual({ ghosts: [], onlyHere: [], differing: [], otherWires: b.wires });
     const overlay = buildTopologyOverlay(a, bWiredDifferently);
     expect(overlay.ghosts).toEqual([{ id: 'ws-wh', name: 'Stock Room', x: 0, y: 0 }]);
     expect(overlay.onlyHere).toEqual([]);
     expect(overlay.differing).toEqual(['ws-pos']);
+    expect(overlay.otherWires).toEqual(bWiredDifferently.wires);
   });
 });
 
@@ -401,5 +402,66 @@ describe('layoutGhosts', () => {
     // top-left corner is anchored into the rect (no NaN, no blow-up).
     const out = layoutGhosts([ghost('g1', -50, -50)], viewport({ width: 100, height: 100 }));
     expect(out[0]).toMatchObject({ id: 'g1', x: 0, y: 0 });
+  });
+});
+
+// ── buildGhostWireStubs unit tests (round 160) ───────────────────
+//
+// Ghost cards alone read as floating boxes; stubs draw the other
+// branch's ghost-to-ghost wiring as dashed connectors between the laid-
+// out ghost positions, so a missing satellite cluster reads as a real
+// (mini) topology. Ghost→shared-workspace connections are deliberately
+// deferred — they need drift-resolved far-end positions on the live
+// canvas (a separate slice). Edge-to-edge, display-only, deterministic.
+
+describe('buildGhostWireStubs', () => {
+  const wire = (id: string, from: string, to: string) =>
+    ({ id, from_node_id: from, to_node_id: to, direction: 'one-way', relationship_type: 'generic' }) as const;
+  const g = (id: string, x: number, y: number) => ({ id, name: id, x, y });
+
+  it('emits a stub for every wire whose BOTH endpoints are ghosts', () => {
+    const stubs = buildGhostWireStubs(
+      [wire('w-1', 'g-a', 'g-b'), wire('w-2', 'g-a', 'nope'), wire('w-3', 'nope', 'g-b')],
+      [g('g-a', 0, 0), g('g-b', 500, 0)],
+    );
+    expect(stubs).toHaveLength(1);
+    expect(stubs[0]).toMatchObject({ id: 'w-1', fromId: 'g-a', toId: 'g-b' });
+  });
+
+  it('connects a right-side ghost to a left-side ghost edge-to-edge', () => {
+    // g-a at (0,0), g-b at (500,0): g-b is to the RIGHT, so the stub exits
+    // g-a's right edge midpoint and enters g-b's left edge midpoint.
+    const [s] = buildGhostWireStubs(
+      [wire('w-1', 'g-a', 'g-b')],
+      [g('g-a', 0, 0), g('g-b', 500, 0)],
+    );
+    expect(s).toMatchObject({ x1: 240, y1: 120, x2: 500, y2: 120 });
+  });
+
+  it('mirrors the edges when the ghost order is flipped', () => {
+    // g-b is to the LEFT of g-a: the stub exits g-a's LEFT edge and enters
+    // g-b's RIGHT edge (the wire id and endpoints stay as authored).
+    const [s] = buildGhostWireStubs(
+      [wire('w-1', 'g-a', 'g-b')],
+      [g('g-a', 500, 0), g('g-b', 0, 0)],
+    );
+    expect(s).toMatchObject({ x1: 500, y1: 120, x2: 240, y2: 120 });
+  });
+
+  it('uses the top/bottom edges for vertical ghost pairs', () => {
+    // g-b below g-a: the stub exits g-a's bottom edge midpoint and enters
+    // g-b's top edge midpoint.
+    const [s] = buildGhostWireStubs(
+      [wire('w-1', 'g-a', 'g-b')],
+      [g('g-a', 0, 0), g('g-b', 0, 500)],
+    );
+    expect(s).toMatchObject({ x1: 120, y1: 240, x2: 120, y2: 500 });
+  });
+
+  it('returns no stubs when nothing is ghost-to-ghost', () => {
+    expect(buildGhostWireStubs([wire('w-1', 'g-a', 'shared-1')], [g('g-a', 0, 0)])).toEqual([]);
+    expect(buildGhostWireStubs([wire('w-1', 'a', 'b')], [g('g-a', 0, 0)])).toEqual([]);
+    expect(buildGhostWireStubs([], [g('g-a', 0, 0)])).toEqual([]);
+    expect(buildGhostWireStubs([wire('w-1', 'g-a', 'g-b')], [])).toEqual([]);
   });
 });

@@ -259,7 +259,12 @@ const renderEditor = (props?: {
   allowLegacyApply?: boolean;
   branchId?: string;
   onDirtyChange?: (dirty: boolean) => void;
-  compareOverlay?: { ghosts: Array<{ id: string; name: string; x: number; y: number }>; onlyHere: string[]; differing: string[] } | null;
+  compareOverlay?: {
+    ghosts: Array<{ id: string; name: string; x: number; y: number }>;
+    onlyHere: string[];
+    differing: string[];
+    otherWires: Array<{ id: string; from_node_id: string; to_node_id: string; direction: string; relationship_type: string }>;
+  } | null;
   canSave?: boolean;
 }) =>
   renderWithProvidersSync(<NodeTopologyEditor currentTier="standard" {...props} />, multiStoreFtl, sharedFtl);
@@ -399,6 +404,7 @@ describe('NodeTopologyEditor Component', () => {
         ghosts: [{ id: 'ws-ghost', name: 'Stock Room', x: 480, y: 360 }],
         onlyHere: ['ws-1'],
         differing: ['store-1'],
+        otherWires: [],
       },
     });
 
@@ -432,6 +438,7 @@ describe('NodeTopologyEditor Component', () => {
         ],
         onlyHere: [],
         differing: [],
+        otherWires: [],
       },
     });
 
@@ -453,6 +460,61 @@ describe('NodeTopologyEditor Component', () => {
     expect(inView).not.toBeNull();
     expect(inView!.style.left).toBe('120px');
     expect(inView!.style.top).toBe('360px');
+  });
+
+  it('draws dashed ghost-wire stubs between ghost workspaces wired together in the other branch', () => {
+    renderEditor({
+      compareOverlay: {
+        ghosts: [
+          { id: 'ws-ghost-a', name: 'Satellite A', x: 0, y: 300 },
+          { id: 'ws-ghost-b', name: 'Satellite B', x: 500, y: 300 },
+        ],
+        onlyHere: [],
+        differing: [],
+        otherWires: [
+          {
+            id: 'w-ghost-ab',
+            from_node_id: 'ws-ghost-a',
+            to_node_id: 'ws-ghost-b',
+            direction: 'one-way',
+            relationship_type: 'generic',
+          },
+          // A ghost wired to a non-ghost workspace must NOT produce a stub.
+          {
+            id: 'w-ghost-out',
+            from_node_id: 'ws-ghost-a',
+            to_node_id: 'ws-1',
+            direction: 'one-way',
+            relationship_type: 'generic',
+          },
+        ],
+      },
+    });
+
+    const lines = Array.from(document.querySelectorAll('.topology-overlay-stub'));
+    expect(lines).toHaveLength(1);
+    const line = lines[0] as unknown as { getAttribute: (n: string) => string | null };
+
+    // The stub must connect the two RENDERED ghost cards edge-to-edge
+    // (right edge midpoint of the left card → left edge midpoint of the
+    // right card). The cards' exact positions are layout-decided (round 159
+    // may push a ghost off a live card), so derive the expectations from
+    // the rendered cards instead of hardcoding the preset geometry.
+    const gA = document.querySelector(
+      '.topology-overlay-ghost[data-overlay-node-id="ws-ghost-a"]',
+    ) as HTMLElement;
+    const gB = document.querySelector(
+      '.topology-overlay-ghost[data-overlay-node-id="ws-ghost-b"]',
+    ) as HTMLElement;
+    const ax = parseInt(gA.style.left, 10);
+    const ay = parseInt(gA.style.top, 10);
+    const bx = parseInt(gB.style.left, 10);
+    const by = parseInt(gB.style.top, 10);
+    expect(bx).toBeGreaterThan(ax); // B sits to the RIGHT of A
+    expect(line.getAttribute('x1')).toBe(String(ax + 240));
+    expect(line.getAttribute('y1')).toBe(String(ay + 120));
+    expect(line.getAttribute('x2')).toBe(String(bx));
+    expect(line.getAttribute('y2')).toBe(String(by + 120));
   });
 
   it('renders tool rack sidebar and preset buttons', () => {
