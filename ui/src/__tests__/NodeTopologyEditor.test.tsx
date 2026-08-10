@@ -192,7 +192,7 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-toast-clipboard-unavailable': 'Clipboard is not available',
   'topology-toast-template-saved': 'Template saved',
   'topology-toast-template-deleted': 'Template deleted',
-  'topology-apply-workspace-diff': '{created} created · {updated} updated · {archived} archived · {typeChanged} type-changed · rev {from} → {to}',
+  'topology-apply-workspace-diff': '{ $created } created · { $updated } updated · { $archived } archived · { $typeChanged } type-changed · rev { $from } → { $to }',
 };
 
 vi.mock('@fluent/react', async () => {
@@ -205,7 +205,7 @@ vi.mock('@fluent/react', async () => {
         getString: (id: string, vars?: Record<string, string | number> | null) => {
           let value = TOPOLOGY_EN[id] ?? id;
           for (const [key, val] of Object.entries(vars ?? {})) {
-            value = value.replaceAll(`{${key}}`, String(val));
+            value = value.replaceAll(`{ $${key} }`, String(val)).replaceAll(`{${key}}`, String(val));
           }
           return value;
         },

@@ -9,6 +9,7 @@ import {
 import {
   applyTopologyDiff,
   canSaveTopology as checkTopologySaveCapability,
+  loadTopology,
   type TopologyApplyResult,
 } from '@/api/topology';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
@@ -32,6 +33,10 @@ import {
   validateTopologyGraph,
 } from './topologyContract';
 import { computeTopologyDiff } from './topologyDiff';
+import {
+  compareBranchTopologies,
+  type BranchTopologyComparison,
+} from './topologyBranchCompare';
 
 /**
  * Workspace instances that are physical nodes in the store topology.
@@ -114,6 +119,16 @@ export default function TopologyScreen() {
   const [deleteBranchSaving, setDeleteBranchSaving] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
+  /** ── Branch-to-branch comparison panel (round 154) ────────────
+   *  Compares the selected branch's saved diagram against another
+   *  branch's, so an operator can see how two locations' topologies
+   *  differ before editing either one. Display-only — it never
+   *  resolves store ownership or builds apply payloads. */
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [compareOtherBranchId, setCompareOtherBranchId] = useState<string | null>(null);
+  const [compareResult, setCompareResult] = useState<BranchTopologyComparison | null>(null);
+  const [compareLoading, setCompareLoading] = useState(false);
+
   /** Set once the first stores/listStores resolution lands — before that,
    *  the seeds must read as undefined ("not supplied yet") rather than the
    *  initial empty array, or the editor's load would treat the not-yet-
@@ -170,6 +185,47 @@ export default function TopologyScreen() {
       });
     }
   }, [sessionToken, addToast, l10n]);
+
+  /** Load both diagrams and compute the comparison. Fetching both fresh
+   *  from the backend keeps the panel honest — it compares the saved
+   *  states, not the possibly-unsaved canvas in front of the user. */
+  const loadCompare = useCallback(async (otherBranchId: string) => {
+    setCompareLoading(true);
+    try {
+      const [currentData, otherData] = await Promise.all([
+        loadTopology(selectedBranchId ?? undefined),
+        loadTopology(otherBranchId),
+      ]);
+      setCompareResult(compareBranchTopologies(currentData, otherData));
+    } catch (err) {
+      setCompareResult(null);
+      addToast({
+        message: `${l10n.getString('topology-compare-load-error')}: ${plainErrorMessage(err)}`,
+        type: 'error',
+      });
+    } finally {
+      setCompareLoading(false);
+    }
+  }, [selectedBranchId, addToast, l10n]);
+
+  /** Open the compare panel against the first other branch. */
+  const openCompare = useCallback(() => {
+    const otherId = stores.find((s) => s.id !== selectedBranchId)?.id ?? null;
+    setCompareOtherBranchId(otherId);
+    setCompareOpen(true);
+    if (otherId !== null) void loadCompare(otherId);
+  }, [stores, selectedBranchId, loadCompare]);
+
+  const closeCompare = useCallback(() => {
+    setCompareOpen(false);
+    setCompareResult(null);
+  }, []);
+
+  // Recompute when the user picks a different comparison target.
+  useEffect(() => {
+    if (!compareOpen || compareOtherBranchId === null) return;
+    void loadCompare(compareOtherBranchId);
+  }, [compareOpen, compareOtherBranchId, loadCompare]);
 
   useEffect(() => { void load(); }, [load]);
   // Mount: load the default branch's instances once.
@@ -623,9 +679,74 @@ export default function TopologyScreen() {
                 {l10n.getString('topology-branch-delete')}
               </Button>
             ) : null}
+            {stores.length >= 2 && selectedBranchId ? (
+              <Button variant="secondary" onClick={() => openCompare()} disabled={compareOpen}>
+                {l10n.getString('topology-compare-open')}
+              </Button>
+            ) : null}
           </div>
         )}
       />
+
+      {/* ── Branch-to-branch comparison panel ───────────────────────
+          Summarises how the selected branch's saved topology differs
+          from another branch's — workspaces only here / only there /
+          shared-but-differing — so an operator can see how locations
+          differ before editing. Display-only. */}
+      {compareOpen ? (
+        <div className="topology-compare-panel" role="region" aria-label={l10n.getString('topology-compare-title')}>
+          <div className="topology-compare-header">
+            <h3>{l10n.getString('topology-compare-title')}</h3>
+            <Button variant="secondary" onClick={() => closeCompare()}>
+              {l10n.getString('topology-compare-close')}
+            </Button>
+          </div>
+          <div className="topology-compare-other">
+            <label htmlFor="topology-compare-other-select">
+              {l10n.getString('topology-compare-other-label')}
+            </label>
+            <SettingsSelect
+              id="topology-compare-other-select"
+              value={compareOtherBranchId ?? ''}
+              onChange={(id) => setCompareOtherBranchId(id)}
+              options={stores.filter((s) => s.id !== selectedBranchId).map((s) => ({ value: s.id, label: s.name }))}
+              ariaLabel={l10n.getString('topology-compare-other-label')}
+            />
+          </div>
+          {compareLoading ? (
+            <p>{l10n.getString('topology-compare-loading')}</p>
+          ) : compareResult ? (
+            compareResult.onlyInCurrent.length === 0 &&
+            compareResult.onlyInOther.length === 0 &&
+            compareResult.differing.length === 0 ? (
+              <p>{l10n.getString('topology-compare-none')}</p>
+            ) : (
+              <div className="topology-compare-summary">
+                <p>
+                  {l10n.getString('topology-compare-counts', {
+                    onlyInCurrent: compareResult.onlyInCurrent.length,
+                    onlyInOther: compareResult.onlyInOther.length,
+                    differ: compareResult.differing.length,
+                    otherBranch: stores.find((s) => s.id === compareOtherBranchId)?.name ?? compareOtherBranchId ?? '',
+                  })}
+                </p>
+                {compareResult.onlyInCurrent.length > 0 ? (
+                  <p>{l10n.getString('topology-compare-only-here', { names: compareResult.onlyInCurrent.map((w) => w.name).join(', ') })}</p>
+                ) : null}
+                {compareResult.onlyInOther.length > 0 ? (
+                  <p>{l10n.getString('topology-compare-only-there', {
+                    names: compareResult.onlyInOther.map((w) => w.name).join(', '),
+                    otherBranch: stores.find((s) => s.id === compareOtherBranchId)?.name ?? compareOtherBranchId ?? '',
+                  })}</p>
+                ) : null}
+                {compareResult.differing.length > 0 ? (
+                  <p>{l10n.getString('topology-compare-differing', { names: compareResult.differing.map((w) => w.name).join(', ') })}</p>
+                ) : null}
+              </div>
+            )
+          ) : null}
+        </div>
+      ) : null}
 
       {/* ── Dirty branch-switch guard: confirm before discarding unsaved
              edits. The controlled selector never changed — cancel leaves

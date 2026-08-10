@@ -36,10 +36,11 @@ vi.mock('@/api/workspaces', () => ({
 
 const mockApplyTopologyDiff = vi.fn();
 const mockCanSaveTopology = vi.fn(() => Promise.resolve(mockIsManager));
+const mockLoadTopology = vi.fn();
 vi.mock('@/api/topology', () => ({
   applyTopologyDiff: (...args: unknown[]) => mockApplyTopologyDiff(...args),
   canSaveTopology: () => mockCanSaveTopology(),
-  loadTopology: () => Promise.resolve(null),
+  loadTopology: (...args: unknown[]) => mockLoadTopology(...args),
 }));
 
 vi.mock('@/contexts/WorkspaceContext', () => ({
@@ -70,7 +71,24 @@ vi.mock('@fluent/react', () => {
       return id;
     }
   }
-  const l10n = { getString: (id: string) => id };
+  // English templates for the keys this suite asserts on with variables;
+  // every other key falls back to the key string itself.
+  const EN: Record<string, string> = {
+    'topology-compare-counts': '{ $onlyInCurrent } workspaces only here · { $onlyInOther } only in { $otherBranch } · { $differ } differ',
+    'topology-compare-only-here': 'Only here: { $names }',
+    'topology-compare-only-there': 'Only in { $otherBranch }: { $names }',
+    'topology-compare-differing': 'Differing: { $names }',
+    'topology-compare-none': 'No differences',
+  };
+  const l10n = {
+    getString: (id: string, vars?: Record<string, string | number> | null) => {
+      let value = EN[id] ?? id;
+      for (const [key, val] of Object.entries(vars ?? {})) {
+        value = value.replaceAll(`{ $${key} }`, String(val)).replaceAll(`{${key}}`, String(val));
+      }
+      return value;
+    },
+  };
   return {
     useLocalization: () => ({ l10n }),
     Localized: ({ children }: { id: string; children: React.ReactNode }) => <>{children}</>,
@@ -238,6 +256,7 @@ describe('TopologyScreen', () => {
     mockListWorkspacesScoped.mockResolvedValue(loadedInstances);
     mockApplyTopologyDiff.mockResolvedValue({ revision: 1 });
     mockDeleteStore.mockResolvedValue(undefined);
+    mockLoadTopology.mockResolvedValue(null);
   });
 
   const renderReady = async (expectedInstanceCount = 1) => {
@@ -466,6 +485,67 @@ describe('TopologyScreen', () => {
     await waitFor(() =>
       expect(capturedEditorProps.branchLocations).toEqual([{ id: 'store-2', name: 'Second Street' }]),
     );
+  });
+
+  // ── Branch-to-branch comparison ───────────────────────────────
+
+  it('compare panel loads both diagrams and shows the summary', async () => {
+    mockListStores.mockResolvedValue([
+      { id: 'store-1', name: 'Main Street', is_primary: true, address: '', tax_id: '', currency: 'USD', timezone: 'UTC', created_at: '', updated_at: '' },
+      { id: 'store-2', name: 'Second Street', is_primary: false, address: '', tax_id: '', currency: 'USD', timezone: 'UTC', created_at: '', updated_at: '' },
+    ]);
+    mockLoadTopology.mockImplementation((branchId?: string) => {
+      if (branchId === 'store-1') {
+        return Promise.resolve({
+          nodes: [
+            { id: 'ws-pos', type: 'workspace', name: 'Front Register', x: 0, y: 0, metadata: { typeKey: 'store-pos' } },
+            { id: 'ws-kds', type: 'workspace', name: 'Kitchen Display', x: 0, y: 0, metadata: { typeKey: 'kds' } },
+          ],
+          wires: [{ id: 'w1', from_node_id: 'ws-pos', to_node_id: 'ws-kds', direction: 'one-way', relationship_type: 'generic' }],
+        });
+      }
+      if (branchId === 'store-2') {
+        return Promise.resolve({
+          nodes: [
+            { id: 'ws-pos', type: 'workspace', name: 'Front Register', x: 0, y: 0, metadata: { typeKey: 'store-pos' } },
+            { id: 'ws-wh', type: 'workspace', name: 'Stock Room', x: 0, y: 0, metadata: { typeKey: 'store-pos' } },
+          ],
+          wires: [{ id: 'w2', from_node_id: 'ws-pos', to_node_id: 'ws-wh', direction: 'one-way', relationship_type: 'stock-routing' }],
+        });
+      }
+      return Promise.resolve(null);
+    });
+    await renderReady(1);
+
+    // The compare affordance is a toolbar button (two branches exist).
+    fireEvent.click(screen.getByRole('button', { name: 'topology-compare-open' }));
+
+    // Both diagrams are fetched and the summary is rendered.
+    await waitFor(() =>
+      expect(screen.getByText('1 workspaces only here · 1 only in Second Street · 1 differ')).toBeInTheDocument(),
+    );
+    expect(screen.getByText('Only here: Kitchen Display')).toBeInTheDocument();
+    expect(screen.getByText('Only in Second Street: Stock Room')).toBeInTheDocument();
+    expect(screen.getByText('Differing: Front Register')).toBeInTheDocument();
+  });
+
+  it('compare panel closes and reports no differences for identical diagrams', async () => {
+    mockListStores.mockResolvedValue([
+      { id: 'store-1', name: 'Main Street', is_primary: true, address: '', tax_id: '', currency: 'USD', timezone: 'UTC', created_at: '', updated_at: '' },
+      { id: 'store-2', name: 'Second Street', is_primary: false, address: '', tax_id: '', currency: 'USD', timezone: 'UTC', created_at: '', updated_at: '' },
+    ]);
+    const sameDiagram = {
+      nodes: [{ id: 'ws-pos', type: 'workspace', name: 'Front Register', x: 0, y: 0, metadata: { typeKey: 'store-pos' } }],
+      wires: [],
+    };
+    mockLoadTopology.mockResolvedValue(sameDiagram);
+    await renderReady(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'topology-compare-open' }));
+    await waitFor(() => expect(screen.getByText('No differences')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'topology-compare-close' }));
+    expect(screen.queryByText('No differences')).not.toBeInTheDocument();
   });
 
   // ── #4: Atomic diff — single applyTopologyDiff call ────────────

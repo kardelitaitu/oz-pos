@@ -446,3 +446,43 @@ describe('i18n two-way key parity (en ↔ id)', () => {
     ).toEqual([]);
   });
 });
+
+// ── Topology placeholder resolution (round 154 regression) ───────
+//
+// Rounds 150-152 introduced `topology-apply-workspace-diff` and the
+// discard-dialog message with BARE `{ created }` / `{name}`
+// placeholders. Fluent treats a bare identifier as a TERM reference,
+// so the real runtime rendered the literal `{created}` text (with
+// isolating error markers) instead of the supplied numbers/names —
+// invisible to the mocked-Fluent editor/screen tests, which
+// interpolate by hand. Topology placeholders must use `$`-prefixed
+// variables, pinned here against the REAL production bundles in BOTH
+// locales so a regression fails at the source.
+describe('i18n topology placeholder resolution (round 154)', () => {
+  const cases: Array<{ key: string; args: Record<string, string | number>; en: string; id: string }> = [
+    {
+      key: 'topology-apply-workspace-diff',
+      args: { created: 1, updated: 0, archived: 0, typeChanged: 0, from: 0, to: 1 },
+      en: '1 created · 0 updated · 0 archived · 0 type-changed · rev 0 → 1',
+      id: '1 dibuat · 0 diperbarui · 0 diarsipkan · 0 diubah jenisnya · rev 0 → 1',
+    },
+    {
+      key: 'topology-discard-changes-msg',
+      args: { name: 'Main Street' },
+      en: '"Main Street" has unsaved changes. Switching branches will discard them.',
+      id: '"Main Street" memiliki perubahan yang belum disimpan. Pindah cabang akan menghilangkannya.',
+    },
+  ];
+
+  it('resolves topology placeholders without Fluent error markers in both locales', () => {
+    for (const { key, args, en, id } of cases) {
+      for (const [locale, expected] of [['en', en], ['id', id]] as const) {
+        const bundle = getBundle(locale);
+        const errors: Error[] = [];
+        const rendered = bundle.formatPattern(bundle.getMessage(key)!.value!, args, errors);
+        expect(rendered, `${key} (${locale})`).toBe(expected);
+        expect(errors, `${key} (${locale})`).toEqual([]);
+      }
+    }
+  });
+});
