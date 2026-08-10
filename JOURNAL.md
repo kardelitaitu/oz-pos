@@ -3244,7 +3244,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** editor suite 479/479 (+2) · full UI suite 276 files / 4,685 tests (+2) · typecheck ✓ · eslint 0 errors (8 pre-existing warnings).
 
-**Commits:** (ref back-filled after commit)
+**Commits:** `80919173`
 
 **Deliberately NOT done:** no auto-nudge/settle for the keyboard path (the wall is the design — auto-resolving a 1px step to a 24px-away spot would be jarring); no duplicate-commit settle (duplicate-in-place copies still overlap their originals by design — the creation-gesture exception from round 140 carries over to the keyboard; Ctrl+D places copies one grid step away, which the wall does not affect).
 
