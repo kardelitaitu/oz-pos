@@ -2995,3 +2995,23 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Commits:** none (verification only) — the round-124 fix commit `4a85c203` stands.
 
 **Risks / follow-ups:** the tablet and desktop share the entire feature surface, so any future plan-gate UI work is inherently cross-client; there is no per-client variant to maintain. If a tablet-only product decision ever splits the feature set, the offline/plan-gate pair (screen + SyncSection) should be the first to get a dedicated tablet review.
+
+### 2026-08-10 — topology hover state extracted into typed state machine (round 126)
+
+**Slice (audit gap #1, final interaction-state extraction):** the editor's hover-focus state — `hoveredNodeId` (focus-mode dimming) and `hoveredWireId` (bend-ghost affordance) — was the last loose `useState` pair. Same drift class as the selection/drag/connection machines already extracted.
+
+**Weakness (evidence):** every structural canvas replacement clears the port-snap `hoveredTarget` but NOT the node/wire hover: the load chain (4 sites), `loadPreset`, the unassigned-branch path, and the branch-location-removal path all call `setHoveredTarget(null)` + `cancelConnection()`, and the prune effect prunes selection + connection on node/wire removal — but none cleared `hoveredNodeId`/`hoveredWireId`. React never fires `mouseleave` on unmount, so a stale hovered id survived a preset load / branch reload / batch delete. Because `hoverConnections` derives from `hoveredNodeId`, the stale id kept it non-null and every remaining card (`node-dimmed`) and wire (dimmed) rendered dimmed until the next hover — verified pre-fix: deleting a hovered wireless node left all 3 remaining cards dimmed.
+
+**Red:** 12 tests in `nodeTopologyEditorHoverState.test.ts` (mutual exclusion both directions, own-slot-only null clears, clear-hover, prune dropping dangling node/wire ids and keeping live ones, the functional leave-updater the card/wire handlers pass, wire leave guard) — failed with module-missing transform error. Plus one component-level regression in the editor suite: hover a wireless card, Delete it, assert zero `.node-dimmed` remain. That test genuinely pins the bug — with `pruneHover` temporarily removed it fails with 3 dimmed nodes.
+
+**Green:** `nodeTopologyEditorHoverState.ts` — reducer where node/wire hover are mutually exclusive (each non-null hover clears the other), a null clear touches only its own slot (so a node's leave never clobbers a wire hover), `clear-hover` for structural replacement, and `prune` drops dangling ids. The hook accepts `SetStateAction<string|null>` (functional updaters from the card/wire `mouseleave` handlers) via a render-time ref mirror, matching the drag hook's pattern.
+
+**Refactor:** editor now consumes `useTopologyEditorHover()`; `pruneHover(validNodeIds, validWireIds)` added to the prune effect, `clearHover()` beside every `setHoveredTarget(null)` structural site (load ×4, loadPreset, unassigned, branch-location removal); child prop write sites now `hoverNode`/`hoverWire`.
+
+**Verified:** hover reducer 12/12 · editor suite 462/462 (+1 regression) · **full UI suite 275 files / 4,661 tests** (+13) · a11y 8/8 · typecheck ✓ · eslint ✓.
+
+**Commits:** `<pending>`
+
+**Deliberately NOT done:** the port-snap `hoveredTarget` stays in the component — it is connection-drag-scoped (the connection machine's preview), not a canvas-hover affordance, and its lifetime is already coupled to `connectingFromNodeId` by an effect. The context-menu / confirm-dialog / finder modals are single-writer states (one opener, one closer each) — a reducer would add ceremony without a drift class to fix.
+
+**Risks / follow-ups:** the marquee, alignment guides, and fresh-node animation are the remaining transient UI states; they are each already carefully paired with ref mirrors and self-clearing effects, so no machine extraction is warranted without a demonstrated drift.

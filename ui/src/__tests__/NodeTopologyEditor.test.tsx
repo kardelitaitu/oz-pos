@@ -6494,6 +6494,33 @@ describe('NodeTopologyEditor — hover focus mode', () => {
     fireEvent.mouseLeave(store!);
     expect(document.querySelectorAll('.node-dimmed')).toHaveLength(0);
   });
+
+  it('deleting the hovered node must not leave the remaining canvas dimmed', async () => {
+    // Regression: the prune effect cleared selection and connection on node
+    // removal but not the hover. React never fires mouseleave on unmount, so
+    // the stale hovered id kept hoverConnections non-null and every
+    // remaining card rendered dimmed until the next hover.
+    renderEditor();
+    const baseline = getNodeCount();
+
+    // Add a wireless node (Delete removes it immediately, no dialog).
+    fireEvent.click(screen.getByText('+ Store Node'));
+    await waitFor(() => expect(screen.getByText('New Store')).toBeInTheDocument());
+    const nodes = document.querySelectorAll('.topology-node');
+    const last = nodes[nodes.length - 1] as HTMLElement;
+
+    // Hover the card (focus mode dims the unconnected retail nodes)…
+    fireEvent.mouseEnter(last);
+    expect(document.querySelectorAll('.node-dimmed').length).toBeGreaterThan(0);
+
+    // …then delete it while the pointer still rests over its position.
+    fireEvent.keyDown(window, { key: 'Delete' });
+    await waitFor(() => expect(getNodeCount()).toBe(baseline));
+
+    // The deleted card is gone; the remaining cards must be lit again — a
+    // stale hover must not dim the whole diagram.
+    expect(document.querySelectorAll('.node-dimmed')).toHaveLength(0);
+  });
 });
 
 // ── Canvas context menu ──────────────────────────────────────────

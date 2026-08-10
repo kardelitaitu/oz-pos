@@ -56,6 +56,7 @@ import { useTopologyEditorSaveLifecycle } from './nodeTopologyEditorSaveState';
 import { useTopologyEditorSelection } from './nodeTopologyEditorSelectionState';
 import { useTopologyEditorDrag } from './nodeTopologyEditorDragState';
 import { useTopologyEditorConnection } from './nodeTopologyEditorConnectionState';
+import { useTopologyEditorHover } from './nodeTopologyEditorHoverState';
 import {
   normalizeTopologyGraph,
   normalizeWireDirection,
@@ -1203,12 +1204,20 @@ export default function NodeTopologyEditor({
 
   /** Hover-focus mode: while a node card is hovered, non-connected nodes
    *  and wires dim so the neighbourhood reads at a glance (Figma-style
-   *  focus). Null when nothing is hovered — no dimming at all. */
-  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
-  /** Wire under the pointer — reveals the midpoint bend ghosts so the
-   *  editing affordance is discoverable without selecting the wire first.
-   *  Selection alone shows the full handles; hover shows only the ghosts. */
-  const [hoveredWireId, setHoveredWireId] = useState<string | null>(null);
+   *  focus). Null when nothing is hovered — no dimming at all. Lives in one
+   *  typed reducer with the wire hover: node/wire hover are mutually
+   *  exclusive, and a structural canvas replacement or node/wire removal
+   *  prunes the stale id (React never fires mouseleave on unmount, so a
+   *  stale hover would otherwise dim the whole diagram until the next
+   *  hover). */
+  const {
+    nodeId: hoveredNodeId,
+    wireId: hoveredWireId,
+    hoverNode,
+    hoverWire,
+    clearHover,
+    pruneHover,
+  } = useTopologyEditorHover();
   const hoverConnections = useMemo(() => {
     if (!hoveredNodeId) return null;
     const ids = new Set([hoveredNodeId]);
@@ -1490,6 +1499,9 @@ export default function NodeTopologyEditor({
         // it like the rebuild path does, so no stale preview can complete.
         cancelConnection();
         setHoveredTarget(null);
+        // Removed branch cards may host a hover — clear it so the stale id
+        // cannot dim the remaining canvas (mouseleave never fires on unmount).
+        clearHover();
       }
       return;
     }
@@ -1683,6 +1695,7 @@ export default function NodeTopologyEditor({
           // so a later port click cannot complete a wire from a stale source.
           cancelConnection();
           setHoveredTarget(null);
+          clearHover();
           // A reloaded node with a surviving id must start a fresh inspector
           // edit session, or its next edit would silently skip pushHistory.
           inspectorHistoryPushedForRef.current = null;
@@ -1706,6 +1719,7 @@ export default function NodeTopologyEditor({
           setRedo([]);
           cancelConnection();
           setHoveredTarget(null);
+          clearHover();
           inspectorHistoryPushedForRef.current = null;
           commitSnapshot({ nodes: [], wires: [] });
           return;
@@ -1755,6 +1769,7 @@ export default function NodeTopologyEditor({
         // Same rule as preset loads: cancel any in-flight port connection.
         cancelConnection();
         setHoveredTarget(null);
+        clearHover();
         // A reloaded node with a surviving id must start a fresh inspector
         // edit session, or its next edit would silently skip pushHistory.
         inspectorHistoryPushedForRef.current = null;
@@ -2353,6 +2368,11 @@ export default function NodeTopologyEditor({
     const validNodeIds = new Set(nodeMap.keys());
     const validWireId = wires.some((w) => w.id === selectedWireId) ? selectedWireId : null;
     pruneSelection(validNodeIds, validWireId);
+    // A hovered node/wire that vanished (preset load, workspace reload,
+    // batch delete, undo/redo) must drop its hover too — React never fires
+    // mouseleave on unmount, so a stale id would keep hoverConnections
+    // non-null and dim every remaining card and wire until the next hover.
+    pruneHover(validNodeIds, new Set(wires.map((w) => w.id)));
     // A picker whose target node vanished (preset load, workspace reload,
     // batch delete) must close — otherwise its keyboard guard would keep
     // swallowing canvas shortcuts even though the popover is unrenderable.
@@ -2361,7 +2381,7 @@ export default function NodeTopologyEditor({
     if (relationshipPicker && !nodeMap.has(relationshipPicker.toNodeId)) {
       cancelConnection();
     }
-  }, [selectedNodeId, selectedWireId, nodeMap, wires, relationshipPicker, pruneSelection, cancelConnection]);
+  }, [selectedNodeId, selectedWireId, nodeMap, wires, relationshipPicker, pruneSelection, cancelConnection, pruneHover]);
 
   const loadPreset = useCallback((preset: 'retail' | 'restaurant') => {
     // A wholesale canvas replacement invalidates any in-flight relationship
@@ -2377,6 +2397,10 @@ export default function NodeTopologyEditor({
     // source could otherwise survive and mis-wire the new canvas).
     cancelConnection();
     setHoveredTarget(null);
+    // Same canvas-replacement rule for the node/wire hover: React never
+    // fires mouseleave on unmount, so a stale hovered id would keep
+    // hoverConnections non-null and dim the whole new canvas.
+    clearHover();
     // Same canvas-replacement rule: the simulation pulse animates the OLD
     // wire geometry, so stop it — a pulse must never animate a "test order"
     // on a topology it was never run against. Flipping isSimulating false
@@ -2402,7 +2426,7 @@ export default function NodeTopologyEditor({
     } else if (selectedWireId && !data.wires.some((w) => w.id === selectedWireId)) {
       addToast({ message: l10n.getString('topology-toast-selection-dropped'), type: 'info' });
     }
-  }, [pushHistory, selectedNodeId, selectedWireId, addToast, l10n, commitSnapshot, setNodes, setWires]);
+  }, [pushHistory, selectedNodeId, selectedWireId, addToast, l10n, commitSnapshot, setNodes, setWires, clearHover]);
 
   const popUndo = useCallback(() => {
     const stack = historyRef.current;
@@ -5491,7 +5515,7 @@ export default function NodeTopologyEditor({
                     hovered={hoveredWireId === wire.id}
                     pulse={isSimulating ? pulsePoint : null}
                     l10n={l10n}
-                    onHoverWire={setHoveredWireId}
+                    onHoverWire={hoverWire}
                     onWireClick={handleWireClick}
                     onOpenWireMenu={openWireMenu}
                     onStartGhostBend={startGhostBendDrag}
@@ -5613,7 +5637,7 @@ export default function NodeTopologyEditor({
                 onSetNodeName={handleSetNodeName}
                 onSetNodeEnabled={handleSetNodeEnabled}
                 onPortClick={handlePortClick}
-                onHoverNode={setHoveredNodeId}
+                onHoverNode={hoverNode}
                 getTelemetry={getTelemetry}
                 isPortCompatible={isPortCompatible}
               />
