@@ -3487,7 +3487,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verify:** engine 17/17 (+5) · screen 41/41 (+1) · editor suite 496/496 (+1) · **full UI 280 files / 4,763 tests (+7)** · typecheck ✓ · eslint 0 errors (8 pre-existing warnings) · **two compliance gates caught real defects**: `themeTokenCompliance` flagged a hardcoded `13px` ghost-name font-size (fixed to `--text-sm`) and `noiseDitherCompliance` flagged the two marker box-shadows as elevated surfaces (replaced `--shadow-md` with flat rings) · drift guard clean.
 
-**Commits:** (added below after commit)
+**Commits:** `db7f8e8c` (feat(topology): ghost overlay renders the branch diff on the canvas)
 
 **Deliberately NOT done:** no ghost WIRES — the other branch's wiring could ghost over the canvas, but wire geometry is computed live from the current diagram and a second wire set has no safe geometry source (the round-146 `wireUnderCardSegments` machinery is current-side only); no ghost interaction (clicks, hover, drag) — decorative by design; no overlay toggle yet — the overlay is only visible while the compare panel is open (the panel's close clears it).
 
