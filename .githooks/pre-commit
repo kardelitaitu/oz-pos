@@ -8,23 +8,19 @@ if ! cargo fmt --all 2>/dev/null; then
     exit 1
 fi
 
-# Re-stage ONLY files that cargo fmt actually modified (.rs sources).
-# Earlier: `git diff --name-only` returned every tracked-but-uncommitted
-# change in the working tree — not just files `cargo fmt --all` touched.
-# The hook then auto-staged them via `git add $CHANGED`, sweeping every
-# non-Rust file in the developer's in-flight work (unrelated .md / .tsx
-# / .ftl / .json / .gitignore / AGENTS.md / READMEs) into the next
-# commit's staging area. Scope the diff to `-- '*.rs'` so CHANGED holds
-# only Rust files (cargo fmt's actual mutation surface). Other
-# working-tree changes stay in the developer's own staging — the hook
-# is a check, not a silent re-stage.
-CHANGED=$(git diff --name-only -- '*.rs')
-if [ -n "$CHANGED" ]; then
+# Re-stage ONLY .rs files that are part of the current commit (staged
+# before the hook ran). `git diff --name-only -- '*.rs'` lists every
+# working-tree-modified Rust file — including other agents' in-flight
+# changes — so adding that whole list swept unrelated Rust work into
+# the commit despite this comment's earlier claim. Formatting fixes to
+# .rs files outside the staged set stay in the worktree for their
+# owner's own commit; the hook is a check, not a silent re-stage.
+STAGED_RS=$(git diff --cached --name-only -- '*.rs')
+if [ -n "$STAGED_RS" ]; then
     echo "cargo fmt applied changes to:"
-    echo "$CHANGED"
-    git add $CHANGED
-fi
-
+    echo "$STAGED_RS"
+    git add $STAGED_RS
+fi
 # ── i18n lint ──────────────────────────────────────────────────────────────
 # Runs the local i18n quality gate (mirrors `.github/workflows/ci.yml#ui
 # i18n quality gate`) on every commit so translation gaps and Fluent
