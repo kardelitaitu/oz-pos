@@ -28,7 +28,7 @@ import {
   NodesIcon,
   WarningIcon,
 } from './NodeTopologyIcons';
-import { plainErrorMessage } from '@/utils/app-error';
+import { parseAppError, plainErrorMessage } from '@/utils/app-error';
 import {
   clampNodeToViewport,
   edgeAutoPanDelta,
@@ -565,6 +565,19 @@ const snap = (v: number) => Math.round(v / GRID_SIZE) * GRID_SIZE;
 const issueKey = topologyIssueKey;
 const graphIssueKey = (messageId: string) => `graph:${messageId}`;
 
+/** True when the thrown error is the backend's topology-revision-conflict
+ *  (round 133). A stale base revision can never retry successfully, so the
+ *  editor treats it differently from a generic save failure: it reloads the
+ *  authoritative topology instead of keeping a canvas that can never apply.
+ *  The backend serializes TopologyValidation as
+ *  { kind: 'topologyValidation', code: 'topology-revision-conflict', ... }. */
+function isTopologyRevisionConflict(err: unknown): boolean {
+  const typed = parseAppError(err);
+  return typed !== null
+    && (typed as { kind?: string }).kind === 'topologyValidation'
+    && (typed as { code?: string }).code === 'topology-revision-conflict';
+}
+
 /** Milliseconds the issues-count readout waits after the LAST validation
  *  change before animating to the new count. Long enough to absorb the
  *  flicker of a drag or connect gesture that temporarily changes the
@@ -744,6 +757,10 @@ export default function NodeTopologyEditor({
   } = useTopologyEditorSaveLifecycle();
   /** Branch-scoped issue dismissals loaded from and saved with the topology. */
   const [resolvedIssues, setResolvedIssues] = useState<Set<string>>(new Set());
+  /** Monotonic token bumped to force an authoritative reload on demand — the
+   *  revision-conflict recovery adopts the newer topology by re-running the
+   *  load effect (which also depends on workspaceInstances/branchLocations). */
+  const [reloadKey, setReloadKey] = useState(0);
 
   /** Selection (primary node, multi-selection set, wire) lives in one
    *  typed reducer — node and wire selection are mutually exclusive by
@@ -1801,7 +1818,7 @@ export default function NodeTopologyEditor({
       });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceInstances, branchLocations, branchId]);
+  }, [workspaceInstances, branchLocations, branchId, reloadKey]);
 
   // ── Inline node rename on the card (Branch Location + workspace) ──
   const [renamingNodeId, setRenamingNodeId] = useState<string | null>(null);
@@ -4773,6 +4790,21 @@ export default function NodeTopologyEditor({
                     setWires(savedWires);
                   }
                 } catch (err) {
+                  if (isTopologyRevisionConflict(err)) {
+                    // A stale base revision can never retry — the backend
+                    // rejected it (round 133) and every retry will fail the
+                    // same way. Adopt the authoritative topology so the user
+                    // re-applies onto the fresh revision instead of being
+                    // stranded on a stale canvas.
+                    addToast({
+                      message: l10n.getString('topology-toast-revision-conflict'),
+                      type: 'error',
+                    });
+                    skipNextLoadRef.current = false;
+                    failApply();
+                    setReloadKey((k) => k + 1);
+                    return;
+                  }
                   addToast({
                     message: `${l10n.getString('topology-toast-save-error')}: ${plainErrorMessage(err)}`,
                     type: 'error',

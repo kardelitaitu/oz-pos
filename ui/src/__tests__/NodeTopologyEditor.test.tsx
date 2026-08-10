@@ -5825,6 +5825,56 @@ describe('NodeTopologyEditor — Apply failure resilience', () => {
     // Selection survives — the failure returns before the idMap branch clears it.
     expect(document.querySelector('.topology-node.node-selected')).not.toBeNull();
   });
+
+  it('adopts the authoritative topology when Apply rejects with a revision conflict', async () => {
+    // A stale base revision can never retry successfully (round 133) — the
+    // editor must reload the authoritative topology instead of stranding the
+    // user on a stale canvas whose every Apply fails with the same conflict.
+    // The mock returns a real (authoritative) diagram on EVERY load so the
+    // reload visibly replaces the canvas — a null response is a deliberate
+    // no-op for the standalone editor (it keeps the demo preset).
+    mockLoadTopology.mockImplementation(async () => ({
+      revision: 1,
+      resolved_issue_keys: [],
+      nodes: [{
+        id: 'store-auth',
+        type: 'store',
+        name: 'Authoritative Branch',
+        x: 80,
+        y: 140,
+      }],
+      wires: [],
+    }));
+
+    renderEditor({
+      onSave: async () => {
+        // The backend serializes TopologyValidation as
+        // { kind: 'topologyValidation', code: 'topology-revision-conflict', ... }.
+        throw {
+          kind: 'topologyValidation',
+          code: 'topology-revision-conflict',
+          nodeId: null,
+          wireId: null,
+          portId: null,
+          message: 'topology revision conflict: expected 0, current 1',
+        };
+      },
+    });
+
+    // Initial authoritative load lands the diagram, then the user makes a
+    // stale edit that will never be accepted.
+    await waitFor(() => expect(getNodeCount()).toBe(1));
+    fireEvent.click(screen.getByText('+ Store Node'));
+    expect(getNodeCount()).toBe(2);
+
+    fireEvent.click(screen.getByText('Apply Topology Changes'));
+
+    // The conflict must trigger an authoritative reload that replaces the
+    // stale canvas (back to the authoritative diagram's single node) — and
+    // the reload must not be swallowed by the post-save skip guard.
+    await waitFor(() => expect(getNodeCount()).toBe(1));
+    expect(mockLoadTopology.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
 });
 
 // ── Wire click cycles direction ─────────────────────────────────

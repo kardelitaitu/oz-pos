@@ -273,6 +273,7 @@ topology-port-guidance-incompatible = Target tidak kompatibel
 
 # ── Toast messages ──
 topology-toast-save-error = Gagal menyimpan topologi
+topology-toast-revision-conflict = Topologi berubah di tempat lain — versi terbaru telah dimuat. Terapkan kembali perubahan Anda.
 topology-toast-no-session = Tidak ada sesi aktif — tidak dapat menyimpan workspace.
 topology-toast-saved = Topologi tersimpan: { $detail }.
 

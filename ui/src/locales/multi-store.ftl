@@ -275,6 +275,7 @@ topology-port-guidance-incompatible = Incompatible target
 
 # ── Toast messages ──
 topology-toast-save-error = Failed to save topology
+topology-toast-revision-conflict = The topology changed elsewhere — loaded the latest version. Re-apply your changes.
 topology-toast-no-session = No active session — cannot save workspaces.
 topology-toast-saved = Topology saved: { $detail }.
 
