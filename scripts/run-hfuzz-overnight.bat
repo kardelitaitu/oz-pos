@@ -18,6 +18,11 @@ REM                                       with live output. Closing this window
 REM                                       kills wsl.exe and stops the fuzzing —
 REM                                       regular .bat behavior.
 REM
+REM  Companion scripts:
+REM    tail-hfuzz.bat  - watch the campaign log live (safe to open anytime)
+REM    stop-hfuzz.bat  - stop the running campaign (kills WSL processes +
+REM                      closes the minimized console)
+REM
 REM  Both modes run fuzz/hfuzz/run_overnight.sh (the "run while you sleep"
 REM  fuzzing campaign) inside WSL. Equivalent to:
 REM
