@@ -739,6 +739,7 @@ describe('TopologyScreen', () => {
       },
     ], [
       locationWire('store-1', 'ws-pos', 'w-loc'),
+      locationWire('store-1', 'wh-1', 'w-wh-scope'),
       {
         id: 'w-stock',
         fromNodeId: 'ws-pos',
@@ -779,6 +780,7 @@ describe('TopologyScreen', () => {
       },
     ], [
       locationWire('store-1', 'ws-pos', 'w-loc'),
+      locationWire('store-1', 'wh-1', 'w-wh-scope'),
       {
         id: 'w-stock',
         fromNodeId: 'ws-pos',
@@ -816,7 +818,10 @@ describe('TopologyScreen', () => {
           metadata: { stock: 500, capacity: 1000 },
         },
       ],
-      [locationWire('store-1', 'ws-pos', 'w-loc')],
+      [
+        locationWire('store-1', 'ws-pos', 'w-loc'),
+        locationWire('store-1', 'wh-1', 'w-wh-scope'),
+      ],
     );
 
   it('blocks an unwired capacity warehouse on Pro tier', async () => {
@@ -863,6 +868,8 @@ describe('TopologyScreen', () => {
       ],
       [
         locationWire('store-1', 'ws-pos', 'w-loc'),
+        locationWire('store-1', 'wh-hub', 'w-hub-scope'),
+        locationWire('store-1', 'wh-sat', 'w-sat-scope'),
         {
           id: 'w-stock',
           fromNodeId: 'ws-pos',

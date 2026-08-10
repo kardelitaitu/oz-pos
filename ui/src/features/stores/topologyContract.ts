@@ -121,6 +121,9 @@ export interface TopologyValidationError {
     | 'missing-operation-input'
     | 'multiple-operation-inputs'
     | 'invalid-operation-source'
+    | 'missing-warehouse-input'
+    | 'multiple-warehouse-inputs'
+    | 'invalid-warehouse-operation-source'
     | 'invalid-semantic-connection'
     | 'ambiguous-legacy-wire'
     | 'cycle-detected'
@@ -181,10 +184,30 @@ export const WORKSPACE_DEFINITION: SemanticNodeDefinition = {
   ],
 };
 
-/** Operational storage node definition; ownership is not implied. */
+/** Operational storage node definition. A Stock Room has one primary
+ *  inbound scope: Branch Location or Retail POS Operation. Stock/transfer
+ *  routes remain operational compatibility ports and do not replace that
+ *  primary relationship. */
 export const WAREHOUSE_DEFINITION: SemanticNodeDefinition = {
   kind: 'warehouse',
-  ports: [],
+  ports: [
+    {
+      id: 'location-in',
+      labelId: 'topology-port-location-in',
+      direction: 'input',
+      relationshipType: 'location',
+      required: false,
+      cardinality: 'one',
+    },
+    {
+      id: 'operation-in',
+      labelId: 'topology-port-operation-in',
+      direction: 'input',
+      relationshipType: 'generic',
+      required: false,
+      cardinality: 'one',
+    },
+  ],
 };
 
 /** Operational hardware node definition; ownership is not implied. */
@@ -250,6 +273,7 @@ const RELATIONSHIP_TYPES = new Set<SemanticRelationshipType>([
 const SEMANTIC_PORT_IDS: ReadonlySet<string> = new Set<SemanticPortId | 'legacy-out' | 'legacy-in'>([
   'location-out',
   'location-in',
+  'operation-out',
   'operation-in',
   'stock-out',
   'stock-in',
@@ -319,6 +343,15 @@ function inferredWire(
       fromPortId: 'operation-out',
       toPortId: 'operation-in',
       relationshipType: 'generic',
+      legacyInferred: true,
+    };
+  }
+
+  if (fromNode?.kind === 'branch-location' && toNode?.kind === 'warehouse') {
+    return {
+      fromPortId: 'location-out',
+      toPortId: 'location-in',
+      relationshipType: 'location',
       legacyInferred: true,
     };
   }
@@ -449,9 +482,10 @@ function semanticNodesMatchWire(
         && toNode.kind === 'hardware';
     case 'operation-out|operation-in|generic':
       return fromNode.kind === 'workspace'
-        && fromTypeKey === 'restaurant-pos'
-        && toNode.kind === 'workspace'
-        && toTypeKey === 'kds';
+        && ((fromTypeKey === 'restaurant-pos'
+          && toNode.kind === 'workspace'
+          && toTypeKey === 'kds')
+          || (fromTypeKey === 'store-pos' && toNode.kind === 'warehouse'));
     case 'device-out|generic-in|hardware-connection':
       return fromNode.kind === 'hardware' && toNode.kind === 'hardware';
     case 'generic-out|generic-in|generic':
@@ -730,8 +764,9 @@ export function validateTopologyGraph(
     if (
       !branchIds.has(wire.fromNodeId)
       || wire.fromPortId !== 'location-out'
-      || !workspaceIds.has(wire.toNodeId)
-      || wire.toPortId !== 'location-in'
+      || (!workspaceIds.has(wire.toNodeId)
+        && !graph.nodes.some((node) => node.id === wire.toNodeId && node.kind === 'warehouse'))
+      || !['location-in'].includes(wire.toPortId)
     ) {
       errors.push({
         code: 'invalid-location-connection',
@@ -801,6 +836,51 @@ export function validateTopologyGraph(
         nodeId: workspaceId,
         portId: 'location-in',
       });
+    }
+  }
+
+  // A Stock Room has exactly one primary inbound scope. It may be attached
+  // directly to the Branch Location, or receive an Operation feed from Retail
+  // POS, but never both and never more than one of either kind. Operational
+  // stock/transfer routes remain separate compatibility/runtime edges.
+  const warehouseNodes = graph.nodes.filter((node) => node.kind === 'warehouse');
+  for (const warehouse of warehouseNodes) {
+    const locationInputs = ownership.filter(
+      (wire) => wire.toNodeId === warehouse.id
+        && wire.toPortId === 'location-in',
+    );
+    const operationInputs = graph.wires.filter(
+      (wire) => wire.toNodeId === warehouse.id
+        && wire.toPortId === 'operation-in'
+        && wire.relationshipType === 'generic',
+    );
+    const primaryInputs = [...locationInputs, ...operationInputs];
+    if (primaryInputs.length === 0) {
+      errors.push({
+        code: 'missing-warehouse-input',
+        messageId: 'topology-validation-missing-warehouse-input',
+        nodeId: warehouse.id,
+        portId: 'location-in',
+      });
+    } else if (primaryInputs.length > 1) {
+      errors.push({
+        code: 'multiple-warehouse-inputs',
+        messageId: 'topology-validation-multiple-warehouse-inputs',
+        nodeId: warehouse.id,
+        portId: primaryInputs[1]!.toPortId,
+      });
+    }
+    for (const input of operationInputs) {
+      const source = graph.nodes.find((node) => node.id === input.fromNodeId);
+      if (source?.kind !== 'workspace' || source.typeKey !== 'store-pos') {
+        errors.push({
+          code: 'invalid-warehouse-operation-source',
+          messageId: 'topology-validation-invalid-warehouse-operation-source',
+          nodeId: warehouse.id,
+          wireId: input.id,
+          portId: 'operation-in',
+        });
+      }
     }
   }
 

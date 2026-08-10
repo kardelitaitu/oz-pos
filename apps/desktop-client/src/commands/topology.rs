@@ -296,6 +296,10 @@ fn compile_topology_runtime_plan(
         .iter()
         .filter_map(|node| value_string(node, "id"))
         .collect();
+    let node_by_id: std::collections::HashMap<&str, &Value> = nodes
+        .iter()
+        .filter_map(|node| value_string(node, "id").map(|id| (id, node)))
+        .collect();
     let routes: Vec<Value> = wires
         .iter()
         .filter(|wire| value_string(wire, "relationship_type") != Some("location"))
@@ -311,6 +315,13 @@ fn compile_topology_runtime_plan(
                 "from_port_id": value_string(wire, "from_port_id").unwrap_or_default(),
                 "to_port_id": value_string(wire, "to_port_id").unwrap_or_default(),
                 "relationship_type": value_string(wire, "relationship_type").unwrap_or_default(),
+                "target_node_kind": value_string(
+                    node_by_id
+                        .get(value_string(wire, "to_node_id").unwrap_or_default())
+                        .copied()
+                        .unwrap_or(&Value::Null),
+                    "type",
+                ).unwrap_or_default(),
             })
         })
         .collect();
@@ -463,8 +474,12 @@ fn ambiguous_legacy_wire(nodes: &[Value], wire: &Value) -> bool {
 
     !matches!(
         (from_type, from_type_key, to_type, to_type_key),
-        (Some("store" | "branch-location"), _, Some("workspace"), _)
-            | (Some("workspace"), _, Some("warehouse"), _)
+        (
+            Some("store" | "branch-location"),
+            _,
+            Some("workspace" | "warehouse"),
+            _
+        ) | (Some("workspace"), _, Some("warehouse"), _)
             | (
                 Some("workspace"),
                 "restaurant-pos",
@@ -562,9 +577,10 @@ fn semantic_wire_matches_contract(wire: &Value, from_node: &Value, to_node: &Val
         }
         (Some("operation-out"), Some("operation-in"), Some("generic")) => {
             from_type == Some("workspace")
-                && from_type_key == "restaurant-pos"
-                && to_type == Some("workspace")
-                && to_type_key == "kds"
+                && ((from_type_key == "restaurant-pos"
+                    && to_type == Some("workspace")
+                    && to_type_key == "kds")
+                    || (from_type_key == "store-pos" && to_type == Some("warehouse")))
         }
         (Some("device-out"), Some("generic-in"), Some("hardware-connection")) => {
             from_type == Some("hardware") && to_type == Some("hardware")
@@ -691,7 +707,11 @@ fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), AppErr
             // two-way are all legal — normalizeWireDirection). Rejecting a
             // location wire whose direction was cycled in the editor would
             // be a frontend/backend contract drift.
-            || !workspace_ids.contains(&value_string(wire, "to_node_id").unwrap_or_default())
+            || (!workspace_ids.contains(&value_string(wire, "to_node_id").unwrap_or_default())
+                && !nodes.iter().any(|node| {
+                    value_string(node, "id") == value_string(wire, "to_node_id")
+                        && semantic_node_type(node) == Some("warehouse")
+                }))
         {
             return Err(topology_validation(
                 "invalid-location-connection",
@@ -738,7 +758,11 @@ fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), AppErr
             && value_string(wire, "relationship_type") == Some("generic")
             && semantic_node_type(to_node) == Some("workspace")
             && semantic_type_key(to_node) == "kds";
-        if is_kds_operation {
+        let is_warehouse_operation = value_string(wire, "from_port_id") == Some("operation-out")
+            && value_string(wire, "to_port_id") == Some("operation-in")
+            && value_string(wire, "relationship_type") == Some("generic")
+            && semantic_node_type(to_node) == Some("warehouse");
+        if is_kds_operation || is_warehouse_operation {
             continue;
         }
         if !semantic_wire_matches_contract(wire, from_node, to_node) {
@@ -859,6 +883,77 @@ fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), AppErr
                     Some("operation-in"),
                     format!(
                         "workspace {workspace_id} Operation In must receive operation-out from Restaurant POS"
+                    ),
+                ));
+            }
+        }
+    }
+
+    // A Stock Room has one primary inbound scope: Branch Location or Retail
+    // POS Operation. Stock/transfer routes remain separate operational edges.
+    for warehouse in nodes
+        .iter()
+        .filter(|node| semantic_node_type(node) == Some("warehouse"))
+    {
+        let warehouse_id = value_string(warehouse, "id").unwrap_or_default();
+        let location_inputs: Vec<&Value> = wires
+            .iter()
+            .filter(|wire| {
+                value_string(wire, "relationship_type") == Some("location")
+                    && value_string(wire, "to_node_id") == Some(warehouse_id)
+                    && value_string(wire, "to_port_id") == Some("location-in")
+            })
+            .collect();
+        let operation_inputs: Vec<&Value> = wires
+            .iter()
+            .filter(|wire| {
+                value_string(wire, "relationship_type") == Some("generic")
+                    && value_string(wire, "to_node_id") == Some(warehouse_id)
+                    && value_string(wire, "to_port_id") == Some("operation-in")
+            })
+            .collect();
+        let primary_count = location_inputs.len() + operation_inputs.len();
+        if primary_count == 0 {
+            return Err(topology_validation(
+                "missing-warehouse-input",
+                Some(warehouse_id),
+                None,
+                Some("location-in"),
+                format!(
+                    "warehouse {warehouse_id} requires one Location or Retail POS Operation connection"
+                ),
+            ));
+        }
+        if primary_count > 1 {
+            let duplicate = operation_inputs
+                .first()
+                .or_else(|| location_inputs.get(1))
+                .copied();
+            return Err(topology_validation(
+                "multiple-warehouse-inputs",
+                Some(warehouse_id),
+                duplicate.and_then(|wire| value_string(wire, "id")),
+                duplicate.and_then(|wire| value_string(wire, "to_port_id")),
+                format!(
+                    "warehouse {warehouse_id} accepts only one primary Location or Retail POS Operation connection"
+                ),
+            ));
+        }
+        for operation_wire in operation_inputs {
+            let source_is_retail_pos = nodes.iter().any(|node| {
+                value_string(node, "id") == value_string(operation_wire, "from_node_id")
+                    && semantic_node_type(node) == Some("workspace")
+                    && semantic_type_key(node) == "store-pos"
+                    && value_string(operation_wire, "from_port_id") == Some("operation-out")
+            });
+            if !source_is_retail_pos {
+                return Err(topology_validation(
+                    "invalid-warehouse-operation-source",
+                    Some(warehouse_id),
+                    value_string(operation_wire, "id"),
+                    Some("operation-in"),
+                    format!(
+                        "warehouse {warehouse_id} Operation In must receive operation-out from Retail POS"
                     ),
                 ));
             }
@@ -2452,11 +2547,128 @@ mod tests {
             ],
             vec![
                 semantic_location_wire("wire-store-location", "store-pos"),
+                semantic_location_wire("wire-warehouse-scope", "warehouse-1"),
                 valid_wire,
             ],
         );
 
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn semantic_save_accepts_warehouse_location_or_retail_pos_operation() {
+        let conn = fresh_conn();
+        let mut retail_pos = semantic_node("retail-pos", "workspace", None);
+        retail_pos["metadata"] = serde_json::json!({ "typeKey": "store-pos" });
+        let warehouse = semantic_node("warehouse-1", "warehouse", None);
+        let operation_wire = serde_json::json!({
+            "id": "wire-retail-warehouse",
+            "from_node_id": "retail-pos",
+            "to_node_id": "warehouse-1",
+            "direction": "one-way",
+            "from_port_id": "operation-out",
+            "to_port_id": "operation-in",
+            "relationship_type": "generic",
+        });
+
+        let result = save_topology_json(
+            &conn,
+            vec![
+                semantic_node("branch", "branch-location", Some("default")),
+                retail_pos,
+                warehouse,
+            ],
+            vec![
+                semantic_location_wire("wire-retail-location", "retail-pos"),
+                operation_wire,
+            ],
+        );
+        assert!(result.is_ok());
+
+        let location_result = save_topology_json(
+            &conn,
+            vec![
+                semantic_node("branch", "branch-location", Some("default")),
+                semantic_node("warehouse-1", "warehouse", None),
+            ],
+            vec![semantic_location_wire(
+                "wire-warehouse-scope",
+                "warehouse-1",
+            )],
+        );
+        assert!(location_result.is_ok());
+    }
+
+    #[test]
+    fn semantic_save_rejects_multiple_warehouse_primary_inputs() {
+        let conn = fresh_conn();
+        let mut retail_pos = semantic_node("retail-pos", "workspace", None);
+        retail_pos["metadata"] = serde_json::json!({ "typeKey": "store-pos" });
+        let operation_wire = serde_json::json!({
+            "id": "wire-retail-warehouse",
+            "from_node_id": "retail-pos",
+            "to_node_id": "warehouse-1",
+            "direction": "one-way",
+            "from_port_id": "operation-out",
+            "to_port_id": "operation-in",
+            "relationship_type": "generic",
+        });
+        let result = save_topology_json(
+            &conn,
+            vec![
+                semantic_node("branch", "branch-location", Some("default")),
+                retail_pos,
+                semantic_node("warehouse-1", "warehouse", None),
+            ],
+            vec![
+                semantic_location_wire("wire-warehouse-scope", "warehouse-1"),
+                semantic_location_wire("wire-retail-location", "retail-pos"),
+                operation_wire,
+            ],
+        );
+
+        match result {
+            Err(AppError::TopologyValidation { code, node_id, .. }) => {
+                assert_eq!(code, "multiple-warehouse-inputs");
+                assert_eq!(node_id.as_deref(), Some("warehouse-1"));
+            }
+            other => panic!("expected multiple-warehouse-inputs, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn semantic_save_rejects_warehouse_operation_from_non_retail_pos() {
+        let mut restaurant_pos = semantic_node("restaurant-pos", "workspace", None);
+        restaurant_pos["metadata"] = serde_json::json!({ "typeKey": "restaurant-pos" });
+        let operation_wire = serde_json::json!({
+            "id": "wire-invalid-warehouse-operation",
+            "from_node_id": "restaurant-pos",
+            "to_node_id": "warehouse-1",
+            "direction": "one-way",
+            "from_port_id": "operation-out",
+            "to_port_id": "operation-in",
+            "relationship_type": "generic",
+        });
+        let result = save_topology_json(
+            &fresh_conn(),
+            vec![
+                semantic_node("branch", "branch-location", Some("default")),
+                restaurant_pos,
+                semantic_node("warehouse-1", "warehouse", None),
+            ],
+            vec![
+                semantic_location_wire("wire-restaurant-location", "restaurant-pos"),
+                operation_wire,
+            ],
+        );
+
+        match result {
+            Err(AppError::TopologyValidation { code, wire_id, .. }) => {
+                assert_eq!(code, "invalid-warehouse-operation-source");
+                assert_eq!(wire_id.as_deref(), Some("wire-invalid-warehouse-operation"));
+            }
+            other => panic!("expected invalid-warehouse-operation-source, got {other:?}"),
+        }
     }
 
     #[test]

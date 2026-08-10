@@ -77,8 +77,35 @@ const ownershipWire = (id: string, workspaceId: string): TopologyWireData => ({
   direction: 'one-way',
 });
 
-function graph(nodes: TopologyNodeData[], wires: TopologyWireData[]) {
-  return normalizeTopologyGraph(nodes, wires);
+const warehouseScopeWire = (id: string, warehouseId: string): TopologyWireData => ({
+  id,
+  fromNodeId: 'branch-1',
+  fromPort: 'right',
+  fromPortId: 'location-out',
+  toNodeId: warehouseId,
+  toPort: 'left',
+  toPortId: 'location-in',
+  relationshipType: 'location',
+  direction: 'one-way',
+});
+
+function graph(
+  nodes: TopologyNodeData[],
+  wires: TopologyWireData[],
+  options: { addWarehouseScope?: boolean } = {},
+) {
+  const addWarehouseScope = options.addWarehouseScope ?? true;
+  const existingPrimary = new Set(
+    wires
+      .filter((wire) => wire.toPortId === 'location-in' || wire.toPortId === 'operation-in')
+      .map((wire) => wire.toNodeId),
+  );
+  const scopeWires = addWarehouseScope
+    ? nodes
+      .filter((node) => node.type === 'warehouse' && !existingPrimary.has(node.id))
+      .map((node, index) => warehouseScopeWire(`warehouse-scope-${index}`, node.id))
+    : [];
+  return normalizeTopologyGraph(nodes, [...wires, ...scopeWires]);
 }
 
 describe('semantic topology contract', () => {
@@ -333,7 +360,7 @@ describe('semantic topology contract', () => {
     ]));
   });
 
-  it('accepts a valid stock-routing wire through the semantic contract', () => {
+  it('accepts a valid stock-routing wire alongside the warehouse primary scope', () => {
     const storePos = { ...workspace('store-pos'), metadata: { typeKey: 'store-pos' } };
     const warehouseNode = warehouse('warehouse-1');
     const normalized = graph(
@@ -778,6 +805,58 @@ describe('semantic topology contract', () => {
         nodeId: 'wh-1',
       }),
     ]));
+  });
+
+  it('requires exactly one warehouse primary input', () => {
+    const noPrimary = validateTopologyGraph(graph(
+      [branch(), warehouse('wh-1')],
+      [],
+      { addWarehouseScope: false },
+    ));
+    expect(noPrimary).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'missing-warehouse-input', nodeId: 'wh-1' }),
+    ]));
+
+    const retailPos = { ...workspace('retail-pos'), metadata: { typeKey: 'store-pos' } };
+    const duplicate = validateTopologyGraph(graph(
+      [branch(), retailPos, warehouse('wh-1')],
+      [
+        ownershipWire('w-retail-location', 'retail-pos'),
+        warehouseScopeWire('w-location', 'wh-1'),
+        {
+          id: 'w-operation',
+          fromNodeId: 'retail-pos',
+          fromPortId: 'operation-out',
+          toNodeId: 'wh-1',
+          toPortId: 'operation-in',
+          relationshipType: 'generic',
+          direction: 'one-way',
+        },
+      ],
+    ));
+    expect(duplicate).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'multiple-warehouse-inputs', nodeId: 'wh-1' }),
+    ]));
+  });
+
+  it('accepts a Retail POS Operation as the warehouse primary input', () => {
+    const retailPos = { ...workspace('retail-pos'), metadata: { typeKey: 'store-pos' } };
+    const normalized = graph(
+      [branch(), retailPos, warehouse('wh-1')],
+      [
+        ownershipWire('w-owner', 'retail-pos'),
+        {
+          id: 'w-operation',
+          fromNodeId: 'retail-pos',
+          fromPortId: 'operation-out',
+          toNodeId: 'wh-1',
+          toPortId: 'operation-in',
+          relationshipType: 'generic',
+          direction: 'one-way',
+        },
+      ],
+    );
+    expect(validateTopologyGraph(normalized)).toEqual([]);
   });
 
   it('skips the missing-wire guard when the warehouse is at or over capacity', () => {

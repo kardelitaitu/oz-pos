@@ -346,9 +346,11 @@ const PRESET_RETAIL: { nodes: TopologyNodeData[]; wires: TopologyWireData[] } = 
     { id: 'wh-1', type: 'warehouse', name: 'Main Stock Room', subtitle: 'Primary Storage', x: 680, y: 140, telemetryBadge: '1,250 items', telemetryStatus: 'online' },
   ],
   wires: [
-    // Natural left-to-right flow: store right → workspace left, workspace right → warehouse left
+    // Retail POS supplies the warehouse's one primary Operation scope.
+    // Runtime stock deduction consumes this typed route as the warehouse
+    // target, so the graph needs no second inbound stock wire.
     { id: 'w-1', fromNodeId: 'store-1', fromPort: 'right', toNodeId: 'ws-1', toPort: 'left', fromPortId: 'location-out', toPortId: 'location-in', relationshipType: 'location', direction: 'one-way', label: 'Binds Store' },
-    { id: 'w-2', fromNodeId: 'ws-1', fromPort: 'right', toNodeId: 'wh-1', toPort: 'left', fromPortId: 'stock-out', toPortId: 'stock-in', relationshipType: 'stock-routing', direction: 'one-way', label: 'Stock Deduct (P1)' },
+    { id: 'w-2', fromNodeId: 'ws-1', fromPort: 'right', toNodeId: 'wh-1', toPort: 'left', fromPortId: 'operation-out', toPortId: 'operation-in', relationshipType: 'generic', direction: 'one-way', label: 'Operation Feed' },
   ],
 };
 
@@ -364,10 +366,11 @@ const PRESET_RESTAURANT: { nodes: TopologyNodeData[]; wires: TopologyWireData[] 
     { id: 'hw-prn', type: 'hardware', name: 'Kitchen Thermal Printer', subtitle: 'LAN 192.168.1.100', x: 680, y: 320, telemetryBadge: 'Ready', telemetryStatus: 'online' },
   ],
   wires: [
-    // Left-to-right: store right → workspace left; then workspace right → warehouse/printer left
+    // Restaurant POS owns the KDS operation feed. The warehouse uses the
+    // alternative primary scope: the Branch Location connection.
     { id: 'w-1', fromNodeId: 'store-1', fromPort: 'right', toNodeId: 'ws-1', toPort: 'left', fromPortId: 'location-out', toPortId: 'location-in', relationshipType: 'location', direction: 'one-way', label: 'Binds Store' },
-    { id: 'w-2', fromNodeId: 'store-1', fromPort: 'right', toNodeId: 'ws-kds', toPort: 'left', fromPortId: 'location-out', toPortId: 'location-in', relationshipType: 'location', direction: 'one-way', label: 'Binds Store' },
-    { id: 'w-3', fromNodeId: 'ws-1', fromPort: 'right', toNodeId: 'wh-kitchen', toPort: 'left', fromPortId: 'stock-out', toPortId: 'stock-in', relationshipType: 'stock-routing', direction: 'one-way', label: 'Stock Deduct' },
+    { id: 'w-2', fromNodeId: 'ws-1', fromPort: 'right', toNodeId: 'ws-kds', toPort: 'left', fromPortId: 'operation-out', toPortId: 'operation-in', relationshipType: 'generic', direction: 'one-way', label: 'Operation Feed' },
+    { id: 'w-3', fromNodeId: 'store-1', fromPort: 'right', toNodeId: 'wh-kitchen', toPort: 'left', fromPortId: 'location-out', toPortId: 'location-in', relationshipType: 'location', direction: 'one-way', label: 'Binds Store' },
     { id: 'w-4', fromNodeId: 'ws-kds', fromPort: 'right', toNodeId: 'hw-prn', toPort: 'left', fromPortId: 'ticket-out', toPortId: 'ticket-in', relationshipType: 'ticket-routing', direction: 'one-way', label: 'Ticket Print' },
   ],
 };
@@ -4150,8 +4153,25 @@ export default function NodeTopologyEditor({
       const fn = nodeMap.get(w.fromNodeId);
       const tn = nodeMap.get(w.toNodeId);
       return fn?.type === 'workspace' && tn?.type === 'warehouse'
-        && (w.relationshipType === 'stock-routing' || w.relationshipType === undefined);
+        && (w.relationshipType === 'stock-routing'
+          || w.relationshipType === undefined
+          // A typed Retail POS → Warehouse Operation edge is the primary
+          // warehouse route in the preset and occupies the same fallback
+          // slot as the legacy stock route for tier gating.
+          || (w.relationshipType === 'generic' && w.toPortId === 'operation-in'));
     });
+    if (
+      target.type === 'warehouse'
+      && (option.toPortId === 'location-in' || option.toPortId === 'operation-in')
+      && currentWires.some(
+        (w) => w.toNodeId === target.id
+          && (w.toPortId === 'location-in' || w.toPortId === 'operation-in'),
+      )
+    ) {
+      addToast({ message: l10n.getString('topology-validation-multiple-warehouse-inputs'), type: 'warning' });
+      cancelRelationshipPicker();
+      return;
+    }
     if (option.relationshipType === 'stock-routing' && existingStockWires.length >= 1 && !isProAllowed) {
       addToast({ message: l10n.getString('topology-toast-fallback-warehouse'), type: 'warning' });
       cancelRelationshipPicker();

@@ -36,7 +36,17 @@ fn runtime_stock_target_instances(plan: &Value, source_instance_id: &str) -> Vec
                 && route.get("from_port_id").and_then(Value::as_str) == Some("stock-out")
                 && route.get("to_port_id").and_then(Value::as_str) == Some("stock-in")
                 && route.get("relationship_type").and_then(Value::as_str) == Some("stock-routing");
-            let Some(target) = is_stock_route
+            // A Retail POS → Warehouse Operation edge is the warehouse's
+            // one primary input. The compiler annotates its target kind so
+            // it can also serve as the stock-deduction target without
+            // confusing Restaurant POS → KDS operation feeds with stock.
+            let is_retail_operation_route = route.get("source_instance_id").and_then(Value::as_str)
+                == Some(source_instance_id)
+                && route.get("from_port_id").and_then(Value::as_str) == Some("operation-out")
+                && route.get("to_port_id").and_then(Value::as_str) == Some("operation-in")
+                && route.get("relationship_type").and_then(Value::as_str) == Some("generic")
+                && route.get("target_node_kind").and_then(Value::as_str) == Some("warehouse");
+            let Some(target) = (is_stock_route || is_retail_operation_route)
                 .then(|| route.get("target_instance_id").and_then(Value::as_str))
                 .flatten()
             else {
@@ -2008,6 +2018,39 @@ mod tests {
             vec!["warehouse-main"]
         );
         assert!(runtime_stock_target_instances(&plan, "other-pos").is_empty());
+    }
+
+    #[test]
+    fn runtime_plan_uses_retail_operation_route_for_warehouse_stock_target() {
+        let plan = serde_json::json!({
+            "routes": [{
+                "source_instance_id": "pos-main",
+                "target_instance_id": "warehouse-main",
+                "from_port_id": "operation-out",
+                "to_port_id": "operation-in",
+                "relationship_type": "generic",
+                "target_node_kind": "warehouse"
+            }]
+        });
+        assert_eq!(
+            runtime_stock_target_instances(&plan, "pos-main"),
+            vec!["warehouse-main"]
+        );
+    }
+
+    #[test]
+    fn runtime_plan_does_not_treat_operation_feed_to_kds_as_stock() {
+        let plan = serde_json::json!({
+            "routes": [{
+                "source_instance_id": "restaurant-pos",
+                "target_instance_id": "kds-main",
+                "from_port_id": "operation-out",
+                "to_port_id": "operation-in",
+                "relationship_type": "generic",
+                "target_node_kind": "workspace"
+            }]
+        });
+        assert!(runtime_stock_target_instances(&plan, "restaurant-pos").is_empty());
     }
 
     #[test]

@@ -103,6 +103,9 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-port-input-only': 'Input connectors receive connections; choose an output connector first.',
   'topology-validation-missing-location': 'Connect this workspace to a Branch Location using Location In.',
   'topology-validation-multiple-location': 'A workspace can have only one Location In wire.',
+  'topology-validation-missing-warehouse-input': 'This Stock Room must connect to exactly one Location or Retail POS Operation input.',
+  'topology-validation-multiple-warehouse-inputs': 'This Stock Room can have only one primary connection: Location or Retail POS Operation.',
+  'topology-validation-invalid-warehouse-operation-source': 'Stock Room Operation In must receive an Operation feed from Retail POS.',
   'topology-validation-missing-branch': 'Add exactly one Branch Location node.',
   'topology-validation-multiple-branches': 'Keep exactly one Branch Location node in this graph.',
   'topology-validation-invalid-purpose': 'This workspace purpose is not supported by its technical type.',
@@ -874,12 +877,14 @@ describe('NodeTopologyEditor Component', () => {
     expect(screen.getByText('These connectors cannot be connected.')).toBeInTheDocument();
   });
 
-  it('rejects a store-to-warehouse connection (location-out vs stock-in) with a toast', () => {
+  it('treats a Branch Location to warehouse drop as the primary Location connection', () => {
     renderEditor();
     fireEvent.click(portOf(nodeAt(0), 'right'));
     fireEvent.click(portOf(nodeAt(2), 'left'));
+    // The retail preset already contains the warehouse's primary Operation
+    // scope, so a Location attempt is rejected as a second primary input.
     expect(getWireCount()).toBe(2);
-    expect(screen.getByText('These connectors cannot be connected.')).toBeInTheDocument();
+    expect(screen.getByText('This Stock Room can have only one primary connection: Location or Retail POS Operation.')).toBeInTheDocument();
   });
 
   it('highlights only compatible target sockets while connecting', () => {
@@ -890,9 +895,10 @@ describe('NodeTopologyEditor Component', () => {
     // Hover the workspace's left socket (location-in): compatible → highlighted.
     fireEvent.mouseMove(canvas, { clientX: 383, clientY: 304 });
     expect(portOf(nodeAt(1), 'left').className).toContain('port-highlight');
-    // Hover the warehouse's left socket (stock-in): incompatible → no highlight.
+    // The warehouse's left socket also accepts the Branch Location primary
+    // input, so it is a compatible target.
     fireEvent.mouseMove(canvas, { clientX: 683, clientY: 364 });
-    expect(portOf(nodeAt(2), 'left').className).not.toContain('port-highlight');
+    expect(portOf(nodeAt(2), 'left').className).toContain('port-highlight');
   });
 
   // ── Live validation badges (ADR #34 slice 2) ───────────────────
@@ -1440,6 +1446,8 @@ describe('NodeTopologyEditor Component', () => {
       ],
       wires: [
         { id: 'w-1', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+        { id: 'w-scope-1', from_node_id: 'store-1', to_node_id: 'wh-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+        { id: 'w-scope-2', from_node_id: 'store-1', to_node_id: 'wh-2', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
       ],
     } as never;
 
@@ -4157,6 +4165,7 @@ describe('NodeTopologyEditor — warehouse capacity validation', () => {
       ],
       wires: [
         { id: 'w-loc', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+        { id: 'w-scope', from_node_id: 'store-1', to_node_id: 'wh-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
         { id: 'w-stock', from_node_id: 'ws-1', to_node_id: 'wh-1', from_port_id: 'stock-out', to_port_id: 'stock-in', relationship_type: 'stock-routing', direction: 'one-way' },
       ],
     } as never);
@@ -4216,6 +4225,7 @@ describe('NodeTopologyEditor — warehouse missing stock-routing prompt', () => 
       ],
       wires: [
         { id: 'w-loc', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+        { id: 'w-scope', from_node_id: 'store-1', to_node_id: 'wh-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
       ],
     } as never);
     renderEditor({ currentTier: 'pro' });
@@ -4242,6 +4252,7 @@ describe('NodeTopologyEditor — warehouse missing stock-routing prompt', () => 
       ],
       wires: [
         { id: 'w-loc', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+        { id: 'w-scope', from_node_id: 'store-1', to_node_id: 'wh-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
         { id: 'w-stock', from_node_id: 'ws-1', to_node_id: 'wh-1', from_port_id: 'stock-out', to_port_id: 'stock-in', relationship_type: 'stock-routing', direction: 'one-way' },
       ],
     } as never);
@@ -4274,6 +4285,8 @@ describe('NodeTopologyEditor — warehouse missing stock-routing prompt', () => 
       ],
       wires: [
         { id: 'w-loc', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+        { id: 'w-scope-hub', from_node_id: 'store-1', to_node_id: 'wh-hub', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+        { id: 'w-scope-sat', from_node_id: 'store-1', to_node_id: 'wh-sat', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
         { id: 'w-stock', from_node_id: 'ws-1', to_node_id: 'wh-hub', from_port_id: 'stock-out', to_port_id: 'stock-in', relationship_type: 'stock-routing', direction: 'one-way' },
         { id: 'w-transfer', from_node_id: 'wh-hub', to_node_id: 'wh-sat', from_port_id: 'transfer-out', to_port_id: 'transfer-in', relationship_type: 'inventory-transfer', direction: 'one-way' },
       ],
@@ -4300,6 +4313,8 @@ describe('NodeTopologyEditor — warehouse missing stock-routing prompt', () => 
       ],
       wires: [
         { id: 'w-loc', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+        { id: 'w-scope-hub', from_node_id: 'store-1', to_node_id: 'wh-hub', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+        { id: 'w-scope-sat', from_node_id: 'store-1', to_node_id: 'wh-sat', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
         { id: 'w-stock', from_node_id: 'ws-1', to_node_id: 'wh-hub', from_port_id: 'stock-out', to_port_id: 'stock-in', relationship_type: 'stock-routing', direction: 'one-way' },
         { id: 'w-transfer', from_node_id: 'wh-hub', to_node_id: 'wh-sat', from_port_id: 'transfer-out', to_port_id: 'transfer-in', relationship_type: 'inventory-transfer', direction: 'one-way' },
       ],
@@ -4331,6 +4346,8 @@ describe('NodeTopologyEditor — warehouse missing stock-routing prompt', () => 
       ],
       wires: [
         { id: 'w-loc', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+        { id: 'w-scope-hub', from_node_id: 'store-1', to_node_id: 'wh-hub', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+        { id: 'w-scope-sat', from_node_id: 'store-1', to_node_id: 'wh-sat', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
         { id: 'w-stock', from_node_id: 'ws-1', to_node_id: 'wh-hub', from_port_id: 'stock-out', to_port_id: 'stock-in', relationship_type: 'stock-routing', direction: 'one-way' },
         { id: 'w-stock-sat', from_node_id: 'ws-1', to_node_id: 'wh-sat', from_port_id: 'stock-out', to_port_id: 'stock-in', relationship_type: 'stock-routing', direction: 'one-way' },
         { id: 'w-transfer', from_node_id: 'wh-hub', to_node_id: 'wh-sat', from_port_id: 'transfer-out', to_port_id: 'transfer-in', relationship_type: 'inventory-transfer', direction: 'one-way' },
@@ -4362,6 +4379,7 @@ describe('NodeTopologyEditor — validation panel stock-wire action', () => {
       ],
       wires: [
         { id: 'w-loc', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+        { id: 'w-scope', from_node_id: 'store-1', to_node_id: 'wh-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
       ],
     } as never);
     renderEditor({ currentTier: 'pro' });
@@ -4437,7 +4455,7 @@ describe('NodeTopologyEditor — validation panel stock-wire action', () => {
     fireEvent.click(portOf(nodeAt(1), 'right'));
     fireEvent.click(portOf(nodeAt(2), 'left'));
     fireEvent.click(within(document.querySelector('.topology-relationship-picker') as HTMLElement).getByText('Stock routing'));
-    expect(getWireCount()).toBe(2);
+    expect(getWireCount()).toBe(3);
 
     await waitFor(() => expect(document.querySelector('.node-stock-wire-hint')).toBeNull());
   });
@@ -4454,6 +4472,7 @@ describe('NodeTopologyEditor — missing-stock-routing dismiss', () => {
     ],
     wires: [
       { id: 'w-loc', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+      { id: 'w-scope', from_node_id: 'store-1', to_node_id: 'wh-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
     ],
   } as never;
 
@@ -4533,6 +4552,7 @@ describe('NodeTopologyEditor — warehouse capacity tier gate', () => {
       ],
       wires: [
         { id: 'w-loc', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+        { id: 'w-scope', from_node_id: 'store-1', to_node_id: 'wh-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
         { id: 'w-stock', from_node_id: 'ws-1', to_node_id: 'wh-1', from_port_id: 'stock-out', to_port_id: 'stock-in', relationship_type: 'stock-routing', direction: 'one-way' },
       ],
     } as never);
@@ -4556,6 +4576,7 @@ describe('NodeTopologyEditor — warehouse capacity tier gate', () => {
       ],
       wires: [
         { id: 'w-loc', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+        { id: 'w-scope', from_node_id: 'store-1', to_node_id: 'wh-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
       ],
     } as never);
     renderEditor();
@@ -4577,6 +4598,7 @@ describe('NodeTopologyEditor — warehouse capacity tier notice', () => {
       ],
       wires: [
         { id: 'w-loc', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+        { id: 'w-scope', from_node_id: 'store-1', to_node_id: 'wh-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
       ],
     } as never);
     renderEditor({ currentTier: tier });
@@ -4611,6 +4633,7 @@ describe('NodeTopologyEditor — warehouse capacity tier notice', () => {
       ],
       wires: [
         { id: 'w-loc', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+        { id: 'w-scope', from_node_id: 'store-1', to_node_id: 'wh-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
       ],
     } as never);
     renderEditor({ onSave });
@@ -7916,7 +7939,7 @@ describe('NodeTopologyEditor — wire label pills', () => {
     // One pill per preset wire, titled with the label (custom or endpoint).
     const texts = pills().map((p) => p.textContent);
     expect(texts).toContain('Binds Store');
-    expect(texts).toContain('Stock Deduct (P1)');
+    expect(texts).toContain('Operation Feed');
   });
 
   it('clicking a pill opens the rename editor without cycling the direction', () => {
@@ -8012,7 +8035,7 @@ describe('NodeTopologyEditor — wire label pills', () => {
 
     const dimmed = document.querySelectorAll('.wire-label-pill.wire-label-pill-dimmed');
     expect(dimmed).toHaveLength(1);
-    expect(dimmed[0]!.textContent).toBe('Stock Deduct (P1)');
+    expect(dimmed[0]!.textContent).toBe('Operation Feed');
   });
 });
 

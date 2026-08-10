@@ -143,9 +143,9 @@ describe('typed connection pairing (ADR #34 first slice)', () => {
     expect(gatingSemanticId(node({ metadata: { typeKey: 'kds' } }), 'right')).toBe('ticket-out');
     expect(gatingSemanticId(node({ type: 'warehouse' }), 'right')).toBe('stock-out');
     expect(gatingSemanticId(node({ type: 'hardware' }), 'right')).toBe('device-out');
-    // Inputs: warehouses take stock, hardware takes generic, workspaces take
-    // location (KDS takes the operation feed).
-    expect(gatingSemanticId(node({ type: 'warehouse' }), 'left')).toBe('stock-in');
+    // Inputs: warehouses take a primary Location/Operation scope, hardware
+    // takes generic, workspaces take location (KDS takes the operation feed).
+    expect(gatingSemanticId(node({ type: 'warehouse' }), 'left')).toBe('location-in');
     expect(gatingSemanticId(node({ type: 'hardware' }), 'left')).toBe('generic-in');
     expect(gatingSemanticId(node({ metadata: { typeKey: 'store-pos' } }), 'left')).toBe('location-in');
     expect(gatingSemanticId(node({ metadata: { typeKey: 'kds' } }), 'left')).toBe('operation-in');
@@ -173,10 +173,11 @@ describe('relationship options (ADR #34 multi-semantic slice)', () => {
     // Workspaces can emit either a stock-routing feed or a transfer feed.
     // Restaurant POS additionally emits an operational feed for KDS on the
     // same output socket.
-    expect(socketSemanticIds(node({ type: 'workspace', metadata: { typeKey: 'store-pos' } }), 'right')).toEqual(['stock-out', 'transfer-out']);
+    expect(socketSemanticIds(node({ type: 'workspace', metadata: { typeKey: 'store-pos' } }), 'right')).toEqual(['stock-out', 'transfer-out', 'operation-out']);
     expect(socketSemanticIds(node({ metadata: { typeKey: 'restaurant-pos' } }), 'right')).toEqual(['operation-out', 'stock-out', 'transfer-out']);
-    // A warehouse INPUT likewise accepts both: stock-in or transfer-in.
-    expect(socketSemanticIds(node({ type: 'warehouse' }), 'left')).toEqual(['stock-in', 'transfer-in']);
+    // A warehouse INPUT accepts one primary scope (Location or Operation),
+    // while retaining stock/transfer semantics for legacy runtime wires.
+    expect(socketSemanticIds(node({ type: 'warehouse' }), 'left')).toEqual(['location-in', 'operation-in', 'stock-in', 'transfer-in']);
     // Every other socket keeps its single semantic.
     expect(socketSemanticIds(node({ type: 'store' }), 'right')).toEqual(['location-out']);
     expect(socketSemanticIds(node({ type: 'warehouse' }), 'right')).toEqual(['stock-out']);
@@ -190,7 +191,7 @@ describe('relationship options (ADR #34 multi-semantic slice)', () => {
 
   it('gatingSemanticId stays the PRIMARY semantic of each socket', () => {
     expect(gatingSemanticId(node({ metadata: { typeKey: 'store-pos' } }), 'right')).toBe('stock-out');
-    expect(gatingSemanticId(node({ type: 'warehouse' }), 'left')).toBe('stock-in');
+    expect(gatingSemanticId(node({ type: 'warehouse' }), 'left')).toBe('location-in');
     expect(gatingSemanticId(node({ type: 'store' }), 'right')).toBe('location-out');
   });
 
@@ -216,6 +217,12 @@ describe('relationship options (ADR #34 multi-semantic slice)', () => {
         toPortId: 'transfer-in',
         relationshipType: 'inventory-transfer',
         labelId: 'topology-relationship-inventory-transfer',
+      },
+      {
+        fromPortId: 'operation-out',
+        toPortId: 'operation-in',
+        relationshipType: 'generic',
+        labelId: 'topology-relationship-operation',
       },
     ]);
   });
@@ -258,9 +265,11 @@ describe('relationship options (ADR #34 multi-semantic slice)', () => {
 
   it('labels a warehouse input by its attached relationship (Stock In / Transfer In)', () => {
     const wh = node({ type: 'warehouse' });
-    expect(leftPortVariants(wh)).toEqual(['stock-in']);
-    // Unwired (or stock-wired): Stock In. Transfer-wired: Transfer In.
-    expect(leftPortLabelId(wh, 0)).toBe('topology-port-stock-in');
+    expect(leftPortVariants(wh)).toEqual(['location-in', 'operation-in']);
+    // Unwired: Location. Primary Operation and legacy stock/transfer wires
+    // retain their corresponding labels.
+    expect(leftPortLabelId(wh, 0)).toBe('topology-port-location-in');
+    expect(leftPortLabelId(wh, 0, 'operation-in')).toBe('topology-port-operation-in');
     expect(leftPortLabelId(wh, 0, 'stock-in')).toBe('topology-port-stock-in');
     expect(leftPortLabelId(wh, 0, 'transfer-in')).toBe('topology-port-transfer-in');
   });
@@ -269,12 +278,18 @@ describe('relationship options (ADR #34 multi-semantic slice)', () => {
     const ws = node({ type: 'workspace', metadata: { typeKey: 'store-pos' } });
     const wh = node({ type: 'warehouse' });
     const hw = node({ type: 'hardware' });
-    // Workspace → workspace (no location/stock combination), store →
-    // warehouse (location vs stock), and a workspace → hardware all have
-    // no admissible pairing. KDS → hardware is authorable (ticket) and is
-    // covered by its own test below.
+    // Workspace → workspace (no matching target), and a workspace →
+    // hardware all have no admissible pairing. Branch Location → Warehouse
+    // is now a valid primary scope connection.
     expect(wireRelationshipOptions(ws, 'right', ws, 'left')).toEqual([]);
-    expect(wireRelationshipOptions(node({ type: 'store' }), 'right', wh, 'left')).toEqual([]);
+    expect(wireRelationshipOptions(node({ type: 'store' }), 'right', wh, 'left')).toEqual([
+      {
+        fromPortId: 'location-out',
+        toPortId: 'location-in',
+        relationshipType: 'location',
+        labelId: 'topology-relationship-location',
+      },
+    ]);
     expect(wireRelationshipOptions(ws, 'right', hw, 'left')).toEqual([]);
   });
 

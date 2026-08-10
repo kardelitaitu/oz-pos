@@ -106,7 +106,7 @@ export function workspaceTypeLabel(
 export function leftPortVariants(node: TopologyNodeData): string[] {
   if (isKdsNode(node)) return ['operation-in'];
   if (node.type === 'store') return [];
-  if (node.type === 'warehouse') return ['stock-in'];
+  if (node.type === 'warehouse') return ['location-in', 'operation-in'];
   if (node.type === 'hardware') return ['generic-in'];
   return ['location-in'];
 }
@@ -133,14 +133,18 @@ export function visiblePortsForNode(node: TopologyNodeData): PortName[] {
  *  wire's recorded toPortId — a warehouse input shows Stock or Transfer
  *  based on what is attached; every other node keeps its fixed label. */
 export function leftPortLabelId(node: TopologyNodeData, variantIndex: number, connectedPortId?: string): string {
+  // A warehouse has one primary input: Branch Location or Retail POS
+  // Operation. Legacy stock/transfer wires remain load-compatible and keep
+  // their historical labels when present.
+  if (node.type === 'warehouse') {
+    if (connectedPortId === 'operation-in') return 'topology-port-operation-in';
+    if (connectedPortId === 'stock-in') return 'topology-port-stock-in';
+    if (connectedPortId === 'transfer-in') return 'topology-port-transfer-in';
+    return 'topology-port-location-in';
+  }
   const variant = leftPortVariants(node)[variantIndex];
   if (variant === 'operation-in') return 'topology-port-operation-in';
   if (variant === 'location-in') return 'topology-port-location-in';
-  // A warehouse input receives stock OR transfer — the label follows the
-  // wire actually attached (the relationship picker makes both authorable).
-  if (node.type === 'warehouse') {
-    return connectedPortId === 'transfer-in' ? 'topology-port-transfer-in' : 'topology-port-stock-in';
-  }
   // A hardware input receives device or ticket feeds — the label follows
   // the wire: Ticket In for a KDS ticket feed, neutral Input otherwise.
   if (node.type === 'hardware') {
@@ -201,7 +205,7 @@ export function socketSemanticIds(
   if (port === 'left') {
     // Inputs.
     if (node.type === 'store') return [];
-    if (node.type === 'warehouse') return ['stock-in', 'transfer-in'];
+    if (node.type === 'warehouse') return ['location-in', 'operation-in', 'stock-in', 'transfer-in'];
     // A hardware input receives device feeds AND KDS ticket feeds — the
     // ticket-in semantic is what the Resto preset's kds→printer wire
     // records, so the pairing row ticket-out → ticket-in is authorable.
@@ -215,11 +219,14 @@ export function socketSemanticIds(
   if (node.type === 'store') return ['location-out'];
   if (node.type === 'warehouse') return ['stock-out'];
   if (node.type === 'hardware') return ['device-out'];
-  // Workspace right: a KDS forwards ticket feeds. Restaurant POS also emits
-  // an operational feed for KDS; it retains stock/transfer routing on the
-  // same socket for inventory connections. Other workspace types keep their
-  // existing stock/transfer semantics.
+  // Workspace right: a KDS forwards ticket feeds. POS workspaces emit an
+  // Operation feed for a Warehouse or KDS, while retaining stock/transfer
+  // routing for the existing inventory runtime. Other workspace types keep
+  // their existing stock/transfer semantics.
   if (isKdsNode(node)) return ['ticket-out'];
+  if (node.type === 'workspace' && node.metadata?.['typeKey'] === 'store-pos') {
+    return ['stock-out', 'transfer-out', 'operation-out'];
+  }
   if (isRestaurantPosNode(node)) return ['operation-out', 'stock-out', 'transfer-out'];
   return ['stock-out', 'transfer-out'];
 }
@@ -267,10 +274,10 @@ interface SemanticPairingRow {
  *  future-facing rather than authorable today. */
 const SEMANTIC_PORT_PAIRINGS: readonly SemanticPairingRow[] = [
   { source: 'location-out', target: 'location-in', relationshipType: 'location', labelId: 'topology-relationship-location' },
+  { source: 'operation-out', target: 'operation-in', relationshipType: 'generic', labelId: 'topology-relationship-operation' },
   { source: 'stock-out', target: 'stock-in', relationshipType: 'stock-routing', labelId: 'topology-relationship-stock-routing' },
   { source: 'transfer-out', target: 'transfer-in', relationshipType: 'inventory-transfer', labelId: 'topology-relationship-inventory-transfer' },
   { source: 'ticket-out', target: 'ticket-in', relationshipType: 'ticket-routing', labelId: 'topology-relationship-ticket-routing' },
-  { source: 'operation-out', target: 'operation-in', relationshipType: 'generic', labelId: 'topology-relationship-operation' },
   { source: 'device-out', target: 'generic-in', relationshipType: 'hardware-connection', labelId: 'topology-relationship-hardware-connection' },
   { source: 'generic-out', target: 'generic-in', relationshipType: 'generic', labelId: 'topology-relationship-generic' },
 ];
@@ -324,7 +331,14 @@ export function wireRelationshipOptions(
   for (const src of socketSemanticIds(source, sourcePort)) {
     for (const tgt of socketSemanticIds(target, targetPort, targetVariantIndex)) {
       const row = SEMANTIC_PORT_PAIRINGS.find((r) => r.source === src && r.target === tgt);
-      if (row) {
+      const operationTargetAllowed = row?.relationshipType !== 'generic'
+        || (target.type === 'warehouse'
+          ? source.type === 'workspace' && source.metadata?.['typeKey'] === 'store-pos'
+          : target.type === 'workspace'
+            && target.metadata?.['typeKey'] === 'kds'
+            && source.type === 'workspace'
+            && source.metadata?.['typeKey'] === 'restaurant-pos');
+      if (row && operationTargetAllowed) {
         options.push({
           fromPortId: src,
           toPortId: tgt,
