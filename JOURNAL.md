@@ -3154,7 +3154,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** contract suite 53/53 (+2) · the four contract-consuming suites (contract, editor, TopologyScreen, topologyCard) 588/588 · full UI suite 275 files / 4,674 tests (+2) · a11y 8/8 · typecheck · eslint 7 pre-existing warnings (0 new). No Rust change this round — `validate_warehouse_capacity` was already correct; the divergence was TS-only. `scripts/test-changed.sh` not needed (UI-only change); the exe lock is moot this round.
 
-**Commits:** TBD
+**Commits:** `9f556a42`
 
 **Deliberately NOT done:** did NOT add a Rust pairing check for the misport wire (Rust already rejects via `semantic_wire_matches_contract` inside `validate_semantic_ownership`, which runs on the save path); did NOT attempt the full generated-contract build (Rust embeds the JSON at compile time, TS imports it at build time — the two sides already share the file; the residual drift was rule logic, not the file itself).
 
