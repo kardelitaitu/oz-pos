@@ -6806,6 +6806,46 @@ describe('NodeTopologyEditor — canvas context menu', () => {
     expect(document.querySelector('.topology-context-menu')).toBeNull();
   });
 
+  it('an authoritative reload closes the open context menu (canvas-replacement rule)', async () => {
+    // Regression: the load effect resets connection/hover/sim/marquee on
+    // canvas replacement but NOT the open context menu — a menu open when
+    // a reload lands (branch switch, instance refresh) stayed on screen at
+    // its stale position, offering actions (rename/delete/spawn) against
+    // nodes or wires that were just replaced.
+    mockLoadTopology.mockResolvedValue({
+      nodes: [
+        { id: 'ws-1', type: 'workspace', name: 'POS One', x: 80, y: 120, metadata: { typeKey: 'store-pos' } },
+        { id: 'ws-2', type: 'workspace', name: 'POS Two', x: 240, y: 80, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [],
+    });
+
+    renderWithProvidersSync(
+      <ReloadingHarness
+        next={[
+          { instanceId: 'ws-1', typeKey: 'store-pos', name: 'POS Reloaded' },
+          { instanceId: 'ws-2', typeKey: 'store-pos', name: 'POS Two' },
+        ]}
+      />,
+      multiStoreFtl,
+      sharedFtl,
+    );
+
+    await waitFor(() => expect(screen.getByText('POS One')).toBeInTheDocument());
+
+    // Open the canvas context menu.
+    fireEvent.contextMenu(
+      document.querySelector('.node-canvas-container') as HTMLElement,
+      { clientX: 400, clientY: 300 },
+    );
+    expect(document.querySelector('.topology-context-menu')).not.toBeNull();
+
+    // Canvas replaced mid-menu — the stale menu must close.
+    fireEvent.click(screen.getByText('reload-instances'));
+    await waitFor(() => expect(screen.getByText('POS Reloaded')).toBeInTheDocument());
+    expect(document.querySelector('.topology-context-menu')).toBeNull();
+  });
+
   it('navigates menuitems with arrow keys and wraps at the ends', () => {
     renderEditor();
     fireEvent.contextMenu(document.querySelector('.node-canvas-container')!, { clientX: 100, clientY: 100 });

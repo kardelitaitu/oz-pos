@@ -1702,34 +1702,18 @@ export default function NodeTopologyEditor({
               if (w.relationship_type !== undefined) wire.relationshipType = w.relationship_type as SemanticRelationshipType;
               return wire;
             });
-          setNodes(mergedNodes);
-          setWires(loadedWires);
+          // Reset transient state BEFORE the loaded canvas lands — the
+          // resets must never act on the replacement canvas (a cancelled
+          // bend-drag, for example, would otherwise restore its old start
+          // position over a freshly loaded bend).
+          resetTransientCanvasState();
           // A fresh authoritative load replaces the canvas — the undo/redo
           // stacks hold stale pre-reload states that contradict the loaded
           // instances. Clear them so Undo can never restore a phantom canvas.
           setHistory([]);
           setRedo([]);
-          // Same rule as preset loads: cancel any in-flight port connection
-          // so a later port click cannot complete a wire from a stale source.
-          cancelConnection();
-          setHoveredTarget(null);
-          clearHover();
-          // Same canvas-replacement rule as preset loads: the simulation
-          // pulse animates the OLD wire geometry, so stop it — a "test
-          // order" pulse must never animate a topology it was never run
-          // against. Flipping isSimulating false makes the interval
-          // effect's cleanup clear the 30ms interval.
-          setIsSimulating(false);
-          setSimPulseStep(0);
-          // Same canvas-replacement rule: an in-flight marquee or bend-drag
-          // is armed at document level and would fire against the new
-          // canvas — the box would linger and the next release would commit
-          // a stale selection, so cancel both.
-          cancelMarquee();
-          cancelBendDrag();
-          // A reloaded node with a surviving id must start a fresh inspector
-          // edit session, or its next edit would silently skip pushHistory.
-          inspectorHistoryPushedForRef.current = null;
+          setNodes(mergedNodes);
+          setWires(loadedWires);
           commitSnapshot({ nodes: mergedNodes, wires: loadedWires });
           return;
         }
@@ -1744,22 +1728,11 @@ export default function NodeTopologyEditor({
           && workspaceInstances.length === 0
           && branchLocations.length === 0;
         if (unassignedGraph) {
-          setNodes([]);
-          setWires([]);
+          resetTransientCanvasState();
           setHistory([]);
           setRedo([]);
-          cancelConnection();
-          setHoveredTarget(null);
-          clearHover();
-          // Same canvas-replacement rule as preset loads — the pulse must
-          // never outlive the canvas it was run against.
-          setIsSimulating(false);
-          setSimPulseStep(0);
-          // Same canvas-replacement rule: cancel an in-flight marquee or
-          // bend-drag so it cannot fire against the emptied canvas.
-          cancelMarquee();
-          cancelBendDrag();
-          inspectorHistoryPushedForRef.current = null;
+          setNodes([]);
+          setWires([]);
           commitSnapshot({ nodes: [], wires: [] });
           return;
         }
@@ -1781,6 +1754,12 @@ export default function NodeTopologyEditor({
           return;
         }
         if (skipNextLoadRef.current) { return; }
+        // Reset transient state BEFORE the loaded canvas lands (see
+        // resetTransientCanvasState).
+        resetTransientCanvasState();
+        // Fresh authoritative load — drop stale pre-load undo/redo state.
+        setHistory([]);
+        setRedo([]);
         setNodes([...savedById.values()]);
         const loadedWires: TopologyWireData[] = data.wires.map((w) => {
           const wire: TopologyWireData = {
@@ -1803,29 +1782,6 @@ export default function NodeTopologyEditor({
           return wire;
         });
         setWires(loadedWires);
-        // Fresh authoritative load — drop stale pre-load undo/redo state.
-        setHistory([]);
-        setRedo([]);
-        // Same rule as preset loads: cancel any in-flight port connection.
-        cancelConnection();
-        setHoveredTarget(null);
-        clearHover();
-        // Same canvas-replacement rule as preset loads: the simulation
-        // pulse animates the OLD wire geometry, so stop it — a "test
-        // order" pulse must never animate a topology it was never run
-        // against. Flipping isSimulating false makes the interval
-        // effect's cleanup clear the 30ms interval.
-        setIsSimulating(false);
-        setSimPulseStep(0);
-        // Same canvas-replacement rule: an in-flight marquee or bend-drag
-        // is armed at document level and would fire against the new
-        // canvas — the box would linger and the next release would commit
-        // a stale selection, so cancel both.
-        cancelMarquee();
-        cancelBendDrag();
-        // A reloaded node with a surviving id must start a fresh inspector
-        // edit session, or its next edit would silently skip pushHistory.
-        inspectorHistoryPushedForRef.current = null;
         commitSnapshot({ nodes: [...savedById.values()], wires: loadedWires });
       })
       .catch((err) => {
@@ -2355,6 +2311,39 @@ export default function NodeTopologyEditor({
     bendDragCleanupRef.current?.();
   }, [setHistory, setWires]);
 
+  /**
+   * Canvas-replacement rule: every path that replaces the canvas wholesale
+   * (the three authoritative load-effect paths and loadPreset) must reset
+   * the transient editor state that outlives a specific canvas — the
+   * in-flight port connection, port-snap target, node/wire hover,
+   * simulation pulse, marquee, bend-drag, open context menu, and the
+   * inspector's first-edit guard. Kept in ONE helper so a new transient
+   * state can never be added to some paths and forgotten in others
+   * (rounds 124-132 each found exactly that drift). Call BEFORE the new
+   * canvas's data lands (commitSnapshot / setNodes / setWires) so the
+   * resets never act on the replacement canvas.
+   */
+  const resetTransientCanvasState = useCallback(() => {
+    cancelConnection();
+    setHoveredTarget(null);
+    clearHover();
+    setIsSimulating(false);
+    setSimPulseStep(0);
+    cancelMarquee();
+    cancelBendDrag();
+    setContextMenu(null);
+    inspectorHistoryPushedForRef.current = null;
+  }, [
+    cancelConnection,
+    setHoveredTarget,
+    clearHover,
+    setIsSimulating,
+    setSimPulseStep,
+    cancelMarquee,
+    cancelBendDrag,
+    setContextMenu,
+  ]);
+
   /** Align or distribute the current multi-selection. One undo entry per
    *  action; the reference geometry is the selection's own bounding box,
    *  so the extremes stay put and the rest move to match. Both use exact
@@ -2449,43 +2438,18 @@ export default function NodeTopologyEditor({
   }, [selectedNodeId, selectedWireId, nodeMap, wires, relationshipPicker, pruneSelection, cancelConnection, pruneHover]);
 
   const loadPreset = useCallback((preset: 'retail' | 'restaurant') => {
-    // A wholesale canvas replacement invalidates any in-flight relationship
-    // choice — close the picker (and its connection) before nodes change.
-    cancelConnection();
     const data = preset === 'retail' ? PRESET_RETAIL : PRESET_RESTAURANT;
     pushHistory();
+    // Reset transient state BEFORE the preset canvas lands (see
+    // resetTransientCanvasState) — the resets must never act on the new
+    // preset's nodes/wires.
+    resetTransientCanvasState();
+    setFreshNodeIds(new Set());
     setNodes(data.nodes);
     setWires(data.wires);
-    // The canvas was replaced — cancel any in-flight port connection so a
-    // later port click starts a fresh connection instead of completing a
-    // wire from a stale source node (the preset ids overlap, so the stale
-    // source could otherwise survive and mis-wire the new canvas).
-    cancelConnection();
-    setHoveredTarget(null);
-    // Same canvas-replacement rule for the node/wire hover: React never
-    // fires mouseleave on unmount, so a stale hovered id would keep
-    // hoverConnections non-null and dim the whole new canvas.
-    clearHover();
-    // Same canvas-replacement rule: the simulation pulse animates the OLD
-    // wire geometry, so stop it — a pulse must never animate a "test order"
-    // on a topology it was never run against. Flipping isSimulating false
-    // makes the interval effect's cleanup clear the 30ms interval.
-    setIsSimulating(false);
-    setSimPulseStep(0);
-    // Same canvas-replacement rule: an in-flight marquee or bend-drag is
-    // armed at document level and would fire against the new canvas — the
-    // box would linger and the next release would commit a stale selection,
-    // so cancel both.
-    cancelMarquee();
-    cancelBendDrag();
-    setFreshNodeIds(new Set());
     // The preset is now the applied state — the canvas matches it exactly,
     // so a subsequent preset click must not confirm.
     commitSnapshot({ nodes: data.nodes, wires: data.wires });
-    // The canvas was replaced — a still-selected node (preset ids overlap)
-    // must start a fresh inspector edit session, or its next edit would
-    // silently skip pushHistory (no undo entry, no dirty flag).
-    inspectorHistoryPushedForRef.current = null;
     setZoom(1);
     setPan({ x: 0, y: 0 });
     // Preset ids only partially overlap — the re-validation effect will
@@ -2497,7 +2461,7 @@ export default function NodeTopologyEditor({
     } else if (selectedWireId && !data.wires.some((w) => w.id === selectedWireId)) {
       addToast({ message: l10n.getString('topology-toast-selection-dropped'), type: 'info' });
     }
-  }, [pushHistory, selectedNodeId, selectedWireId, addToast, l10n, commitSnapshot, setNodes, setWires, clearHover]);
+  }, [pushHistory, selectedNodeId, selectedWireId, addToast, l10n, commitSnapshot, setNodes, setWires, resetTransientCanvasState]);
 
   const popUndo = useCallback(() => {
     const stack = historyRef.current;

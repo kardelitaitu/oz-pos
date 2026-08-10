@@ -3098,4 +3098,22 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Deliberately NOT done:** `cancelBendDrag` restores the bend position and pops the drag's undo entry on the OLD wire array — the load path replaces wires right after, so the restore is overwritten and history is cleared; harmless but slightly redundant (a load-scoped variant could skip the restore). The fresh-node id set is still cleared only by `loadPreset`, not the load effect — a stale spawn ring could survive a reload; deferred as minor.
 
+### 2026-08-10 — context menu survives canvas replacement + the five-block reset consolidation (round 132)
+
+**Problem (evidence):** the round-131 audit sweep found every document-armed transient state except one: the open **context menu**. A menu open when a reload landed (branch switch, instance refresh) stayed on screen at its stale position, offering rename/delete/spawn actions against nodes or wires that were just replaced. None of the four canvas-replacement blocks touched `setContextMenu(null)`. Separately, the reset sequence (connection/hover/sim/marquee/bend/inspector-guard) was by then duplicated verbatim across the four blocks — every round 124-131 had added lines to it, and the next transient state would inevitably be forgotten somewhere.
+
+**Red:** `an authoritative reload closes the open context menu (canvas-replacement rule)` — open the canvas menu, reload through the harness, assert the menu is gone. Failed pre-fix: `expected <div> to be null`.
+
+**Green + Refactor:** extracted `resetTransientCanvasState()` (connection, port-snap target, hover, sim, marquee, bend-drag, context menu, inspector first-edit guard) and routed all four blocks through it. Two structural consequences: (1) the new `setContextMenu(null)` lands in all four paths at once; (2) the reset now runs BEFORE the new canvas's data lands (`setNodes`/`setWires`) — the round-131 `cancelBendDrag` in the load paths previously ran AFTER `setWires(loadedWires)`, so a mid-drag reload whose loaded wire carried the same id would have let the cancel restore its OLD start position over the freshly loaded bend. The reorder removes that latent clobber.
+
+**Bonus:** the consolidation dropped one lint warning (the `clearHover` unnecessary-dependency in loadPreset's deps) — 8 → 7 pre-existing warnings.
+
+**Verified:** editor 470/470 (+1) · **full UI suite 275 files / 4,672 tests** (+1) · a11y 8/8 · typecheck ✓ · eslint ✓ (7 pre-existing warnings, one removed by the refactor).
+
+**Commits:** `<pending>`
+
+**Deliberately NOT done:** the fresh-node id set (`setFreshNodeIds`) stays outside the helper — it is cleared by loadPreset but not the load effect; verified unobservable (canvas rebuilds drop every in-memory spawned id, so a stale ring can never render) so it was left as-is rather than adding a line with no testable effect. The finder modal is single-writer and unreachable mid-reload.
+
+**Risks / follow-ups:** the canvas-replacement rule is now STRUCTURAL — a future transient state is added to the helper once and every path inherits it. The audit's remaining items are unchanged: the generated TS↔Rust semantic contract (the warehouse capacity rules still diverge on port checking but are masked by the editor's port normalization), crash-injection recovery tests, and process-safe revision locking.
+
 **Risks / follow-ups:** with connection, hover, sim, marquee, and bend-drag all reset by the same five blocks, the duplication is now five-fold — the `resetTransientCanvasState()` helper is overdue and would make the rule structural. The audit's remaining items are unchanged: the generated TS↔Rust semantic contract, crash-injection recovery tests, and process-safe revision locking.
