@@ -3330,7 +3330,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** integration 1/1 (pulse at t=0.5 sits at (500,364) — inside ws-1's box — the overlay shows the dot; advanced to t=0.95 (x≈662, clear) the dot vanishes) · pure unit 4/4 (inside, outside, flush edges, multi-box) · editor suite 486/486 · full UI suite 277 files / 4,703 tests · typecheck ✓ · eslint 0 errors (8 pre-existing warnings) · **mutation check**: shifting every box left by 99999 failed the two crossing unit tests, restored → green. Drift guard clean.
 
-**Commits:** `TODO`
+**Commits:** `65b73324`
 
 **Deliberately NOT done:** no hover/selected-state on the overlay segment (the round-146 note stands — the under-card segment keeps the base accent while exposed parts brighten; a deliberate, subtle tradeoff). No pulse on the label pill. No branch-diff preview this round — it remains the leading new-capability candidate.
 
