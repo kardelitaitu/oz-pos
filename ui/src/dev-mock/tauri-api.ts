@@ -374,6 +374,118 @@ function saveMockCart(): void {
 }
 let cartState: { lines: CartLine[] } = loadMockCart();
 
+// ── Held carts (persisted so hold/resume previews mirror SQLite) ──
+interface MockHeldCart {
+  id: string;
+  label: string;
+  cart_data: string;
+  item_count: number;
+  total_minor: number;
+  currency: string;
+  created_at: string;
+  bill_type: string;
+  customer_name: string | null;
+  deduction_location_id: string | null;
+}
+
+const MOCK_HELD_CARTS_KEY = 'oz-dev-mock:held-carts';
+
+function isMockHeldCart(value: unknown): value is MockHeldCart {
+  if (!value || typeof value !== 'object') return false;
+  const row = value as Record<string, unknown>;
+  const hasNullableString = (field: string): boolean =>
+    row[field] === null || typeof row[field] === 'string';
+
+  if (
+    typeof row['id'] !== 'string' || row['id'].trim() === ''
+    || typeof row['label'] !== 'string'
+    || typeof row['cart_data'] !== 'string'
+    || typeof row['item_count'] !== 'number' || !Number.isSafeInteger(row['item_count']) || row['item_count'] < 0
+    || typeof row['total_minor'] !== 'number' || !Number.isSafeInteger(row['total_minor'])
+    || typeof row['currency'] !== 'string' || row['currency'].trim() === ''
+    || typeof row['created_at'] !== 'string' || Number.isNaN(Date.parse(row['created_at']))
+    || typeof row['bill_type'] !== 'string' || row['bill_type'].trim() === ''
+    || !hasNullableString('customer_name')
+    || !hasNullableString('deduction_location_id')
+  ) {
+    return false;
+  }
+
+  try {
+    const cart = JSON.parse(row['cart_data']);
+    return cart !== null && typeof cart === 'object';
+  } catch {
+    return false;
+  }
+}
+
+function loadMockHeldCarts(): MockHeldCart[] {
+  try {
+    const raw = localStorage.getItem(MOCK_HELD_CARTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) return parsed.filter(isMockHeldCart);
+    }
+  } catch {
+    // storage unavailable or corrupt — start with an empty hold list
+  }
+  return [];
+}
+
+function createMockHeldCartId(): string {
+  try {
+    return `held-mock-${crypto.randomUUID()}`;
+  } catch {
+    // Older preview runtimes may not expose randomUUID; retain uniqueness
+    // with a timestamp plus a random suffix rather than array length, which
+    // can repeat after a deletion in the same clock tick.
+    return `held-mock-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+}
+
+let mockHeldCarts: MockHeldCart[] = loadMockHeldCarts();
+
+function saveMockHeldCarts(): void {
+  try {
+    localStorage.setItem(MOCK_HELD_CARTS_KEY, JSON.stringify(mockHeldCarts));
+  } catch {
+    // storage unavailable — keep the in-memory copy for this session
+  }
+}
+
+function holdMockCart(args: unknown): { id: string } {
+  const input = unwrapArgs<{
+    label?: unknown;
+    cart_data?: unknown;
+    item_count?: unknown;
+    total_minor?: unknown;
+    currency?: unknown;
+    bill_type?: unknown;
+    customer_name?: unknown;
+    deduction_location_id?: unknown;
+  }>(args);
+  const id = createMockHeldCartId();
+  mockHeldCarts.push({
+    id,
+    label: String(input.label ?? '').trim(),
+    cart_data: String(input.cart_data ?? '{}'),
+    item_count: Number(input.item_count ?? 0),
+    total_minor: Number(input.total_minor ?? 0),
+    currency: String(input.currency ?? 'IDR'),
+    created_at: new Date().toISOString(),
+    bill_type: String(input.bill_type ?? 'hold'),
+    customer_name: typeof input.customer_name === 'string' ? input.customer_name : null,
+    deduction_location_id: typeof input.deduction_location_id === 'string' ? input.deduction_location_id : null,
+  });
+  saveMockHeldCarts();
+  return { id };
+}
+
+function heldCartSummary(cart: MockHeldCart): Omit<MockHeldCart, 'cart_data' | 'deduction_location_id'> {
+  const { cart_data: _cartData, deduction_location_id: _deductionLocationId, ...summary } = cart;
+  return summary;
+}
+
 // ── Completed sales (persisted so sales history + refund e2e work) ─
 interface MockCompletedSale {
   id: string;
@@ -1272,18 +1384,40 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'override_line_price': () => null,
   'override_line_price_scoped': () => null,
 
-  'hold_cart': () => ({ id: 'held-mock-1' }),
-  'hold_cart_scoped': () => ({ id: 'held-mock-1' }),
+  'hold_cart': (args) => holdMockCart(args),
+  'hold_cart_scoped': (args) => holdMockCart(args),
   'list_active_carts': () => ({ carts: [] }),
   'get_active_cart': () => null,
-  'list_held_carts': () => [],
-  'list_held_carts_scoped': () => [],
-  'list_open_bills': () => [],
-  'list_open_bills_scoped': () => [],
-  'get_held_cart': () => null,
-  'get_held_cart_scoped': () => null,
-  'delete_held_cart': () => null,
-  'delete_held_cart_scoped': () => null,
+  'list_held_carts': () => mockHeldCarts.map(heldCartSummary),
+  'list_held_carts_scoped': () => mockHeldCarts.map(heldCartSummary),
+  'list_open_bills': () => mockHeldCarts.filter((cart) => cart.bill_type === 'open_bill').map(heldCartSummary),
+  'list_open_bills_scoped': () => mockHeldCarts.filter((cart) => cart.bill_type === 'open_bill').map(heldCartSummary),
+  'get_held_cart': (args) => {
+    const id = (args as { id?: string })?.id;
+    return id ? (mockHeldCarts.find((cart) => cart.id === id) ?? null) : null;
+  },
+  'get_held_cart_scoped': (args) => {
+    const id = (args as { id?: string })?.id;
+    return id ? (mockHeldCarts.find((cart) => cart.id === id) ?? null) : null;
+  },
+  'delete_held_cart': (args) => {
+    const id = (args as { id?: string })?.id;
+    const next = mockHeldCarts.filter((cart) => cart.id !== id);
+    if (next.length !== mockHeldCarts.length) {
+      mockHeldCarts = next;
+      saveMockHeldCarts();
+    }
+    return null;
+  },
+  'delete_held_cart_scoped': (args) => {
+    const id = (args as { id?: string })?.id;
+    const next = mockHeldCarts.filter((cart) => cart.id !== id);
+    if (next.length !== mockHeldCarts.length) {
+      mockHeldCarts = next;
+      saveMockHeldCarts();
+    }
+    return null;
+  },
 
   'list_sales': () => [...completedSales],
   'list_sales_scoped': () => [...completedSales],

@@ -22,14 +22,14 @@ The dev-mock powers the browser preview (`npm run dev` / Vite). It stands in for
 | `mockShiftHistory` | 413→544 | `const` array (pushed on close) | ✅ Yes — `oz-dev-mock:shift-history` | `shifts` (021) | ✅ SQLite |
 | `MOCK_STAFF/PRODUCTS/CATEGORIES/…` | 20–111 | `const` static seed | n/a — never mutated | seeded tables / fixtures | ✅ SQLite (seed) |
 | `_initialKdsOrders` | 122 | `const` static seed | n/a — cloned into `mockKdsOrders` | seed fixture | — |
-| held carts / open bills (`list_held_carts*`, `list_open_bills*`) | 983–986 | hardcoded `[]` | n/a — no state exists | `held_carts` (013, + 095) | ✅ SQLite |
+| `mockHeldCarts` | 380→430 | `let` array (hold/resume/delete mutations) | ✅ Yes — `oz-dev-mock:held-carts` | `held_carts` (013, + 095) | ✅ SQLite |
 | sessions (`create_session`) | — | stateless fresh token | n/a | `session_store` — in-memory `HashMap` (`apps/desktop-client/src/state.rs:132`) | ❌ **In-memory by design** |
 
 ---
 
 ## ✅ Persisted state (parity with backend)
 
-Seven localStorage keys, all using the same pattern (seed on first load, `save*` on every mutation, `load*` on module load):
+Eight localStorage keys, all using the same pattern (seed on first load, `save*` on every mutation, `load*` on module load):
 
 | Key | Backs | Writes |
 |---|---|---|
@@ -40,6 +40,7 @@ Seven localStorage keys, all using the same pattern (seed on first load, `save*`
 | `oz-dev-mock:kds` | `mockKdsOrders` + `mockKdsLineItems` (+ `kdsDisplayCounter` derived from the stored orders) | `pushKdsOrderFromCart` on all `complete_sale*` variants; `update_kds_status*`; `update_kds_line_item_status*` — the whole queue + line items persist under one key, and the next ticket number is one past the highest persisted `display_number` (never below the 104 seed baseline) |
 | `oz-dev-mock:login-attempts` | `loginAttempts` | `staff_login` failure increments (persisted so a reload cannot bypass a lockout); success deletes (persisted so the unlock survives) |
 | `oz-dev-mock:shift-history` | `mockShiftHistory` | both `close_shift*` variants push the closed shift and save; fresh loads seed exactly the one pre-seeded closed shift |
+| `oz-dev-mock:held-carts` | `mockHeldCarts` | `hold_cart*` stores the full cart payload; `list_held_carts*` / `list_open_bills*` return summaries; `get_held_cart*` returns detail; `delete_held_cart*` removes the row |
 
 All loaders/savers are wrapped in try/catch — if storage is unavailable they fall back to in-memory behavior and the app still works.
 
@@ -53,7 +54,7 @@ All loaders/savers are wrapped in try/catch — if storage is unavailable they f
 ## ⚖️ By-design parity (no fix needed)
 
 - **Sessions** — both mock and backend are in-memory/stateless. The real backend intentionally re-authenticates on restart (`session_store` is a `HashMap` with TTL), which is why the preview always lands back at the login screen after a reload.
-- **Held carts / open bills** — the mock returns empty arrays (no state to lose), though this also means the hold/resume flow is never exercised in dev. The backend persists these in `held_carts`.
+- **Held carts / open bills** — persisted in `oz-dev-mock:held-carts`; the mock now exercises the same hold/list/detail/delete contract as the backend. Session scope remains intentionally simplified because the browser mock has one store.
 
 ## 📌 Static seed data
 
@@ -61,9 +62,15 @@ All loaders/savers are wrapped in try/catch — if storage is unavailable they f
 
 ## Recommended follow-ups (in priority order)
 
-1. **(Stretch) Exercise held carts** by implementing real `hold_cart`/`list_held_carts` state instead of hardcoded `[]` — unblocks the hold/resume flow in the preview.
-2. **(Stretch) Mirror the backend's sliding-window lockout** instead of the flat threshold of 4 — the reload contract is fixed; the enforcement model is still simpler than the backend.
+1. **(Stretch) Mirror the backend's sliding-window lockout** instead of the flat threshold of 4 — the reload contract is fixed; the enforcement model is still simpler than the backend.
 
 > ✅ **Done (2026-08-06):** `loginAttempts` → `oz-dev-mock:login-attempts` and `mockShiftHistory` → `oz-dev-mock:shift-history`, both pinned by reload-survival contract tests in `dev-mock-auth-contract.test.ts`. The audit's gap list is now empty.
 
 > ✅ **Done (2026-08-06):** KDS state (`mockKdsOrders`, `mockKdsLineItems`, `kdsDisplayCounter`) is now persisted under `oz-dev-mock:kds` — the biggest gap is closed, pinned by the reload-survival contract tests in `dev-mock-auth-contract.test.ts`.
+
+> ✅ **Done (2026-08-09):** Held carts (`mockHeldCarts`) are now persisted under `oz-dev-mock:held-carts`; hold/list/detail/delete and reload-resume behavior are pinned by the held-cart contract tests in `dev-mock-auth-contract.test.ts`. Persisted rows are runtime-validated on load, and generated ids use `crypto.randomUUID()` with a compatibility fallback.
+
+> last audited 09-08-26 by buffy
+> audit: Phase 1 Core Architecture & API Docs Audit
+
+> status: ACCURATE (0 findings) · verified accurate: cargo check passed, no structural orphans, no stale version headers, all file references valid

@@ -272,6 +272,211 @@ describe('dev-mock delegates to a real Tauri webview (production regression)', (
   });
 });
 
+// The real backend persists held carts in `held_carts` (013), so a preview
+// restart must not turn a parked order into an empty list. The mock currently
+// returns hardcoded empty held-cart data, which makes the hold/resume flow
+// impossible to exercise in browser previews.
+describe('dev-mock held-cart persistence (restart parity)', () => {
+  const HELD_CART_KEY = 'oz-dev-mock:held-carts';
+
+  afterEach(() => {
+    localStorage.removeItem(HELD_CART_KEY);
+    vi.resetModules();
+  });
+
+  it('holding a cart makes its summary visible to the held-cart listing', async () => {
+    const first = await import('@/dev-mock/tauri-api');
+    const cartData = JSON.stringify({
+      lines: [
+        {
+          sku: 'LATTE',
+          name: 'Caffè Latte',
+          category: 'Hot Drinks',
+          qty: 2,
+          unit_price: { minor_units: 45000, currency: 'IDR' },
+        },
+      ],
+    });
+
+    const created = (await first.invoke('hold_cart_scoped', {
+      sessionToken: 'session-1',
+      args: {
+        label: 'Hold #42',
+        cart_data: cartData,
+        item_count: 1,
+        total_minor: 90000,
+        currency: 'IDR',
+        bill_type: 'hold',
+      },
+    })) as unknown as { id: string };
+
+    const carts = (await first.invoke('list_held_carts_scoped', {
+      sessionToken: 'session-1',
+    })) as unknown as Array<Record<string, unknown>>;
+
+    expect(carts).toEqual([
+      expect.objectContaining({
+        id: created.id,
+        label: 'Hold #42',
+        item_count: 1,
+        total_minor: 90000,
+        currency: 'IDR',
+        bill_type: 'hold',
+      }),
+    ]);
+  });
+
+  it('held-cart detail survives a module reload for resume', async () => {
+    const first = await import('@/dev-mock/tauri-api');
+    const cartData = JSON.stringify({
+      lines: [{ sku: 'LATTE', name: 'Caffè Latte', qty: 2 }],
+      discountPercent: 10,
+    });
+    const created = (await first.invoke('hold_cart_scoped', {
+      sessionToken: 'session-1',
+      args: {
+        label: 'Resume me',
+        cart_data: cartData,
+        item_count: 1,
+        total_minor: 81000,
+        currency: 'IDR',
+        bill_type: 'hold',
+        customer_name: 'Ada',
+        deduction_location_id: 'loc-1',
+      },
+    })) as unknown as { id: string };
+
+    vi.resetModules();
+    const second = await import('@/dev-mock/tauri-api');
+    const detail = (await second.invoke('get_held_cart_scoped', {
+      sessionToken: 'session-1',
+      id: created.id,
+    })) as unknown as Record<string, unknown> | null;
+
+    expect(detail).toEqual(expect.objectContaining({
+      id: created.id,
+      label: 'Resume me',
+      cart_data: cartData,
+      customer_name: 'Ada',
+      deduction_location_id: 'loc-1',
+    }));
+  });
+
+  it('open-bill listing separates table bills from parked holds', async () => {
+    const first = await import('@/dev-mock/tauri-api');
+    await first.invoke('hold_cart_scoped', {
+      sessionToken: 'session-1',
+      args: {
+        label: 'Parked hold',
+        cart_data: JSON.stringify({ lines: [] }),
+        item_count: 0,
+        total_minor: 0,
+        currency: 'IDR',
+        bill_type: 'hold',
+      },
+    });
+    await first.invoke('hold_cart_scoped', {
+      sessionToken: 'session-1',
+      args: {
+        label: 'Table 4',
+        cart_data: JSON.stringify({ lines: [] }),
+        item_count: 0,
+        total_minor: 0,
+        currency: 'IDR',
+        bill_type: 'open_bill',
+      },
+    });
+
+    const openBills = (await first.invoke('list_open_bills_scoped', {
+      sessionToken: 'session-1',
+    })) as unknown as Array<Record<string, unknown>>;
+    expect(openBills).toHaveLength(1);
+    expect(openBills[0]?.['label']).toBe('Table 4');
+    expect(openBills[0]?.['bill_type']).toBe('open_bill');
+  });
+
+  it('deleting a held cart removes it from the listing', async () => {
+    const first = await import('@/dev-mock/tauri-api');
+    const created = (await first.invoke('hold_cart_scoped', {
+      sessionToken: 'session-1',
+      args: {
+        label: 'Delete me',
+        cart_data: JSON.stringify({ lines: [] }),
+        item_count: 0,
+        total_minor: 0,
+        currency: 'IDR',
+        bill_type: 'hold',
+      },
+    })) as unknown as { id: string };
+
+    await first.invoke('delete_held_cart_scoped', {
+      sessionToken: 'session-1',
+      id: created.id,
+    });
+
+    const carts = (await first.invoke('list_held_carts_scoped', {
+      sessionToken: 'session-1',
+    })) as unknown as Array<Record<string, unknown>>;
+    expect(carts).toEqual([]);
+  });
+
+  it('filters malformed persisted rows before exposing them to the preview', async () => {
+    const first = await import('@/dev-mock/tauri-api');
+    const created = (await first.invoke('hold_cart_scoped', {
+      sessionToken: 'session-1',
+      args: {
+        label: 'Keep me',
+        cart_data: JSON.stringify({ lines: [] }),
+        item_count: 0,
+        total_minor: 0,
+        currency: 'IDR',
+        bill_type: 'hold',
+      },
+    })) as unknown as { id: string };
+    const persisted = JSON.parse(localStorage.getItem(HELD_CART_KEY) ?? '[]') as unknown[];
+    localStorage.setItem(HELD_CART_KEY, JSON.stringify([
+      { id: 'broken-row', total_minor: 'not-a-number' },
+      ...persisted,
+    ]));
+
+    vi.resetModules();
+    const second = await import('@/dev-mock/tauri-api');
+    const carts = (await second.invoke('list_held_carts_scoped', {
+      sessionToken: 'session-1',
+    })) as unknown as Array<Record<string, unknown>>;
+
+    expect(carts).toEqual([
+      expect.objectContaining({ id: created.id, label: 'Keep me' }),
+    ]);
+  });
+
+  it('does not reuse a held-cart id after deletion in the same clock tick', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_754_713_600_000);
+    const first = await import('@/dev-mock/tauri-api');
+    const args = {
+      sessionToken: 'session-1',
+      args: {
+        label: 'Collision test',
+        cart_data: JSON.stringify({ lines: [] }),
+        item_count: 0,
+        total_minor: 0,
+        currency: 'IDR',
+        bill_type: 'hold',
+      },
+    };
+
+    const firstHeld = (await first.invoke('hold_cart_scoped', args)) as unknown as { id: string };
+    await first.invoke('delete_held_cart_scoped', {
+      sessionToken: 'session-1',
+      id: firstHeld.id,
+    });
+    const secondHeld = (await first.invoke('hold_cart_scoped', args)) as unknown as { id: string };
+
+    expect(secondHeld.id).not.toBe(firstHeld.id);
+    now.mockRestore();
+  });
+});
+
 // The real backend persists KDS orders (kds_orders 032), per-item line
 // statuses (kds_line_items 105), and the daily display counter
 // (kds_daily_counters 032), so a restart resumes the kitchen queue exactly
