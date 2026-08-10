@@ -54,6 +54,7 @@ import {
 import { TopologyNodeCard } from './topologyNodeCard';
 import { TopologyWireGroup } from './topologyWireGroup';
 import { computeCanvasDiff } from './topologyCanvasDiff';
+import { planTopologyDiff } from './topologyDiff';
 import { cubicBezier, pointUnderCards, polylinePoint, wireUnderCardSegments } from './topologyWireGeometry';
 import { useTopologyEditorGraph, type TopologyHistoryEntry } from './nodeTopologyEditorState';
 import { useTopologyEditorSaveLifecycle } from './nodeTopologyEditorSaveState';
@@ -4969,8 +4970,43 @@ export default function NodeTopologyEditor({
           </Button>
 
           {isDirty && (() => {
-            // Round 148: the dirty chip now previews what an Apply would
-            // commit — the canvas diff against the last committed snapshot
+            // Round 150: when real instances are seeded, preview what an
+            // Apply would commit — the workspace-instance vectors
+            // (create/update/archive) plus the revision bump, computed by
+            // the SAME planTopologyDiff the save path's payload builder is
+            // built on, so the preview can never drift from the Apply. The
+            // plan is total: a workspace mid-wiring (no store ownership
+            // yet) still counts as a creation instead of crashing the chip.
+            if (workspaceInstances !== undefined) {
+              const plan = planTopologyDiff(
+                nodes,
+                workspaceInstances.map((s) => ({
+                  instance_id: s.instanceId,
+                  type_key: s.typeKey,
+                  // exactOptionalPropertyTypes: omit the key, never set
+                  // it to undefined.
+                  ...(s.purposeKey !== undefined ? { purpose_key: s.purposeKey } : {}),
+                  name: s.name,
+                })),
+              );
+              return (
+                <span className="topology-dirty-chip" role="status">
+                  <span className="topology-dirty-dot" aria-hidden="true" />
+                  <Localized id="topology-unsaved">Unsaved changes</Localized>
+                  <span className="topology-diff-summary">
+                    {l10n.getString('topology-apply-workspace-diff', {
+                      created: plan.createNodeIds.length,
+                      updated: plan.updateNodeIds.length,
+                      archived: plan.archiveIds.length,
+                      from: topologyRevision,
+                      to: topologyRevision + 1,
+                    })}
+                  </span>
+                </span>
+              );
+            }
+            // Round 148 fallback (demo/dev canvas without an instance
+            // seed): the canvas diff against the last committed snapshot
             // plus the revision bump (from = last committed, to = next).
             const snap = appliedSnapshotRef.current;
             const diff = computeCanvasDiff(snap?.nodes ?? [], snap?.wires ?? [], nodes, wires);

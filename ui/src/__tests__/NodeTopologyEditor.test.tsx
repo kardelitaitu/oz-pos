@@ -193,6 +193,7 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-toast-template-saved': 'Template saved',
   'topology-toast-template-deleted': 'Template deleted',
   'topology-apply-diff': '{added} added · {removed} removed · {moved} moved · rev {from} → {to}',
+  'topology-apply-workspace-diff': '{created} created · {updated} updated · {archived} archived · rev {from} → {to}',
 };
 
 vi.mock('@fluent/react', async () => {
@@ -6839,6 +6840,86 @@ describe('NodeTopologyEditor — unsaved-changes indicator', () => {
     expect(summary()).toContain('0 removed');
     expect(summary()).toContain('0 moved');
     expect(summary()).toContain('rev 0 → 1');
+  });
+
+  it('previews the workspace-instance diff when instances are seeded', async () => {
+    // Round 150: with real instances the chip reports what Apply actually
+    // commits (workspace create/update/archive vectors), not canvas counts.
+    renderEditor({
+      workspaceInstances: [
+        { instanceId: 'ws-existing', typeKey: 'store-pos', purposeKey: 'checkout', name: 'Front Register' },
+      ],
+      branchLocations: [{ id: 'store-1', name: 'Main Street' }],
+    });
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    const summary = () => document.querySelector('.topology-diff-summary')?.textContent ?? '';
+    // Fresh seed: the canvas equals the committed snapshot, so the chip is hidden.
+    expect(document.querySelector('.topology-diff-summary')).toBeNull();
+
+    // A Store node is a diagram-only change — no workspace vector, but the
+    // revision still bumps.
+    fireEvent.click(screen.getByText('+ Store Node'));
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+    expect(summary()).toContain('0 created');
+    expect(summary()).toContain('0 updated');
+    expect(summary()).toContain('0 archived');
+    expect(summary()).toContain('rev 0 → 1');
+  });
+
+  it('counts a spawned workspace as a creation in the workspace diff', async () => {
+    renderEditor({
+      workspaceInstances: [
+        { instanceId: 'ws-existing', typeKey: 'store-pos', purposeKey: 'checkout', name: 'Front Register' },
+      ],
+      branchLocations: [{ id: 'store-1', name: 'Main Street' }],
+    });
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+
+    fireEvent.click(screen.getByText('+ Retail POS'));
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+    const summary = () => document.querySelector('.topology-diff-summary')?.textContent ?? '';
+    expect(summary()).toContain('1 created');
+    expect(summary()).toContain('0 updated');
+    expect(summary()).toContain('0 archived');
+  });
+
+  it('counts a renamed workspace as an update in the workspace diff', async () => {
+    renderEditor({
+      workspaceInstances: [
+        { instanceId: 'ws-existing', typeKey: 'store-pos', purposeKey: 'checkout', name: 'Front Register' },
+      ],
+      branchLocations: [{ id: 'store-1', name: 'Main Street' }],
+    });
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    const summary = () => document.querySelector('.topology-diff-summary')?.textContent ?? '';
+
+    // Select the workspace node (second card — the first is the store).
+    fireEvent.mouseDown(nodeAt(1), { button: 0 });
+    const nameInput = document.querySelector('.node-config-input') as HTMLInputElement;
+    fireEvent.change(nameInput, { target: { value: 'Renamed Register' } });
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+    expect(summary()).toContain('1 updated');
+    expect(summary()).toContain('0 created');
+    expect(summary()).toContain('0 archived');
+  });
+
+  it('counts a removed workspace as an archive in the workspace diff', async () => {
+    renderEditor({
+      workspaceInstances: [
+        { instanceId: 'ws-existing', typeKey: 'store-pos', purposeKey: 'checkout', name: 'Front Register' },
+      ],
+      branchLocations: [{ id: 'store-1', name: 'Main Street' }],
+    });
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    const summary = () => document.querySelector('.topology-diff-summary')?.textContent ?? '';
+
+    fireEvent.mouseDown(nodeAt(1), { button: 0 });
+    fireEvent.click(screen.getByText('Delete Selected Element'));
+    await waitFor(() => expect(getNodeCount()).toBe(1));
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+    expect(summary()).toContain('1 archived');
+    expect(summary()).toContain('0 created');
+    expect(summary()).toContain('0 updated');
   });
 });
 

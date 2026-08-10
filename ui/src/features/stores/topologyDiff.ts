@@ -7,18 +7,33 @@
 // state so the workspace-instance semantics are unit-testable directly
 // (round 149) — TopologyScreen's handleTopologySave delegates here
 // instead of embedding this block in the callback.
+//
+// The classification (which nodes create / update / archive) is split
+// from the payload building (which needs store_id resolution) so the
+// editor chip can preview the vectors through planTopologyDiff — total,
+// never throwing — while the save path builds the full CreateInstance
+// payloads through computeTopologyDiff on the SAME plan, so the preview
+// can never drift from what Apply commits (round 150).
 
 import { normalizeTopologyGraph } from './topologyContract';
 import type { CreateInstanceRequest, UpdateInstanceRequest } from '@/api/topology';
-import type { WorkspaceDto } from '@/api/workspaces';
 import type { TopologyNodeData, TopologyWireData } from './NodeTopologyEditor';
+
+/** The workspace-instance fields a diff reads. WorkspaceDto satisfies it;
+ *  the editor's seeded instances map onto it. */
+export interface TopologyPlanInstance {
+  instance_id: string;
+  type_key: string;
+  purpose_key?: string;
+  name: string;
+}
 
 export interface TopologyDiffInput {
   /** Canvas nodes (the diff's "after" side). */
   nodes: TopologyNodeData[];
   wires: TopologyWireData[];
   /** Loaded backend workspace instances (the diff's "before" side). */
-  workspaceInstances: WorkspaceDto[];
+  workspaceInstances: TopologyPlanInstance[];
   /** Known store profiles — needed for legacy store-node id resolution. */
   stores: Array<{ id: string }>;
   /** UUID generator for type-change recreates; injectable for tests. */
@@ -35,21 +50,96 @@ export interface TopologyDiffResult {
   idMap: Record<string, string>;
 }
 
-export function computeTopologyDiff(input: TopologyDiffInput): TopologyDiffResult {
-  const {
-    nodes,
-    wires,
-    workspaceInstances,
-    stores,
-    makeId = () => `ws-${crypto.randomUUID()}`,
-  } = input;
+export interface TopologyDiffPlan {
+  /** Workspace node ids (canvas order) that must be created (new or type-changed). */
+  createNodeIds: string[];
+  /** Workspace node ids that must be updated (rename or purpose change). */
+  updateNodeIds: string[];
+  /** Instance ids to archive — type-changed originals, then instances removed from the canvas. */
+  archiveIds: string[];
+  /** Node id → replacement identity for type-changed workspaces. */
+  typeChanges: Map<string, { newId: string; newTypeKey: string }>;
+}
 
-  const idMap: Record<string, string> = {};
-  const semanticGraph = normalizeTopologyGraph(nodes, wires);
-
+/**
+ * Classify the workspace-instance vectors without resolving store
+ * ownership. Total: a workspace with no resolvable Branch Location (a
+ * mid-wiring canvas) still counts as a creation — only the create
+ * payload's store_id needs ownership, and that is computeTopologyDiff's
+ * job. Never throws.
+ */
+export function planTopologyDiff(
+  nodes: TopologyNodeData[],
+  workspaceInstances: TopologyPlanInstance[],
+  makeId: () => string = () => `ws-${crypto.randomUUID()}`,
+): TopologyDiffPlan {
   const wsNodes = nodes.filter((n) => n.type === 'workspace');
   const loadedById = new Map(workspaceInstances.map((w) => [w.instance_id, w]));
   const canvasIds = new Set(wsNodes.map((n) => n.id));
+
+  // ── Type-change detection (Critical #1) ──────────────────────────
+  //
+  // Walk persisted workspace nodes. For each one where the inspector's
+  // typeKey differs from the backend's type_key, schedule an archive +
+  // recreate. Generate new UUIDs so the recreated instance gets a fresh
+  // primary key and the topology diagram stays consistent.
+  const typeChanges = new Map<
+    string,
+    { newId: string; newTypeKey: string }
+  >();
+  for (const node of wsNodes) {
+    const existing = loadedById.get(node.id);
+    if (!existing) continue;
+    const newTypeKey = (node.metadata?.['typeKey'] as string) ?? 'store-pos';
+    if (existing.type_key !== newTypeKey) {
+      typeChanges.set(node.id, { newId: makeId(), newTypeKey });
+    }
+  }
+
+  const createNodeIds: string[] = [];
+  const updateNodeIds: string[] = [];
+  const archiveIds: string[] = [];
+
+  for (const node of wsNodes) {
+    const change = typeChanges.get(node.id);
+    if (change) {
+      // Archive old instance, create replacement with new typeKey.
+      archiveIds.push(node.id);
+      createNodeIds.push(node.id);
+      continue;
+    }
+
+    const existing = loadedById.get(node.id);
+    if (!existing) {
+      createNodeIds.push(node.id);
+    } else {
+      const nextPurposeKey = (node.metadata?.['purposeKey'] as string) ?? existing.purpose_key ?? 'general';
+      if (existing.name !== node.name || existing.purpose_key !== nextPurposeKey) {
+        updateNodeIds.push(node.id);
+      }
+    }
+  }
+
+  // Archive instances removed from the canvas.
+  for (const inst of workspaceInstances) {
+    if (!canvasIds.has(inst.instance_id)) {
+      archiveIds.push(inst.instance_id);
+    }
+  }
+
+  return { createNodeIds, updateNodeIds, archiveIds, typeChanges };
+}
+
+export function computeTopologyDiff(input: TopologyDiffInput): TopologyDiffResult {
+  const { nodes, wires, workspaceInstances, stores, makeId } = input;
+
+  const plan = planTopologyDiff(nodes, workspaceInstances, makeId);
+  const idMap: Record<string, string> = {};
+  for (const [nodeId, change] of plan.typeChanges) {
+    idMap[nodeId] = change.newId;
+  }
+
+  const semanticGraph = normalizeTopologyGraph(nodes, wires);
 
   // ── Semantic store_id resolution ────────────────────────────────
   // The validator has already established one Branch Location parent
@@ -106,71 +196,34 @@ export function computeTopologyDiff(input: TopologyDiffInput): TopologyDiffResul
     throw new Error('workspace has no semantic Branch Location ownership');
   };
 
-  // ── Type-change detection (Critical #1) ──────────────────────────
-  //
-  // Walk persisted workspace nodes. For each one where the inspector's
-  // typeKey differs from the backend's type_key, schedule an archive +
-  // recreate. Generate new UUIDs so the recreated instance gets a fresh
-  // primary key and the topology diagram stays consistent.
-  const typeChanges = new Map<
-    string,
-    { newId: string; newTypeKey: string }
-  >();
-  for (const node of wsNodes) {
-    const existing = loadedById.get(node.id);
-    if (!existing) continue;
-    const newTypeKey = (node.metadata?.['typeKey'] as string) ?? 'store-pos';
-    if (existing.type_key !== newTypeKey) {
-      const newId = makeId();
-      typeChanges.set(node.id, { newId, newTypeKey });
-      idMap[node.id] = newId;
-    }
-  }
+  // ── Build diff payloads from the plan ───────────────────────────
+  // The plan's createNodeIds ride the node's canvas slot; the payload id
+  // comes from the typeChanges remap for type-changed nodes.
 
-  // ── Build diff vectors ───────────────────────────────────────────
+  const nodeById = new Map(nodes.map((n) => [n.id, n]));
+  const creations: CreateInstanceRequest[] = plan.createNodeIds.map((nodeId) => {
+    const node = nodeById.get(nodeId)!;
+    const change = plan.typeChanges.get(nodeId);
+    return {
+      id: change?.newId ?? nodeId,
+      type_key: change?.newTypeKey ?? (node.metadata?.['typeKey'] as string) ?? 'store-pos',
+      purpose_key: (node.metadata?.['purposeKey'] as string) ?? 'general',
+      store_id: resolveStoreId(node),
+      name: node.name,
+    };
+  });
+  const updates: UpdateInstanceRequest[] = plan.updateNodeIds.map((nodeId) => {
+    const node = nodeById.get(nodeId)!;
+    const existing = workspaceInstances.find((w) => w.instance_id === nodeId);
+    const nextPurposeKey = (node.metadata?.['purposeKey'] as string) ?? existing?.purpose_key ?? 'general';
+    return { id: nodeId, name: node.name, purpose_key: nextPurposeKey };
+  });
 
-  const creations: CreateInstanceRequest[] = [];
-  const updates: UpdateInstanceRequest[] = [];
-  const archives: string[] = [];
-
-  for (const node of wsNodes) {
-    const change = typeChanges.get(node.id);
-    if (change) {
-      // Archive old instance, create replacement with new typeKey.
-      archives.push(node.id);
-      creations.push({
-        id: change.newId,
-        type_key: change.newTypeKey,
-        purpose_key: (node.metadata?.['purposeKey'] as string) ?? 'general',
-        store_id: resolveStoreId(node),
-        name: node.name,
-      });
-      continue;
-    }
-
-    const existing = loadedById.get(node.id);
-    if (!existing) {
-      creations.push({
-        id: node.id,
-        type_key: (node.metadata?.['typeKey'] as string) ?? 'store-pos',
-        purpose_key: (node.metadata?.['purposeKey'] as string) ?? 'general',
-        store_id: resolveStoreId(node),
-        name: node.name,
-      });
-    } else {
-      const nextPurposeKey = (node.metadata?.['purposeKey'] as string) ?? existing.purpose_key ?? 'general';
-      if (existing.name !== node.name || existing.purpose_key !== nextPurposeKey) {
-        updates.push({ id: node.id, name: node.name, purpose_key: nextPurposeKey });
-      }
-    }
-  }
-
-  // Archive instances removed from the canvas.
-  for (const inst of workspaceInstances) {
-    if (!canvasIds.has(inst.instance_id)) {
-      archives.push(inst.instance_id);
-    }
-  }
-
-  return { creations, updates, archives, typeChanges, idMap };
+  return {
+    creations,
+    updates,
+    archives: plan.archiveIds,
+    typeChanges: plan.typeChanges,
+    idMap,
+  };
 }

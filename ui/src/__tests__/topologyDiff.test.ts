@@ -10,7 +10,7 @@
 // fails here first instead of only at the screen boundary.
 
 import { describe, expect, it } from 'vitest';
-import { computeTopologyDiff } from '@/features/stores/topologyDiff';
+import { computeTopologyDiff, planTopologyDiff } from '@/features/stores/topologyDiff';
 import type { TopologyNodeData, TopologyWireData } from '@/features/stores/NodeTopologyEditor';
 import type { WorkspaceDto } from '@/api/workspaces';
 
@@ -279,5 +279,61 @@ describe('computeTopologyDiff', () => {
         stores,
       }),
     ).toThrow('workspace has no semantic Branch Location ownership');
+  });
+});
+
+describe('planTopologyDiff', () => {
+  it('classifies a new workspace as a creation and a rename as an update', () => {
+    const plan = planTopologyDiff(
+      [
+        wsNode({ id: 'ws-existing', name: 'Renamed Register', metadata: { typeKey: 'store-pos', persisted: true } }),
+        wsNode({ id: 'ws-new', name: 'New Register', metadata: { typeKey: 'store-pos', persisted: false } }),
+      ],
+      loadedInstances,
+    );
+
+    expect(plan.createNodeIds).toEqual(['ws-new']);
+    expect(plan.updateNodeIds).toEqual(['ws-existing']);
+    expect(plan.archiveIds).toEqual([]);
+    expect(plan.typeChanges.size).toBe(0);
+  });
+
+  it('is total — an orphan workspace with no store ownership still counts as a creation', () => {
+    // computeTopologyDiff throws on this input (no resolvable store_id);
+    // the plan needs no store_id and must never throw — the editor chip
+    // previews pending creations even while the canvas is mid-wiring.
+    const plan = planTopologyDiff(
+      [wsNode({ id: 'ws-orphan', name: 'Orphan', metadata: { typeKey: 'store-pos', persisted: false } })],
+      [],
+    );
+
+    expect(plan.createNodeIds).toEqual(['ws-orphan']);
+    expect(plan.updateNodeIds).toEqual([]);
+    expect(plan.archiveIds).toEqual([]);
+    expect(plan.typeChanges.size).toBe(0);
+  });
+
+  it('counts a type change as one create and one archive with the replacement id', () => {
+    const plan = planTopologyDiff(
+      [wsNode({ id: 'ws-existing', name: 'Front Register', metadata: { typeKey: 'restaurant-pos', persisted: true } })],
+      loadedInstances,
+      () => 'ws-fresh',
+    );
+
+    // The create rides the node's slot; the payload id comes from the
+    // typeChanges remap (ws-fresh), so the plan's count is 1 create + 1
+    // archive for a single type change.
+    expect(plan.createNodeIds).toEqual(['ws-existing']);
+    expect(plan.archiveIds).toEqual(['ws-existing']);
+    expect(plan.updateNodeIds).toEqual([]);
+    expect(plan.typeChanges.get('ws-existing')).toEqual({ newId: 'ws-fresh', newTypeKey: 'restaurant-pos' });
+  });
+
+  it('archives instances missing from the canvas', () => {
+    const plan = planTopologyDiff([], loadedInstances);
+
+    expect(plan.createNodeIds).toEqual([]);
+    expect(plan.updateNodeIds).toEqual([]);
+    expect(plan.archiveIds).toEqual(['ws-existing']);
   });
 });
