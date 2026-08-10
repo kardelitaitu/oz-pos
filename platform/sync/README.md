@@ -17,6 +17,26 @@ the shared typed importer, and resets the anchor only after a successful
 import. PostgreSQL deployments use a dedicated sync database rather than the
 HTTP snapshot endpoint.
 
+### Real PostgreSQL integration checks
+
+The crate includes ignored integration tests for the PostgreSQL retention and
+snapshot contracts. They use a disposable database and do not run as part of
+the normal unit-test suite:
+
+```text
+docker run --name oz-pos-pg-sync-tdd --rm -d \
+  -e POSTGRES_USER=ozsync -e POSTGRES_PASSWORD=ozsync \
+  -e POSTGRES_DB=ozsync -p 127.0.0.1:15432:5432 postgres:16-alpine
+
+PG_SYNC_TEST_URL=postgresql://ozsync:ozsync@127.0.0.1:15432/ozsync \
+  cargo test -p platform-sync --test pg_integration -- --ignored --nocapture
+```
+
+The harness verifies real PostgreSQL `MIN(created_at)` anchor expiry,
+boolean/timestamp decoding in snapshots, and that credential verifier
+material is absent from the typed snapshot. The disposable container must be
+removed by the caller after the run (`docker stop oz-pos-pg-sync-tdd`).
+
 ## Architecture
 
 ```
