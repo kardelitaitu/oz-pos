@@ -36,6 +36,7 @@ import {
   NODE_WIDTH,
   NODE_HEIGHT,
   NODE_PORT_Y,
+  nodeBoxesOverlap,
   resolveDropOverlaps,
 } from './nodeTopologyClamp';
 import { computeAutoLayout } from './nodeTopologyLayout';
@@ -2979,7 +2980,6 @@ export default function NodeTopologyEditor({
       }
       if (selectedNodeIds.size > 0 && !e.repeat && (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
         e.preventDefault();
-        pushHistory();
         // Shift = FINE nudge (1px, pixel-exact — never grid-rounded); plain
         // arrows move one full grid step when snap is on (deterministic,
         // no dead presses on-grid) or the raw 8px step when it is off.
@@ -3008,6 +3008,27 @@ export default function NodeTopologyEditor({
             y: fine ? clamped.y : (snapEnabled ? snap(clamped.y) : clamped.y),
           });
         }
+        // Block a nudge that would step any selected node's box into a
+        // STATIONARY node's box (round 141) — the keyboard path must respect
+        // the same no-overlap invariant as drops. Selection members move
+        // together (rigid), so they cannot newly overlap each other; only
+        // stationary nodes matter. Flush alignment (zero gap, the guide
+        // landing) is not an overlap and stays reachable. A blocked nudge is
+        // NOT an edit: no history entry, no movement — the user hits a wall
+        // and goes around instead of stepping a card under a neighbour.
+        let blocked = false;
+        for (const n of nodes) {
+          if (selectedNodeIds.has(n.id)) continue;
+          for (const pos of next.values()) {
+            if (nodeBoxesOverlap(pos, n)) {
+              blocked = true;
+              break;
+            }
+          }
+          if (blocked) break;
+        }
+        if (blocked) return;
+        pushHistory();
         // Figma-style alignment on FINE nudges only: the round-22 guide
         // engine runs on the nudged selection, so a Shift+arrow landing
         // flush against a neighbour shows the live guide. ENTRY-ONLY snap:

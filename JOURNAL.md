@@ -3233,3 +3233,19 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Deliberately NOT done:** no nudge blocking (arrow keys can still step a node into a neighbour — nudges are 1px/8-24px steps where auto-resolving to a 24px-away spot would be jarring; blocking is a small follow-up); no loaded-diagram overlap repair (pre-existing overlap from saved data is left alone until the user moves the node — a silent jump on load would be worse); no overlap warning indicator.
 
 **Risks / follow-ups:** the movement invariant now holds for drags (mouse + touch share `finalizeNodeDrag`). Follow-ups: blocking nudges that would overlap (the keyboard path), and a sweep for other movement paths that bypass the resolver (e.g., duplicate-commit settle, if the duplicate-in-place UX is ever revisited).
+
+### 2026-08-11 — arrow nudges blocked at a neighbour's wall (round 141)
+
+**Problem:** the round-140 follow-up — the keyboard movement path still violated the no-overlap invariant. A selected node could be arrow-nudged INTO a neighbour (1px fine steps or 8/24px grid steps), stacking it under the other card. Auto-resolving a nudge to a distant spot would be jarring for 1px steps, so the least-surprising behavior is a wall: block the whole nudge (selection stays put, no history entry).
+
+**Solution:** Red→Green. New tests: (1) a node flush against a neighbour (0 gap — the guide landing) nudged one grid step right must stay put AND create no undo entry, while nudging away still works; (2) a 1px gap to flush must remain reachable (fine Shift+nudge lands flush, not blocked). Pre-fix the flush node stepped to 96px (Red). Fix: in the arrow-key handler, compute the would-be positions (same clamp/snap pipeline) BEFORE `pushHistory()`, then block if any nudged node's box intersects a STATIONARY node's box via the round-140 `nodeBoxesOverlap`. Selection members move rigidly, so they can't newly overlap each other — only stationary nodes matter. A blocked nudge returns before the history push, so it is not an edit (undo stays clean).
+
+**Two alignment-guide tests updated, same honest contract change as round 140:** the fine-nudge fixture (A right edge 440, B left edge 447) deliberately nudged A 1–7px PAST B's flush edge (208/209/213/214) to exercise the guide's entry-snap and band-exit mechanics. Those positions are now forbidden — nudging into the neighbour is a wall at flush. Both tests were adapted to exercise the SAME mechanics in the reachable direction (away from the wall): entry-snap applies once and raw 1px moves stand (207 → 206 → 205, guide persists), the band clears at 7px (201 in-band → 200 clears), and the wall itself is pinned (207 → 208 blocked, guide persists). A subtle first adaptation error — asserting the wall at 205 when 206 (edge 446, still 1px short of 447) is legal — was caught by the run and corrected; the wall is exactly at flush.
+
+**Verified:** editor suite 479/479 (+2) · full UI suite 276 files / 4,685 tests (+2) · typecheck ✓ · eslint 0 errors (8 pre-existing warnings).
+
+**Commits:** (ref back-filled after commit)
+
+**Deliberately NOT done:** no auto-nudge/settle for the keyboard path (the wall is the design — auto-resolving a 1px step to a 24px-away spot would be jarring); no duplicate-commit settle (duplicate-in-place copies still overlap their originals by design — the creation-gesture exception from round 140 carries over to the keyboard; Ctrl+D places copies one grid step away, which the wall does not affect).
+
+**Risks / follow-ups:** the no-overlap invariant now holds for drags AND nudges. Remaining movement paths: `computeAutoLayout` output is not guaranteed collision-free (the same `resolveDropOverlaps` primitive could settle it — suggested as a follow-up), and loaded diagrams with pre-existing overlaps are still left alone until the user moves the node (deliberate).

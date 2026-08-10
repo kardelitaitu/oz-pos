@@ -2359,13 +2359,26 @@ function BranchDeleteHarness() {
       fireEvent.keyDown(canvas(), { key: 'ArrowRight', shiftKey: true });
       expect(nodeA().style.left).toBe('207px'); // flush at 447 (entry snap)
 
-      // The band was entered ONCE — further nudges must move freely (208,
-      // 209), never snapping back to 207. The guide stays visible in-band.
-      fireEvent.keyDown(canvas(), { key: 'ArrowRight', shiftKey: true });
-      expect(nodeA().style.left).toBe('208px');
+      // The band was entered ONCE — a raw 1px move AWAY from the neighbour
+      // stands (206, never snapping back to 207). The guide stays in-band.
+      // (Moving TOWARD the neighbour is now blocked at the wall — round 141
+      // forbids stepping 1px into the card, so the in-band raw-move property
+      // is exercised in the reachable direction.)
+      fireEvent.keyDown(canvas(), { key: 'ArrowLeft', shiftKey: true });
+      expect(nodeA().style.left).toBe('206px');
       expect(document.querySelector('.alignment-guide-x')).not.toBeNull();
+      fireEvent.keyDown(canvas(), { key: 'ArrowLeft', shiftKey: true });
+      expect(nodeA().style.left).toBe('205px');
+      expect(document.querySelector('.alignment-guide-x')).not.toBeNull();
+      // Nudging back toward the neighbour is legal while a gap remains (205
+      // → 206, edge 446 still 1px short of B's 447); the WALL is at flush —
+      // a nudge that would step into B (207 → 208) is blocked (round 141).
       fireEvent.keyDown(canvas(), { key: 'ArrowRight', shiftKey: true });
-      expect(nodeA().style.left).toBe('209px');
+      expect(nodeA().style.left).toBe('206px');
+      fireEvent.keyDown(canvas(), { key: 'ArrowRight', shiftKey: true });
+      expect(nodeA().style.left).toBe('207px');
+      fireEvent.keyDown(canvas(), { key: 'ArrowRight', shiftKey: true });
+      expect(nodeA().style.left).toBe('207px'); // blocked — never 208
       expect(document.querySelector('.alignment-guide-x')).not.toBeNull();
     });
 
@@ -2377,14 +2390,16 @@ function BranchDeleteHarness() {
       fireEvent.keyDown(canvas(), { key: 'ArrowRight', shiftKey: true });
       expect(nodeA().style.left).toBe('207px'); // entry snap, flush at 447
 
-      // 6 more nudges → 213 (edge 453, still 6px from the line = in band).
-      for (let i = 0; i < 6; i++) fireEvent.keyDown(canvas(), { key: 'ArrowRight', shiftKey: true });
-      expect(nodeA().style.left).toBe('213px');
+      // 6 nudges LEFT → 201 (edge 441, still 6px from the line = in band).
+      // (Right is a hard wall at flush — round 141 blocks stepping into the
+      // neighbour — so the band-exit property is exercised leftward.)
+      for (let i = 0; i < 6; i++) fireEvent.keyDown(canvas(), { key: 'ArrowLeft', shiftKey: true });
+      expect(nodeA().style.left).toBe('201px');
       expect(document.querySelector('.alignment-guide-x')).not.toBeNull();
 
-      // One more → 214 (edge 454, 7px past) — out of the band, guide clears.
-      fireEvent.keyDown(canvas(), { key: 'ArrowRight', shiftKey: true });
-      expect(nodeA().style.left).toBe('214px');
+      // One more → 200 (edge 440, 7px past) — out of the band, guide clears.
+      fireEvent.keyDown(canvas(), { key: 'ArrowLeft', shiftKey: true });
+      expect(nodeA().style.left).toBe('200px');
       expect(document.querySelector('.alignment-guide')).toBeNull();
     });
 
@@ -9650,5 +9665,70 @@ describe('resolveDropOverlaps (drop-overlap resolution)', () => {
     expect(overlapsA).toBe(false);
     expect(result!.find((n) => n.id === 'd')).toEqual({ id: 'd', x: 700, y: 300 });
     expect(result!.find((n) => n.id === 'b')).toEqual({ id: 'b', x: 380, y: 80 });
+  });
+});
+
+// ── Nudge-overlap blocking (round 141) ───────────────────────────
+//
+// Round 140 settled dropped nodes clear of other cards, but the keyboard
+// path could still step a selected node INTO a neighbour (1px/8-24px steps
+// where auto-resolving to a distant spot would be jarring). The least-
+// jarring behavior: block the whole nudge (the selection stays put, no
+// history entry) — the user hits a wall and goes around. Flush alignment
+// (zero gap) is NOT an overlap and remains reachable, and nudges away
+// from the neighbour still work.
+describe('NodeTopologyEditor — nudge-overlap blocking', () => {
+  beforeEach(() => {
+    mockLoadTopology.mockResolvedValue(null);
+  });
+
+  it('blocks an arrow nudge that would step the selection into another card', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'a', type: 'store', name: 'A', x: 80, y: 80 },
+        // B sits flush against A's right edge (0 gap — the guide landing).
+        { id: 'b', type: 'workspace', name: 'B', x: 80 + NODE_WIDTH, y: 80, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    const nodeA = document.querySelector('.topology-node[data-node-id="a"]') as HTMLElement;
+    selectFirstNode();
+
+    // One grid step right (80 → 104) would push A's box [104..344] into B's
+    // [320..560] — the nudge must be blocked, not stepped into the card.
+    fireEvent.keyDown(canvas, { key: 'ArrowRight' });
+    expect(nodeA.style.left).toBe('80px');
+    // A blocked nudge is not an edit: no undo entry is created.
+    expect(screen.queryByText('Undo (Ctrl+Z)')).toBeNull();
+
+    // Nudging AWAY from the neighbour still works (only the overlapping
+    // direction is blocked).
+    fireEvent.keyDown(canvas, { key: 'ArrowLeft' });
+    expect(parseFloat(nodeA.style.left)).toBeLessThan(80);
+  });
+
+  it('a fine Shift+nudge flush against a neighbour stays reachable (guide landing)', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'a', type: 'store', name: 'A', x: 80, y: 80 },
+        // B one 1px step away from flush: A's right edge at 320, B's left
+        // at 321 — a 1px fine nudge right lands FLUSH (0 gap), which is NOT
+        // an overlap and must be allowed (the alignment guide's landing).
+        { id: 'b', type: 'workspace', name: 'B', x: 321, y: 80, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    const nodeA = document.querySelector('.topology-node[data-node-id="a"]') as HTMLElement;
+    selectFirstNode();
+
+    fireEvent.keyDown(canvas, { key: 'ArrowRight', shiftKey: true });
+    // A's right edge lands exactly on B's left edge — flush, allowed.
+    expect(nodeA.style.left).toBe('81px');
   });
 });
