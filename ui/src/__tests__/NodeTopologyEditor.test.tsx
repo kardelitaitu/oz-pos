@@ -193,7 +193,7 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-toast-template-saved': 'Template saved',
   'topology-toast-template-deleted': 'Template deleted',
   'topology-apply-diff': '{added} added · {removed} removed · {moved} moved · rev {from} → {to}',
-  'topology-apply-workspace-diff': '{created} created · {updated} updated · {archived} archived · rev {from} → {to}',
+  'topology-apply-workspace-diff': '{created} created · {updated} updated · {archived} archived · {typeChanged} type-changed · rev {from} → {to}',
 };
 
 vi.mock('@fluent/react', async () => {
@@ -7008,6 +7008,32 @@ describe('NodeTopologyEditor — unsaved-changes indicator', () => {
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
     expect(summary()).toContain('1 archived');
     expect(summary()).toContain('0 created');
+    expect(summary()).toContain('0 updated');
+  });
+
+  it('flags a type change as a recreate instead of a plain create plus archive', async () => {
+    // Round 152: changing a workspace's type archives the old instance and
+    // creates a NEW one with a fresh id (Critical #1) — a destructive
+    // recreate the chip previously read as "1 created · 1 archived". It
+    // must surface as a distinct type-changed count.
+    renderEditor({
+      workspaceInstances: [
+        { instanceId: 'ws-existing', typeKey: 'store-pos', purposeKey: 'checkout', name: 'Front Register' },
+      ],
+      branchLocations: [{ id: 'store-1', name: 'Main Street' }],
+    });
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    const summary = () => document.querySelector('.topology-diff-summary')?.textContent ?? '';
+
+    // Select the workspace node (second card) and switch its type.
+    fireEvent.mouseDown(nodeAt(1), { button: 0 });
+    const select = typeSelect();
+    fireEvent.change(select, { target: { value: 'restaurant-pos' } });
+
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+    expect(summary()).toContain('1 type-changed');
+    expect(summary()).toContain('0 created');
+    expect(summary()).toContain('0 archived');
     expect(summary()).toContain('0 updated');
   });
 });

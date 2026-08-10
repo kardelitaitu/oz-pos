@@ -10,7 +10,7 @@
 // fails here first instead of only at the screen boundary.
 
 import { describe, expect, it } from 'vitest';
-import { computeTopologyDiff, planTopologyDiff } from '@/features/stores/topologyDiff';
+import { computeTopologyDiff, planTopologyDiff, summarizeTopologyPlan } from '@/features/stores/topologyDiff';
 import type { TopologyNodeData, TopologyWireData } from '@/features/stores/NodeTopologyEditor';
 import type { WorkspaceDto } from '@/api/workspaces';
 
@@ -335,5 +335,57 @@ describe('planTopologyDiff', () => {
     expect(plan.createNodeIds).toEqual([]);
     expect(plan.updateNodeIds).toEqual([]);
     expect(plan.archiveIds).toEqual(['ws-existing']);
+  });
+});
+
+describe('summarizeTopologyPlan', () => {
+  it('counts a type change as a recreate — not a plain create plus archive', () => {
+    // A type change archives the old instance and creates a NEW one with a
+    // fresh id. The summary must surface it as typeChanged so the chip does
+    // not read a destructive recreate as a routine add+remove.
+    const plan = planTopologyDiff(
+      [wsNode({ id: 'ws-existing', name: 'Front Register', metadata: { typeKey: 'restaurant-pos', persisted: true } })],
+      loadedInstances,
+      () => 'ws-fresh',
+    );
+
+    expect(summarizeTopologyPlan(plan)).toEqual({ created: 0, updated: 0, archived: 0, typeChanged: 1 });
+  });
+
+  it('separates plain creates from type-change recreates', () => {
+    const plan = planTopologyDiff(
+      [
+        wsNode({ id: 'ws-existing', name: 'Front Register', metadata: { typeKey: 'restaurant-pos', persisted: true } }),
+        wsNode({ id: 'ws-new', name: 'New Register', metadata: { typeKey: 'store-pos', persisted: false } }),
+      ],
+      loadedInstances,
+      () => 'ws-fresh',
+    );
+
+    expect(summarizeTopologyPlan(plan)).toEqual({ created: 1, updated: 0, archived: 0, typeChanged: 1 });
+  });
+
+  it('separates sweep archives from type-change recreates', () => {
+    const plan = planTopologyDiff([], loadedInstances, () => 'ws-fresh');
+
+    expect(summarizeTopologyPlan(plan)).toEqual({ created: 0, updated: 0, archived: 1, typeChanged: 0 });
+  });
+
+  it('classifies a rename as an update with no recreate', () => {
+    const plan = planTopologyDiff(
+      [wsNode({ id: 'ws-existing', name: 'Renamed', metadata: { typeKey: 'store-pos', persisted: true } })],
+      loadedInstances,
+    );
+
+    expect(summarizeTopologyPlan(plan)).toEqual({ created: 0, updated: 1, archived: 0, typeChanged: 0 });
+  });
+
+  it('is all zeros for an identical canvas', () => {
+    const plan = planTopologyDiff(
+      [wsNode({ id: 'ws-existing', name: 'Front Register', metadata: { typeKey: 'store-pos', persisted: true } })],
+      loadedInstances,
+    );
+
+    expect(summarizeTopologyPlan(plan)).toEqual({ created: 0, updated: 0, archived: 0, typeChanged: 0 });
   });
 });

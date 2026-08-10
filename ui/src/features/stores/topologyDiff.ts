@@ -61,6 +61,29 @@ export interface TopologyDiffPlan {
   typeChanges: Map<string, { newId: string; newTypeKey: string }>;
 }
 
+/** Counts a plan for the Apply chip (round 152). A type change archives
+ *  the old instance and creates a NEW one with a fresh id (Critical #1) —
+ *  a destructive recreate — so it is surfaced as `typeChanged` instead of
+ *  inflating the plain created/archived counts. The split guarantees
+ *  created + typeChanged + updated + archived never double-count a single
+ *  node. */
+export interface TopologyDiffSummary {
+  created: number;
+  updated: number;
+  archived: number;
+  typeChanged: number;
+}
+
+export function summarizeTopologyPlan(plan: TopologyDiffPlan): TopologyDiffSummary {
+  const typeChanged = plan.typeChanges.size;
+  return {
+    created: plan.createNodeIds.length - typeChanged,
+    updated: plan.updateNodeIds.length,
+    archived: plan.archiveIds.length - typeChanged,
+    typeChanged,
+  };
+}
+
 /**
  * Classify the workspace-instance vectors without resolving store
  * ownership. Total: a workspace with no resolvable Branch Location (a

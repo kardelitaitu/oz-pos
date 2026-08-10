@@ -54,7 +54,7 @@ import {
 import { TopologyNodeCard } from './topologyNodeCard';
 import { TopologyWireGroup } from './topologyWireGroup';
 import { computeCanvasDiff } from './topologyCanvasDiff';
-import { planTopologyDiff } from './topologyDiff';
+import { planTopologyDiff, summarizeTopologyPlan } from './topologyDiff';
 import { cubicBezier, pointUnderCards, polylinePoint, wireUnderCardSegments } from './topologyWireGeometry';
 import { useTopologyEditorGraph, type TopologyHistoryEntry } from './nodeTopologyEditorState';
 import { useTopologyEditorSaveLifecycle } from './nodeTopologyEditorSaveState';
@@ -4989,15 +4989,20 @@ export default function NodeTopologyEditor({
                   name: s.name,
                 })),
               );
+              // Round 152: a type change is a destructive recreate (archive
+              // + fresh-id create) — surface it separately so the chip never
+              // reads one as a routine create + archive.
+              const summary = summarizeTopologyPlan(plan);
               return (
                 <span className="topology-dirty-chip" role="status">
                   <span className="topology-dirty-dot" aria-hidden="true" />
                   <Localized id="topology-unsaved">Unsaved changes</Localized>
                   <span className="topology-diff-summary">
                     {l10n.getString('topology-apply-workspace-diff', {
-                      created: plan.createNodeIds.length,
-                      updated: plan.updateNodeIds.length,
-                      archived: plan.archiveIds.length,
+                      created: summary.created,
+                      updated: summary.updated,
+                      archived: summary.archived,
+                      typeChanged: summary.typeChanged,
                       from: topologyRevision,
                       to: topologyRevision + 1,
                     })}

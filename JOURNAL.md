@@ -3391,3 +3391,17 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Deliberately NOT done:** no hover state on the pulse dots (they ride the overlay as transient info-blue dots — a hover class on them would read as the wire itself changing). No refactor of the 8 eslint warnings (churn with behavioral risk and no test to pin — journaled as deliberate noise). No dimmed propagation into the overlay via a shared memo (the wire lookup at render is O(n) over few crossing wires; a memo would need the wire map anyway).
 
 **Risks / follow-ups:** with the interaction states mirrored, the wire/overlay story is complete: static, hover, selected, and hover-focus all read continuous. The remaining open items are the demo/dev canvas format unify (round 150) and — if a browser pass ever flags it — the pulse dot's hover look. The eslint warnings remain as the one known piece of lint debt in the editor.
+
+### 2026-08-11 — The chip flags type changes as destructive recreates (round 152)
+
+**Problem:** the round-150 chip counted a workspace type change as `1 created · 1 archived` — true to the backend vectors but actively hiding the destructive part: a type change (Critical #1) archives the old instance and creates a NEW one with a fresh UUID, so instance identity is destroyed and external references break. The worst case is non-obvious even to the user who made the change: toggling a workspace's type back and forth creates a brand-new instance each Apply (the idMap remap), and the chip gave zero hint. The post-Apply toast already says `type-changed` — only the pre-commit chip hid it.
+
+**Solution:** Red→Green. Red: 5 pure `summarizeTopologyPlan` tests (type-change only → `{0,0,0,1}`; plain create + type-change split → `{1,0,0,1}`; sweep archive split → `{0,0,1,0}`; rename → `{0,1,0,0}`; identical → zeros) + an integration test — seed an instance, switch the workspace's type in the inspector → the chip shows `1 type-changed` and `0 created · 0 archived` (pre-fix: `1 created · 0 updated · 1 archived` with no type-changed segment). Green: `summarizeTopologyPlan(plan)` in topologyDiff.ts — `typeChanged = typeChanges.size`, with created/archived EXCLUDING the recreate so a node is never double-counted — and the chip renders the new `typeChanged` var. FTL key extended in both bundles (`{ typeChanged } type-changed` / id: `diubah jenisnya`), matching the toast's established `type-changed` wording.
+
+**Verified:** summary unit 5/5 · diff suite 19/19 · TopologyScreen integration 38/38 (payload builder untouched — this is display-only) · editor suite 495/495 (+1) · **full UI suite 279 files / 4,736 tests (+6)** · typecheck ✓ · eslint 0 errors (8 pre-existing warnings) · lint:i18n clean (bundle parity counts the extended key) · **mutation check**: pinning typeChanged to 0 failed 2 pure + 1 integration test → restored, green. Drift guard clean.
+
+**Commits:** `TBD`
+
+**Deliberately NOT done:** no change to the plan or payload builder — the recreate split is a pure display concern (created/archived/typeChanged always sum to the true vectors). No per-node recreate badge on cards. No warning styling on the chip for recreates (the count carries the signal; a browser pass could add emphasis later).
+
+**Risks / follow-ups:** the chip now shows the honest pre-commit signal for every vector the backend commits — created, updated, archived, type-changed, and the revision bump. The remaining open item is the demo/dev canvas format unify (round 150), and the eslint warnings stay as the editor's known lint debt.
