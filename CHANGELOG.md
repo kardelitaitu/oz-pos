@@ -6,9 +6,18 @@ All notable changes to OZ-POS are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.0.25] — 2026-08-06
+## [0.0.25] — 2026-08-09
 
-Architecture enforcement and release baseline update for the 0.0.25 cycle.
+Production hardening and operator-facing UX release: stronger sync recovery and replay safety, typed multi-store topology management, broader restart parity in the browser mock, and a fully green release gate.
+
+### Release-window summary — last 100 commits
+
+The 100 commits from **2026-08-07 through 2026-08-09** form the final 0.0.25 hardening window: **35 fixes, 14 features, 15 test commits, 30 documentation/audit commits, 2 refactors, 2 chores, and 2 audit milestones**. Together they moved the release from feature completion to operational confidence:
+
+- **Sync and settings:** PostgreSQL and SQLite replay safety, durable cursor pagination, expired-anchor recovery, operator rewind protection, stock-summary rebuilding, settings-update enqueue/compaction, remote settings events, sync auto-provisioning, and deliberate-disable behavior.
+- **Topology:** Typed connection contracts, corrupt-data quarantine, Apply-time structural validation, relationship selection, multi-select/marquee editing, branch lifecycle management, stale-card cleanup, dirty-switch protection, bends/routing, finder, auto-layout, viewport memory, and per-branch minimap preferences.
+- **Data and migration safety:** Store-owned workspace reseeding, stateful topology mock round-trips, and regression coverage for branch rename/delete flows.
+- **Quality and delivery:** 15 topology, retail, and E2E test commits, documentation-audit repair, a docs-auditor skill, changelog repair, and restored strict formatting, Clippy, panic-inventory, architecture, and drift gates.
 
 ### Added
 
@@ -20,6 +29,9 @@ Architecture enforcement and release baseline update for the 0.0.25 cycle.
 - **AnchorExpired snapshot recovery no longer re-fetches every cycle** — After an `AnchorExpired` snapshot import succeeds, the durable pull anchor now advances to the server's `oldest_available` (or clears) instead of retaining the stale anchor. Previously every cycle re-triggered the expired anchor and re-downloaded the full snapshot.
 - **Operator requeue rewind survives the daemon apply phase** — The daemon (SQLite and PostgreSQL) now re-reads the durable `sync_pull_state` before advancing it after a pull page. If an operator requeues a dead-lettered item (which rewinds the anchor to `NULL`) while the pull is in flight, the rewind is retained so the next cycle re-fetches the item — previously the apply-phase write clobbered it and the requeued item was never re-pulled.
 - **Dead-letter requeue workflow** — Added `Store::requeue_remote_failure(item_id)` (oz-core) plus a `requeue_remote_failure` Tauri command in both desktop and tablet clients. Operators can now clear a quarantined remote item (e.g. after creating the missing product a remote sale referenced); the failure row is deleted and the durable pull anchor is rewound so the next sync cycle re-fetches and retries the item with a fresh attempt budget. Requeueing an id that is not dead-lettered fails with `NotFound` rather than silently no-op'ing. The full re-pull is safe because the `sync_applied_items` idempotency ledger skips already-applied items. 8 new tests (2 store + 3 command per client).
+- **Typed multi-store topology management** — Added branch-scoped topology graphs with canonical Branch Location ownership, typed ports and relationships, live validation, branch add/rename/delete flows, workspace-instance diffing, and guarded Apply behavior. Saved diagrams now load and reconcile against real stores and workspace instances instead of relying on display names or default-store inference.
+- **Topology editing toolkit** — Added marquee and multi-select group editing, batch deletion, bend points, orthogonal routing, node finder, auto-layout, hardware-node inspection, per-branch viewport memory, minimap controls, and keyboard-accessible relationship/preset interactions.
+- **Browser-preview restart parity** — Persisted active carts, completed sales, shifts, login lockout/history, KDS orders and line items, display counters, and held carts in the dev mock, with contract tests covering reload, resume, deletion, malformed storage, and collision-resistant identifiers.
 
 - **PostgreSQL sync daemon replay-safety parity** — `pg_daemon.rs` now matches the SQLite daemon/engine SYNC-01 safeguards: the pull anchor comes from the durable `sync_pull_state` row (not a fresh `None` every 60s), remote items apply atomically via `apply_remote_atomic` with the `sync_applied_items` idempotency ledger, poison items dead-letter after their retry budget instead of erroring forever, and the anchor advances only after a page applied (retained on retryable failure). Push conflicts now route through the shared ADR #21 conflict service rather than blanket mark-synced + re-enqueue. `pg_transport.rs` no longer panics when a pulled row's `synced_at` is NULL (rows this terminal pushed as `pending`). 5 new tests.
 
@@ -31,7 +43,9 @@ Architecture enforcement and release baseline update for the 0.0.25 cycle.
 - **Release version synchronization** — Bumped workspace, desktop, tablet, Docker, UI, health endpoint, localized status-bar, test, and lockfile versions from 0.0.24 to 0.0.25.
 - **Atomic remote sync replay handling** — Remote mutations now apply through transaction-aware stock, product, movement, and receipt helpers. The sync daemon commits each mutation with its `sync_applied_items` receipt, preventing crash-window replays from duplicating stock or sale effects; unsupported actions fail closed without recording a receipt.
 - **Replay regression coverage** — Added focused tests for exactly-once replay suppression, rollback when a later sale line fails, and rejection of unknown remote actions. The implementation is documented in spec `0044-critical-delivery-and-sync-replay-safety`.
+- **Topology stale-state cleanup** — Prevented deleted or unassigned branches from resurrecting saved cards, wires, and selections; successful branch renames merge into the live canvas without discarding unsaved edits, while dirty branch switches now require confirmation.
 - **Engine pull replay safety (SYNC-01 parity)** — `SyncEngine::run_sync_cycle` now pulls through the durable `sync_pull_state` anchor (instead of deriving `since` from the local queue's synced timestamps) and applies each remote item atomically with its `sync_applied_items` receipt via the same dead-lettering path as the daemon. Manual "sync now" runs can no longer re-apply remote stock/sale mutations when the server replays history or the anchor is lost; the anchor advances only after a page applied successfully. Regression test: two engine cycles against a replaying server apply the mutation once.
+- **PostgreSQL daemon recovery parity** — PostgreSQL pulls now detect retention-expired anchors, recover through typed reference snapshots, rebuild materialized stock summaries after stock movements, publish remote settings changes to the UI, and preserve operator rewinds and retryable anchors. Real PostgreSQL integration coverage exercises timestamp/boolean decoding and credential exclusion.
 
 ### Fixed
 
@@ -46,6 +60,7 @@ Architecture enforcement and release baseline update for the 0.0.25 cycle.
 - **Session-mint authorization gate (right user, right store, right permission)** — `Store::verify_instance_access` (the gate `create_session` calls in both clients) now resolves the caller from `users` and fails closed for unknown users, inactive users, and claimed `role_id` values that differ from the user's actual database role. Previously the claimed role was trusted for the owner/manager bypass, so a caller who knew an owner's user id could mint a session as that owner — without their PIN — and inherit every permission, in any store's active instance (privilege escalation + cross-store session minting; audit/06 residual).
 - **Pre-session workspace picker bound to the authenticated user (audit/06)** — `staff_login` / `bootstrap_owner` now mint a short-lived HMAC-signed picker ticket, and the pre-session `list_workspaces` / `list_workspace_screens` commands verify it and resolve the caller's real role from the database instead of trusting caller-supplied `role_id` / `user_id`. A forged `role-owner` claim can no longer enumerate workspace instances in any store. The terminal-management screen's cross-store instance picker (previously a hardcoded `role-owner` claim) now uses the session-scoped `list_workspaces_for_store_scoped` command. **Tablet parity**: the tablet client mints the same ticket in `staff_login` and registers the three picker commands, so the shared picker works identically on desktop and tablet.
 - **Tablet first-owner bootstrap + device binding (audit/06 parity)** — the tablet client now registers `bootstrap_owner` (first-owner creation with the same picker-ticket mint as the desktop, gated on "no users exist" and full PIN/field validation) and the full device-binding surface: `set_device_binding` / `set_device_binding_scoped` write an HMAC-SHA256 signature (OS-keyring secret, constant-time verify) over `{terminal_id}:{store_id}:{instance_id}` into the global identity DB, and `resolve_boot_store` auto-boots a bound tablet into its store+instance, falling back to the primary store on a missing/tampered binding or a vanished instance. The shared `WorkspaceContext` now passes the device id into `resolve_boot_store`, so a bound terminal actually resolves its binding on both clients. 24 new tablet tests + 2 new frontend tests.
+- **PostgreSQL sync observability** — Pull-applied `settings.update` changes now emit `settings_updated` events, while local-originated events are ignored by the originating terminal to avoid duplicate refetches. The PostgreSQL daemon also rebuilds derived stock state before advancing its durable anchor.
 
 #### 🎯 Final Code Health Milestone — Zero Pre-existing Issues
 
@@ -69,7 +84,11 @@ After 4 sprints of methodical test rescue and lint/clippy cleanup, all gates are
 
 ### Validation
 
-- Full script test suite: **46/46 passed**.
+- Full pre-push gate: `bash scripts/check.sh` — **all checks passed**.
+- Rust workspace formatting, Clippy, nextest, doctests, migration checks, panic scan, architecture checks, and skill-drift checks passed.
+- UI lint, typecheck, Vitest, i18n, Fluent dedupe, feature registry, plugin, release, Windows, and CI-documentation checks passed.
+- Real PostgreSQL integration target: **2/2 ignored tests passed** against a disposable PostgreSQL 16 instance.
+- Desktop topology E2E coverage: **13/13 passed** on an isolated Vite server.
 - Architecture-boundary tests: **14/14 passed**.
 - Strict live boundary check: **17 tracked findings, 0 blocking findings**.
 - CI documentation drift check: **0 drift items**.

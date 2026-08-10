@@ -115,11 +115,12 @@ Final connector vocabulary (as implemented in the UX):
 
 A workspace is invalid until it has its required ownership connection: POS-type
 workspaces need exactly one `location-in` edge from a Branch Location's
-`location-out`; KDS needs exactly one `operation-in` edge; a Stock Room needs
-at least one inbound stock-bearing edge (`stock-routing` or
-`inventory-transfer`). The Branch Location `location-out` supports fan-out to
-multiple workspaces. `operation-in` feeds are operational edges and must never
-substitute for ownership.
+`location-out`; KDS needs exactly one `operation-in` edge from Restaurant POS;
+a Stock Room needs at least one inbound stock-bearing edge (`stock-routing`
+or `inventory-transfer`). The Branch Location `location-out` supports fan-out
+to multiple workspaces. A KDS inherits its
+store scope transitively from the Branch Location-owned POS source; the
+operation feed itself does not create a second direct Branch Location edge.
 
 The exact internal schema is intentionally deferred to the implementation ADR
 or follow-up design. The semantic contract above is fixed by this decision.

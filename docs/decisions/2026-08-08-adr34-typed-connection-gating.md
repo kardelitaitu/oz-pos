@@ -131,8 +131,9 @@ label ("Ticket Print"), matching the preset's hardcoded label. Duplicate
 detection compares the recorded `toPortId`, so a second KDS → printer wire
 is rejected even against a preset-loaded one.
 
-`operation-out` remains contract-level and future-facing — reserved for a
-dedicated operation feed that no current node produces.
+`operation-out` is authorable from Restaurant POS and feeds a KDS's
+`operation-in` socket. It remains a shared contract semantic for future
+operational workspace outputs.
 
 ### 4. Live-validation gate mirror (`validateEditorGraph`)
 
@@ -232,10 +233,10 @@ canonical and duplicate detection intact.
 
 ### Remaining
 
-`operation-out` stays contract-level and future-facing — reserved for a
-dedicated operation feed that no current node produces. Closing it would
-follow the same pattern: expose the socket, admit the target semantic, and
-let the existing `operation-out → operation-in` row author.
+Restaurant POS now exposes `operation-out` on its right socket, so the
+existing `operation-out → operation-in` row authorizes the Resto POS → KDS
+connection. Future operational workspace types can reuse the same semantic
+without changing the pairing table.
 
 ---
 
@@ -260,9 +261,9 @@ let the existing `operation-out → operation-in` row author.
 
 - Two resolvers (`semanticPortId` vs `gatingSemanticId`) must be maintained
   in parallel; their split is a documented invariant, not an accident.
-- `operation-out` is a contract member that is load-compatible only — a
-  reader must know the socket exposure, not just the table, to know what is
-  authorable.
+- `operation-out` is currently authored by Restaurant POS; future operational
+  workspace types must explicitly expose the semantic before it becomes
+  authorable from their sockets.
 - The closed table is intentionally static; new relationship types (or new
   socket semantics) require a deliberate row + socket change, which is the
   desired friction for a registry the backend must also understand.
