@@ -53,6 +53,7 @@ import {
 } from './topologyExport';
 import { TopologyNodeCard } from './topologyNodeCard';
 import type { TopologyOverlay } from './topologyBranchCompare';
+import { layoutGhosts } from './topologyBranchCompare';
 import { TopologyWireGroup } from './topologyWireGroup';
 import { planTopologyDiff, summarizeTopologyPlan } from './topologyDiff';
 import { cubicBezier, pointUnderCards, polylinePoint, wireUnderCardSegments } from './topologyWireGeometry';
@@ -1540,6 +1541,29 @@ export default function NodeTopologyEditor({
     if (!isFinite(maxX) || !isFinite(maxY)) return { width: 0, height: 0 };
     return { width: maxX + 200, height: maxY + 200 };
   }, [nodes]);
+
+  /** Round 159: the overlay's ghosts laid out into the VISIBLE canvas. The
+   *  other diagram's saved coordinates can sit outside the current viewport
+   *  (different canvas size, or a pan/zoom since it was authored) — clamp
+   *  them into the visible world-rect and resolve pile-ups against each
+   *  other and against the live cards, so every difference stays legible.
+   *  Falls back to 800×600 pre-layout (jsdom has no client size). */
+  const laidOutGhosts = useMemo(() => {
+    if (!compareOverlay || compareOverlay.ghosts.length === 0) return compareOverlay?.ghosts ?? [];
+    const canvas = canvasRef.current;
+    return layoutGhosts(
+      compareOverlay.ghosts,
+      {
+        width: canvas?.clientWidth || 800,
+        height: canvas?.clientHeight || 600,
+        pan,
+        zoom,
+      },
+      nodes
+        .filter((n) => n.type === 'workspace')
+        .map((n) => ({ x: n.x, y: n.y, width: NODE_WIDTH, height: NODE_HEIGHT })),
+    );
+  }, [compareOverlay, pan, zoom, nodes]);
 
   // Load persisted topology on mount, fall back to retail preset.
   useEffect(() => {
@@ -5920,9 +5944,9 @@ export default function NodeTopologyEditor({
                 location has that this one does not. Decorative: pointer-
                 events-none and aria-hidden, so the ghost never steals
                 clicks, hover, or focus from a card below. */}
-            {(compareOverlay?.ghosts.length ?? 0) > 0 && (
+            {laidOutGhosts.length > 0 && (
               <div className="topology-overlay-ghost-layer" aria-hidden="true">
-                {compareOverlay!.ghosts.map((g) => (
+                {laidOutGhosts.map((g) => (
                   <div
                     key={g.id}
                     className="topology-overlay-ghost"

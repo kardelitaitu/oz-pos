@@ -423,6 +423,38 @@ describe('NodeTopologyEditor Component', () => {
     expect(wh1.className).not.toContain('topology-node--overlay-');
   });
 
+  it('clamps off-canvas overlay ghosts into the visible canvas and leaves in-view ghosts alone', () => {
+    renderEditor({
+      compareOverlay: {
+        ghosts: [
+          { id: 'ws-ghost-far', name: 'Satellite', x: 4000, y: 4000 },
+          { id: 'ws-ghost-in', name: 'Local', x: 120, y: 360 },
+        ],
+        onlyHere: [],
+        differing: [],
+      },
+    });
+
+    // The far ghost clamps into the default 800×600 viewport (jsdom has no
+    // layout, so the editor falls back to 800×600 at zoom 1, pan 0 — the
+    // visible world-rect is [0,800]×[0,600] and a 240px card fits at x ≤ 560).
+    const far = document.querySelector(
+      '.topology-overlay-ghost[data-overlay-node-id="ws-ghost-far"]',
+    ) as HTMLElement | null;
+    expect(far).not.toBeNull();
+    expect(far!.style.left).toBe('560px');
+    expect(far!.style.top).toBe('360px');
+
+    // The already-visible ghost keeps its exact position (the layout must
+    // not shuffle cards that fit).
+    const inView = document.querySelector(
+      '.topology-overlay-ghost[data-overlay-node-id="ws-ghost-in"]',
+    ) as HTMLElement | null;
+    expect(inView).not.toBeNull();
+    expect(inView!.style.left).toBe('120px');
+    expect(inView!.style.top).toBe('360px');
+  });
+
   it('renders tool rack sidebar and preset buttons', () => {
     renderEditor();
 

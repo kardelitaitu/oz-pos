@@ -188,6 +188,111 @@ export function buildTopologyOverlay(
   return { ghosts, onlyHere, differing };
 }
 
+// ── Ghost layout (round 159) ──────────────────────────────────────
+//
+// Ghosts are placed at the OTHER diagram's saved world coordinates, so a
+// branch authored on a different canvas size — or after a big pan/zoom —
+// can leave ghosts off-screen or piled onto live cards. layoutGhosts
+// clamps every ghost card into the VISIBLE world-rect (derived from the
+// canvas size and the pan/zoom transform: world = (screen − pan) / zoom)
+// and resolves collisions with a deterministic downward stack: the first
+// ghost in input order keeps its clamped spot, each later ghost drops
+// below the lowest rect it would overlap. Pure and deterministic — the
+// same input always lays out the same way, so the overlay never flickers.
+
+export interface GhostPlacement {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+}
+
+export interface GhostViewport {
+  /** Canvas client size in screen px (falls back to 800×600 pre-layout). */
+  width: number;
+  height: number;
+  pan: { x: number; y: number };
+  zoom: number;
+}
+
+export interface GhostBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** Ghost card size in world units — matches the overlay CSS (240×240). */
+export const GHOST_WIDTH = 240;
+export const GHOST_HEIGHT = 240;
+/** Vertical gap between stacked ghosts / below an occupied card. */
+const GHOST_STACK_GAP = 8;
+
+function rectsOverlap(a: GhostBounds, b: GhostBounds): boolean {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
+/** Clamp `v` into [lo, hi] (order-agnostic: works when lo > hi). */
+function clampInto(v: number, lo: number, hi: number): number {
+  return Math.min(Math.max(v, Math.min(lo, hi)), Math.max(lo, hi));
+}
+
+/** Clamp a card's top-left into [lo, hi]: anchor it inside the rect, and
+ *  when the card fits, keep it fully inside (top-left within [lo, hi − size]). */
+function clampCard(v: number, lo: number, hi: number, size: number): number {
+  const anchored = clampInto(v, lo, hi);
+  if (hi - lo >= size) return clampInto(anchored, lo, hi - size);
+  return anchored;
+}
+
+export function layoutGhosts(
+  ghosts: GhostPlacement[],
+  viewport: GhostViewport,
+  occupied: GhostBounds[] = [],
+): GhostPlacement[] {
+  // Visible world-rect: screen coords mapped back through the transform.
+  // `0 - x` (not `-x`): a zero pan must stay +0, not -0 — a -0 position
+  // renders fine but poisons deep-equality checks on the layout.
+  const left = (0 - viewport.pan.x) / viewport.zoom;
+  const top = (0 - viewport.pan.y) / viewport.zoom;
+  const right = (viewport.width - viewport.pan.x) / viewport.zoom;
+  const bottom = (viewport.height - viewport.pan.y) / viewport.zoom;
+
+  const placed: GhostBounds[] = [...occupied];
+  return ghosts.map((g) => {
+    // MUTATION: no clamping
+    let x = clampCard(g.x, left, right, GHOST_WIDTH);
+    let y = clampCard(g.y, top, bottom, GHOST_HEIGHT);
+
+    // Resolve collisions deterministically (bounded so pathological inputs
+    // terminate): first drop below the lowest blocker; when the stack runs
+    // out of vertical room, wrap LEFT of the column — every move keeps the
+    // card inside the visible rect, so a pile-up stays legible instead of
+    // cascading off-screen.
+    let guard = 0;
+    while (guard < 64) {
+      const self = { x, y, width: GHOST_WIDTH, height: GHOST_HEIGHT };
+      const blockers = placed.filter((p) => rectsOverlap(self, p));
+      if (blockers.length === 0) break;
+
+      const lowest = blockers.reduce((acc, p) => Math.max(acc, p.y + p.height), -Infinity);
+      const downY = lowest + GHOST_STACK_GAP;
+      if (downY + GHOST_HEIGHT <= bottom) {
+        y = downY;
+      } else {
+        const leftmost = blockers.reduce((acc, p) => Math.min(acc, p.x), Infinity);
+        const leftX = leftmost - GHOST_WIDTH - GHOST_STACK_GAP;
+        if (leftX < left) break; // no room anywhere — accept the overlap
+        x = leftX;
+      }
+      guard += 1;
+    }
+
+    placed.push({ x, y, width: GHOST_WIDTH, height: GHOST_HEIGHT });
+    return { id: g.id, name: g.name, x, y };
+  });
+}
+
 export function compareBranchTopologies(
   current: TopologyDiagram | null,
   other: TopologyDiagram | null,

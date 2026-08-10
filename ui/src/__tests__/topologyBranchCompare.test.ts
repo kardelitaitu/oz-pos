@@ -8,7 +8,7 @@
 // editing either one.
 
 import { describe, expect, it } from 'vitest';
-import { compareBranchTopologies, buildTopologyOverlay } from '@/features/stores/topologyBranchCompare';
+import { compareBranchTopologies, buildTopologyOverlay, layoutGhosts } from '@/features/stores/topologyBranchCompare';
 import type { TopologyDiagram } from '@/features/stores/topologyBranchCompare';
 import type { TopologyNodePayload, TopologyWirePayload } from '@/api/topology';
 
@@ -310,5 +310,96 @@ describe('compareBranchTopologies', () => {
     expect(overlay.ghosts).toEqual([{ id: 'ws-wh', name: 'Stock Room', x: 0, y: 0 }]);
     expect(overlay.onlyHere).toEqual([]);
     expect(overlay.differing).toEqual(['ws-pos']);
+  });
+});
+
+// ── layoutGhosts unit tests (round 159) ───────────────────────────
+//
+// The overlay renders ghosts at the OTHER diagram's SAVED world
+// coordinates; the visible world-rect is derived from the canvas size
+// and the pan/zoom transform. layoutGhosts clamps each ghost card into
+// that rect and resolves collisions (ghost-vs-ghost and ghost-vs-live-
+// card) by deterministic downward stacking, so the overlay never loses
+// a difference to an off-screen or buried card.
+
+describe('layoutGhosts', () => {
+  const viewport = (over: Partial<{ width: number; height: number; panX: number; panY: number; zoom: number }> = {}) => ({
+    width: over.width ?? 800,
+    height: over.height ?? 600,
+    pan: { x: over.panX ?? 0, y: over.panY ?? 0 },
+    zoom: over.zoom ?? 1,
+  });
+  const ghost = (id: string, x: number, y: number) => ({ id, name: id, x, y });
+
+  it('leaves an already-visible ghost exactly in place', () => {
+    const out = layoutGhosts([ghost('g1', 120, 140)], viewport());
+    expect(out).toEqual([{ id: 'g1', name: 'g1', x: 120, y: 140 }]);
+  });
+
+  it('clamps a ghost fully off to the right so its card fits the visible rect', () => {
+    // Card is 240×240: at the 800×600 rect, the rightmost visible x is 560.
+    const out = layoutGhosts([ghost('g1', 4000, 100)], viewport());
+    expect(out[0]).toMatchObject({ id: 'g1', x: 560, y: 100 });
+  });
+
+  it('clamps a ghost fully off below the canvas so its card fits the visible rect', () => {
+    const out = layoutGhosts([ghost('g1', 100, 9000)], viewport());
+    expect(out[0]).toMatchObject({ id: 'g1', x: 100, y: 360 });
+  });
+
+  it('clamps a ghost off to the top-left into the visible corner', () => {
+    const out = layoutGhosts([ghost('g1', -3000, -3000)], viewport());
+    expect(out[0]).toMatchObject({ id: 'g1', x: 0, y: 0 });
+  });
+
+  it('derives the visible rect from zoom (world shrinks at 2×)', () => {
+    // zoom 2 → visible world rect is [0, 400] × [0, 300]; rightmost x = 160.
+    const out = layoutGhosts([ghost('g1', 1000, 1000)], viewport({ zoom: 2 }));
+    expect(out[0]).toMatchObject({ id: 'g1', x: 160, y: 60 });
+  });
+
+  it('derives the visible rect from pan (the rect moves with the pan)', () => {
+    // pan (300, 200) at zoom 1 → visible world rect is [-300, 500] × [-200, 400].
+    const out = layoutGhosts([ghost('g1', 9000, 9000)], viewport({ panX: 300, panY: 200 }));
+    expect(out[0]).toMatchObject({ id: 'g1', x: 260, y: 160 });
+  });
+
+  it('stacks ghosts that clamp onto the same corner side-by-side instead of overlapping', () => {
+    const out = layoutGhosts(
+      [ghost('g1', 9000, 9000), ghost('g2', 9000, 9000)],
+      viewport(),
+    );
+    // No vertical room below the bottom-right corner, so the second wraps
+    // LEFT of the first — both stay fully inside the visible rect.
+    expect(out[0]).toMatchObject({ id: 'g1', x: 560, y: 360 });
+    expect(out[1]).toMatchObject({ id: 'g2', x: 312, y: 360 });
+  });
+
+  it('moves a ghost off a live card it would land on', () => {
+    // A live card occupies the bottom-right corner; the ghost clamps there
+    // and must move aside (wraps left of the card) instead of hiding it.
+    const liveCard = { x: 560, y: 360, width: 240, height: 240 };
+    const out = layoutGhosts([ghost('g1', 9000, 9000)], viewport(), [liveCard]);
+    expect(out[0]).toMatchObject({ id: 'g1', x: 312, y: 360 });
+  });
+
+  it('stacks deterministically in input order through a chain', () => {
+    const out = layoutGhosts(
+      [ghost('g1', 9000, 9000), ghost('g2', 9000, 9000), ghost('g3', 9000, 9000)],
+      viewport(),
+    );
+    expect(out.map((g) => g.id)).toEqual(['g1', 'g2', 'g3']);
+    expect(out[2]).toMatchObject({ id: 'g3', x: 64, y: 360 });
+  });
+
+  it('returns an empty list for no ghosts', () => {
+    expect(layoutGhosts([], viewport())).toEqual([]);
+  });
+
+  it('keeps the card anchored when the visible rect is smaller than the card', () => {
+    // 100×100 rect, 240×240 card: full visibility is impossible — the
+    // top-left corner is anchored into the rect (no NaN, no blow-up).
+    const out = layoutGhosts([ghost('g1', -50, -50)], viewport({ width: 100, height: 100 }));
+    expect(out[0]).toMatchObject({ id: 'g1', x: 0, y: 0 });
   });
 });
