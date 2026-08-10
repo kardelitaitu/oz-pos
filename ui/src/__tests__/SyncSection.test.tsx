@@ -59,6 +59,8 @@ const testL10n = {
       'settings-sync-success': 'Sync succeeded',
       'settings-sync-nothing': 'Nothing to sync',
       'settings-sync-error': 'Sync failed',
+      'settings-sync-plan-required': 'Cloud sync requires a paid plan',
+      'settings-sync-plan-required-hint': 'Your local sales keep working — upgrade to sync them to the cloud.',
       'settings-sync-request-token': 'Request Token',
       'settings-sync-requesting': 'Requesting…',
       'settings-sync-token-hint': 'Enter a JWT token.',
@@ -510,6 +512,35 @@ describe('SyncSection', () => {
     await waitFor(() => {
       expect(addToast).toHaveBeenCalledWith(expect.objectContaining({ type: 'info' }));
     });
+  });
+
+  it('shows the localized plan-required toast when syncRun reports planRequired', async () => {
+    // A free tenant's sync_run returns error + planRequired:true. The toast
+    // must surface the localized upgrade prompt — never the raw backend
+    // string "cloud sync requires a paid plan" (ADR sync-plan-gating).
+    const syncRun = vi.fn().mockResolvedValue({
+      synced: 0,
+      failed: 0,
+      error: 'cloud sync requires a paid plan',
+      planRequired: true,
+    });
+    const addToast = vi.fn();
+    renderSection({
+      sync: { serverUrl: 'https://sync.example.com', hasApiKey: true, enabled: true },
+      syncRun,
+      addToast,
+    });
+
+    fireEvent.click(screen.getByText('Sync Now'));
+    await waitFor(() => {
+      expect(addToast).toHaveBeenCalled();
+    });
+    const toastCall = addToast.mock.calls[0]?.[0] as { message: string; type: string };
+    expect(toastCall).toBeDefined();
+    expect(toastCall!.type).toBe('error');
+    // Localized message, not the raw backend error string.
+    expect(toastCall!.message).toBe('Cloud sync requires a paid plan');
+    expect(toastCall!.message).not.toContain('cloud sync requires a paid plan');
   });
 
   it('shows error toast when syncRun throws', async () => {

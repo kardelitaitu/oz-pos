@@ -417,7 +417,14 @@ export default function SyncSection({
                     const result = await syncRun();
                     setSyncResult(result);
                     refreshQueueSummary();
-                    if (result.error) {
+                    if (result.planRequired) {
+                      // ADR sync-plan-gating: surface the localized upgrade
+                      // prompt, never the raw backend error string.
+                      addToast({
+                        message: l10n.getString('settings-sync-plan-required'),
+                        type: 'error',
+                      });
+                    } else if (result.error) {
                       addToast({ message: result.error, type: 'error' });
                     } else if (result.synced > 0 || result.failed > 0) {
                       addToast({
