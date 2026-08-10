@@ -53,7 +53,7 @@ import {
 } from './topologyExport';
 import { TopologyNodeCard } from './topologyNodeCard';
 import { TopologyWireGroup } from './topologyWireGroup';
-import { cubicBezier, polylinePoint } from './topologyWireGeometry';
+import { cubicBezier, polylinePoint, wireUnderCardSegments } from './topologyWireGeometry';
 import { useTopologyEditorGraph, type TopologyHistoryEntry } from './nodeTopologyEditorState';
 import { useTopologyEditorSaveLifecycle } from './nodeTopologyEditorSaveState';
 import { useTopologyEditorSelection } from './nodeTopologyEditorSelectionState';
@@ -1473,6 +1473,28 @@ export default function NodeTopologyEditor({
     }
     return geo;
   }, [wires, nodeMap, wireRouting]);
+
+  /** Under-card segments of crossing wires (round 146): the wire SVG
+   *  renders beneath the cards, so a wire passing under a card it does not
+   *  connect to vanishes under the card and re-emerges as two broken
+   *  pieces. These clipped sub-paths are drawn in a pointer-events-none
+   *  overlay ON TOP of the cards so the wire reads as one continuous
+   *  connection. The wire's own endpoint cards are excluded (ports sit on
+   *  the box edge, so they would false-positive). */
+  const wireUnderCardPaths = useMemo(() => {
+    const m = new Map<string, string>();
+    const boxes = nodes.map((n) => ({ id: n.id, x: n.x, y: n.y }));
+    for (const wire of wires) {
+      const geo = wireGeometries.get(wire.id);
+      if (!geo) continue;
+      const d = wireUnderCardSegments(
+        geo,
+        boxes.filter((b) => b.id !== wire.fromNodeId && b.id !== wire.toNodeId),
+      );
+      if (d) m.set(wire.id, d);
+    }
+    return m;
+  }, [wireGeometries, wires, nodes]);
 
   /** Dynamic SVG bounds derived from node positions — replaces fixed 5000×5000px clipping. */
   const svgBounds = useMemo(() => {
@@ -5801,6 +5823,18 @@ export default function NodeTopologyEditor({
                 isPortCompatible={isPortCompatible}
               />
             ))}
+
+            {/* Round 146: the under-card segments of wires that cross a card
+                they do not connect to, drawn on top so the wire reads as
+                continuous. Pointer-events-none: the overlay never steals
+                clicks or hover from the card below. */}
+            {wireUnderCardPaths.size > 0 && (
+              <svg className="node-wires-crossing" style={{ width: svgBounds.width, height: svgBounds.height }}>
+                {[...wireUnderCardPaths.entries()].map(([wireId, d]) => (
+                  <path key={wireId} d={d} pointerEvents="none" />
+                ))}
+              </svg>
+            )}
           </div>
 
           {/* ── Canvas HUD — status readouts only; the zoom readout

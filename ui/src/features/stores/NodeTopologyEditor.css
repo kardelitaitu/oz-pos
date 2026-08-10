@@ -461,6 +461,18 @@
   transition: stroke 0.2s ease;
 }
 
+/* Round 146: under-card wire segments drawn on top of the cards. Must
+   mirror the base .wire-path stroke exactly (dotted 3px accent) so a
+   crossing wire reads as one continuous connection across the card. The
+   overlay is pointer-events-none — it never intercepts card clicks. */
+.node-wires-crossing path {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 3px;
+  stroke-dasharray: 0 10;
+  stroke-linecap: round;
+}
+
 .wire-group .wire-end-dot {
   fill: var(--color-accent);
   transition: fill 0.2s ease;

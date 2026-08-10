@@ -6270,6 +6270,48 @@ describe('NodeTopologyEditor — wire arrow markers', () => {
   });
 });
 
+// ── Wire crossing under cards ───────────────────────────────────
+
+describe('NodeTopologyEditor — wire crossing under cards', () => {
+  it('draws the under-card segment ON TOP so a crossing wire reads as continuous', async () => {
+    // The restaurant template's store→warehouse wire passes under the
+    // middle POS card; mirror that geometry: a store→warehouse wire whose
+    // bezier runs straight through ws-1's box. The under-card segment must
+    // be drawn over the card (pointer-events-none) so the wire reads as one
+    // continuous connection instead of vanishing under the card and
+    // re-emerging as two broken pieces.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        // Ports sit at y = node.y + NODE_PORT_Y (224), so this store→warehouse
+        // wire runs along y=364; the middle POS card at y=260 covers it.
+        { id: 'ws-1', type: 'workspace', name: 'POS', x: 380, y: 260, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-1', type: 'warehouse', name: 'Stock', x: 680, y: 140 },
+      ],
+      wires: [
+        {
+          id: 'w-cross', from_node_id: 'store-1', from_port: 'right', to_node_id: 'wh-1', to_port: 'left',
+          from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location',
+          direction: 'one-way', label: 'Binds Store',
+        },
+      ],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getWireCount()).toBe(1));
+    expect(document.querySelectorAll('.node-wires-crossing path')).toHaveLength(1);
+    const overlayPath = document.querySelector('.node-wires-crossing path') as Element;
+    // Pointer-events-none: the overlay never steals clicks from the card.
+    expect(overlayPath.getAttribute('pointer-events')).toBe('none');
+  });
+
+  it('renders no overlay when no wire crosses a card', () => {
+    renderEditor();
+    // Retail preset wires sit in the 60px gaps between adjacent cards —
+    // nothing passes under a card, so there is nothing to overlay.
+    expect(document.querySelectorAll('.node-wires-crossing path')).toHaveLength(0);
+  });
+});
+
 // ── Fresh-node animation pulse ──────────────────────────────────
 
 describe('NodeTopologyEditor — fresh-node animation pulse', () => {
