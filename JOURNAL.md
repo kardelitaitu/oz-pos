@@ -3272,7 +3272,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** editor suite 481/481 (+2: badge shows on an overlapping card, and dragging the card clear removes it) · full UI suite 276 files / 4,688 tests (+2) · typecheck ✓ · eslint 0 errors (one new-error caught and fixed: the badge span's stopPropagation needed the file's standard jsx-a11y disable-with-reason, mirroring the validation-note pattern) · lint:i18n clean (bundle parity) · drift guard clean.
 
-**Commits:** `TODO`
+**Commits:** `8a255ba5`
 
 **Deliberately NOT done:** no auto-settle on load — a silent position change on load would fight the user's saved layout and the round-140 design note explicitly avoided it. No overlap count on the badge ("2 cards overlap" localization churn for marginal value — the badge marks each offender). No badge for the duplicate-drag creation gesture — copies deliberately overlap their originals (round-140 exception).
 
