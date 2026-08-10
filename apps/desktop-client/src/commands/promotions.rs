@@ -7,7 +7,7 @@ use tauri::State;
 
 use oz_core::{Promotion, PromotionApplication, Store, format_minor};
 
-use crate::commands::authz::require_permission_for_user;
+use crate::commands::authz::{require_permission_for_session, require_permission_for_user};
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -248,6 +248,8 @@ pub async fn create_promotion_scoped(
     state: State<'_, AppState>,
 ) -> Result<Promotion, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::PROMOTIONS_CREATE)
+        .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -277,11 +279,6 @@ pub async fn create_promotion_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::PROMOTIONS_CREATE,
-    )?;
     let result = store.create_promotion(&promo)?;
     drop(db);
     Ok(result)
@@ -314,6 +311,7 @@ pub async fn update_promotion_scoped(
     state: State<'_, AppState>,
 ) -> Result<Promotion, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::PROMOTIONS_EDIT).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -326,11 +324,6 @@ pub async fn update_promotion_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::PROMOTIONS_EDIT,
-    )?;
     let result = store.update_promotion(&p)?;
     drop(db);
     Ok(result)
@@ -360,6 +353,8 @@ pub async fn delete_promotion_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::PROMOTIONS_DELETE)
+        .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -369,11 +364,6 @@ pub async fn delete_promotion_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::PROMOTIONS_DELETE,
-    )?;
     store.delete_promotion(&id)?;
     drop(db);
     Ok(())
@@ -402,6 +392,8 @@ pub async fn apply_promotion_scoped(
     state: State<'_, AppState>,
 ) -> Result<PromotionApplication, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::PROMOTIONS_APPLY)
+        .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -410,10 +402,12 @@ pub async fn apply_promotion_scoped(
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
-    run_apply_promotion(&db, &sale_id, &promotion_id, &session.user_id)
+    run_apply_promotion_unchecked(&db, &sale_id, &promotion_id)
 }
 
-/// Shared business logic for applying a promotion.
+/// Shared business logic for applying a promotion using an already-authorized
+/// caller. Scoped commands authorize against the global identity DB before
+/// opening the store connection.
 fn run_apply_promotion(
     db: &rusqlite::Connection,
     sale_id: &str,
@@ -421,8 +415,16 @@ fn run_apply_promotion(
     user_id: &str,
 ) -> Result<PromotionApplication, AppError> {
     let store = Store::new(db);
-
     require_permission_for_user(&store, user_id, oz_core::permissions::PROMOTIONS_APPLY)?;
+    run_apply_promotion_unchecked(db, sale_id, promotion_id)
+}
+
+fn run_apply_promotion_unchecked(
+    db: &rusqlite::Connection,
+    sale_id: &str,
+    promotion_id: &str,
+) -> Result<PromotionApplication, AppError> {
+    let store = Store::new(db);
 
     let promo = store
         .get_promotion(promotion_id)?

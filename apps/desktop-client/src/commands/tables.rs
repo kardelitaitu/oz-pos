@@ -10,7 +10,7 @@ use tauri::State;
 use oz_core::Table;
 use oz_core::db::Store;
 
-use crate::commands::authz::require_permission_for_user;
+use crate::commands::authz::{require_permission_for_session, require_permission_for_user};
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -132,6 +132,7 @@ pub async fn create_table_scoped(
     state: State<'_, AppState>,
 ) -> Result<Table, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::TABLES_CREATE).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -141,11 +142,6 @@ pub async fn create_table_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::TABLES_CREATE,
-    )?;
     let result = store.create_table(&table)?;
     drop(db);
     Ok(result)
@@ -176,6 +172,7 @@ pub async fn update_table_scoped(
     state: State<'_, AppState>,
 ) -> Result<Table, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::TABLES_EDIT).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -185,7 +182,6 @@ pub async fn update_table_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, oz_core::permissions::TABLES_EDIT)?;
     let result = store.update_table(&table)?;
     drop(db);
     Ok(result)
@@ -216,6 +212,7 @@ pub async fn delete_table_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::TABLES_DELETE).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -225,11 +222,6 @@ pub async fn delete_table_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::TABLES_DELETE,
-    )?;
     store.delete_table(&id)?;
     drop(db);
     Ok(())
@@ -262,6 +254,7 @@ pub async fn update_table_status_scoped(
     state: State<'_, AppState>,
 ) -> Result<Table, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::TABLES_CLOSE).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -271,7 +264,6 @@ pub async fn update_table_status_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, oz_core::permissions::TABLES_CLOSE)?;
     let table = store.update_table_status(&id, &status)?;
     drop(db);
     Ok(table)
@@ -304,6 +296,7 @@ pub async fn assign_table_order_scoped(
     state: State<'_, AppState>,
 ) -> Result<Table, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::TABLES_ASSIGN).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -313,11 +306,6 @@ pub async fn assign_table_order_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::TABLES_ASSIGN,
-    )?;
     let table = store.assign_table_order(&table_id, &sale_id)?;
     drop(db);
     Ok(table)
@@ -348,6 +336,7 @@ pub async fn release_table_scoped(
     state: State<'_, AppState>,
 ) -> Result<Table, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::TABLES_CLOSE).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -357,7 +346,6 @@ pub async fn release_table_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, oz_core::permissions::TABLES_CLOSE)?;
     let table = store.release_table(&table_id)?;
     drop(db);
     Ok(table)

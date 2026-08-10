@@ -123,13 +123,14 @@ pub async fn list_tax_rates_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<TaxRateDto>, AppError> {
-    let (session, conn) = state.resolve_scope(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     require_tax_permission(
         &state,
         &session.user_id,
         oz_core::permissions::SETTINGS_READ,
     )
     .await?;
+    let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -155,13 +156,14 @@ pub async fn create_tax_rate_scoped(
     args: CreateTaxRateArgs,
     state: State<'_, AppState>,
 ) -> Result<TaxRateDto, AppError> {
-    let (session, conn) = state.resolve_scope(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     require_tax_permission(
         &state,
         &session.user_id,
         oz_core::permissions::SETTINGS_EDIT,
     )
     .await?;
+    let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -187,13 +189,14 @@ pub async fn update_tax_rate_scoped(
     args: UpdateTaxRateArgs,
     state: State<'_, AppState>,
 ) -> Result<TaxRateDto, AppError> {
-    let (session, conn) = state.resolve_scope(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     require_tax_permission(
         &state,
         &session.user_id,
         oz_core::permissions::SETTINGS_EDIT,
     )
     .await?;
+    let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -220,13 +223,14 @@ pub async fn delete_tax_rate_scoped(
     id: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    let (session, conn) = state.resolve_scope(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     require_tax_permission(
         &state,
         &session.user_id,
         oz_core::permissions::SETTINGS_EDIT,
     )
     .await?;
+    let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -266,13 +270,14 @@ pub async fn get_tax_rate_dependency_counts_scoped(
     id: String,
     state: State<'_, AppState>,
 ) -> Result<TaxRateDependencyCountsDto, AppError> {
-    let (session, conn) = state.resolve_scope(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     require_tax_permission(
         &state,
         &session.user_id,
         oz_core::permissions::SETTINGS_READ,
     )
     .await?;
+    let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -295,13 +300,14 @@ pub async fn list_category_tax_rates_scoped(
     session_token: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<CategoryTaxRateRow>, AppError> {
-    let (session, conn) = state.resolve_scope(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     require_tax_permission(
         &state,
         &session.user_id,
         oz_core::permissions::SETTINGS_READ,
     )
     .await?;
+    let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -338,13 +344,14 @@ pub async fn set_category_tax_rates_scoped(
     args: SetCategoryTaxRatesArgs,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    let (session, conn) = state.resolve_scope(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     require_tax_permission(
         &state,
         &session.user_id,
         oz_core::permissions::SETTINGS_EDIT,
     )
     .await?;
+    let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;

@@ -14,7 +14,7 @@ use oz_core::db::Store;
 use oz_core::permissions;
 use oz_core::subscription::TenantSubscription;
 
-use crate::commands::authz::require_permission_for_user;
+use crate::commands::authz::require_permission_for_session;
 use crate::commands::workspaces::CreateInstanceRequest;
 use crate::error::AppError;
 use crate::state::AppState;
@@ -422,7 +422,7 @@ fn semantic_branch_profile_id<'a>(nodes: &'a [Value], wires: &[Value]) -> Option
         })
 }
 
-fn semantic_type_key<'a>(node: &'a Value) -> &'a str {
+fn semantic_type_key(node: &Value) -> &str {
     node.get("metadata")
         .and_then(|metadata| value_string(metadata, "typeKey"))
         .unwrap_or("store-pos")
@@ -1598,6 +1598,7 @@ pub struct UpdateInstanceRequest {
 /// both databases if the second write fails. A compensation failure is returned
 /// explicitly so the caller can surface an operator-recovery condition.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn apply_topology_diff(
     session_token: String,
     workspace_creations: Vec<CreateInstanceRequest>,
@@ -1611,6 +1612,14 @@ pub async fn apply_topology_diff(
     let session = state.resolve_session(&session_token)?;
     let topology_key = topology_setting_key(branch_id.as_deref())?;
     recover_pending_topology_apply(&state, &session.store_id).await?;
+
+    // Authorization: workspace topology changes require admin access. The
+    // session user's identity + role live in the GLOBAL identity DB — the
+    // store-scoped DB below has an empty `users` table by design, so the
+    // gate MUST run here against the global DB. (Authorizing against the
+    // store connection would deny every caller — owner included — with
+    // "user not found".)
+    require_permission_for_session(&state, &session, permissions::STAFF_UPDATE).await?;
 
     // Reject malformed graphs before any workspace mutation. Legacy
     // geometric payloads remain accepted during the migration window.
@@ -1708,9 +1717,6 @@ pub async fn apply_topology_diff(
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
         let store = Store::new(&db);
-
-        // Permission: workspace topology changes require admin access.
-        require_permission_for_user(&store, &session.user_id, permissions::STAFF_UPDATE)?;
 
         // Preserve the same subscription and entitlement boundary as the
         // standalone workspace-create command. The topology diff must not

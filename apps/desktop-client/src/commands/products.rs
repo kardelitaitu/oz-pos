@@ -17,7 +17,7 @@ use foundation::validate_not_empty;
 
 use oz_core::permissions;
 
-use crate::commands::authz::require_permission_for_user;
+use crate::commands::authz::{require_permission_for_session, require_permission_for_user};
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -544,6 +544,7 @@ pub async fn create_product_scoped(
     state: State<'_, AppState>,
 ) -> Result<CreateProductResult, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::PRODUCTS_CREATE).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -556,8 +557,6 @@ pub async fn create_product_scoped(
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
         let store = Store::new(&db);
-
-        require_permission_for_user(&store, &session.user_id, permissions::PRODUCTS_CREATE)?;
 
         let currency: oz_core::Currency = args
             .currency
@@ -712,6 +711,7 @@ pub async fn update_product_scoped(
     state: State<'_, AppState>,
 ) -> Result<UpdateProductResult, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::PRODUCTS_UPDATE).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -724,8 +724,6 @@ pub async fn update_product_scoped(
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
         let store = Store::new(&db);
-
-        require_permission_for_user(&store, &session.user_id, permissions::PRODUCTS_UPDATE)?;
 
         let currency: oz_core::Currency = args
             .currency
@@ -895,6 +893,7 @@ pub async fn delete_product_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::PRODUCTS_DELETE).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -907,7 +906,6 @@ pub async fn delete_product_scoped(
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
         let store = Store::new(&db);
-        require_permission_for_user(&store, &session.user_id, permissions::PRODUCTS_DELETE)?;
         store.delete_product(&args.sku)?;
     }
 

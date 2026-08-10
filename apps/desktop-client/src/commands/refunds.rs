@@ -7,7 +7,7 @@ use oz_core::db::Store;
 use oz_core::permissions;
 use oz_core::{Money, Refund, RefundLine, Sale};
 
-use crate::commands::authz::require_permission_for_user;
+use crate::commands::authz::{require_permission_for_session, require_permission_for_user};
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -102,6 +102,7 @@ pub async fn process_refund_scoped(
     state: State<'_, AppState>,
 ) -> Result<ProcessRefundResult, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::SALES_REFUND).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -110,7 +111,7 @@ pub async fn process_refund_scoped(
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
-    run_process_refund(
+    run_process_refund_unchecked(
         &db,
         &args.sale_id,
         &args.reason,
@@ -130,9 +131,22 @@ fn run_process_refund(
     lines: &[RefundLineArg],
 ) -> Result<ProcessRefundResult, AppError> {
     let store = Store::new(db);
-
-    // Permission check: caller must have sales:refund.
     require_permission_for_user(&store, user_id, permissions::SALES_REFUND)?;
+    run_process_refund_unchecked(db, sale_id, reason, note, user_id, lines)
+}
+
+/// Process an already-authorized refund against a store-scoped database.
+/// Scoped commands authorize the session against the global identity DB
+/// before opening the store connection, then call this business path.
+fn run_process_refund_unchecked(
+    db: &rusqlite::Connection,
+    sale_id: &str,
+    reason: &str,
+    note: Option<&str>,
+    user_id: &str,
+    lines: &[RefundLineArg],
+) -> Result<ProcessRefundResult, AppError> {
+    let store = Store::new(db);
 
     // Verify the sale exists and is completed.
     let sale = store
@@ -231,6 +245,7 @@ pub async fn lookup_sale_by_receipt_barcode_scoped(
     state: State<'_, AppState>,
 ) -> Result<Option<Sale>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_PROCESS).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -239,12 +254,6 @@ pub async fn lookup_sale_by_receipt_barcode_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let sale = store.lookup_sale_by_receipt_barcode(&barcode)?;
     drop(db);
@@ -278,6 +287,7 @@ pub async fn list_refunds_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<Refund>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_PROCESS).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -286,12 +296,6 @@ pub async fn list_refunds_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let refunds = store.list_refunds_for_sale(&sale_id)?;
     drop(db);

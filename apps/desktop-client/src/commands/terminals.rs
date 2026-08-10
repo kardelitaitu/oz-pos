@@ -16,7 +16,7 @@ use oz_core::{Store, Terminal, TerminalFeatureOverride, TerminalProfile};
 
 use foundation::validate_not_empty;
 
-use crate::commands::authz::require_permission_for_user;
+use crate::commands::authz::{require_permission_for_session, require_permission_for_user};
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -498,6 +498,8 @@ pub async fn register_terminal_scoped(
         .map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::TERMINALS_REGISTER)
+        .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -515,11 +517,6 @@ pub async fn register_terminal_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::TERMINALS_REGISTER,
-    )?;
     store.create_terminal(&terminal)?;
     drop(db);
 
@@ -582,6 +579,7 @@ pub async fn update_terminal_scoped(
     validate_not_empty("id", &args.id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::TERMINALS_EDIT).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -615,11 +613,6 @@ pub async fn update_terminal_scoped(
         terminal.metadata = Some(meta);
     }
 
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::TERMINALS_EDIT,
-    )?;
     store.update_terminal(&terminal)?;
     drop(db);
 
@@ -658,6 +651,8 @@ pub async fn delete_terminal_scoped(
     validate_not_empty("id", &id).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::TERMINALS_DELETE)
+        .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -667,11 +662,6 @@ pub async fn delete_terminal_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::TERMINALS_DELETE,
-    )?;
     store.delete_terminal(&id)?;
     drop(db);
 
@@ -723,6 +713,7 @@ pub async fn set_terminal_override_scoped(
     validate_not_empty("feature", &feature).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::TERMINALS_EDIT).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -732,11 +723,6 @@ pub async fn set_terminal_override_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::TERMINALS_EDIT,
-    )?;
     store.set_terminal_override(&terminal_id, &feature, enabled)?;
     drop(db);
 
@@ -786,6 +772,7 @@ pub async fn delete_terminal_override_scoped(
     validate_not_empty("feature", &feature).map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::TERMINALS_EDIT).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -795,11 +782,6 @@ pub async fn delete_terminal_override_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::TERMINALS_EDIT,
-    )?;
     store.delete_terminal_override(&terminal_id, &feature)?;
     drop(db);
 
@@ -895,6 +877,7 @@ pub async fn set_terminal_profile_scoped(
         .map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::TERMINALS_EDIT).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -904,11 +887,6 @@ pub async fn set_terminal_profile_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::TERMINALS_EDIT,
-    )?;
     store.set_terminal_profile(
         &args.terminal_id,
         &args.profile_type,
@@ -957,6 +935,7 @@ pub async fn delete_terminal_profile_scoped(
         .map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::TERMINALS_EDIT).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -966,11 +945,6 @@ pub async fn delete_terminal_profile_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::TERMINALS_EDIT,
-    )?;
     store.delete_terminal_profile(&terminal_id)?;
     drop(db);
 
@@ -1054,6 +1028,7 @@ pub async fn set_device_binding_scoped(
         .map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::TERMINALS_EDIT).await?;
 
     let signature = {
         let keyring = oz_security::default_keyring()
@@ -1075,11 +1050,6 @@ pub async fn set_device_binding_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::TERMINALS_EDIT,
-    )?;
     store.update_terminal_binding(
         &args.terminal_id,
         &args.bound_store_id,
@@ -1144,6 +1114,7 @@ pub async fn clear_device_binding_scoped(
         .map_err(|e| AppError::Invalid(e.to_string()))?;
 
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::TERMINALS_EDIT).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -1153,11 +1124,6 @@ pub async fn clear_device_binding_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::TERMINALS_EDIT,
-    )?;
     store.clear_terminal_binding(&terminal_id)?;
     drop(db);
 

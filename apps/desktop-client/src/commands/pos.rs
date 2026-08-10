@@ -17,7 +17,7 @@ use oz_core::db::Store;
 use oz_core::events::{SaleCompleted, SaleCompletedLine};
 use oz_core::{Cart, CartId, CartLine, LineId, Money, PaymentSplitArg, SaleStatus, Sku};
 
-use crate::commands::authz::require_permission_for_user;
+use crate::commands::authz::{require_permission_for_session, require_permission_for_user};
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -195,6 +195,7 @@ pub async fn set_cart_discount_scoped(
     let percent = Percentage::new(args.percent as u8).unwrap();
 
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_DISCOUNT).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -204,12 +205,6 @@ pub async fn set_cart_discount_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_DISCOUNT,
-    )?;
 
     let mut cart = store
         .load_active_cart(&args.cart_id)?
@@ -288,7 +283,9 @@ pub async fn start_sale_scoped(
     args: StartSaleArgs,
     state: State<'_, AppState>,
 ) -> Result<StartSaleResult, AppError> {
-    let (session, conn) = state.resolve_scope(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_PROCESS).await?;
+    let conn = state.resolve_store(&session_token)?;
     let stock_target_instance_id = {
         let global_db = state.db.lock().await;
         resolve_runtime_stock_target(&global_db, &session.store_id, &session.instance_id)?
@@ -297,12 +294,6 @@ pub async fn start_sale_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let currency: oz_core::Currency = if args.currency.is_empty() {
         // M-6: lookup the store profile's default currency instead of hardcoding "USD".
@@ -417,6 +408,7 @@ pub async fn add_line_scoped(
     state: State<'_, AppState>,
 ) -> Result<AddLineResult, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_PROCESS).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -425,12 +417,6 @@ pub async fn add_line_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     // ADR-19 §5.1: reject add_line when the cart has no deduction location lock.
     store
@@ -522,6 +508,8 @@ pub async fn override_line_price_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_OVERRIDE_PRICE)
+        .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -530,13 +518,7 @@ pub async fn override_line_price_scoped(
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
-    run_override_line_price(
-        &db,
-        &args.cart_id,
-        &args.line_id,
-        args.new_price_minor,
-        &session.user_id,
-    )
+    run_override_line_price_unchecked(&db, &args.cart_id, &args.line_id, args.new_price_minor)
 }
 
 /// Shared business logic for overriding a line price.
@@ -548,11 +530,20 @@ fn run_override_line_price(
     user_id: &str,
 ) -> Result<(), AppError> {
     let store = Store::new(db);
+    require_permission_for_user(&store, user_id, oz_core::permissions::SALES_OVERRIDE_PRICE)?;
+    run_override_line_price_unchecked(db, cart_id, line_id, new_price_minor)
+}
+
+fn run_override_line_price_unchecked(
+    db: &rusqlite::Connection,
+    cart_id: &CartId,
+    line_id: &LineId,
+    new_price_minor: i64,
+) -> Result<(), AppError> {
+    let store = Store::new(db);
     let mut cart = store
         .load_active_cart(cart_id)?
         .ok_or_else(|| AppError::Invalid(format!("cart not found: {}", cart_id)))?;
-
-    require_permission_for_user(&store, user_id, oz_core::permissions::SALES_OVERRIDE_PRICE)?;
 
     let currency = cart.currency();
     let new_price = Money {
@@ -627,6 +618,8 @@ pub async fn override_cart_deduction_location_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_OVERRIDE_PRICE)
+        .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -638,11 +631,6 @@ pub async fn override_cart_deduction_location_scoped(
     let store = Store::new(&db);
 
     // Permission check: require sales override permission.
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_OVERRIDE_PRICE,
-    )?;
 
     store
         .override_active_cart_deduction_location(&cart_id)
@@ -1011,6 +999,7 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
     state: State<'_, AppState>,
 ) -> Result<CompleteSaleResult, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_PROCESS).await?;
     let stock_target_instance_id = {
         let global_db = state.db.lock().await;
         resolve_runtime_stock_target(&global_db, &session.store_id, &session.instance_id)?
@@ -1091,7 +1080,7 @@ pub async fn complete_sale_with_resolved_shortfalls_scoped(
 
         store.complete_sale_with_resolved_shortfalls(
             &sale,
-            Some(&deduction_instance_id),
+            Some(deduction_instance_id),
             &splits,
             &session.user_id,
             Some(&session.terminal_id),
@@ -1150,6 +1139,7 @@ pub async fn complete_sale_scoped(
     state: State<'_, AppState>,
 ) -> Result<CompleteSaleResult, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_PROCESS).await?;
     let stock_target_instance_ids = {
         let global_db = state.db.lock().await;
         resolve_runtime_stock_targets(&global_db, &session.store_id, &session.instance_id)?
@@ -1177,12 +1167,6 @@ pub async fn complete_sale_scoped(
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
         let store = Store::new(&db);
-
-        require_permission_for_user(
-            &store,
-            &session.user_id,
-            oz_core::permissions::SALES_PROCESS,
-        )?;
 
         let cart = store
             .load_active_cart(&args.cart_id)?
@@ -1345,7 +1329,7 @@ pub async fn complete_sale_scoped(
         if stock_locations.is_empty() {
             store.complete_sale_deduction(
                 &sale,
-                Some(&deduction_instance_id),
+                Some(deduction_instance_id),
                 &splits,
                 &session.user_id,
                 Some(&session.terminal_id),
@@ -1353,7 +1337,7 @@ pub async fn complete_sale_scoped(
         } else {
             store.complete_sale_deduction_with_locations(
                 &sale,
-                Some(&deduction_instance_id),
+                Some(deduction_instance_id),
                 &stock_locations,
                 &splits,
                 &session.user_id,
@@ -1418,6 +1402,7 @@ pub async fn compute_cart_tax_scoped(
         .parse()
         .map_err(|_| AppError::Invalid(format!("invalid currency code: {currency}")))?;
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_PROCESS).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -1426,12 +1411,6 @@ pub async fn compute_cart_tax_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let tax = store.compute_cart_tax(
         &lines,
@@ -1515,6 +1494,7 @@ pub async fn hold_cart_scoped(
     state: State<'_, AppState>,
 ) -> Result<HoldCartResult, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_PROCESS).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -1523,12 +1503,6 @@ pub async fn hold_cart_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let id = store.hold_cart(
         &args.label,
@@ -1568,6 +1542,7 @@ pub async fn list_held_carts_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<oz_core::db::HeldCartRow>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_PROCESS).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -1576,12 +1551,6 @@ pub async fn list_held_carts_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let carts = store.list_held_carts()?;
     drop(db);
@@ -1611,6 +1580,7 @@ pub async fn list_open_bills_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<oz_core::db::HeldCartRow>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_PROCESS).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -1619,12 +1589,6 @@ pub async fn list_open_bills_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let carts = store.list_open_bills()?;
     drop(db);
@@ -1656,6 +1620,7 @@ pub async fn get_held_cart_scoped(
     state: State<'_, AppState>,
 ) -> Result<Option<oz_core::db::HeldCartFull>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_PROCESS).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -1664,12 +1629,6 @@ pub async fn get_held_cart_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     let cart = store.get_held_cart(&id)?;
     drop(db);
@@ -1683,6 +1642,7 @@ pub async fn get_held_cart_scoped(
 pub async fn delete_held_cart(id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
+
     store.delete_held_cart(&id)?;
     drop(db);
     tracing::info!(held_cart_id = %id, "held cart deleted");
@@ -1699,6 +1659,7 @@ pub async fn delete_held_cart_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, oz_core::permissions::SALES_PROCESS).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -1707,12 +1668,6 @@ pub async fn delete_held_cart_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::SALES_PROCESS,
-    )?;
 
     store.delete_held_cart(&id)?;
     drop(db);
@@ -1922,20 +1877,22 @@ mod tests {
             }]
         });
         oz_core::Settings::set(&global, &runtime_key, &runtime_plan.to_string()).unwrap();
+        {
+            let identity_store = Store::new(&global);
+            identity_store.seed_default_roles().unwrap();
+            global.execute(
+                "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+                 VALUES ('stock-route-user', 'stock-route-user', 'hash', 'Stock Route User', 'role-owner', 1, '2026-08-09T00:00:00Z', '2026-08-09T00:00:00Z')",
+                [],
+            )
+            .unwrap();
+        }
 
         let temp_dir = tempfile::tempdir().unwrap();
         let manager = StoreDatabaseManager::new(temp_dir.path().to_path_buf(), migrations::ALL);
         let store_conn = manager.open_store(store_id).unwrap();
         {
             let db = store_conn.lock().unwrap();
-            let store = Store::new(&db);
-            store.seed_default_roles().unwrap();
-            db.execute(
-                "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
-                 VALUES ('stock-route-user', 'stock-route-user', 'hash', 'Stock Route User', 'role-owner', 1, '2026-08-09T00:00:00Z', '2026-08-09T00:00:00Z')",
-                [],
-            )
-            .unwrap();
             db.execute_batch(
                 "INSERT OR IGNORE INTO store_profiles (id, name, is_primary) VALUES ('store-stock-route-e2e', 'Stock Route E2E', 0);
                  INSERT INTO inventory_locations (id, name, type) VALUES

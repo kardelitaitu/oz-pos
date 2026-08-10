@@ -9,7 +9,7 @@ use oz_core::{FeatureRegistry, Settings, Store, features};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use crate::commands::authz::require_permission_for_user;
+use crate::commands::authz::require_permission_for_session;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -154,6 +154,10 @@ pub async fn seed_default_roles_scoped(
     state: State<'_, AppState>,
 ) -> Result<usize, AppError> {
     let session = state.resolve_session(&session_token)?;
+    // Authorize against the GLOBAL identity DB: users + roles live there,
+    // never in the store DB (which this command is about to seed).
+    require_permission_for_session(&state, &session, oz_core::permissions::STAFF_MANAGE_ROLES)
+        .await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -162,11 +166,6 @@ pub async fn seed_default_roles_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(
-        &store,
-        &session.user_id,
-        oz_core::permissions::STAFF_MANAGE_ROLES,
-    )?;
     let count = store.seed_default_roles()?;
     drop(db);
     tracing::info!(count, "default roles seeded (scoped)");

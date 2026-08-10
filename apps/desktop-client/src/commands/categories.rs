@@ -118,10 +118,11 @@ pub async fn create_category_scoped(
     args: CreateCategoryArgs,
     state: State<'_, AppState>,
 ) -> Result<CreateCategoryResult, AppError> {
-    let (session, conn) = state.resolve_scope(&session_token)?;
-    // Permission is checked against the GLOBAL identity DB (ADR #4/#7);
-    // the store-scoped DB has no user rows.
+    let session = state.resolve_session(&session_token)?;
+    // Permission is checked against the GLOBAL identity DB (ADR #4/#7)
+    // before the store-scoped connection is opened.
     require_category_permission(&state, &session.user_id, permissions::PRODUCTS_CREATE).await?;
+    let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -177,8 +178,9 @@ pub async fn update_category_scoped(
     args: UpdateCategoryArgs,
     state: State<'_, AppState>,
 ) -> Result<UpdateCategoryResult, AppError> {
-    let (session, conn) = state.resolve_scope(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     require_category_permission(&state, &session.user_id, permissions::PRODUCTS_UPDATE).await?;
+    let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -230,8 +232,9 @@ pub async fn delete_category_scoped(
     args: DeleteCategoryArgs,
     state: State<'_, AppState>,
 ) -> Result<DeleteCategoryResult, AppError> {
-    let (session, conn) = state.resolve_scope(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     require_category_permission(&state, &session.user_id, permissions::PRODUCTS_DELETE).await?;
+    let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;

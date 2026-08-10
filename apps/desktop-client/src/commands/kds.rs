@@ -14,7 +14,7 @@ use oz_core::db::Store;
 use oz_core::permissions;
 use serde_json::Value;
 
-use crate::commands::authz::require_permission_for_user;
+use crate::commands::authz::{require_permission_for_session, require_permission_for_user};
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -153,6 +153,7 @@ pub async fn list_kds_orders_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<KdsOrder>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::KDS_VIEW).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -161,7 +162,6 @@ pub async fn list_kds_orders_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::KDS_VIEW)?;
     let orders = store.list_kds_orders_for_instance(status.as_deref(), &session.instance_id)?;
     drop(db);
     Ok(orders)
@@ -192,6 +192,7 @@ pub async fn get_kds_queue_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<KdsOrder>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::KDS_VIEW).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -200,7 +201,6 @@ pub async fn get_kds_queue_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::KDS_VIEW)?;
     let orders = store.get_kds_queue_for_instance(kds_zone.as_deref(), &session.instance_id)?;
     drop(db);
     Ok(orders)
@@ -261,6 +261,7 @@ pub async fn update_kds_order_items_scoped(
     state: State<'_, AppState>,
 ) -> Result<KdsOrder, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::KDS_UPDATE).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -269,7 +270,6 @@ pub async fn update_kds_order_items_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::KDS_UPDATE)?;
     let order = store.update_kds_order_items_for_instance(args, &session.instance_id)?;
     drop(db);
 
@@ -290,6 +290,7 @@ pub async fn update_kds_status_scoped(
     state: State<'_, AppState>,
 ) -> Result<KdsOrder, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::KDS_UPDATE).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -298,7 +299,6 @@ pub async fn update_kds_status_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::KDS_UPDATE)?;
     let order = store.update_kds_status_for_instance(&id, &status, &session.instance_id)?;
     drop(db);
 
@@ -353,6 +353,7 @@ pub async fn create_kds_order_from_sale_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<KdsOrder>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::KDS_UPDATE).await?;
     let runtime_plan = {
         let db = state.db.lock().await;
         resolve_runtime_kds_plan(&db, &session.store_id)?
@@ -370,7 +371,6 @@ pub async fn create_kds_order_from_sale_scoped(
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
         let store = Store::new(&db);
-        require_permission_for_user(&store, &session.user_id, permissions::KDS_UPDATE)?;
         if !should_create_kds_tickets(runtime_targets.as_deref()) {
             Vec::new()
         } else {
@@ -434,6 +434,7 @@ pub async fn get_kds_order_scoped(
     state: State<'_, AppState>,
 ) -> Result<Option<KdsOrder>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::KDS_VIEW).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -442,7 +443,6 @@ pub async fn get_kds_order_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::KDS_VIEW)?;
     let order = store.get_kds_order_for_instance(&id, &session.instance_id)?;
     drop(db);
     Ok(order)
@@ -581,6 +581,7 @@ pub async fn print_kds_chit_scoped(
     state: State<'_, AppState>,
 ) -> Result<bool, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::KDS_UPDATE).await?;
     // Scope-limit the DB access so Store is dropped before .await.
     let order = {
         let conn = state
@@ -591,7 +592,6 @@ pub async fn print_kds_chit_scoped(
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
         let store = Store::new(&db);
-        require_permission_for_user(&store, &session.user_id, permissions::KDS_UPDATE)?;
         store.get_kds_order_for_instance(&order_id, &session.instance_id)?
     }; // conn, db, store dropped here
 
@@ -633,6 +633,7 @@ pub async fn get_kds_order_lines_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<oz_core::KdsLineItem>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::KDS_VIEW).await?;
     let order = {
         let conn = state
             .db_manager
@@ -642,7 +643,6 @@ pub async fn get_kds_order_lines_scoped(
             .lock()
             .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
         let store = Store::new(&db);
-        require_permission_for_user(&store, &session.user_id, permissions::KDS_VIEW)?;
         store.get_kds_order_lines_for_instance(&order_id, &session.instance_id)?
     };
     Ok(order)
@@ -660,6 +660,7 @@ pub async fn update_kds_line_item_status_scoped(
     state: State<'_, AppState>,
 ) -> Result<oz_core::KdsLineItem, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::KDS_UPDATE).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -668,7 +669,6 @@ pub async fn update_kds_line_item_status_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::KDS_UPDATE)?;
     let item =
         store.update_kds_line_item_status_for_instance(&item_id, &status, &session.instance_id)?;
     drop(db);

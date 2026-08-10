@@ -22,7 +22,7 @@ use oz_core::db::workspaces::{CreateWorkspaceInstanceArgs, WorkspaceDto};
 use oz_core::permissions;
 use oz_core::subscription::TenantSubscription;
 
-use crate::commands::authz::require_permission_for_user;
+use crate::commands::authz::require_permission_for_session;
 use crate::commands::picker_ticket;
 use crate::error::AppError;
 use crate::state::AppState;
@@ -149,6 +149,11 @@ pub async fn create_workspace_instance_scoped(
     state: State<'_, AppState>,
 ) -> Result<WorkspaceDto, AppError> {
     let session = state.resolve_session(&session_token)?;
+    // Authorization: the session user's identity + role live in the GLOBAL
+    // identity DB — the store DB has an empty `users` table by design, so
+    // every scoped command authorizes against the global DB before touching
+    // the store connection.
+    require_permission_for_session(&state, &session, permissions::STAFF_UPDATE).await?;
 
     // ADR #5: Load subscription from the GLOBAL database first.
     // Also validates the system clock has not been rolled back.
@@ -170,7 +175,6 @@ pub async fn create_workspace_instance_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::STAFF_UPDATE)?;
     let effective = sub.effective_tier();
     store.enforce_instance_quota(&effective, &req.type_key, &req.store_id)?;
     let _row = store.create_workspace_instance_with_purpose(CreateWorkspaceInstanceArgs {
@@ -211,6 +215,7 @@ pub async fn update_workspace_instance_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::STAFF_UPDATE).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -219,7 +224,6 @@ pub async fn update_workspace_instance_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::STAFF_UPDATE)?;
     store.update_workspace_instance(
         &instance_id,
         &name,
@@ -242,6 +246,7 @@ pub async fn archive_workspace_instance_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::STAFF_UPDATE).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -250,7 +255,6 @@ pub async fn archive_workspace_instance_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::STAFF_UPDATE)?;
     store.archive_instance(&instance_id)?;
     drop(db);
     tracing::info!(instance_id = %instance_id, "workspace instance archived (scoped)");
@@ -371,6 +375,7 @@ pub async fn set_user_workspace_instances_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::STAFF_UPDATE).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -379,7 +384,6 @@ pub async fn set_user_workspace_instances_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::STAFF_UPDATE)?;
     let ids: Vec<&str> = instance_ids.iter().map(|s| s.as_str()).collect();
     store.set_user_workspace_instances(&user_id, ids, default_instance_id.as_deref())?;
     drop(db);
@@ -395,6 +399,7 @@ pub async fn get_user_workspace_instances_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<String>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::STAFF_READ).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -403,7 +408,6 @@ pub async fn get_user_workspace_instances_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::STAFF_READ)?;
     let ids = store.get_user_workspace_instance_ids(&user_id)?;
     drop(db);
     Ok(ids)
@@ -520,6 +524,7 @@ pub async fn list_all_workspaces_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<WorkspaceTypeDto>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::STAFF_READ).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -528,7 +533,6 @@ pub async fn list_all_workspaces_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::STAFF_READ)?;
     let rows = store.list_all_workspace_types()?;
     drop(db);
     Ok(rows
@@ -566,6 +570,7 @@ pub async fn set_user_workspaces_scoped(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::STAFF_UPDATE).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -574,7 +579,6 @@ pub async fn set_user_workspaces_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::STAFF_UPDATE)?;
     let keys: Vec<&str> = workspace_keys.iter().map(|s| s.as_str()).collect();
     store.set_user_workspaces_legacy(&user_id, keys)?;
     drop(db);
@@ -603,6 +607,7 @@ pub async fn get_user_workspaces_scoped(
     state: State<'_, AppState>,
 ) -> Result<Vec<String>, AppError> {
     let session = state.resolve_session(&session_token)?;
+    require_permission_for_session(&state, &session, permissions::STAFF_READ).await?;
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -611,7 +616,6 @@ pub async fn get_user_workspaces_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, permissions::STAFF_READ)?;
     let keys = store.get_user_workspace_keys_legacy(&user_id)?;
     drop(db);
     Ok(keys)

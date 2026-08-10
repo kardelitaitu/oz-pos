@@ -270,8 +270,9 @@ pub async fn create_customer_scoped(
     state: State<'_, AppState>,
 ) -> Result<CustomerDto, AppError> {
     validate_customer_fields(&args.name, args.email.as_deref(), args.phone.as_deref())?;
-    let (session, conn) = state.resolve_scope(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     require_customer_permission(&state, &session.user_id, permissions::CUSTOMERS_CREATE).await?;
+    let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -293,8 +294,9 @@ pub async fn update_customer_scoped(
     state: State<'_, AppState>,
 ) -> Result<CustomerDto, AppError> {
     validate_customer_fields(&args.name, args.email.as_deref(), args.phone.as_deref())?;
-    let (session, conn) = state.resolve_scope(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     require_customer_permission(&state, &session.user_id, permissions::CUSTOMERS_EDIT).await?;
+    let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -316,8 +318,9 @@ pub async fn delete_customer_scoped(
     id: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
-    let (session, conn) = state.resolve_scope(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     require_customer_permission(&state, &session.user_id, permissions::CUSTOMERS_DELETE).await?;
+    let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -350,8 +353,9 @@ pub async fn search_customers_scoped(
     offset: Option<u64>,
     state: State<'_, AppState>,
 ) -> Result<CustomerSearchPage, AppError> {
-    let (session, conn) = state.resolve_scope(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     require_customer_permission(&state, &session.user_id, permissions::CUSTOMERS_VIEW).await?;
+    let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
@@ -420,8 +424,9 @@ pub async fn get_customer_history_scoped(
     offset: Option<u64>,
     state: State<'_, AppState>,
 ) -> Result<CustomerHistoryDto, AppError> {
-    let (session, conn) = state.resolve_scope(&session_token)?;
+    let session = state.resolve_session(&session_token)?;
     require_customer_permission(&state, &session.user_id, permissions::CUSTOMERS_VIEW).await?;
+    let conn = state.resolve_store(&session_token)?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
