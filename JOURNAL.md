@@ -3502,7 +3502,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verify:** engine 28/28 (+11) · editor 497/497 (+1) · screen 41/41 · **full UI 280 files / 4,775 tests (+12)** · typecheck ✓ · eslint 0 errors (8 pre-existing warnings) · drift guard clean.
 
-**Commits:** (added below after commit)
+**Commits:** `23673cec` (feat(topology): clamp ghost overlay into the visible canvas)
 
 **Deliberately NOT done:** no ghost WIRE layout — a ghost workspace's connecting wires have no geometry source on the current canvas (round-158 decision stands); no animated transitions when a ghost clamps (the position snaps; a CSS transition on the ghost layer would be a cheap polish slice); no resize-observer reactivity — the layout recomputes on pan/zoom/overlay/nodes changes; a window resize alone doesn't re-lay ghosts until the user pans or zooms (the canvas size rarely changes mid-session, and the memo reads `clientWidth` live at each recompute).
 
