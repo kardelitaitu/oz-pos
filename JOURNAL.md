@@ -3386,7 +3386,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verified:** crossing integration 3/3 (hover/selected/dimmed) · editor suite 494/494 (+3) · wire-geometry 10/10 · **full UI suite 279 files / 4,730 tests (+3)** · typecheck ✓ · eslint 0 errors (8 pre-existing warnings, unchanged) · **mutation check**: dropping the hover class from the `cls` array failed the hover test → restored, green. Drift guard clean.
 
-**Commits:** `TBD`
+**Commits:** `54ecc9bc`
 
 **Deliberately NOT done:** no hover state on the pulse dots (they ride the overlay as transient info-blue dots — a hover class on them would read as the wire itself changing). No refactor of the 8 eslint warnings (churn with behavioral risk and no test to pin — journaled as deliberate noise). No dimmed propagation into the overlay via a shared memo (the wire lookup at render is O(n) over few crossing wires; a memo would need the wire map anyway).
 
