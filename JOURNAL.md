@@ -4241,3 +4241,50 @@ Commits: 9d7d5f9d (code), 9e1814d5 (docs)
 Tests: oz-core 1749/1749 (workspaces 52), desktop 900/900, tablet 431/431,
 gate_audit 3/3, wiring_audit 6/6, UI 4874/4874 (283 files) incl. staff
 screen 21 + contract 7 + screenExtraction 138; fmt/clippy/drift clean.
+
+### 2026-08-11 — Staff analytics page (analytics:view)
+
+Problem: owner/admin/manager had no consolidated per-staff view of shifts and
+sales over time — the data existed across `shifts` and `sales` in each
+store-scoped DB but nothing aggregated it per staff member, and the UI role
+gates silently ignored `admin` (a taxonomy gap: an Admin session saw zero
+manager-gated nav items).
+
+Solution: a new analytics surface built on the 0046 registry + 0048 scopes.
+- oz-core `db::analytics`: `staff_analytics_summary` (per-staff shifts, closed
+  shifts, shift sales, completed sale count/total) and `staff_analytics_daily`
+  (per-day series for one staff member). Both join `shifts`/`sales` by
+  `user_id`, zero-fill the missing side, respect the date range, and exclude
+  pending/voided/no-cashier sales. 7 tests, Red-first.
+- `analytics:view` permission const + registry entry; preset grants to
+  Owner/Admin/Manager only (Staff deliberately excluded — a taxonomy
+  decision, not an oversight). platform-core preset test pins Staff = Manager
+  minus settings minus analytics.
+- Both clients: `get_staff_analytics_scoped` / `get_staff_analytics_daily_scoped`
+  gated by the scope-aware session gate with display-name enrichment from the
+  GLOBAL identity DB. The tablet had NO session gate at all — added
+  `require_permission_for_session` mirroring the desktop (scope-aware) so the
+  analytics commands enforce the same fail-closed scope there.
+- UI: AnalyticsScreen (summary table + daily series + date range + staff
+  select), nav under a new `management` required-role level
+  (owner/admin/manager, excluding staff). The legacy `'manager'` gate keeps
+  staff (backend grants Staff REPORTS_VIEW / SHIFTS_VIEW_ANY); `'management'`
+  is the new tighter tier. Fixed `hasRequiredRole`/`hasNavRole`/AuthContext
+  to recognize `admin`/`role-admin` (before, an Admin saw nothing gated).
+- i18n in new `analytics.ftl`/`analytics.id.ftl` (parity + i18n lint clean);
+  `nav-analytics` in both shared bundles.
+
+Decisions / tradeoffs:
+- Chose a `management` role level over reusing `'manager'` because the legacy
+  gate includes staff; reusing it would have leaked analytics to staff.
+- The UI gates on role names, not permission keys (the session DTO carries
+  only `role_name`). Carrying the granted permission keys on the session DTO
+  would let the UI mirror the backend exactly — flagged as a follow-up.
+- Kept the analytics aggregates in store-scoped DBs (per-store by design);
+  the GLOBAL identity DB is only read for display names.
+
+Commits: pending
+Tests: oz-core 1758/1758 (analytics 7), platform-core 236/236, desktop
+905/905 (analytics+authz 14, gate_audit 3, wiring_audit 6), tablet 434/434,
+UI 4884/4884 (285 files) incl. AnalyticsScreen 6 + contract 2 +
+screenExtraction 138; typecheck 0, fmt/clippy/drift/i18n-parity clean.
