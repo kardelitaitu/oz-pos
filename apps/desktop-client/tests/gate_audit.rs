@@ -35,6 +35,8 @@ static PINNED_DESKTOP: &[(&str, usize, &[&str])] = &[
     ("audit", 1, &["AUDIT_EXPORT", "AUDIT_VIEW"]),
     ("auth", 0, &[]),
     ("branding", 0, &[]),
+    // ADR #36/#37/#38 opener browser plugin: no permission-gated commands.
+    ("browser", 0, &[]),
     ("bundles", 0, &[]),
     (
         "categories",
@@ -156,6 +158,8 @@ static PINNED_TABLET: &[(&str, usize, &[&str])] = &[
     ("audit", 1, &["AUDIT_EXPORT", "AUDIT_VIEW"]),
     ("auth", 0, &[]),
     ("branding", 0, &[]),
+    // ADR #36/#37/#38 opener browser plugin: no permission-gated commands.
+    ("browser", 0, &[]),
     ("bundles", 0, &[]),
     (
         "categories",

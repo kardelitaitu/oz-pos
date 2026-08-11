@@ -74,6 +74,14 @@ pub fn require_permission_for_user_scoped(
 /// with "user not found" for every caller — owner included — because the
 /// lookup queries the store DB's empty `users` table (this was the topology
 /// Apply denial: "You don't have permission to do this." for everyone).
+///
+/// Scope-aware (ADR #35 D5 / spec 0048, scoped-sessions follow-up): the
+/// session's resolved store (branch) and workspace `type_key` are evaluated
+/// against the caller's assignment in addition to the permission. A scoped
+/// member whose session context is out of scope is denied fail-closed — a
+/// session can never be switched into a store/workspace type the assignment
+/// does not cover. Global assignments and legacy users without an assignment
+/// row are not scope-restricted.
 pub async fn require_permission_for_session(
     state: &AppState,
     session: &SessionContext,
@@ -81,7 +89,13 @@ pub async fn require_permission_for_session(
 ) -> Result<(), AppError> {
     let db = state.db.lock().await;
     let store = Store::new(&db);
-    require_permission_for_user(&store, &session.user_id, required)
+    require_permission_for_user_scoped(
+        &store,
+        &session.user_id,
+        required,
+        Some(&session.store_id),
+        Some(&session.type_key),
+    )
 }
 
 #[cfg(test)]
@@ -261,5 +275,210 @@ mod tests {
         drop(store_db);
         drop(state);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// TDD red (scoped sessions follow-up): the session gate must be
+    /// scope-aware. A scoped user whose session context is out of scope is
+    /// denied even when the role grants the permission — a session minted
+    /// for a store/workspace the assignment does not cover must fail
+    /// closed on EVERY command, not just at the picker.
+    #[tokio::test]
+    async fn session_gate_enforces_scoped_assignment_workspace_dimension() {
+        use oz_core::db::assignments::{AssignmentSpec, ScopeMode};
+        use oz_core::session::SessionContext;
+
+        use crate::state::AppState;
+
+        // Owner scoped to workspace type `store-pos` only (branches all).
+        let conn = oz_core::migrations::fresh_db();
+        {
+            let store = Store::new(&conn);
+            store.seed_default_roles().unwrap();
+            conn.execute(
+                "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+                 VALUES ('user-owner', 'owner', 'hash', 'Owner', 'role-owner', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+                [],
+            )
+            .unwrap();
+            store
+                .set_assignment(
+                    "user-owner",
+                    "role-owner",
+                    &AssignmentSpec {
+                        scope_mode: ScopeMode::Scoped,
+                        branches_all: true,
+                        branches: vec![],
+                        workspaces_all: false,
+                        workspaces: vec!["store-pos".into()],
+                    },
+                )
+                .unwrap();
+        }
+        let state = AppState::for_test_with_conn(conn);
+
+        // In-scope session context (store-a / store-pos) passes.
+        let in_scope = SessionContext::new(
+            "user-owner".into(),
+            "role-owner".into(),
+            "t1".into(),
+            "store-a".into(),
+            "i1".into(),
+            "store-pos".into(),
+            None,
+            0,
+        );
+        require_permission_for_session(&state, &in_scope, permissions::STAFF_UPDATE)
+            .await
+            .expect("in-scope session must pass the scope-aware gate");
+
+        // Out-of-scope workspace type (store-a / kds): the role grants
+        // STAFF_UPDATE but the assignment does not cover kds — deny.
+        let out_of_scope_type = SessionContext::new(
+            "user-owner".into(),
+            "role-owner".into(),
+            "t1".into(),
+            "store-a".into(),
+            "i2".into(),
+            "kds".into(),
+            None,
+            0,
+        );
+        assert!(matches!(
+            require_permission_for_session(&state, &out_of_scope_type, permissions::STAFF_UPDATE)
+                .await,
+            Err(AppError::PermissionDenied(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn session_gate_enforces_scoped_assignment_branch_dimension() {
+        use oz_core::db::assignments::{AssignmentSpec, ScopeMode};
+        use oz_core::session::SessionContext;
+
+        use crate::state::AppState;
+
+        // Owner scoped to branch store-a only (workspaces all).
+        let conn = oz_core::migrations::fresh_db();
+        {
+            let store = Store::new(&conn);
+            store.seed_default_roles().unwrap();
+            conn.execute(
+                "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+                 VALUES ('user-owner', 'owner', 'hash', 'Owner', 'role-owner', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+                [],
+            )
+            .unwrap();
+            store
+                .set_assignment(
+                    "user-owner",
+                    "role-owner",
+                    &AssignmentSpec {
+                        scope_mode: ScopeMode::Scoped,
+                        branches_all: false,
+                        branches: vec!["store-a".into()],
+                        workspaces_all: true,
+                        workspaces: vec![],
+                    },
+                )
+                .unwrap();
+        }
+        let state = AppState::for_test_with_conn(conn);
+
+        // In-scope branch passes.
+        let in_scope = SessionContext::new(
+            "user-owner".into(),
+            "role-owner".into(),
+            "t1".into(),
+            "store-a".into(),
+            "i1".into(),
+            "store-pos".into(),
+            None,
+            0,
+        );
+        require_permission_for_session(&state, &in_scope, permissions::STAFF_UPDATE)
+            .await
+            .expect("in-scope branch must pass the scope-aware gate");
+
+        // Out-of-scope branch (store-b): deny fail-closed.
+        let out_of_scope_branch = SessionContext::new(
+            "user-owner".into(),
+            "role-owner".into(),
+            "t1".into(),
+            "store-b".into(),
+            "i1".into(),
+            "store-pos".into(),
+            None,
+            0,
+        );
+        assert!(matches!(
+            require_permission_for_session(&state, &out_of_scope_branch, permissions::STAFF_UPDATE)
+                .await,
+            Err(AppError::PermissionDenied(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn session_gate_passes_global_and_legacy_users_unrestricted() {
+        use oz_core::db::assignments::{AssignmentSpec, ScopeMode};
+        use oz_core::session::SessionContext;
+
+        use crate::state::AppState;
+
+        // user-legacy: NO assignment row — not scope-restricted.
+        let conn = oz_core::migrations::fresh_db();
+        {
+            let store = Store::new(&conn);
+            store.seed_default_roles().unwrap();
+            conn.execute_batch(
+                "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
+                    ('user-owner',  'owner',  'hash', 'Owner',  'role-owner',  1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z'),
+                    ('user-legacy', 'legacy', 'hash', 'Legacy', 'role-staff',  1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
+            )
+            .unwrap();
+            store
+                .set_assignment(
+                    "user-owner",
+                    "role-owner",
+                    &AssignmentSpec {
+                        scope_mode: ScopeMode::Global,
+                        branches_all: true,
+                        branches: vec![],
+                        workspaces_all: true,
+                        workspaces: vec![],
+                    },
+                )
+                .unwrap();
+        }
+        let state = AppState::for_test_with_conn(conn);
+
+        // A global assignment ignores both dimensions — any context passes.
+        let global_session = SessionContext::new(
+            "user-owner".into(),
+            "role-owner".into(),
+            "t1".into(),
+            "store-b".into(),
+            "i1".into(),
+            "kds".into(),
+            None,
+            0,
+        );
+        require_permission_for_session(&state, &global_session, permissions::STAFF_UPDATE)
+            .await
+            .expect("global assignments must not be scope-restricted");
+
+        // A legacy user without an assignment passes in any context too.
+        let legacy_session = SessionContext::new(
+            "user-legacy".into(),
+            "role-staff".into(),
+            "t1".into(),
+            "store-a".into(),
+            "i1".into(),
+            "store-pos".into(),
+            None,
+            0,
+        );
+        require_permission_for_session(&state, &legacy_session, permissions::STAFF_READ)
+            .await
+            .expect("legacy users without an assignment must not be scope-restricted");
     }
 }
