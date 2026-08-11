@@ -204,11 +204,12 @@ else:
 # codebase-memory-mcp auto-index start
 # Run codebase memory indexing in the background for supported subdirectories.
 # Uses the CLI directly (MCP-invoked indexing does not reliably handle all folder types).
+# Note: ui/src is indexed per-subfolder because the full directory is too large for one pass.
 _CBM_EXE="C:/Users/Dika/AppData/Local/Programs/codebase-memory-mcp/codebase-memory-mcp.exe"
 _REPO_ROOT="C:/My Script/oz-pos"
 
 if [ -f "$_CBM_EXE" ]; then
-    # Index backend Rust crates
+    # Index backend Rust crates and other top-level source dirs
     for _DIR in crates apps platform modules foundation gateway; do
         if [ -d "$_REPO_ROOT/$_DIR" ]; then
             "$_CBM_EXE" cli index_repository \
@@ -217,13 +218,15 @@ if [ -f "$_CBM_EXE" ]; then
                 --name "oz-pos-$_DIR" >/dev/null 2>&1 &
         fi
     done
-    # Index frontend source separately (ui/src avoids node_modules/dist crashes)
-    if [ -d "$_REPO_ROOT/ui/src" ]; then
-        "$_CBM_EXE" cli index_repository \
-            --repo-path "$_REPO_ROOT/ui/src" \
-            --mode moderate \
-            --name "oz-pos-ui" >/dev/null 2>&1 &
-    fi
+    # Index frontend per-subfolder (full ui/src is too large for the indexer in one pass)
+    for _UIDIR in api components features frontend hooks contexts utils types; do
+        if [ -d "$_REPO_ROOT/ui/src/$_UIDIR" ]; then
+            "$_CBM_EXE" cli index_repository \
+                --repo-path "$_REPO_ROOT/ui/src/$_UIDIR" \
+                --mode moderate \
+                --name "oz-pos-ui-$_UIDIR" >/dev/null 2>&1 &
+        fi
+    done
 fi
 # codebase-memory-mcp auto-index end
 
