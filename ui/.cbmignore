@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-tablet/
+
+# Test & CI artifacts
+playwright-report/
+test-results/
+
+# Static assets (not source code)
+public/
+
+# Large log & build cache files
+*.log
+*.tsbuildinfo
+*.js.map
+
+# Binary & image assets
+*.exe
+*.node
+*.png
+*.jpg
+*.ico
+*.woff
+*.woff2
+*.ttf
+
+# Misc
+nul
+nul.txt

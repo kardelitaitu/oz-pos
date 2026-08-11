@@ -202,16 +202,28 @@ else:
 # graphify-hook-end
 
 # codebase-memory-mcp auto-index start
-# Run codebase memory indexing in the background for supported subdirectories
-_CBM_EXE="C:\\Users\\Dika\\AppData\\Local\\Programs\\codebase-memory-mcp\\codebase-memory-mcp.exe"
-_REPO_ROOT="C:\\My Script\\oz-pos"
+# Run codebase memory indexing in the background for supported subdirectories.
+# Uses the CLI directly (MCP-invoked indexing does not reliably handle all folder types).
+_CBM_EXE="C:/Users/Dika/AppData/Local/Programs/codebase-memory-mcp/codebase-memory-mcp.exe"
+_REPO_ROOT="C:/My Script/oz-pos"
 
-if [ -f "$_CBM_EXE" ] || [ -x "$_CBM_EXE" ]; then
+if [ -f "$_CBM_EXE" ]; then
+    # Index backend Rust crates
     for _DIR in crates apps platform modules foundation gateway; do
         if [ -d "$_REPO_ROOT/$_DIR" ]; then
-            # Run in background and detach output to prevent blocking git
-            "$_CBM_EXE" cli index_repository --repo-path "$_REPO_ROOT/$_DIR" --mode moderate --name "oz-pos-$_DIR" >/dev/null 2>&1 &
+            "$_CBM_EXE" cli index_repository \
+                --repo-path "$_REPO_ROOT/$_DIR" \
+                --mode moderate \
+                --name "oz-pos-$_DIR" >/dev/null 2>&1 &
         fi
     done
+    # Index frontend source separately (ui/src avoids node_modules/dist crashes)
+    if [ -d "$_REPO_ROOT/ui/src" ]; then
+        "$_CBM_EXE" cli index_repository \
+            --repo-path "$_REPO_ROOT/ui/src" \
+            --mode moderate \
+            --name "oz-pos-ui" >/dev/null 2>&1 &
+    fi
 fi
 # codebase-memory-mcp auto-index end
+
