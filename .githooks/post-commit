@@ -230,15 +230,14 @@ if [ -f "$_CBM_EXE" ]; then
                 --name "oz-pos-$_DIR" >/dev/null 2>&1 &
         fi
     done
-    # Index frontend per-subfolder (full ui/src is too large for the indexer in one pass)
-    for _UIDIR in api components features frontend hooks contexts utils types; do
-        if [ -d "$_REPO_ROOT/ui/src/$_UIDIR" ]; then
-            "$_CBM_EXE" cli index_repository \
-                --repo-path "$_REPO_ROOT/ui/src/$_UIDIR" \
-                --mode full \
-                --name "oz-pos-ui-$_UIDIR" >/dev/null 2>&1 &
-        fi
-    done
+    # Index frontend as a single unified project (ui/src was previously broken by
+    # Windows 'nul' ghost device files that have since been deleted).
+    if [ -d "$_REPO_ROOT/ui/src" ]; then
+        "$_CBM_EXE" cli index_repository \
+            --repo-path "$_REPO_ROOT/ui/src" \
+            --mode full \
+            --name "oz-pos-ui" >/dev/null 2>&1 &
+    fi
 fi
 # codebase-memory-mcp auto-index end
 
