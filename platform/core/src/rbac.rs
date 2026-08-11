@@ -360,6 +360,9 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::STAFF_READ,
             permissions::STAFF_CREATE,
             permissions::STAFF_UPDATE,
+            permissions::STAFF_READ_IDENTITY,
+            permissions::STAFF_READ_PAYROLL,
+            permissions::STAFF_EDIT_NOTES,
             permissions::SETTINGS_READ,
             permissions::SETTINGS_EDIT,
             permissions::REPORTS_VIEW,
@@ -465,6 +468,9 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::STAFF_READ,
             permissions::STAFF_CREATE,
             permissions::STAFF_UPDATE,
+            permissions::STAFF_READ_IDENTITY,
+            permissions::STAFF_READ_PAYROLL,
+            permissions::STAFF_EDIT_NOTES,
             permissions::REPORTS_VIEW,
             permissions::REPORTS_EXPORT,
             permissions::REPORTS_SCHEDULE,
@@ -535,6 +541,9 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::STAFF_CREATE,
             permissions::STAFF_UPDATE,
             permissions::STAFF_MANAGE_ROLES,
+            permissions::STAFF_READ_IDENTITY,
+            permissions::STAFF_READ_PAYROLL,
+            permissions::STAFF_EDIT_NOTES,
             permissions::SETTINGS_READ,
             permissions::SETTINGS_EDIT,
             permissions::REPORTS_VIEW,
@@ -870,6 +879,12 @@ pub mod permissions {
     pub const STAFF_DELETE: &str = "staff:delete";
     /// Create, edit, or delete roles and their permission sets.
     pub const STAFF_MANAGE_ROLES: &str = "staff:manage_roles";
+    /// Read a staff member's identity fields (national id, tax id) unmasked.
+    pub const STAFF_READ_IDENTITY: &str = "staff:read_identity";
+    /// Read a staff member's payroll fields (monthly take-home pay).
+    pub const STAFF_READ_PAYROLL: &str = "staff:read_payroll";
+    /// Edit a staff member's free-text notes.
+    pub const STAFF_EDIT_NOTES: &str = "staff:edit_notes";
 
     // ── Settings ──────────────────────────────────────────────────
     /// View store and system settings.
@@ -1025,6 +1040,9 @@ pub const ALL_ENFORCED: &[&str] = &[
     permissions::STAFF_UPDATE,
     permissions::STAFF_DELETE,
     permissions::STAFF_MANAGE_ROLES,
+    permissions::STAFF_READ_IDENTITY,
+    permissions::STAFF_READ_PAYROLL,
+    permissions::STAFF_EDIT_NOTES,
     permissions::SETTINGS_READ,
     permissions::SETTINGS_EDIT,
     permissions::REPORTS_VIEW,

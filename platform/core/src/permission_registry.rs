@@ -186,6 +186,24 @@ pub const REGISTRY: &[PermissionEntry] = &[
         sensitive: true,
         description: "Create, edit, or delete roles and their permission sets.",
     },
+    PermissionEntry {
+        key: "staff:read_identity",
+        family: "staff",
+        sensitive: true,
+        description: "Read a staff member's identity fields (national id, tax id) unmasked.",
+    },
+    PermissionEntry {
+        key: "staff:read_payroll",
+        family: "staff",
+        sensitive: true,
+        description: "Read a staff member's payroll fields (monthly take-home pay).",
+    },
+    PermissionEntry {
+        key: "staff:edit_notes",
+        family: "staff",
+        sensitive: true,
+        description: "Edit a staff member's free-text notes.",
+    },
     // ── settings ─────────────────────────────────────────────────
     PermissionEntry {
         key: "settings:read",
@@ -547,6 +565,9 @@ mod tests {
                 | permissions::PAYMENTS_SETTLE
                 | permissions::STAFF_MANAGE_ROLES
                 | permissions::STAFF_DELETE
+                | permissions::STAFF_READ_IDENTITY
+                | permissions::STAFF_READ_PAYROLL
+                | permissions::STAFF_EDIT_NOTES
                 | permissions::REPORTS_EXPORT
                 | permissions::AUDIT_EXPORT
         )
@@ -579,6 +600,60 @@ mod tests {
                 is_expected_sensitive(p),
                 "sensitive flag mismatch for {p}"
             );
+        }
+    }
+
+    /// ADR #35 D6 / spec 0049: the profile sensitive keys are registered,
+    /// classified sensitive (never wildcard-eligible), granted to every
+    /// management preset, and deliberately withheld from Auditor.
+    #[test]
+    fn profile_sensitive_keys_are_registered_and_granted() {
+        for key in [
+            permissions::STAFF_READ_IDENTITY,
+            permissions::STAFF_READ_PAYROLL,
+            permissions::STAFF_EDIT_NOTES,
+        ] {
+            assert!(is_registered(key), "{key} must be registered");
+            assert!(ALL_ENFORCED.contains(&key), "{key} must be in ALL_ENFORCED");
+            let entry = lookup(key).expect("registered");
+            assert!(entry.sensitive, "{key} must be classified sensitive");
+            // Sensitive keys can never ride a family wildcard.
+            assert!(
+                validate_grant("staff:*", false).is_err(),
+                "staff:* must reject {key}"
+            );
+        }
+
+        // Management presets grant them; Auditor is read-only and excluded.
+        for preset in crate::rbac::ROLE_PRESETS {
+            let grants = preset.permissions;
+            match preset.id {
+                crate::rbac::builtin_roles::MANAGER
+                | crate::rbac::builtin_roles::ADMIN
+                | crate::rbac::builtin_roles::STAFF => {
+                    for key in [
+                        permissions::STAFF_READ_IDENTITY,
+                        permissions::STAFF_READ_PAYROLL,
+                        permissions::STAFF_EDIT_NOTES,
+                    ] {
+                        assert!(
+                            grants.contains(&key),
+                            "{} preset must grant {key}",
+                            preset.id
+                        );
+                    }
+                }
+                crate::rbac::builtin_roles::AUDITOR => {
+                    for key in [
+                        permissions::STAFF_READ_IDENTITY,
+                        permissions::STAFF_READ_PAYROLL,
+                        permissions::STAFF_EDIT_NOTES,
+                    ] {
+                        assert!(!grants.contains(&key), "Auditor must NOT grant {key}");
+                    }
+                }
+                _ => {}
+            }
         }
     }
 
