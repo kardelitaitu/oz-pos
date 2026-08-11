@@ -463,8 +463,10 @@ refund-sale-date = Tanggal: { $date }
 refund-items-title = Pilih Item untuk Dikembalikan
 refund-item-aria =
     .aria-label = Kembalikan { $sku }
-refund-qty-decrease-aria = Kurangi jumlah pengembalian
-refund-qty-increase-aria = Tambah jumlah pengembalian
+refund-qty-decrease-aria =
+    .aria-label = Kurangi jumlah pengembalian
+refund-qty-increase-aria =
+    .aria-label = Tambah jumlah pengembalian
 refund-reason-label = Alasan *
 refund-reason-placeholder =
     .placeholder = mis. Pelanggan berubah pikiran
@@ -866,7 +868,8 @@ retail-product-edit-title = Edit Produk
 retail-product-edit-aria = Edit { $name }
 retail-product-weigh-aria = Timbang { $name }
 retail-price-volatility-hint = Harga baru saja berubah
-retail-edit-modal-close-aria = Tutup
+retail-edit-modal-close-aria =
+    .aria-label = Tutup
 
 # ── Edit Product Modal ──
 retail-edit-product-title = Edit Produk

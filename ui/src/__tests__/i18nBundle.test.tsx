@@ -528,13 +528,14 @@ describe('i18n translation-var drift scan (round 165)', () => {
   });
 });
 
-// Round 166: the localized-attribute omission check. A site localizes
-// an attribute via `attrs`; when the id translation omits that
-// attribute (message exists, key missing) it is silently unset for
-// Indonesian users. Driven by the site attrs so only rendered
-// attributes count. Same gate, fails closed.
-describe('i18n localized-attribute omission scan (round 166)', () => {
-  it('finds no localized attribute omitted by any id translation', () => {
+// Rounds 166-167: the localized-attribute checks. A site localizes an
+// attribute via `attrs`; when the id translation omits it (round 166)
+// it is silently unset for Indonesian users, and when the EN message
+// lacks it entirely (round 167) everyone sees the JSX English
+// fallback. Driven by the site attrs so only rendered attributes
+// count. Same gate, fails closed.
+describe('i18n localized-attribute scan (rounds 166-167)', () => {
+  it('finds no localized attribute missing or omitted by any translation', () => {
     expect(scanAttributeOmissions()).toEqual([]);
   });
 });

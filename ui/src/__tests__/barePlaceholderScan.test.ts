@@ -20,6 +20,7 @@ import {
   scanTranslationVars,
   scanAttributeOmissions,
   localizedAttributeOmission,
+  localizedAttributeMissing,
   translationVarDrift,
   varsMismatch,
   type MessageVarContract,
@@ -325,10 +326,46 @@ describe('localizedAttributeOmission', () => {
   });
 });
 
+// Round 167: the en-side of the same gate. A site-localized attribute
+// missing from the EN message is silently unset for ALL users — the
+// JSX fallback (usually hardcoded English) shows instead. The data
+// showed this splits into two live sub-classes: absent from both
+// bundles (26 sites) and present only in id (5 — en users still lose
+// it). Sites align to the en contract (rounds 164-166), so the
+// invariant is: every localized attr must exist in en.
+
+describe('localizedAttributeMissing', () => {
+  const enAttrs = new Set(['aria-label']);
+
+  it('flags a localized attribute absent from the en message', () => {
+    expect(localizedAttributeMissing(['placeholder'], enAttrs)).toEqual(['placeholder']);
+  });
+
+  // (The id-only sub-class — attr present in id but not en — is the
+  // same decision here: en is canonical, id presence is irrelevant to
+  // whether EN users lose the attribute. The scan's repo-integrity
+  // assertion covers it against the real tree.)
+
+  it('flags only the en-missing ones from a mixed set', () => {
+    expect(localizedAttributeMissing(['placeholder', 'aria-label'], enAttrs)).toEqual(['placeholder']);
+  });
+
+  it('is clean when every localized attribute exists in en', () => {
+    expect(localizedAttributeMissing(['aria-label'], enAttrs)).toEqual([]);
+  });
+
+  it('is clean for an empty attrs set', () => {
+    expect(localizedAttributeMissing([], enAttrs)).toEqual([]);
+  });
+});
+
 describe('scanAttributeOmissions (repo integrity)', () => {
-  it('finds no localized attribute omitted by any id translation', () => {
-    // An omitted attribute is silently unset for Indonesian users.
-    // Driven by the site attrs, so only rendered attributes count.
+  it('finds no localized attribute missing or omitted by any translation', () => {
+    // Round 166: an attribute the id translation omits is silently
+    // unset for Indonesian users. Round 167: an attribute absent from
+    // the EN message is silently unset for everyone (JSX English
+    // fallback). Driven by the site attrs, so only rendered
+    // attributes count.
     expect(scanAttributeOmissions()).toEqual([]);
   });
 });

@@ -433,8 +433,10 @@ refund-sale-date = Date: { $date }
 refund-items-title = Select Items to Refund
 refund-item-aria =
     .aria-label = Refund { $sku }
-refund-qty-decrease-aria = Decrease refund quantity
-refund-qty-increase-aria = Increase refund quantity
+refund-qty-decrease-aria =
+    .aria-label = Decrease refund quantity
+refund-qty-increase-aria =
+    .aria-label = Increase refund quantity
 refund-reason-label = Reason *
 refund-reason-placeholder =
     .placeholder = e.g. Customer changed mind
@@ -895,7 +897,8 @@ retail-product-edit-title = Edit Product
 retail-product-edit-aria = Edit { $name }
 retail-product-weigh-aria = Weigh { $name }
 retail-price-volatility-hint = Price changed recently
-retail-edit-modal-close-aria = Close
+retail-edit-modal-close-aria =
+    .aria-label = Close
 
 # ── Edit Product Modal ──
 retail-edit-product-title = Edit Product

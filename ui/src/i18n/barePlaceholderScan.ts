@@ -482,11 +482,27 @@ export function localizedAttributeOmission(
 }
 
 /**
- * Repo-wide omission scan: every `<Localized>` site's statically-known
- * `attrs` keys must exist in the en message's attributes AND in the id
- * translation's. Sites with unresolvable `attrs` expressions are
- * skipped (documented, like the vars scan); ids missing from en or id
- * are the parity gate's job. Reports one hit per affected site.
+ * Round 167: the en-side of the same gate. A site-localized attribute
+ * absent from the EN message is silently unset for ALL users (the JSX
+ * fallback — usually hardcoded English — shows instead). Sites align
+ * to the en contract, so every localized attr must exist in en; id
+ * presence is irrelevant (an attr only id has still means en users
+ * lose it).
+ */
+export function localizedAttributeMissing(
+  attrsKeys: string[],
+  enAttrs: ReadonlySet<string>,
+): string[] {
+  return attrsKeys.filter((attr) => !enAttrs.has(attr));
+}
+
+/**
+ * Repo-wide attribute scan: every `<Localized>` site's statically-known
+ * `attrs` keys must exist in the en message's attributes (round 167)
+ * AND, when en has them, in the id translation's (round 166). Sites
+ * with unresolvable `attrs` expressions are skipped (documented, like
+ * the vars scan); ids missing from en or id are the parity gate's job.
+ * Reports one hit per affected site.
  */
 export function scanAttributeOmissions(): AttributeOmissionHit[] {
   const ftlModules = import.meta.glob(['../locales/*.ftl', '!../locales/*.id.ftl'], {
@@ -527,13 +543,13 @@ export function scanAttributeOmissions(): AttributeOmissionHit[] {
       if (enContract === undefined) continue; // missing en key — the parity gate owns that
       const idContract = idDeclared.get(site.id);
       if (idContract === undefined) continue; // untranslated message — the parity gate owns that
-      const omitted = localizedAttributeOmission(
-        site.attrsKeys,
-        new Set(enContract.attributes.keys()),
-        new Set(idContract.attributes.keys()),
-      );
-      if (omitted.length > 0) {
-        hits.push({ file: path, line: site.line, id: site.id, attrs: omitted });
+      const enAttrs = new Set(enContract.attributes.keys());
+      const idAttrs = new Set(idContract.attributes.keys());
+      const missing = localizedAttributeMissing(site.attrsKeys, enAttrs);
+      const omitted = localizedAttributeOmission(site.attrsKeys, enAttrs, idAttrs);
+      const attrs = [...missing, ...omitted]; // disjoint — missing requires ¬enHas
+      if (attrs.length > 0) {
+        hits.push({ file: path, line: site.line, id: site.id, attrs });
       }
     }
   }
