@@ -3676,7 +3676,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verify:** WSL replay of the real crash input (clean, exit 0) · oz-lua 63/63 (Windows) · cargo fmt ✓ · clippy -p oz-lua -D warnings ✓ · only `lua_sandbox.rs` had the stale assert (grep across fuzz targets). The hfuzz build env quirks are documented: `RUSTC_WRAPPER=` (empty) disables the sccache interception, and CARGO_TARGET_DIR must point at a space-free dir.
 
-**Commits:** `____` (fix(lua): align fuzz-target sandbox assert with the restricted-os contract)
+**Commits:** `ccca7cbb` (fix(lua): align fuzz-target sandbox assert with the restricted-os contract)
 
 **Deliberately NOT done:** no sandbox change (the crate is correct — restricted os date/time/clock is intentional); no change to the other six fuzz targets (audited — only lua_sandbox had drifted); no lldb/gdb setup to capture a post-fix backtrace (the replay's clean exit is the evidence; a debugger adds nothing now that nothing crashes). NOTE: `/fuzz/hfuzz/` is gitignored wholesale (repo convention, `.gitignore` line 26 — instrumented builds, corpora, and crash reports are local/dev-only), so the target fix itself is not versioned; the oz-lua contract test is the durable regression pin, and the crash input stays in `fuzz/hfuzz/crash_reports/20260811-041231/` for local replay.
 
