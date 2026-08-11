@@ -83,9 +83,9 @@ pub fn query_menu_engineering(
         "SELECT p.id AS product_id, p.sku, p.name,
                 COALESCE(SUM(sl.qty), 0) AS total_volume,
                 sl.unit_minor AS unit_price_minor,
-                COALESCE(p.cost_minor, 0) AS unit_cost_minor,
-                (sl.unit_minor - COALESCE(p.cost_minor, 0)) AS margin_per_unit,
-                SUM((sl.unit_minor - COALESCE(p.cost_minor, 0)) * sl.qty) AS total_margin_minor,
+                COALESCE(sl.cost_minor, p.cost_minor, 0) AS unit_cost_minor,
+                (sl.unit_minor - COALESCE(sl.cost_minor, p.cost_minor, 0)) AS margin_per_unit,
+                SUM((sl.unit_minor - COALESCE(sl.cost_minor, p.cost_minor, 0)) * sl.qty) AS total_margin_minor,
                 SUM(sl.line_minor) AS total_revenue_minor
          FROM sale_lines sl
          JOIN sales s ON sl.sale_id = s.id

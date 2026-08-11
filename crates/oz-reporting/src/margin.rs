@@ -8,13 +8,12 @@
 //!
 //! # Cost semantics
 //!
-//! Costs are **not snapshotted into `sale_lines`** — they are read from the
-//! product's current `cost_minor` at query time (matching
-//! [`crate::menu_engineering`]). A cost correction after a sale therefore
-//! restates that sale's historical margin; this is the documented behavior
-//! of the existing reporting layer and keeps the ledger unchanged. Lines
-//! whose product is missing (deleted/unknown SKU) fall back to a zero cost
-//! and the SKU as the display name.
+//! Costs are **snapshotted into `sale_lines.cost_minor` at checkout** (migration
+//! 135): the product's HPP is frozen when the sale is written, so editing a
+//! product's cost later never restates historical margins. The query prefers
+//! the per-line snapshot and falls back to the product's current cost (and 0)
+//! for legacy rows and lines whose product is missing/deleted. The display
+//! name likewise falls back to the SKU when the product is unknown.
 
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
@@ -74,8 +73,8 @@ pub fn query_sale_lines_with_margin(
                 sl.qty,
                 sl.unit_minor,
                 sl.line_minor,
-                COALESCE(p.cost_minor, 0) AS unit_cost_minor,
-                (sl.unit_minor - COALESCE(p.cost_minor, 0)) * sl.qty AS margin_minor
+                COALESCE(sl.cost_minor, p.cost_minor, 0) AS unit_cost_minor,
+                (sl.unit_minor - COALESCE(sl.cost_minor, p.cost_minor, 0)) * sl.qty AS margin_minor
          FROM sale_lines sl
          LEFT JOIN products p ON sl.sku = p.sku
          WHERE sl.sale_id = ?1
@@ -234,6 +233,45 @@ mod tests {
         let rows = query_sale_lines_with_margin(&conn, &sale_id).unwrap();
         assert_eq!(rows[0].margin_minor, -900);
         assert!((rows[0].margin_percent - (-60.0)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn margin_snapshot_is_frozen_after_cost_edit() {
+        // Core HPP invariant: the per-line snapshot (written at checkout)
+        // must survive a later cost edit — historical margins never change.
+        let conn = fresh();
+        seed_product(&conn, "STEAK", 2500, 800);
+        let sale_id = complete_sale(&conn, &[("STEAK", 2, 2500)]);
+        conn.execute(
+            "UPDATE products SET cost_minor = 1500 WHERE sku = 'STEAK'",
+            [],
+        )
+        .unwrap();
+
+        let rows = query_sale_lines_with_margin(&conn, &sale_id).unwrap();
+        assert_eq!(
+            rows[0].unit_cost_minor, 800,
+            "snapshot must not follow the edited HPP"
+        );
+        assert_eq!(rows[0].margin_minor, (2500 - 800) * 2);
+    }
+
+    #[test]
+    fn margin_falls_back_to_current_cost_when_snapshot_missing() {
+        // Legacy / unset-cost sales have no snapshot: the report follows the
+        // product's current cost (the documented fallback).
+        let conn = fresh();
+        seed_product(&conn, "NEW", 500, 0); // cost unset at sale time
+        let sale_id = complete_sale(&conn, &[("NEW", 1, 500)]);
+        conn.execute("UPDATE products SET cost_minor = 300 WHERE sku = 'NEW'", [])
+            .unwrap();
+
+        let rows = query_sale_lines_with_margin(&conn, &sale_id).unwrap();
+        assert_eq!(
+            rows[0].unit_cost_minor, 300,
+            "unset-snapshot rows follow the current product cost"
+        );
+        assert_eq!(rows[0].margin_minor, 200);
     }
 
     #[test]

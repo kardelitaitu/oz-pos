@@ -110,6 +110,56 @@ pub struct HeldCartFull {
 /// negative split is never legitimate and is rejected even when the sum
 /// happens to cover the total. Summing uses checked arithmetic so a huge
 /// split list cannot overflow past the total.
+/// Insert one sale line with the HPP cost snapshot (ADR #36 reporting).
+///
+/// The product's cost is frozen at write time so historical margins never
+/// change when `products.cost_minor` is edited later. NULL when the product
+/// is missing or has no cost set — the reporting layer falls back to the
+/// product's current cost (and 0) via COALESCE.
+fn insert_sale_line(tx: &rusqlite::Transaction<'_>, line: &SaleLine) -> Result<(), CoreError> {
+    let unit_cur =
+        std::str::from_utf8(&line.unit_price.currency.0).map_err(|e| CoreError::Validation {
+            field: "currency",
+            message: format!("invalid UTF-8 in currency bytes: {e}"),
+        })?;
+    // `products.cost_minor` is `NOT NULL DEFAULT 0` — 0 means "cost not
+    // set". Normalize it to NULL so an unset snapshot can never shadow a
+    // later-set product cost in the reporting COALESCE fallback.
+    let cost_minor = match tx.query_row(
+        "SELECT cost_minor FROM products WHERE sku = ?1",
+        params![line.sku],
+        |row| row.get::<_, i64>(0),
+    ) {
+        Ok(v) if v > 0 => Some(v),
+        Ok(_) | Err(rusqlite::Error::QueryReturnedNoRows) => None,
+        Err(e) => return Err(CoreError::Db(e)),
+    };
+    tx.execute(
+        "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position,
+                                 tax_minor, tax_rate_id, tax_breakdown_json,
+                                 serial_number, course, modifiers_json, cost_minor)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+        params![
+            line.id,
+            line.sale_id,
+            line.sku,
+            line.qty,
+            line.unit_price.minor_units,
+            line.line_total.minor_units,
+            unit_cur,
+            line.line_position,
+            line.tax_amount.minor_units,
+            line.tax_rate_id,
+            line.tax_breakdown_json,
+            line.serial_number,
+            line.course,
+            line.modifiers_json,
+            cost_minor,
+        ],
+    )?;
+    Ok(())
+}
+
 fn validate_payment_splits_cover_total(
     splits: &[crate::PaymentSplitArg],
     total_minor: i64,
@@ -534,35 +584,7 @@ impl Store<'_> {
         )?;
 
         for line in &sale.lines {
-            let unit_cur = std::str::from_utf8(&line.unit_price.currency.0).map_err(|e| {
-                CoreError::Validation {
-                    field: "currency",
-                    message: format!("invalid UTF-8 in currency bytes: {e}"),
-                }
-            })?;
-            tx.execute(
-                "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor,
-                                         currency, line_position, tax_minor, tax_rate_id,
-                                         tax_breakdown_json, serial_number, course,
-                                         modifiers_json)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-                rusqlite::params![
-                    line.id,
-                    line.sale_id,
-                    line.sku,
-                    line.qty,
-                    line.unit_price.minor_units,
-                    line.line_total.minor_units,
-                    unit_cur,
-                    line.line_position,
-                    line.tax_amount.minor_units,
-                    line.tax_rate_id,
-                    line.tax_breakdown_json,
-                    line.serial_number,
-                    line.course,
-                    line.modifiers_json,
-                ],
-            )?;
+            insert_sale_line(&tx, line)?;
         }
 
         // Create payment records.
@@ -922,35 +944,7 @@ impl Store<'_> {
         )?;
 
         for line in &sale.lines {
-            let unit_cur = std::str::from_utf8(&line.unit_price.currency.0).map_err(|e| {
-                CoreError::Validation {
-                    field: "currency",
-                    message: format!("invalid UTF-8 in currency bytes: {e}"),
-                }
-            })?;
-            tx.execute(
-                "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor,
-                                         currency, line_position, tax_minor, tax_rate_id,
-                                         tax_breakdown_json, serial_number, course,
-                                         modifiers_json)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-                rusqlite::params![
-                    line.id,
-                    line.sale_id,
-                    line.sku,
-                    line.qty,
-                    line.unit_price.minor_units,
-                    line.line_total.minor_units,
-                    unit_cur,
-                    line.line_position,
-                    line.tax_amount.minor_units,
-                    line.tax_rate_id,
-                    line.tax_breakdown_json,
-                    line.serial_number,
-                    line.course,
-                    line.modifiers_json,
-                ],
-            )?;
+            insert_sale_line(&tx, line)?;
         }
 
         if !payment_splits.is_empty() {
@@ -1252,28 +1246,7 @@ impl Store<'_> {
         )?;
 
         for line in &sale.lines {
-            let unit_cur = std::str::from_utf8(&line.unit_price.currency.0).map_err(|e| {
-                CoreError::Validation {
-                    field: "currency",
-                    message: format!("invalid UTF-8 in currency bytes: {e}"),
-                }
-            })?;
-            tx.execute(
-                "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position,
-                                        tax_minor, tax_rate_id, tax_breakdown_json,
-                                        serial_number, course, modifiers_json)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-                params![
-                    line.id, line.sale_id, line.sku, line.qty,
-                    line.unit_price.minor_units, line.line_total.minor_units,
-                    unit_cur, line.line_position,
-                    line.tax_amount.minor_units, line.tax_rate_id,
-                    line.tax_breakdown_json,
-                    line.serial_number,
-                    line.course,
-                    line.modifiers_json,
-                ],
-            )?;
+            insert_sale_line(&tx, line)?;
         }
 
         tx.commit()?;
@@ -2237,6 +2210,53 @@ mod tests {
         assert_eq!(loaded.lines[0].line_position, 1);
         assert_eq!(loaded.lines[1].sku, "BAGEL");
         assert_eq!(loaded.lines[1].line_position, 2);
+    }
+
+    #[test]
+    fn create_sale_snapshots_product_cost_at_checkout() {
+        let conn = fresh();
+        let s = store(&conn);
+
+        // A product with a known HPP: the snapshot must freeze it into the
+        // line at write time (ADR #36 reporting follow-up).
+        s.create_product("STEAK", "STEAK", price(2500), None, None, 100, None)
+            .unwrap();
+        conn.execute(
+            "UPDATE products SET cost_minor = 800 WHERE sku = 'STEAK'",
+            [],
+        )
+        .unwrap();
+        let sale = make_single_line_sale("STEAK", 2, 2500);
+        s.create_sale(&sale).unwrap();
+
+        let cost: Option<i64> = conn
+            .query_row(
+                "SELECT cost_minor FROM sale_lines WHERE sku = 'STEAK'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            cost,
+            Some(800),
+            "product cost must be frozen into the line at checkout"
+        );
+
+        // A product without a cost set (0 = unset) must snapshot as NULL,
+        // never 0 — otherwise the reporting fallback to a later-set product
+        // cost would be shadowed.
+        s.create_product("FREE", "FREE", price(500), None, None, 100, None)
+            .unwrap();
+        let sale2 = make_single_line_sale("FREE", 1, 500);
+        s.create_sale(&sale2).unwrap();
+        let cost2: Option<i64> = conn
+            .query_row(
+                "SELECT cost_minor FROM sale_lines WHERE sku = 'FREE'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(cost2, None, "unset cost must snapshot as NULL, not 0");
     }
 
     #[test]

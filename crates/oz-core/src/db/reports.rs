@@ -188,7 +188,7 @@ impl Store<'_> {
                     SUM(s.total_minor) AS total_minor,
                     s.currency AS currency,
                     COUNT(*) AS sale_count,
-                    (SELECT COALESCE(SUM(COALESCE(p2.cost_minor, 0) * sl2.qty), 0)
+                    (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty), 0)
                      FROM sale_lines sl2
                      JOIN sales s2 ON sl2.sale_id = s2.id
                      LEFT JOIN products p2 ON sl2.sku = p2.sku
@@ -228,7 +228,7 @@ impl Store<'_> {
             "SELECT DATE(s.created_at, 'weekday 0', '-7 days') AS week_start,
                     SUM(s.total_minor) AS total_minor, s.currency AS currency,
                     COUNT(*) AS sale_count,
-                    (SELECT COALESCE(SUM(COALESCE(p2.cost_minor, 0) * sl2.qty), 0)
+                    (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty), 0)
                      FROM sale_lines sl2
                      JOIN sales s2 ON sl2.sale_id = s2.id
                      LEFT JOIN products p2 ON sl2.sku = p2.sku
@@ -269,7 +269,7 @@ impl Store<'_> {
             "SELECT SUBSTR(s.created_at, 1, 7) AS month,
                     SUM(s.total_minor) AS total_minor, s.currency AS currency,
                     COUNT(*) AS sale_count,
-                    (SELECT COALESCE(SUM(COALESCE(p2.cost_minor, 0) * sl2.qty), 0)
+                    (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty), 0)
                      FROM sale_lines sl2
                      JOIN sales s2 ON sl2.sale_id = s2.id
                      LEFT JOIN products p2 ON sl2.sku = p2.sku

@@ -794,6 +794,15 @@ pub const ALL: &[Migration] = &[
         id: "134_popularity_backfill.sql",
         sql: include_str!("../migrations/134_popularity_backfill.sql"),
     },
+    // ── ADR #36 reporting: freeze HPP into sale_lines ────────────
+    // sale_lines.cost_minor snapshots the product's cost at checkout so
+    // historical margins never change when cost_minor is edited later.
+    // Backfills existing rows with the current product cost and reports
+    // fall back COALESCE(sl.cost_minor, p.cost_minor, 0).
+    Migration {
+        id: "135_sale_line_cost_snapshot.sql",
+        sql: include_str!("../migrations/135_sale_line_cost_snapshot.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.
@@ -1221,6 +1230,55 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM product_activity", [], |r| r.get(0))
             .unwrap();
         assert_eq!(total, 2, "migration 134 must run exactly once");
+    }
+
+    // ── Backfill migration 135: freeze HPP into sale_lines ──
+    //
+    // On upgrade, existing sale_lines have no cost snapshot. 135 backfills
+    // each line with the product's current cost so pre-existing rows are
+    // frozen at what the reports displayed before the migration. A product
+    // cost of 0 ("not set") normalizes to NULL.
+    #[test]
+    fn migration_135_backfills_cost_snapshot_from_product_cost() {
+        // 1. Simulate a pre-feature release: apply every migration EXCEPT
+        //    135 (the snapshot column does not exist yet), then seed a
+        //    catalog with one costed product, one without a cost, and a
+        //    completed sale referencing both.
+        let mut conn = fresh();
+        let split = ALL.len() - 1;
+        platform_core::database::run(&mut conn, &ALL[..split]).unwrap();
+        conn.execute_batch(
+            "INSERT INTO products (id, sku, name, price_minor, currency, cost_minor, created_at, updated_at) VALUES
+             ('p-1', 'COSTED', 'Costed', 1000, 'USD', 800, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
+             ('p-2', 'FREE',   'Free',   1000, 'USD', 0,   '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+             INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at) VALUES
+             ('s-1', 3000, 'USD', 2, 'completed', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+             INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position) VALUES
+             ('sl-1', 's-1', 'COSTED', 2, 1000, 2000, 'USD', 1),
+             ('sl-2', 's-1', 'FREE',   1, 1000, 1000, 'USD', 2);",
+        )
+        .unwrap();
+
+        // 2. Apply the remainder (135) exactly as an upgrade would.
+        platform_core::database::run(&mut conn, &ALL[split..]).unwrap();
+
+        // 3. Costed line frozen at the product cost; unset cost → NULL.
+        let costed: Option<i64> = conn
+            .query_row(
+                "SELECT cost_minor FROM sale_lines WHERE id = 'sl-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(costed, Some(800));
+        let free: Option<i64> = conn
+            .query_row(
+                "SELECT cost_minor FROM sale_lines WHERE id = 'sl-2'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(free, None, "0 product cost normalizes to NULL");
     }
 
     // ── Repair migration 120: re-seed default workspace instances ──

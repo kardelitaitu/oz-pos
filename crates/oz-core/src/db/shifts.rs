@@ -355,7 +355,7 @@ impl Store<'_> {
             |r| r.get(0),
         )?;
         let cogs_minor: i64 = self.conn.query_row(
-            "SELECT COALESCE(SUM(COALESCE(p.cost_minor, 0) * sl.qty), 0)
+            "SELECT COALESCE(SUM(COALESCE(sl.cost_minor, p.cost_minor, 0) * sl.qty), 0)
              FROM sale_lines sl
              JOIN sales s ON sl.sale_id = s.id
              LEFT JOIN products p ON sl.sku = p.sku
