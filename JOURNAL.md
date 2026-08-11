@@ -3646,7 +3646,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verify:** gate files 69/69 (i18nBundle 19/19) · **full UI 280 files / 4,839 tests (+5)** · typecheck ✓ · eslint 0 errors · `lint:i18n.sh` clean end-to-end (still one pass — the lint gate's i18nBundle test exercises all five scans) · drift guard clean.
 
-**Commits:** (to be back-filled)
+**Commits:** `9b61b0a3` (refactor(i18n): consolidate the five scans onto shared bundle maps)
 
 **Deliberately NOT done:** no new module file (the scanner module IS the i18n-scan home — exporting the loaders keeps the diff minimal and the types adjacent); no caching/memoization of the maps (each scan call still parses once per run, same cost as before; a gate-level cache is premature); no extraction of the round-165 `indexOf` line helper (used once — extracting it would be speculative).
 
