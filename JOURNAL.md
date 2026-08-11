@@ -4091,5 +4091,5 @@ Remaining risks / follow-ups:
 - The legacy `workspace_keys` arg is now dead UI-side; removing it from the wire is a compat decision for a later slice.
 - Two unblocking fixes land in the worktree only (NOT committed): cache.rs test literals and both clients' products.rs fixture completed for the other agent's in-flight ADR #36 fields — they compile only with that WIP present, so they must ride with it.
 
-Commits: pending (this slice)
+Commits: ea826188 (feat(rbac): assignment write path + DTO surface), 782a6bc0 (feat(rbac): five-role staff screen + assignment editor), 0c32994e (docs)
 Tests: oz-core 1746/1746 (assignments 13, profile 17), desktop 893/893 (staff 41), tablet 429/429 (staff 19), gate_audit 3/3, contract 7/7, staff screen 21/21; fmt/clippy (changed area)/drift/bundle-parity/i18n-lint all clean.
