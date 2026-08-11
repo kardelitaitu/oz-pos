@@ -5,6 +5,8 @@
 //! 2. Add `pub mod <feature>;` here.
 //! 3. Add the command(s) to the `invoke_handler!` macro in `lib.rs`.
 
+/// Analytics commands (analytics:view — owner/admin/manager only).
+pub mod analytics;
 /// Audit log commands (view, filter, export).
 pub mod audit;
 /// Authentication commands (login, logout, refresh).

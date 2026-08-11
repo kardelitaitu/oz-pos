@@ -643,6 +643,8 @@ pub fn run() {
             commands::reports::get_low_stock_alerts_scoped,
             commands::reports::get_category_breakdown_scoped,
             commands::reports::build_custom_report_scoped,
+            commands::analytics::get_staff_analytics_scoped,
+            commands::analytics::get_staff_analytics_daily_scoped,
             commands::security::get_key_rotation_info,
             commands::security::rotate_encryption_key,
             commands::shifts::open_shift,

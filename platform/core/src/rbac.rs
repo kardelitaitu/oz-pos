@@ -365,6 +365,7 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::REPORTS_VIEW,
             permissions::REPORTS_EXPORT,
             permissions::REPORTS_SCHEDULE,
+            permissions::ANALYTICS_VIEW,
             permissions::SHIFTS_OPEN,
             permissions::SHIFTS_CLOSE,
             permissions::SHIFTS_VIEW_ANY,
@@ -512,6 +513,7 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::REPORTS_VIEW,
             permissions::REPORTS_EXPORT,
             permissions::REPORTS_SCHEDULE,
+            permissions::ANALYTICS_VIEW,
             permissions::SHIFTS_OPEN,
             permissions::SHIFTS_CLOSE,
             permissions::SHIFTS_VIEW_ANY,
@@ -785,15 +787,22 @@ mod preset_tests {
     fn staff_preset_has_manager_count_minus_settings() {
         let manager = &ROLE_PRESETS[1];
         let staff = &ROLE_PRESETS[2];
-        // Staff should have exactly 2 fewer permissions than Manager (settings:read, settings:edit)
+        // Staff should have exactly 3 fewer permissions than Manager
+        // (settings:read, settings:edit, analytics:view) — the analytics
+        // surface is a management review tool deliberately withheld from
+        // Staff (owner/admin/manager only, ADR #35 D4 taxonomy).
         assert_eq!(
             staff.permissions.len(),
-            manager.permissions.len() - 2,
-            "Staff should have all Manager permissions except settings:read and settings:edit"
+            manager.permissions.len() - 3,
+            "Staff should have all Manager permissions except settings and analytics"
         );
-        // Verify every Manager permission except settings is present in Staff
+        // Verify every Manager permission except settings + analytics is
+        // present in Staff
         for perm in manager.permissions {
-            if *perm != permissions::SETTINGS_READ && *perm != permissions::SETTINGS_EDIT {
+            if *perm != permissions::SETTINGS_READ
+                && *perm != permissions::SETTINGS_EDIT
+                && *perm != permissions::ANALYTICS_VIEW
+            {
                 assert!(
                     staff.permissions.contains(perm),
                     "Staff should inherit Manager permission: {perm}"
@@ -887,6 +896,10 @@ pub mod permissions {
     pub const REPORTS_EXPORT: &str = "reports:export";
     /// Schedule automated report generation.
     pub const REPORTS_SCHEDULE: &str = "reports:schedule";
+
+    // ── Analytics ─────────────────────────────────────────────────
+    /// View per-staff shift + sales analytics (owner / admin / manager).
+    pub const ANALYTICS_VIEW: &str = "analytics:view";
 
     // ── Shifts ────────────────────────────────────────────────────
     /// Open a new cashier shift.
@@ -1036,6 +1049,7 @@ pub const ALL_ENFORCED: &[&str] = &[
     permissions::REPORTS_VIEW,
     permissions::REPORTS_EXPORT,
     permissions::REPORTS_SCHEDULE,
+    permissions::ANALYTICS_VIEW,
     permissions::SHIFTS_OPEN,
     permissions::SHIFTS_CLOSE,
     permissions::SHIFTS_VIEW_ANY,

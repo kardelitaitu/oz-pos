@@ -32,6 +32,7 @@ use std::path::{Path, PathBuf};
 // Generated from the current source; update deliberately, never silently.
 // ---------------------------------------------------------------------------
 static PINNED_DESKTOP: &[(&str, usize, &[&str])] = &[
+    ("analytics", 2, &["ANALYTICS_VIEW"]),
     ("audit", 1, &["AUDIT_EXPORT", "AUDIT_VIEW"]),
     ("auth", 0, &[]),
     ("branding", 0, &[]),
@@ -157,6 +158,7 @@ static PINNED_DESKTOP: &[(&str, usize, &[&str])] = &[
 // Pinned census — tablet client.
 // ---------------------------------------------------------------------------
 static PINNED_TABLET: &[(&str, usize, &[&str])] = &[
+    ("analytics", 2, &["ANALYTICS_VIEW"]),
     ("audit", 1, &["AUDIT_EXPORT", "AUDIT_VIEW"]),
     ("auth", 0, &[]),
     ("branding", 0, &[]),
@@ -442,6 +444,7 @@ fn tablet_command_census_matches_pin() {
 fn permission_value(name: &str) -> &'static str {
     use oz_core::permissions as p;
     match name {
+        "ANALYTICS_VIEW" => p::ANALYTICS_VIEW,
         "AUDIT_EXPORT" => p::AUDIT_EXPORT,
         "AUDIT_VIEW" => p::AUDIT_VIEW,
         "CUSTOMERS_CREATE" => p::CUSTOMERS_CREATE,

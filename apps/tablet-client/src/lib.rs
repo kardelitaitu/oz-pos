@@ -448,6 +448,8 @@ pub fn run() {
                 commands::reports::get_low_stock_alerts_scoped,
                 commands::reports::get_category_breakdown_scoped,
                 commands::reports::build_custom_report_scoped,
+                commands::analytics::get_staff_analytics_scoped,
+                commands::analytics::get_staff_analytics_daily_scoped,
                 commands::scale::read_scale_weight,
                 commands::tables::list_tables,
                 commands::tables::get_table,

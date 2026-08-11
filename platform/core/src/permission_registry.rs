@@ -236,6 +236,13 @@ pub const REGISTRY: &[PermissionEntry] = &[
         sensitive: true,
         description: "Export reports to file (PDF, CSV, etc.).",
     },
+    // ── analytics ────────────────────────────────────────────────
+    PermissionEntry {
+        key: "analytics:view",
+        family: "analytics",
+        sensitive: false,
+        description: "View per-staff shift and sales analytics (owner / admin / manager).",
+    },
     // ── shifts ───────────────────────────────────────────────────
     PermissionEntry {
         key: "shifts:open",

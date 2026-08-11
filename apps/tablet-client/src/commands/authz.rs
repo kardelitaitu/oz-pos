@@ -5,8 +5,10 @@
 
 use oz_core::CoreError;
 use oz_core::db::Store;
+use oz_core::session::SessionContext;
 
 use crate::error::AppError;
+use crate::state::AppState;
 
 /// Map a gate denial to the client's `permissionDenied` wire shape.
 ///
@@ -46,6 +48,27 @@ pub fn require_permission_for_user_scoped(
     store
         .require_permission_scoped(user_id, required, branch, workspace)
         .map_err(map_gate_error)
+}
+
+/// Authorize the session user against the GLOBAL identity database,
+/// scope-aware (ADR #35 D5 / spec 0048): the session's resolved store
+/// (branch) and workspace `type_key` are evaluated against the caller's
+/// assignment in addition to the permission. Global assignments and legacy
+/// users without an assignment row are not scope-restricted.
+pub async fn require_permission_for_session(
+    state: &AppState,
+    session: &SessionContext,
+    required: &str,
+) -> Result<(), AppError> {
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    require_permission_for_user_scoped(
+        &store,
+        &session.user_id,
+        required,
+        Some(&session.store_id),
+        Some(&session.type_key),
+    )
 }
 
 #[cfg(test)]

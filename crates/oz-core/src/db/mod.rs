@@ -49,6 +49,7 @@ use crate::error::CoreError;
 use crate::money::Currency;
 
 /// Audit log queries (read / write).
+pub mod analytics;
 pub mod assignments;
 pub mod audit;
 /// Active cart persistence (survives restarts).
