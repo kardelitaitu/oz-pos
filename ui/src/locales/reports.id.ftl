@@ -1,5 +1,6 @@
 dashboard-title = Dasbor
 dashboard-today-revenue = Pendapatan Hari Ini
+dashboard-gross-profit = Laba Kotor
 dashboard-orders-today = Pesanan Hari Ini
 dashboard-top-product = Produk Terlaris
 dashboard-low-stock-alerts = Peringatan Stok Menipis

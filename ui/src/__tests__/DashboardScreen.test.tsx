@@ -46,12 +46,17 @@ bundle.addResource(new FluentResource(sharedFtl));
 bundle.addResource(new FluentResource(reportsFtl));
 const l10n = new ReactLocalization([bundle]);
 
-function buildRevenueRow(overrides: Partial<{ date: string; total_minor: number; currency: string; sale_count: number }> = {}) {
+function buildRevenueRow(overrides: Partial<{ date: string; total_minor: number; currency: string; sale_count: number; cogs_minor: number; gross_profit_minor: number; gross_margin_percent: number }> = {}) {
+  const total_minor = overrides.total_minor ?? 150000;
+  const cogs_minor = overrides.cogs_minor ?? 60000;
   return {
     date: overrides.date ?? '2026-07-07',
-    total_minor: overrides.total_minor ?? 150000,
+    total_minor,
     currency: overrides.currency ?? 'USD',
     sale_count: overrides.sale_count ?? 12,
+    cogs_minor,
+    gross_profit_minor: overrides.gross_profit_minor ?? total_minor - cogs_minor,
+    gross_margin_percent: overrides.gross_margin_percent ?? 60,
   };
 }
 
@@ -123,15 +128,43 @@ describe('DashboardScreen', () => {
   });
 
   // ── KPI cards ──────────────────────────────────────────────────────
-  it('shows KPI labels: Today Revenue, Orders Today, Top Product', async () => {
+  it('shows KPI labels: Today Revenue, Gross Profit, Orders Today, Top Product', async () => {
     mockGetDailyRevenue.mockResolvedValue([]);
     mockGetTopProducts.mockResolvedValue([]);
     mockGetLowStockAlerts.mockResolvedValue([]);
     renderScreen();
     await waitFor(() => {
       expect(screen.getByText("Today's Revenue")).toBeTruthy();
+      expect(screen.getByText('Gross Profit')).toBeTruthy();
       expect(screen.getByText('Orders Today')).toBeTruthy();
       expect(screen.getByText('Top Product')).toBeTruthy();
+    });
+  });
+
+  it('shows gross profit KPI from the daily revenue rows', async () => {
+    const revenue = [
+      buildRevenueRow({ total_minor: 250000, cogs_minor: 100000, sale_count: 5 }),
+      buildRevenueRow({ total_minor: 100000, cogs_minor: 40000, sale_count: 3 }),
+    ];
+    mockGetDailyRevenue.mockResolvedValue(revenue);
+    mockGetTopProducts.mockResolvedValue([]);
+    mockGetLowStockAlerts.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      // Gross profit = (250000 − 100000) + (100000 − 40000) = 210000 → $2,100.00
+      expect(screen.getByText('$2,100.00')).toBeTruthy();
+    });
+  });
+
+  it('renders a negative gross profit KPI in the danger color', async () => {
+    const revenue = [buildRevenueRow({ total_minor: 100000, cogs_minor: 130000, sale_count: 5 })];
+    mockGetDailyRevenue.mockResolvedValue(revenue);
+    mockGetTopProducts.mockResolvedValue([]);
+    mockGetLowStockAlerts.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      const value = screen.getByText('-$300.00');
+      expect(value.className).toContain('dashboard-kpi-negative');
     });
   });
 

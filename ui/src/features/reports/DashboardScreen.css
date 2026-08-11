@@ -29,6 +29,10 @@
   margin-bottom: var(--space-1);
 }
 
+.dashboard-kpi-negative {
+  color: var(--color-danger);
+}
+
 .dashboard-kpi-value {
   display: block;
   font-size: var(--text-2xl);

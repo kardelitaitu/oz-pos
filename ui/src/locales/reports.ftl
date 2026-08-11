@@ -32,6 +32,7 @@ day-saturday = Sat
 # Dashboard
 dashboard-title = Dashboard
 dashboard-today-revenue = Today's Revenue
+dashboard-gross-profit = Gross Profit
 dashboard-orders-today = Orders Today
 dashboard-top-product = Top Product
 dashboard-low-stock-alerts = Low Stock Alerts

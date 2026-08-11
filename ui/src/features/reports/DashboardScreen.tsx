@@ -91,6 +91,7 @@ export default function DashboardScreen() {
 
   const todayRevenue = revenue.reduce((s, r) => s + r.total_minor, 0);
   const todayOrders = revenue.reduce((s, r) => s + r.sale_count, 0);
+  const todayGrossProfit = revenue.reduce((s, r) => s + (r.gross_profit_minor ?? 0), 0);
   const todayCurrency = revenue.length > 0 ? revenue[0]!.currency : 'USD';
   const maxWeekly = weeklyRevenue.length > 0
     ? Math.max(...weeklyRevenue.map((r) => r.total_minor), 1)
@@ -109,6 +110,14 @@ export default function DashboardScreen() {
           </Localized>
           <span className="dashboard-kpi-value">
             {fmtCurrency(todayRevenue, todayCurrency)}
+          </span>
+        </Card>
+        <Card shadow="sm" className="dashboard-kpi">
+          <Localized id="dashboard-gross-profit">
+            <span className="dashboard-kpi-label">Gross Profit</span>
+          </Localized>
+          <span className={`dashboard-kpi-value${todayGrossProfit < 0 ? ' dashboard-kpi-negative' : ''}`}>
+            {fmtCurrency(todayGrossProfit, todayCurrency)}
           </span>
         </Card>
         <Card shadow="sm" className="dashboard-kpi">
