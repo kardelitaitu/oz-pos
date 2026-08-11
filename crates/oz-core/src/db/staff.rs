@@ -196,6 +196,38 @@ impl Store<'_> {
         }
     }
 
+    /// The centralized fail-closed authorization gate (ADR #35 D3 / spec
+    /// 0047): resolve `user_id` to their role and verify the role grants
+    /// `required`.
+    ///
+    /// Denies by default: an unregistered permission key is rejected even
+    /// for the `"*"` Owner grant, and an unresolvable user or role denies
+    /// rather than erroring internally.
+    pub fn require_permission(&self, user_id: &str, required: &str) -> Result<(), CoreError> {
+        // Deny by default: an unregistered permission key is rejected even
+        // for the global `"*"` Owner grant — the registry is the only
+        // vocabulary authorization speaks (ADR #35 D3 / spec 0046 + 0047).
+        if !platform_core::permission_registry::is_registered(required) {
+            return Err(CoreError::PermissionDenied(format!(
+                "unknown permission: {required}"
+            )));
+        }
+        let user = self
+            .get_user(user_id)?
+            .ok_or_else(|| CoreError::PermissionDenied("user not found".into()))?;
+        if !user.is_active {
+            return Err(CoreError::PermissionDenied("user is inactive".into()));
+        }
+        // Fail closed: an unresolvable role is a denial, never an internal
+        // error (a role row deleted out from under a user must not surface
+        // as a crash-adjacent 500 to the frontend).
+        let role = self.get_role(&user.role_id)?.ok_or_else(|| {
+            CoreError::PermissionDenied(format!("role {} not found", user.role_id))
+        })?;
+        role.authorize(required)
+            .map_err(|e| CoreError::PermissionDenied(e.to_string()))
+    }
+
     /// Look up a user by username.
     pub fn get_user_by_username(&self, username: &str) -> Result<Option<User>, CoreError> {
         let mut stmt = self.conn.prepare(
@@ -537,6 +569,159 @@ mod tests {
                 ('user-2', 'bob',     'hash_bob',     'Bob',     'role-owner',   1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
                 ('user-3', 'carol',   'hash_carol',   'Carol',   'role-cashier', 0, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
         ).unwrap();
+    }
+
+    // ── Authorization gate (0047) ──────────────────────────────────
+
+    #[test]
+    fn gate_denies_unregistered_permission_even_for_owner() {
+        let conn = fresh();
+        seed_users(&conn);
+        // bob is role-owner with the global `"*"` grant — a typo'd or
+        // future key must STILL deny: unregistered means deny-by-default.
+        let err = store(&conn)
+            .require_permission("user-2", "sales:typo")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::PermissionDenied(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn gate_allows_registered_permission_for_owner() {
+        let conn = fresh();
+        seed_users(&conn);
+        // The global `*` grant covers every registered key.
+        assert!(
+            store(&conn)
+                .require_permission("user-2", "sales:void")
+                .is_ok()
+        );
+        assert!(
+            store(&conn)
+                .require_permission("user-2", "settings:edit")
+                .is_ok()
+        );
+        assert!(
+            store(&conn)
+                .require_permission("user-2", "kds:update")
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn gate_denies_unknown_user() {
+        let conn = fresh();
+        seed_users(&conn);
+        let err = store(&conn)
+            .require_permission("no-such-user", "sales:view")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::PermissionDenied(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn gate_denies_inactive_user() {
+        let conn = fresh();
+        seed_users(&conn);
+        let err = store(&conn)
+            .require_permission("user-3", "sales:view")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::PermissionDenied(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn gate_denies_user_with_unresolvable_role() {
+        let conn = fresh();
+        seed_roles(&conn);
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-ghost', 'ghost', 'h', 'Ghost', 'role-staff', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        // The role row disappears out from under the user. FK enforcement
+        // normally prevents this, but defense-in-depth demands the gate fail
+        // closed even when it happens (FKs off, partial migration, tampered
+        // DB) — so the test simulates it with FK enforcement off.
+        conn.execute_batch("PRAGMA foreign_keys = OFF; DELETE FROM roles WHERE id = 'role-staff';")
+            .unwrap();
+        // Fail-closed: an unresolvable role is a denial, not an internal error.
+        let err = store(&conn)
+            .require_permission("user-ghost", "sales:view")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::PermissionDenied(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn gate_denies_permission_not_granted_to_role() {
+        let conn = fresh();
+        seed_users(&conn);
+        // alice is cashier: has sales:view but not sales:void.
+        assert!(
+            store(&conn)
+                .require_permission("user-1", "sales:view")
+                .is_ok()
+        );
+        let err = store(&conn)
+            .require_permission("user-1", "sales:void")
+            .unwrap_err();
+        assert!(matches!(err, CoreError::PermissionDenied(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn gate_resolves_wildcard_grants_via_registry() {
+        let conn = fresh();
+        seed_roles(&conn);
+        store(&conn)
+            .create_role("role-wild", "Wild", "tables wildcard", "[\"tables:*\"]")
+            .unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-op', 'op', 'h', 'Op', 'role-wild', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        // tables:* has no sensitive keys, so the wildcard is a valid grant
+        // and the gate resolves every operational tables action through it.
+        assert!(
+            store(&conn)
+                .require_permission("user-op", "tables:assign")
+                .is_ok()
+        );
+        assert!(
+            store(&conn)
+                .require_permission("user-op", "tables:close")
+                .is_ok()
+        );
+        assert!(
+            store(&conn)
+                .require_permission("user-op", "sales:view")
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn gate_resolves_sensitive_keys_only_by_explicit_grant() {
+        let conn = fresh();
+        seed_roles(&conn);
+        // Explicit sensitive grant passes; a role without it is denied.
+        store(&conn)
+            .create_role("role-v", "Void", "explicit void", "[\"sales:void\"]")
+            .unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-v', 'v', 'h', 'V', 'role-v', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        assert!(
+            store(&conn)
+                .require_permission("user-v", "sales:void")
+                .is_ok()
+        );
+        assert!(
+            store(&conn)
+                .require_permission("user-v", "sales:refund")
+                .is_err()
+        );
     }
 
     // ── Role CRUD ───────────────────────────────────────────────────

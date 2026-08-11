@@ -4,11 +4,24 @@
 //! has the required permission: it looks up the user's actual role from
 //! the database, preventing role‑ID forgery.
 
+use oz_core::CoreError;
 use oz_core::db::Store;
 use oz_core::session::SessionContext;
 
 use crate::error::AppError;
 use crate::state::AppState;
+
+/// Map a gate denial to the client's `permissionDenied` wire shape.
+///
+/// `Store::require_permission` returns `CoreError::PermissionDenied` for
+/// every fail-closed case; anything else (DB errors) becomes a `Core` error
+/// as usual. The frontend sees `kind: "permissionDenied"` unchanged.
+fn map_gate_error(e: CoreError) -> AppError {
+    match e {
+        CoreError::PermissionDenied(message) => AppError::PermissionDenied(message),
+        other => AppError::from(other),
+    }
+}
 
 /// Look up the user by `user_id`, load their role, and verify the role
 /// has the given permission.
@@ -27,19 +40,9 @@ pub fn require_permission_for_user(
     user_id: &str,
     required: &str,
 ) -> Result<(), AppError> {
-    let user = store
-        .get_user(user_id)?
-        .ok_or_else(|| AppError::PermissionDenied("user not found".into()))?;
-    if !user.is_active {
-        return Err(AppError::PermissionDenied("user is inactive".into()));
-    }
-
-    let role = store
-        .get_role(&user.role_id)?
-        .ok_or_else(|| AppError::Internal(format!("role {} not found", user.role_id)))?;
-
-    role.authorize(required)
-        .map_err(|e| AppError::PermissionDenied(e.to_string()))
+    store
+        .require_permission(user_id, required)
+        .map_err(map_gate_error)
 }
 
 /// Authorize the session user against the GLOBAL identity database.
@@ -90,6 +93,30 @@ mod tests {
         )
         .unwrap();
         conn
+    }
+
+    #[test]
+    fn unregistered_permission_denies_owner_through_the_gate() {
+        let conn = seeded_store();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-owner', 'owner', 'hash', 'Owner', 'role-owner', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        let store = Store::new(&conn);
+
+        // The `*` Owner grant covers every registered key but must NOT cover
+        // an unregistered one — deny-by-default survives the client wrapper
+        // and still surfaces as `permissionDenied`, not a core error.
+        assert!(matches!(
+            require_permission_for_user(&store, "user-owner", "sales:typo"),
+            Err(AppError::PermissionDenied(_))
+        ));
+        assert!(matches!(
+            require_permission_for_user(&store, "user-owner", "sales:void"),
+            Ok(())
+        ));
     }
 
     #[test]

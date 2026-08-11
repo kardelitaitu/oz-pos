@@ -3779,3 +3779,49 @@ edit_notes register when enforced). Manifest `permissions` arrays are a
 separate declarative DSL (format-validated only), not RBAC enforcement — a
 future slice may reconcile them. `products:crud` / `categories:manage` stay
 as registered legacy composites so seeds remain byte-identical.
+
+### 2026-08-11 — 0047: centralized fail-closed enforcement gate with pinned gated-command census (round 176)
+
+**Problem:** enforcement was per-command `require_permission_for_user(...)`
+with the user→role→authorize resolution duplicated in both clients'
+`authz.rs` — "did every command gate itself?" was answered by review and
+audit, both of which missed instances (rounds 172/174 found a command that
+skipped its gate and one that skipped validation). The gate also had no
+deny-by-default: an unregistered key or an unresolvable role was handled
+inconsistently (role-missing surfaced as `Internal`, not a denial).
+
+**Solution:** `Store::require_permission(user_id, required)` is now the single
+gate in `oz-core` (ADR #35 D3): the 0046 registry is the only vocabulary
+(unregistered key denies even the `"*"` Owner grant), user resolution +
+active check + role lookup all fail closed as `CoreError::PermissionDenied`
+(role-missing is a denial, never `Internal`). Both clients' `authz.rs` are
+thin wrappers mapping `CoreError::PermissionDenied` → the existing
+`AppError::PermissionDenied` wire shape (`kind: "permissionDenied"` — no UI
+contract change), killing the duplicated resolution logic; the tablet's
+dead role-based `require_permission` (zero callers, a second parallel
+enforcement path) was removed per spec §7. A new `gate_audit.rs` integration
+test pins the full gated-command census of both clients — every command
+module with its gate-call count and permission keys, bidirectionally — so a
+new command, a dropped gate call, or a changed key surface fails the suite
+and forces a deliberate pin update (the spec's review signal). Every gated
+key is resolved through its real constant to `is_registered` (renaming a
+constant breaks the match arm), and raw string-literal permissions at gate
+call sites are pinned out of existence.
+
+**Verify:** gate 8/8 (oz-core db::staff 50/50), desktop authz/customers/
+exchange_rates --lib 56/56, tablet 55/55, gate_audit 3/3, fmt + clippy -D
+warnings (oz-core, both clients) + drift guard clean. `test-changed.sh`
+blocked by running app binaries (oz-pos-app running via another agent's
+`cargo run`; oz-pos-tablet via `tauri dev`) — left alone per the shared-tree
+rule; the audit test was run by executing the built harness directly against
+current sources.
+
+**Commits:** (see git log — feat gate + test census)
+
+**Risks / follow-ups:** the census pins *modules*, not command fns — a new
+command inside an already-pinned module with a gate call changes the count
+and is caught, but a new command inside a pinned module that silently skips
+the gate is not (no intent signal exists); that remains the job of review.
+Assignment scopes (0048) will extend the gate with scope_mode + branch/
+workspace resolution. The 0047 spec moves to `_done` once the user closes
+the slice.
