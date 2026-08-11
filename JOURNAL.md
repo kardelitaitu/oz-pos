@@ -4136,7 +4136,7 @@ member could switch workspaces within their session into an
 out-of-scope type. A "scoped sessions" slice should extend the gate and
 the session-scoped listings.
 
-Commits: fdafcd73 (code), docs pending
+Commits: fdafcd73 (code), 53b30d02 (docs)
 Tests: desktop 895/895 (workspaces 20 incl. 2 new), tablet 431/431
 (workspaces 16 incl. 2 new); fmt/clippy/drift clean.
 
@@ -4183,7 +4183,7 @@ commands) was never added to either client's pinned census, failing
 Added `("browser", 0, &[])` to both pins (census is fail-closed on
 unpinned modules).
 
-Commits: fdafcd73 (code), docs pending
+Commits: fdafcd73 (code), 53b30d02 (docs)
 Tests: desktop lib 901/901 (authz 9 incl. 3 new, workspaces 23 incl. 3 new),
 gate_audit 3/3; fmt/clippy/drift clean. NOTE: the working tree currently
 does not compile — another agent's in-flight `reports.rs` / `oz_reporting`
