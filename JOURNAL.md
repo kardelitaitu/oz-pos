@@ -3951,3 +3951,41 @@ exposed that a naive user-then-profile sequence leaves a partial row.
 Commits: 6b76d3e0 (feat: profile schema + validation + store API)
 Tests: 12 profile + 1 migration new; oz-core lib 1717/1717, staff_integration
 25/25, fmt/clippy -D warnings/drift clean.
+
+### 2026-08-11 — 0049 c2: sensitive keys + at-rest encryption, masking, read-audit, residency, retention gating
+
+Problem: the profile columns from cycle 1 were plaintext at rest, readable by
+anyone with `staff:read` (which the spec's sensitive fields must not ride),
+and there was no masking, read-audit, residency, retention, or
+incomplete-profile enforcement.
+
+Solution: (2a) three sensitive registry keys — `staff:read_identity`,
+`staff:read_payroll`, `staff:edit_notes` — classified sensitive (never
+wildcard-eligible), granted to Manager/Admin/Staff presets, deliberately
+withheld from Auditor, pinned by a registry test. (2b) In oz-core:
+`national_id` and `monthly_take_home_minor` are now encrypted at rest via new
+domain-separated `crypto::encrypt_profile_field`/`decrypt_profile_field`
+(static-key precedent, survives DB restore on another machine); a migration
+131 `national_id_hash` column + unique index preserves "unique when present"
+because nonce-randomised ciphertext would dodge the old index. New
+`Store::get_user_profile_viewed_by` returns a `ProfileView` that withholds
+full national_id/tax_id/pay without the explicit grants, always renders
+national_id last-4 masked (`mask_last4`), audits every sensitive read
+(`staff.identity.read` / `staff.payroll.read` — access, never values), and
+fails closed on corrupt ciphertext. New `Store::assign_role_guarded` denies
+management-role assignment when the target profile is incomplete and the new
+role grants sensitive permissions (non-sensitive roles stay assignable so
+legacy checkout users keep working). Retention pinned: deactivation never
+deletes profile data. Residency pinned: sync `SnapshotUser` wire format has
+no profile fields (test asserts the safe key set).
+
+Deviations from the spec (journaled): "keyring-backed" became the repo's
+actual precedent — `oz_core::crypto` AES-256-GCM domain-separated (oz-core
+cannot depend on oz-security, which depends on oz-core); masking helper lives
+in oz-core for the same reason, not `oz_security::mask`.
+
+Commits: d9990925 (feat(perms): sensitive profile keys + preset grants),
+abc7949e (feat(profile): encrypt, mask, audit, gate, retain)
+Tests: 1 registry + 3 crypto + 6 profile + 1 migration + 1 sync new;
+oz-core lib 1727/1727, platform-core 237/237, platform-sync 276/276,
+fmt/clippy -D warnings/drift clean.
