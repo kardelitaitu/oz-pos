@@ -13,6 +13,12 @@ scope:
   - apps/tablet-client/src/commands/staff.rs
   - crates/oz-security/src/
   - docs/specs/_active/0049-user-profile-data/
+  - ui/src/features/staff/StaffManagementScreen.tsx
+  - ui/src/api/staff.ts
+  - ui/src/__tests__/StaffManagementScreen.test.tsx
+  - ui/src/__tests__/api-staff-contract.test.ts
+  - ui/src/locales/staff.ftl
+  - ui/src/locales/staff.id.ftl
 
 problem:
   - 'The `users` table has only username, display name, PIN hash, and role; there
@@ -42,6 +48,15 @@ implemented_slice:
     (`oz-security::mask`); record an audit event for every read of the three
     sensitive fields; exclude sensitive fields from cloud sync and bulk exports;
     never auto-delete on deactivation.
+  - Collect the 9 required and optional profile fields in the staff create/edit
+    form with field-level, localized validation errors.
+  - Display national_id masked to last-4 in the staff list and detail views;
+    the full value is never rendered without the explicit grant.
+  - Flag incomplete-profile users in the staff screen and disable
+    management-role and assignment controls until the profile is complete.
+  - Extend the staff IPC args (CreateStaffScopedArgs, UpdateStaffScopedArgs)
+    with the profile fields and pin the wire shape with a new api-staff-contract
+    test.
   - Add validation-matrix, incomplete-profile, encryption round-trip, masking,
     read-audit, residency (sync/export exclusion), and retention tests.
 
@@ -53,6 +68,12 @@ invariants:
   - Every read of `national_id`, monthly pay, or `tax_id` produces an audit
     event; full `national_id` is visible only via the explicit grant.
   - Deactivation never deletes identity, payroll, or emergency contact data.
+  - The staff form cannot submit with any of the 9 required fields missing;
+    field errors are per-field and localized.
+  - national_id renders last-4 in every UI surface; the full value is never
+    rendered without the explicit grant.
+  - Incomplete-profile users are visibly flagged, and management-role and
+    assignment controls are disabled until the profile is complete.
   - 'The D6 not-collected fields never appear in the schema: gender, religion,
     marital status, ethnicity, blood type, bank account, shift/availability.'
 

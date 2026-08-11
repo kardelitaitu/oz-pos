@@ -68,6 +68,21 @@ Creation requires the 9 fields; legacy rows enter the incomplete-profile state.
 Checkout login works; the user is flagged in staff management; management-role
 assignment and sensitive grants require a complete profile.
 
+### 4.5 Front-end (ui/src)
+
+- The staff create/edit form collects the 9 required + optional fields with
+  field-level, localized validation errors; the required set is enforced in
+  the form before submission.
+- Staff list and detail views render national_id masked to last-4; full values
+  appear only via the explicit sensitive grant.
+- Incomplete-profile users carry a visible flag; management-role and
+  assignment controls are disabled until the profile is complete.
+- The IPC contract is extended and pinned: `CreateStaffScopedArgs` /
+  `UpdateStaffScopedArgs` gain the profile fields, `ui/src/api/staff.ts` is
+  updated, and a new `api-staff-contract.test.ts` pins the wire shape (no
+  staff contract test exists today).
+- New strings land in both `staff.ftl` bundles (en + id) for parity.
+
 ## 5. Implementation plan
 
 1. Write the Red tests first: validation matrix, incomplete-profile semantics,
@@ -79,8 +94,11 @@ assignment and sensitive grants require a complete profile.
 4. Wire the sensitive grants through the 0046/0047 stack.
 5. Add encryption (oz-security keyring), masking, read-audit, and residency
    exclusions in the profile read/export/sync paths.
-6. Run area tests: `test-tdd.sh -p crates/oz-core`, `cargo test -p oz-pos-app
-   --lib`, `cargo test -p oz-pos-tablet --lib`, fmt, clippy, drift guard.
+6. Update the staff form, list, and detail UI (fields, masking, incomplete
+   badge); extend the staff IPC args and pin them with the contract test.
+7. Run area tests: `test-tdd.sh -p crates/oz-core`, `cargo test -p oz-pos-app
+   --lib`, `cargo test -p oz-pos-tablet --lib`, fmt, clippy, drift guard,
+   plus the UI checks from validation.md.
 
 ## 6. Test plan
 
@@ -114,6 +132,17 @@ assignment and sensitive grants require a complete profile.
   no values.
 - Residency: sensitive fields absent from sync and bulk-export payloads.
 - Retention: deactivation never deletes sensitive fields.
+
+### UI tests (new)
+
+- Staff form UX: submission is blocked with field-level, localized errors for
+  each missing or malformed required field.
+- Masking render: national_id shows last-4 in list and detail; the full value
+  is never in the DOM without the explicit grant.
+- Incomplete-profile UI: badge visible; management-role and assignment
+  controls disabled until complete.
+- `api-staff-contract.test.ts` (new): pins the profile fields on the staff IPC
+  wire shape.
 
 ## 7. Security and correctness considerations
 

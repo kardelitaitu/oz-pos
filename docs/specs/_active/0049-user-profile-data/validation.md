@@ -9,6 +9,8 @@
 - `cargo test -p oz-pos-tablet --lib -- commands::staff -- --nocapture`
 - `cargo test -p oz-security -- --nocapture`
 - `cargo clippy -p oz-core -p oz-pos-app -p oz-pos-tablet -p oz-security -- -D warnings`
+- `cd ui && npx vitest run src/__tests__/StaffManagementScreen.test.tsx src/__tests__/api-staff-contract.test.ts`
+- `cd ui && npx tsc --noEmit`
 - `bash .agents/skills/skill-drift-guard/scripts/detect.sh`
 
 ## Acceptance criteria
@@ -25,3 +27,8 @@
   explicit grant; audit events record access, never values.
 - Sensitive fields never appear in cloud sync or bulk export payloads.
 - Deactivation never deletes identity, payroll, or emergency contact data.
+- The staff form enforces the 9 required fields with localized per-field
+  errors; national_id renders last-4 in list and detail; incomplete-profile
+  users are flagged with management controls disabled.
+- The staff IPC wire shape including the profile fields is pinned by the
+  contract test.
