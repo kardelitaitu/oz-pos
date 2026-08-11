@@ -4190,3 +4190,54 @@ does not compile — another agent's in-flight `reports.rs` / `oz_reporting`
 change (ReportingError without an AppError From impl, landed 21:18 after
 this verification) blocks oz-pos-app. My committed state was green before
 it landed; their files are untouched.
+
+### 2026-08-11 — Retire the legacy workspace surface (0048 follow-up)
+
+Problem: after the assignment model (ADR #35 D5 / spec 0048) went end to
+end, the legacy `user_workspaces` key-based surface was dead weight with
+three stale entry points: `workspace_keys` on the staff update args (STAFF-05
+wrote it to the STORE-scoped DB via `set_user_workspaces_legacy`, needing the
+cross-DB compensation block), the `set_user_workspaces_scoped` /
+`get_user_workspaces_scoped` commands (zero UI callers), and the legacy
+oz-core write methods.
+
+Solution: TDD red/green on the retirement — the census pin is the spec. Set
+the desktop workspaces.rs pin 8 -> 6, watched the census fail, then removed:
+- `set_user_workspaces_scoped` / `get_user_workspaces_scoped` + their
+  unscoped stubs + lib.rs registrations + wiring_audit entries (the
+  instance-based `*_workspace_instances*` commands stay — that table is still
+  read by `list_workspaces_inner`, so it is NOT fully superseded).
+- `workspace_keys` from `UpdateStaffScopedArgs` (both clients; the create
+  args never had it) and the whole STAFF-05 store-DB write + compensation
+  block — the profile, PIN, and assignment now ride ONE global-DB
+  transaction, so a failure rolls everything back atomically (previously
+  pinned by the now-deleted `scoped_update_staff_rolls_back_profile_when_workspace_assignment_fails`
+  test; the atomicity is pinned structurally by oz-core's in-tx writer test).
+- `set_user_workspaces_legacy` / `get_user_workspace_keys_legacy` from
+  oz-core + their tests; `list_workspaces_legacy_with_user_override` now
+  seeds the row via direct SQL so the legacy READER stays pinned. The
+  `user_workspaces` table itself is kept (still read by `list_workspaces_legacy`).
+- `workspace_keys` from the TS `UpdateStaffScopedArgs`, the two api functions,
+  and the stale dev-mock / screen-test mock cases.
+
+Also fixed a pre-existing gap found by the full UI suite: commit 57e98628
+(0049 c3) added the profile-form classes `staff-mgmt-incomplete-badge`,
+`staff-mgmt-incomplete-hint`, `staff-mgmt-profile-section`,
+`staff-mgmt-field-error` with NO CSS rules — the screenExtraction integrity
+test had been red since then and the form rendered unstyled. Added the
+missing rules matching the design tokens (--color-warning / --color-danger).
+
+Decision: did NOT drop the `user_workspaces` table or the legacy READERS
+(`list_workspaces_legacy` / `list_all_workspace_types` — the latter still
+feeds the live `list_all_workspaces_scoped` admin dropdown from the old
+`workspaces` table). Those are a separate "old tables" surface; the natural
+follow-up is to migrate `list_all_workspaces_scoped` onto the new
+`workspace_types` table and then drop the old tables with a migration.
+
+Note: my dev-mock removal of the two legacy command mocks rode into the
+other agent's `3236d8bf` commit (they swept the file) — end state correct.
+
+Commits: 9d7d5f9d (code), docs pending
+Tests: oz-core 1749/1749 (workspaces 52), desktop 900/900, tablet 431/431,
+gate_audit 3/3, wiring_audit 6/6, UI 4874/4874 (283 files) incl. staff
+screen 21 + contract 7 + screenExtraction 138; fmt/clippy/drift clean.
