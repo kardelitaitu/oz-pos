@@ -12,7 +12,7 @@ export PYTHONHASHSEED=0
 # and agent shells. Override the default (1) to use more cores on machines
 # with high thread counts; explicit GRAPHIFY_MAX_WORKERS still wins.
 if [ -n "${WINDIR:-}" ] || [ -n "${MSYSTEM:-}" ]; then
-    export GRAPHIFY_MAX_WORKERS="${GRAPHIFY_MAX_WORKERS:-16}"
+    export GRAPHIFY_MAX_WORKERS="${GRAPHIFY_MAX_WORKERS:-32}"
 fi
 
 # Skip during rebase/merge/cherry-pick to avoid blocking --continue with unstaged changes
@@ -213,7 +213,7 @@ else:
 #   With a 32-thread CPU and 14 parallel processes, RAYON_NUM_THREADS=16 gives each
 #   process 16 threads to saturate the CPU while CBM_MEM_BUDGET_MB=16384 keeps each
 #   process capped at 16GB so they don't compete for RAM.
-export RAYON_NUM_THREADS="${RAYON_NUM_THREADS:-16}"
+export RAYON_NUM_THREADS="${RAYON_NUM_THREADS:-32}"
 export CBM_MEM_BUDGET_MB="${CBM_MEM_BUDGET_MB:-16384}"
 
 _CBM_EXE="C:/Users/Dika/AppData/Local/Programs/codebase-memory-mcp/codebase-memory-mcp.exe"
