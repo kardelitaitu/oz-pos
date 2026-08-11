@@ -31,6 +31,7 @@ sales-report-category-popularity-mean = Popularity
 sales-report-category-popularity-mean-tip = Category average vs. catalog average
 sales-report-category-popularity-top = Top Sellers
 sales-report-category-popularity-uncategorized = Uncategorized
+sales-report-popularity-trend = Popularity Trend
 heatmap-title = Busiest Hours
 heatmap-no-data = No data
 day-sunday = Sun

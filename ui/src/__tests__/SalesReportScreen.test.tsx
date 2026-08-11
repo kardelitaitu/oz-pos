@@ -60,12 +60,15 @@ sales-report-category-popularity-mean = Popularity
 sales-report-category-popularity-mean-tip = Category average vs. catalog average
 sales-report-category-popularity-top = Top Sellers
 sales-report-category-popularity-uncategorized = Uncategorized
+sales-report-popularity-trend = Popularity Trend
 `;
 
 // ── Mock recharts ─────────────────────────────────────────────────
 vi.mock('recharts', () => ({
   BarChart: ({ children }: { children: React.ReactNode }) => <div data-testid="bar-chart">{children}</div>,
   Bar: (props: { dataKey: string; 'aria-label'?: string }) => <div data-testid="bar" data-key={props.dataKey} aria-label={props['aria-label']} />,
+  LineChart: ({ children }: { children: React.ReactNode }) => <div data-testid="line-chart">{children}</div>,
+  Line: (props: { dataKey?: string }) => <div data-testid="line" data-key={props.dataKey} />,
   XAxis: () => <div data-testid="x-axis" />,
   YAxis: () => <div data-testid="y-axis" />,
   Tooltip: () => <div data-testid="tooltip" />,
@@ -84,6 +87,7 @@ const mockGetTopProducts = vi.fn();
 const mockGetHourlyHeatmap = vi.fn();
 const mockGetCategoryBreakdown = vi.fn();
 const mockGetCategoryPopularity = vi.fn();
+const mockGetCategoryPopularityTrend = vi.fn();
 const mockPrintSalesReceipt = vi.fn();
 
 vi.mock('@/api/reports', () => ({
@@ -94,6 +98,7 @@ vi.mock('@/api/reports', () => ({
   getHourlyHeatmap: (...args: unknown[]) => mockGetHourlyHeatmap(...args),
   getCategoryBreakdown: (...args: unknown[]) => mockGetCategoryBreakdown(...args),
   getCategoryPopularity: (...args: unknown[]) => mockGetCategoryPopularity(...args),
+  getCategoryPopularityTrend: (...args: unknown[]) => mockGetCategoryPopularityTrend(...args),
 }));
 
 vi.mock('@/api/sales', () => ({
@@ -227,6 +232,24 @@ function resolveDefaultData() {
   mockGetHourlyHeatmap.mockResolvedValue([buildHeatmap()]);
   mockGetCategoryBreakdown.mockResolvedValue([buildCategory()]);
   mockGetCategoryPopularity.mockResolvedValue([buildCategoryPopularity()]);
+  mockGetCategoryPopularityTrend.mockResolvedValue([
+    buildTrendPoint({ period_start: '2026-07-01', category_id: 'cat-drinks', category_name: 'Drinks', score: 2 }),
+    buildTrendPoint({ period_start: '2026-07-02', category_id: 'cat-drinks', category_name: 'Drinks', score: 3 }),
+  ]);
+}
+
+function buildTrendPoint(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    period_start: '2026-07-01',
+    category_id: 'cat-drinks',
+    category_name: 'Drinks',
+    score: 2,
+    units_sold: 4,
+    distinct_transactions: 3,
+    searches: 1,
+    edits: 0,
+    ...overrides,
+  };
 }
 
 // ── Tests ────────────────────────────────────────────────────────
@@ -241,6 +264,7 @@ describe('SalesReportScreen', () => {
     // Category popularity defaults to empty (not pending) so tests that
     // override only the other mocks still resolve the shared Promise.all.
     mockGetCategoryPopularity.mockResolvedValue([]);
+    mockGetCategoryPopularityTrend.mockResolvedValue([]);
     mockPrintSalesReceipt.mockResolvedValue(undefined);
   });
 
@@ -259,6 +283,7 @@ describe('SalesReportScreen', () => {
     mockGetHourlyHeatmap.mockRejectedValue(new Error('Server offline'));
     mockGetCategoryBreakdown.mockRejectedValue(new Error('Server offline'));
     mockGetCategoryPopularity.mockRejectedValue(new Error('Server offline'));
+    mockGetCategoryPopularityTrend.mockRejectedValue(new Error('Server offline'));
     renderScreen();
     await waitFor(() => {
       expect(screen.getByText('An error occurred')).toBeTruthy();
@@ -619,6 +644,48 @@ describe('SalesReportScreen', () => {
     });
   });
 
+  it('renders the popularity trend chart with one line per category', async () => {
+    resolveDefaultData();
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByText('Popularity Trend')).toBeTruthy();
+      const lines = screen.getAllByTestId('line');
+      // One Line per category series (Drinks here).
+      expect(lines.length).toBeGreaterThanOrEqual(1);
+      expect(lines[0]!.getAttribute('data-key')).toBe('Drinks');
+    });
+  });
+
+  it('re-fetches the trend when the view mode changes granularity', async () => {
+    resolveDefaultData();
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('bar-chart')).toBeTruthy();
+    });
+
+    expect(mockGetCategoryPopularityTrend).toHaveBeenCalledWith(
+      '',
+      expect.any(String),
+      expect.any(String),
+      'daily',
+      5,
+    );
+
+    mockGetCategoryPopularityTrend.mockClear();
+    resolveDefaultData();
+    await userEvent.click(screen.getByRole('radio', { name: 'weekly' }));
+
+    await waitFor(() => {
+      expect(mockGetCategoryPopularityTrend).toHaveBeenCalledWith(
+        '',
+        expect.any(String),
+        expect.any(String),
+        'weekly',
+        5,
+      );
+    });
+  });
+
   // ── Hourly heatmap ───────────────────────────────────────────
   it('renders heatmap section with title', async () => {
     resolveDefaultData();
@@ -667,7 +734,8 @@ describe('SalesReportScreen', () => {
     mockGetCategoryBreakdown.mockResolvedValue([]);
     renderScreen();
     await waitFor(() => {
-      expect(screen.getByText('No data')).toBeTruthy();
+      // Heatmap + popularity trend cards both show "No data" when empty.
+      expect(screen.getAllByText('No data').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -871,8 +939,8 @@ describe('SalesReportScreen', () => {
       // Category breakdown and top products both show "No results"
       // Top products, category breakdown, and category popularity.
       expect(screen.getAllByText('No results').length).toBe(3);
-      // Heatmap shows "No data"
-      expect(screen.getByText('No data')).toBeTruthy();
+      // Heatmap shows "No data" (also on the trend card)
+      expect(screen.getAllByText('No data').length).toBeGreaterThanOrEqual(1);
     });
   });
 });

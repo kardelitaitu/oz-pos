@@ -85,6 +85,22 @@ export interface CategoryBreakdownRow {
   percentage: number;
 }
 
+/** One (period, category) point of the popularity trend series. */
+export interface CategoryTrendPoint {
+  /** Period bucket start: `YYYY-MM-DD` (daily/weekly) or `YYYY-MM` (monthly). */
+  period_start: string;
+  /** Category id; empty string for uncategorized products. */
+  category_id: string;
+  /** Category name; `null` for uncategorized. */
+  category_name: string | null;
+  /** Period popularity score (same scale as `popularity_score`). */
+  score: number;
+  units_sold: number;
+  distinct_transactions: number;
+  searches: number;
+  edits: number;
+}
+
 /** One product inside a category's popularity leaderboard. */
 export interface CategoryTopProduct {
   sku: string;
@@ -175,6 +191,24 @@ export const getCategoryPopularity = (
   loggedInvoke<CategoryPopularityRow[]>('get_category_popularity_scoped', {
     sessionToken: sessionToken ?? '',
     topPerCategory,
+  });
+
+/** Get the per-period popularity trend for the top `topCategories`
+ * categories, bucketed by `granularity` (`'daily'` | `'weekly'` |
+ * `'monthly'`) over `startDate..=endDate`. */
+export const getCategoryPopularityTrend = (
+  sessionToken: string,
+  startDate: string,
+  endDate: string,
+  granularity: 'daily' | 'weekly' | 'monthly',
+  topCategories = 5,
+): Promise<CategoryTrendPoint[]> =>
+  loggedInvoke<CategoryTrendPoint[]>('get_category_popularity_trend_scoped', {
+    sessionToken: sessionToken ?? '',
+    startDate,
+    endDate,
+    granularity,
+    topCategories,
   });
 
 /** Get hourly sales heatmap data for a date range in the active store. */

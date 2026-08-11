@@ -154,8 +154,14 @@ upsert imports only its snapshot columns, so `popularity_score` and
 
 ### D6 — Explicitly deferred
 
-- Breadth weighting (`× ln(1 + distinct transactions)`) — optional refinement
-  that rewards reach over one-customer bulk; the ledger can support it later.
+- Breadth weighting (`× ln(1 + distinct transactions)`) — ✅ implemented
+  (2026-08-12): the decayed unit volume is multiplied by `ln(1 + distinct
+  transactions inside the window)` inside `score_from_raw` — the single place
+  the sales raw is scaled — so the full pass, the per-event recompute, and
+  the trend series can never drift apart. The catalog/category smoothing
+  means are computed over the breadth-scaled raws to keep the scale
+  consistent. Rewards reach over one-customer bulk: same volume across more
+  customers ranks higher.
 - Per-category popularity — ✅ implemented (2026-08-12): the full pass now
   caches per-category smoothing means (`popularity.category_means`) and
   scores each product against its own category, so the grid's popularity sort
@@ -166,8 +172,15 @@ upsert imports only its snapshot columns, so `popularity_score` and
   count, mean score, ratio to the catalog average, and top-N products ranked
   by score with category-relative rank + percentile, exposed as
   `get_category_popularity_scoped` in both clients and rendered as the
-  Category Popularity card on the sales report. Per-period popularity and the
-  demand-forecasting integration remain out of scope.
+  Category Popularity card on the sales report. Per-period popularity is now
+  implemented too (2026-08-12): `Store::category_popularity_trend` buckets
+  the sale/search/edit ledgers by `daily` | `weekly` | `monthly` (weekly
+  mirrors `weekly_revenue`'s `DATE(created_at, 'weekday 0', '-7 days')`)
+  and evaluates the same blend per (period, category) smoothed toward the
+  cached category means — same scale as the materialized scores — exposed as
+  `get_category_popularity_trend_scoped` in both clients and rendered as the
+  Popularity Trend line chart on the sales report. Only the demand-
+  forecasting integration remains out of scope.
 - Surfacing the score in analytics exports — the data will be available to the
   analytics tool through the local store DB (same path as cost, ADR #36 D2).
 
@@ -223,8 +236,12 @@ the full-catalog recompute pass is wired at store open
 history from product timestamps, so the default popularity sort is meaningful
 on first launch. Key commits: `e5cab0a9`, `2913d49c`, `be37eac1`
 (implementation), `33b44571` (backfill), `9c8bc6cd` (ADR location
-correction). Note the formula landed in `crates/oz-core/src/popularity.rs`
-with the recompute/ledger access in `crates/oz-core/src/db/popularity.rs`, not
-`crates/oz-reporting` as originally scoped — the score is written by the
-store layer, so the formula sits beside that code. D6 deferrals (breadth
-weighting, per-category/per-period popularity, analytics export) remain open.
+correction), `43bc280f` (per-category standings surface). Note the formula
+landed in `crates/oz-core/src/popularity.rs` with the recompute/ledger access
+in `crates/oz-core/src/db/popularity.rs`, not `crates/oz-reporting` as
+originally scoped — the score is written by the store layer, so the formula
+sits beside that code. The D6 breadth weighting and per-category/per-period
+popularity items are all now implemented (see D6); the only remaining
+out-of-scope item is the demand-forecasting integration, and the analytics
+export path remains the external analytics tool's consumer of the local
+store DB.

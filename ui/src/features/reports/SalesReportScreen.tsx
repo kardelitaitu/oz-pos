@@ -5,6 +5,8 @@ import { Localized, useLocalization } from '@fluent/react';
 import {
   BarChart,
   Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   Tooltip,
@@ -23,6 +25,7 @@ import {
   getHourlyHeatmap,
   getCategoryBreakdown,
   getCategoryPopularity,
+  getCategoryPopularityTrend,
   type DailyRevenueRow,
   type WeeklyRevenueRow,
   type MonthlyRevenueRow,
@@ -30,6 +33,7 @@ import {
   type HourlyHeatmapRow,
   type CategoryBreakdownRow,
   type CategoryPopularityRow,
+  type CategoryTrendPoint,
 } from '@/api/reports';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -100,6 +104,7 @@ export default function SalesReportScreen() {
   const [categoryPopularity, setCategoryPopularity] = useState<
     CategoryPopularityRow[]
   >([]);
+  const [popularityTrend, setPopularityTrend] = useState<CategoryTrendPoint[]>([]);
 
   // P9-3: Period comparison
   const [comparePeriod, setComparePeriod] = useState(false);
@@ -136,13 +141,15 @@ export default function SalesReportScreen() {
       getHourlyHeatmap(startDate, endDate, sessionToken),
       getCategoryBreakdown(startDate, endDate, sessionToken),
       getCategoryPopularity(sessionToken, 3),
+      getCategoryPopularityTrend(sessionToken, startDate, endDate, view, 5),
     ])
-      .then(([rev, top, heat, cat, catPop]) => {
+      .then(([rev, top, heat, cat, catPop, trend]) => {
         setRevenueData(rev);
         setTopProducts(top);
         setHeatmap(heat);
         setCategoryBreakdown(cat);
         setCategoryPopularity(catPop);
+        setPopularityTrend(trend);
       })
       .catch((e) => {
         setError(e.message ?? String(e));
@@ -269,6 +276,34 @@ export default function SalesReportScreen() {
     () => prevRevenueData.reduce((s: number, r) => r.sale_count + s, 0),
     [prevRevenueData],
   );
+
+  // Reshape the trend points into one row per period for recharts: each
+  // category becomes a series keyed by its display name.
+  const trendData = useMemo(() => {
+    const byPeriod = new Map<string, Record<string, number>>();
+    for (const p of popularityTrend) {
+      const catName =
+        p.category_name ??
+        requiredLocalized(l10n, 'sales-report-category-popularity-uncategorized');
+      if (!byPeriod.has(p.period_start)) {
+        byPeriod.set(p.period_start, {});
+      }
+      byPeriod.get(p.period_start)![catName] = p.score;
+    }
+    return [...byPeriod.entries()]
+      .map(([period_start, cats]) => ({ period_start, ...cats }))
+      .sort((a, b) => a.period_start.localeCompare(b.period_start));
+  }, [popularityTrend, l10n]);
+  const trendCategories = useMemo(() => {
+    const names: string[] = [];
+    for (const p of popularityTrend) {
+      const catName =
+        p.category_name ??
+        requiredLocalized(l10n, 'sales-report-category-popularity-uncategorized');
+      if (!names.includes(catName)) names.push(catName);
+    }
+    return names;
+  }, [popularityTrend, l10n]);
 
   if (loading) {
     return (
@@ -668,6 +703,38 @@ export default function SalesReportScreen() {
               </div>
             ))}
           </div>
+        )}
+      </Card>
+
+      <Card shadow="sm" className="sales-report-chart-card">
+        <Localized id="sales-report-popularity-trend">
+          <h2 className="sales-report-section-title">Popularity Trend</h2>
+        </Localized>
+        {trendData.length === 0 ? (
+          <p className="sales-report-no-data">
+            <Localized id="heatmap-no-data">
+              <span>No data</span>
+            </Localized>
+          </p>
+        ) : (
+          <ResponsiveContainer width="100%" height={220}>
+            <LineChart data={trendData as unknown as Record<string, unknown>[]}>
+              <XAxis dataKey="period_start" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip />
+              <Legend />
+              {trendCategories.map((name, i) => (
+                <Line
+                  key={name}
+                  type="monotone"
+                  dataKey={name}
+                  stroke={PIE_COLORS[i % PIE_COLORS.length]!}
+                  strokeWidth={2}
+                  dot={false}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
         )}
       </Card>
 

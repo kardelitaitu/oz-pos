@@ -1957,6 +1957,46 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     rows.sort((a, b) => b.mean_score - a.mean_score);
     return rows;
   },
+  'get_category_popularity_trend': (args) => {
+    const { startDate, endDate, granularity, topCategories } = (args ?? {}) as {
+      startDate?: string;
+      endDate?: string;
+      granularity?: string;
+      topCategories?: number;
+    };
+    const top = Math.max(1, Math.min(topCategories ?? 5, 10));
+    // Reuse the same pseudo-scores as the standings handler, then draw a
+    // small rising/falling series per category across the requested range.
+    const cats = MOCK_CATEGORIES.slice(0, top).map((c, i) => ({
+      id: c.id,
+      name: c.name,
+      base: 10 - i * 2,
+    }));
+    const start = new Date(startDate ?? new Date().toISOString().slice(0, 10));
+    const end = new Date(endDate ?? start.toISOString().slice(0, 10));
+    const step = granularity === 'monthly' ? 30 : granularity === 'weekly' ? 7 : 1;
+    const points = [];
+    const cursor = new Date(start);
+    let guard = 0;
+    while (cursor <= end && guard < 60) {
+      for (const c of cats) {
+        const wave = Math.sin((guard + c.base) / 3) * 2;
+        points.push({
+          period_start: cursor.toISOString().slice(0, 10),
+          category_id: c.id,
+          category_name: c.name,
+          score: Math.max(0.5, Math.round((c.base + wave) * 10) / 10),
+          units_sold: Math.max(0, Math.round(c.base * 3 + wave * 2)),
+          distinct_transactions: Math.max(0, Math.round(c.base + wave)),
+          searches: Math.max(0, Math.round(c.base / 2)),
+          edits: Math.max(0, Math.round(c.base / 4)),
+        });
+      }
+      cursor.setDate(cursor.getDate() + step);
+      guard += 1;
+    }
+    return points;
+  },
   'get_hourly_heatmap': () => [0, 3, 5, 8, 11].flatMap((day) =>
     [9, 12, 15, 18].map((hour, i) => ({
       day_of_week: day,
@@ -2210,6 +2250,7 @@ const SCOPED_ALIASES: Array<[string, string]> = [
   ['get_monthly_revenue_scoped', 'get_monthly_revenue'],
   ['get_top_products_scoped', 'get_top_products'],
   ['get_category_popularity_scoped', 'get_category_popularity'],
+  ['get_category_popularity_trend_scoped', 'get_category_popularity_trend'],
   ['get_hourly_heatmap_scoped', 'get_hourly_heatmap'],
   ['get_category_breakdown_scoped', 'get_category_breakdown'],
   ['get_menu_engineering_scoped', 'get_menu_engineering'],
