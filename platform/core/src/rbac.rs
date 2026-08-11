@@ -347,6 +347,7 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::PRODUCTS_DELETE,
             permissions::PRODUCTS_IMPORT,
             permissions::PRODUCTS_EXPORT,
+            permissions::PRODUCTS_CRUD,
             permissions::INVENTORY_VIEW,
             permissions::INVENTORY_ADJUST,
             permissions::INVENTORY_TRANSFER,
@@ -449,6 +450,7 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::PRODUCTS_DELETE,
             permissions::PRODUCTS_IMPORT,
             permissions::PRODUCTS_EXPORT,
+            permissions::PRODUCTS_CRUD,
             permissions::INVENTORY_VIEW,
             permissions::INVENTORY_ADJUST,
             permissions::INVENTORY_TRANSFER,
@@ -673,6 +675,9 @@ pub mod permissions {
     pub const PRODUCTS_IMPORT: &str = "products:import";
     /// Export the product catalog.
     pub const PRODUCTS_EXPORT: &str = "products:export";
+    /// Legacy composite seed key (create/read/update/delete) kept
+    /// byte-identical — registered in the permission registry (spec 0046).
+    pub const PRODUCTS_CRUD: &str = "products:crud";
 
     // ── Inventory ─────────────────────────────────────────────────
     /// View stock levels.
@@ -809,6 +814,11 @@ pub mod permissions {
     pub const TERMINALS_EDIT: &str = "terminals:edit";
     /// Delete / unregister a terminal.
     pub const TERMINALS_DELETE: &str = "terminals:delete";
+
+    // ── Categories ────────────────────────────────────────────────
+    /// Legacy seed key (create/update/delete) kept byte-identical —
+    /// registered in the permission registry (spec 0046).
+    pub const CATEGORIES_MANAGE: &str = "categories:manage";
 
     // ── Plugins ───────────────────────────────────────────────────
     /// Manage plugins (install, enable, disable, remove).
@@ -1050,6 +1060,7 @@ mod tests {
             permissions::PRODUCTS_DELETE,
             permissions::PRODUCTS_IMPORT,
             permissions::PRODUCTS_EXPORT,
+            permissions::PRODUCTS_CRUD,
             permissions::INVENTORY_VIEW,
             permissions::INVENTORY_ADJUST,
             permissions::INVENTORY_TRANSFER,
@@ -1100,6 +1111,7 @@ mod tests {
             permissions::TERMINALS_REGISTER,
             permissions::TERMINALS_EDIT,
             permissions::TERMINALS_DELETE,
+            permissions::CATEGORIES_MANAGE,
             permissions::PLUGINS_MANAGE,
         ];
         for &p in &all {
@@ -1123,6 +1135,7 @@ mod tests {
             permissions::PRODUCTS_DELETE,
             permissions::PRODUCTS_IMPORT,
             permissions::PRODUCTS_EXPORT,
+            permissions::PRODUCTS_CRUD,
             permissions::INVENTORY_VIEW,
             permissions::INVENTORY_ADJUST,
             permissions::INVENTORY_TRANSFER,
@@ -1173,6 +1186,7 @@ mod tests {
             permissions::TERMINALS_REGISTER,
             permissions::TERMINALS_EDIT,
             permissions::TERMINALS_DELETE,
+            permissions::CATEGORIES_MANAGE,
             permissions::PLUGINS_MANAGE,
         ];
         let mut seen = HashSet::new();

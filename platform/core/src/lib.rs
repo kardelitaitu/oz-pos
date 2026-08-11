@@ -14,6 +14,7 @@
 pub mod auth;
 pub mod database;
 pub mod error;
+pub mod permission_registry;
 pub mod rbac;
 pub mod settings;
 pub mod terminal_profile;

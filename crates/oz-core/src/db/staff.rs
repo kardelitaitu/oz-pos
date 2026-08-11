@@ -99,6 +99,26 @@ impl Store<'_> {
         description: &str,
         permissions: &str,
     ) -> Result<Role, CoreError> {
+        // Every grant must be registered, and sensitive keys must never ride
+        // a family wildcard (ADR #35 D3 / spec 0046). The global `*` wildcard
+        // is reserved for the Owner seed, which uses a direct insert and is
+        // never validated here.
+        let grants: Vec<String> =
+            serde_json::from_str(permissions).map_err(|e| CoreError::Validation {
+                field: "permissions",
+                message: format!("permissions must be a JSON array of strings: {e}"),
+            })?;
+        platform_core::permission_registry::validate_grants(&grants, false).map_err(|errors| {
+            let message = errors
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join("; ");
+            CoreError::Validation {
+                field: "permissions",
+                message,
+            }
+        })?;
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let result = self.conn.execute(
             "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -595,6 +615,47 @@ mod tests {
             .create_role("role-dup", "Owner", "Dup", "[]")
             .unwrap_err();
         assert!(matches!(err, CoreError::Conflict { entity, .. } if entity == "role"));
+    }
+
+    #[test]
+    fn create_role_rejects_unregistered_permission() {
+        let conn = fresh();
+        let err = store(&conn)
+            .create_role("role-x", "X", "x", "[\"sales:typo\"]")
+            .unwrap_err();
+        assert!(
+            matches!(err, CoreError::Validation { field, .. } if field == "permissions"),
+            "unregistered key must fail validation: {err}"
+        );
+    }
+
+    #[test]
+    fn create_role_rejects_sensitive_family_wildcard() {
+        let conn = fresh();
+        let err = store(&conn)
+            .create_role("role-x", "X", "x", "[\"sales:*\"]")
+            .unwrap_err();
+        assert!(
+            matches!(err, CoreError::Validation { field, .. } if field == "permissions"),
+            "a wildcard covering sensitive keys must fail validation: {err}"
+        );
+    }
+
+    #[test]
+    fn create_role_accepts_valid_permission_set() {
+        let conn = fresh();
+        let r = store(&conn)
+            .create_role(
+                "role-x",
+                "X",
+                "x",
+                "[\"sales:process\", \"products:*\", \"sales:void\"]",
+            )
+            .unwrap();
+        assert_eq!(
+            r.permissions,
+            "[\"sales:process\", \"products:*\", \"sales:void\"]"
+        );
     }
 
     // ── User CRUD ───────────────────────────────────────────────────

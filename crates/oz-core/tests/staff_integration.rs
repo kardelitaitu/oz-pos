@@ -45,7 +45,7 @@ fn role_permissions_json_roundtrip() {
     let conn = setup();
     let s = store(&conn);
 
-    let permissions = r#"["sales:process","sales:void","products:crud","products:view","inventory:adjust","reports:view"]"#;
+    let permissions = r#"["sales:process","sales:void","products:crud","products:read","inventory:adjust","reports:view"]"#;
     let r = s
         .create_role(
             "role-supervisor",
@@ -78,8 +78,31 @@ fn role_with_many_permissions() {
     let conn = setup();
     let s = store(&conn);
 
-    // Create a role with 20 permission strings.
-    let perms: Vec<String> = (0..20).map(|i| format!("module:{i}:action")).collect();
+    // Create a role with 20 permission strings — all registered keys, since
+    // the registry rejects unregistered grants (spec 0046).
+    const KEYS: [&str; 20] = [
+        "sales:process",
+        "sales:view",
+        "sales:discount",
+        "sales:split",
+        "products:create",
+        "products:read",
+        "products:update",
+        "products:delete",
+        "products:import",
+        "products:export",
+        "inventory:view",
+        "inventory:adjust",
+        "inventory:transfer",
+        "inventory:count",
+        "inventory:locations_manage",
+        "customers:create",
+        "customers:view",
+        "customers:edit",
+        "customers:delete",
+        "reports:view",
+    ];
+    let perms: Vec<String> = KEYS.iter().map(|k| k.to_string()).collect();
     let permissions = serde_json::to_string(&perms).unwrap();
     let r = s
         .create_role("role-verbose", "verbose", "Many permissions", &permissions)
@@ -88,8 +111,8 @@ fn role_with_many_permissions() {
     let loaded = s.get_role(&r.id).unwrap().unwrap();
     let parsed: Vec<String> = serde_json::from_str(&loaded.permissions).unwrap();
     assert_eq!(parsed.len(), 20, "all 20 permissions should roundtrip");
-    assert_eq!(parsed[0], "module:0:action");
-    assert_eq!(parsed[19], "module:19:action");
+    assert_eq!(parsed[0], "sales:process");
+    assert_eq!(parsed[19], "reports:view");
 }
 
 #[test]
@@ -202,7 +225,7 @@ fn role_created_at_set_on_creation() {
             "role-ts-test",
             "timestamped",
             "Testing timestamps",
-            r#"["test"]"#,
+            r#"["sales:view"]"#,
         )
         .unwrap();
     assert!(!r.created_at.is_empty(), "created_at should be populated");

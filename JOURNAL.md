@@ -3743,3 +3743,39 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 **Deliberately NOT done:** no repository-level validation inside modules/currency (the command boundary is the IPC surface; a second direct caller of `CurrencyRepository` would need its own guard — follow-up); no source-length bound (the audit's minor item); no UI change (already prevents same-pair + type=date); no CUR-03 work (scoping is a separate finding).
 
 **Risks / follow-ups:** the checks live in two mirrored client files (the repo's established pattern; a shared validator belongs in modules/currency if a third caller appears); `list_exchange_rates` / `get_default_currency` / `set_default_currency` remain unscoped and unpermissioned (CUR-03, P0) — the round-172 pattern is the natural next currency slice; repository-level validation and source-length bounds are the open CUR-05 residuals.
+
+### 2026-08-11 — 0046: code-resident permission registry with write-time grant validation (round 175)
+
+**Problem:** roles store flat JSON permission lists and accept any string at
+write time, so nothing classified a key as operational (wildcard-eligible) or
+sensitive (explicit-only) — ADR #35 D2's "sensitive keys are never
+wildcarded" rule was unenforceable. The inventory also had gaps the audit
+missed: legacy seeds use `products:crud` and `categories:manage` (no
+constants), and a test fixture used `products:view`.
+
+**Solution:** new `platform-core::permission_registry` (spec 0046): all 68
+enforced keys classified by family + sensitivity (8 sensitive: sales:void,
+sales:refund, payments:refund, payments:settle, staff:manage_roles,
+staff:delete, reports:export, audit:export), a bidirectional inventory test
+(constants == registry, so a new key is either registered everywhere or
+nowhere), and `validate_grants` rejecting unregistered keys, wildcards that
+would grant sensitive keys, and the global `*` (reserved for the Owner seed,
+which bypasses this path via direct insert). Wired into `Store::create_role`
+→ `CoreError::Validation`. Added `PRODUCTS_CRUD` / `CATEGORIES_MANAGE`
+constants (legacy seed keys, byte-identical) and updated two integration
+fixtures that used synthetic keys (`module:N:action`, `["test"]`) plus one
+`products:view` → `products:read` (nothing enforces products:view).
+
+**Verify:** registry 9/9, oz-core lib 1678/1678, staff_integration 25/25,
+oz-pos-app staff 40/40, oz-pos-tablet staff 19/19, fmt + clippy -D warnings
++ drift guard clean. `test-changed.sh` blocked by the locked oz-pos-app.exe
+(running process — left alone per the shared-tree rule).
+
+**Commits:** <backfill> (feat) + <backfill> (docs).
+
+**Risks / follow-ups:** the registry is the foundation for the gate (0047)
+and the profile sensitive keys (0049: staff:read_identity / read_payroll /
+edit_notes register when enforced). Manifest `permissions` arrays are a
+separate declarative DSL (format-validated only), not RBAC enforcement — a
+future slice may reconcile them. `products:crud` / `categories:manage` stay
+as registered legacy composites so seeds remain byte-identical.
