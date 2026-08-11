@@ -78,6 +78,13 @@ pub struct TopProductRow {
     pub total_qty: i64,
     /// Total revenue in minor units.
     pub total_minor: i64,
+    /// Cost of goods sold in minor units (snapshotted sale-line cost,
+    /// falling back to the product's current cost).
+    pub cogs_minor: i64,
+    /// Gross profit in minor units: revenue − COGS.
+    pub gross_profit_minor: i64,
+    /// Gross margin as a percentage of revenue; 0.0 when revenue is 0.
+    pub gross_margin_percent: f64,
 }
 
 /// Hourly sales heatmap entry.
@@ -307,7 +314,8 @@ impl Store<'_> {
         let mut stmt = self.conn.prepare(
             "SELECT p.id AS product_id, p.sku, p.name,
                     SUM(sl.qty) AS total_qty,
-                    SUM(sl.line_minor) AS total_minor
+                    SUM(sl.line_minor) AS total_minor,
+                    SUM(COALESCE(sl.cost_minor, p.cost_minor, 0) * sl.qty) AS cogs_minor
              FROM sale_lines sl
              JOIN sales s ON sl.sale_id = s.id
              JOIN products p ON sl.sku = p.sku
@@ -317,12 +325,21 @@ impl Store<'_> {
              LIMIT ?3",
         )?;
         let rows = stmt.query_map(params![start_date, end_date, limit], |row| {
+            let total_minor = row.get::<_, i64>("total_minor")?;
+            let cogs_minor = row.get::<_, i64>("cogs_minor")?;
             Ok(TopProductRow {
                 product_id: row.get("product_id")?,
                 sku: row.get("sku")?,
                 name: row.get("name")?,
                 total_qty: row.get("total_qty")?,
-                total_minor: row.get("total_minor")?,
+                total_minor,
+                cogs_minor,
+                gross_profit_minor: total_minor - cogs_minor,
+                gross_margin_percent: if total_minor > 0 {
+                    ((total_minor - cogs_minor) as f64 / total_minor as f64) * 100.0
+                } else {
+                    0.0
+                },
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
@@ -543,6 +560,7 @@ impl Store<'_> {
 #[cfg(test)]
 mod tests {
     use crate::db::Store;
+    use crate::db::products::{CreateProductAttributes, UpdateProductAttributes};
     use crate::money::Currency;
     use crate::{Cart, CartLine, Money, Sale, SaleStatus, Sku, migrations};
     use rusqlite::Connection;
@@ -785,6 +803,68 @@ mod tests {
         // Highest revenue first
         assert_eq!(rows[0].sku, "C");
         assert_eq!(rows[1].sku, "B");
+    }
+
+    #[test]
+    fn top_products_with_costs_and_snapshot_fallback() {
+        let conn = fresh();
+        let s = store(&conn);
+        // Product with a cost — the sale-line snapshot freezes it at checkout.
+        s.create_product_with_attributes(
+            "COFFEE",
+            "Coffee",
+            price(350),
+            None,
+            None,
+            100,
+            None,
+            &CreateProductAttributes {
+                cost_minor: 150,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        // Product with no cost — snapshot stays NULL, falls back to current cost.
+        s.create_product("TEA", "Tea", price(200), None, None, 100, None)
+            .unwrap();
+
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("COFFEE"), 2, price(350)))
+            .unwrap();
+        cart.add_line(CartLine::new(Sku::new("TEA"), 3, price(200)))
+            .unwrap();
+        let mut sale = Sale::from_cart(&cart).unwrap();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        sale.created_at = now.clone();
+        sale.updated_at = now;
+        s.create_sale(&sale).unwrap();
+        s.update_sale_status(&sale.id, SaleStatus::Active).unwrap();
+        s.update_sale_status(&sale.id, SaleStatus::Completed)
+            .unwrap();
+
+        // Editing HPP after the sale must NOT restate the frozen snapshot.
+        s.update_product_attributes(
+            "COFFEE",
+            &UpdateProductAttributes {
+                cost_minor: Some(999),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let rows = s.top_products("2000-01-01", "2099-12-31", 10).unwrap();
+        let coffee = rows.iter().find(|r| r.sku == "COFFEE").unwrap();
+        // COGS = snapshot 150 × 2 = 300 (not 999 × 2); profit = 700 − 300.
+        assert_eq!(coffee.total_minor, 700);
+        assert_eq!(coffee.cogs_minor, 300);
+        assert_eq!(coffee.gross_profit_minor, 400);
+        assert!((coffee.gross_margin_percent - 57.14).abs() < 0.01);
+        let tea = rows.iter().find(|r| r.sku == "TEA").unwrap();
+        // No cost recorded anywhere → COGS 0, profit = revenue, margin 100%.
+        assert_eq!(tea.total_minor, 600);
+        assert_eq!(tea.cogs_minor, 0);
+        assert_eq!(tea.gross_profit_minor, 600);
+        assert!((tea.gross_margin_percent - 100.0).abs() < f64::EPSILON);
     }
 
     // ── Hourly heatmap ─────────────────────────────────────────────

@@ -49,6 +49,9 @@ export interface TopProductRow {
   name: string;
   total_qty: number;
   total_minor: number;
+  cogs_minor: number;
+  gross_profit_minor: number;
+  gross_margin_percent: number;
 }
 
 /** Sales volume by day-of-week and hour for heatmap visualisation. */

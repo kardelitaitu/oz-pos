@@ -559,6 +559,12 @@ export default function SalesReportScreen() {
                 <span>
                   <Localized id="top-products-revenue">Revenue</Localized>
                 </span>
+                <span>
+                  <Localized id="top-products-gross-profit">Gross Profit</Localized>
+                </span>
+                <span>
+                  <Localized id="top-products-margin">Margin</Localized>
+                </span>
               </div>
               {topProducts.map((p, i) => (
                 <div key={p.product_id} className="sales-report-top-row">
@@ -566,6 +572,10 @@ export default function SalesReportScreen() {
                   <span>{p.name}</span>
                   <span>{p.total_qty}</span>
                   <span>{fmtCurrency(p.total_minor, currency)}</span>
+                  <span className={p.gross_profit_minor < 0 ? 'sales-report-top-negative' : undefined}>
+                    {fmtCurrency(p.gross_profit_minor, currency)}
+                  </span>
+                  <span>{`${p.gross_margin_percent.toFixed(1)}%`}</span>
                 </div>
               ))}
             </div>

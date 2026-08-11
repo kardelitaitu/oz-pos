@@ -35,6 +35,8 @@ sales-report-rank = #
 top-products-name = Name
 top-products-quantity = Qty
 top-products-revenue = Revenue
+top-products-gross-profit = Gross Profit
+top-products-margin = Margin
 heatmap-title = Busiest Hours
 heatmap-no-data = No data
 
@@ -146,13 +148,16 @@ function buildMonthlyRevenue(overrides: Partial<{ month: string; total_minor: nu
   };
 }
 
-function buildTopProduct(overrides: Partial<{ product_id: string; sku: string; name: string; total_qty: number; total_minor: number }> = {}) {
+function buildTopProduct(overrides: Partial<{ product_id: string; sku: string; name: string; total_qty: number; total_minor: number; cogs_minor: number; gross_profit_minor: number; gross_margin_percent: number }> = {}) {
   return {
     product_id: overrides.product_id ?? 'prod-1',
     sku: overrides.sku ?? 'SKU001',
     name: overrides.name ?? 'Espresso',
     total_qty: overrides.total_qty ?? 45,
     total_minor: overrides.total_minor ?? 90000,
+    cogs_minor: overrides.cogs_minor ?? 30000,
+    gross_profit_minor: overrides.gross_profit_minor ?? 60000,
+    gross_margin_percent: overrides.gross_margin_percent ?? 66.7,
   };
 }
 
@@ -460,6 +465,29 @@ describe('SalesReportScreen', () => {
       // Revenue formatted: $1,200.00 and $1,000.00
       expect(screen.getByText('$1,200.00')).toBeTruthy();
       expect(screen.getByText('$1,000.00')).toBeTruthy();
+    });
+  });
+
+  it('renders gross profit and margin per product', async () => {
+    mockGetDailyRevenue.mockResolvedValue([buildDailyRevenue()]);
+    mockGetTopProducts.mockResolvedValue([
+      buildTopProduct({ name: 'Latte', total_minor: 120000, cogs_minor: 40000, gross_profit_minor: 80000, gross_margin_percent: 66.7 }),
+      buildTopProduct({ name: 'Mocha', total_minor: 100000, cogs_minor: 130000, gross_profit_minor: -30000, gross_margin_percent: -30 }),
+    ]);
+    mockGetHourlyHeatmap.mockResolvedValue([]);
+    mockGetCategoryBreakdown.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      // Gross Profit column header (also appears in the totals line)
+      expect(screen.getAllByText('Gross Profit').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText('Margin')).toBeTruthy();
+      // Latte: $800.00 profit, 66.7% margin
+      expect(screen.getByText('$800.00')).toBeTruthy();
+      expect(screen.getByText('66.7%')).toBeTruthy();
+      // Mocha: loss-leader, red class
+      const loss = screen.getByText('-$300.00');
+      expect(loss.className).toContain('sales-report-top-negative');
+      expect(screen.getByText('-30.0%')).toBeTruthy();
     });
   });
 

@@ -60,13 +60,16 @@ function buildRevenueRow(overrides: Partial<{ date: string; total_minor: number;
   };
 }
 
-function buildTopProductRow(overrides: Partial<{ product_id: string; sku: string; name: string; total_qty: number; total_minor: number }> = {}) {
+function buildTopProductRow(overrides: Partial<{ product_id: string; sku: string; name: string; total_qty: number; total_minor: number; cogs_minor: number; gross_profit_minor: number; gross_margin_percent: number }> = {}) {
   return {
     product_id: overrides.product_id ?? 'prod-1',
     sku: overrides.sku ?? 'SKU001',
     name: overrides.name ?? 'Espresso',
     total_qty: overrides.total_qty ?? 45,
     total_minor: overrides.total_minor ?? 90000,
+    cogs_minor: overrides.cogs_minor ?? 30000,
+    gross_profit_minor: overrides.gross_profit_minor ?? 60000,
+    gross_margin_percent: overrides.gross_margin_percent ?? 66.7,
   };
 }
 

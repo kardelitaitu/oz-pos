@@ -117,6 +117,10 @@
   width: 100%;
 }
 
+.sales-report-top-negative {
+  color: var(--color-danger);
+}
+
 .sales-report-totals {
   font-weight: var(--font-weight-bold);
   font-variant-numeric: tabular-nums;
