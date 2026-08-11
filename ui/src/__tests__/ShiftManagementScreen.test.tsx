@@ -190,6 +190,7 @@ describe('ShiftManagementScreen', () => {
     mockGetShiftReport.mockResolvedValue({
       paymentBreakdown: [], hourlyBreakdown: [], cashPayouts: [],
       saleCount: 0, voidCount: 0, refundCount: 0,
+      cogsMinor: 0, grossProfitMinor: 0, grossMarginPercent: 0,
     });
     renderWithFluentSync(<ToastProvider><ShiftManagementScreen /></ToastProvider>, shiftsFtl, sharedFtl);
 

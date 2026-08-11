@@ -1115,6 +1115,43 @@ export default function ShiftManagementScreen() {
                     </div>
                   )}
 
+                  {/* Gross profit summary (HPP) */}
+                  {shiftReport.saleCount > 0 && (
+                    <div className="shift-mgmt-report-section">
+                      <Localized id="shift-report-gross-profit">
+                        <h3 className="shift-mgmt-report-title">Gross Profit</h3>
+                      </Localized>
+                      <div className="shift-mgmt-report-table">
+                        <div className="shift-mgmt-report-table-header">
+                          <Localized id="shift-report-col-metric">
+                            <span>Metric</span>
+                          </Localized>
+                          <Localized id="shift-report-col-total">
+                            <span>Total</span>
+                          </Localized>
+                        </div>
+                        <div className="shift-mgmt-report-row">
+                          <Localized id="shift-report-cogs">
+                            <span>Cost of Goods Sold (HPP)</span>
+                          </Localized>
+                          <span className="shift-mgmt-cell-mono">{fmt(shiftReport.cogsMinor, currency)}</span>
+                        </div>
+                        <div className="shift-mgmt-report-row">
+                          <Localized id="shift-report-gross-profit-value">
+                            <span>Gross Profit</span>
+                          </Localized>
+                          <span className={`shift-mgmt-cell-mono${shiftReport.grossProfitMinor < 0 ? ' shift-mgmt-cell-negative' : ''}`}>{fmt(shiftReport.grossProfitMinor, currency)}</span>
+                        </div>
+                        <div className="shift-mgmt-report-row">
+                          <Localized id="shift-report-gross-margin-pct">
+                            <span>Gross Margin</span>
+                          </Localized>
+                          <span className="shift-mgmt-cell-mono">{shiftReport.grossMarginPercent.toFixed(1)}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Cash payouts */}
                   {shiftReport.cashPayouts.length > 0 && (
                     <div className="shift-mgmt-report-section">

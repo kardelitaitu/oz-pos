@@ -12,6 +12,7 @@ import {
   type LineItemDto,
 } from '@/api/sales';
 import { listStaffScoped, type StaffMemberDto } from '@/api/staff';
+import { getSaleLineMarginsScoped, type SaleLineMarginDto } from '@/api/reports';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { formatMoney } from '@/types/domain';
 import { Card } from '@/components/Card';
@@ -135,6 +136,8 @@ export default function SalesHistoryScreen() {
   const [_refundsLoading, setRefundsLoading] = useState(false);
   const { session, isManager } = useAuth();
   const { sessionToken } = useWorkspace();
+  // ── Per-line cost / margin (HPP) for the open sale detail ──
+  const [lineMargins, setLineMargins] = useState<SaleLineMarginDto[]>([]);
 
   // P2-4: Sale detail cache — avoids re-fetching the same sale on modal re-open.
   // Invalidated when a sale is voided or refunded (status-changing events).
@@ -318,15 +321,28 @@ export default function SalesHistoryScreen() {
       } catch {
         setRefunds([]);
       }
+      // Margin is a live report (costs can change) — always refresh.
+      try {
+        const margins = sessionToken
+          ? await getSaleLineMarginsScoped(sessionToken, id)
+          : [];
+        setLineMargins(margins);
+      } catch {
+        setLineMargins([]);
+      }
       return;
     }
 
     setDetailLoading(true);
     setRefunds([]);
+    setLineMargins([]);
     try {
-      const [sale, refundData] = await Promise.all([
+      const [sale, refundData, margins] = await Promise.all([
         getSale(id),
         listRefunds(id).catch(() => [] as RefundDto[]),
+        sessionToken
+          ? getSaleLineMarginsScoped(sessionToken, id).catch(() => [] as SaleLineMarginDto[])
+          : Promise.resolve([] as SaleLineMarginDto[]),
       ]);
       // Cache the result for future re-opens (null-safe: getSale can return null)
       if (sale) {
@@ -334,16 +350,18 @@ export default function SalesHistoryScreen() {
       }
       setDetail(sale);
       setRefunds(refundData);
+      setLineMargins(margins);
     } catch {
       // IPC unavailable.
     } finally {
       setDetailLoading(false);
     }
-  }, []);
+  }, [sessionToken]);
 
   const closeDetail = useCallback(() => {
     setDetail(null);
     setRefunds([]);
+    setLineMargins([]);
   }, []);
 
   const detailExit = useExitAnimation(!!detail, closeDetail);
@@ -1070,6 +1088,13 @@ export default function SalesHistoryScreen() {
                       <Localized id="sales-history-line-qty"><th><span>Qty</span></th></Localized>
                       <Localized id="sales-history-line-unit-price"><th><span>Unit Price</span></th></Localized>
                       <Localized id="sales-history-line-total"><th><span>Total</span></th></Localized>
+                      {lineMargins.length > 0 && (
+                        <>
+                          <Localized id="sales-history-line-cost"><th><span>Cost</span></th></Localized>
+                          <Localized id="sales-history-line-margin"><th><span>Margin</span></th></Localized>
+                          <Localized id="sales-history-line-margin-pct"><th><span>Margin %</span></th></Localized>
+                        </>
+                      )}
                       {detail.lines.some((l) => l.tax_amount) && (
                         <Localized id="sales-history-line-tax"><th><span>Tax</span></th></Localized>
                       )}
@@ -1082,6 +1107,19 @@ export default function SalesHistoryScreen() {
                         <td>{line.qty}</td>
                         <td>{formatMoney(line.unit_price)}</td>
                         <td>{formatMoney({ minor_units: line.total_minor, currency: line.unit_price.currency })}</td>
+                        {lineMargins.length > 0 && (
+                          (() => {
+                            const m = lineMargins.find((lm) => lm.sale_line_id === line.id);
+                            if (!m) return <td>{'\u2014'}</td>;
+                            return (
+                              <>
+                                <td className="sales-history-cell-mono">{formatMoney({ minor_units: m.unit_cost_minor, currency: line.unit_price.currency })}</td>
+                                <td className={`sales-history-cell-mono${m.margin_minor < 0 ? ' sales-history-cell-negative' : ''}`}>{formatMoney({ minor_units: m.margin_minor, currency: line.unit_price.currency })}</td>
+                                <td className={`sales-history-cell-mono${m.margin_percent < 0 ? ' sales-history-cell-negative' : ''}`}>{m.margin_percent.toFixed(1)}%</td>
+                              </>
+                            );
+                          })()
+                        )}
                         <td>{line.tax_amount ? formatMoney(line.tax_amount) : '\u2014'}</td>
                       </tr>
                     ))}

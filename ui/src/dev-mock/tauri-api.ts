@@ -983,8 +983,6 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   ],
   'get_user_workspace_instances_scoped': () => [],
   'set_user_workspace_instances_scoped': () => null,
-  'get_user_workspaces_scoped': () => [],
-  'set_user_workspaces_scoped': () => null,
 
   // ═══════════════════════════════════════════════════════════════
   // TERMINALS
@@ -2183,6 +2181,9 @@ handlers['get_customer_history_scoped'] = (args) => {
 };
 handlers['list_in_transit_transfers_scoped'] = () => [];
 handlers['print_kds_chit_scoped'] = () => true;
+// HPP exposure: no historical sale lines exist in the mock, so the margin
+// report is empty (the UI hides the Cost/Margin columns when it is).
+handlers['get_sale_line_margins_scoped'] = () => [];
 handlers['update_kds_order_items_scoped'] = (args) => {
   const raw = (args ?? {}) as { id?: string; args?: { id?: string } };
   const id = raw.id ?? raw.args?.id ?? '';

@@ -699,3 +699,14 @@
   box-shadow: inset 0 0 0 1px var(--color-border-focus);
 }
 
+
+/* ── HPP margin columns (ADR #36 reporting) ─────────────────── */
+
+.sales-history-cell-mono {
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.sales-history-cell-negative {
+  color: var(--color-danger);
+}

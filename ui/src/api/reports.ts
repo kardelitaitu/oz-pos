@@ -178,6 +178,31 @@ export const getMenuEngineering = (
     endDate,
   });
 
+// ── Per-sale-line margin (HPP exposure) ────────────────────────────
+
+/** One enriched sale line with cost and margin figures (HPP). */
+export interface SaleLineMarginDto {
+  sale_line_id: string;
+  sku: string;
+  name: string;
+  qty: number;
+  unit_price_minor: number;
+  line_total_minor: number;
+  unit_cost_minor: number;
+  margin_minor: number;
+  margin_percent: number;
+}
+
+/** Get per-line cost and margin for a single sale (ADR #36 HPP exposure). */
+export const getSaleLineMarginsScoped = (
+  sessionToken: string,
+  saleId: string,
+): Promise<SaleLineMarginDto[]> =>
+  loggedInvoke<SaleLineMarginDto[]>('get_sale_line_margins_scoped', {
+    sessionToken: sessionToken ?? '',
+    saleId,
+  });
+
 // ── Custom Report Builder (P24) ──────────────────────────────────
 
 /** Request payload for the custom report builder. */
