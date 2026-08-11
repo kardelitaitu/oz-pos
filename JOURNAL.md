@@ -3661,7 +3661,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verify:** editor 504/504 (+1 net) · **full UI 280 files / 4,840 tests (+1)** · typecheck ✓ · eslint 0 errors (8 pre-existing hook-dep warnings, none near the change) · css-token scanner: 0 var() refs added (its 117/360/22 findings are a pre-existing standalone-informational baseline, not a gated check) · drift guard clean.
 
-**Commits:** (to be back-filled)
+**Commits:** `c2e3099d` (feat(topology): ghost glide eases clamp repositions instead of snapping)
 
 **Deliberately NOT done:** no left/top transition (the layout-thrash version — transform is the point); no saved-position → clamped-position entrance animation (would need a two-phase mount effect for a small win — the fade-and-rise covers the pop); no touch/wheel gating (see scope above); no `will-change` (many compositor layers for a few ghosts is the kind of premature hint that hurts more than helps).
 
