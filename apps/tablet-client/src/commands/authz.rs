@@ -32,6 +32,22 @@ pub fn require_permission_for_user(
         .map_err(map_gate_error)
 }
 
+/// The scope-aware variant (ADR #35 D5 / spec 0048): for commands that run
+/// inside a branch/workspace context, this enforces the caller's scoped
+/// assignment in addition to the permission. Global assignments and legacy
+/// users without an assignment are not scope-restricted.
+pub fn require_permission_for_user_scoped(
+    store: &Store<'_>,
+    user_id: &str,
+    required: &str,
+    branch: Option<&str>,
+    workspace: Option<&str>,
+) -> Result<(), AppError> {
+    store
+        .require_permission_scoped(user_id, required, branch, workspace)
+        .map_err(map_gate_error)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

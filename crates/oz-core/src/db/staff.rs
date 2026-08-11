@@ -202,8 +202,49 @@ impl Store<'_> {
     ///
     /// Denies by default: an unregistered permission key is rejected even
     /// for the `"*"` Owner grant, and an unresolvable user or role denies
-    /// rather than erroring internally.
+    /// rather than erroring internally. The role resolves through the
+    /// user's assignment when one exists (0048); legacy users without an
+    /// assignment fall back to `users.role_id`.
     pub fn require_permission(&self, user_id: &str, required: &str) -> Result<(), CoreError> {
+        let assignment = self.assignment_for_user(user_id)?;
+        self.authorize_with(user_id, required, &assignment)
+    }
+
+    /// The scope-aware gate (ADR #35 D5 / spec 0048): same as
+    /// [`require_permission`], plus the assignment's branch/workspace scope
+    /// is evaluated for scoped assignments. Global assignments and legacy
+    /// users without an assignment are not scope-restricted.
+    pub fn require_permission_scoped(
+        &self,
+        user_id: &str,
+        required: &str,
+        branch: Option<&str>,
+        workspace: Option<&str>,
+    ) -> Result<(), CoreError> {
+        let assignment = self.assignment_for_user(user_id)?;
+        // Scoped assignments deny when the requested branch/workspace is out
+        // of scope; global assignments and legacy users (no assignment) are
+        // not scope-restricted (ADR #35 D5).
+        if assignment
+            .as_ref()
+            .is_some_and(|a| !a.matches_scope(branch, workspace))
+        {
+            return Err(CoreError::PermissionDenied(format!(
+                "branch/workspace out of scope for user {user_id}"
+            )));
+        }
+        self.authorize_with(user_id, required, &assignment)
+    }
+
+    /// Shared gate body: registry deny-by-default, user resolution + active
+    /// check, role resolution (assignment first, `users.role_id` fallback),
+    /// then `role.authorize`.
+    fn authorize_with(
+        &self,
+        user_id: &str,
+        required: &str,
+        assignment: &Option<crate::db::assignments::Assignment>,
+    ) -> Result<(), CoreError> {
         // Deny by default: an unregistered permission key is rejected even
         // for the global `"*"` Owner grant — the registry is the only
         // vocabulary authorization speaks (ADR #35 D3 / spec 0046 + 0047).
@@ -218,12 +259,18 @@ impl Store<'_> {
         if !user.is_active {
             return Err(CoreError::PermissionDenied("user is inactive".into()));
         }
+        // The role resolves through the assignment when one exists; legacy
+        // users without an assignment fall back to `users.role_id`.
+        let role_id = assignment
+            .as_ref()
+            .map(|a| a.role_id.as_str())
+            .unwrap_or(user.role_id.as_str());
         // Fail closed: an unresolvable role is a denial, never an internal
         // error (a role row deleted out from under a user must not surface
         // as a crash-adjacent 500 to the frontend).
-        let role = self.get_role(&user.role_id)?.ok_or_else(|| {
-            CoreError::PermissionDenied(format!("role {} not found", user.role_id))
-        })?;
+        let role = self
+            .get_role(role_id)?
+            .ok_or_else(|| CoreError::PermissionDenied(format!("role {role_id} not found")))?;
         role.authorize(required)
             .map_err(|e| CoreError::PermissionDenied(e.to_string()))
     }
@@ -298,6 +345,14 @@ impl Store<'_> {
             Ok(_) => {}
         }
 
+        // Every user gets their single effective assignment (ADR #35 D5 /
+        // spec 0048): a default global-mode assignment mirroring the role.
+        self.conn.execute(
+            "INSERT INTO assignments (user_id, role_id, scope_mode, branch_scope, workspace_scope)
+             VALUES (?1, ?2, 'global', 'all', 'all')",
+            params![id, role_id],
+        )?;
+
         Ok(User {
             id,
             username,
@@ -340,6 +395,14 @@ impl Store<'_> {
                 id: id.to_owned(),
             });
         }
+        // Keep the assignment role in sync — the scope columns and scope rows
+        // of an existing assignment are preserved (only the role follows).
+        self.conn.execute(
+            "INSERT INTO assignments (user_id, role_id, scope_mode, branch_scope, workspace_scope, updated_at)
+             VALUES (?1, ?2, 'global', 'all', 'all', ?3)
+             ON CONFLICT(user_id) DO UPDATE SET role_id = excluded.role_id, updated_at = excluded.updated_at",
+            params![id, role_id, now],
+        )?;
         self.get_user(id)?.ok_or_else(|| CoreError::NotFound {
             entity: "user",
             id: id.to_owned(),
@@ -724,6 +787,189 @@ mod tests {
         );
     }
 
+    // ── Assignment-aware gate (0048 cycle 2) ──────────────────────────
+
+    /// Seed a user whose legacy `role_id` and assignment role disagree, so
+    /// the tests prove the gate resolves through the ASSIGNMENT.
+    fn seed_assigned_user(conn: &rusqlite::Connection, user_id: &str, role_id: &str) {
+        seed_roles(conn);
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES (?1, ?2, 'h', ?3, ?4, 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+            params![user_id, user_id, user_id, role_id],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO assignments (user_id, role_id, scope_mode, branch_scope, workspace_scope)
+             VALUES (?1, 'role-staff', 'global', 'all', 'all')",
+            params![user_id],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn gate_resolves_role_through_assignment_not_role_id() {
+        let conn = fresh();
+        // Legacy column says role-manager; the assignment says role-staff.
+        // role-manager grants settings:edit; role-staff does NOT — so the
+        // denial proves the gate authorized through the ASSIGNMENT.
+        seed_assigned_user(&conn, "user-a", "role-manager");
+        let store = store(&conn);
+        assert!(store.require_permission("user-a", "sales:void").is_ok());
+        assert!(
+            store.require_permission("user-a", "settings:edit").is_err(),
+            "assignment role (role-staff) must win over the legacy role_id (role-manager)"
+        );
+    }
+
+    #[test]
+    fn gate_falls_back_to_role_id_when_no_assignment() {
+        let conn = fresh();
+        seed_users(&conn);
+        // alice (cashier) has no assignment row — legacy fallback applies.
+        assert!(
+            store(&conn)
+                .require_permission("user-1", "sales:view")
+                .is_ok()
+        );
+        assert!(
+            store(&conn)
+                .require_permission("user-1", "sales:void")
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn gate_scoped_denies_workspace_out_of_scope() {
+        let conn = fresh();
+        seed_roles(&conn);
+        // scoped to the kds workspace only.
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-k', 'k', 'h', 'K', 'role-staff', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        conn.execute_batch(
+            "INSERT INTO assignments (user_id, role_id, scope_mode, branch_scope, workspace_scope)
+                 VALUES ('user-k', 'role-staff', 'scoped', 'all', 'list');
+             INSERT INTO assignment_workspaces (assignment_user_id, workspace_key)
+                 VALUES ('user-k', 'kds');",
+        )
+        .unwrap();
+        let store = store(&conn);
+        // In the kds workspace the grant holds; anywhere else it denies.
+        assert!(
+            store
+                .require_permission_scoped("user-k", "sales:view", None, Some("kds"))
+                .is_ok()
+        );
+        assert!(
+            store
+                .require_permission_scoped("user-k", "sales:view", None, Some("retail-pos"))
+                .is_err()
+        );
+        assert!(
+            store
+                .require_permission_scoped("user-k", "sales:view", None, None)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn gate_scoped_denies_branch_out_of_scope() {
+        let conn = fresh();
+        seed_roles(&conn);
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-b', 'b', 'h', 'B', 'role-staff', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        conn.execute_batch(
+            "INSERT INTO assignments (user_id, role_id, scope_mode, branch_scope, workspace_scope)
+                 VALUES ('user-b', 'role-staff', 'scoped', 'list', 'all');
+             INSERT INTO assignment_branches (assignment_user_id, branch_id)
+                 VALUES ('user-b', 'store-a');",
+        )
+        .unwrap();
+        let store = store(&conn);
+        assert!(
+            store
+                .require_permission_scoped("user-b", "sales:view", Some("store-a"), None)
+                .is_ok()
+        );
+        assert!(
+            store
+                .require_permission_scoped("user-b", "sales:view", Some("store-b"), None)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn gate_scoped_global_assignment_ignores_scope() {
+        let conn = fresh();
+        seed_assigned_user(&conn, "user-g", "role-staff");
+        let store = store(&conn);
+        // Global assignment: scope context is ignored, like the plain gate.
+        assert!(
+            store
+                .require_permission_scoped("user-g", "sales:view", None, Some("retail-pos"))
+                .is_ok()
+        );
+        assert!(
+            store
+                .require_permission_scoped("user-g", "sales:view", Some("store-z"), None)
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn gate_scoped_legacy_user_without_assignment_has_no_scope_restriction() {
+        let conn = fresh();
+        seed_users(&conn);
+        // user-1 (cashier) predates assignments — scope is not evaluated.
+        assert!(
+            store(&conn)
+                .require_permission_scoped("user-1", "sales:view", None, Some("retail-pos"))
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn create_user_writes_default_global_assignment() {
+        let conn = fresh();
+        seed_roles(&conn);
+        let store = store(&conn);
+        let user = store
+            .create_user("newbie", "hash", "Newbie", "role-staff")
+            .unwrap();
+        let a = store
+            .assignment_for_user(&user.id)
+            .unwrap()
+            .expect("create_user must write an assignment");
+        assert_eq!(a.role_id, "role-staff");
+        assert_eq!(a.scope_mode, crate::db::assignments::ScopeMode::Global);
+    }
+
+    #[test]
+    fn update_user_syncs_assignment_role() {
+        let conn = fresh();
+        seed_roles(&conn);
+        let store = store(&conn);
+        let user = store
+            .create_user("switcher", "hash", "Switcher", "role-staff")
+            .unwrap();
+        store
+            .update_user(&user.id, "switcher", "Switcher", "role-manager", true)
+            .unwrap();
+        let a = store.assignment_for_user(&user.id).unwrap().unwrap();
+        assert_eq!(
+            a.role_id, "role-manager",
+            "assignment role must follow the update"
+        );
+    }
+
     // ── Role CRUD ───────────────────────────────────────────────────
 
     #[test]
@@ -738,25 +984,30 @@ mod tests {
         let conn = fresh();
         seed_roles(&conn);
         let roles = store(&conn).list_roles().unwrap();
-        assert_eq!(roles.len(), 6);
-        // Ordered by name: cashier, custom, kitchen, manager, owner, staff.
-        assert_eq!(roles[0].name, "Cashier");
-        assert_eq!(roles[0].id, "role-cashier");
-        assert_eq!(roles[1].name, "Custom");
-        assert_eq!(roles[1].id, "role-custom");
-        assert_eq!(roles[1].permissions, "[]");
-        assert_eq!(roles[2].name, "Kitchen");
-        assert_eq!(roles[2].id, "role-kitchen");
-        assert!(roles[2].permissions.contains("kds:view"));
-        assert!(roles[2].permissions.contains("kds:update"));
-        assert_eq!(roles[3].name, "Manager");
-        assert_eq!(roles[3].id, "role-manager");
-        assert_eq!(roles[4].name, "Owner");
-        assert_eq!(roles[4].id, "role-owner");
-        assert_eq!(roles[5].name, "Staff");
-        assert_eq!(roles[5].id, "role-staff");
-        assert!(!roles[5].permissions.contains("settings:read"));
-        assert!(!roles[5].permissions.contains("settings:edit"));
+        assert_eq!(roles.len(), 8);
+        // Ordered by name: admin, auditor, cashier, custom, kitchen, manager,
+        // owner, staff.
+        assert_eq!(roles[0].name, "Admin");
+        assert_eq!(roles[0].id, "role-admin");
+        assert_eq!(roles[1].name, "Auditor");
+        assert_eq!(roles[1].id, "role-auditor");
+        assert_eq!(roles[2].name, "Cashier");
+        assert_eq!(roles[2].id, "role-cashier");
+        assert_eq!(roles[3].name, "Custom");
+        assert_eq!(roles[3].id, "role-custom");
+        assert_eq!(roles[3].permissions, "[]");
+        assert_eq!(roles[4].name, "Kitchen");
+        assert_eq!(roles[4].id, "role-kitchen");
+        assert!(roles[4].permissions.contains("kds:view"));
+        assert!(roles[4].permissions.contains("kds:update"));
+        assert_eq!(roles[5].name, "Manager");
+        assert_eq!(roles[5].id, "role-manager");
+        assert_eq!(roles[6].name, "Owner");
+        assert_eq!(roles[6].id, "role-owner");
+        assert_eq!(roles[7].name, "Staff");
+        assert_eq!(roles[7].id, "role-staff");
+        assert!(!roles[7].permissions.contains("settings:read"));
+        assert!(!roles[7].permissions.contains("settings:edit"));
     }
 
     #[test]
