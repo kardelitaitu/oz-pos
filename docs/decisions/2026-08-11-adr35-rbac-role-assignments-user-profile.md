@@ -2,7 +2,7 @@
 
 Date: 2026-08-11
 
-Status: Accepted (design ratified in [`roles.md`](../../roles.md); implementation sequenced there in §10)
+Status: Accepted (ratified 2026-08-11; implementation sequence in D9)
 
 ## Context
 
@@ -32,8 +32,8 @@ The current model cannot answer five questions that growth keeps raising:
    expressed as UI gating in places — and rounds 172/174 demonstrated that
    frontend gating is not a security boundary.
 
-This ADR records the decisions; the full plan, data model, and implementation
-sequence live in `roles.md` (ratified 2026-08-11).
+This ADR is the authoritative record of these decisions; it supersedes the
+working plan (`roles.md`) it ratifies.
 
 ## Decision
 
@@ -143,8 +143,9 @@ force role edits as the system grows.
   `tax_id` is an auditable event (key, user, timestamp) — the explicit grants
   give each sensitive field exactly one read path, so the audit is cheap.
   `national_id` is displayed as last-4 by default (`oz-security::mask`, the
-  PAN-masking precedent); the full value requires the explicit grant and is
-  masked in every other surface (audit, export, logs).
+  PAN-masking precedent); the audit records access, not values, and the full
+  value requires the explicit grant and is masked in any other surface
+  (export, logs).
 - **Data residency:** sensitive profile fields (`national_id`,
   `monthly_take_home_minor`, `tax_id`, emergency contact, `notes`) are
   **excluded from cloud sync and bulk exports by default** — the store-first
@@ -177,6 +178,29 @@ of permission-sensitive actions. Access is gated by the `staff:*` and
 payroll fields never leak into a shift review by default. The read-audit and
 data-residency rules from D6 carry into the analytics surfaces: sensitive
 fields stay masked and on-device, and every access is traceable.
+
+### D9 — Implementation sequence
+
+1. Define the permission registry in code (D3): classify every current key into
+   a family and mark it operational (wildcardable) or sensitive (explicit-only),
+   keeping today's `{resource}:{action}` strings.
+2. Centralize enforcement: one fail-closed backend `require_permission` gate
+   every permission-sensitive command passes through (replacing
+   `require_permission_for_user`).
+3. Add the assignment model (D5); migrate `users.role_id` to a default
+   global-mode assignment so existing databases are unchanged in behavior.
+4. Align the role taxonomy (D4): seed Owner, Admin, and Auditor alongside the
+   existing Manager and Staff (`role-staff` survives); fold cashier/kitchen
+   into Staff + workspace assignments; retire `role-cashier`/`role-kitchen` via
+   the step-3 migration.
+5. Add custom roles, UI/API integration, and focused authorization tests across
+   branch and workspace combinations.
+6. Add the user profile fields (D6) with the incomplete-profile state; encrypt
+   `national_id` and `monthly_take_home_minor` at rest via `oz-security`;
+   register `staff:read_identity`, `staff:read_payroll`, and `staff:edit_notes`
+   as sensitive keys.
+7. Deferred (D7): org-tenant layer, invitations, permission caching, assignment
+   expiry.
 
 ## Consequences
 
@@ -218,10 +242,10 @@ fields stay masked and on-device, and every access is traceable.
 
 ## Verification
 
-Implementation is sequenced in `roles.md` §10 and each step ships with focused
-tests: role permissions, family wildcards, sensitive exclusions, branch scopes,
-workspace scopes, high-risk actions, profile field validation, sensitive-field
-read audit, masking, residency (sync/export exclusion), and migration
-round-trips (default assignment, role retirement, incomplete-profile state). The registry/gate work replaces the per-command
-`require_permission_for_user` call sites from rounds 172–174, whose tests stay
-green as the migration contract.
+Each step of the implementation sequence (D9) ships with focused tests: role
+permissions, family wildcards, sensitive exclusions, branch scopes, workspace
+scopes, high-risk actions, profile field validation, sensitive-field read
+audit, masking, residency (sync/export exclusion), and migration round-trips
+(default assignment, role retirement, incomplete-profile state). The
+registry/gate work replaces the per-command `require_permission_for_user` call
+sites from rounds 172–174, whose tests stay green as the migration contract.
