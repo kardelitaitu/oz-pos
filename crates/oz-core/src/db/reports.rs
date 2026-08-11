@@ -310,29 +310,38 @@ impl Store<'_> {
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
-    /// Top products ranked by total revenue for a date range.
+    /// Top products ranked by `order_by` (`"revenue"` or `"profit"`) for a
+    /// date range. Unknown values fall back to revenue ranking.
     pub fn top_products(
         &self,
         start_date: &str,
         end_date: &str,
         limit: i64,
+        order_by: &str,
     ) -> Result<Vec<TopProductRow>, CoreError> {
-        let mut stmt = self.conn.prepare(
+        let order_clause = if order_by == "profit" {
+            "gross_profit_minor DESC"
+        } else {
+            "total_minor DESC"
+        };
+        let mut stmt = self.conn.prepare(&format!(
             "SELECT p.id AS product_id, p.sku, p.name,
                     SUM(sl.qty) AS total_qty,
                     SUM(sl.line_minor) AS total_minor,
-                    SUM(COALESCE(sl.cost_minor, p.cost_minor, 0) * sl.qty) AS cogs_minor
+                    SUM(COALESCE(sl.cost_minor, p.cost_minor, 0) * sl.qty) AS cogs_minor,
+                    (SUM(sl.line_minor) - SUM(COALESCE(sl.cost_minor, p.cost_minor, 0) * sl.qty)) AS gross_profit_minor
              FROM sale_lines sl
              JOIN sales s ON sl.sale_id = s.id
              JOIN products p ON sl.sku = p.sku
              WHERE s.status = 'completed' AND DATE(s.created_at) BETWEEN ?1 AND ?2
              GROUP BY p.id
-             ORDER BY total_minor DESC
-             LIMIT ?3",
-        )?;
+             ORDER BY {order_clause}, p.sku
+             LIMIT ?3"
+        ))?;
         let rows = stmt.query_map(params![start_date, end_date, limit], |row| {
             let total_minor = row.get::<_, i64>("total_minor")?;
             let cogs_minor = row.get::<_, i64>("cogs_minor")?;
+            let gross_profit_minor = row.get::<_, i64>("gross_profit_minor")?;
             Ok(TopProductRow {
                 product_id: row.get("product_id")?,
                 sku: row.get("sku")?,
@@ -340,9 +349,9 @@ impl Store<'_> {
                 total_qty: row.get("total_qty")?,
                 total_minor,
                 cogs_minor,
-                gross_profit_minor: total_minor - cogs_minor,
+                gross_profit_minor,
                 gross_margin_percent: if total_minor > 0 {
-                    ((total_minor - cogs_minor) as f64 / total_minor as f64) * 100.0
+                    (gross_profit_minor as f64 / total_minor as f64) * 100.0
                 } else {
                     0.0
                 },
@@ -787,7 +796,7 @@ mod tests {
     fn top_products_empty() {
         let conn = fresh();
         let rows = store(&conn)
-            .top_products("2000-01-01", "2099-12-31", 10)
+            .top_products("2000-01-01", "2099-12-31", 10, "revenue")
             .unwrap();
         assert!(rows.is_empty());
     }
@@ -798,11 +807,83 @@ mod tests {
         seed_completed_sale(&conn, "COFFEE", 2, 350);
         seed_completed_sale(&conn, "BAGEL", 1, 450);
         let rows = store(&conn)
-            .top_products("2000-01-01", "2099-12-31", 10)
+            .top_products("2000-01-01", "2099-12-31", 10, "revenue")
             .unwrap();
         assert!(!rows.is_empty());
         // BAGEL has higher unit price but lower qty → check ordering
         assert_eq!(rows.len(), 2);
+    }
+
+    #[test]
+    fn top_products_ranks_by_gross_profit_when_requested() {
+        let conn = fresh();
+        let s = store(&conn);
+        // A: high revenue, thin margin. B: lower revenue, fat margin.
+        s.create_product_with_attributes(
+            "A",
+            "Thin Margin",
+            price(1000),
+            None,
+            None,
+            100,
+            None,
+            &CreateProductAttributes {
+                cost_minor: 900,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        s.create_product_with_attributes(
+            "B",
+            "Fat Margin",
+            price(500),
+            None,
+            None,
+            100,
+            None,
+            &CreateProductAttributes {
+                cost_minor: 100,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        for sku in ["A", "B"] {
+            let mut cart = Cart::new(usd());
+            cart.add_line(CartLine::new(
+                Sku::new(sku),
+                10,
+                price(if sku == "A" { 1000 } else { 500 }),
+            ))
+            .unwrap();
+            let mut sale = Sale::from_cart(&cart).unwrap();
+            let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+            sale.created_at = now.clone();
+            sale.updated_at = now;
+            s.create_sale(&sale).unwrap();
+            s.update_sale_status(&sale.id, SaleStatus::Active).unwrap();
+            s.update_sale_status(&sale.id, SaleStatus::Completed)
+                .unwrap();
+        }
+
+        let by_revenue = s
+            .top_products("2000-01-01", "2099-12-31", 10, "revenue")
+            .unwrap();
+        assert_eq!(by_revenue[0].sku, "A");
+        assert_eq!(by_revenue[0].gross_profit_minor, 1000);
+
+        let by_profit = s
+            .top_products("2000-01-01", "2099-12-31", 10, "profit")
+            .unwrap();
+        // Revenue A=10000 > B=5000, but profit B=4000 > A=1000.
+        assert_eq!(by_profit[0].sku, "B");
+        assert_eq!(by_profit[0].gross_profit_minor, 4000);
+        assert_eq!(by_profit[1].sku, "A");
+
+        // Unknown keys fall back to revenue ranking.
+        let by_unknown = s
+            .top_products("2000-01-01", "2099-12-31", 10, "quantity")
+            .unwrap();
+        assert_eq!(by_unknown[0].sku, "A");
     }
 
     #[test]
@@ -812,7 +893,7 @@ mod tests {
         seed_completed_sale(&conn, "B", 1, 200);
         seed_completed_sale(&conn, "C", 1, 300);
         let rows = store(&conn)
-            .top_products("2000-01-01", "2099-12-31", 2)
+            .top_products("2000-01-01", "2099-12-31", 2, "revenue")
             .unwrap();
         assert_eq!(rows.len(), 2);
         // Highest revenue first
@@ -867,7 +948,9 @@ mod tests {
         )
         .unwrap();
 
-        let rows = s.top_products("2000-01-01", "2099-12-31", 10).unwrap();
+        let rows = s
+            .top_products("2000-01-01", "2099-12-31", 10, "revenue")
+            .unwrap();
         let coffee = rows.iter().find(|r| r.sku == "COFFEE").unwrap();
         // COGS = snapshot 150 × 2 = 300 (not 999 × 2); profit = 700 − 300.
         assert_eq!(coffee.total_minor, 700);
@@ -1350,7 +1433,9 @@ mod tests {
             .unwrap();
 
         // top_products JOINs with products, so the deleted product won't appear.
-        let rows = s.top_products("2000-01-01", "2099-12-31", 10).unwrap();
+        let rows = s
+            .top_products("2000-01-01", "2099-12-31", 10, "revenue")
+            .unwrap();
         assert!(
             rows.is_empty(),
             "deleted products should not appear in top products"

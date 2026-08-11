@@ -158,6 +158,7 @@ impl Store<'_> {
             &config.start_date,
             &config.end_date,
             config.top_product_limit,
+            "revenue",
         )?;
         let hourly_heatmap = self.hourly_heatmap(&config.start_date, &config.end_date)?;
         let category_breakdown = self.category_breakdown(&config.start_date, &config.end_date)?;
