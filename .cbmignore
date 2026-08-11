@@ -32,3 +32,10 @@ test-results/
 fuzz/
 nul
 nul.txt
+
+# Un-exclude folders that the indexer skips by default but we want indexed:
+# scripts/, docs/, audit/ contain .sh/.ps1/.bat/.md files we want searchable.
+!scripts/
+!ui/scripts/
+!docs/
+!audit/
