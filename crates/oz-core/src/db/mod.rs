@@ -76,6 +76,7 @@ pub mod payments;
 pub mod product_bundles;
 /// Product CRUD and search.
 pub mod products;
+pub mod profile;
 /// Promotion / discount CRUD.
 pub mod promotions;
 /// CRUD for purchase orders.

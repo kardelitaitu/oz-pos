@@ -755,6 +755,10 @@ pub const ALL: &[Migration] = &[
         id: "128_assignments.sql",
         sql: include_str!("../migrations/128_assignments.sql"),
     },
+    Migration {
+        id: "130_user_profiles.sql",
+        sql: include_str!("../migrations/130_user_profiles.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.
@@ -3244,5 +3248,87 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM assignments", [], |r| r.get(0))
             .unwrap();
         assert_eq!(after, 5, "migration 128 must be idempotent");
+    }
+
+    // ── ADR #35 D6 (migration 130): user profile columns ────────────
+    //
+    // The users table gains the profile contract columns (nullable in SQL —
+    // "mandatory" is enforced at creation) plus unique indexes for email and
+    // national_id, and NONE of the D6 not-collected fields.
+    #[test]
+    fn migration_130_adds_profile_columns_and_unique_indexes() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        let cols: Vec<String> = conn
+            .prepare("SELECT name FROM pragma_table_info('users')")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        for col in [
+            "date_of_birth",
+            "phone",
+            "national_id_type",
+            "national_id",
+            "email",
+            "monthly_take_home_minor",
+            "emergency_contact_name",
+            "emergency_contact_phone",
+            "job_title",
+            "notes",
+            "address",
+            "language",
+            "avatar",
+            "tax_id",
+            "national_id_expires_at",
+            "emergency_contact_relationship",
+            "hire_date",
+        ] {
+            assert!(
+                cols.contains(&col.to_string()),
+                "users must gain profile column `{col}`"
+            );
+        }
+
+        // Unique indexes: email and national_id (SQLite UNIQUE allows
+        // multiple NULLs, so "unique when present" holds).
+        let idx: Vec<String> = conn
+            .prepare(
+                "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='users' AND name LIKE 'idx_users_%'",
+            )
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        assert!(
+            idx.contains(&"idx_users_email".into()),
+            "email unique index"
+        );
+        assert!(
+            idx.contains(&"idx_users_national_id".into()),
+            "national_id unique index"
+        );
+
+        // The D6 not-collected fields must NEVER appear in the schema.
+        for banned in [
+            "gender",
+            "religion",
+            "marital_status",
+            "ethnicity",
+            "blood_type",
+            "bank_account",
+            "shift_availability",
+        ] {
+            assert!(
+                !cols.contains(&banned.to_string()),
+                "{banned} is on the D6 not-collected list and must not appear"
+            );
+        }
+
+        // Re-running migrations stays idempotent (module convention).
+        run(&mut conn).unwrap();
     }
 }
