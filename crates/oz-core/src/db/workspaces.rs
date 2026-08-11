@@ -1230,7 +1230,7 @@ mod tests {
     fn list_all_workspace_types_returns_seeded() {
         let (store, _) = fresh();
         let ws = store.list_all_workspace_types().unwrap();
-        assert_eq!(ws.len(), 5);
+        assert_eq!(ws.len(), 6);
         assert!(ws.iter().any(|w| w.key == "restaurant-pos"));
         assert!(ws.iter().any(|w| w.key == "kds"));
         assert!(ws.iter().any(|w| w.key == "store-pos"));
@@ -1241,6 +1241,9 @@ mod tests {
         // for stock-keeping is 'warehouse', not 'inventory'.
         assert!(ws.iter().any(|w| w.key == "warehouse"));
         assert!(ws.iter().any(|w| w.key == "admin"));
+        // ADR #35 D5 (migration 128): 'retail-pos' is the cashier workspace
+        // that role-cashier users fold into as Staff assignments.
+        assert!(ws.iter().any(|w| w.key == "retail-pos"));
         let kds = ws.iter().find(|w| w.key == "kds").unwrap();
         assert_eq!(kds.name, "Kitchen Display");
         assert_eq!(kds.icon, "kds");
@@ -1250,7 +1253,7 @@ mod tests {
     fn list_workspaces_legacy_owner_returns_all() {
         let (store, _) = fresh();
         let ws = store.list_workspaces_legacy("role-owner", None).unwrap();
-        assert_eq!(ws.len(), 5);
+        assert_eq!(ws.len(), 6);
     }
 
     #[test]

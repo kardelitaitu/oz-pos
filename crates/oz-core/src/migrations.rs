@@ -751,6 +751,10 @@ pub const ALL: &[Migration] = &[
         id: "127_stripe_customers.sql",
         sql: include_str!("../migrations/127_stripe_customers.sql"),
     },
+    Migration {
+        id: "128_assignments.sql",
+        sql: include_str!("../migrations/128_assignments.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.
@@ -1315,6 +1319,10 @@ mod tests {
             "sync_pull_state",
             "sync_applied_items",
             "sync_remote_failures",
+            // ── ADR #35 D5 (migration 128) ──
+            "assignments",
+            "assignment_branches",
+            "assignment_workspaces",
         ];
 
         for table in &expected_tables {
@@ -3094,5 +3102,147 @@ mod tests {
 
         // Re-running migrations stays idempotent (module convention).
         run(&mut conn).unwrap();
+    }
+
+    // ── ADR #35 D5 (migration 128): assignment backfill ────────────
+    //
+    // A legacy database (an older release, migrations through 127 applied)
+    // carries one global `users.role_id` and the six legacy role rows.
+    // Migrating to 128 must give every existing user exactly one effective
+    // assignment: Owner/Manager/Staff/custom keep global mode, while legacy
+    // role-cashier / role-kitchen users resolve to role-staff with the
+    // scoped workspace their current permission set implies (retail-pos /
+    // kds) so their operational access survives the role retirement that
+    // follows in a later migration.
+    #[test]
+    fn migration_128_backfills_assignments_from_legacy_role_ids() {
+        // 1. Build the legacy DB: all migrations through 127 applied, with
+        //    the legacy roles seeded and users referencing them.
+        let idx = ALL
+            .iter()
+            .position(|m| m.id == "128_assignments.sql")
+            .expect("128_assignments.sql registered");
+        let mut conn = fresh();
+        platform_core::database::run(&mut conn, &ALL[..idx]).unwrap();
+        conn.execute_batch(
+            "INSERT INTO roles (id, name, permissions) VALUES
+                 ('role-owner', 'owner', '[\"*\"]'),
+                 ('role-manager', 'manager', '[\"reports:view\"]'),
+                 ('role-cashier', 'cashier', '[\"sales:process\"]'),
+                 ('role-kitchen', 'kitchen', '[\"kds:view\", \"kds:update\"]'),
+                 ('role-staff', 'staff', '[\"sales:view\"]');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
+                 ('u-owner', 'owner', 'h', 'Owner', 'role-owner', 1, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'),
+                 ('u-manager', 'manager', 'h', 'Manager', 'role-manager', 1, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'),
+                 ('u-cashier', 'cashier', 'h', 'Cashier', 'role-cashier', 1, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'),
+                 ('u-kitchen', 'kitchen', 'h', 'Kitchen', 'role-kitchen', 1, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'),
+                 ('u-staff', 'staff', 'h', 'Staff', 'role-staff', 1, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');",
+        )
+        .unwrap();
+
+        // 2. Apply the remainder (128+).
+        platform_core::database::run(&mut conn, &ALL[idx..]).unwrap();
+
+        // 3. Every user has exactly one effective assignment.
+        let total: i64 = conn
+            .query_row("SELECT COUNT(*) FROM assignments", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(total, 5, "one assignment per legacy user");
+        let dupes: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM (SELECT user_id FROM assignments GROUP BY user_id HAVING COUNT(*) > 1)",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(dupes, 0, "one effective assignment per user");
+
+        // 4. Owner / Manager / Staff keep global mode with their role.
+        for (user, role) in [
+            ("u-owner", "role-owner"),
+            ("u-manager", "role-manager"),
+            ("u-staff", "role-staff"),
+        ] {
+            let (got_role, mode): (String, String) = conn
+                .query_row(
+                    "SELECT role_id, scope_mode FROM assignments WHERE user_id = ?1",
+                    rusqlite::params![user],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .unwrap();
+            assert_eq!(got_role, role, "{user} keeps its role");
+            assert_eq!(mode, "global", "{user} keeps global mode");
+        }
+
+        // 5. Cashier resolves to Staff + scoped `retail-pos`; kitchen to
+        //    Staff + scoped `kds` — the workspace their grants imply.
+        let (cash_role, cash_mode): (String, String) = conn
+            .query_row(
+                "SELECT role_id, scope_mode FROM assignments WHERE user_id = 'u-cashier'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(cash_role, "role-staff");
+        assert_eq!(cash_mode, "scoped");
+        let cash_ws: Vec<String> = conn
+            .prepare("SELECT workspace_key FROM assignment_workspaces WHERE assignment_user_id = 'u-cashier'")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        assert_eq!(
+            cash_ws,
+            vec!["retail-pos"],
+            "cashier -> retail-pos workspace"
+        );
+
+        let (kit_role, kit_mode): (String, String) = conn
+            .query_row(
+                "SELECT role_id, scope_mode FROM assignments WHERE user_id = 'u-kitchen'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(kit_role, "role-staff");
+        assert_eq!(kit_mode, "scoped");
+        let kit_ws: Vec<String> = conn
+            .prepare("SELECT workspace_key FROM assignment_workspaces WHERE assignment_user_id = 'u-kitchen'")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        assert_eq!(kit_ws, vec!["kds"], "kitchen -> kds workspace");
+
+        // 6. Global assignments have no scope rows.
+        let scope_rows: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM assignment_workspaces aw
+                 JOIN assignments a ON a.user_id = aw.assignment_user_id
+                 WHERE a.scope_mode = 'global'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(scope_rows, 0, "global assignments carry no scope rows");
+
+        // 7. The `retail-pos` workspace was seeded for the cashier remap.
+        let retail: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM workspaces WHERE key = 'retail-pos'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(retail, 1, "retail-pos workspace must be seeded");
+
+        // 8. Re-running migrations stays idempotent (module convention).
+        run(&mut conn).unwrap();
+        let after: i64 = conn
+            .query_row("SELECT COUNT(*) FROM assignments", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(after, 5, "migration 128 must be idempotent");
     }
 }
