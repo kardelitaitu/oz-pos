@@ -3631,7 +3631,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verify:** gate files 64/64 (i18nBundle 19/19) · **full UI 280 files / 4,834 tests (+4)** · typecheck ✓ · eslint 0 errors · `lint:i18n.sh` clean end-to-end · drift guard clean.
 
-**Commits:** (to be back-filled)
+**Commits:** `700ccbc0` (feat(i18n): gate site-localized attrs against the en message, fix 31)
 
 **Deliberately NOT done:** no fix of the value→attribute pattern at the SITE level (a future author can still write a value-only message for an attr-only site — the gate catches it at commit time, which is the point); no removal of now-dead values (all converted messages were value-only, so nothing became dead); no check for sites localizing an attribute the message has but with a different NAME intent (that's a naming convention, not a defect).
 
