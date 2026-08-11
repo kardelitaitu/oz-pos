@@ -3874,3 +3874,46 @@ cashier/kitchen via a second migration, and sweeps the role-id test seeds
 across both clients; cycle 3 is the UI (five-role list, assignment editor,
 i18n, staff IPC contract test). `role-staff` grants must cover the folded
 cashier/kitchen operational keys once the gate reads assignments.
+
+### 2026-08-11 — 0048 cycle 2a: five-role taxonomy seeds + 2b: assignment-aware gate (round 178)
+
+**Problem:** D4's five-role taxonomy did not exist (only Owner/Manager/
+Cashier/Kitchen/Staff/Custom), and the 0047 gate still resolved the role
+from `users.role_id`, ignoring the assignments migration 128 created — so
+the assignment model was a parallel structure with no consumer.
+
+**Solution (2a — taxonomy, additive):** `rbac.rs` gains `role-admin` and
+`role-auditor` presets (Admin = the operational set + role management +
+plugins, explicit list never `*`, staff:delete stays owner-only per D4's
+"irreversible org actions"; Auditor = read-only view keys, no exports, no
+writes). Staff AND Manager gain `kds:view`/`kds:update` so folded kitchen
+users keep KDS access through role-staff (and managers oversee kitchens).
+Cashier/kitchen presets remain during the transition; their removal is the
+next step with the seed sweep.
+
+**Solution (2b — assignment-aware gate):** `Store::require_permission`
+resolves the role through the user's assignment first, falling back to
+`users.role_id` for legacy users — behavior-identical for every existing
+user (no assignments yet in fixtures). New `Store::require_permission_scoped`
+evaluates `matches_scope` for scoped assignments (deny when branch/workspace
+out of scope; global + legacy ignore scope). `create_user` now writes a
+default global assignment and `update_user` keeps the assignment role in
+sync (scope columns/rows preserved via ON CONFLICT role-only update). Both
+clients' `authz.rs` gain `require_permission_for_user_scoped`; the existing
+wrapper is unchanged in signature and now assignment-aware underneath.
+
+**Verify:** platform-core 236/236 (preset tests incl. new admin/auditor
+tests), oz-core lib 1705/1705 (8 new gate/write tests, Red proven first),
+desktop authz+staff 46/46, tablet authz+staff 24/24, staff_integration
+25/25, fmt + clippy -D warnings (all four crates) + drift guard clean.
+`list_roles_seeded` updated for the 8 seeded roles (admin/auditor added).
+
+**Commits:** `5dacef8e` (taxonomy), `054b3f7c` (gate rewire).
+
+**Risks / follow-ups:** cashier/kitchen presets are still seeded — the
+retirement (migration 129 + preset removal + the ~22-file role-id seed
+sweep across both clients) is the next cycle step; the scope-aware gate is
+available but no command adopts it yet (adoption happens where commands
+carry branch/workspace context); the staff screen still lists six roles
+(UI is cycle 3). Auditor's exports are deliberately excluded — revisit if
+the product wants auditor-export.
