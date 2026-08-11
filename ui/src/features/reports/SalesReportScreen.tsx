@@ -26,6 +26,7 @@ import {
   getCategoryBreakdown,
   getCategoryPopularity,
   getCategoryPopularityTrend,
+  getCategoryForecast,
   type DailyRevenueRow,
   type WeeklyRevenueRow,
   type MonthlyRevenueRow,
@@ -34,6 +35,7 @@ import {
   type CategoryBreakdownRow,
   type CategoryPopularityRow,
   type CategoryTrendPoint,
+  type CategoryForecastRow,
 } from '@/api/reports';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -105,6 +107,7 @@ export default function SalesReportScreen() {
     CategoryPopularityRow[]
   >([]);
   const [popularityTrend, setPopularityTrend] = useState<CategoryTrendPoint[]>([]);
+  const [categoryForecast, setCategoryForecast] = useState<CategoryForecastRow[]>([]);
 
   // P9-3: Period comparison
   const [comparePeriod, setComparePeriod] = useState(false);
@@ -142,14 +145,16 @@ export default function SalesReportScreen() {
       getCategoryBreakdown(startDate, endDate, sessionToken),
       getCategoryPopularity(sessionToken, 3),
       getCategoryPopularityTrend(sessionToken, startDate, endDate, view, 5),
+      getCategoryForecast(sessionToken, startDate, endDate, view, 5),
     ])
-      .then(([rev, top, heat, cat, catPop, trend]) => {
+      .then(([rev, top, heat, cat, catPop, trend, forecast]) => {
         setRevenueData(rev);
         setTopProducts(top);
         setHeatmap(heat);
         setCategoryBreakdown(cat);
         setCategoryPopularity(catPop);
         setPopularityTrend(trend);
+        setCategoryForecast(forecast);
       })
       .catch((e) => {
         setError(e.message ?? String(e));
@@ -735,6 +740,61 @@ export default function SalesReportScreen() {
               ))}
             </LineChart>
           </ResponsiveContainer>
+        )}
+      </Card>
+
+      <Card shadow="sm" className="sales-report-chart-card">
+        <Localized id="sales-report-demand-forecast">
+          <h2 className="sales-report-section-title">Demand Forecast</h2>
+        </Localized>
+        {categoryForecast.length === 0 ? (
+          <p className="sales-report-no-data">
+            <Localized id="heatmap-no-data">
+              <span>No data</span>
+            </Localized>
+          </p>
+        ) : (
+          <div className="sales-report-top-table">
+            <div className="sales-report-top-header">
+              <span>
+                <Localized id="sales-report-demand-forecast-category">Category</Localized>
+              </span>
+              <span>
+                <Localized id="sales-report-demand-forecast-avg">Avg / period</Localized>
+              </span>
+              <span>
+                <Localized id="sales-report-demand-forecast-trend">Trend</Localized>
+              </span>
+              <span>
+                <Localized id="sales-report-demand-forecast-next">Next period</Localized>
+              </span>
+            </div>
+            {categoryForecast.map((c) => {
+              const up = c.trend_per_period > 0.1;
+              const down = c.trend_per_period < -0.1;
+              return (
+                <div key={c.category_id || 'uncategorized'} className="sales-report-top-row">
+                  <span>
+                    {c.category_name ??
+                      requiredLocalized(l10n, 'sales-report-category-popularity-uncategorized')}
+                  </span>
+                  <span>{c.recent_avg_units.toFixed(1)}</span>
+                  <span
+                    className={
+                      up
+                        ? 'sales-report-forecast-up'
+                        : down
+                          ? 'sales-report-forecast-down'
+                          : undefined
+                    }
+                  >
+                    {up ? '▲' : down ? '▼' : '—'} {Math.abs(c.trend_per_period).toFixed(1)}
+                  </span>
+                  <span className="sales-report-forecast-next">{c.forecast_units}</span>
+                </div>
+              );
+            })}
+          </div>
         )}
       </Card>
 

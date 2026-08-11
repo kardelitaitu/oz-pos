@@ -179,8 +179,13 @@ upsert imports only its snapshot columns, so `popularity_score` and
   and evaluates the same blend per (period, category) smoothed toward the
   cached category means — same scale as the materialized scores — exposed as
   `get_category_popularity_trend_scoped` in both clients and rendered as the
-  Popularity Trend line chart on the sales report. Only the demand-
-  forecasting integration remains out of scope.
+  Popularity Trend line chart on the sales report. A prototype-level demand
+  forecast ships too (2026-08-12): `Store::category_forecast` fits a linear
+  least-squares model over each category's recent trend units (last ≤6
+  points) and projects the next period, exposed as
+  `get_category_forecast_scoped` and rendered as the Demand Forecast table
+  on the sales report; the learned on-device model from the 2026-07-20
+  research remains out of scope.
 - Surfacing the score in analytics exports — the data will be available to the
   analytics tool through the local store DB (same path as cost, ADR #36 D2).
 

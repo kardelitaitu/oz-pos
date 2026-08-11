@@ -160,6 +160,21 @@
   margin-bottom: var(--space-3);
 }
 
+/* Demand forecast card — trend direction + next-period projection */
+.sales-report-forecast-up {
+  color: var(--color-success, #16a34a);
+  font-weight: var(--font-weight-semibold);
+}
+
+.sales-report-forecast-down {
+  color: var(--color-danger, #dc2626);
+}
+
+.sales-report-forecast-next {
+  font-family: var(--font-mono);
+  font-weight: var(--font-weight-semibold);
+}
+
 /* ── Heatmap ──────────────────────────────────────────────── */
 
 .sales-report-heatmap-header {

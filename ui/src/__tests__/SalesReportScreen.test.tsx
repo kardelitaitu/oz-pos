@@ -61,6 +61,11 @@ sales-report-category-popularity-mean-tip = Category average vs. catalog average
 sales-report-category-popularity-top = Top Sellers
 sales-report-category-popularity-uncategorized = Uncategorized
 sales-report-popularity-trend = Popularity Trend
+sales-report-demand-forecast = Demand Forecast
+sales-report-demand-forecast-category = Category
+sales-report-demand-forecast-avg = Avg / period
+sales-report-demand-forecast-trend = Trend
+sales-report-demand-forecast-next = Next period
 `;
 
 // ── Mock recharts ─────────────────────────────────────────────────
@@ -88,6 +93,7 @@ const mockGetHourlyHeatmap = vi.fn();
 const mockGetCategoryBreakdown = vi.fn();
 const mockGetCategoryPopularity = vi.fn();
 const mockGetCategoryPopularityTrend = vi.fn();
+const mockGetCategoryForecast = vi.fn();
 const mockPrintSalesReceipt = vi.fn();
 
 vi.mock('@/api/reports', () => ({
@@ -99,6 +105,7 @@ vi.mock('@/api/reports', () => ({
   getCategoryBreakdown: (...args: unknown[]) => mockGetCategoryBreakdown(...args),
   getCategoryPopularity: (...args: unknown[]) => mockGetCategoryPopularity(...args),
   getCategoryPopularityTrend: (...args: unknown[]) => mockGetCategoryPopularityTrend(...args),
+  getCategoryForecast: (...args: unknown[]) => mockGetCategoryForecast(...args),
 }));
 
 vi.mock('@/api/sales', () => ({
@@ -236,6 +243,15 @@ function resolveDefaultData() {
     buildTrendPoint({ period_start: '2026-07-01', category_id: 'cat-drinks', category_name: 'Drinks', score: 2 }),
     buildTrendPoint({ period_start: '2026-07-02', category_id: 'cat-drinks', category_name: 'Drinks', score: 3 }),
   ]);
+  mockGetCategoryForecast.mockResolvedValue([
+    {
+      category_id: 'cat-drinks',
+      category_name: 'Drinks',
+      forecast_units: 18,
+      trend_per_period: 2,
+      recent_avg_units: 13,
+    },
+  ]);
 }
 
 function buildTrendPoint(overrides: Partial<Record<string, unknown>> = {}) {
@@ -265,6 +281,7 @@ describe('SalesReportScreen', () => {
     // override only the other mocks still resolve the shared Promise.all.
     mockGetCategoryPopularity.mockResolvedValue([]);
     mockGetCategoryPopularityTrend.mockResolvedValue([]);
+    mockGetCategoryForecast.mockResolvedValue([]);
     mockPrintSalesReceipt.mockResolvedValue(undefined);
   });
 
@@ -284,6 +301,7 @@ describe('SalesReportScreen', () => {
     mockGetCategoryBreakdown.mockRejectedValue(new Error('Server offline'));
     mockGetCategoryPopularity.mockRejectedValue(new Error('Server offline'));
     mockGetCategoryPopularityTrend.mockRejectedValue(new Error('Server offline'));
+    mockGetCategoryForecast.mockRejectedValue(new Error('Server offline'));
     renderScreen();
     await waitFor(() => {
       expect(screen.getByText('An error occurred')).toBeTruthy();
@@ -603,8 +621,9 @@ describe('SalesReportScreen', () => {
     await waitFor(() => {
       expect(screen.getByText('Category Popularity')).toBeTruthy();
       // Category row: name, count, catalog ratio, ranked top products
-      // ('3' also appears as a heatmap hour header, so use getAllByText).
-      expect(screen.getByText('Drinks')).toBeTruthy();
+      // ('Drinks' also appears in the Demand Forecast card; '3' is a
+      // heatmap hour header — use getAllByText for both).
+      expect(screen.getAllByText('Drinks').length).toBeGreaterThanOrEqual(1);
       expect(screen.getAllByText('3').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText('1.7×')).toBeTruthy();
       expect(screen.getByText('1. Latte · 2. Mocha · 3. Tea')).toBeTruthy();
@@ -683,6 +702,46 @@ describe('SalesReportScreen', () => {
         'weekly',
         5,
       );
+    });
+  });
+
+  // ── Demand forecast ──────────────────────────────────────────
+  it('renders the demand forecast table with trend direction', async () => {
+    resolveDefaultData();
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByText('Demand Forecast')).toBeTruthy();
+      // 'Drinks' also appears in the Category Popularity card.
+      expect(screen.getAllByText('Drinks').length).toBeGreaterThanOrEqual(1);
+      // Avg 13.0, rising trend ▲ 2.0, next period 18 ('18' is also a
+      // heatmap hour header, so use getAllByText).
+      expect(screen.getByText('13.0')).toBeTruthy();
+      expect(screen.getByText('▲ 2.0')).toBeTruthy();
+      expect(screen.getAllByText('18').length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('shows a falling trend indicator for declining categories', async () => {
+    mockGetDailyRevenue.mockResolvedValue([buildDailyRevenue()]);
+    mockGetTopProducts.mockResolvedValue([]);
+    mockGetHourlyHeatmap.mockResolvedValue([]);
+    mockGetCategoryBreakdown.mockResolvedValue([]);
+    mockGetCategoryPopularity.mockResolvedValue([]);
+    mockGetCategoryPopularityTrend.mockResolvedValue([]);
+    mockGetCategoryForecast.mockResolvedValue([
+      {
+        category_id: 'cat-x',
+        category_name: 'X',
+        forecast_units: 3,
+        trend_per_period: -1.5,
+        recent_avg_units: 8,
+      },
+    ]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByText('▼ 1.5')).toBeTruthy();
+      const down = screen.getByText('▼ 1.5');
+      expect(down.className).toContain('sales-report-forecast-down');
     });
   });
 

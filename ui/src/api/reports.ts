@@ -85,6 +85,20 @@ export interface CategoryBreakdownRow {
   percentage: number;
 }
 
+/** A per-category next-period demand forecast derived from the trend series. */
+export interface CategoryForecastRow {
+  /** Category id; empty string for uncategorized products. */
+  category_id: string;
+  /** Category name; `null` for uncategorized. */
+  category_name: string | null;
+  /** Predicted units sold in the next period (never negative). */
+  forecast_units: number;
+  /** Fitted trend — units per period; 0 when fewer than 2 points. */
+  trend_per_period: number;
+  /** Baseline — mean units per period over the recent series. */
+  recent_avg_units: number;
+}
+
 /** One (period, category) point of the popularity trend series. */
 export interface CategoryTrendPoint {
   /** Period bucket start: `YYYY-MM-DD` (daily/weekly) or `YYYY-MM` (monthly). */
@@ -191,6 +205,24 @@ export const getCategoryPopularity = (
   loggedInvoke<CategoryPopularityRow[]>('get_category_popularity_scoped', {
     sessionToken: sessionToken ?? '',
     topPerCategory,
+  });
+
+/** Get the next-period demand forecast per top category (simple linear fit
+ * over the popularity trend series' recent units), bucketed by
+ * `granularity` over `startDate..=endDate`. */
+export const getCategoryForecast = (
+  sessionToken: string,
+  startDate: string,
+  endDate: string,
+  granularity: 'daily' | 'weekly' | 'monthly',
+  topCategories = 5,
+): Promise<CategoryForecastRow[]> =>
+  loggedInvoke<CategoryForecastRow[]>('get_category_forecast_scoped', {
+    sessionToken: sessionToken ?? '',
+    startDate,
+    endDate,
+    granularity,
+    topCategories,
   });
 
 /** Get the per-period popularity trend for the top `topCategories`

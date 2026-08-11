@@ -38,6 +38,11 @@ sales-report-category-popularity-mean-tip = Rata-rata kategori vs. rata-rata kat
 sales-report-category-popularity-top = Penjual Teratas
 sales-report-category-popularity-uncategorized = Tanpa Kategori
 sales-report-popularity-trend = Tren Popularitas
+sales-report-demand-forecast = Perkiraan Permintaan
+sales-report-demand-forecast-category = Kategori
+sales-report-demand-forecast-avg = Rata-rata / periode
+sales-report-demand-forecast-trend = Tren
+sales-report-demand-forecast-next = Periode berikutnya
 
 heatmap-title = Jam Tersibuk
 heatmap-hour = Jam

@@ -1997,6 +1997,58 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     }
     return points;
   },
+  'get_category_forecast': (args) => {
+    const { startDate, endDate, granularity, topCategories } = (args ?? {}) as {
+      startDate?: string;
+      endDate?: string;
+      granularity?: string;
+      topCategories?: number;
+    };
+    const top = Math.max(1, Math.min(topCategories ?? 5, 10));
+    // Forecast from the same pseudo-series as the trend handler: each
+    // category's slope over its generated points, projected one period.
+    const trend = handlers['get_category_popularity_trend']!({
+      startDate,
+      endDate,
+      granularity,
+      topCategories: top,
+    }) as Array<{
+      category_id: string;
+      category_name: string | null;
+      units_sold: number;
+      score: number;
+    }>;
+    const byCat = new Map<string, { name: string | null; units: number[] }>();
+    for (const p of trend) {
+      const e = byCat.get(p.category_id) ?? { name: p.category_name, units: [] };
+      e.units.push(p.units_sold);
+      byCat.set(p.category_id, e);
+    }
+    const rows = [...byCat.entries()].map(([category_id, e]) => {
+      const units = e.units;
+      const n = units.length;
+      const avg = n ? units.reduce((a, b) => a + b, 0) / n : 0;
+      // Least-squares slope over period indices.
+      const meanX = (n - 1) / 2;
+      let num = 0;
+      let den = 0;
+      for (let i = 0; i < n; i++) {
+        num += (i - meanX) * (units[i]! - avg);
+        den += (i - meanX) * (i - meanX);
+      }
+      const slope = den > 0 ? num / den : 0;
+      const forecast = Math.max(0, Math.round(avg + slope * ((n - 1) / 2)));
+      return {
+        category_id,
+        category_name: e.name,
+        forecast_units: n ? forecast : 0,
+        trend_per_period: Math.round(slope * 10) / 10,
+        recent_avg_units: Math.round(avg * 10) / 10,
+      };
+    });
+    rows.sort((a, b) => b.forecast_units - a.forecast_units);
+    return rows;
+  },
   'get_hourly_heatmap': () => [0, 3, 5, 8, 11].flatMap((day) =>
     [9, 12, 15, 18].map((hour, i) => ({
       day_of_week: day,
@@ -2251,6 +2303,7 @@ const SCOPED_ALIASES: Array<[string, string]> = [
   ['get_top_products_scoped', 'get_top_products'],
   ['get_category_popularity_scoped', 'get_category_popularity'],
   ['get_category_popularity_trend_scoped', 'get_category_popularity_trend'],
+  ['get_category_forecast_scoped', 'get_category_forecast'],
   ['get_hourly_heatmap_scoped', 'get_hourly_heatmap'],
   ['get_category_breakdown_scoped', 'get_category_breakdown'],
   ['get_menu_engineering_scoped', 'get_menu_engineering'],
