@@ -45,6 +45,7 @@ describe('reports.ts scoped IPC contract', () => {
       startDate: '2026-07-01',
       endDate: '2026-07-31',
       limit: 10,
+      orderBy: 'revenue',
     });
     expect(mockInvoke).toHaveBeenNthCalledWith(6, 'get_low_stock_alerts_scoped', {
       sessionToken: 'session-1',

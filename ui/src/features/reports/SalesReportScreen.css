@@ -148,6 +148,18 @@
   color: var(--color-fg);
 }
 
+/* Top-products card heading — title + rank toggle on one row */
+.sales-report-top-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.sales-report-top-heading .sales-report-section-title {
+  margin-bottom: var(--space-3);
+}
+
 /* ── Heatmap ──────────────────────────────────────────────── */
 
 .sales-report-heatmap-header {

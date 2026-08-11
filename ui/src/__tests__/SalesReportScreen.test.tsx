@@ -50,6 +50,9 @@ sales-report-compare-on-aria = Compare to previous period
 sales-report-print-aria = Print report
 sales-report-export-aria = Export CSV
 sales-report-heatmap-aria = Hourly heatmap
+sales-report-top-rank-aria = Rank top products by
+sales-report-top-rank-revenue-aria = Rank by revenue
+sales-report-top-rank-profit-aria = Rank by gross profit
 `;
 
 // ── Mock recharts ─────────────────────────────────────────────────
@@ -488,6 +491,40 @@ describe('SalesReportScreen', () => {
       const loss = screen.getByText('-$300.00');
       expect(loss.className).toContain('sales-report-top-negative');
       expect(screen.getByText('-30.0%')).toBeTruthy();
+    });
+  });
+
+  it('re-ranks by gross profit when the toggle is clicked', async () => {
+    resolveDefaultData();
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByText('Top Products')).toBeTruthy();
+    });
+
+    // Default fetch is ranked by revenue
+    expect(mockGetTopProducts).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      10,
+      '',
+      'revenue',
+    );
+
+    mockGetTopProducts.mockClear();
+    resolveDefaultData();
+    await userEvent.click(screen.getByRole('radio', { name: 'Rank by gross profit' }));
+
+    await waitFor(() => {
+      expect(mockGetTopProducts).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(String),
+        10,
+        '',
+        'profit',
+      );
+      expect(
+        screen.getByRole('radio', { name: 'Rank by gross profit' }).getAttribute('aria-checked'),
+      ).toBe('true');
     });
   });
 

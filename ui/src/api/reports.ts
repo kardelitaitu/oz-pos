@@ -121,18 +121,21 @@ export const getMonthlyRevenue = (
     endDate,
   });
 
-/** Get top-selling products for a date range in the active store. */
+/** Get top-selling products for a date range in the active store, ranked by
+ * `orderBy` — `'revenue'` (default) or `'profit'` (gross profit). */
 export const getTopProducts = (
   startDate: string,
   endDate: string,
   limit: number,
   sessionToken: string,
+  orderBy: 'revenue' | 'profit' = 'revenue',
 ): Promise<TopProductRow[]> =>
   loggedInvoke<TopProductRow[]>('get_top_products_scoped', {
     sessionToken: sessionToken ?? '',
     startDate,
     endDate,
     limit,
+    orderBy,
   });
 
 /** Get hourly sales heatmap data for a date range in the active store. */

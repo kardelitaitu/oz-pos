@@ -87,6 +87,10 @@ export default function SalesReportScreen() {
 
   const [revenueData, setRevenueData] = useState<RevenueRow[]>([]);
   const [topProducts, setTopProducts] = useState<TopProductRow[]>([]);
+  // Rank the top-products table by revenue (default) or gross profit.
+  // Boolean flag keeps className interpolations quote-free (see
+  // screenExtraction: quoted strings inside `${...}` are read as classes).
+  const [rankByProfit, setRankByProfit] = useState(false);
   const [heatmap, setHeatmap] = useState<HourlyHeatmapRow[]>([]);
   const [categoryBreakdown, setCategoryBreakdown] = useState<
     CategoryBreakdownRow[]
@@ -123,7 +127,7 @@ export default function SalesReportScreen() {
 
     Promise.all([
       revenuePromise,
-      getTopProducts(startDate, endDate, 10, sessionToken),
+      getTopProducts(startDate, endDate, 10, sessionToken, rankByProfit ? 'profit' : 'revenue'),
       getHourlyHeatmap(startDate, endDate, sessionToken),
       getCategoryBreakdown(startDate, endDate, sessionToken),
     ])
@@ -139,7 +143,7 @@ export default function SalesReportScreen() {
       .finally(() => {
         setLoading(false);
       });
-  }, [view, startDate, endDate, sessionToken]);
+  }, [view, startDate, endDate, sessionToken, rankByProfit]);
 
   // P9-3: Fetch previous period data when comparison is enabled
   const calcPrevRange = useCallback(() => {
@@ -537,9 +541,35 @@ export default function SalesReportScreen() {
         </Card>
 
         <Card shadow="sm" className="sales-report-chart-card">
-          <Localized id="sales-report-top-products">
-            <h2 className="sales-report-section-title">Top Products</h2>
-          </Localized>
+          <div className="sales-report-top-heading">
+            <Localized id="sales-report-top-products">
+              <h2 className="sales-report-section-title">Top Products</h2>
+            </Localized>
+            <div
+              className="sales-report-view-toggle"
+              role="radiogroup"
+              aria-label={requiredLocalized(l10n, 'sales-report-top-rank-aria')}
+            >
+              <button
+                className={`sales-report-view-btn ${rankByProfit ? 'active' : ''}`}
+                onClick={() => setRankByProfit(false)}
+                role="radio"
+                aria-checked={!rankByProfit}
+                aria-label={requiredLocalized(l10n, 'sales-report-top-rank-revenue-aria')}
+              >
+                <Localized id="top-products-revenue">Revenue</Localized>
+              </button>
+              <button
+                className={`sales-report-view-btn ${rankByProfit ? 'active' : ''}`}
+                onClick={() => setRankByProfit(true)}
+                role="radio"
+                aria-checked={rankByProfit}
+                aria-label={requiredLocalized(l10n, 'sales-report-top-rank-profit-aria')}
+              >
+                <Localized id="top-products-gross-profit">Gross Profit</Localized>
+              </button>
+            </div>
+          </div>
           {topProducts.length === 0 ? (
             <p className="sales-report-no-data">
               <Localized id="no-results">

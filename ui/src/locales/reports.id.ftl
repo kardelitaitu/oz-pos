@@ -24,6 +24,9 @@ top-products-quantity = Jumlah Terjual
 top-products-revenue = Pendapatan
 top-products-gross-profit = Laba Kotor
 top-products-margin = Margin
+sales-report-top-rank-aria = Urutkan produk terlaris berdasarkan
+sales-report-top-rank-revenue-aria = Urutkan berdasarkan pendapatan
+sales-report-top-rank-profit-aria = Urutkan berdasarkan laba kotor
 
 heatmap-title = Jam Tersibuk
 heatmap-hour = Jam

@@ -1890,23 +1890,29 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     });
     return [...months.values()].map((m) => ({ ...m, currency: 'IDR' }));
   },
-  'get_top_products': () => MOCK_PRODUCTS.slice(0, 5).map((p, i) => {
-    const qty = 3 + (i * 7) % 30;
-    const total_minor = p.price.minor_units * qty;
-    const cogs_minor = (p.cost_minor ?? 0) * qty;
-    return {
-      product_id: p.sku,
-      sku: p.sku,
-      name: p.name,
-      total_qty: qty,
-      total_minor,
-      cogs_minor,
-      gross_profit_minor: total_minor - cogs_minor,
-      gross_margin_percent: total_minor > 0
-        ? ((total_minor - cogs_minor) / total_minor) * 100
-        : 0,
-    };
-  }),
+  'get_top_products': (args) => {
+    const { orderBy } = (args ?? {}) as { orderBy?: 'revenue' | 'profit' };
+    const rows = MOCK_PRODUCTS.slice(0, 5).map((p, i) => {
+      const qty = 3 + (i * 7) % 30;
+      const total_minor = p.price.minor_units * qty;
+      const cogs_minor = (p.cost_minor ?? 0) * qty;
+      return {
+        product_id: p.sku,
+        sku: p.sku,
+        name: p.name,
+        total_qty: qty,
+        total_minor,
+        cogs_minor,
+        gross_profit_minor: total_minor - cogs_minor,
+        gross_margin_percent: total_minor > 0
+          ? ((total_minor - cogs_minor) / total_minor) * 100
+          : 0,
+      };
+    });
+    return orderBy === 'profit'
+      ? rows.sort((a, b) => b.gross_profit_minor - a.gross_profit_minor)
+      : rows;
+  },
   'get_hourly_heatmap': () => [0, 3, 5, 8, 11].flatMap((day) =>
     [9, 12, 15, 18].map((hour, i) => ({
       day_of_week: day,

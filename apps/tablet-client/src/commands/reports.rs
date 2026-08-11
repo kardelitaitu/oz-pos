@@ -46,6 +46,17 @@ fn validate_top_product_limit(limit: i64) -> Result<(), AppError> {
     Ok(())
 }
 
+/// The top-products ranking keys accepted by the command layer (whitelist
+/// — the store query falls back to revenue for anything else).
+fn validate_top_product_order(order_by: &str) -> Result<(), AppError> {
+    if !matches!(order_by, "revenue" | "profit") {
+        return Err(AppError::Invalid(format!(
+            "top product order must be 'revenue' or 'profit', got '{order_by}'"
+        )));
+    }
+    Ok(())
+}
+
 #[command]
 /// Get menu engineering for the session's store.
 pub async fn get_menu_engineering_scoped(
@@ -136,14 +147,16 @@ pub async fn get_top_products_scoped(
     start_date: String,
     end_date: String,
     limit: i64,
+    order_by: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<TopProductRow>, AppError> {
     validate_top_product_limit(limit)?;
+    validate_top_product_order(&order_by)?;
     let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
-    Ok(Store::new(&db).top_products(&start_date, &end_date, limit)?)
+    Ok(Store::new(&db).top_products(&start_date, &end_date, limit, &order_by)?)
 }
 
 #[command]

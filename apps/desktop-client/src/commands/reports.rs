@@ -45,6 +45,17 @@ fn validate_top_product_limit(limit: i64) -> Result<(), AppError> {
     Ok(())
 }
 
+/// The top-products ranking keys accepted by the command layer (whitelist
+/// — the store query falls back to revenue for anything else).
+fn validate_top_product_order(order_by: &str) -> Result<(), AppError> {
+    if !matches!(order_by, "revenue" | "profit") {
+        return Err(AppError::Invalid(format!(
+            "top product order must be 'revenue' or 'profit', got '{order_by}'"
+        )));
+    }
+    Ok(())
+}
+
 #[tauri::command]
 /// Get menu engineering from the global database.
 ///
@@ -194,10 +205,12 @@ pub async fn get_top_products(
     start_date: String,
     end_date: String,
     limit: i64,
+    order_by: String,
 ) -> Result<Vec<TopProductRow>, AppError> {
+    validate_top_product_order(&order_by)?;
     let db = state.db.lock().await;
     let store = Store::new(&db);
-    let rows = store.top_products(&start_date, &end_date, limit)?;
+    let rows = store.top_products(&start_date, &end_date, limit, &order_by)?;
     drop(db);
     Ok(rows)
 }
@@ -209,14 +222,16 @@ pub async fn get_top_products_scoped(
     start_date: String,
     end_date: String,
     limit: i64,
+    order_by: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<TopProductRow>, AppError> {
     validate_top_product_limit(limit)?;
+    validate_top_product_order(&order_by)?;
     let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
     let db = conn
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
-    Ok(Store::new(&db).top_products(&start_date, &end_date, limit)?)
+    Ok(Store::new(&db).top_products(&start_date, &end_date, limit, &order_by)?)
 }
 
 #[tauri::command]
@@ -393,6 +408,19 @@ mod tests {
     fn top_product_limit_rejects_unbounded_values() {
         for limit in [0, -1, MAX_TOP_PRODUCTS + 1, i64::MAX] {
             assert!(validate_top_product_limit(limit).is_err());
+        }
+    }
+
+    #[test]
+    fn top_product_order_accepts_revenue_and_profit() {
+        assert!(validate_top_product_order("revenue").is_ok());
+        assert!(validate_top_product_order("profit").is_ok());
+    }
+
+    #[test]
+    fn top_product_order_rejects_unknown_values() {
+        for bad in ["", "quantity", "margin", "revenue DESC"] {
+            assert!(validate_top_product_order(bad).is_err());
         }
     }
 }
