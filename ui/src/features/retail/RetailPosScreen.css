@@ -3014,3 +3014,226 @@
   flex: 1;
   overflow: auto;
 }
+
+/* ── ADR #36: retail attribute columns ─────────────────────────── */
+.retail-col-barcode {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+  white-space: nowrap;
+  width: 120px;
+  line-height: 1.25;
+}
+
+.retail-col-category {
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+  white-space: nowrap;
+  width: 130px;
+  line-height: 1.25;
+}
+
+.retail-col-brand {
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+  white-space: nowrap;
+  width: 110px;
+  line-height: 1.25;
+}
+
+.retail-col-rack {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+  white-space: nowrap;
+  width: 90px;
+  line-height: 1.25;
+}
+
+.retail-col-notes {
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+
+/* ── ADR #37: popularity sort chip ─────────────────────────────── */
+.retail-sort-popularity-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1_5);
+  padding: var(--space-1_5) var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--color-fg-secondary);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color var(--duration-150) var(--ease-out),
+    color var(--duration-150) var(--ease-out),
+    border-color var(--duration-150) var(--ease-out);
+}
+
+.retail-sort-popularity-btn:hover {
+  color: var(--color-accent);
+  border-color: var(--color-border-strong);
+}
+
+.retail-sort-popularity-btn--active {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+  background: var(--color-accent-subtle);
+}
+
+/* ── ADR #36: column toggle button + menu ──────────────────────── */
+.retail-col-toggle-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.retail-col-toggle-btn {
+  padding: var(--space-1_5) var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--color-fg-secondary);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color var(--duration-150) var(--ease-out),
+    color var(--duration-150) var(--ease-out),
+    border-color var(--duration-150) var(--ease-out);
+}
+
+.retail-col-toggle-btn:hover {
+  color: var(--color-accent);
+  border-color: var(--color-border-strong);
+}
+
+.retail-col-toggle-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 500;
+  min-width: 220px;
+  padding: var(--space-2);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.retail-col-toggle-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1_5) var(--space-2);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  color: var(--color-fg-primary);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+}
+
+.retail-col-toggle-item:hover {
+  background: var(--color-bg-hover);
+}
+
+.retail-col-toggle-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  font-size: var(--text-xs);
+  color: transparent;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.retail-col-toggle-check--on {
+  color: var(--color-accent-fg);
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.retail-col-toggle-divider {
+  height: 1px;
+  margin: var(--space-1_5) 0;
+  background: var(--color-border-subtle);
+}
+
+/* ── ADR #38: row context menu ─────────────────────────────────── */
+.retail-row-context-menu {
+  position: fixed;
+  min-width: 200px;
+  padding: var(--space-1_5);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.retail-row-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-2_5);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  color: var(--color-fg-primary);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+}
+
+.retail-row-menu-item:hover,
+.retail-row-menu-item:focus-visible {
+  background: var(--color-bg-hover);
+  color: var(--color-accent);
+  outline: none;
+}
+
+/* ── ADR #36: modal attribute fields ───────────────────────────── */
+.retail-edit-cost-override-hint {
+  font-size: var(--text-xs);
+  color: var(--color-accent);
+  margin-top: 2px;
+}
+
+.retail-edit-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-pos-modal-label);
+  cursor: pointer;
+  user-select: none;
+}
+
+.retail-edit-checkbox input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--color-success-pos);
+  cursor: pointer;
+}

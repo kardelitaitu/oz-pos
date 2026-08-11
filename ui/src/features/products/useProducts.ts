@@ -58,6 +58,14 @@ function dtoToProduct(dto: ProductDto, uncategorisedLabel: string): Product {
     createdAt: dto.created_at,
     priceUpdatedAt: dto.price_updated_at,
     productType: dto.product_type as Product['productType'],
+    costMinor: dto.cost_minor ?? 0,
+    brand: dto.brand ?? null,
+    rackLocation: dto.rack_location ?? null,
+    notes: dto.notes ?? null,
+    unit: dto.unit ?? null,
+    isActive: dto.is_active !== false,
+    defaultSupplierId: dto.default_supplier_id ?? null,
+    popularityScore: dto.popularity_score ?? 0,
   };
 }
 

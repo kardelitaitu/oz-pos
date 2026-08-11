@@ -528,6 +528,13 @@ function ProductCard({ product, onAdd, added }: ProductCardProps) {
           {/* SKU */}
           <span className="product-card-sku">{product.sku}</span>
 
+          {/* Rack position (ADR #36 D6): staff find the item without asking a manager */}
+          {product.rackLocation && (
+            <span className="product-card-rack" title={l10n.getString('product-lookup-rack-title')}>
+              📦 {product.rackLocation}
+            </span>
+          )}
+
           {/* Footer: stock indicator + add icon */}
           <div className="product-card-footer">
             <span

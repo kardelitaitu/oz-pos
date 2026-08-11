@@ -81,7 +81,8 @@ describe('AddProductModal', () => {
     const nameInput = screen.getByPlaceholderText('e.g. Logitech G Pro X Wireless Mouse');
     await user.type(nameInput, 'Corsair Vengeance DDR5 32GB');
 
-    const priceInput = screen.getByDisplayValue('0');
+    // Price and cost both default to 0 (ADR #36), so disambiguate by order.
+    const priceInput = screen.getAllByDisplayValue('0')[0] as HTMLElement;
     await user.clear(priceInput);
     await user.type(priceInput, '1850000');
 

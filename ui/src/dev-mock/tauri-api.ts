@@ -28,7 +28,7 @@ const MOCK_STAFF: Record<string, {
   'kasir': { user_id: 'kasir-1', pin_hash: '1234', role: 'cashier', is_active: true },
 };
 
-const MOCK_PRODUCTS = [
+const RAW_MOCK_PRODUCTS = [
   { sku: 'CPU-R7-7800X3D', name: 'AMD Ryzen 7 7800X3D 8-Core', category: 'Processors (CPU)', price: { minor_units: 6250000, currency: 'IDR' }, barcode: '730143314930', in_stock: true, stock_qty: 15, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
   { sku: 'CPU-I7-14700K', name: 'Intel Core i7-14700K 20-Core', category: 'Processors (CPU)', price: { minor_units: 6450000, currency: 'IDR' }, barcode: '503203727850', in_stock: true, stock_qty: 10, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
   { sku: 'CPU-R5-7600', name: 'AMD Ryzen 5 7600 6-Core', category: 'Processors (CPU)', price: { minor_units: 3150000, currency: 'IDR' }, barcode: '730143314503', in_stock: true, stock_qty: 25, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'retail' },
@@ -58,6 +58,21 @@ const MOCK_PRODUCTS = [
   { sku: 'BAGEL', name: 'Plain Bagel', category: 'Food', price: { minor_units: 25000, currency: 'IDR' }, barcode: '4901234567894', in_stock: true, stock_qty: 100, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
   { sku: 'SANDW-C', name: 'Chicken Sandwich', category: 'Food', price: { minor_units: 75000, currency: 'IDR' }, barcode: '4901234567899', in_stock: true, stock_qty: 15, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
 ];
+
+// ADR #36/#37: enrich the raw mock catalog with the retail attribute fields
+// (brand/rack/notes/unit/cost) and a deterministic popularity score so the
+// default popularity sort has visible ordering in dev/demo.
+const MOCK_PRODUCTS = RAW_MOCK_PRODUCTS.map((p, i) => ({
+  ...p,
+  cost_minor: 0,
+  brand: p.name.includes('AMD') || p.name.includes('Ryzen') ? 'AMD' : null,
+  rack_location: `R-${String(Math.floor(i / 4) + 1).padStart(2, '0')}`, // R-01..R-05
+  notes: null,
+  unit: 'pcs',
+  is_active: true,
+  default_supplier_id: null,
+  popularity_score: RAW_MOCK_PRODUCTS.length - i, // descending demo ranking
+}));
 
 const MOCK_CATEGORIES = [
   { id: 'cat-cpu', name: 'Processors (CPU)', colour: '#e74c3c', icon: 'cpu-1' },
@@ -1203,6 +1218,13 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'update_product_scoped': () => ({ sku: 'SKU-UPD' }),
   'delete_product': () => null,
   'delete_product_scoped': () => null,
+
+  // ADR #37 D3: fire-and-forget popularity search signal.
+  'record_product_search_scoped': () => null,
+
+  // ADR #38 D3: browser opening — dev-mock keeps window.open fallback
+  // client-side; the real backend performs the open in production.
+  'open_product_images_scoped': () => null,
 
   'lookup_product_by_sku': (args) => {
     const { sku } = args as { sku: string };

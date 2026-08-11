@@ -91,6 +91,22 @@ export interface Product {
   readonly priceUpdatedAt?: string;
   /** Product type: "retail" | "restaurant" | "both" | "service". */
   readonly productType: 'retail' | 'restaurant' | 'both' | 'service';
+  /** Cost price in minor units (local-only, ADR #36). */
+  readonly costMinor?: number;
+  /** Brand (free text). */
+  readonly brand?: string | null;
+  /** Rack position code. */
+  readonly rackLocation?: string | null;
+  /** Free-text notes. */
+  readonly notes?: string | null;
+  /** Unit of measure. */
+  readonly unit?: string | null;
+  /** Active/sellable status. */
+  readonly isActive?: boolean;
+  /** Default supplier FK (local-only). */
+  readonly defaultSupplierId?: string | null;
+  /** Materialized popularity score (ADR #37) — retail grid sort key. */
+  readonly popularityScore?: number;
 }
 
 /** Mirrors `AppError` in `apps/desktop-client/src/error.rs`. */

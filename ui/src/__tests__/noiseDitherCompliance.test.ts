@@ -110,6 +110,11 @@ const KNOWN_NOISE_SELECTORS = [
   '.promo-mgmt-table',
   '.menu-eng-tooltip',
   '.retail-menu',
+  // ADR #36 retail grid column-toggle dropdown + ADR #38 row context menu
+  // (positioned absolute/fixed — the .noise-dither relative utility would
+  // fight their anchoring, so they use the explicit ::after path).
+  '.retail-col-toggle-menu',
+  '.retail-row-context-menu',
   '.pos-cart-undo-bar',
   ".pos-cart-tip-segment[aria-pressed='true']",
   '.retail-reminder-popup',

@@ -927,6 +927,36 @@ retail-add-product-category-label = Category
 retail-add-product-name-placeholder = e.g. Logitech G Pro X Wireless Mouse
 retail-sku-lookup-aria = Look up SKU
 
+# ── Retail POS table columns (ADR #36 D4) ──
+retail-col-barcode = Barcode
+retail-col-category = Category
+retail-col-brand = Brand
+retail-col-rack = Rack
+retail-col-notes = Notes
+retail-col-popularity = Popularity
+retail-col-popularity-title = Sort by popularity
+retail-col-hide-inactive = Hide inactive products
+retail-col-toggle-btn = Columns
+retail-col-toggle-title = Show / hide columns
+retail-col-toggle-aria = Choose visible columns
+
+# ── Retail product attributes (ADR #36 D5) ──
+retail-edit-field-cost = Cost (IDR)
+retail-edit-field-unit = Unit
+retail-edit-field-brand = Brand
+retail-edit-field-rack = Rack
+retail-edit-field-notes = Notes
+retail-edit-field-active = Active (sellable)
+retail-edit-cost-override-hint = Restocking — update the cost to the latest purchase price
+retail-toast-save-product-failed = Failed to save product
+
+# ── Retail row context menu (ADR #38) ──
+retail-row-menu-aria = Product actions
+retail-row-menu-view-images = View product images
+
+# ── Product Lookup rack (ADR #36 D6) ──
+product-lookup-rack-title = Rack position
+
 # ── Gift Cards ─────────────────────────────────────────────────────
 gift-cards-loading = Loading...
 gift-cards-status-all = All Statuses

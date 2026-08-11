@@ -1,6 +1,7 @@
 import type React from 'react';
 import { useState, useEffect, useRef } from 'react';
-import { Localized } from '@fluent/react';
+import { Localized, useLocalization } from '@fluent/react';
+import { requiredLocalized } from '@/frontend/shared';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import type { ProductDto } from '@/api/products';
 
@@ -17,11 +18,19 @@ export const EditProductModal: React.FC<EditProductModalProps> = ({
   onClose,
   onSave,
 }) => {
+  const { l10n } = useLocalization();
   const [name, setName] = useState('');
   const [priceMinor, setPriceMinor] = useState<number | ''>(0);
   const [stockQty, setStockQty] = useState<number | ''>(0);
   const [lowThreshold, setLowThreshold] = useState<number | ''>(5);
   const [highThreshold, setHighThreshold] = useState<number | ''>(10);
+  // ADR #36: cost (edit/override), brand, rack, notes, unit, status.
+  const [costMinor, setCostMinor] = useState<number | ''>(0);
+  const [brand, setBrand] = useState('');
+  const [rackLocation, setRackLocation] = useState('');
+  const [notes, setNotes] = useState('');
+  const [unit, setUnit] = useState('');
+  const [isActive, setIsActive] = useState(true);
 
   useEffect(() => {
     if (isOpen && product) {
@@ -30,6 +39,12 @@ export const EditProductModal: React.FC<EditProductModalProps> = ({
       setStockQty(product.stock_qty ?? 0);
       setLowThreshold(product.low_stock_threshold ?? 5);
       setHighThreshold(product.high_stock_threshold ?? 10);
+      setCostMinor(product.cost_minor ?? 0);
+      setBrand(product.brand ?? '');
+      setRackLocation(product.rack_location ?? '');
+      setNotes(product.notes ?? '');
+      setUnit(product.unit ?? '');
+      setIsActive(product.is_active !== false);
     }
   }, [isOpen, product]);
 
@@ -56,11 +71,25 @@ export const EditProductModal: React.FC<EditProductModalProps> = ({
       in_stock: (stockQty === '' ? 0 : Math.max(0, stockQty)) > 0,
       low_stock_threshold: Math.max(0, lowThreshold === '' ? 0 : lowThreshold),
       high_stock_threshold: Math.max(0, highThreshold === '' ? 0 : highThreshold),
+      cost_minor: Math.max(0, costMinor === '' ? 0 : costMinor),
+      brand: brand.trim() || null,
+      rack_location: rackLocation.trim() || null,
+      notes: notes.trim() || null,
+      unit: unit.trim() || null,
+      is_active: isActive,
+      default_supplier_id: product.default_supplier_id ?? null,
+      popularity_score: product.popularity_score ?? 0,
     };
 
     onSave(updatedProduct);
     onClose();
   };
+
+  // ADR #36 D5: restocking (stock qty increased) shows the cost-override
+  // hint — the Cost field doubles as the override for the newly received
+  // stock.
+  const originalStock = product.stock_qty ?? 0;
+  const restocking = Math.max(0, stockQty === '' ? 0 : stockQty) > originalStock;
 
   return (
     <>
@@ -210,6 +239,114 @@ export const EditProductModal: React.FC<EditProductModalProps> = ({
               />
             </div>
           </div>
+
+          {/* ── ADR #36 attributes ── */}
+          <div className="retail-edit-form-row">
+            <div className="retail-edit-form-group">
+              <Localized id="retail-edit-field-cost">
+                <label htmlFor="edit-product-cost" className="retail-edit-label">
+                  Cost (IDR)
+                </label>
+              </Localized>
+              <input
+                id="edit-product-cost"
+                type="number"
+                min="0"
+                step="1"
+                className="retail-edit-input"
+                value={costMinor}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setCostMinor(v === '' ? '' : Math.max(0, parseInt(v, 10) || 0));
+                }}
+              />
+              {restocking && (
+                <div className="retail-edit-cost-override-hint" role="note">
+                  {requiredLocalized(l10n, 'retail-edit-cost-override-hint')}
+                </div>
+              )}
+            </div>
+
+            <div className="retail-edit-form-group">
+              <Localized id="retail-edit-field-unit">
+                <label htmlFor="edit-product-unit" className="retail-edit-label">
+                  Unit
+                </label>
+              </Localized>
+              <input
+                id="edit-product-unit"
+                type="text"
+                className="retail-edit-input"
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+                placeholder="pcs / kg / box"
+              />
+            </div>
+          </div>
+
+          <div className="retail-edit-form-row">
+            <div className="retail-edit-form-group">
+              <Localized id="retail-edit-field-brand">
+                <label htmlFor="edit-product-brand" className="retail-edit-label">
+                  Brand
+                </label>
+              </Localized>
+              <input
+                id="edit-product-brand"
+                type="text"
+                className="retail-edit-input"
+                value={brand}
+                onChange={(e) => setBrand(e.target.value)}
+              />
+            </div>
+
+            <div className="retail-edit-form-group">
+              <Localized id="retail-edit-field-rack">
+                <label htmlFor="edit-product-rack" className="retail-edit-label">
+                  Rack
+                </label>
+              </Localized>
+              <input
+                id="edit-product-rack"
+                type="text"
+                className="retail-edit-input"
+                value={rackLocation}
+                onChange={(e) => setRackLocation(e.target.value)}
+                placeholder="A-01"
+              />
+            </div>
+          </div>
+
+          <div className="retail-edit-form-group">
+            <Localized id="retail-edit-field-notes">
+              <label htmlFor="edit-product-notes" className="retail-edit-label">
+                Notes
+              </label>
+            </Localized>
+            <textarea
+              id="edit-product-notes"
+              rows={2}
+              className="retail-edit-input"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+
+          <label
+            className="retail-edit-checkbox"
+            htmlFor="edit-product-active"
+            aria-label={requiredLocalized(l10n, 'retail-edit-field-active')}
+          >
+            <input
+              id="edit-product-active"
+              type="checkbox"
+              checked={isActive}
+              onChange={(e) => setIsActive(e.target.checked)}
+            />
+            <Localized id="retail-edit-field-active">
+              <span>Active (sellable)</span>
+            </Localized>
+          </label>
 
           <div className="retail-edit-modal-actions">
             <Localized id="retail-edit-cancel">

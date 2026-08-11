@@ -898,6 +898,36 @@ retail-add-product-category-label = Kategori
 retail-add-product-name-placeholder = mis. Logitech G Pro X Wireless Mouse
 retail-sku-lookup-aria = Cari berdasarkan SKU
 
+# ── Retail POS table columns (ADR #36 D4) ──
+retail-col-barcode = Barcode
+retail-col-category = Kategori
+retail-col-brand = Merek
+retail-col-rack = Rak
+retail-col-notes = Catatan
+retail-col-popularity = Populer
+retail-col-popularity-title = Urutkan berdasarkan popularitas
+retail-col-hide-inactive = Sembunyikan produk nonaktif
+retail-col-toggle-btn = Kolom
+retail-col-toggle-title = Tampilkan / sembunyikan kolom
+retail-col-toggle-aria = Pilih kolom yang terlihat
+
+# ── Retail product attributes (ADR #36 D5) ──
+retail-edit-field-cost = HPP (IDR)
+retail-edit-field-unit = Satuan
+retail-edit-field-brand = Merek
+retail-edit-field-rack = Rak
+retail-edit-field-notes = Catatan
+retail-edit-field-active = Aktif (dapat dijual)
+retail-edit-cost-override-hint = Menambah stok — perbarui HPP ke harga beli terbaru
+retail-toast-save-product-failed = Gagal menyimpan produk
+
+# ── Retail row context menu (ADR #38) ──
+retail-row-menu-aria = Aksi produk
+retail-row-menu-view-images = Lihat gambar produk
+
+# ── Product Lookup rack (ADR #36 D6) ──
+product-lookup-rack-title = Posisi rak
+
 # ── Scale indicator widget ────────────────────────────────────────────────────
 scale-indicator-aria = Indikator timbangan
 scale-idle = Timbangan
