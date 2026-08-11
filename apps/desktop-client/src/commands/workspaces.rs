@@ -440,9 +440,12 @@ pub async fn list_workspaces(
     let user_id = picker_ticket::verify_picker_ticket(&state.picker_ticket_secret, &ticket, now_ts)
         .ok_or_else(|| AppError::PermissionDenied("invalid or expired picker session".into()))?;
 
-    // 2. Resolve the REAL user + role from the global identity DB. The ticket
-    //    binds the user; the role is derived from the DB, never the claim.
-    let (real_role_id, real_user_id) = {
+    // 2. Resolve the REAL user + role + assignment from the global identity
+    //    DB. The ticket binds the user; the role is derived from the DB,
+    //    never the claim. The assignment (ADR #35 D5 / spec 0048) is what
+    //    constrains a scoped user's picker below — legacy users without an
+    //    assignment row are not scope-restricted.
+    let (real_role_id, real_user_id, assignment) = {
         let db = state.db.lock().await;
         let store = Store::new(&db);
         let user = store.get_user(&user_id)?.ok_or_else(|| {
@@ -456,7 +459,8 @@ pub async fn list_workspaces(
         let role = store
             .get_role(&user.role_id)?
             .ok_or_else(|| AppError::Internal(format!("role {} not found", user.role_id)))?;
-        (role.id, user.id)
+        let assignment = store.assignment_for_user(&user.id)?;
+        (role.id, user.id, assignment)
     };
 
     // 3. List instances in the requested store using the REAL role + user.
@@ -472,7 +476,19 @@ pub async fn list_workspaces(
     let store = Store::new(&db);
     let rows = store.list_workspaces(&real_role_id, Some(&real_user_id), &store_id)?;
     drop(db);
-    Ok(rows)
+
+    // 4. Scope-filter the listing through the user's assignment (ADR #35 D5
+    //    / spec 0048): global assignments and legacy users (no assignment)
+    //    pass everything; a scoped assignment keeps only instances whose
+    //    store (branch) and workspace type are in scope — fail closed, so an
+    //    out-of-scope store or workspace type lists nothing.
+    Ok(match assignment {
+        Some(assignment) => rows
+            .into_iter()
+            .filter(|d| assignment.matches_scope(Some(&store_id), Some(&d.type_key)))
+            .collect(),
+        None => rows,
+    })
 }
 
 /// List workspace instances in an explicitly named store for the session user.
@@ -1014,6 +1030,7 @@ mod tests {
     // REAL role is resolved from the global identity DB.
 
     use oz_core::StoreProfile;
+    use oz_core::db::assignments::{AssignmentSpec, ScopeMode};
     use oz_core::migrations;
     use platform_core::StoreDatabaseManager;
     use tauri::Manager as _;
@@ -1252,6 +1269,95 @@ mod tests {
         assert!(
             cashier_rows.is_empty(),
             "limited role must not see owner-level instances, got {cashier_rows:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn scoped_assignment_filters_picker_workspace_list() {
+        let (state, _dir) = picker_state();
+        // Add a second instance of a different workspace type to store-a so
+        // the workspace dimension of a scoped assignment has something to
+        // filter (the owner bypass would otherwise list both).
+        {
+            let conn = state.db_manager.open_store("store-a").unwrap();
+            let db = conn.lock().unwrap();
+            Store::new(&db)
+                .create_workspace_instance("ws-a-2", "kds", "store-a", "Kitchen", "", None)
+                .unwrap();
+        }
+        // The owner keeps the legacy owner bypass (both instances would
+        // list) but the assignment scope now limits the picker to the
+        // store-pos workspace type (ADR #35 D5 / spec 0048).
+        {
+            let db = state.db.lock().await;
+            Store::new(&db)
+                .set_assignment(
+                    "user-owner",
+                    "role-owner",
+                    &AssignmentSpec {
+                        scope_mode: ScopeMode::Scoped,
+                        branches_all: true,
+                        branches: vec![],
+                        workspaces_all: false,
+                        workspaces: vec!["store-pos".into()],
+                    },
+                )
+                .unwrap();
+        }
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+        let ticket = sign_ticket_for(&app.state(), "user-owner", 300);
+        let rows = list_workspaces(app.state(), ticket, "store-a".into())
+            .await
+            .unwrap();
+        assert!(
+            rows.iter().any(|d| d.type_key == "store-pos"),
+            "in-scope workspace type must list, got {rows:?}"
+        );
+        assert!(
+            rows.iter().all(|d| d.type_key != "kds"),
+            "out-of-scope workspace type must be hidden, got {rows:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn scoped_assignment_branch_dimension_denies_out_of_scope_store() {
+        let (state, _dir) = picker_state();
+        // Owner scoped to branch store-a only — store-b is out of scope, so
+        // listing it must yield nothing (fail closed per ADR #35 D5).
+        {
+            let db = state.db.lock().await;
+            Store::new(&db)
+                .set_assignment(
+                    "user-owner",
+                    "role-owner",
+                    &AssignmentSpec {
+                        scope_mode: ScopeMode::Scoped,
+                        branches_all: false,
+                        branches: vec!["store-a".into()],
+                        workspaces_all: true,
+                        workspaces: vec![],
+                    },
+                )
+                .unwrap();
+        }
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+        let ticket = sign_ticket_for(&app.state(), "user-owner", 300);
+        let in_scope = list_workspaces(app.state(), ticket.clone(), "store-a".into())
+            .await
+            .unwrap();
+        assert!(in_scope.iter().any(|d| d.instance_id == "ws-a-1"));
+        let out_of_scope = list_workspaces(app.state(), ticket, "store-b".into())
+            .await
+            .unwrap();
+        assert!(
+            out_of_scope.is_empty(),
+            "branch out of scope must deny the whole store, got {out_of_scope:?}"
         );
     }
 
