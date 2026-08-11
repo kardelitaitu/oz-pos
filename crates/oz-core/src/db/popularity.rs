@@ -48,6 +48,29 @@ pub struct CategoryTopProduct {
     pub percentile: f64,
 }
 
+/// One (period, category) point of the popularity trend series.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CategoryTrendPoint {
+    /// Period bucket start: `YYYY-MM-DD` (daily/weekly) or `YYYY-MM` (monthly).
+    pub period_start: String,
+    /// Category id; empty string for uncategorized products.
+    pub category_id: String,
+    /// Category name; `None` for uncategorized (the UI localizes the label).
+    pub category_name: Option<String>,
+    /// Period popularity score — the ADR #37 blend evaluated over the
+    /// period's raw signals, smoothed toward the cached category means, so
+    /// the series is on the same scale as the current `popularity_score`.
+    pub score: f64,
+    /// Units sold in the period (completed sales).
+    pub units_sold: i64,
+    /// Distinct transactions in the period (breadth input).
+    pub distinct_transactions: i64,
+    /// Acted-upon searches in the period.
+    pub searches: i64,
+    /// Edit events in the period.
+    pub edits: i64,
+}
+
 /// Per-category popularity summary (ADR #37 — the per-category evolution:
 /// the smoothing means are used for scoring, and this query surfaces the
 /// resulting category standings for the reporting layer).
@@ -84,7 +107,172 @@ fn window_modifier() -> String {
     format!("-{} days", crate::popularity::WINDOW_DAYS)
 }
 
+/// Accepted granularities for [`Store::category_popularity_trend`].
+pub const TREND_GRANULARITIES: [&str; 3] = ["daily", "weekly", "monthly"];
+
 impl Store<'_> {
+    /// Per-period popularity trend for the top `top_categories` categories.
+    ///
+    /// Buckets the sale/search/edit ledgers by `granularity` (`daily`,
+    /// `weekly`, `monthly`; the weekly bucket mirrors `weekly_revenue`'s
+    /// `DATE(created_at, 'weekday 0', '-7 days')`) over `[start_date,
+    /// end_date]` and evaluates the ADR #37 blend per (period, category)
+    /// with the raw period counts smoothed toward the cached category
+    /// means — the same scale as the materialized `popularity_score`, so a
+    /// category's trend line reads directly against its current standing.
+    pub fn category_popularity_trend(
+        &self,
+        start_date: &str,
+        end_date: &str,
+        granularity: &str,
+        top_categories: i64,
+    ) -> Result<Vec<CategoryTrendPoint>, CoreError> {
+        // Qualified period expressions: the sales query joins `sales s` and
+        // the activity query joins `products p` (which also has a
+        // `created_at`), so the column must be explicit per query.
+        let (s_period, a_period) = match granularity {
+            "weekly" => (
+                "DATE(s.created_at, 'weekday 0', '-7 days')",
+                "DATE(a.created_at, 'weekday 0', '-7 days')",
+            ),
+            "monthly" => (
+                "strftime('%Y-%m', s.created_at)",
+                "strftime('%Y-%m', a.created_at)",
+            ),
+            _ => ("DATE(s.created_at)", "DATE(a.created_at)"),
+        };
+
+        // The most popular categories by current mean score — the chart's
+        // series (kept small so a line chart stays readable).
+        let top: Vec<(String, Option<String>)> = {
+            let mut stmt = self.conn.prepare(
+                "SELECT p.category_id, c.name
+                 FROM products p
+                 LEFT JOIN categories c ON p.category_id = c.id
+                 GROUP BY p.category_id
+                 ORDER BY AVG(p.popularity_score) DESC, p.category_id ASC
+                 LIMIT ?1",
+            )?;
+            let rows = stmt.query_map(params![top_categories.max(1)], |r| {
+                Ok((
+                    r.get::<_, Option<String>>(0)?.unwrap_or_default(),
+                    r.get::<_, Option<String>>(1)?,
+                ))
+            })?;
+            let mut out = Vec::new();
+            for row in rows {
+                out.push(row?);
+            }
+            out
+        };
+        if top.is_empty() {
+            return Ok(Vec::new());
+        }
+        // Order categories by their ranking index so points sort sensibly.
+        let rank: HashMap<String, usize> = top
+            .iter()
+            .enumerate()
+            .map(|(i, (id, _))| (id.clone(), i))
+            .collect();
+
+        // (period, category) → raw signals.
+        let mut agg: HashMap<(String, String), (i64, i64, i64, i64)> = HashMap::new();
+        {
+            // Sales: units + distinct transactions per (period, category).
+            let mut stmt = self.conn.prepare(&format!(
+                "SELECT {s_period} AS period_start, p.category_id,
+                        SUM(sl.qty) AS units, COUNT(DISTINCT sl.sale_id) AS txns
+                 FROM sale_lines sl
+                 JOIN sales s ON sl.sale_id = s.id
+                 JOIN products p ON sl.sku = p.sku
+                 WHERE s.status = 'completed' AND DATE(s.created_at) BETWEEN ?1 AND ?2
+                 GROUP BY period_start, p.category_id"
+            ))?;
+            let rows = stmt.query_map(params![start_date, end_date], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                    r.get::<_, i64>(2)?,
+                    r.get::<_, i64>(3)?,
+                ))
+            })?;
+            for row in rows {
+                let (period_start, cat, units, txns) = row?;
+                let e = agg.entry((period_start, cat)).or_insert((0, 0, 0, 0));
+                e.0 += units;
+                e.1 += txns;
+            }
+        }
+        {
+            // Search + edit events per (period, category).
+            let mut stmt = self.conn.prepare(&format!(
+                "SELECT {a_period} AS period_start, p.category_id, a.event_type, COUNT(*) AS cnt
+                 FROM product_activity a
+                 JOIN products p ON a.sku = p.sku
+                 WHERE DATE(a.created_at) BETWEEN ?1 AND ?2
+                 GROUP BY period_start, p.category_id, a.event_type"
+            ))?;
+            let rows = stmt.query_map(params![start_date, end_date], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                    r.get::<_, String>(2)?,
+                    r.get::<_, i64>(3)?,
+                ))
+            })?;
+            for row in rows {
+                let (period_start, cat, etype, cnt) = row?;
+                let e = agg.entry((period_start, cat)).or_insert((0, 0, 0, 0));
+                if etype == "search" {
+                    e.2 += cnt;
+                } else {
+                    e.3 += cnt;
+                }
+            }
+        }
+
+        // Only the top categories' points survive (the charts stay small).
+        let mut points: Vec<CategoryTrendPoint> = Vec::new();
+        for ((period_start, cat), (units, txns, searches, edits)) in agg {
+            if !rank.contains_key(&cat) {
+                continue;
+            }
+            let (ms, mq, me) = self.category_means(&cat).unwrap_or((0.0, 0.0, 0.0));
+            let score = crate::popularity::score_from_raw(
+                units as f64,
+                units as f64,
+                txns as f64,
+                searches as f64,
+                searches as f64,
+                edits as f64,
+                edits as f64,
+                ms,
+                mq,
+                me,
+            );
+            let name = top
+                .iter()
+                .find(|(id, _)| *id == cat)
+                .and_then(|(_, n)| n.clone());
+            points.push(CategoryTrendPoint {
+                period_start,
+                category_id: cat,
+                category_name: name,
+                score,
+                units_sold: units,
+                distinct_transactions: txns,
+                searches,
+                edits,
+            });
+        }
+        points.sort_by(|a, b| {
+            a.period_start
+                .cmp(&b.period_start)
+                .then_with(|| rank[&a.category_id].cmp(&rank[&b.category_id]))
+        });
+        Ok(points)
+    }
+
     /// Per-category popularity standings over the whole catalog.
     ///
     /// Returns every category (including the `""` bucket for uncategorized
@@ -226,6 +414,22 @@ impl Store<'_> {
         Ok(out)
     }
 
+    /// Distinct completed transactions containing a SKU inside the window —
+    /// the breadth input to the sales signal (ADR #37 D6: reach over
+    /// one-customer bulk).
+    fn sale_distinct_transactions(&self, sku: &str) -> Result<i64, CoreError> {
+        let n: i64 = self.conn.query_row(
+            "SELECT COUNT(DISTINCT sl.sale_id)
+             FROM sale_lines sl
+             JOIN sales s ON sl.sale_id = s.id
+             WHERE sl.sku = ?1 AND s.status = 'completed'
+               AND s.created_at >= datetime('now', ?2)",
+            params![sku, window_modifier()],
+            |r| r.get(0),
+        )?;
+        Ok(n)
+    }
+
     /// Daily counts of one activity type for a SKU over the window.
     fn activity_day_counts(&self, sku: &str, event_type: &str) -> Result<Vec<DayCount>, CoreError> {
         let mut stmt = self.conn.prepare(
@@ -339,11 +543,13 @@ impl Store<'_> {
     /// [`Store::recompute_all_popularity`] runs.
     pub fn recompute_popularity(&self, sku: &str) -> Result<(), CoreError> {
         let sales = self.sale_day_counts(sku)?;
+        let distinct = self.sale_distinct_transactions(sku)?;
         let searches = self.activity_day_counts(sku, "search")?;
         let edits = self.activity_day_counts(sku, "edit")?;
         let (mean_sales, mean_search, mean_edits) = self.sku_means(sku);
         let score = compute_score(
             &sales,
+            distinct,
             &searches,
             &edits,
             mean_sales,
@@ -386,6 +592,23 @@ impl Store<'_> {
                     days_ago: days_ago(&day),
                     count: qty,
                 });
+            }
+        } // Distinct transactions per SKU inside the window (breadth input).
+        let mut distinct: HashMap<String, i64> = HashMap::new();
+        {
+            let mut stmt = self.conn.prepare(
+                "SELECT sl.sku, COUNT(DISTINCT sl.sale_id)
+                 FROM sale_lines sl
+                 JOIN sales s ON sl.sale_id = s.id
+                 WHERE s.status = 'completed' AND s.created_at >= datetime('now', ?1)
+                 GROUP BY sl.sku",
+            )?;
+            let rows = stmt.query_map(params![window_modifier()], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+            })?;
+            for row in rows {
+                let (sku, cnt) = row?;
+                distinct.insert(sku, cnt);
             }
         }
 
@@ -446,10 +669,20 @@ impl Store<'_> {
         }
 
         // Global means — the fallback for uncategorized products and the
-        // `""` entry of the per-category cache.
+        // `""` entry of the per-category cache. The sales mean is computed
+        // over breadth-scaled raws so the smoothing scale always matches the
+        // scaled raw inside `score_from_raw`.
         let n = products.len() as f64;
         let mean_sales = if n > 0.0 {
-            products.iter().map(|p| p.2).sum::<f64>() / n
+            products
+                .iter()
+                .map(|p| {
+                    p.2 * crate::popularity::breadth_factor(
+                        distinct.get(&p.0).copied().unwrap_or(0),
+                    )
+                })
+                .sum::<f64>()
+                / n
         } else {
             0.0
         };
@@ -472,7 +705,8 @@ impl Store<'_> {
         for p in &products {
             let key = p.1.clone().unwrap_or_default();
             let entry = cat_sums.entry(key).or_insert((0.0, 0.0, 0.0, 0.0));
-            entry.0 += p.2;
+            entry.0 +=
+                p.2 * crate::popularity::breadth_factor(distinct.get(&p.0).copied().unwrap_or(0));
             entry.1 += p.4;
             entry.2 += p.6;
             entry.3 += 1.0;
@@ -511,7 +745,9 @@ impl Store<'_> {
                     .get(&key)
                     .copied()
                     .unwrap_or((mean_sales, mean_search, mean_edits));
-            let score = crate::popularity::score_from_raw(sr, sv, qr, qv, er, ev, ms, mq, me);
+            let distinct = distinct.get(&sku).copied().unwrap_or(0) as f64;
+            let score =
+                crate::popularity::score_from_raw(sr, sv, distinct, qr, qv, er, ev, ms, mq, me);
             tx.execute(
                 "UPDATE products SET popularity_score = ?1 WHERE sku = ?2",
                 params![score, sku],
@@ -664,17 +900,18 @@ mod tests {
             .unwrap();
         // Only completed sales feed the signal; the score must equal the
         // 4-unit backfill, not the 7-unit (pending-included) figure.
+        // Breadth-scaled raw: 4 completed units across 1 distinct sale.
         let sales_raw = crate::popularity::decayed_sum(&[DayCount {
             days_ago: 0,
             count: 4,
-        }]);
+        }]) * crate::popularity::breadth_factor(1);
         // The pending sale's 3 units must NOT inflate the signal: the score
         // can at most reflect the 4 completed units (smoothing toward the
         // catalog mean can only shrink it, never grow it past the raw).
         let seven_units = crate::popularity::decayed_sum(&[DayCount {
             days_ago: 0,
             count: 7,
-        }]);
+        }]) * crate::popularity::breadth_factor(2);
         let score_raw_share = crate::popularity::WEIGHT_SALES * sales_raw;
         assert!(
             score_raw_share <= pending_influence + 1e-9
@@ -757,14 +994,17 @@ mod tests {
             "within the quiet category the 2-unit seller must outrank the \
              1-unit seller (two={two}, one={one})"
         );
-        // Reference: the catalog-mean blend (mean 63.125) inverts that
-        // ordering — the whole pathology per-category popularity fixes.
-        let catalog_mean = 63.125;
+        // Reference: the catalog-mean blend inverts that ordering — the
+        // whole pathology per-category popularity fixes. The catalog mean is
+        // the breadth-scaled average: 5×100, 2, 1, and 2 units, each sold in
+        // one transaction → (5·100 + 2 + 1 + 2)·ln2 / 8.
+        let catalog_mean = (5.0 * 100.0 + 2.0 + 1.0 + 2.0) * std::f64::consts::LN_2 / 8.0;
         let global_two = crate::popularity::compute_score(
             &[DayCount {
                 days_ago: 0,
                 count: 2,
             }],
+            1,
             &[],
             &[],
             catalog_mean,
@@ -776,6 +1016,7 @@ mod tests {
                 days_ago: 0,
                 count: 1,
             }],
+            1,
             &[],
             &[],
             catalog_mean,
@@ -908,11 +1149,187 @@ mod tests {
     }
 
     #[test]
+    fn category_popularity_trend_buckets_daily_and_scores() {
+        let conn = fresh();
+        seed_category(&conn, "cat-a", "A");
+        seed_category(&conn, "cat-b", "B");
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let yesterday = chrono::Utc::now()
+            .checked_sub_signed(chrono::Duration::days(1))
+            .unwrap()
+            .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        conn.execute_batch(
+            &format!(
+                "INSERT INTO products (id, sku, name, price_minor, currency, category_id, created_at, updated_at) VALUES
+                ('p-1', 'A-1', 'A one', 1000, 'USD', 'cat-a', '{now}', '{now}'),
+                ('p-2', 'A-2', 'A two', 1000, 'USD', 'cat-a', '{now}', '{now}'),
+                ('p-3', 'B-1', 'B one', 1000, 'USD', 'cat-b', '{now}', '{now}');
+                INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at) VALUES
+                ('s1', 2000, 'USD', 1, 'completed', '{now}', '{now}'),
+                ('s2', 1000, 'USD', 1, 'completed', '{yesterday}', '{yesterday}'),
+                ('s3', 3000, 'USD', 1, 'completed', '{now}', '{now}');
+                INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position) VALUES
+                ('sl1', 's1', 'A-1', 2, 1000, 2000, 'USD', 1),
+                ('sl2', 's2', 'A-2', 1, 1000, 1000, 'USD', 1),
+                ('sl3', 's3', 'B-1', 3, 1000, 3000, 'USD', 1);"
+            ),
+        )
+        .unwrap();
+        // Cache means via a full pass so single-point scores smooth
+        // consistently with the rest of the system.
+        let store = Store::new(&conn);
+        store.recompute_all_popularity().unwrap();
+
+        let today = chrono::Utc::now().date_naive().to_string();
+        let yesterday_s = chrono::Utc::now()
+            .checked_sub_signed(chrono::Duration::days(1))
+            .unwrap()
+            .date_naive()
+            .to_string();
+        let points = store
+            .category_popularity_trend("2000-01-01", "2099-12-31", "daily", 5)
+            .unwrap();
+
+        // Only (period, category) pairs with activity produce points:
+        // cat-a sold both days, cat-b only today (uncategorized never sold).
+        // Within a period, categories sort by mean-score rank (cat-b first).
+        let keys: Vec<(&str, &str)> = points
+            .iter()
+            .map(|p| (p.period_start.as_str(), p.category_id.as_str()))
+            .collect();
+        assert_eq!(
+            keys,
+            vec![
+                (yesterday_s.as_str(), "cat-a"),
+                (today.as_str(), "cat-b"),
+                (today.as_str(), "cat-a"),
+            ]
+        );
+
+        let a_today = points
+            .iter()
+            .find(|p| p.period_start == today && p.category_id == "cat-a")
+            .unwrap();
+        assert_eq!(a_today.units_sold, 2);
+        assert_eq!(a_today.distinct_transactions, 1);
+        assert_eq!(a_today.searches, 0);
+        assert_eq!(a_today.edits, 0);
+        assert!(a_today.score > 0.0, "sales-driven period score must be > 0");
+
+        let b_today = points
+            .iter()
+            .find(|p| p.period_start == today && p.category_id == "cat-b")
+            .unwrap();
+        assert!(b_today.score > a_today.score, "3 units must beat 2 units");
+    }
+
+    #[test]
+    fn category_popularity_trend_monthly_and_top_limit() {
+        let conn = fresh();
+        seed_category(&conn, "cat-a", "A");
+        seed_category(&conn, "cat-b", "B");
+        for (sku, cat, score) in [
+            ("A-1", "cat-a", 8.0),
+            ("A-2", "cat-a", 6.0),
+            ("B-1", "cat-b", 2.0),
+            ("C-1", "", 9.0),
+        ] {
+            let id = uuid::Uuid::now_v7().to_string();
+            let cat = if cat.is_empty() { None } else { Some(cat) };
+            conn.execute(
+                "INSERT INTO products (id, sku, name, price_minor, currency, category_id, \
+                 popularity_score, created_at, updated_at) VALUES (?1, ?2, ?2, 1000, 'USD', \
+                 ?3, ?4, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+                params![id, sku, cat, score],
+            )
+            .unwrap();
+        }
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        conn.execute_batch(&format!(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at) VALUES
+             ('s1', 1000, 'USD', 1, 'completed', '{now}', '{now}');
+             INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position) VALUES
+             ('sl1', 's1', 'A-1', 1, 1000, 1000, 'USD', 1);"
+        ))
+        .unwrap();
+
+        let store = Store::new(&conn);
+        let points = store
+            .category_popularity_trend("2000-01-01", "2099-12-31", "monthly", 2)
+            .unwrap();
+
+        // Top 2 categories by mean score: uncategorized (9.0) and cat-a
+        // (7.0) — cat-b (2.0) is excluded. Only cat-a has a sales point.
+        let cats: Vec<&str> = points.iter().map(|p| p.category_id.as_str()).collect();
+        assert_eq!(cats, vec!["cat-a"], "only top categories appear");
+        assert_eq!(
+            points[0].period_start,
+            chrono::Utc::now().date_naive().format("%Y-%m").to_string(),
+            "monthly bucket is YYYY-MM"
+        );
+        assert_eq!(points[0].units_sold, 1);
+    }
+
+    #[test]
     fn category_popularity_empty_catalog() {
         let conn = fresh();
         let store = Store::new(&conn);
         let rows = store.category_popularity(3).unwrap();
         assert!(rows.is_empty(), "no products → no category rows");
+    }
+
+    #[test]
+    fn breadth_weighting_ranks_spread_over_single_bulk_sale() {
+        // Same volume (10 units), same day: 10 units in one sale vs 10 units
+        // spread across 5 different customers. The spread seller must
+        // outrank the bulk seller (ADR #37 D6 reach-over-bulk).
+        let conn = fresh();
+        for sku in ["BULK", "SPREAD"] {
+            let id = uuid::Uuid::now_v7().to_string();
+            conn.execute(
+                "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at) \
+                 VALUES (?1, ?2, ?2, 1000, 'USD', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+                params![id, sku],
+            )
+            .unwrap();
+        }
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let mut batch = String::new();
+        // BULK: one sale of 10 units.
+        batch.push_str(&format!(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at) VALUES
+             ('s-bulk', 10000, 'USD', 1, 'completed', '{now}', '{now}');
+             INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position) VALUES
+             ('sl-bulk', 's-bulk', 'BULK', 10, 1000, 10000, 'USD', 1);"
+        ));
+        // SPREAD: five sales of 2 units each.
+        for i in 0..5 {
+            batch.push_str(&format!(
+                "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at) VALUES
+                 ('s-spread-{i}', 2000, 'USD', 1, 'completed', '{now}', '{now}');
+                 INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position) VALUES
+                 ('sl-spread-{i}', 's-spread-{i}', 'SPREAD', 2, 1000, 2000, 'USD', 1);"
+            ));
+        }
+        conn.execute_batch(&batch).unwrap();
+
+        let store = Store::new(&conn);
+        store.recompute_all_popularity().unwrap();
+
+        let score = |sku: &str| -> f64 {
+            conn.query_row(
+                "SELECT popularity_score FROM products WHERE sku = ?1",
+                params![sku],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        let (spread, bulk) = (score("SPREAD"), score("BULK"));
+        assert!(
+            spread > bulk,
+            "same volume across more customers must rank higher \
+             (spread={spread}, bulk={bulk})"
+        );
     }
 
     #[test]

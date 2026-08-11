@@ -10,9 +10,15 @@
 //!
 //! ```text
 //! raw_c      = Σ_t events(t) × λ^t           t = days ago, λ = 0.93, 90-day window
+//! sales_raw  = raw_sales × ln(1 + distinct transactions)     breadth weighting (D6)
 //! component' = mean_c + (raw_c − mean_c) × v / (m + v)     v = event count, m = 5
 //! score      = 0.6·Sales' + 0.3·Search' + 0.1·Edits'
 //! ```
+//!
+//! The sales signal is additionally **breadth-weighted**: the decayed unit
+//! volume is multiplied by `ln(1 + distinct transactions)`, so the same
+//! volume sold to many different customers outranks one bulk buyer — reach
+//! over one-customer bulk (ADR #37 D6).
 //!
 //! The smoothing term shrinks the *deviation from the catalog mean* by the
 //! evidence fraction `v/(m + v)`: a product with zero events sits exactly at
@@ -55,6 +61,16 @@ pub fn decayed_sum(events: &[DayCount]) -> f64 {
         .sum()
 }
 
+/// Breadth multiplier for the sales signal: `ln(1 + distinct transactions)`.
+///
+/// - 0 transactions → 0 (no sales signal).
+/// - 1 transaction (a single bulk buyer) → `ln 2 ≈ 0.69`.
+/// - 9 transactions → `ln 10 ≈ 2.30` — the same volume spread across nine
+///   customers is worth ~3.3× a single-customer bulk order.
+pub fn breadth_factor(distinct_transactions: i64) -> f64 {
+    (1.0 + distinct_transactions.max(0) as f64).ln()
+}
+
 /// Total raw events inside the window — the evidence count `v` for smoothing.
 pub fn total_events(events: &[DayCount]) -> f64 {
     events
@@ -75,8 +91,12 @@ pub fn smoothed(raw: f64, votes: f64, mean: f64) -> f64 {
 }
 
 /// Weighted blend of the three smoothed components (ADR #37 D1).
+///
+/// `sales_transactions` is the number of distinct completed sales containing
+/// the product inside the window — the breadth input to the sales signal.
 pub fn compute_score(
     sales: &[DayCount],
+    sales_transactions: i64,
     searches: &[DayCount],
     edits: &[DayCount],
     sales_mean: f64,
@@ -86,6 +106,7 @@ pub fn compute_score(
     score_from_raw(
         decayed_sum(sales),
         total_events(sales),
+        sales_transactions as f64,
         decayed_sum(searches),
         total_events(searches),
         decayed_sum(edits),
@@ -98,12 +119,18 @@ pub fn compute_score(
 
 /// Weighted blend over already-computed raw values (full-pass path).
 ///
-/// Nine positional args mirror the three (raw, votes) signal pairs plus the
-/// three catalog means; the full-pass path already holds all of them.
+/// Ten positional args mirror the three (raw, votes) signal pairs plus the
+/// sales breadth input plus the three catalog means; the full-pass path
+/// already holds all of them. The breadth multiplier is applied here — the
+/// single place where the sales raw is scaled — so the full pass and the
+/// per-event recompute can never drift apart. `sales_raw` must therefore be
+/// the *unscaled* decayed unit sum; `sales_distinct` carries the distinct
+/// transaction count.
 #[allow(clippy::too_many_arguments)]
 pub fn score_from_raw(
     sales_raw: f64,
     sales_votes: f64,
+    sales_distinct: f64,
     search_raw: f64,
     search_votes: f64,
     edit_raw: f64,
@@ -112,7 +139,8 @@ pub fn score_from_raw(
     search_mean: f64,
     edit_mean: f64,
 ) -> f64 {
-    let s = smoothed(sales_raw, sales_votes, sales_mean);
+    let sales_scaled = sales_raw * breadth_factor(sales_distinct as i64);
+    let s = smoothed(sales_scaled, sales_votes, sales_mean);
     let q = smoothed(search_raw, search_votes, search_mean);
     let e = smoothed(edit_raw, edit_votes, edit_mean);
     WEIGHT_SALES * s + WEIGHT_SEARCH * q + WEIGHT_EDITS * e
@@ -178,9 +206,9 @@ mod tests {
         let sales = [day(0, 100)];
         let searches: [DayCount; 0] = [];
         let edits: [DayCount; 0] = [];
-        // sales raw = 100, v = 100 → ~100; others = mean.
-        let score = compute_score(&sales, &searches, &edits, 50.0, 10.0, 5.0);
-        let sales_c = smoothed(100.0, 100.0, 50.0);
+        // sales raw = 100 × ln(1+9) = 100 × 2.3026; v = 100 → ~230.3; others = mean.
+        let score = compute_score(&sales, 9, &searches, &edits, 50.0, 10.0, 5.0);
+        let sales_c = smoothed(100.0 * breadth_factor(9), 100.0, 50.0);
         let expected = WEIGHT_SALES * sales_c + WEIGHT_SEARCH * 10.0 + WEIGHT_EDITS * 5.0;
         assert!((score - expected).abs() < 1e-9);
     }
@@ -188,7 +216,26 @@ mod tests {
     #[test]
     fn compute_score_empty_catalog_is_zero() {
         let empty: [DayCount; 0] = [];
-        assert_eq!(compute_score(&empty, &empty, &empty, 0.0, 0.0, 0.0), 0.0);
+        assert_eq!(compute_score(&empty, 0, &empty, &empty, 0.0, 0.0, 0.0), 0.0);
+    }
+
+    #[test]
+    fn breadth_factor_rewards_spread_over_bulk() {
+        assert_eq!(breadth_factor(0), 0.0);
+        assert_eq!(breadth_factor(1), std::f64::consts::LN_2);
+        // Ten units sold to one customer is worth less than the same ten
+        // units sold to nine different customers.
+        let bulk = breadth_factor(1);
+        let spread = breadth_factor(9);
+        assert!(spread > bulk * 3.0, "spread={spread}, bulk={bulk}");
+    }
+
+    #[test]
+    fn breadth_never_scales_up_zero_sales() {
+        let empty: [DayCount; 0] = [];
+        // No units → raw 0 × factor = 0 regardless of transaction count.
+        let score = compute_score(&empty, 10, &empty, &empty, 0.0, 0.0, 0.0);
+        assert_eq!(score, 0.0);
     }
 
     #[test]

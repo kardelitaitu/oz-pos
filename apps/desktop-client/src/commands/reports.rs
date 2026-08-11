@@ -6,7 +6,7 @@
 use tauri::State;
 
 use oz_core::db::Store;
-use oz_core::db::popularity::CategoryPopularityRow;
+use oz_core::db::popularity::{CategoryPopularityRow, CategoryTrendPoint};
 use oz_core::db::reports::{
     CategoryBreakdownRow, DailyRevenueRow, HourlyHeatmapRow, LowStockAlert, MonthlyRevenueRow,
     TopProductRow, WeeklyRevenueRow,
@@ -54,6 +54,25 @@ fn validate_category_top(top_per_category: i64) -> Result<(), AppError> {
     if !(1..=MAX_CATEGORY_TOP).contains(&top_per_category) {
         return Err(AppError::Invalid(format!(
             "top per category must be between 1 and {MAX_CATEGORY_TOP}"
+        )));
+    }
+    Ok(())
+}
+
+/// Trend series limit: the chart shows one line per category, so more than
+/// a handful of series becomes unreadable.
+const MAX_TREND_CATEGORIES: i64 = 10;
+
+fn validate_trend_args(granularity: &str, top_categories: i64) -> Result<(), AppError> {
+    if !oz_core::db::popularity::TREND_GRANULARITIES.contains(&granularity) {
+        return Err(AppError::Invalid(format!(
+            "granularity must be one of {:?}",
+            oz_core::db::popularity::TREND_GRANULARITIES
+        )));
+    }
+    if !(1..=MAX_TREND_CATEGORIES).contains(&top_categories) {
+        return Err(AppError::Invalid(format!(
+            "top categories must be between 1 and {MAX_TREND_CATEGORIES}"
         )));
     }
     Ok(())
@@ -263,6 +282,32 @@ pub async fn get_category_popularity_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     Ok(Store::new(&db).category_popularity(top_per_category)?)
+}
+
+#[tauri::command]
+/// Get the per-period popularity trend for the session's store: each of the
+/// top categories' score over `start_date..=end_date`, bucketed by
+/// `granularity` (`daily` | `weekly` | `monthly`) — the same ADR #37 blend
+/// as the materialized scores, so the lines read against current standings.
+pub async fn get_category_popularity_trend_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    granularity: String,
+    top_categories: i64,
+    state: State<'_, AppState>,
+) -> Result<Vec<CategoryTrendPoint>, AppError> {
+    validate_trend_args(&granularity, top_categories)?;
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).category_popularity_trend(
+        &start_date,
+        &end_date,
+        &granularity,
+        top_categories,
+    )?)
 }
 
 #[tauri::command]
