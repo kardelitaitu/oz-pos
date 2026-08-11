@@ -4237,7 +4237,7 @@ follow-up is to migrate `list_all_workspaces_scoped` onto the new
 Note: my dev-mock removal of the two legacy command mocks rode into the
 other agent's `3236d8bf` commit (they swept the file) — end state correct.
 
-Commits: 9d7d5f9d (code), docs pending
+Commits: 9d7d5f9d (code), 9e1814d5 (docs)
 Tests: oz-core 1749/1749 (workspaces 52), desktop 900/900, tablet 431/431,
 gate_audit 3/3, wiring_audit 6/6, UI 4874/4874 (283 files) incl. staff
 screen 21 + contract 7 + screenExtraction 138; fmt/clippy/drift clean.
