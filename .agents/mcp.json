@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "codebase-memory-mcp": {
+      "command": "python",
+      "args": [
+        "C:\\Users\\Dika\\.agents\\bin\\codebase-memory-mcp-launcher.py"
+      ]
+    }
+  }
+}
