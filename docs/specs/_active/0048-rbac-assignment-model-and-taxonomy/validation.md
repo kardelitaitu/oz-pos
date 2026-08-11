@@ -8,6 +8,8 @@
 - `cargo test -p oz-pos-app --lib -- commands::staff -- --nocapture`
 - `cargo test -p oz-pos-tablet --lib -- commands::staff -- --nocapture`
 - `cargo clippy -p oz-core -p oz-pos-app -p oz-pos-tablet -- -D warnings`
+- `cd ui && npx vitest run src/__tests__/StaffManagementScreen.test.tsx src/__tests__/api-staff-contract.test.ts`
+- `cd ui && npx tsc --noEmit`
 
 ## Acceptance criteria
 
@@ -20,3 +22,7 @@
   the workspace scope their current permission set implies.
 - Migration round-trip tests pass on a seeded legacy database: behavior
   unchanged, no role references to retired IDs.
+- The staff screen presents exactly the five-role taxonomy with no
+  cashier/kitchen options, and the assignment editor expresses scope_mode plus
+  per-dimension explicit all/list.
+- The staff IPC wire shape is pinned by the contract test.

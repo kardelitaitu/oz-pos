@@ -13,6 +13,12 @@ scope:
   - apps/desktop-client/src/commands/staff.rs
   - apps/tablet-client/src/commands/staff.rs
   - docs/specs/_active/0048-rbac-assignment-model-and-taxonomy/
+  - ui/src/features/staff/StaffManagementScreen.tsx
+  - ui/src/api/staff.ts
+  - ui/src/__tests__/StaffManagementScreen.test.tsx
+  - ui/src/__tests__/api-staff-contract.test.ts
+  - ui/src/locales/staff.ftl
+  - ui/src/locales/staff.id.ftl
 
 problem:
   - Users carry one global `role_id`, so branch/workspace scopes, explicit "all"
@@ -35,6 +41,14 @@ implemented_slice:
     (`retail-pos` / `kds`) and retire `role-cashier` / `role-kitchen`.
   - Evaluate scoped mode per dimension (branches, workspaces), each an explicit
     `all` or a list; global-mode roles ignore both dimensions.
+  - Present the five-role taxonomy in the staff screen (Owner, Admin, Manager,
+    Staff, Auditor); cashier/kitchen labels come from workspace assignment and
+    job title, never from the role list.
+  - Extend the existing assignment editor with scope_mode (global | scoped) and
+    per-dimension branch and workspace pickers, where each dimension is an
+    explicit all or a list.
+  - Localize the new assignment strings in both staff.ftl bundles (parity gate)
+    and pin the staff IPC wire shape with a new api-staff-contract test.
   - Add migration round-trip, default-assignment, role-retirement, and scope
     evaluation tests (all/one/combination, global-ignores-scope).
 
@@ -47,6 +61,9 @@ invariants:
     after the migration; seeded and legacy users resolve to Staff + the
     workspace scope their current permission set implies.
   - Existing databases are behavior-unchanged through the migration.
+  - The staff screen never presents cashier/kitchen as selectable roles.
+  - The assignment UI cannot express empty-list "all" — every dimension is an
+    explicit all or a list.
 
 non_goals:
   - 'Org-tenant layer, invitations, assignment expiry, permission caching

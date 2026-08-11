@@ -60,6 +60,18 @@ Scoped mode: branch dimension and workspace dimension, each explicit `all` or
 a list. Global mode: both dimensions ignored. Request authorization requires
 permission (gate) AND branch/workspace in scope for scoped roles.
 
+### 4.4 Front-end (ui/src)
+
+- The staff screen's role list renders the five-role taxonomy; cashier/kitchen
+  are never selectable roles — their labels derive from workspace assignment
+  and the optional `job_title` field.
+- The existing assignment editor (StaffManagementScreen already manages
+  workspace assignments) gains scope_mode and the branch dimension; each
+  dimension is an explicit all or a list.
+- New strings land in both `staff.ftl` bundles (en + id) to pass the parity
+  gate; the staff IPC wire shape (`RoleDto`, staff args) is pinned by a new
+  `api-staff-contract.test.ts` — no staff contract test exists today.
+
 ## 5. Implementation plan
 
 1. Write migration tests first (Red): default-assignment round-trip,
@@ -72,8 +84,12 @@ permission (gate) AND branch/workspace in scope for scoped roles.
    cashier/kitchen via the migration.
 5. Update test seeds that hardcode `role-cashier`/`role-kitchen` to the new
    Staff + workspace shape.
-6. Run area tests: `test-tdd.sh -p crates/oz-core`, `cargo test -p oz-pos-app
-   --lib`, `cargo test -p oz-pos-tablet --lib`, fmt, clippy.
+6. Update the staff screen: five-role list, assignment editor (scope_mode +
+   branch/workspace pickers), localized strings, and the new staff IPC
+   contract test.
+7. Run area tests: `test-tdd.sh -p crates/oz-core`, `cargo test -p oz-pos-app
+   --lib`, `cargo test -p oz-pos-tablet --lib`, fmt, clippy, plus the UI
+   checks from validation.md.
 
 ## 6. Test plan
 
@@ -107,6 +123,14 @@ unchanged:
   branch or workspace is out of scope.
 - Global-ignores-scope: Owner/Admin/Auditor assignments ignore both dimensions.
 - One-effective-assignment invariant per user.
+
+### UI tests (new)
+
+- `StaffManagementScreen.test.tsx` — the role list shows exactly the five
+  roles; cashier/kitchen are absent; the assignment editor drives scope_mode
+  and the per-dimension all/list pickers.
+- `api-staff-contract.test.ts` (new) — pins the RoleDto / assignment wire
+  shape consumed by the screen.
 
 ## 7. Security and correctness considerations
 
