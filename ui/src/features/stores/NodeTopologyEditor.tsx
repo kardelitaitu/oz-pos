@@ -1047,6 +1047,11 @@ export default function NodeTopologyEditor({
    *  hovered). Ref-only — the readout no longer needs it; CanvasCursorReadout
    *  owns its own listener and rAF. */
   const mousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  /** Round 169: while a mouse-pan drag is in flight, the ghost layer drops
+   *  its glide transition so an edge-anchored ghost tracks the pointer
+   *  instead of trailing it (state mirrors isPanningRef — a ref alone
+   *  would not re-render the class toggle). */
+  const [panGestureActive, setPanGestureActive] = useState(false);
   const isPanningRef = useRef(false);
   /** Right-button drags emit a native contextmenu after mouseup. Track
    *  whether the pan actually moved so that gesture is suppressed while a
@@ -3787,6 +3792,7 @@ export default function NodeTopologyEditor({
     if (clearSelectionFirst) clearSelection();
     panMovedRef.current = false;
     isPanningRef.current = true;
+    setPanGestureActive(true);
     panStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
     document.body.style.cursor = 'grabbing';
 
@@ -3810,6 +3816,7 @@ export default function NodeTopologyEditor({
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
       isPanningRef.current = false;
+      setPanGestureActive(false);
       document.body.style.cursor = '';
       panCleanupRef.current = null;
     };
@@ -6007,7 +6014,14 @@ export default function NodeTopologyEditor({
                 events-none and aria-hidden, so the ghost never steals
                 clicks, hover, or focus from a card below. */}
             {laidOutGhosts.length > 0 && (
-              <div className="topology-overlay-ghost-layer" aria-hidden="true">
+              <div
+                className={
+                  panGestureActive
+                    ? 'topology-overlay-ghost-layer'
+                    : 'topology-overlay-ghost-layer topology-ghosts-animate'
+                }
+                aria-hidden="true"
+              >
                 {ghostStubs.length > 0 && (
                   <svg
                     className="topology-overlay-stub-layer"
@@ -6031,7 +6045,7 @@ export default function NodeTopologyEditor({
                     className="topology-overlay-ghost"
                     data-overlay-node-id={g.id}
                     aria-hidden="true"
-                    style={{ left: `${g.x}px`, top: `${g.y}px` }}
+                    style={{ transform: `translate(${g.x}px, ${g.y}px)` }}
                   >
                     <span className="topology-overlay-ghost-name">{g.name}</span>
                   </div>

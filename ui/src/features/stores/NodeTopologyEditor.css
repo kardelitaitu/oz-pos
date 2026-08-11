@@ -627,6 +627,8 @@
 
 .topology-overlay-ghost {
   position: absolute;
+  left: 0;
+  top: 0;
   width: 240px;
   height: 240px;
   box-sizing: border-box;
@@ -644,6 +646,24 @@
   font-size: var(--text-sm);
   line-height: 1.4;
   color: var(--color-success-fg, var(--color-fg));
+}
+
+/* Round 169: ghosts GLIDE instead of snapping when they clamp into the
+   visible canvas. The transition animates transform (compositor-friendly
+   — easing left/top would layout-thrash) and the keyframes soften the
+   mount pop with a fade-and-rise. Both are gated behind the layer's
+   animate class: the editor drops it during a mouse-pan drag so an
+   edge-anchored ghost tracks the pointer instead of trailing it. */
+.topology-ghosts-animate .topology-overlay-ghost {
+  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: topology-ghost-in 280ms ease-out both;
+}
+
+@keyframes topology-ghost-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
 }
 
 /* Round 160: dashed stubs for the other branch's ghost-to-ghost wiring.

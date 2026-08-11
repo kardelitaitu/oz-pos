@@ -290,6 +290,15 @@ function ReloadingHarness({ next }: { next: WorkspaceInstanceSeed[] }) {
   );
 }
 
+/** Read a ghost card's position from its translate transform (round 169:
+ *  ghosts position via transform so the glide transition is compositor-
+ *  friendly, instead of left/top which would layout-thrash while easing). */
+const ghostXY = (el: HTMLElement) => {
+  const m = /translate\(\s*([-\d.]+)px\s*,\s*([-\d.]+)px\s*\)/.exec(el.style.transform);
+  if (!m) return { x: NaN, y: NaN };
+  return { x: parseFloat(m[1]!), y: parseFloat(m[2]!) };
+};
+
 /** Stable workspace seed — identity never changes, so only the
  *  branchLocations prop drives the load-effect re-run in the rename flow. */
 const renameWsInstances: WorkspaceInstanceSeed[] = [
@@ -417,10 +426,14 @@ describe('NodeTopologyEditor Component', () => {
       '.topology-overlay-ghost[data-overlay-node-id="ws-ghost"]',
     ) as HTMLElement | null;
     expect(ghost).not.toBeNull();
-    expect(ghost!.style.left).toBe('480px');
-    expect(ghost!.style.top).toBe('360px');
+    expect(ghostXY(ghost!)).toEqual({ x: 480, y: 360 });
     expect(ghost!.textContent).toContain('Stock Room');
     expect(ghost!.getAttribute('aria-hidden')).toBe('true');
+
+    // The glide is gated behind the layer's animate class while idle — the
+    // transition is removed during a pan drag so ghosts track the canvas.
+    const layer = document.querySelector('.topology-overlay-ghost-layer');
+    expect(layer!.className).toContain('topology-ghosts-animate');
 
     // Current-only cards get the red marker, shared-differing ones the amber
     // marker; cards outside the classification keep their plain look.
@@ -453,8 +466,7 @@ describe('NodeTopologyEditor Component', () => {
       '.topology-overlay-ghost[data-overlay-node-id="ws-ghost-far"]',
     ) as HTMLElement | null;
     expect(far).not.toBeNull();
-    expect(far!.style.left).toBe('560px');
-    expect(far!.style.top).toBe('360px');
+    expect(ghostXY(far!)).toEqual({ x: 560, y: 360 });
 
     // The already-visible ghost keeps its exact position (the layout must
     // not shuffle cards that fit).
@@ -462,8 +474,33 @@ describe('NodeTopologyEditor Component', () => {
       '.topology-overlay-ghost[data-overlay-node-id="ws-ghost-in"]',
     ) as HTMLElement | null;
     expect(inView).not.toBeNull();
-    expect(inView!.style.left).toBe('120px');
-    expect(inView!.style.top).toBe('360px');
+    expect(ghostXY(inView!)).toEqual({ x: 120, y: 360 });
+  });
+
+  it('gates the ghost glide off during a pan drag and restores it on release', () => {
+    renderEditor({
+      compareOverlay: {
+        ghosts: [{ id: 'ws-ghost', name: 'Stock Room', x: 480, y: 360 }],
+        onlyHere: [],
+        differing: [],
+        otherWires: [],
+        sharedByOtherId: [],
+      },
+    });
+    const layer = document.querySelector('.topology-overlay-ghost-layer') as HTMLElement;
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    expect(layer.className).toContain('topology-ghosts-animate');
+
+    // Middle-button drag starts the pan: the transition class must drop so
+    // an edge-anchored ghost tracks the pointer instead of trailing it.
+    fireEvent.mouseDown(canvas, { button: 1, clientX: 100, clientY: 100 });
+    expect(layer.className).not.toContain('topology-ghosts-animate');
+    fireEvent.mouseMove(document, { clientX: 150, clientY: 130 });
+    expect(layer.className).not.toContain('topology-ghosts-animate');
+
+    // Releasing the drag restores the glide for the next discrete re-clamp.
+    fireEvent.mouseUp(document, { button: 1 });
+    expect(layer.className).toContain('topology-ghosts-animate');
   });
 
   it('draws dashed ghost-wire stubs between ghost workspaces wired together in the other branch', () => {
@@ -511,10 +548,8 @@ describe('NodeTopologyEditor Component', () => {
     const gB = document.querySelector(
       '.topology-overlay-ghost[data-overlay-node-id="ws-ghost-b"]',
     ) as HTMLElement;
-    const ax = parseInt(gA.style.left, 10);
-    const ay = parseInt(gA.style.top, 10);
-    const bx = parseInt(gB.style.left, 10);
-    const by = parseInt(gB.style.top, 10);
+    const { x: ax, y: ay } = ghostXY(gA);
+    const { x: bx, y: by } = ghostXY(gB);
     expect(bx).toBeGreaterThan(ax); // B sits to the RIGHT of A
     expect(line.getAttribute('x1')).toBe(String(ax + 240));
     expect(line.getAttribute('y1')).toBe(String(ay + 120));
@@ -554,8 +589,7 @@ describe('NodeTopologyEditor Component', () => {
       '.topology-overlay-ghost[data-overlay-node-id="ws-ghost-sat"]',
     ) as HTMLElement;
     const shared = document.querySelector('.topology-node[data-node-id="ws-1"]') as HTMLElement;
-    const gx = parseInt(ghost.style.left, 10);
-    const gy = parseInt(ghost.style.top, 10);
+    const { x: gx, y: gy } = ghostXY(ghost);
     const sx = parseInt(shared.style.left, 10);
     const sy = parseInt(shared.style.top, 10);
     expect(sx).toBeGreaterThan(gx); // the shared card sits to the RIGHT
