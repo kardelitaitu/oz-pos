@@ -2,7 +2,7 @@
 
 Date: 2026-08-11
 
-Status: Accepted
+Status: Implemented (2026-08-12)
 
 ## Context
 
@@ -268,3 +268,20 @@ shown here — per D4/D5 it is never rendered outside the Add/Edit modals.
   `cargo clippy --all-targets --all-features -- -D warnings`, targeted cargo
   tests, `npm run typecheck` / `npm run lint` / `npm run test` in `ui/`,
   i18n lint.
+
+---
+
+## Implementation Status
+
+**Implemented (2026-08-12).** Decisions D1–D6 shipped; the D7 deferrals
+(role-gated cost access, brand as a lookup table, structured rack, PO-receive
+auto-cost, Product Management screen columns) remain open as recorded.
+Key commits: `e5cab0a9` (attribute columns, stock totals, core plumbing),
+`2913d49c` (scoped attribute commands + sync cost exclusion), `be37eac1`
+(retail grid UI, Add/Edit modals, rack badges). Verified end-to-end in the
+retail POS: cost/brand/rack/notes/unit/status/default-supplier persist through
+`create_product_scoped` / `update_product_scoped`, the Stock column is the
+per-location total, and the visible-column set persists per user via the
+`retail.visible_columns` preference. Follow-on HPP work (margin reporting,
+cost snapshot at checkout — migrations 134/135) extends this ADR's cost data
+across the reporting surface; see commits `5a030f67`–`788bf2fa`.

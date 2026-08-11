@@ -2,7 +2,7 @@
 
 Date: 2026-08-11
 
-Status: Accepted
+Status: Implemented (2026-08-12)
 
 ## Context
 
@@ -202,3 +202,19 @@ upsert imports only its snapshot columns, so `popularity_score` and
   carries `popularity_score`; add-from-search fires the event (mocked IPC,
   non-blocking); i18n key for the sort option in both bundles.
 - The single verification pass from ADR #36 covers the combined change.
+
+---
+
+## Implementation Status
+
+**Implemented (2026-08-12).** D1–D5 shipped, including the day-one backfill:
+the full-catalog recompute pass is wired at store open
+(`recompute_all_popularity` in both client apps) and migration 134 seeds edit
+history from product timestamps, so the default popularity sort is meaningful
+on first launch. Key commits: `e5cab0a9`, `2913d49c`, `be37eac1`
+(implementation), `33b44571` (backfill), `9c8bc6cd` (ADR location
+correction). Note the formula landed in `crates/oz-core/src/popularity.rs`
+with the recompute/ledger access in `crates/oz-core/src/db/popularity.rs`, not
+`crates/oz-reporting` as originally scoped — the score is written by the
+store layer, so the formula sits beside that code. D6 deferrals (breadth
+weighting, per-category/per-period popularity, analytics export) remain open.

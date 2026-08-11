@@ -2,7 +2,7 @@
 
 Date: 2026-08-11
 
-Status: Accepted
+Status: Implemented (2026-08-12)
 
 ## Context
 
@@ -125,3 +125,16 @@ State of the codebase:
   i18n keys present in both bundles.
 - Capability + plugin wiring verified by both clients building; the single
   verification pass from ADR #36 covers the combined change.
+
+---
+
+## Implementation Status
+
+**Implemented (2026-08-12).** D1–D4 shipped: `RetailProductContextMenu`
+(right-click + Menu/Shift+F10, keyboard navigation, focus return),
+`tauri-plugin-opener` registered in both clients with `opener:allow-open-url`
+in all three capability files, and `open_product_images_scoped`
+(percent-encoded name+brand query, https-only URL) with the
+`ui/src/api/browser.ts` wrapper and a dev-mock `window.open` fallback.
+Key commits: `2913d49c`, `be37eac1`. Stored product images remain the
+documented future seam (D2) — the action currently searches Google Images.
