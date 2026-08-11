@@ -4136,6 +4136,57 @@ member could switch workspaces within their session into an
 out-of-scope type. A "scoped sessions" slice should extend the gate and
 the session-scoped listings.
 
-Commits: pending (this slice)
+Commits: fdafcd73 (code), docs pending
 Tests: desktop 895/895 (workspaces 20 incl. 2 new), tablet 431/431
 (workspaces 16 incl. 2 new); fmt/clippy/drift clean.
+
+### 2026-08-11 — Sessions assignment-aware end to end (0048 follow-up)
+
+Problem: the pre-session picker was scope-filtered, but after login a scoped
+member could still operate through the session gate and the session-scoped
+listings — `require_permission_for_session` used the non-scoped
+`require_permission_for_user`, and `list_workspaces_scoped` /
+`list_workspaces_for_store_scoped` returned every instance the role could see.
+The scope wall stopped at login.
+
+Solution: TDD red/green on the desktop client (the tablet has no
+session-scoped listings or session gate — its boot flow was already
+assignment-filtered in the picker slice).
+- `require_permission_for_session` now delegates to
+  `require_permission_for_user_scoped` with the session's `store_id` (branch)
+  and `type_key` (workspace) — ~78 session-gated commands become scope-aware
+  in one place. Scoped assignments deny when the session context is out of
+  scope; global assignments and legacy users (no assignment row) pass
+  unchanged.
+- Both listings load the caller's assignment from the global identity DB and
+  filter through `matches_scope(store_id, type_key)`: an out-of-scope store
+  lists nothing (fail closed) and an out-of-scope workspace type is hidden,
+  so the terminal-management screen can't switch a scoped member sideways.
+- Red tests: session-gate workspace-dimension denial, branch-dimension
+  denial, legacy/global pass-through; listing workspace + branch filters.
+  `restaurant-pos` is the out-of-scope fixture type because the Free tier
+  allows it — tier entitlement filtering alone cannot hide it, only the
+  assignment can.
+
+Decision: switched the existing session gate in place (one function, ~78
+call sites) instead of adding a parallel scope-aware variant — a parallel
+variant would leave the default gate un-scoped, which is exactly the hole
+this slice closes. The gate reads the session's resolved context, so a
+scoped member's session can never be in a store/type their assignment does
+not cover (the picker now prevents minting one; a stale or bound session is
+denied fail-closed on the first command).
+
+Also repaired: the gate_audit census drifted at HEAD — the other agent's
+ADR #36/#37/#38 `browser` module (committed 2913d49c, zero permission-gated
+commands) was never added to either client's pinned census, failing
+`desktop_command_census_matches_pin` / `tablet_command_census_matches_pin`.
+Added `("browser", 0, &[])` to both pins (census is fail-closed on
+unpinned modules).
+
+Commits: fdafcd73 (code), docs pending
+Tests: desktop lib 901/901 (authz 9 incl. 3 new, workspaces 23 incl. 3 new),
+gate_audit 3/3; fmt/clippy/drift clean. NOTE: the working tree currently
+does not compile — another agent's in-flight `reports.rs` / `oz_reporting`
+change (ReportingError without an AppError From impl, landed 21:18 after
+this verification) blocks oz-pos-app. My committed state was green before
+it landed; their files are untouched.
