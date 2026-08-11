@@ -267,6 +267,10 @@ pub mod builtin_roles {
     pub const OWNER: &str = "role-owner";
     /// Manager — can manage products, categories, and view reports.
     pub const MANAGER: &str = "role-manager";
+    /// Admin — global scope, everything except ownership/billing/irreversible org actions.
+    pub const ADMIN: &str = "role-admin";
+    /// Auditor — global, read-only.
+    pub const AUDITOR: &str = "role-auditor";
     /// Cashier — can process sales and manage the daily register.
     pub const CASHIER: &str = "role-cashier";
     /// Kitchen — can view and update KDS orders.
@@ -396,6 +400,8 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::TERMINALS_REGISTER,
             permissions::TERMINALS_EDIT,
             permissions::TERMINALS_DELETE,
+            permissions::KDS_VIEW,
+            permissions::KDS_UPDATE,
         ],
     },
     RolePreset {
@@ -497,6 +503,100 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::TERMINALS_REGISTER,
             permissions::TERMINALS_EDIT,
             permissions::TERMINALS_DELETE,
+            permissions::KDS_VIEW,
+            permissions::KDS_UPDATE,
+        ],
+    },
+    RolePreset {
+        id: builtin_roles::ADMIN,
+        name: "Admin",
+        description: "Global scope — everything except ownership transfer, billing, and irreversible org actions (staff deletion).",
+        permissions: &[
+            permissions::SALES_PROCESS,
+            permissions::SALES_VOID,
+            permissions::SALES_REFUND,
+            permissions::SALES_VIEW,
+            permissions::SALES_DISCOUNT,
+            permissions::SALES_SPLIT,
+            permissions::SALES_OVERRIDE_PRICE,
+            permissions::PRODUCTS_CREATE,
+            permissions::PRODUCTS_READ,
+            permissions::PRODUCTS_UPDATE,
+            permissions::PRODUCTS_DELETE,
+            permissions::PRODUCTS_IMPORT,
+            permissions::PRODUCTS_EXPORT,
+            permissions::PRODUCTS_CRUD,
+            permissions::INVENTORY_VIEW,
+            permissions::INVENTORY_ADJUST,
+            permissions::INVENTORY_TRANSFER,
+            permissions::INVENTORY_COUNT,
+            permissions::INVENTORY_LOCATIONS_MANAGE,
+            permissions::STAFF_READ,
+            permissions::STAFF_CREATE,
+            permissions::STAFF_UPDATE,
+            permissions::STAFF_MANAGE_ROLES,
+            permissions::SETTINGS_READ,
+            permissions::SETTINGS_EDIT,
+            permissions::REPORTS_VIEW,
+            permissions::REPORTS_EXPORT,
+            permissions::REPORTS_SCHEDULE,
+            permissions::SHIFTS_OPEN,
+            permissions::SHIFTS_CLOSE,
+            permissions::SHIFTS_VIEW_ANY,
+            permissions::AUDIT_VIEW,
+            permissions::AUDIT_EXPORT,
+            permissions::PAYMENTS_CASH,
+            permissions::PAYMENTS_CARD,
+            permissions::PAYMENTS_REFUND,
+            permissions::PAYMENTS_SETTLE,
+            permissions::CUSTOMERS_CREATE,
+            permissions::CUSTOMERS_VIEW,
+            permissions::CUSTOMERS_EDIT,
+            permissions::CUSTOMERS_DELETE,
+            permissions::LOYALTY_VIEW,
+            permissions::LOYALTY_EARN,
+            permissions::LOYALTY_REDEEM,
+            permissions::LOYALTY_MANAGE,
+            permissions::TABLES_ASSIGN,
+            permissions::TABLES_MERGE,
+            permissions::TABLES_SPLIT,
+            permissions::TABLES_CLOSE,
+            permissions::TABLES_CREATE,
+            permissions::TABLES_EDIT,
+            permissions::TABLES_DELETE,
+            permissions::DISCOUNTS_APPLY,
+            permissions::DISCOUNTS_CREATE,
+            permissions::DISCOUNTS_MANAGE,
+            permissions::WORKSPACES_SWITCH,
+            permissions::PROMOTIONS_CREATE,
+            permissions::PROMOTIONS_EDIT,
+            permissions::PROMOTIONS_DELETE,
+            permissions::PROMOTIONS_APPLY,
+            permissions::TERMINALS_REGISTER,
+            permissions::TERMINALS_EDIT,
+            permissions::TERMINALS_DELETE,
+            permissions::CATEGORIES_MANAGE,
+            permissions::PLUGINS_MANAGE,
+            permissions::KDS_VIEW,
+            permissions::KDS_UPDATE,
+        ],
+    },
+    RolePreset {
+        id: builtin_roles::AUDITOR,
+        name: "Auditor",
+        description: "Global, read-only — views operational data and the audit log; never manages and never sees sensitive profile fields.",
+        permissions: &[
+            permissions::SALES_VIEW,
+            permissions::PRODUCTS_READ,
+            permissions::INVENTORY_VIEW,
+            permissions::STAFF_READ,
+            permissions::SETTINGS_READ,
+            permissions::REPORTS_VIEW,
+            permissions::AUDIT_VIEW,
+            permissions::SHIFTS_VIEW_ANY,
+            permissions::CUSTOMERS_VIEW,
+            permissions::LOYALTY_VIEW,
+            permissions::KDS_VIEW,
         ],
     },
     RolePreset {
@@ -608,12 +708,80 @@ mod preset_tests {
 
     #[test]
     fn custom_preset_has_no_permissions() {
-        let preset = &ROLE_PRESETS[5];
-        assert_eq!(preset.id, builtin_roles::CUSTOM);
+        let preset = ROLE_PRESETS
+            .iter()
+            .find(|p| p.id == builtin_roles::CUSTOM)
+            .expect("custom preset");
         assert_eq!(preset.name, "Custom");
         assert!(preset.permissions.is_empty());
         let json = preset.permissions_json();
         assert_eq!(json, "[]");
+    }
+
+    #[test]
+    fn admin_preset_manages_roles_and_plugins_but_never_wildcard_or_staff_delete() {
+        // ADR #35 D4: Admin is global with the same mechanism as Owner, but
+        // "everything except ownership transfer, billing, and irreversible
+        // org actions" — expressed as an explicit grant list (no `*`), and
+        // staff deletion stays out of the default.
+        let preset = ROLE_PRESETS
+            .iter()
+            .find(|p| p.id == builtin_roles::ADMIN)
+            .expect("admin preset");
+        assert_eq!(preset.name, "Admin");
+        assert!(
+            !preset.permissions.contains(&"*"),
+            "Admin is never a wildcard"
+        );
+        assert!(
+            preset
+                .permissions
+                .contains(&permissions::STAFF_MANAGE_ROLES)
+        );
+        assert!(preset.permissions.contains(&permissions::PLUGINS_MANAGE));
+        assert!(preset.permissions.contains(&permissions::SETTINGS_EDIT));
+        assert!(
+            !preset.permissions.contains(&permissions::STAFF_DELETE),
+            "irreversible org action stays owner-only by default"
+        );
+    }
+
+    #[test]
+    fn auditor_preset_is_read_only() {
+        // ADR #35 D4: Auditor is global and read-only — views operational
+        // data and the audit log, never manages, never exports, and never
+        // sees sensitive profile fields (0049 adds those denials).
+        let preset = ROLE_PRESETS
+            .iter()
+            .find(|p| p.id == builtin_roles::AUDITOR)
+            .expect("auditor preset");
+        assert_eq!(preset.name, "Auditor");
+        for read in [
+            permissions::SALES_VIEW,
+            permissions::PRODUCTS_READ,
+            permissions::INVENTORY_VIEW,
+            permissions::STAFF_READ,
+            permissions::REPORTS_VIEW,
+            permissions::AUDIT_VIEW,
+        ] {
+            assert!(
+                preset.permissions.contains(&read),
+                "{read} must be readable"
+            );
+        }
+        for write in [
+            permissions::SALES_PROCESS,
+            permissions::STAFF_UPDATE,
+            permissions::SETTINGS_EDIT,
+            permissions::REPORTS_EXPORT,
+            permissions::AUDIT_EXPORT,
+            permissions::CUSTOMERS_CREATE,
+        ] {
+            assert!(
+                !preset.permissions.contains(&write),
+                "{write} is a write/export — Auditor must not hold it"
+            );
+        }
     }
 
     #[test]
