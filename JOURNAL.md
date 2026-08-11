@@ -4288,3 +4288,50 @@ Tests: oz-core 1758/1758 (analytics 7), platform-core 236/236, desktop
 905/905 (analytics+authz 14, gate_audit 3, wiring_audit 6), tablet 434/434,
 UI 4884/4884 (285 files) incl. AnalyticsScreen 6 + contract 2 +
 screenExtraction 138; typecheck 0, fmt/clippy/drift/i18n-parity clean.
+
+### 2026-08-11 — Granted permission keys ride the login session (0046)
+
+Problem: the UI gated analytics (and would gate future permission-based
+features) on role-name strings, because the session DTO carried only
+`role_name`. That diverged from the backend registry the moment a custom
+role granted a key its role name doesn't imply — and it forced the role
+gates to hand-maintain the taxonomy.
+
+Solution: carry the role's granted permission keys on the session, verbatim
+from the role's permissions JSON, and make the UI gate on them when present.
+- `LoginSession` (platform-core auth) gains `permissions: Vec<String>` with
+  `#[serde(default)]` so older persisted sessions / older clients still
+  parse. `modules_staff::models::Role::permission_keys()` parses the JSON
+  (malformed -> empty, authorizes nothing). Both clients populate it at
+  `staff_login` and `bootstrap_owner`.
+- UI: `LoginSessionDto.permissions: string[]`; new `hasGrantedPermission`
+  TS helper that EXACTLY mirrors the backend `has_permission` wildcard
+  semantics (`*`, `<domain>:*`) — a naive `includes` would deny the Owner,
+  whose preset grants `["*"]`. Page/Nav registrations accept an optional
+  `requiredPermission`; `passesGate` makes the permission check
+  authoritative when the session carries keys and falls back to
+  `requiredRole` otherwise (mocks/tests). AppShell/TabletAppShell thread
+  `session.permissions` into `getEnabledPages`/`getNavItems`/`isPageAccessible`
+  via conditional spread (exactOptionalPropertyTypes). The analytics page
+  now registers `requiredPermission: 'analytics:view'` alongside
+  `requiredRole: 'management'`; dev-mock login fixtures return realistic
+  grants (owner `["*"]`, manager incl. analytics, cashier without).
+
+Decisions / tradeoffs:
+- Kept `requiredRole` as the fallback path rather than deleting it: dev-mock
+  and older test fixtures without keys still resolve, and it preserves the
+  existing role-gate tests. When a session IS present the permission check
+  is authoritative (an explicit empty list denies — never an implicit grant).
+- The DTO carries the RAW keys (including `*`) and the UI applies wildcard
+  semantics, so the UI mirrors the backend exactly and stays correct if a
+  preset's grant set changes.
+- Red discipline note: a struct-field addition's Red is inherently a compile
+  failure, so I scaffolded the field + fixtures first (mechanical), then the
+  behavioral tests (staff_login returns `["*"]` for owner, round-trip,
+  malformed-JSON) pinned the new behavior before wiring the population.
+
+Commits: pending
+Tests: platform-core 237, modules-staff 12 (permission_keys 3), desktop
+auth+staff 56, tablet auth+staff 29, gate_audit 3, wiring_audit 6; UI
+AnalyticsScreen 9 (gate + hasGrantedPermission) + shells/auth/workspace 77;
+typecheck 0, fmt/clippy/drift/i18n-parity clean.
