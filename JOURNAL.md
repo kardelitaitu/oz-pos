@@ -4358,6 +4358,6 @@ exactOptionalPropertyTypes when a page registration has no key.
 Red-first: the new test asserted the permission message + key line render
 and the role message is absent, and failed before the component change.
 
-Commits: pending
+Commits: a25f31fb
 Tests: PermissionDenied 10, screenExtraction 138, full UI 4890/4890 (285
 files); typecheck 0, fmt/clippy/drift/i18n-parity clean.
