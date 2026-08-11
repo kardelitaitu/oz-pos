@@ -23,6 +23,11 @@ import {
   localizedAttributeMissing,
   translationVarDrift,
   varsMismatch,
+  loadEnContracts,
+  loadIdContracts,
+  loadLocaleSources,
+  loadTsxSources,
+  loadLocalizedSites,
   type MessageVarContract,
 } from '@/i18n/barePlaceholderScan';
 
@@ -287,6 +292,45 @@ describe('scanTranslationVars (repo integrity)', () => {
     // only provide the en contract's vars (round 164 gates that). This
     // runs in the same gate as the en-side cross-check.
     expect(scanTranslationVars()).toEqual([]);
+  });
+});
+
+// ── Shared bundle/site maps (round 168) ──────────────────────────
+//
+// The four scans each globbed and parsed the bundles themselves, with
+// three different locale glob forms in play. These pins lock the
+// shared maps so the globs live in exactly one place: a regression to
+// the round-156 all-locale glob (matching id files) would silently
+// overwrite en contracts with the shorter id translations.
+
+describe('shared bundle and site maps (round 168)', () => {
+  it('loads the en contracts with the canonical attribute vars', () => {
+    // Discriminating: the id translation DROPS `$colour`, so if the en
+    // glob ever matched id bundles, this pin fails (the round-164 bug).
+    const en = loadEnContracts();
+    expect(en.get('category-colour-swatch-aria')!.attributes.get('aria-label')).toEqual(['colour']);
+  });
+
+  it('loads the id contracts without the dropped var', () => {
+    const id = loadIdContracts();
+    expect(id.get('category-colour-swatch-aria')!.attributes.get('aria-label')).toEqual([]);
+  });
+
+  it('loads every production site with its attrs', () => {
+    const sites = loadLocalizedSites();
+    const fastpin = [...sites.entries()].find(([path]) => path.endsWith('FastPINOverlay.tsx'));
+    expect(fastpin).toBeDefined();
+    const clear = fastpin![1].find((site) => site.id === 'staff-login-clear-aria');
+    expect(clear!.attrsKeys).toEqual(['aria-label']);
+  });
+
+  it('excludes test files from the tsx map', () => {
+    expect(Object.keys(loadTsxSources()).some((p) => p.includes('__tests__'))).toBe(false);
+  });
+
+  it('serves the round-156 all-locale sources for the bare-placeholder scan', () => {
+    const all = loadLocaleSources();
+    expect(Object.keys(all).some((p) => p.endsWith('.id.ftl'))).toBe(true);
   });
 });
 

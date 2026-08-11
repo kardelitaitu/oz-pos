@@ -43,6 +43,77 @@ export function findBarePlaceholders(
   return hits;
 }
 
+// ── Shared bundle/site maps (round 168) ──────────────────────────
+//
+// Every scan globs the same files and parses the same bundles; these
+// are the single source of truth for the glob forms (three different
+// locale shapes existed before). The pins in the test file lock them:
+// a regression to the all-locale glob would silently overwrite en
+// contracts with the shorter id translations.
+
+/** Every locale source, en and id (the round-156 bare-placeholder glob). */
+export function loadLocaleSources(): Record<string, string> {
+  return import.meta.glob('../locales/*.ftl', {
+    query: '?raw',
+    import: 'default',
+    eager: true,
+  });
+}
+
+/** EN-only sources — canonical for the var/attr contracts (round 164). */
+export function loadEnSources(): Record<string, string> {
+  return import.meta.glob(['../locales/*.ftl', '!../locales/*.id.ftl'], {
+    query: '?raw',
+    import: 'default',
+    eager: true,
+  });
+}
+
+/** Indonesian sources. */
+export function loadIdSources(): Record<string, string> {
+  return import.meta.glob('../locales/*.id.ftl', {
+    query: '?raw',
+    import: 'default',
+    eager: true,
+  });
+}
+
+/** Production `.tsx` sources — tests excluded (the parity gate's domain). */
+export function loadTsxSources(): Record<string, string> {
+  return import.meta.glob(['../**/*.tsx', '!../**/__tests__/**'], {
+    query: '?raw',
+    import: 'default',
+    eager: true,
+  });
+}
+
+/** Every message id → variable contract across the EN bundles. */
+export function loadEnContracts(): Map<string, MessageVarContract> {
+  const map = new Map<string, MessageVarContract>();
+  for (const source of Object.values(loadEnSources())) {
+    for (const [id, contract] of messageDeclaredVars(source)) map.set(id, contract);
+  }
+  return map;
+}
+
+/** Every message id → variable contract across the Indonesian bundles. */
+export function loadIdContracts(): Map<string, MessageVarContract> {
+  const map = new Map<string, MessageVarContract>();
+  for (const source of Object.values(loadIdSources())) {
+    for (const [id, contract] of messageDeclaredVars(source)) map.set(id, contract);
+  }
+  return map;
+}
+
+/** Every production tsx file → its `<Localized>` sites. */
+export function loadLocalizedSites(): Map<string, LocalizedSite[]> {
+  const map = new Map<string, LocalizedSite[]>();
+  for (const [path, source] of Object.entries(loadTsxSources())) {
+    map.set(path, findLocalizedSites(source));
+  }
+  return map;
+}
+
 /**
  * Scan every locale bundle in `src/locales` (both `.ftl` and
  * `.id.ftl`) for bare placeholders. Returns one hit per occurrence,
@@ -50,14 +121,9 @@ export function findBarePlaceholders(
  * turns a regression into a readable report.
  */
 export function scanLocaleFiles(): BarePlaceholderHit[] {
-  const modules = import.meta.glob('../locales/*.ftl', {
-    query: '?raw',
-    import: 'default',
-    eager: true,
-  });
   const hits: BarePlaceholderHit[] = [];
-  for (const [path, source] of Object.entries(modules)) {
-    for (const hit of findBarePlaceholders(source as string)) {
+  for (const [path, source] of Object.entries(loadLocaleSources())) {
+    for (const hit of findBarePlaceholders(source)) {
       hits.push({ file: path, ...hit });
     }
   }
@@ -330,27 +396,11 @@ export function varsMismatch(
  * en bundles are skipped (the latter is the parity gate's job).
  */
 export function scanLocalizedVars(): LocalizedVarsHit[] {
-  // EN bundles only — the canonical variable contract. The `*.id.ftl`
-  // translations may legitimately drop a variable (a shorter translation),
-  // so they must not overwrite the en declaration.
-  const ftlModules = import.meta.glob(['../locales/*.ftl', '!../locales/*.id.ftl'], {
-    query: '?raw',
-    import: 'default',
-    eager: true,
-  });
-  const declared = new Map<string, MessageVarContract>();
-  for (const source of Object.values(ftlModules)) {
-    for (const [id, contract] of messageDeclaredVars(source as string)) declared.set(id, contract);
-  }
-
-  const tsxModules = import.meta.glob(['../**/*.tsx', '!../**/__tests__/**'], {
-    query: '?raw',
-    import: 'default',
-    eager: true,
-  });
+  // EN bundles only — the canonical variable contract (loadEnContracts).
+  const declared = loadEnContracts();
   const hits: LocalizedVarsHit[] = [];
-  for (const [path, source] of Object.entries(tsxModules)) {
-    for (const site of findLocalizedSites(source as string)) {
+  for (const [path, sites] of loadLocalizedSites()) {
+    for (const site of sites) {
       const contract = declared.get(site.id);
       if (contract === undefined) continue; // missing key — the parity gate owns that
       if (site.varsKeys === null) continue; // unresolvable vars expression — documented
@@ -416,26 +466,9 @@ export function translationVarDrift(
  * attributes are the parity gate's / a separate defect class's job.
  */
 export function scanTranslationVars(): TranslationVarDriftHit[] {
-  const ftlModules = import.meta.glob(['../locales/*.ftl', '!../locales/*.id.ftl'], {
-    query: '?raw',
-    import: 'default',
-    eager: true,
-  });
-  const enDeclared = new Map<string, MessageVarContract>();
-  for (const source of Object.values(ftlModules)) {
-    for (const [id, contract] of messageDeclaredVars(source as string)) {
-      enDeclared.set(id, contract);
-    }
-  }
-
-  const idModules = import.meta.glob('../locales/*.id.ftl', {
-    query: '?raw',
-    import: 'default',
-    eager: true,
-  });
+  const enDeclared = loadEnContracts();
   const hits: TranslationVarDriftHit[] = [];
-  for (const [path, source] of Object.entries(idModules)) {
-    const text = source as string;
+  for (const [path, text] of Object.entries(loadIdSources())) {
     for (const [id, idContract] of messageDeclaredVars(text)) {
       const enContract = enDeclared.get(id);
       if (enContract === undefined) continue; // id-only key — the parity gate owns that
@@ -505,38 +538,11 @@ export function localizedAttributeMissing(
  * Reports one hit per affected site.
  */
 export function scanAttributeOmissions(): AttributeOmissionHit[] {
-  const ftlModules = import.meta.glob(['../locales/*.ftl', '!../locales/*.id.ftl'], {
-    query: '?raw',
-    import: 'default',
-    eager: true,
-  });
-  const enDeclared = new Map<string, MessageVarContract>();
-  for (const source of Object.values(ftlModules)) {
-    for (const [id, contract] of messageDeclaredVars(source as string)) {
-      enDeclared.set(id, contract);
-    }
-  }
-
-  const idModules = import.meta.glob('../locales/*.id.ftl', {
-    query: '?raw',
-    import: 'default',
-    eager: true,
-  });
-  const idDeclared = new Map<string, MessageVarContract>();
-  for (const source of Object.values(idModules)) {
-    for (const [id, contract] of messageDeclaredVars(source as string)) {
-      idDeclared.set(id, contract);
-    }
-  }
-
-  const tsxModules = import.meta.glob(['../**/*.tsx', '!../**/__tests__/**'], {
-    query: '?raw',
-    import: 'default',
-    eager: true,
-  });
+  const enDeclared = loadEnContracts();
+  const idDeclared = loadIdContracts();
   const hits: AttributeOmissionHit[] = [];
-  for (const [path, source] of Object.entries(tsxModules)) {
-    for (const site of findLocalizedSites(source as string)) {
+  for (const [path, sites] of loadLocalizedSites()) {
+    for (const site of sites) {
       if (site.attrsKeys === null) continue; // unresolvable attrs expression — documented
       if (site.attrsKeys.length === 0) continue;
       const enContract = enDeclared.get(site.id);
