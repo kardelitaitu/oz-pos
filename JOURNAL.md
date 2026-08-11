@@ -3771,7 +3771,7 @@ oz-pos-app staff 40/40, oz-pos-tablet staff 19/19, fmt + clippy -D warnings
 + drift guard clean. `test-changed.sh` blocked by the locked oz-pos-app.exe
 (running process — left alone per the shared-tree rule).
 
-**Commits:** <backfill> (feat) + <backfill> (docs).
+**Commits:** `bde2962d` (feat) + `7fa406a4` (refactor).
 
 **Risks / follow-ups:** the registry is the foundation for the gate (0047)
 and the profile sensitive keys (0049: staff:read_identity / read_payroll /

@@ -1,5 +1,9 @@
 # RBAC code-resident permission registry
 
+> **Status: IMPLEMENTED — 2026-08-11.** Shipped in two commits
+> (`bde2962d`, `7fa406a4`); moved to `_done/`. See §10 for the completion
+> record. The sections below are the original plan as approved.
+
 ## 1. Decision requested
 
 Build the code-resident permission registry that ADR #35 D3 requires: every
@@ -109,3 +113,43 @@ The registry is additive and non-runtime-breaking: removing it reverts role
 writes to today's unchecked behavior. Each validation rule ships behind its
 own test, so a rule that proves too strict can be removed individually
 without reverting the registry itself.
+
+## 10. Completion record (2026-08-11)
+
+**Shipped:** `platform-core::permission_registry` — all 68 enforced keys
+classified by family + `sensitive: bool`, a bidirectional inventory test
+(constants == registry), and `validate_grants` wired into
+`Store::create_role` → `CoreError::Validation`. Rejects unregistered keys,
+wildcards covering sensitive keys, and the global `*` (reserved for the Owner
+seed, which bypasses via direct insert). Added `PRODUCTS_CRUD` /
+`CATEGORIES_MANAGE` constants for the legacy seed keys (byte-identical
+strings).
+
+**Deviations from plan (all recorded in JOURNAL round 175):**
+
+- The audit surfaced keys the plan's baseline missed: legacy seeds use
+  `products:crud` and `categories:manage` (no constants existed), and a test
+  fixture used `products:view` (nothing enforces it) — fixed by adding the two
+  constants and renaming the fixture key to `products:read`.
+- Two integration fixtures used synthetic keys (`module:N:action`, `["test"]`)
+  and were updated to registered keys.
+- Finalization (commit `7fa406a4`) consolidated the four copies of the key
+  inventory into `rbac::ALL_ENFORCED` and derived the wildcard-vs-sensitive
+  tests from the registry, so a sensitive key added to a new family is pinned
+  automatically (−122 lines).
+
+**Verify (round 175 + finalization):** registry 9/9, oz-core lib 1678/1678,
+staff_integration 25/25, oz-pos-app staff 40/40, oz-pos-tablet staff 19/19,
+platform-core 234/234 post-refactor; `cargo fmt --check`, clippy
+`-D warnings` (platform-core + oz-core), and drift guard all clean.
+`test-changed.sh` blocked by the locked `oz-pos-app.exe` (running process,
+left alone).
+
+**Commits:** `bde2962d` (feat) + `7fa406a4` (refactor). Journal round 175;
+CHANGELOG bullet under Added.
+
+**Known follow-ups (deferred, not regressions):** module-manifest
+`permissions` arrays are a separate declarative DSL (format-validated only),
+not RBAC enforcement — a future slice may reconcile them. The centralized
+enforcement gate (0047) consumes this registry's public API
+(`is_registered`, `is_sensitive`, `validate_grant`).

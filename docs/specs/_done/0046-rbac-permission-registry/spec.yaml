@@ -1,6 +1,6 @@
 id: 0046-rbac-permission-registry
 title: RBAC code-resident permission registry
-status: needs-human-approval
+status: implemented
 owner: OZ-POS maintainers
 implementer: Buffy
 priority: P1
@@ -13,7 +13,7 @@ scope:
   - apps/desktop-client/src/commands/authz.rs
   - apps/desktop-client/src/commands/*.rs
   - apps/tablet-client/src/commands/*.rs
-  - docs/specs/_active/0046-rbac-permission-registry/
+  - docs/specs/_done/0046-rbac-permission-registry/
 
 problem:
   - Roles store flat JSON permission lists, so nothing classifies a key as
