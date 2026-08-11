@@ -1272,4 +1272,130 @@ mod tests {
         // Should have 3 recent transactions
         assert_eq!(details.recent_transactions.len(), 3);
     }
+
+    // ── LOY-02 (migration 128): unique earn/redeem projection index ──
+
+    /// The audit's LOY-02 recommendation: enforce idempotency at the
+    /// database layer with a unique projection key (account_id, sale_id,
+    /// txn_type) so a CONCURRENT replay — both callers passing the
+    /// application-layer lookup, then both inserting — can never
+    /// double-award. `earn_points`/`redeem_points` recover from the
+    /// resulting ConstraintViolation by returning the winning row, but that
+    /// recovery depends on the index existing. Pin: a second row for the
+    /// same projection must be rejected by the database.
+    #[test]
+    fn duplicate_earn_projection_row_is_rejected_by_database() {
+        let conn = fresh();
+        seed_customer(&conn, "cust-1", "Alice");
+        seed_sale(&conn, "sale-1");
+        let account = store(&conn)
+            .get_or_create_loyalty_account("cust-1")
+            .unwrap();
+
+        // The winning concurrent replay row is already in the ledger.
+        conn.execute(
+            "INSERT INTO loyalty_transactions (id, account_id, sale_id, points, txn_type, description, created_at)
+             VALUES ('txn-win', ?1, 'sale-1', 100, 'earn', 'winning row', '2025-01-01T00:00:00.000Z')",
+            params![account.id],
+        )
+        .unwrap();
+
+        // A losing concurrent replay must hit the unique projection index
+        // instead of double-awarding the same sale.
+        let duplicate = conn.execute(
+            "INSERT INTO loyalty_transactions (id, account_id, sale_id, points, txn_type, description, created_at)
+             VALUES ('txn-lose', ?1, 'sale-1', 100, 'earn', 'losing row', '2025-01-01T00:00:00.000Z')",
+            params![account.id],
+        );
+        assert!(
+            matches!(
+                &duplicate,
+                Err(rusqlite::Error::SqliteFailure(code, _))
+                    if code.code == rusqlite::ErrorCode::ConstraintViolation
+            ),
+            "duplicate (account_id, sale_id, 'earn') row must be rejected by the unique \
+             projection index, got: {duplicate:?}"
+        );
+    }
+
+    /// The same projection must also hold for redemptions: one 'redeem'
+    /// row per (account, sale). A retried checkout must not double-deduct.
+    #[test]
+    fn duplicate_redeem_projection_row_is_rejected_by_database() {
+        let conn = fresh();
+        seed_customer(&conn, "cust-1", "Alice");
+        seed_sale_for_customer(&conn, "sale-1", Some("cust-1"), 5000);
+        let account = store(&conn)
+            .get_or_create_loyalty_account("cust-1")
+            .unwrap();
+        conn.execute(
+            "INSERT INTO loyalty_transactions (id, account_id, sale_id, points, txn_type, description, created_at)
+             VALUES ('txn-win', ?1, 'sale-1', -100, 'redeem', 'winning row', '2025-01-01T00:00:00.000Z')",
+            params![account.id],
+        )
+        .unwrap();
+
+        let duplicate = conn.execute(
+            "INSERT INTO loyalty_transactions (id, account_id, sale_id, points, txn_type, description, created_at)
+             VALUES ('txn-lose', ?1, 'sale-1', -100, 'redeem', 'losing row', '2025-01-01T00:00:00.000Z')",
+            params![account.id],
+        );
+        assert!(
+            matches!(
+                &duplicate,
+                Err(rusqlite::Error::SqliteFailure(code, _))
+                    if code.code == rusqlite::ErrorCode::ConstraintViolation
+            ),
+            "duplicate (account_id, sale_id, 'redeem') row must be rejected, got: {duplicate:?}"
+        );
+    }
+
+    /// A sale may legitimately carry BOTH an earn and a redeem row — the
+    /// projection key is (account, sale, TYPE), so the index must not
+    /// collapse different transaction types for the same sale.
+    #[test]
+    fn earn_and_redeem_for_same_sale_are_distinct_projections() {
+        let conn = fresh();
+        seed_customer(&conn, "cust-1", "Alice");
+        seed_sale_for_customer(&conn, "sale-1", Some("cust-1"), 5000);
+        let account = store(&conn)
+            .get_or_create_loyalty_account("cust-1")
+            .unwrap();
+
+        conn.execute(
+            "INSERT INTO loyalty_transactions (id, account_id, sale_id, points, txn_type, description, created_at)
+             VALUES ('txn-earn', ?1, 'sale-1', 500, 'earn', 'earned', '2025-01-01T00:00:00.000Z')",
+            params![account.id],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO loyalty_transactions (id, account_id, sale_id, points, txn_type, description, created_at)
+             VALUES ('txn-redeem', ?1, 'sale-1', -100, 'redeem', 'redeemed', '2025-01-02T00:00:00.000Z')",
+            params![account.id],
+        )
+        .unwrap();
+    }
+
+    /// adjust/expire rows have no sale binding (NULL sale_id). SQLite unique
+    /// indexes treat NULLs as distinct, so multiple sale-less rows for the
+    /// same account must stay insertable — the projection index must not
+    /// over-constrain them.
+    #[test]
+    fn sale_less_transaction_rows_are_not_projection_constrained() {
+        let conn = fresh();
+        seed_customer(&conn, "cust-1", "Alice");
+        let account = store(&conn)
+            .get_or_create_loyalty_account("cust-1")
+            .unwrap();
+
+        for i in 0..2 {
+            let id = format!("txn-adjust-{i}");
+            conn.execute(
+                "INSERT INTO loyalty_transactions (id, account_id, sale_id, points, txn_type, description, created_at)
+                 VALUES (?1, ?2, NULL, -10, 'adjust', 'manual adjustment', '2025-01-01T00:00:00.000Z')",
+                params![id, account.id],
+            )
+            .unwrap_or_else(|e| panic!("sale-less adjust row {i} must insert: {e}"));
+        }
+    }
 }
