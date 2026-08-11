@@ -1,0 +1,56 @@
+id: 0048-rbac-assignment-model-and-taxonomy
+title: RBAC assignment model and role taxonomy alignment
+status: needs-human-approval
+owner: OZ-POS maintainers
+implementer: Buffy
+priority: P1
+scope:
+  - crates/oz-core/migrations/007_customers.sql
+  - crates/oz-core/src/db/staff.rs
+  - crates/oz-core/src/migrations.rs
+  - modules/staff/src/models.rs
+  - modules/staff/src/lib.rs
+  - apps/desktop-client/src/commands/staff.rs
+  - apps/tablet-client/src/commands/staff.rs
+  - docs/specs/_active/0048-rbac-assignment-model-and-taxonomy/
+
+problem:
+  - Users carry one global `role_id`, so branch/workspace scopes, explicit "all"
+    semantics, and scope_mode cannot be expressed; the audit flagged command
+    scoping as a P0 (CUR-03) that the assignment model is the fix for.
+  - 'Cashier and kitchen are seeded roles while ADR #35 D4 makes Staff the single
+    operational role with workspace-scoped assignments, and the five-role
+    taxonomy (Owner, Admin, Manager, Staff, Auditor) does not exist yet.'
+  - The `users.role_id` column must migrate to an assignment without changing
+    behavior for existing databases.
+
+implemented_slice:
+  - Add `assignments` (`user_id`, `role_id`, `scope_mode` `global` | `scoped`,
+    `expires_at` deferred), `assignment_branches`, and `assignment_workspaces`
+    (new migration, registered in the runner).
+  - Migrate `users.role_id` to a default global-mode assignment; existing
+    databases behave identically.
+  - Seed Owner, Admin, and Auditor alongside Manager and Staff (`role-staff`
+    survives); fold cashier/kitchen into Staff + workspace assignments
+    (`retail-pos` / `kds`) and retire `role-cashier` / `role-kitchen`.
+  - Evaluate scoped mode per dimension (branches, workspaces), each an explicit
+    `all` or a list; global-mode roles ignore both dimensions.
+  - Add migration round-trip, default-assignment, role-retirement, and scope
+    evaluation tests (all/one/combination, global-ignores-scope).
+
+invariants:
+  - Every user has exactly one effective assignment.
+  - Global-mode roles (Owner, Admin, Auditor) ignore branch and workspace scope.
+  - Scoped-mode evaluation requires the requested branch and workspace to be in
+    scope (or explicitly `all`).
+  - Retired roles (`role-cashier`, `role-kitchen`) are no longer referenced
+    after the migration; seeded and legacy users resolve to Staff + the
+    workspace scope their current permission set implies.
+  - Existing databases are behavior-unchanged through the migration.
+
+non_goals:
+  - 'Org-tenant layer, invitations, assignment expiry, permission caching
+    (deferred in ADR #35 D7).'
+  - Custom-role UI/API (a later step in D9 step 5).
+  - The user profile fields (spec 0049).
+  - 'Role inheritance (permanently out of scope per ADR #35 D4).'
