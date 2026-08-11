@@ -4024,7 +4024,7 @@ the fieldset role.
 
 Commits: ecae8b52 (feat(profile): staff IPC profile fields + viewer-gated
 profile command + staff screen), 57e98628 (feat(ui): staff profile form),
-<backfilled> (docs(0049): spec progress)
+0a909c4b (docs(0049): spec progress)
 Tests: desktop staff 40/40, tablet staff 19/19, UI screen 17/17,
 contract 4/4; oz-core 1727/1727, platform-core 237/237, platform-sync
 276/276; fmt/clippy (changed area)/bundle-parity/drift clean. Two pre-existing
