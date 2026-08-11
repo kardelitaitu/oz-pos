@@ -128,10 +128,15 @@ staff-login-backspace-aria =
 staff-login-digit-aria =
     .aria-label = { $digit }
 
-# ── Workspace Access ──
-staff-ws-section-label = Akses Ruang Kerja
-staff-ws-role-defaults = Gunakan default peran
-staff-ws-custom = Kustom
+# ── Assignment Access (ADR #35 D5 / spec 0048) ──
+staff-assignment-section-label = Akses Penugasan
+staff-assignment-global = Semua cabang & ruang kerja
+staff-assignment-scoped = Batasi berdasarkan cabang atau ruang kerja
+staff-assignment-branches-label = Cabang
+staff-assignment-workspaces-label = Ruang Kerja
+staff-assignment-all-branches = Semua cabang
+staff-assignment-all-workspaces = Semua ruang kerja
+staff-assignment-all-workspaces-short = Semua
 
 # ── Fast User Switching (ADR #6) ──────────────────────────────────────────
 

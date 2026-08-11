@@ -78,10 +78,15 @@ staff-toast-updated = { $name } updated successfully
 staff-toast-deactivated = { $name } deactivated
 staff-toast-restored = { $name } restored
 
-# ── Workspace Access ──────────────────────────────────────────────────────
-staff-ws-section-label = Workspace Access
-staff-ws-role-defaults = Use role defaults
-staff-ws-custom = Custom
+# ── Assignment Access (ADR #35 D5 / spec 0048) ──────────────────────────
+staff-assignment-section-label = Assignment Access
+staff-assignment-global = All branches & workspaces
+staff-assignment-scoped = Restrict by branch or workspace
+staff-assignment-branches-label = Branches
+staff-assignment-workspaces-label = Workspaces
+staff-assignment-all-branches = All branches
+staff-assignment-all-workspaces = All workspaces
+staff-assignment-all-workspaces-short = All
 
 # ── Staff Login ──────────────────────────────────────────────────────────
 staff-login-title = OZ-POS

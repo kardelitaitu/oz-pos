@@ -21,6 +21,7 @@ import {
   createStaffScoped,
   updateStaffScoped,
   getStaffProfileScoped,
+  type AssignmentArgs,
 } from '@/api/staff';
 
 const completeProfile = {
@@ -34,20 +35,42 @@ const completeProfile = {
   emergency_contact_phone: '+14155550987',
 };
 
+/** A scoped assignment fixture (ADR #35 D5 / spec 0048). */
+const scopedAssignment: AssignmentArgs = {
+  scope_mode: 'scoped',
+  branches_all: false,
+  branch_ids: ['store-a', 'store-b'],
+  workspaces_all: false,
+  workspace_keys: ['retail-pos'],
+};
+
+/** The global fallback a legacy DTO carries. */
+const globalAssignment = {
+  scope_mode: 'global',
+  branches_all: true,
+  branch_ids: [],
+  workspaces_all: true,
+  workspace_keys: [],
+};
+
+/** StaffMemberDto mock with the ADR #35 D5 assignment shape. */
+const staffMemberDto = {
+  id: 'u-1',
+  username: 'alice',
+  display_name: 'Alice',
+  role_id: 'role-staff',
+  role_name: 'Staff',
+  is_active: true,
+  national_id_masked: '*****6789',
+  is_profile_complete: true,
+  assignment: globalAssignment,
+};
+
 describe('staff.ts scoped IPC contract (ADR #35 D6 profile fields)', () => {
   beforeEach(() => mockInvoke.mockReset());
 
   it('createStaffScoped sends the 9 required + optional profile fields', async () => {
-    mockInvoke.mockResolvedValue({
-      id: 'u-1',
-      username: 'alice',
-      display_name: 'Alice',
-      role_id: 'role-staff',
-      role_name: 'Staff',
-      is_active: true,
-      national_id_masked: '*****6789',
-      is_profile_complete: true,
-    });
+    mockInvoke.mockResolvedValue(staffMemberDto);
     await createStaffScoped('session-1', {
       username: 'alice',
       pin: '1234',
@@ -76,16 +99,7 @@ describe('staff.ts scoped IPC contract (ADR #35 D6 profile fields)', () => {
   });
 
   it('updateStaffScoped sends the profile fields and omits undefined ones', async () => {
-    mockInvoke.mockResolvedValue({
-      id: 'u-1',
-      username: 'alice',
-      display_name: 'Alice Updated',
-      role_id: 'role-staff',
-      role_name: 'Staff',
-      is_active: true,
-      national_id_masked: '*****6789',
-      is_profile_complete: true,
-    });
+    mockInvoke.mockResolvedValue(staffMemberDto);
     await updateStaffScoped('session-1', {
       id: 'u-1',
       username: 'alice',
@@ -137,6 +151,64 @@ describe('staff.ts scoped IPC contract (ADR #35 D6 profile fields)', () => {
     await listStaffScoped('session-1');
     expect(mockInvoke).toHaveBeenCalledWith('list_staff_scoped', {
       sessionToken: 'session-1',
+    });
+  });
+
+  it('updateStaffScoped sends the assignment scope (ADR #35 D5 / 0048)', async () => {
+    mockInvoke.mockResolvedValue(staffMemberDto);
+    await updateStaffScoped('session-1', {
+      id: 'u-1',
+      username: 'alice',
+      display_name: 'Alice',
+      role_id: 'role-staff',
+      is_active: true,
+      assignment: { ...scopedAssignment },
+    });
+    expect(mockInvoke).toHaveBeenCalledWith('update_staff_scoped', {
+      sessionToken: 'session-1',
+      args: {
+        id: 'u-1',
+        username: 'alice',
+        display_name: 'Alice',
+        role_id: 'role-staff',
+        is_active: true,
+        assignment: { ...scopedAssignment },
+      },
+    });
+  });
+
+  it('createStaffScoped can carry the assignment scope too', async () => {
+    mockInvoke.mockResolvedValue(staffMemberDto);
+    await createStaffScoped('session-1', {
+      username: 'alice',
+      pin: '1234',
+      display_name: 'Alice',
+      role_id: 'role-staff',
+      profile: completeProfile,
+      assignment: { ...scopedAssignment },
+    });
+    expect(mockInvoke).toHaveBeenCalledWith('create_staff_scoped', {
+      sessionToken: 'session-1',
+      args: {
+        username: 'alice',
+        pin: '1234',
+        display_name: 'Alice',
+        role_id: 'role-staff',
+        profile: completeProfile,
+        assignment: { ...scopedAssignment },
+      },
+    });
+  });
+
+  it('listStaffScoped resolves a DTO carrying the assignment shape', async () => {
+    mockInvoke.mockResolvedValue([staffMemberDto]);
+    const staff = await listStaffScoped('session-1');
+    expect(staff[0]?.assignment).toEqual({
+      scope_mode: 'global',
+      branches_all: true,
+      branch_ids: [],
+      workspaces_all: true,
+      workspace_keys: [],
     });
   });
 });

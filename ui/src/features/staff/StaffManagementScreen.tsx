@@ -9,12 +9,10 @@ import {
   type StaffMemberDto,
   type RoleDto,
   type ProfileArgs,
+  type AssignmentArgs,
 } from '@/api/staff';
-import {
-  listAllWorkspacesScoped,
-  getUserWorkspacesScoped,
-  type WorkspaceTypeDto,
-} from '@/api/workspaces';
+import { listAllWorkspacesScoped, type WorkspaceTypeDto } from '@/api/workspaces';
+import { listStores, type StoreProfile } from '@/api/stores';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -49,6 +47,34 @@ function wsIcon(key: string): React.ReactNode {
   }
 }
 
+// ── Five-role taxonomy (ADR #35 D4 / spec 0048) ──────────────────────
+//
+// The staff screen presents exactly the five preset roles, in this order.
+// Cashier/kitchen are retired (0048 2c) and custom roles have no UI yet
+// (0048 non-goal) — so the dropdown is the taxonomy, never the raw role
+// table. Role ids are the seeded preset ids (platform-core `ROLE_PRESETS`).
+const PRESET_ROLE_ORDER = [
+  'role-owner',
+  'role-admin',
+  'role-manager',
+  'role-staff',
+  'role-auditor',
+] as const;
+
+/**
+ * The roles presented in the dropdown, filtered to the five-role taxonomy
+ * and ordered Owner → Admin → Manager → Staff → Auditor.
+ */
+function taxonomyRoles(roles: RoleDto[]): RoleDto[] {
+  const byId = new Map(roles.map((r) => [r.id, r]));
+  const ordered: RoleDto[] = [];
+  for (const id of PRESET_ROLE_ORDER) {
+    const role = byId.get(id);
+    if (role) ordered.push(role);
+  }
+  return ordered;
+}
+
 // ── Form state ──────────────────────────────────────────────────────
 
 interface FormData {
@@ -58,10 +84,16 @@ interface FormData {
   roleId: string;
   /** STAFF-09: current active state — preserved unchanged on profile edits. */
   isActive: boolean;
-  /** Only used when editing — workspace assignment mode */
-  wsMode: 'default' | 'custom';
-  /** Only used when editing — selected workspace keys */
-  wsKeys: string[];
+  /** Only used when editing — assignment scope mode (ADR #35 D5). */
+  scopeMode: 'global' | 'scoped';
+  /** Only used when editing — branch dimension is explicit `all`. */
+  branchesAll: boolean;
+  /** Only used when editing — branch ids in scope when not all. */
+  branchIds: string[];
+  /** Only used when editing — workspace dimension is explicit `all`. */
+  workspacesAll: boolean;
+  /** Only used when editing — workspace keys in scope when not all. */
+  workspaceKeys: string[];
   // ── ADR #35 D6 profile fields ────────────────────────────────
   dateOfBirth: string;
   phone: string;
@@ -90,8 +122,11 @@ const EMPTY_FORM: FormData = {
   pin: '',
   roleId: '',
   isActive: true,
-  wsMode: 'default',
-  wsKeys: [],
+  scopeMode: 'global',
+  branchesAll: true,
+  branchIds: [],
+  workspacesAll: true,
+  workspaceKeys: [],
   dateOfBirth: '',
   phone: '',
   nationalIdType: '',
@@ -206,7 +241,9 @@ export default function StaffManagementScreen() {
   const [roles, setRoles] = useState<RoleDto[]>([]);
   const [allWorkspaces, setAllWorkspaces] = useState<WorkspaceTypeDto[]>([]);
   const [workspaceNameMap, setWorkspaceNameMap] = useState<Map<string, string>>(new Map());
-  const [staffWorkspaces, setStaffWorkspaces] = useState<Map<string, string[]>>(new Map());
+  /** Branch picker source — `store_profiles` rows are the branch ids the
+   * assignment model scopes on (ADR #35 D5). */
+  const [branches, setBranches] = useState<StoreProfile[]>([]);
   const [loading, setLoading] = useState(true);
   /** STAFF-08: primary staff/roles load failed — show error + retry. */
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -242,31 +279,23 @@ export default function StaffManagementScreen() {
       setStaff(staffData);
       setRoles(rolesData);
 
-      // Load workspace names and assignments for the table column.
-      // STAFF-08: a workspace failure must NOT hide staff rows — show an
-      // explicit "workspace data unavailable" notice instead.
+      // Load workspace names + branch ids for the table column and the
+      // assignment editor. STAFF-08: a workspace failure must NOT hide
+      // staff rows — show an explicit "workspace data unavailable" notice
+      // instead. The workspace column derives from the DTO assignment
+      // (spec 0048), so it only needs the name map, not per-user lookups.
       try {
-        const workspaces = await listAllWorkspacesScoped(sessionToken);
+        const [workspaces, storeProfiles] = await Promise.all([
+          listAllWorkspacesScoped(sessionToken),
+          listStores(),
+        ]);
         const nameMap = new Map<string, string>();
         for (const w of workspaces) {
           nameMap.set(w.key, w.name);
         }
         setWorkspaceNameMap(nameMap);
-
-        const wsMap = new Map<string, string[]>();
-        const results = await Promise.allSettled(
-          staffData.map((m) => getUserWorkspacesScoped(sessionToken, m.id)),
-        );
-        for (let i = 0; i < results.length; i++) {
-          const member = staffData[i];
-          const r = results[i];
-          if (member && r && r.status === 'fulfilled') {
-            wsMap.set(member.id, r.value);
-          } else if (member) {
-            wsMap.set(member.id, []);
-          }
-        }
-        setStaffWorkspaces(wsMap);
+        setAllWorkspaces(workspaces);
+        setBranches(storeProfiles);
         setWorkspacesUnavailable(false);
       } catch {
         setWorkspacesUnavailable(true);
@@ -303,8 +332,14 @@ export default function StaffManagementScreen() {
       pin: '',
       roleId: member.role_id,
       isActive: member.is_active,
-      wsMode: 'default',
-      wsKeys: [],
+      // The assignment editor starts from the member's CURRENT effective
+      // assignment (ADR #35 D5 / spec 0048) — global roles show as global,
+      // scoped members show their all/list dimensions.
+      scopeMode: member.assignment.scope_mode,
+      branchesAll: member.assignment.branches_all,
+      branchIds: member.assignment.branch_ids,
+      workspacesAll: member.assignment.workspaces_all,
+      workspaceKeys: member.assignment.workspace_keys,
       dateOfBirth: '',
       phone: '',
       nationalIdType: '',
@@ -332,15 +367,15 @@ export default function StaffManagementScreen() {
     setShowModal(true);
 
     // Load the full profile (masked/withheld per the caller's grants) and
-    // the user's workspaces in parallel.
+    // the workspace/branch options in parallel.
     try {
       if (!sessionToken) {
         return;
       }
-      const [profile, workspaces, userKeys] = await Promise.all([
+      const [profile, workspaces, storeProfiles] = await Promise.all([
         getStaffProfileScoped(sessionToken, member.id),
         listAllWorkspacesScoped(sessionToken),
-        getUserWorkspacesScoped(sessionToken, member.id),
+        listStores(),
       ]);
       setForm((prev) => ({
         ...prev,
@@ -365,9 +400,7 @@ export default function StaffManagementScreen() {
         hireDate: profile.hire_date ?? '',
       }));
       setAllWorkspaces(workspaces);
-      if (userKeys.length > 0) {
-        setForm((prev) => ({ ...prev, wsMode: 'custom', wsKeys: userKeys }));
-      }
+      setBranches(storeProfiles);
     } catch {
       addToast({ message: requiredLocalized(l10n, 'staff-error-workspaces-failed'), type: 'error' });
       setAllWorkspaces([]);
@@ -380,16 +413,38 @@ export default function StaffManagementScreen() {
     setError(null);
   }, []);
 
-  // ── Toggle workspace checkbox ──────────────────────────────────
+  // ── Assignment editor toggles (ADR #35 D5 / spec 0048) ────────────
+  //
+  // Each scoped dimension is an explicit `all` or a list — the all/list
+  // toggle and the list checkboxes never express an implicit "all".
 
-  const toggleWsKey = useCallback((key: string) => {
+  const toggleBranch = useCallback((id: string) => {
     setForm((prev) => ({
       ...prev,
-      wsKeys: prev.wsKeys.includes(key)
-        ? prev.wsKeys.filter((k) => k !== key)
-        : [...prev.wsKeys, key],
+      branchIds: prev.branchIds.includes(id)
+        ? prev.branchIds.filter((b) => b !== id)
+        : [...prev.branchIds, id],
     }));
   }, []);
+
+  const toggleWorkspace = useCallback((key: string) => {
+    setForm((prev) => ({
+      ...prev,
+      workspaceKeys: prev.workspaceKeys.includes(key)
+        ? prev.workspaceKeys.filter((k) => k !== key)
+        : [...prev.workspaceKeys, key],
+    }));
+  }, []);
+
+  /** Assignment args derived from the form — `global` ignores both
+   * dimensions; `scoped` keeps the explicit all/list per dimension. */
+  const assignmentArgsFromForm = (): AssignmentArgs => ({
+    scope_mode: form.scopeMode,
+    branches_all: form.scopeMode === 'global' ? true : form.branchesAll,
+    branch_ids: form.scopeMode === 'global' ? [] : form.branchIds,
+    workspaces_all: form.scopeMode === 'global' ? true : form.workspacesAll,
+    workspace_keys: form.scopeMode === 'global' ? [] : form.workspaceKeys,
+  });
 
   // ── Save / Update ──────────────────────────────────────────────
 
@@ -444,8 +499,9 @@ export default function StaffManagementScreen() {
           is_active: form.isActive,
           // STAFF-03: rotate PIN only when a new one was entered.
           ...(trimmedPin ? { pin: trimmedPin } : {}),
-          // STAFF-05: workspace assignment rides on the same command.
-          workspace_keys: form.wsMode === 'custom' ? form.wsKeys : [],
+          // ADR #35 D5 (spec 0048): the assignment scope rides the same
+          // atomic update — the backend replaces it inside the transaction.
+          assignment: assignmentArgsFromForm(),
           // ADR #35 D6: the profile columns ride the same atomic update.
           profile,
         });
@@ -554,7 +610,8 @@ export default function StaffManagementScreen() {
   // ── Render ─────────────────────────────────────────────────────
 
   const isEditing = editingId !== null;
-  const hasRoleSelected = roles.length > 0;
+  const selectableRoles = taxonomyRoles(roles);
+  const hasRoleSelected = selectableRoles.length > 0;
 
   return (
     <div className="staff-mgmt" onContextMenu={(e) => e.preventDefault()}>
@@ -652,9 +709,15 @@ export default function StaffManagementScreen() {
                     </Badge>
                   </td>
                   <td className="staff-mgmt-cell-username">
-                    {(staffWorkspaces.get(member.id) ?? [])
-                      .map((k) => workspaceNameMap.get(k) ?? k)
-                      .join(', ') || '—'}
+                    {member.assignment.scope_mode === 'global' || member.assignment.workspaces_all ? (
+                      <Localized id="staff-assignment-all-workspaces-short">
+                        <span>All</span>
+                      </Localized>
+                    ) : (
+                      member.assignment.workspace_keys
+                        .map((k) => workspaceNameMap.get(k) ?? k)
+                        .join(', ') || '—'
+                    )}
                   </td>
                   <td>
                     <span>{member.display_name}</span>
@@ -730,7 +793,13 @@ export default function StaffManagementScreen() {
           !form.displayName.trim() ||
           !form.roleId ||
           (!isEditing && (!form.pin || form.pin.length < 4)) ||
-          (isEditing && form.wsMode === 'custom' && allWorkspaces.length > 0 && form.wsKeys.length === 0)
+          // ADR #35 D5: a scoped assignment must not save with an empty
+          // list dimension — `list` with no ids is a deny, never an
+          // implicit "all" (the all/list toggle is the explicit marker).
+          (isEditing &&
+            form.scopeMode === 'scoped' &&
+            ((!form.branchesAll && branches.length > 0 && form.branchIds.length === 0) ||
+              (!form.workspacesAll && allWorkspaces.length > 0 && form.workspaceKeys.length === 0)))
         }
         cancelLabel={l10n.getString('staff-btn-cancel')}
       >
@@ -813,7 +882,7 @@ export default function StaffManagementScreen() {
                       value={form.roleId}
                       disabled={editingIncomplete}
                       onChange={(value) => setForm({ ...form, roleId: value })}
-                      options={roles.map((r) => ({ value: r.id, label: `${r.name} — ${r.description}` }))}
+                      options={selectableRoles.map((r) => ({ value: r.id, label: `${r.name} — ${r.description}` }))}
                       placeholder={l10n.getString('staff-role-select-default')}
                       ariaLabel={l10n.getString('staff-field-role-label')}
                     />
@@ -1038,62 +1107,121 @@ export default function StaffManagementScreen() {
           </label>
         </fieldset>
 
-        {/* ── Workspace Access Section (edit only) ──────── */}
-        {isEditing && allWorkspaces.length > 0 && (
+        {/* ── Assignment Access Section (edit only, ADR #35 D5) ── */}
+        {isEditing && (
           <fieldset className="staff-mgmt-ws-section" disabled={editingIncomplete}>
-            <Localized id="staff-ws-section-label">
-              <legend className="staff-mgmt-label">Workspace Access</legend>
+            <Localized id="staff-assignment-section-label">
+              <legend className="staff-mgmt-label">Assignment Access</legend>
             </Localized>
 
             <div className="staff-mgmt-radio">
               <input
                 type="radio"
-                name="wsMode"
-                value="default"
-                checked={form.wsMode === 'default'}
-                onChange={() => setForm({ ...form, wsMode: 'default', wsKeys: [] })}
-                aria-label={l10n.getString('staff-ws-role-defaults')}
+                name="scopeMode"
+                value="global"
+                checked={form.scopeMode === 'global'}
+                onChange={() => setForm({ ...form, scopeMode: 'global' })}
+                aria-label={l10n.getString('staff-assignment-global')}
               />
-              <Localized id="staff-ws-role-defaults">
-                <span>Use role defaults</span>
+              <Localized id="staff-assignment-global">
+                <span>All branches &amp; workspaces</span>
               </Localized>
             </div>
 
             <div className="staff-mgmt-radio">
               <input
                 type="radio"
-                name="wsMode"
-                value="custom"
-                checked={form.wsMode === 'custom'}
-                onChange={() => setForm({ ...form, wsMode: 'custom' })}
-                aria-label={l10n.getString('staff-ws-custom')}
+                name="scopeMode"
+                value="scoped"
+                checked={form.scopeMode === 'scoped'}
+                onChange={() => setForm({ ...form, scopeMode: 'scoped' })}
+                aria-label={l10n.getString('staff-assignment-scoped')}
               />
-              <Localized id="staff-ws-custom">
-                <span>Custom</span>
+              <Localized id="staff-assignment-scoped">
+                <span>Restrict by branch or workspace</span>
               </Localized>
             </div>
 
-            {form.wsMode === 'custom' && (
-              <div className="staff-mgmt-ws-checkboxes">
-                {allWorkspaces.map((ws) => (
-                  <label key={ws.key} className="staff-mgmt-ws-checkbox">
+            {form.scopeMode === 'scoped' && (
+              <>
+                {/* ── Branch dimension (explicit all or list) ── */}
+                <div className="staff-mgmt-dimension">
+                  <Localized id="staff-assignment-branches-label">
+                    <span className="staff-mgmt-dimension-label">Branches</span>
+                  </Localized>
+                  <label className="staff-mgmt-ws-checkbox">
                     <input
                       type="checkbox"
-                      checked={form.wsKeys.includes(ws.key)}
-                      onChange={() => toggleWsKey(ws.key)}
+                      checked={form.branchesAll}
+                      onChange={() =>
+                        setForm((prev) => ({ ...prev, branchesAll: !prev.branchesAll, branchIds: [] }))
+                      }
                     />
-                    <span className="staff-mgmt-ws-checkbox-label">
-                      {ws.icon && (
-                        <span className="staff-mgmt-ws-icon" aria-hidden="true">
-                          {wsIcon(ws.icon)}
-                        </span>
-                      )}
-                      {ws.name}
-                    </span>
-                    <span className="staff-mgmt-ws-desc">{ws.description}</span>
+                    <Localized id="staff-assignment-all-branches">
+                      <span>All branches</span>
+                    </Localized>
                   </label>
-                ))}
-              </div>
+                  {!form.branchesAll && branches.length > 0 && (
+                    <div className="staff-mgmt-ws-checkboxes">
+                      {branches.map((b) => (
+                        <label key={b.id} className="staff-mgmt-ws-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={form.branchIds.includes(b.id)}
+                            onChange={() => toggleBranch(b.id)}
+                          />
+                          <span className="staff-mgmt-ws-checkbox-label">{b.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Workspace dimension (explicit all or list) ── */}
+                <div className="staff-mgmt-dimension">
+                  <Localized id="staff-assignment-workspaces-label">
+                    <span className="staff-mgmt-dimension-label">Workspaces</span>
+                  </Localized>
+                  <label className="staff-mgmt-ws-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={form.workspacesAll}
+                      onChange={() =>
+                        setForm((prev) => ({
+                          ...prev,
+                          workspacesAll: !prev.workspacesAll,
+                          workspaceKeys: [],
+                        }))
+                      }
+                    />
+                    <Localized id="staff-assignment-all-workspaces">
+                      <span>All workspaces</span>
+                    </Localized>
+                  </label>
+                  {!form.workspacesAll && allWorkspaces.length > 0 && (
+                    <div className="staff-mgmt-ws-checkboxes">
+                      {allWorkspaces.map((ws) => (
+                        <label key={ws.key} className="staff-mgmt-ws-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={form.workspaceKeys.includes(ws.key)}
+                            onChange={() => toggleWorkspace(ws.key)}
+                          />
+                          <span className="staff-mgmt-ws-checkbox-label">
+                            {ws.icon && (
+                              <span className="staff-mgmt-ws-icon" aria-hidden="true">
+                                {wsIcon(ws.icon)}
+                              </span>
+                            )}
+                            {ws.name}
+                          </span>
+                          <span className="staff-mgmt-ws-desc">{ws.description}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </fieldset>
         )}

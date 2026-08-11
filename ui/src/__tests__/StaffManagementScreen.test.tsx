@@ -9,14 +9,33 @@ import StaffManagementScreen from '@/features/staff/StaffManagementScreen';
 const FAST_WAIT = { interval: 5, timeout: 500 } as const;
 
 const SAMPLE_ROLES = [
-  { id: 'role-1', name: 'owner', description: 'Owner' },
-  { id: 'role-2', name: 'manager', description: 'Manager' },
-  { id: 'role-3', name: 'cashier', description: 'Cashier' },
+  { id: 'role-owner', name: 'owner', description: 'Owner' },
+  { id: 'role-admin', name: 'admin', description: 'Admin' },
+  { id: 'role-manager', name: 'manager', description: 'Manager' },
+  { id: 'role-staff', name: 'staff', description: 'Staff' },
+  { id: 'role-auditor', name: 'auditor', description: 'Auditor' },
+  // A custom role must never appear in the five-role taxonomy dropdown.
+  { id: 'role-custom', name: 'custom', description: 'Custom' },
 ];
 
+/** Global fallback assignment (ADR #35 D5) carried by the staff DTO. */
+const GLOBAL_ASSIGNMENT = {
+  scope_mode: 'global',
+  branches_all: true,
+  branch_ids: [],
+  workspaces_all: true,
+  workspace_keys: [],
+};
+
 const SAMPLE_STAFF = [
-  { id: 'staff-1', username: 'jane', display_name: 'Jane Smith', role_id: 'role-1', role_name: 'owner', is_active: true, national_id_masked: '*****6789', is_profile_complete: true },
-  { id: 'staff-2', username: 'john', display_name: 'John Doe', role_id: 'role-3', role_name: 'cashier', is_active: false, national_id_masked: '****', is_profile_complete: false },
+  { id: 'staff-1', username: 'jane', display_name: 'Jane Smith', role_id: 'role-owner', role_name: 'owner', is_active: true, national_id_masked: '*****6789', is_profile_complete: true, assignment: GLOBAL_ASSIGNMENT },
+  { id: 'staff-2', username: 'john', display_name: 'John Doe', role_id: 'role-staff', role_name: 'staff', is_active: false, national_id_masked: '****', is_profile_complete: false, assignment: { scope_mode: 'scoped', branches_all: true, branch_ids: [], workspaces_all: false, workspace_keys: ['restaurant'] } },
+];
+
+/** Store profiles = the branch ids the assignment scopes on. */
+const SAMPLE_BRANCHES = [
+  { id: 'store-a', name: 'Jakarta HQ', address: '', tax_id: '', currency: 'IDR', timezone: 'Asia/Jakarta', is_primary: true, created_at: '', updated_at: '' },
+  { id: 'store-b', name: 'Bandung Branch', address: '', tax_id: '', currency: 'IDR', timezone: 'Asia/Jakarta', is_primary: false, created_at: '', updated_at: '' },
 ];
 
 /** A complete ADR #35 D6 profile as `get_staff_profile_scoped` returns it. */
@@ -76,7 +95,7 @@ beforeEach(() => {
       { key: 'restaurant', name: 'Restaurant', description: 'Dine-in service', icon: 'restaurant' },
       { key: 'store', name: 'Retail Store', description: 'Retail counter', icon: 'store' },
     ]);
-    if (cmd === 'get_user_workspaces_scoped') return Promise.resolve([]);
+    if (cmd === 'list_store_profiles') return Promise.resolve(SAMPLE_BRANCHES);
     if (cmd === 'set_user_workspaces_scoped') return Promise.resolve(undefined);
     return Promise.reject(new Error(`Unknown command: ${cmd}`));
   });
@@ -114,7 +133,7 @@ describe('StaffManagementScreen', () => {
     expect(screen.getByText('jane')).toBeInTheDocument();
     expect(screen.getByText('john')).toBeInTheDocument();
     expect(screen.getByText('owner')).toBeInTheDocument();
-    expect(screen.getByText('cashier')).toBeInTheDocument();
+    expect(screen.getByText('staff')).toBeInTheDocument();
     expect(screen.getByText('Active')).toBeInTheDocument();
     expect(screen.getByText('Inactive')).toBeInTheDocument();
   });
@@ -279,7 +298,7 @@ describe('StaffManagementScreen', () => {
     fireEvent.change(within(dialog).getByPlaceholderText(/enter pin/i), { target: { value: '1234' } });
 
     // Select a role
-    fireEvent.change(within(dialog).getByRole('combobox', { name: /^role/i }), { target: { value: 'role-3' } });
+    fireEvent.change(within(dialog).getByRole('combobox', { name: /^role/i }), { target: { value: 'role-staff' } });
 
     // ADR #35 D6: creation requires the 9 mandatory fields.
     await fillRequiredProfile(dialog);
@@ -327,11 +346,11 @@ describe('StaffManagementScreen', () => {
     await waitFor(() => {
       expect(within(dialog).getByLabelText('Date of Birth *')).toHaveValue('1990-05-14');
     }, FAST_WAIT);
-    // Role selector and workspace section are disabled for incomplete
+    // Role selector and assignment section are disabled for incomplete
     // profiles (a disabled fieldset drops its children from the a11y tree,
     // so assert on the fieldset itself).
     expect(within(dialog).getByRole('combobox', { name: /^role/i })).toBeDisabled();
-    expect(within(dialog).getByRole('group', { name: /workspace access/i })).toBeDisabled();
+    expect(within(dialog).getByRole('group', { name: /assignment access/i })).toBeDisabled();
   });
 
   it('blocks create submission with per-field errors when a required profile field is missing', async () => {
@@ -342,7 +361,7 @@ describe('StaffManagementScreen', () => {
     fireEvent.change(within(dialog).getByRole('textbox', { name: /username/i }), { target: { value: 'newuser' } });
     fireEvent.change(within(dialog).getByRole('textbox', { name: /display name/i }), { target: { value: 'New User' } });
     fireEvent.change(within(dialog).getByPlaceholderText(/enter pin/i), { target: { value: '1234' } });
-    fireEvent.change(within(dialog).getByRole('combobox', { name: /^role/i }), { target: { value: 'role-3' } });
+    fireEvent.change(within(dialog).getByRole('combobox', { name: /^role/i }), { target: { value: 'role-staff' } });
     fireEvent.click(within(dialog).getByRole('button', { name: /create/i }));
 
     // The submit must be blocked and per-field errors shown (localized).
@@ -377,7 +396,7 @@ describe('StaffManagementScreen', () => {
     fireEvent.change(within(dialog).getByRole('textbox', { name: /username/i }), { target: { value: 'newuser' } });
     fireEvent.change(within(dialog).getByRole('textbox', { name: /display name/i }), { target: { value: 'New User' } });
     fireEvent.change(within(dialog).getByPlaceholderText(/enter pin/i), { target: { value: '1234' } });
-    fireEvent.change(within(dialog).getByRole('combobox', { name: /role/i }), { target: { value: 'role-3' } });
+    fireEvent.change(within(dialog).getByRole('combobox', { name: /role/i }), { target: { value: 'role-staff' } });
 
     fireEvent.click(within(dialog).getByRole('button', { name: /create/i }));
 
@@ -387,28 +406,106 @@ describe('StaffManagementScreen', () => {
     }, FAST_WAIT);
   });
 
-  it('renders workspace column for staff members', async () => {
-    // Mock some workspace assignments
-    invokeMock.mockImplementation((cmd: string) => {
-      if (cmd === 'list_staff_scoped') return Promise.resolve(SAMPLE_STAFF);
-      if (cmd === 'list_roles_scoped') return Promise.resolve(SAMPLE_ROLES);
-      if (cmd === 'list_all_workspaces_scoped') return Promise.resolve([
-        { key: 'restaurant', name: 'Restaurant', description: 'Dine-in', icon: 'restaurant' },
-        { key: 'store', name: 'Retail Store', description: 'Retail', icon: 'store' },
-      ]);
-      if (cmd === 'get_user_workspaces_scoped') {
-        // Both staff members get the same workspace assignment — sufficient
-        // to verify the workspace column renders without crashing.
-        return Promise.resolve(['restaurant']);
-      }
-      if (cmd === 'set_user_workspaces_scoped') return Promise.resolve(undefined);
-      return Promise.resolve([]);
-    });
-
+  it('renders the workspace column from the DTO assignment (spec 0048)', async () => {
     renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
     await waitForTable();
 
-    // The workspace column should be present (table has aria-label)
-    expect(screen.getByRole('table', { name: /staff members/i })).toBeInTheDocument();
+    // Jane is global all/all → "All"; John is scoped to restaurant → the
+    // workspace name from the loaded map.
+    expect(screen.getByText('All')).toBeInTheDocument();
+    expect(screen.getByText('Restaurant')).toBeInTheDocument();
+  });
+
+  // ── Five-role taxonomy (ADR #35 D4 / spec 0048) ───────────────────
+
+  it('presents exactly the five-role taxonomy in the role dropdown', async () => {
+    renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
+    await waitForTable();
+    fireEvent.click(screen.getByRole('button', { name: /add staff/i }));
+    const dialog = screen.getByRole('dialog');
+    const combobox = within(dialog).getByRole('combobox', { name: /^role/i });
+    const options = within(combobox).getAllByRole('option').map((o) => o.textContent);
+    // First option is the placeholder; then Owner → Admin → Manager →
+    // Staff → Auditor — the custom role is absent.
+    expect(options[0]).toMatch(/select a role/i);
+    expect(options.slice(1)).toEqual([
+      expect.stringMatching(/owner/i),
+      expect.stringMatching(/admin/i),
+      expect.stringMatching(/manager/i),
+      expect.stringMatching(/staff/i),
+      expect.stringMatching(/auditor/i),
+    ]);
+    expect(options.join(' | ')).not.toMatch(/custom/i);
+  });
+
+  // ── Assignment editor (ADR #35 D5 / spec 0048) ───────────────────
+
+  it('pre-fills the assignment editor from the member DTO', async () => {
+    renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
+    await waitForTable();
+
+    // John is scoped → the scoped radio is selected and his workspace list
+    // shows the checked restaurant.
+    fireEvent.click(screen.getByRole('button', { name: /edit.*john doe/i }));
+    const dialog = await screen.findByRole('dialog');
+    await waitFor(() => {
+      expect(within(dialog).getByLabelText('Date of Birth *')).toHaveValue('1990-05-14');
+    }, FAST_WAIT);
+    expect(within(dialog).getByLabelText('Restrict by branch or workspace')).toBeChecked();
+    expect(within(dialog).getByLabelText('All branches')).toBeChecked();
+    expect(within(dialog).getByLabelText('All workspaces')).not.toBeChecked();
+    expect(within(dialog).getByLabelText(/Restaurant/)).toBeChecked();
+  });
+
+  it('saves a scoped assignment with branch and workspace lists', async () => {
+    renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
+    await waitForTable();
+
+    // Jane is global — switch her to scoped with a branch + workspace list.
+    fireEvent.click(screen.getByRole('button', { name: /edit.*jane smith/i }));
+    const dialog = await screen.findByRole('dialog');
+    await waitFor(() => {
+      expect(within(dialog).getByLabelText('Date of Birth *')).toHaveValue('1990-05-14');
+    }, FAST_WAIT);
+    fireEvent.click(within(dialog).getByLabelText('Restrict by branch or workspace'));
+    fireEvent.click(within(dialog).getByLabelText('All branches'));
+    fireEvent.click(within(dialog).getByLabelText(/Bandung Branch/));
+    fireEvent.click(within(dialog).getByLabelText('All workspaces'));
+    fireEvent.click(within(dialog).getByLabelText(/Retail Store/));
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /update/i }));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('update_staff_scoped', expect.objectContaining({
+        sessionToken: 'session-1',
+        args: expect.objectContaining({
+          id: 'staff-1',
+          assignment: {
+            scope_mode: 'scoped',
+            branches_all: false,
+            branch_ids: ['store-b'],
+            workspaces_all: false,
+            workspace_keys: ['store'],
+          },
+        }),
+      }));
+    }, FAST_WAIT);
+  });
+
+  it('blocks saving a scoped assignment with an empty list dimension', async () => {
+    renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
+    await waitForTable();
+
+    // John is scoped with workspace list [restaurant] — uncheck restaurant,
+    // leaving the list empty, which per ADR #35 D5 is a deny, never an
+    // implicit "all" — saving must block.
+    fireEvent.click(screen.getByRole('button', { name: /edit.*john doe/i }));
+    const dialog = await screen.findByRole('dialog');
+    await waitFor(() => {
+      expect(within(dialog).getByLabelText('Date of Birth *')).toHaveValue('1990-05-14');
+    }, FAST_WAIT);
+    fireEvent.click(within(dialog).getByLabelText(/Restaurant/));
+
+    expect(within(dialog).getByRole('button', { name: /update/i })).toBeDisabled();
   });
 });

@@ -195,7 +195,7 @@
   opacity: 0.5;
 }
 
-/* ── Workspace Access ──────────────────────────────────────────────── */
+/* ── Assignment Access (ADR #35 D5) ──────────────────────────────── */
 
 .staff-mgmt-ws-section {
   border: 1px solid var(--color-border);
@@ -210,6 +210,20 @@
   font-weight: var(--font-weight-semibold);
   color: var(--color-fg);
   padding: 0 var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.staff-mgmt-dimension {
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px dashed var(--color-border);
+}
+
+.staff-mgmt-dimension-label {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg-muted);
   margin-bottom: var(--space-2);
 }
 

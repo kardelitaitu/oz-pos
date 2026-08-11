@@ -82,6 +82,36 @@ export const bootstrapOwner = (args: BootstrapOwnerArgs): Promise<BootstrapOwner
 
 // ── Staff Management ──────────────────────────────────────────────
 
+/**
+ * A user's single effective assignment (ADR #35 D5 / spec 0048): scope mode
+ * plus the per-dimension explicit-all flag and list. Empty lists never mean
+ * "all" — the `*_all` flags are the explicit marker, so `list` with no ids
+ * is a deny. Legacy users without an assignment row resolve as global all/all.
+ */
+export interface AssignmentDto {
+  scope_mode: 'global' | 'scoped';
+  /** Branch dimension is explicit `all`. */
+  branches_all: boolean;
+  /** Branch ids in scope when `branches_all` is false. */
+  branch_ids: string[];
+  /** Workspace dimension is explicit `all`. */
+  workspaces_all: boolean;
+  /** Workspace keys in scope when `workspaces_all` is false. */
+  workspace_keys: string[];
+}
+
+/**
+ * The assignment scope carried by the staff create/edit IPC args (ADR #35
+ * D5 / spec 0048). Mirrors `AssignmentDto`.
+ */
+export interface AssignmentArgs {
+  scope_mode: 'global' | 'scoped';
+  branches_all: boolean;
+  branch_ids: string[];
+  workspaces_all: boolean;
+  workspace_keys: string[];
+}
+
 /** A staff member record. */
 export interface StaffMemberDto {
   id: string;
@@ -96,6 +126,8 @@ export interface StaffMemberDto {
   /** Whether all 8 required profile fields are present — incomplete users
    * are flagged and management-role assignment is gated on this. */
   is_profile_complete: boolean;
+  /** The user's single effective assignment (ADR #35 D5 / spec 0048). */
+  assignment: AssignmentDto;
 }
 
 /**
@@ -157,6 +189,11 @@ export interface CreateStaffScopedArgs {
   role_id: string;
   /** ADR #35 D6 profile fields — creation requires the 9 mandatory fields. */
   profile: ProfileArgs;
+  /**
+   * Optional assignment scope (spec 0048). When present, the user is created
+   * with this scope instead of the default global all/all.
+   */
+  assignment?: AssignmentArgs;
 }
 
 /** Arguments for updating a staff member via a session-scoped command. */
@@ -178,6 +215,12 @@ export interface UpdateStaffScopedArgs {
    * Omit to leave the profile columns untouched.
    */
   profile?: ProfileArgs;
+  /**
+   * Optional assignment scope (ADR #35 D5 / spec 0048). When present, it is
+   * written atomically with the user + profile update. Omit to leave the
+   * assignment scope untouched.
+   */
+  assignment?: AssignmentArgs;
 }
 
 /** List all staff members (caller resolved from session token). */
