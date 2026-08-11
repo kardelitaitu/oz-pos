@@ -1,0 +1,63 @@
+id: 0049-user-profile-data
+title: User profile data contract with sensitive-field handling
+status: needs-human-approval
+owner: OZ-POS maintainers
+implementer: Buffy
+priority: P1
+scope:
+  - crates/oz-core/migrations/007_customers.sql
+  - crates/oz-core/src/db/staff.rs
+  - crates/oz-core/src/migrations.rs
+  - modules/staff/src/models.rs
+  - apps/desktop-client/src/commands/staff.rs
+  - apps/tablet-client/src/commands/staff.rs
+  - crates/oz-security/src/
+  - docs/specs/_active/0049-user-profile-data/
+
+problem:
+  - 'The `users` table has only username, display name, PIN hash, and role; there
+    is no identity, payroll, or emergency-contact data, and no contract for what
+    is mandatory, optional, sensitive, or collectible (ADR #35 D6).'
+  - Sensitive fields (national ID, monthly take-home pay, tax ID) would ride the
+    `staff:read` wildcard unless gated by the explicit sensitive keys from 0046.
+  - 'Privacy rules — at-rest encryption, read audit, display masking, residency
+    (no cloud sync / bulk export), compliance retention, incomplete-profile
+    semantics — are decided in ADR #35 D6 and have no implementation yet.'
+
+implemented_slice:
+  - Add the 9 mandatory-at-creation profile fields (nullable in SQL) plus the
+    optional set, in a new migration registered in the runner.
+  - Enforce the required fields at creation with field-specific validation —
+    national_id per type (ssn 9 / nik 16) and UNIQUE when present, email
+    format + UNIQUE, phone E.164, DOB not in the future, monthly take-home pay
+    strictly positive (i64 minor units, store currency).
+  - Implement the incomplete-profile state — checkout login works, user flagged
+    in staff management, management-role assignment and sensitive grants gated
+    on a complete profile.
+  - Register `staff:read_identity`, `staff:read_payroll`, `staff:edit_notes` as
+    sensitive keys (via the 0046 registry) and enforce them on the profile
+    command surface.
+  - Encrypt `national_id` and `monthly_take_home_minor` at rest via
+    `oz-security` (keyring-backed); display `national_id` as last-4 by default
+    (`oz-security::mask`); record an audit event for every read of the three
+    sensitive fields; exclude sensitive fields from cloud sync and bulk exports;
+    never auto-delete on deactivation.
+  - Add validation-matrix, incomplete-profile, encryption round-trip, masking,
+    read-audit, residency (sync/export exclusion), and retention tests.
+
+invariants:
+  - Creation requires the 9 mandatory fields; legacy rows enter the
+    incomplete-profile state instead of being rejected.
+  - national_id is unique when present and validated per type.
+  - Sensitive field values never appear in cloud sync or bulk export payloads.
+  - Every read of `national_id`, monthly pay, or `tax_id` produces an audit
+    event; full `national_id` is visible only via the explicit grant.
+  - Deactivation never deletes identity, payroll, or emergency contact data.
+  - 'The D6 not-collected fields never appear in the schema: gender, religion,
+    marital status, ethnicity, blood type, bank account, shift/availability.'
+
+non_goals:
+  - 'Invitations and org-tenant layer (deferred in ADR #35 D7).'
+  - A second PIN/password credential; email is an identifier only.
+  - 'The staff analytics page (ADR #35 D8, separate feature spec).'
+  - SQLCipher full-database at rest (open spec C-5, separate track).
