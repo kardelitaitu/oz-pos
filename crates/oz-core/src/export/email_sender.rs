@@ -458,6 +458,8 @@ mod tests {
             category_breakdown: vec![],
             low_stock_alerts: vec![],
             active_stock_alerts: vec![],
+            category_popularity: vec![],
+            category_forecast: vec![],
         };
 
         // Only include weekly_revenue

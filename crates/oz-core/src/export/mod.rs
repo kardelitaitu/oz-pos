@@ -13,6 +13,7 @@ pub mod email_sender;
 use serde::{Deserialize, Serialize};
 
 use crate::db::Store;
+use crate::db::popularity::{CategoryForecastRow, CategoryPopularityRow};
 use crate::db::reports::{
     CategoryBreakdownRow, DailyRevenueRow, HourlyHeatmapRow, LowStockAlert, MonthlyRevenueRow,
     StockAlertEvent, TopProductRow, WeeklyRevenueRow,
@@ -107,6 +108,12 @@ pub struct AnalyticsBundle {
     pub low_stock_alerts: Vec<LowStockAlert>,
     /// Active (non-resolved) stock alert events at the default location.
     pub active_stock_alerts: Vec<StockAlertEvent>,
+    /// Per-category popularity standings (ADR #37): each category's count,
+    /// mean score, catalog ratio, and top-3 products with rank/percentile.
+    pub category_popularity: Vec<CategoryPopularityRow>,
+    /// Next-period demand forecast per category (ADR #37 prototype): weekly
+    /// granularity over the export's date range, linear-fit projection.
+    pub category_forecast: Vec<CategoryForecastRow>,
 }
 
 /// Configuration knobs for the analytics export.
@@ -168,6 +175,9 @@ impl Store<'_> {
         )?;
         let active_stock_alerts =
             self.active_stock_alerts(crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID)?;
+        let category_popularity = self.category_popularity(3)?;
+        let category_forecast =
+            self.category_forecast(&config.start_date, &config.end_date, "weekly", 10)?;
 
         let exported_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
 
@@ -186,6 +196,8 @@ impl Store<'_> {
             category_breakdown,
             low_stock_alerts,
             active_stock_alerts,
+            category_popularity,
+            category_forecast,
         })
     }
 }
@@ -417,6 +429,55 @@ pub fn write_analytics_bundle_csv(
             csv.push('\n');
         }
         files.push(write("low_stock_alerts.csv", &csv)?);
+    }
+
+    // Category popularity (one row per top product, category context repeated)
+    if !bundle.category_popularity.is_empty() {
+        let mut csv = String::from(
+            "category_id,category_name,product_count,mean_score,catalog_ratio,rank,sku,product_name,popularity_score,percentile\n",
+        );
+        for cat in &bundle.category_popularity {
+            for p in &cat.top_products {
+                csv.push_str(&csv_row(
+                    [
+                        cat.category_id.clone(),
+                        cat.category_name.clone().unwrap_or_default(),
+                        cat.product_count.to_string(),
+                        format!("{:.4}", cat.mean_score),
+                        format!("{:.4}", cat.catalog_ratio),
+                        p.rank.to_string(),
+                        p.sku.clone(),
+                        p.name.clone(),
+                        format!("{:.4}", p.popularity_score),
+                        format!("{:.4}", p.percentile),
+                    ]
+                    .into_iter(),
+                ));
+                csv.push('\n');
+            }
+        }
+        files.push(write("category_popularity.csv", &csv)?);
+    }
+
+    // Category demand forecast
+    if !bundle.category_forecast.is_empty() {
+        let mut csv = String::from(
+            "category_id,category_name,forecast_units,trend_per_period,recent_avg_units\n",
+        );
+        for r in &bundle.category_forecast {
+            csv.push_str(&csv_row(
+                [
+                    r.category_id.clone(),
+                    r.category_name.clone().unwrap_or_default(),
+                    r.forecast_units.to_string(),
+                    format!("{:.2}", r.trend_per_period),
+                    format!("{:.2}", r.recent_avg_units),
+                ]
+                .into_iter(),
+            ));
+            csv.push('\n');
+        }
+        files.push(write("category_forecast.csv", &csv)?);
     }
 
     // Active stock alerts
@@ -742,6 +803,8 @@ mod tests {
         assert!(bundle.category_breakdown.is_empty());
         assert!(bundle.low_stock_alerts.is_empty());
         assert!(bundle.active_stock_alerts.is_empty());
+        assert!(bundle.category_popularity.is_empty());
+        assert!(bundle.category_forecast.is_empty());
     }
 
     #[test]
@@ -764,6 +827,13 @@ mod tests {
         assert_eq!(bundle.top_products.len(), 2);
         assert!(!bundle.hourly_heatmap.is_empty());
         assert!(!bundle.category_breakdown.is_empty());
+        // Both products land in the uncategorized bucket; the export must
+        // carry the standings and a weekly forecast derived from the sales.
+        assert_eq!(bundle.category_popularity.len(), 1);
+        assert_eq!(bundle.category_popularity[0].product_count, 2);
+        assert_eq!(bundle.category_popularity[0].top_products.len(), 2);
+        assert_eq!(bundle.category_forecast.len(), 1);
+        assert!(bundle.category_forecast[0].forecast_units > 0);
     }
 
     #[test]
@@ -785,6 +855,8 @@ mod tests {
         assert!(json.contains("\"category_breakdown\""));
         assert!(json.contains("\"low_stock_alerts\""));
         assert!(json.contains("\"active_stock_alerts\""));
+        assert!(json.contains("\"category_popularity\""));
+        assert!(json.contains("\"category_forecast\""));
         assert!(json.contains("\"exported_at\""));
         assert!(json.contains("\"version\""));
     }
@@ -1117,6 +1189,9 @@ mod tests {
         assert!(files.iter().any(|f| f.ends_with("metadata.json")));
         assert!(files.iter().any(|f| f.ends_with("daily_revenue.csv")));
         assert!(files.iter().any(|f| f.ends_with("top_products.csv")));
+        // The popularity standings + forecast ride the export too.
+        assert!(files.iter().any(|f| f.ends_with("category_popularity.csv")));
+        assert!(files.iter().any(|f| f.ends_with("category_forecast.csv")));
     }
 
     #[test]

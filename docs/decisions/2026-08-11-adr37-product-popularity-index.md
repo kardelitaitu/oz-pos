@@ -189,8 +189,13 @@ upsert imports only its snapshot columns, so `popularity_score` and
   fit (`seasonal_daily_forecast`), so the next-day projection respects the
   weekday pattern; the learned on-device model from the 2026-07-20 research
   remains out of scope.
-- Surfacing the score in analytics exports — the data will be available to the
-  analytics tool through the local store DB (same path as cost, ADR #36 D2).
+- Surfacing the score in analytics exports — ✅ implemented (2026-08-12):
+  `AnalyticsBundle` (the JSON/CSV/cloud-NDJSON export schema) now carries
+  `category_popularity` (standings with top-3 products, rank, percentile) and
+  `category_forecast` (next-period demand), written to
+  `category_popularity.csv` / `category_forecast.csv` and stamped into the
+  cloud destination rows — the external analytics tool can consume the
+  scores through the same bundle path as everything else.
 
 ## Consequences
 

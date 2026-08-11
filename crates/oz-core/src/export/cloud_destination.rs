@@ -475,6 +475,20 @@ fn bundle_to_ndjson(bundle: &super::AnalyticsBundle) -> Vec<serde_json::Value> {
         }
     }
 
+    // Category popularity (top products nested per category row)
+    for r in &bundle.category_popularity {
+        if let Ok(val) = serde_json::to_value(r) {
+            rows.push(stamp("category_popularity", val));
+        }
+    }
+
+    // Category demand forecast
+    for r in &bundle.category_forecast {
+        if let Ok(val) = serde_json::to_value(r) {
+            rows.push(stamp("category_forecast", val));
+        }
+    }
+
     rows
 }
 
@@ -611,6 +625,8 @@ mod tests {
             category_breakdown: Vec::new(),
             low_stock_alerts: Vec::new(),
             active_stock_alerts: Vec::new(),
+            category_popularity: Vec::new(),
+            category_forecast: Vec::new(),
         }
     }
 
