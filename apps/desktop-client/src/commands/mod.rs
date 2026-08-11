@@ -13,6 +13,8 @@ pub mod auth;
 pub mod authz;
 /// Store branding commands.
 pub mod branding;
+/// External-browser commands (ADR #38).
+pub mod browser;
 /// Product bundle commands.
 pub mod bundles;
 /// Category CRUD commands.

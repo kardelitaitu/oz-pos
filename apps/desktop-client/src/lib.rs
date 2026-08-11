@@ -77,6 +77,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let state = AppState::new(app.handle())
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
@@ -541,6 +542,8 @@ pub fn run() {
             commands::products::get_product_track_serial_scoped,
             commands::products::get_product_track_serial_batch,
             commands::products::get_product_track_serial_batch_scoped,
+            commands::products::record_product_search_scoped,
+            commands::browser::open_product_images_scoped,
             commands::promotions::list_promotions,
             commands::promotions::list_promotions_scoped,
             commands::promotions::get_promotion,

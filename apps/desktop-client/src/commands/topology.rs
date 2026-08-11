@@ -8272,6 +8272,10 @@ mod tests {
     }
 
     #[tokio::test]
+    // The `sessions` guard is explicitly `drop`ped before the awaits below;
+    // clippy's await_holding_lock cannot see through the explicit drop and
+    // flags a false positive. Allowed with the drop in place.
+    #[allow(clippy::await_holding_lock)]
     async fn can_save_topology_probe_gates_on_staff_update_permission() {
         // Round 145: the capability probe the editor uses to gate the Save
         // toolbar (TopologyScreen -> canSaveTopology -> can_save_topology)
@@ -8356,9 +8360,8 @@ mod tests {
             .build(tauri::generate_context!())
             .unwrap();
 
-        assert_eq!(
+        assert!(
             can_save_topology(owner_token, app.state()).await.unwrap(),
-            true,
             "an owner session must be allowed to save topology"
         );
         let denied = can_save_topology(cashier_token, app.state()).await;
