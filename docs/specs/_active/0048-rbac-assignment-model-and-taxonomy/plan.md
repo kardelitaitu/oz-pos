@@ -1,5 +1,11 @@
 # RBAC assignment model and role taxonomy alignment
 
+> **Status: IN PROGRESS — 2026-08-11.** Cycles 1 (assignment schema +
+> evaluation API), 2a (five-role taxonomy seeds), and 2b (assignment-aware
+> gate) are implemented and committed. Cycle 2c (retirement + seed sweep)
+> and cycle 3 (UI) remain. See §10 for the running progress record; the
+> sections below are the original plan as approved.
+
 ## 1. Decision requested
 
 Introduce the assignment model ADR #35 D5 specifies (`assignments` with
@@ -152,3 +158,56 @@ The migration is additive (new tables) plus a data remap of role IDs. Rollback
 restores the old seeds and keeps the new tables unused. If the role retirement
 breaks an edge case, the remap can be scoped down to a later step without
 reverting the assignment tables.
+
+## 10. Progress record (2026-08-11)
+
+### Cycle 1 — assignment schema + explicit-all scope evaluation (DONE)
+
+- Migration `128_assignments.sql`: `assignments` (user_id PK, role_id,
+  `scope_mode` global|scoped, explicit `branch_scope`/`workspace_scope`
+  all|list — two columns beyond the spec's listed set, required by the
+  "empty lists never mean all" invariant), `assignment_branches`,
+  `assignment_workspaces`; backfills every existing user (owner/manager/staff
+  global; legacy cashier/kitchen -> role-staff + scoped `retail-pos`/`kds`,
+  workspaces seeded). Purely additive; the legacy column is untouched until
+  the retirement so no behavior changes at the migration boundary.
+- `db::assignments`: `ScopeMode`, `Assignment::matches_scope` (fail-closed:
+  global ignores dimensions; scoped requires explicit `all` or list
+  membership; `None` context on a list denies; empty list never "all"),
+  `Store::assignment_for_user` (unparsable scope_mode -> None).
+- Commit `3447c0cf`.
+
+### Cycle 2a — five-role taxonomy seeds (DONE)
+
+- `role-admin` (global, operational set + role management + plugins, explicit
+  list, never `*`; `staff:delete` stays owner-only) and `role-auditor`
+  (global, read-only views, no exports/writes) presets + constants. Staff and
+  Manager gain `kds:view`/`kds:update` so folded kitchen users keep KDS
+  access through `role-staff`. Cashier/kitchen presets remain during the
+  transition. Commit `5dacef8e`.
+
+### Cycle 2b — assignment-aware gate (DONE)
+
+- `Store::require_permission` resolves the role through the assignment first
+  (`users.role_id` fallback for legacy users — behavior-identical); new
+  `require_permission_scoped` enforces `matches_scope` for scoped
+  assignments (global + legacy unrestricted); `create_user` writes a default
+  global assignment; `update_user` keeps the assignment role in sync
+  (role-only conflict update preserves scope rows). Both clients expose
+  `require_permission_for_user_scoped`. Commit `054b3f7c`.
+
+### Cycle 2c — retirement + seed sweep (REMAINING)
+
+- Migration `129`: re-point `users.role_id` to `role-staff` for
+  cashier/kitchen users and delete the two role rows (lands with the gate
+  already assignment-aware, so no behavior gap). Remove the CASHIER/KITCHEN
+  presets + constants. Sweep the role-id test seeds across both clients
+  (~22 files) — staff-like fixtures to `role-staff`, limited-access
+  assertions to a narrow custom role.
+
+### Cycle 3 — front-end (REMAINING)
+
+- Staff screen presents the five-role taxonomy (no cashier/kitchen options),
+  assignment editor gains `scope_mode` + per-dimension branch/workspace
+  pickers, strings in both `staff.ftl` bundles, new `api-staff-contract`
+  test, and the UI checks in validation.md.
