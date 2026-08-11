@@ -3827,3 +3827,50 @@ the gate is not (no intent signal exists); that remains the job of review.
 Assignment scopes (0048) will extend the gate with scope_mode + branch/
 workspace resolution. The 0047 spec moves to `_done` once the user closes
 the slice.
+
+### 2026-08-11 — 0048 cycle 1: assignment schema + explicit-all scope evaluation API (round 177)
+
+**Problem:** a single global `users.role_id` cannot express ADR #35 D5's
+shapes — "Manager for branches A+B, workspaces retail-pos only" or "Staff for
+the kds workspace" — and there was no structure to migrate legacy rows into.
+The audit's CUR-03 (command scoping) is the P0 this model fixes, and D9 steps
+3-4 depend on the assignment tables existing.
+
+**Solution:** migration `128_assignments.sql` (registered, `expected_tables`
+extended): `assignments` (user_id PK, role_id, scope_mode global|scoped,
+branch_scope / workspace_scope explicit all|list, expires_at deferred),
+`assignment_branches`, `assignment_workspaces`. Every existing user is
+backfilled with one effective assignment — owner/manager/staff/custom keep
+global mode; legacy role-cashier / role-kitchen users resolve to role-staff
+with the scoped workspace their grants imply (`retail-pos` / `kds`, both
+seeded). Two per-dimension scope flags were added beyond the spec's column
+list because "empty lists never mean all" needs an explicit marker — the
+spec lists only `scope_mode`, but its invariants require the all/list
+semantics. New `db::assignments` model: `ScopeMode`, `Assignment` with
+fail-closed `matches_scope` (global ignores dimensions; scoped requires each
+dimension to be explicit `all` or contain the request id; `None` context on a
+list dimension denies; empty list is deny, never all), and
+`Store::assignment_for_user` (unparsable scope_mode -> None, fail closed).
+
+**Deliberate sequencing decision:** the retirement of role-cashier /
+role-kitchen is NOT in 128. Re-pointing `users.role_id` to role-staff would
+change what the 0047 gate (still resolving through role_id) grants kitchen
+users until the gate rewires to assignments — a behavior change at the
+migration boundary. So 128 is purely additive and behavior-neutral; the
+retirement + re-point land with the gate rewire in cycle 2. Two workspaces
+tests pinned the seeded set at 5; they now expect 6 (retail-pos is a
+first-class workspace per the ADR).
+
+**Verify:** oz-core lib 1697/1697 (assignments 12/12, migration_128 1/1,
+expected_tables), staff_integration 25/25, both clients compile, fmt +
+clippy -D warnings + drift guard clean. `test-changed.sh` still blocked by
+running app binaries (documented in rounds 172-176).
+
+**Commits:** `3447c0cf` (feat: assignment model + migration 128).
+
+**Risks / follow-ups:** cycle 2 wires the gate + create_staff writes to
+assignments, seeds the five-role taxonomy (Owner/Admin/Auditor), retires
+cashier/kitchen via a second migration, and sweeps the role-id test seeds
+across both clients; cycle 3 is the UI (five-role list, assignment editor,
+i18n, staff IPC contract test). `role-staff` grants must cover the folded
+cashier/kitchen operational keys once the gate reads assignments.
