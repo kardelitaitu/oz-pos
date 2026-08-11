@@ -978,6 +978,15 @@ impl Store<'_> {
 
         tx.commit()?;
 
+        // ADR #37 D3: recompute popularity for every sold SKU — the sale
+        // ledger rows are durable now, so the sales signal (decayed units)
+        // reflects this transaction. Runs outside the tx (read-only pass).
+        for line in &sale.lines {
+            if let Err(e) = self.recompute_popularity(line.sku.as_str()) {
+                tracing::warn!(sku = %line.sku, error = %e, "popularity recompute failed after sale");
+            }
+        }
+
         Ok(crate::sale_deduction::CompleteSaleResult {
             sale_id: sale.id.clone(),
             status: foundation::SaleStatus::Pending,

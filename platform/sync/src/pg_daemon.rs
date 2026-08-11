@@ -721,6 +721,7 @@ mod tests {
                 price_updated_at: None,
                 track_serial: false,
                 store_id: None,
+                ..Default::default()
             }],
             tax_rates: vec![],
             users: vec![],

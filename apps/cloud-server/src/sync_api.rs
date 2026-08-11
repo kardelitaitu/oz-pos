@@ -419,7 +419,7 @@ async fn snapshot_handler(
     let products: Vec<serde_json::Value> = match (|| -> Result<_, String> {
         let mut stmt = conn
             .prepare(
-                "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, store_id
+                "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, store_id, brand, rack_location, notes, unit, is_active
                  FROM products WHERE tenant_id = ?1"
             )
             .map_err(|e| e.to_string())?;
@@ -436,7 +436,12 @@ async fn snapshot_handler(
                 "updated_at": row.get::<_, String>("updated_at")?,
                 "price_updated_at": row.get::<_, String>("price_updated_at")?,
                 "track_serial": row.get::<_, bool>("track_serial")?,
-                "store_id": row.get::<_, Option<String>>("store_id")?
+                "store_id": row.get::<_, Option<String>>("store_id")?,
+                "brand": row.get::<_, Option<String>>("brand")?,
+                "rack_location": row.get::<_, Option<String>>("rack_location")?,
+                "notes": row.get::<_, Option<String>>("notes")?,
+                "unit": row.get::<_, Option<String>>("unit")?,
+                "is_active": row.get::<_, bool>("is_active")?
             }))
         })
         .map_err(|e| e.to_string())?

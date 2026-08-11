@@ -767,6 +767,22 @@ pub const ALL: &[Migration] = &[
         id: "131_user_profiles_national_id_hash.sql",
         sql: include_str!("../migrations/131_user_profiles_national_id_hash.sql"),
     },
+    // ── ADR #36 D1: retail merchandising attributes ──────────────
+    // brand/rack_location/notes/unit (free text), is_active (hide without
+    // delete), default_supplier_id (FK to suppliers, local-only). cost_minor
+    // already exists (054).
+    Migration {
+        id: "132_product_attributes.sql",
+        sql: include_str!("../migrations/132_product_attributes.sql"),
+    },
+    // ── ADR #37 D3: popularity signal ledger + materialized score ─
+    // product_activity (search/edit events) + products.popularity_score.
+    // Sales signal reads sale_lines directly; the score is recomputed by the
+    // formula in code and is local-only (never synced).
+    Migration {
+        id: "133_product_activity.sql",
+        sql: include_str!("../migrations/133_product_activity.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.

@@ -39,10 +39,35 @@ pub struct CreateProductDto {
     /// Whether this product requires serial number capture at checkout.
     #[serde(default)]
     pub track_serial: bool,
+    /// Purchase/cost price in minor units (local-only, ADR #36 D2).
+    #[serde(default)]
+    pub cost_minor: i64,
+    /// Brand (free text).
+    #[serde(default)]
+    pub brand: Option<String>,
+    /// Rack position code, e.g. "A-01-03".
+    #[serde(default)]
+    pub rack_location: Option<String>,
+    /// Free-text notes.
+    #[serde(default)]
+    pub notes: Option<String>,
+    /// Unit of measure, e.g. "pcs", "kg", "box".
+    #[serde(default)]
+    pub unit: Option<String>,
+    /// Active/sellable status (default: active).
+    #[serde(default = "default_is_active")]
+    pub is_active: bool,
+    /// Default supplier FK (local-only, ADR #36 D2).
+    #[serde(default)]
+    pub default_supplier_id: Option<String>,
 }
 
 fn default_product_type() -> String {
     "retail".into()
+}
+
+fn default_is_active() -> bool {
+    true
 }
 
 /// Payload for updating an existing product (PATCH semantics — only
@@ -86,6 +111,47 @@ pub struct UpdateProductDto {
     /// Updated serial tracking flag.
     #[serde(default)]
     pub track_serial: Option<bool>,
+    /// Updated cost in minor units. `Some(v)` updates, `None` keeps.
+    #[serde(default)]
+    pub cost_minor: Option<i64>,
+    /// Updated brand. Send `null` to clear.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_field"
+    )]
+    pub brand: Option<Option<String>>,
+    /// Updated rack position code. Send `null` to clear.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_field"
+    )]
+    pub rack_location: Option<Option<String>>,
+    /// Updated notes. Send `null` to clear.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_field"
+    )]
+    pub notes: Option<Option<String>>,
+    /// Updated unit of measure. Send `null` to clear.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_field"
+    )]
+    pub unit: Option<Option<String>>,
+    /// Updated active status. `Some(v)` updates, `None` keeps.
+    #[serde(default)]
+    pub is_active: Option<bool>,
+    /// Updated default supplier. Send `null` to clear.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_field"
+    )]
+    pub default_supplier_id: Option<Option<String>>,
 }
 
 /// Custom deserializer for `Option<Option<T>>` PATCH fields.
@@ -192,6 +258,13 @@ mod tests {
         assert!(dto.category_id.is_none());
         assert!(dto.barcode.is_none());
         assert!(!dto.track_serial);
+        assert_eq!(dto.cost_minor, 0); // default
+        assert!(dto.brand.is_none());
+        assert!(dto.rack_location.is_none());
+        assert!(dto.notes.is_none());
+        assert!(dto.unit.is_none());
+        assert!(dto.is_active); // default
+        assert!(dto.default_supplier_id.is_none());
     }
 
     #[test]
@@ -199,12 +272,22 @@ mod tests {
         let json = r#"{
             "sku":"LAPTOP","name":"MacBook Pro","price_minor":129999,"currency":"USD",
             "category_id":"cat-electronics","barcode":"5901234123457",
-            "product_type":"retail","track_serial":true
+            "product_type":"retail","track_serial":true,
+            "cost_minor":90000,"brand":"Apple","rack_location":"E-02-11",
+            "notes":"genuine","unit":"pcs","is_active":true,
+            "default_supplier_id":"sup-1"
         }"#;
         let dto: CreateProductDto = serde_json::from_str(json).unwrap();
         assert_eq!(dto.category_id, Some("cat-electronics".into()));
         assert_eq!(dto.barcode, Some("5901234123457".into()));
         assert!(dto.track_serial);
+        assert_eq!(dto.cost_minor, 90000);
+        assert_eq!(dto.brand.as_deref(), Some("Apple"));
+        assert_eq!(dto.rack_location.as_deref(), Some("E-02-11"));
+        assert_eq!(dto.notes.as_deref(), Some("genuine"));
+        assert_eq!(dto.unit.as_deref(), Some("pcs"));
+        assert!(dto.is_active);
+        assert_eq!(dto.default_supplier_id.as_deref(), Some("sup-1"));
     }
 
     #[test]
@@ -218,6 +301,13 @@ mod tests {
             barcode: None,
             product_type: "retail".into(),
             track_serial: false,
+            cost_minor: 0,
+            brand: None,
+            rack_location: None,
+            notes: None,
+            unit: None,
+            is_active: true,
+            default_supplier_id: None,
         };
         let json = serde_json::to_string(&dto).unwrap();
         let back: CreateProductDto = serde_json::from_str(&json).unwrap();
@@ -266,6 +356,13 @@ mod tests {
             barcode: None,
             product_type: None,
             track_serial: Some(true),
+            cost_minor: Some(800),
+            brand: Some(Some("Apple".into())),
+            rack_location: Some(None),
+            notes: None,
+            unit: Some(Some("kg".into())),
+            is_active: Some(true),
+            default_supplier_id: None,
         };
         let json = serde_json::to_string(&dto).unwrap();
         let back: UpdateProductDto = serde_json::from_str(&json).unwrap();

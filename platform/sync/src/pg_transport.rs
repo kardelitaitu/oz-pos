@@ -215,7 +215,9 @@ impl PgTransport {
                 "SELECT id, sku, name, price_minor, currency, category_id, barcode,
                         created_at::TEXT, updated_at::TEXT, price_updated_at::TEXT,
                         (track_serial::TEXT IN ('1', 't', 'true')) AS track_serial,
-                        store_id
+                        store_id,
+                        brand, rack_location, notes, unit,
+                        (is_active::TEXT IN ('1', 't', 'true')) AS is_active
                  FROM products
                  ORDER BY sku ASC",
                 &[],
@@ -236,6 +238,11 @@ impl PgTransport {
                 price_updated_at: row.get("price_updated_at"),
                 track_serial: row.get("track_serial"),
                 store_id: row.get("store_id"),
+                brand: row.get("brand"),
+                rack_location: row.get("rack_location"),
+                notes: row.get("notes"),
+                unit: row.get("unit"),
+                is_active: row.get("is_active"),
             })
             .collect();
 

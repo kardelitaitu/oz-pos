@@ -701,6 +701,7 @@ mod tests {
                     price_updated_at: None,
                     track_serial: false,
                     store_id: None,
+                    ..Default::default()
                 }],
                 tax_rates: vec![],
                 users: vec![],
@@ -838,6 +839,11 @@ mod tests {
             price_updated_at: None,
             track_serial: false,
             store_id: None,
+            brand: None,
+            rack_location: None,
+            notes: None,
+            unit: None,
+            is_active: true,
         }
     }
 
@@ -900,6 +906,7 @@ mod tests {
                 price_updated_at: None,
                 track_serial: false,
                 store_id: None,
+                ..Default::default()
             }],
             tax_rates: vec![],
             users: vec![],
@@ -932,6 +939,7 @@ mod tests {
                 price_updated_at: None,
                 track_serial: false,
                 store_id: None,
+                ..Default::default()
             }],
             tax_rates: vec![],
             users: vec![],
@@ -963,6 +971,7 @@ mod tests {
                 price_updated_at: None,
                 track_serial: false,
                 store_id: None,
+                ..Default::default()
             }],
             tax_rates: vec![],
             users: vec![],
@@ -994,6 +1003,7 @@ mod tests {
                 price_updated_at: None,
                 track_serial: false,
                 store_id: None,
+                ..Default::default()
             }],
             tax_rates: vec![],
             users: vec![],
@@ -1194,6 +1204,7 @@ mod tests {
                 price_updated_at: None,
                 track_serial: false,
                 store_id: None,
+                ..Default::default()
             }],
             tax_rates: vec![],
             users: vec![],
@@ -1229,6 +1240,7 @@ mod tests {
                 price_updated_at: None,
                 track_serial: false,
                 store_id: None,
+                ..Default::default()
             }],
             tax_rates: vec![tax_rate("tax-extra", "Extra Tax", 500)],
             users: vec![user("extra-user", "Extra User", "role-1")],
@@ -1339,6 +1351,7 @@ mod tests {
                 price_updated_at: None,
                 track_serial: false,
                 store_id: None,
+                ..Default::default()
             }],
             tax_rates: vec![],
             users: vec![],
@@ -1378,6 +1391,7 @@ mod tests {
                     price_updated_at: None,
                     track_serial: false,
                     store_id: Some("store-a".into()),
+                    ..Default::default()
                 },
                 transport::SnapshotProduct {
                     id: "p-b".into(),
@@ -1392,6 +1406,7 @@ mod tests {
                     price_updated_at: None,
                     track_serial: false,
                     store_id: Some("store-b".into()),
+                    ..Default::default()
                 },
                 transport::SnapshotProduct {
                     id: "p-g".into(),
@@ -1406,6 +1421,7 @@ mod tests {
                     price_updated_at: None,
                     track_serial: false,
                     store_id: None,
+                    ..Default::default()
                 },
             ],
             tax_rates: vec![],
@@ -1460,6 +1476,7 @@ mod tests {
                     price_updated_at: None,
                     track_serial: false,
                     store_id: Some("store-a".into()),
+                    ..Default::default()
                 },
                 transport::SnapshotProduct {
                     id: "p-ghost".into(),
@@ -1474,6 +1491,7 @@ mod tests {
                     price_updated_at: None,
                     track_serial: false,
                     store_id: Some("ghost-store".into()),
+                    ..Default::default()
                 },
             ],
             tax_rates: vec![],

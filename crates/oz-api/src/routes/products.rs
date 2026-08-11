@@ -163,6 +163,7 @@ pub async fn create_product(
                 } else {
                     None
                 },
+                popularity_score: 0.0,
             };
             (StatusCode::CREATED, Json(detail)).into_response()
         }

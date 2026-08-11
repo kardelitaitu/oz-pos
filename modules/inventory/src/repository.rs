@@ -18,7 +18,7 @@ impl<'a> InventoryRepository<'a> {
     /// Retrieve a product by ID.
     pub fn get_product(&self, id: &str) -> Result<Option<Product>, anyhow::Error> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type, version
+            "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type, version, cost_minor, brand, rack_location, notes, unit, is_active, default_supplier_id, popularity_score
              FROM products WHERE id = ?1",
         )?;
 
@@ -58,6 +58,13 @@ impl<'a> InventoryRepository<'a> {
             track_serial: row.get::<_, i64>(10).unwrap_or(0) != 0,
             product_type,
             version: row.get(12).unwrap_or(1),
+            cost_minor: row.get(13).unwrap_or(0),
+            brand: row.get(14).unwrap_or(None),
+            rack_location: row.get(15).unwrap_or(None),
+            notes: row.get(16).unwrap_or(None),
+            unit: row.get(17).unwrap_or(None),
+            is_active: row.get::<_, i64>(18).unwrap_or(1) != 0,
+            default_supplier_id: row.get(19).unwrap_or(None),
         }))
     }
 

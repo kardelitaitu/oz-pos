@@ -1044,6 +1044,23 @@ struct SnapshotProduct {
     /// the global catalog exactly as before.
     #[serde(default)]
     store_id: Option<String>,
+    /// Product brand (free text, synced — ADR #36 D2).
+    #[serde(default)]
+    brand: Option<String>,
+    /// Rack position code (synced).
+    #[serde(default)]
+    rack_location: Option<String>,
+    /// Free-text notes (synced).
+    #[serde(default)]
+    notes: Option<String>,
+    /// Unit of measure (synced).
+    #[serde(default)]
+    unit: Option<String>,
+    /// Active/sellable status — synced so retirement propagates to every
+    /// store. `cost_minor`, `default_supplier_id`, and `popularity_score` are
+    /// deliberately absent (local-only, ADR #36 D2 / ADR #37 D4).
+    #[serde(default = "default_true")]
+    is_active: bool,
 }
 
 /// Flat tax-rate row matching the `tax_rates` table columns.
@@ -1189,9 +1206,11 @@ fn upsert_products(
     let mut stmt = tx.prepare(
         "INSERT INTO products (id, sku, name, price_minor, currency,
                                category_id, barcode, created_at, updated_at,
-                               price_updated_at, track_serial, store_id)
+                               price_updated_at, track_serial, store_id,
+                               brand, rack_location, notes, unit, is_active)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7,
-                 COALESCE(?8, ?11), COALESCE(?9, ?11), COALESCE(?10, ?11), ?12, ?13)
+                 COALESCE(?8, ?11), COALESCE(?9, ?11), COALESCE(?10, ?11), ?12, ?13,
+                 ?14, ?15, ?16, ?17, ?18)
          ON CONFLICT(sku) DO UPDATE SET
              name            = excluded.name,
              price_minor     = excluded.price_minor,
@@ -1201,7 +1220,12 @@ fn upsert_products(
              updated_at      = COALESCE(excluded.updated_at, ?11),
              price_updated_at = COALESCE(excluded.price_updated_at, ?11),
              track_serial    = excluded.track_serial,
-             store_id        = excluded.store_id",
+             store_id        = excluded.store_id,
+             brand           = excluded.brand,
+             rack_location   = excluded.rack_location,
+             notes           = excluded.notes,
+             unit            = excluded.unit,
+             is_active       = excluded.is_active",
     )?;
     for p in rows {
         let id =
@@ -1221,6 +1245,11 @@ fn upsert_products(
             now,
             p.track_serial as i64,
             p.store_id,
+            p.brand,
+            p.rack_location,
+            p.notes,
+            p.unit,
+            p.is_active as i64,
         ])?;
         count += 1;
     }

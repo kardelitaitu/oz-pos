@@ -72,6 +72,8 @@ pub mod stripe;
 pub use offline::RemoteSyncFailure;
 /// Payment CRUD (tenders, transactions).
 pub mod payments;
+/// Popularity recompute (ADR #37) — sale/activity aggregation + score writes.
+pub mod popularity;
 /// CRUD for product bundles (group selling).
 pub mod product_bundles;
 /// Product CRUD and search.
@@ -118,7 +120,7 @@ pub mod workspaces;
 
 // ── Re-exports ──────────────────────────────────────────────────────
 
-pub use products::ProductWithDetails;
+pub use products::{CreateProductAttributes, ProductWithDetails, UpdateProductAttributes};
 pub use reports::{
     CategoryBreakdownRow, DailyRevenueRow, HourlyHeatmapRow, LowStockAlert, MonthlyRevenueRow,
     TopProductRow, WeeklyRevenueRow,
@@ -329,5 +331,12 @@ pub(crate) fn row_to_product(row: &rusqlite::Row) -> rusqlite::Result<crate::Pro
             .and_then(crate::ProductType::parse_str)
             .unwrap_or_default(),
         version: row.get("version").unwrap_or(1),
+        cost_minor: row.get("cost_minor").unwrap_or(0),
+        brand: row.get("brand").unwrap_or(None),
+        rack_location: row.get("rack_location").unwrap_or(None),
+        notes: row.get("notes").unwrap_or(None),
+        unit: row.get("unit").unwrap_or(None),
+        is_active: row.get("is_active").unwrap_or(1i64) != 0,
+        default_supplier_id: row.get("default_supplier_id").unwrap_or(None),
     })
 }

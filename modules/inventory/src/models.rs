@@ -129,10 +129,36 @@ pub struct Product {
     /// Optimistic concurrency version.
     #[serde(default = "default_version")]
     pub version: i64,
+    /// Purchase/cost price in minor units. Local-only — never synced (ADR #36 D2).
+    #[serde(default)]
+    pub cost_minor: i64,
+    /// Product brand (free text).
+    #[serde(default)]
+    pub brand: Option<String>,
+    /// Rack position code, e.g. "A-01-03".
+    #[serde(default)]
+    pub rack_location: Option<String>,
+    /// Free-text product notes.
+    #[serde(default)]
+    pub notes: Option<String>,
+    /// Unit of measure, e.g. "pcs", "kg", "box".
+    #[serde(default)]
+    pub unit: Option<String>,
+    /// Whether the product is active/sellable. Retired products are hidden,
+    /// not deleted — matches `product_variants.is_active` (ADR #36 D1).
+    #[serde(default = "default_is_active")]
+    pub is_active: bool,
+    /// Default supplier FK. Local-only — never synced (ADR #36 D2).
+    #[serde(default)]
+    pub default_supplier_id: Option<String>,
 }
 
 fn default_version() -> i64 {
     1
+}
+
+fn default_is_active() -> bool {
+    true
 }
 
 impl Product {
@@ -154,6 +180,13 @@ impl Product {
             track_serial: false,
             product_type: ProductType::Retail,
             version: 1,
+            cost_minor: 0,
+            brand: None,
+            rack_location: None,
+            notes: None,
+            unit: None,
+            is_active: true,
+            default_supplier_id: None,
         }
     }
 

@@ -78,6 +78,8 @@ pub mod offline;
 pub mod ozpkg;
 /// Payment processing and split-tender allocation.
 pub mod payment;
+/// Product popularity scoring (ADR #37) — pure decayed/smoothed blend.
+pub mod popularity;
 /// Product catalog — SKU, price, type, metadata.
 pub mod product;
 /// Product bundles — sell multiple SKUs as one item.

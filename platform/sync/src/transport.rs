@@ -114,6 +114,51 @@ pub struct SnapshotProduct {
     /// the global catalog exactly as before.
     #[serde(default)]
     pub store_id: Option<String>,
+    /// Product brand (free text, synced — ADR #36 D2).
+    #[serde(default)]
+    pub brand: Option<String>,
+    /// Rack position code (synced).
+    #[serde(default)]
+    pub rack_location: Option<String>,
+    /// Free-text notes (synced).
+    #[serde(default)]
+    pub notes: Option<String>,
+    /// Unit of measure (synced).
+    #[serde(default)]
+    pub unit: Option<String>,
+    /// Active/sellable status (synced so retirement propagates).
+    /// `cost_minor`, `default_supplier_id`, and `popularity_score` are
+    /// deliberately absent — local-only (ADR #36 D2, ADR #37 D4).
+    #[serde(default = "default_snapshot_is_active")]
+    pub is_active: bool,
+}
+
+fn default_snapshot_is_active() -> bool {
+    true
+}
+
+impl Default for SnapshotProduct {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            sku: String::new(),
+            name: String::new(),
+            price_minor: 0,
+            currency: String::new(),
+            category_id: None,
+            barcode: None,
+            created_at: None,
+            updated_at: None,
+            price_updated_at: None,
+            track_serial: false,
+            store_id: None,
+            brand: None,
+            rack_location: None,
+            notes: None,
+            unit: None,
+            is_active: true,
+        }
+    }
 }
 
 /// A tax-rate row in a server snapshot (typed, RUST-04).
@@ -869,6 +914,7 @@ mod tests {
                 price_updated_at: None,
                 track_serial: false,
                 store_id: None,
+                ..Default::default()
             }],
             tax_rates: vec![SnapshotTaxRate {
                 id: "t-1".into(),
