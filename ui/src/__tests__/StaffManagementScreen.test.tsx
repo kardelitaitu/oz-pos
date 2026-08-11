@@ -96,7 +96,6 @@ beforeEach(() => {
       { key: 'store', name: 'Retail Store', description: 'Retail counter', icon: 'store' },
     ]);
     if (cmd === 'list_store_profiles') return Promise.resolve(SAMPLE_BRANCHES);
-    if (cmd === 'set_user_workspaces_scoped') return Promise.resolve(undefined);
     return Promise.reject(new Error(`Unknown command: ${cmd}`));
   });
 });
@@ -143,7 +142,6 @@ describe('StaffManagementScreen', () => {
       if (cmd === 'list_staff_scoped') return Promise.resolve([]);
       if (cmd === 'list_roles_scoped') return Promise.resolve(SAMPLE_ROLES);
       if (cmd === 'list_all_workspaces_scoped') return Promise.resolve([]);
-      if (cmd === 'get_user_workspaces_scoped') return Promise.resolve([]);
       return Promise.resolve([]);
     });
     renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
@@ -381,8 +379,6 @@ describe('StaffManagementScreen', () => {
       if (cmd === 'list_staff_scoped') return Promise.resolve(SAMPLE_STAFF);
       if (cmd === 'list_roles_scoped') return Promise.resolve(SAMPLE_ROLES);
       if (cmd === 'list_all_workspaces_scoped') return Promise.resolve([]);
-      if (cmd === 'get_user_workspaces_scoped') return Promise.resolve([]);
-      if (cmd === 'set_user_workspaces_scoped') return Promise.resolve(undefined);
       return Promise.resolve([]);
     });
 

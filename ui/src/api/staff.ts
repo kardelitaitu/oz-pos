@@ -206,11 +206,6 @@ export interface UpdateStaffScopedArgs {
   /** STAFF-03: optional new PIN; hashed server-side. Omit to keep current. */
   pin?: string;
   /**
-   * STAFF-05: workspace key assignment applied atomically with the profile
-   * update (single IPC call). Omit to leave workspace assignments untouched.
-   */
-  workspace_keys?: string[];
-  /**
    * ADR #35 D6 profile fields (validated + encrypted at rest by the backend).
    * Omit to leave the profile columns untouched.
    */

@@ -228,19 +228,3 @@ export async function listAllWorkspacesScoped(
   return loggedInvoke<WorkspaceTypeDto[]>('list_all_workspaces_scoped', { sessionToken });
 }
 
-/** Replace workspace key assignments (legacy), caller from session. ADR #7. */
-export async function setUserWorkspacesScoped(
-  sessionToken: string,
-  userId: string,
-  workspaceKeys: string[],
-): Promise<void> {
-  return loggedInvoke<void>('set_user_workspaces_scoped', { sessionToken, userId, workspaceKeys });
-}
-
-/** Get workspace keys for a user (legacy), caller from session. ADR #7. */
-export async function getUserWorkspacesScoped(
-  sessionToken: string,
-  userId: string,
-): Promise<string[]> {
-  return loggedInvoke<string[]>('get_user_workspaces_scoped', { sessionToken, userId });
-}

@@ -250,38 +250,12 @@ impl Store<'_> {
         rows.collect::<Result<Vec<_>, _>>().map_err(CoreError::from)
     }
 
-    /// Legacy: replace workspace assignments for a user (old tables).
-    pub fn set_user_workspaces_legacy<'b>(
-        &self,
-        user_id: &str,
-        ws_keys: impl IntoIterator<Item = &'b str>,
-    ) -> Result<(), CoreError> {
-        let tx = self.conn.unchecked_transaction()?;
-
-        tx.execute(
-            "DELETE FROM user_workspaces WHERE user_id = ?1",
-            params![user_id],
-        )?;
-
-        for key in ws_keys {
-            tx.execute(
-                "INSERT OR IGNORE INTO user_workspaces (user_id, ws_key) VALUES (?1, ?2)",
-                params![user_id, key],
-            )?;
-        }
-
-        tx.commit()?;
-        Ok(())
-    }
-
-    /// Legacy: get workspace keys assigned to a user (old table).
-    pub fn get_user_workspace_keys_legacy(&self, user_id: &str) -> Result<Vec<String>, CoreError> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT ws_key FROM user_workspaces WHERE user_id = ?1 ORDER BY ws_key")?;
-        let rows = stmt.query_map(params![user_id], |row| row.get::<_, String>(0))?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(CoreError::from)
-    }
+    // Retired (0048 follow-up): the `set_user_workspaces_legacy` /
+    // `get_user_workspace_keys_legacy` write path is gone — the assignment
+    // model (ADR #35 D5 / spec 0048) supersedes it, and staff CRUD writes
+    // `assignments` + dimension rows in the global identity DB. The old
+    // `user_workspaces` table is still READ by the legacy listing above and
+    // kept for data compatibility; nothing writes it anymore.
 }
 
 // ── New Type Queries (ADR #4) ────────────────────────────────────────────
@@ -1257,39 +1231,6 @@ mod tests {
     }
 
     #[test]
-    fn set_user_workspaces_legacy_replaces_previous() {
-        let (store, user_id) = fresh();
-        // Post ADR-18 §13 finding 37 (migration 091): workspace_types.key is
-        // 'warehouse', not 'inventory' — the user_workspaces.ws_key FK
-        // column references `workspaces.key` and the literal 'inventory'
-        // would FK-violate against the post-rename workspaces row.
-        store
-            .set_user_workspaces_legacy(&user_id, ["restaurant-pos", "warehouse"])
-            .unwrap();
-        let keys = store.get_user_workspace_keys_legacy(&user_id).unwrap();
-        assert_eq!(keys.len(), 2);
-        assert!(keys.contains(&"warehouse".into()));
-
-        store
-            .set_user_workspaces_legacy(&user_id, ["admin"])
-            .unwrap();
-        let keys = store.get_user_workspace_keys_legacy(&user_id).unwrap();
-        assert_eq!(keys.len(), 1);
-        assert_eq!(keys[0], "admin");
-    }
-
-    #[test]
-    fn set_user_workspaces_legacy_empty_clears() {
-        let (store, user_id) = fresh();
-        store
-            .set_user_workspaces_legacy(&user_id, ["admin"])
-            .unwrap();
-        store.set_user_workspaces_legacy(&user_id, []).unwrap();
-        let keys = store.get_user_workspace_keys_legacy(&user_id).unwrap();
-        assert!(keys.is_empty());
-    }
-
-    #[test]
     fn list_workspaces_legacy_with_user_override() {
         let (store, user_id) = fresh();
         let before = store
@@ -1297,21 +1238,21 @@ mod tests {
             .unwrap();
         assert!(before.is_empty(), "role-test has no role_workspaces");
 
+        // The user_workspaces write path is retired (assignment model
+        // supersedes it); seed the legacy row directly to keep pinning the
+        // legacy listing's replace-mode read.
         store
-            .set_user_workspaces_legacy(&user_id, ["admin"])
+            .conn
+            .execute(
+                "INSERT INTO user_workspaces (user_id, ws_key) VALUES (?1, ?2)",
+                params![user_id, "admin"],
+            )
             .unwrap();
         let after = store
             .list_workspaces_legacy("role-test", Some(&user_id))
             .unwrap();
         assert_eq!(after.len(), 1);
         assert_eq!(after[0].key, "admin");
-    }
-
-    #[test]
-    fn get_user_workspace_keys_legacy_empty_when_no_override() {
-        let (store, user_id) = fresh();
-        let keys = store.get_user_workspace_keys_legacy(&user_id).unwrap();
-        assert!(keys.is_empty());
     }
 
     // ── New tests (ADR #4 Phase 1) ────────────────────────────────────

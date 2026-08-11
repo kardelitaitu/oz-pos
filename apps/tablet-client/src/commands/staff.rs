@@ -446,14 +446,6 @@ pub struct UpdateStaffScopedArgs {
     /// validated, hashed server-side, and persisted via `update_user_pin`.
     /// `None`/empty leaves the current PIN unchanged.
     pub pin: Option<String>,
-    /// Optional workspace key assignment (STAFF-05). When `Some`, the
-    /// profile update and the workspace assignment are applied by this one
-    /// command — the front-end no longer issues two separate IPC calls. If
-    /// the store-scoped workspace write fails after the profile commits,
-    /// the profile change is rolled back (compensating update) and a clear
-    /// partial-failure error is returned.
-    #[serde(default)]
-    pub workspace_keys: Option<Vec<String>>,
     /// ADR #35 D6 profile fields (validated + encrypted at rest). When
     /// `Some`, they are written atomically with the user update.
     #[serde(default)]
@@ -646,12 +638,11 @@ pub async fn create_staff_scoped(
 ///
 /// STAFF-02: enforces the role-assignment hierarchy.
 /// STAFF-03: optionally rotates the PIN when `args.pin` is a non-empty value.
-/// STAFF-05: the profile update and (optional) workspace assignment run as
-/// one command. The profile lives in the GLOBAL identity DB while workspace
-/// assignments live in the STORE-scoped DB, so a single SQLite transaction
-/// across both is impossible; instead we apply the profile first and, if the
-/// store-scoped workspace write then fails, compensate by restoring the
-/// previous profile values and returning a clear partial-failure error.
+/// STAFF-05: the profile update, PIN rotation, and (optional) assignment
+/// scope run as one command inside a single global-DB transaction — any
+/// failure rolls the whole update back atomically. The legacy store-scoped
+/// `workspace_keys` write path (which needed cross-DB compensation) is
+/// retired; assignments ride the same transaction as the profile.
 #[command]
 pub async fn update_staff_scoped(
     session_token: String,
@@ -748,86 +739,6 @@ pub async fn update_staff_scoped(
         (user, roles, pin_rotated)
     };
     drop(db);
-
-    // STAFF-05: apply the workspace assignment as part of this same command.
-    // If it fails, compensate by restoring the previous profile and surface a
-    // clear partial-failure error instead of leaving a half-updated account.
-    if let Some(keys) = &args.workspace_keys {
-        let result = {
-            let conn = state
-                .db_manager
-                .open_store(&session.store_id)
-                .map_err(|e| AppError::Internal(format!("opening store db: {e}")))?;
-            let sdb = conn
-                .lock()
-                .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
-            let store = Store::new(&sdb);
-            let key_refs: Vec<&str> = keys.iter().map(|s| s.as_str()).collect();
-            store.set_user_workspaces_legacy(&args.id, key_refs)
-        };
-        if let Err(e) = result {
-            // Compensate: roll the profile back to its previous values.
-            // Do not hide a rollback failure behind the original workspace
-            // error; operators need to know whether the account is consistent.
-            let rollback_result: Result<(), String> =
-                if let Some((username, display_name, role_id, is_active, pin_hash, profile)) =
-                    &previous_profile
-                {
-                    let db = state.db.lock().await;
-                    match db.unchecked_transaction() {
-                        Ok(tx) => {
-                            let store = Store::new(&tx);
-                            match store.update_user(
-                                &args.id,
-                                username,
-                                display_name,
-                                role_id,
-                                *is_active,
-                            ) {
-                                Ok(_) => {
-                                    match store.update_user_pin(&args.id, pin_hash) {
-                                        // Only restore the profile columns when
-                                        // this update actually wrote one — a
-                                        // legacy user's snapshot is all-NULL and
-                                        // would fail validation.
-                                        Ok(_) => match args.profile.is_some() {
-                                            true => match profile
-                                                .as_ref()
-                                                .map(|p| store.write_user_profile(&args.id, p))
-                                            {
-                                                Some(Ok(())) => {
-                                                    tx.commit().map_err(|error| error.to_string())
-                                                }
-                                                Some(Err(error)) => Err(error.to_string()),
-                                                None => {
-                                                    tx.commit().map_err(|error| error.to_string())
-                                                }
-                                            },
-                                            false => tx.commit().map_err(|error| error.to_string()),
-                                        },
-                                        Err(error) => Err(error.to_string()),
-                                    }
-                                }
-                                Err(error) => Err(error.to_string()),
-                            }
-                        }
-                        Err(error) => Err(error.to_string()),
-                    }
-                } else {
-                    Err(format!(
-                        "staff profile {} was not found before update",
-                        args.id
-                    ))
-                };
-            let rollback_detail = match rollback_result {
-                Ok(_) => "profile rollback succeeded".to_owned(),
-                Err(rollback_error) => format!("profile rollback failed: {rollback_error}"),
-            };
-            return Err(AppError::Internal(format!(
-                "profile updated but workspace assignment failed: {e}; {rollback_detail}"
-            )));
-        }
-    }
 
     if pin_rotated {
         // STAFF-03: a rotated PIN invalidates every OTHER session issued

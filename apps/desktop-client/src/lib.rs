@@ -696,8 +696,6 @@ pub fn run() {
             commands::workspaces::recover_workspace_instances_scoped,
             commands::workspaces::suspend_surplus_workspace_instances_scoped,
             commands::workspaces::list_all_workspaces_scoped,
-            commands::workspaces::set_user_workspaces_scoped,
-            commands::workspaces::get_user_workspaces_scoped,
             commands::workspaces::set_user_workspace_instances_scoped,
             commands::workspaces::get_user_workspace_instances_scoped,
             commands::workspaces::resolve_boot_store,

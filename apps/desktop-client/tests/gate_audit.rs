@@ -148,7 +148,9 @@ static PINNED_DESKTOP: &[(&str, usize, &[&str])] = &[
     ),
     ("topology", 2, &["STAFF_UPDATE"]),
     ("void", 2, &["SALES_VOID"]),
-    ("workspaces", 8, &["STAFF_READ", "STAFF_UPDATE"]),
+    // 8 -> 6: set/get_user_workspaces_scoped retired with the legacy
+    // user_workspaces write path (assignment model supersedes it).
+    ("workspaces", 6, &["STAFF_READ", "STAFF_UPDATE"]),
 ];
 
 // ---------------------------------------------------------------------------

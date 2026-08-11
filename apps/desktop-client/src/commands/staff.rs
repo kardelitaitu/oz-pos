@@ -451,14 +451,6 @@ pub struct UpdateStaffScopedArgs {
     /// validated, hashed server-side, and persisted via `update_user_pin`.
     /// `None`/empty leaves the current PIN unchanged.
     pub pin: Option<String>,
-    /// Optional workspace key assignment (STAFF-05). When `Some`, the
-    /// profile update and the workspace assignment are applied by this one
-    /// command — the front-end no longer issues two separate IPC calls. If
-    /// the store-scoped workspace write fails after the profile commits,
-    /// the profile change is rolled back (compensating update) and a clear
-    /// partial-failure error is returned.
-    #[serde(default)]
-    pub workspace_keys: Option<Vec<String>>,
     /// ADR #35 D6 profile fields (validated + encrypted at rest). When
     /// `Some`, they are written atomically with the user update.
     #[serde(default)]
@@ -652,12 +644,11 @@ fn enforce_role_assignment_policy(
 /// STAFF-02: enforces the role-assignment hierarchy (Owner-only promotion,
 /// no self-promotion, last-owner protection).
 /// STAFF-03: optionally rotates the PIN when `args.pin` is a non-empty value.
-/// STAFF-05: the profile update and (optional) workspace assignment run as
-/// one command. The profile lives in the GLOBAL identity DB while workspace
-/// assignments live in the STORE-scoped DB, so a single SQLite transaction
-/// across both is impossible; instead we apply the profile first and, if the
-/// store-scoped workspace write then fails, compensate by restoring the
-/// previous profile values and returning a clear partial-failure error.
+/// STAFF-05: the profile update, PIN rotation, and (optional) assignment
+/// scope run as one command inside a single global-DB transaction — any
+/// failure rolls the whole update back atomically. The legacy store-scoped
+/// `workspace_keys` write path (which needed cross-DB compensation) is
+/// retired; assignments ride the same transaction as the profile.
 #[tauri::command]
 pub async fn update_staff_scoped(
     session_token: String,
@@ -755,92 +746,6 @@ pub async fn update_staff_scoped(
         (user, roles, pin_rotated)
     };
     drop(db);
-
-    // STAFF-05: apply the workspace assignment as part of this same command.
-    // If it fails, compensate by restoring the previous profile and surface a
-    // clear partial-failure error instead of leaving a half-updated account.
-    if let Some(keys) = &args.workspace_keys {
-        // Keep database-open and mutex failures inside the same compensation
-        // path as assignment failures. Returning early here would otherwise
-        // leave the committed profile update without reporting or attempting
-        // a rollback (STAFF-05).
-        let result: Result<(), String> = match state.db_manager.open_store(&session.store_id) {
-            Err(error) => Err(format!("opening store db: {error}")),
-            Ok(conn) => match conn.lock() {
-                Err(error) => Err(format!("store db lock: {error}")),
-                Ok(sdb) => {
-                    let store = Store::new(&sdb);
-                    let key_refs: Vec<&str> = keys.iter().map(|s| s.as_str()).collect();
-                    store
-                        .set_user_workspaces_legacy(&args.id, key_refs)
-                        .map_err(|error| error.to_string())
-                }
-            },
-        };
-        if let Err(e) = result {
-            // Compensate: roll the profile back to its previous values.
-            // Do not use `?` while compensating: a rollback failure must be
-            // reported together with the original workspace error, otherwise
-            // operators cannot tell that the account may still be inconsistent.
-            let rollback_result: Result<(), String> =
-                if let Some((username, display_name, role_id, is_active, pin_hash, profile)) =
-                    &previous_profile
-                {
-                    let db = state.db.lock().await;
-                    match db.unchecked_transaction() {
-                        Ok(tx) => {
-                            let store = Store::new(&tx);
-                            match store.update_user(
-                                &args.id,
-                                username,
-                                display_name,
-                                role_id,
-                                *is_active,
-                            ) {
-                                Ok(_) => {
-                                    match store.update_user_pin(&args.id, pin_hash) {
-                                        // Only restore the profile columns when
-                                        // this update actually wrote one — a
-                                        // legacy user's snapshot is all-NULL and
-                                        // would fail validation.
-                                        Ok(_) => match args.profile.is_some() {
-                                            true => match profile
-                                                .as_ref()
-                                                .map(|p| store.write_user_profile(&args.id, p))
-                                            {
-                                                Some(Ok(())) => {
-                                                    tx.commit().map_err(|error| error.to_string())
-                                                }
-                                                Some(Err(error)) => Err(error.to_string()),
-                                                None => {
-                                                    tx.commit().map_err(|error| error.to_string())
-                                                }
-                                            },
-                                            false => tx.commit().map_err(|error| error.to_string()),
-                                        },
-                                        Err(error) => Err(error.to_string()),
-                                    }
-                                }
-                                Err(error) => Err(error.to_string()),
-                            }
-                        }
-                        Err(error) => Err(error.to_string()),
-                    }
-                } else {
-                    Err(format!(
-                        "staff profile {} was not found before update",
-                        args.id
-                    ))
-                };
-            let rollback_detail = match rollback_result {
-                Ok(_) => "profile rollback succeeded".to_owned(),
-                Err(rollback_error) => format!("profile rollback failed: {rollback_error}"),
-            };
-            return Err(AppError::Internal(format!(
-                "profile updated but workspace assignment failed: {e}; {rollback_detail}"
-            )));
-        }
-    }
 
     if pin_rotated {
         // STAFF-03: a rotated PIN invalidates every OTHER session issued
@@ -1340,7 +1245,6 @@ mod tests {
                 role_id: "role-owner".into(),
                 is_active: true,
                 pin: None,
-                workspace_keys: None,
                 profile: None,
                 assignment: None,
             },
@@ -1430,7 +1334,6 @@ mod tests {
                 role_id: "role-owner".into(),
                 is_active: true,
                 pin: None,
-                workspace_keys: None,
                 profile: None,
                 assignment: None,
             },
@@ -1476,7 +1379,6 @@ mod tests {
                 role_id: "role-owner".into(),
                 is_active: true,
                 pin: None,
-                workspace_keys: None,
                 profile: None,
                 assignment: None,
             },
@@ -1516,7 +1418,6 @@ mod tests {
                 role_id: "role-owner".into(),
                 is_active: false,
                 pin: None,
-                workspace_keys: None,
                 profile: None,
                 assignment: None,
             },
@@ -1551,7 +1452,6 @@ mod tests {
                 role_id: "role-lite".into(),
                 is_active: true,
                 pin: Some("9876".into()),
-                workspace_keys: None,
                 profile: None,
                 assignment: None,
             },
@@ -1602,7 +1502,6 @@ mod tests {
                 role_id: "role-lite".into(),
                 is_active: true,
                 pin: Some("9876".into()),
-                workspace_keys: None,
                 profile: None,
                 assignment: None,
             },
@@ -1658,7 +1557,6 @@ mod tests {
                 role_id: "role-owner".into(),
                 is_active: true,
                 pin: Some("4321".into()),
-                workspace_keys: None,
                 profile: None,
                 assignment: None,
             },
@@ -1697,7 +1595,6 @@ mod tests {
                 role_id: "role-lite".into(),
                 is_active: true,
                 pin: None,
-                workspace_keys: None,
                 profile: None,
                 // ADR #35 D5 (spec 0048): scoped assignment with explicit
                 // all/list per dimension — `retail-pos` is FK-valid (seeded
@@ -1751,7 +1648,6 @@ mod tests {
                 role_id: "role-lite".into(),
                 is_active: true,
                 pin: Some("9876".into()),
-                workspace_keys: None,
                 profile: None,
                 assignment: None,
             },
@@ -1826,7 +1722,6 @@ mod tests {
                 role_id: "role-lite".into(),
                 is_active: true,
                 pin: Some("9876".into()),
-                workspace_keys: None,
                 profile: None,
                 assignment: None,
             },
@@ -1845,48 +1740,6 @@ mod tests {
         assert!(st.resolve_session("owner-token").is_ok());
         // The other user's session is completely untouched.
         assert!(st.resolve_session("manager-token").is_ok());
-    }
-
-    #[tokio::test]
-    async fn scoped_update_staff_rolls_back_profile_when_workspace_assignment_fails() {
-        let conn = oz_core::migrations::fresh_db();
-        seed_global_users(&conn);
-        let state =
-            scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
-        let app = tauri::test::mock_builder()
-            .manage(state)
-            .build(tauri::generate_context!())
-            .unwrap();
-
-        let result = update_staff_scoped(
-            "owner-token".into(),
-            UpdateStaffScopedArgs {
-                id: "user-cashier".into(),
-                username: "cashier-updated".into(),
-                display_name: "Cashier Updated".into(),
-                role_id: "role-lite".into(),
-                is_active: true,
-                pin: None,
-                // This key violates the workspace FK and forces the second
-                // database write to fail after the profile transaction.
-                workspace_keys: Some(vec!["missing-workspace".into()]),
-                profile: None,
-                assignment: None,
-            },
-            app.state(),
-        )
-        .await;
-
-        let error = result.expect_err("invalid workspace assignment must fail");
-        assert!(
-            matches!(error, AppError::Internal(message) if message.contains("profile rollback succeeded"))
-        );
-
-        let state = app.state::<AppState>();
-        let db = state.db.lock().await;
-        let user = Store::new(&db).get_user("user-cashier").unwrap().unwrap();
-        assert_eq!(user.username, "cashier");
-        assert_eq!(user.display_name, "Cashier");
     }
 
     #[tokio::test]
@@ -1909,7 +1762,6 @@ mod tests {
                 role_id: "role-lite".into(),
                 is_active: true,
                 pin: Some("12".into()),
-                workspace_keys: None,
                 profile: None,
                 assignment: None,
             },
