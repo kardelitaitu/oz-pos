@@ -27,6 +27,18 @@ This separation keeps roles stable while permissions and scopes grow.
 
 Keep the built-in role set intentionally small. New requirements should normally be handled through permissions, scopes, or custom roles.
 
+### Quick reference for contributors
+
+| Role | Default scope | Can view | Can modify | Main restriction |
+| --- | --- | --- | --- | --- |
+| **Owner** | Entire organization | Everything in the organization | Everything, including billing and ownership actions | Cannot be narrowed by assignment scope. |
+| **Admin** | Entire organization by default | Organization, branches, workspaces, reports, and audit data | Most operational and administrative settings | Cannot transfer ownership, manage billing, or perform irreversible organization actions by default. |
+| **Manager** | Assigned branches and workspaces | Operational data, reports, inventory, and assigned users | Staff and operational workflows within the assigned scope | Cannot manage organization settings, billing, or unassigned branches. |
+| **Staff** | Explicitly assigned branches and workspaces | Assigned operational information | Assigned day-to-day workflows | No user/role management, topology editing, or high-risk actions unless explicitly granted. |
+| **Auditor** | Entire organization, read-only | Business data, reports, configuration, and audit logs | Nothing | Cannot create, update, delete, approve, transact, or administer the organization. |
+
+The Auditor role provides organization-wide visibility without write access. It should never expose credentials, secrets, or other data excluded by the system’s privacy policy.
+
 ### Owner
 
 Full access to the organization, including:
@@ -66,6 +78,18 @@ Operational access only within explicitly assigned branches and workspaces.
 
 Examples include processing sales, viewing KDS orders, and picking or packing warehouse items. Staff should not receive user-management, topology-editor, or high-risk permissions such as unrestricted voids or refunds unless those permissions are explicitly granted.
 
+### Auditor
+
+Read-only visibility across the organization.
+
+- Can view all branches and workspaces.
+- Can view reports, inventory, configuration, and audit logs.
+- Can export data only when an explicit export permission is granted.
+- Cannot create, update, delete, approve, or execute operational transactions.
+- Cannot manage users, roles, billing, ownership, or topology configuration.
+
+The Auditor role is useful for internal controls, compliance reviews, finance review, and external audits. It should be implemented as a permission set, not as a frontend-only restriction.
+
 ### Optional roles for later
 
 These roles do not require a new role model if custom roles are supported:
@@ -87,6 +111,8 @@ org:billing
 org:users.manage
 org:roles.manage
 org:topology.edit
+audit-logs:view
+audit-logs:export
 
 branch:create
 branch:read
@@ -162,7 +188,7 @@ Prefer normalized join tables for permissions and scopes so queries, constraints
 
 ### Authorization and operations
 
-- Seed the four system roles when an organization is created.
+- Seed the five system roles when an organization is created.
 - Allow Owners and authorized Admins to create custom roles.
 - Centralize effective-permission evaluation in a backend authorization service.
 - Cache effective permissions in Redis or memory, with invalidation on role or assignment changes.
@@ -181,6 +207,7 @@ Defer role inheritance until explicit use cases require it. Explicit permission 
 | `ceo` | Admin system role, unless the business needs a genuinely different permission set. |
 | `manager` | Manager role with branch scopes. |
 | `staff` | Staff role with branch and workspace scopes. |
+| `auditor` | Auditor system role with organization-wide read-only scope. |
 
 ## 9. Recommended implementation sequence
 
