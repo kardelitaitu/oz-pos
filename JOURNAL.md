@@ -3817,7 +3817,8 @@ rule; the audit test was run by executing the built harness directly against
 current sources.
 
 **Commits:** `47fcf6a5` (feat: centralized gate + client wrappers), `ef0707e1`
-(test: pinned gated-command census).
+(test: pinned gated-command census), `34464e79` (docs: spec moved to
+`_done`).
 
 **Risks / follow-ups:** the census pins *modules*, not command fns — a new
 command inside an already-pinned module with a gate call changes the count

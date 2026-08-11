@@ -147,4 +147,5 @@ oz-pos-app, oz-pos-tablet · drift guard clean · enforcement sweep: zero
 the gate.
 
 **Commits.** `47fcf6a5` (feat: centralized gate + client wrappers),
-`ef0707e1` (test: pinned gated-command census).
+`ef0707e1` (test: pinned gated-command census), `34464e79` (docs: spec
+moved to `_done`).
