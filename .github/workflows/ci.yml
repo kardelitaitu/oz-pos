@@ -792,13 +792,19 @@ jobs:
       - name: Fuzz tier-1 targets (60s each, no C deps)
         if: steps.gate.outputs.run == 'true'
         run: |
-          for target in sku_parse money_parse; do
+          for target in sku_parse money_parse lua_sandbox; do
             echo "::group::Fuzzing $target"
             # AUDIT-27 CI-03: no `|| true` — fuzz failures surface to the
             # advisory job and trigger the crash-artifact upload below.
             # The target bins are already built above; `cargo fuzz run` only
             # does a seconds-long incremental rebuild, so the 65s cap now
             # bounds the 60s fuzz run itself.
+            #
+            # lua_sandbox MUST actually run, not just build: it was dropped
+            # from this loop as collateral in the 6e7c37b6 tier split and
+            # stayed build-only until round 171 — the stale os-is-nil assert
+            # (round 170's crash class) survived in the versioned target
+            # exactly because CI compiled but never executed it.
             timeout 65 cargo fuzz run "$target" -- -max_total_time=60
             echo "::endgroup::"
           done
