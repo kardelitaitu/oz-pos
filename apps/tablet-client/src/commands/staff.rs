@@ -9,6 +9,7 @@ use tauri::{State, command};
 
 use oz_core::auth::hash_pin;
 use oz_core::db::Store;
+use oz_core::db::profile::{UserProfile, mask_last4};
 use oz_core::permissions;
 use oz_core::{Role, User};
 
@@ -36,9 +37,159 @@ pub struct StaffMemberDto {
     pub role_name: String,
     /// Whether this is active.
     pub is_active: bool,
+    /// National id rendered last-4 masked (ADR #35 D6).
+    pub national_id_masked: String,
+    /// Whether all 8 required profile fields are present.
+    pub is_profile_complete: bool,
 }
 
-fn to_staff_dto(user: &User, roles: &[Role]) -> StaffMemberDto {
+/// The 17 profile fields carried by the staff create/edit IPC args (ADR #35
+/// D6 / spec 0049). All optional on the wire — creation-time mandatory-ness
+/// is enforced by `create_user_with_profile`, and the form blocks submission
+/// before the command is ever called.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct ProfileArgs {
+    /// ISO date (`YYYY-MM-DD`), never in the future.
+    pub date_of_birth: Option<String>,
+    /// Phone in E.164 form.
+    pub phone: Option<String>,
+    /// `"ssn"` or `"nik"`.
+    pub national_id_type: Option<String>,
+    /// National id (ssn 9 / nik 16 digits) — encrypted at rest.
+    pub national_id: Option<String>,
+    /// Lowercase email, unique when present.
+    pub email: Option<String>,
+    /// Monthly take-home pay in i64 minor units — encrypted at rest.
+    pub monthly_take_home_minor: Option<i64>,
+    /// Emergency contact name (required at creation).
+    pub emergency_contact_name: Option<String>,
+    /// Emergency contact phone (required at creation).
+    pub emergency_contact_phone: Option<String>,
+    /// Job title (free text).
+    pub job_title: Option<String>,
+    /// Free-text notes.
+    pub notes: Option<String>,
+    /// Street address.
+    pub address: Option<String>,
+    /// UI language preference.
+    pub language: Option<String>,
+    /// Avatar reference.
+    pub avatar: Option<String>,
+    /// Tax identification number.
+    pub tax_id: Option<String>,
+    /// Expiry of the national id document (`YYYY-MM-DD`).
+    pub national_id_expires_at: Option<String>,
+    /// Relationship of the emergency contact (e.g. "spouse").
+    pub emergency_contact_relationship: Option<String>,
+    /// Hire date (`YYYY-MM-DD`).
+    pub hire_date: Option<String>,
+}
+
+impl ProfileArgs {
+    /// Build the domain [`UserProfile`] (empty strings for the stable slots).
+    pub fn into_profile(self) -> UserProfile {
+        UserProfile {
+            date_of_birth: self.date_of_birth,
+            phone: self.phone,
+            national_id_type: self.national_id_type,
+            national_id: self.national_id,
+            email: self.email,
+            monthly_take_home_minor: self.monthly_take_home_minor,
+            emergency_contact_name: self.emergency_contact_name,
+            emergency_contact_phone: self.emergency_contact_phone,
+            job_title: self.job_title.unwrap_or_default(),
+            notes: self.notes.unwrap_or_default(),
+            address: self.address,
+            language: self.language,
+            avatar: self.avatar,
+            tax_id: self.tax_id,
+            national_id_expires_at: self.national_id_expires_at,
+            emergency_contact_relationship: self.emergency_contact_relationship,
+            hire_date: self.hire_date,
+        }
+    }
+}
+
+/// A staff profile as seen by the caller (ADR #35 D6).
+#[derive(Debug, Serialize)]
+pub struct ProfileViewDto {
+    /// Target user id.
+    pub user_id: String,
+    /// Login username.
+    pub username: String,
+    /// Display name.
+    pub display_name: String,
+    /// ISO date of birth.
+    pub date_of_birth: Option<String>,
+    /// Phone in E.164 form.
+    pub phone: Option<String>,
+    /// `"ssn"` or `"nik"`.
+    pub national_id_type: Option<String>,
+    /// Full national id — present only with `staff:read_identity`.
+    pub national_id: Option<String>,
+    /// Last-4 masked national id — always present.
+    pub national_id_masked: String,
+    /// Lowercase email.
+    pub email: Option<String>,
+    /// Monthly take-home pay — present only with `staff:read_payroll`.
+    pub monthly_take_home_minor: Option<i64>,
+    /// Emergency contact name.
+    pub emergency_contact_name: Option<String>,
+    /// Emergency contact phone.
+    pub emergency_contact_phone: Option<String>,
+    /// Job title.
+    pub job_title: String,
+    /// Free-text notes.
+    pub notes: String,
+    /// Street address.
+    pub address: Option<String>,
+    /// UI language preference.
+    pub language: Option<String>,
+    /// Avatar reference.
+    pub avatar: Option<String>,
+    /// Tax id — present only with `staff:read_identity`.
+    pub tax_id: Option<String>,
+    /// National id document expiry.
+    pub national_id_expires_at: Option<String>,
+    /// Emergency contact relationship.
+    pub emergency_contact_relationship: Option<String>,
+    /// Hire date.
+    pub hire_date: Option<String>,
+    /// Whether all 8 required profile fields are present.
+    pub is_complete: bool,
+}
+
+impl From<oz_core::db::profile::ProfileView> for ProfileViewDto {
+    fn from(view: oz_core::db::profile::ProfileView) -> Self {
+        Self {
+            user_id: String::new(),
+            username: view.username,
+            display_name: view.display_name,
+            date_of_birth: view.date_of_birth,
+            phone: view.phone,
+            national_id_type: view.national_id_type,
+            national_id: view.national_id,
+            national_id_masked: view.national_id_masked,
+            email: view.email,
+            monthly_take_home_minor: view.monthly_take_home_minor,
+            emergency_contact_name: view.emergency_contact_name,
+            emergency_contact_phone: view.emergency_contact_phone,
+            job_title: view.job_title,
+            notes: view.notes,
+            address: view.address,
+            language: view.language,
+            avatar: view.avatar,
+            tax_id: view.tax_id,
+            national_id_expires_at: view.national_id_expires_at,
+            emergency_contact_relationship: view.emergency_contact_relationship,
+            hire_date: view.hire_date,
+            is_complete: view.is_complete,
+        }
+    }
+}
+
+fn to_staff_dto(user: &User, roles: &[Role], profile: Option<&UserProfile>) -> StaffMemberDto {
     let role_name = roles
         .iter()
         .find(|r| r.id == user.role_id)
@@ -51,6 +202,11 @@ fn to_staff_dto(user: &User, roles: &[Role]) -> StaffMemberDto {
         role_id: user.role_id.clone(),
         role_name,
         is_active: user.is_active,
+        national_id_masked: profile
+            .and_then(|p| p.national_id.as_deref())
+            .map(mask_last4)
+            .unwrap_or_else(|| "****".to_string()),
+        is_profile_complete: profile.map(|p| p.is_complete()).unwrap_or(false),
     }
 }
 
@@ -179,6 +335,8 @@ pub struct CreateStaffScopedArgs {
     pub display_name: String,
     /// ID of the associated role.
     pub role_id: String,
+    /// ADR #35 D6 profile fields — creation requires the 9 mandatory fields.
+    pub profile: ProfileArgs,
 }
 
 /// Arguments for updating a staff member from a session token.
@@ -209,6 +367,10 @@ pub struct UpdateStaffScopedArgs {
     /// partial-failure error is returned.
     #[serde(default)]
     pub workspace_keys: Option<Vec<String>>,
+    /// ADR #35 D6 profile fields (validated + encrypted at rest). When
+    /// `Some`, they are written atomically with the user update.
+    #[serde(default)]
+    pub profile: Option<ProfileArgs>,
 }
 
 /// List staff members. Caller identity is resolved from the session token.
@@ -223,8 +385,38 @@ pub async fn list_staff_scoped(
     require_permission_for_user(&store, &session.user_id, permissions::STAFF_READ)?;
     let users = store.list_users()?;
     let roles = store.list_roles()?;
+    let dtos = users
+        .iter()
+        .map(|u| {
+            let profile = store.get_user_profile(&u.id).ok().flatten();
+            to_staff_dto(u, &roles, profile.as_ref())
+        })
+        .collect();
     drop(db);
-    Ok(users.iter().map(|u| to_staff_dto(u, &roles)).collect())
+    Ok(dtos)
+}
+
+/// Load a staff member's full profile as the session user sees it (ADR #35
+/// D6). Sensitive fields are withheld or masked unless the caller holds
+/// `staff:read_identity` / `staff:read_payroll`, and every sensitive read is
+/// audited.
+#[command]
+pub async fn get_staff_profile_scoped(
+    session_token: String,
+    user_id: String,
+    state: State<'_, AppState>,
+) -> Result<ProfileViewDto, AppError> {
+    let session = state.resolve_session(&session_token)?;
+    let db = state.db.lock().await;
+    let store = Store::new(&db);
+    require_permission_for_user(&store, &session.user_id, permissions::STAFF_READ)?;
+    let view = store
+        .get_user_profile_viewed_by(&session.user_id, &user_id)?
+        .ok_or_else(|| AppError::Invalid(format!("no such user: {user_id}")))?;
+    drop(db);
+    let mut dto: ProfileViewDto = view.into();
+    dto.user_id = user_id;
+    Ok(dto)
 }
 
 /// List roles. Caller identity is resolved from the session token.
@@ -334,11 +526,18 @@ pub async fn create_staff_scoped(
     let store = Store::new(&db);
     require_permission_for_user(&store, &session.user_id, permissions::STAFF_CREATE)?;
     enforce_role_assignment_policy(&store, &session.user_id, None, &args.role_id, true)?;
-    let user = store.create_user(&username, &pin_hash, display_name, &args.role_id)?;
+    let profile = args.profile.into_profile();
+    let user = store.create_user_with_profile(
+        &username,
+        &pin_hash,
+        display_name,
+        &args.role_id,
+        &profile,
+    )?;
     let roles = store.list_roles()?;
     drop(db);
 
-    Ok(to_staff_dto(&user, &roles))
+    Ok(to_staff_dto(&user, &roles, Some(&profile)))
 }
 
 /// Update a staff member. Caller identity is resolved from the session token.
@@ -380,13 +579,16 @@ pub async fn update_staff_scoped(
     // restore it if the store-scoped workspace write fails afterwards.
     let previous_profile = {
         let store = Store::new(&db);
-        store.get_user(&args.id)?.map(|u| {
+        let user = store.get_user(&args.id)?;
+        let profile = store.get_user_profile(&args.id)?;
+        user.map(|u| {
             (
                 u.username,
                 u.display_name,
                 u.role_id,
                 u.is_active,
                 u.pin_hash,
+                profile,
             )
         })
     };
@@ -398,6 +600,9 @@ pub async fn update_staff_scoped(
     let (user, roles, pin_rotated) = {
         let tx = db.unchecked_transaction()?;
         let store = Store::new(&tx);
+        // ADR #35 D6 incomplete-profile semantics: assigning a role that
+        // grants sensitive permissions requires a complete profile.
+        store.require_role_assignable(&args.id, &args.role_id)?;
         store.update_user(
             &args.id,
             &args.username,
@@ -405,6 +610,11 @@ pub async fn update_staff_scoped(
             &args.role_id,
             args.is_active,
         )?;
+        // ADR #35 D6: the profile columns (validated, encrypted at rest by
+        // oz-core) follow the same atomic update.
+        if let Some(profile) = &args.profile {
+            store.write_user_profile(&args.id, &profile.clone().into_profile())?;
+        }
 
         // Hash server-side; never accept plaintext beyond the command boundary.
         let pin_rotated = if let Some(pin) = args.pin.as_deref().filter(|p| !p.is_empty()) {
@@ -450,7 +660,7 @@ pub async fn update_staff_scoped(
             // Do not hide a rollback failure behind the original workspace
             // error; operators need to know whether the account is consistent.
             let rollback_result: Result<(), String> =
-                if let Some((username, display_name, role_id, is_active, pin_hash)) =
+                if let Some((username, display_name, role_id, is_active, pin_hash, profile)) =
                     &previous_profile
                 {
                     let db = state.db.lock().await;
@@ -464,10 +674,30 @@ pub async fn update_staff_scoped(
                                 role_id,
                                 *is_active,
                             ) {
-                                Ok(_) => match store.update_user_pin(&args.id, pin_hash) {
-                                    Ok(_) => tx.commit().map_err(|error| error.to_string()),
-                                    Err(error) => Err(error.to_string()),
-                                },
+                                Ok(_) => {
+                                    match store.update_user_pin(&args.id, pin_hash) {
+                                        // Only restore the profile columns when
+                                        // this update actually wrote one — a
+                                        // legacy user's snapshot is all-NULL and
+                                        // would fail validation.
+                                        Ok(_) => match args.profile.is_some() {
+                                            true => match profile
+                                                .as_ref()
+                                                .map(|p| store.write_user_profile(&args.id, p))
+                                            {
+                                                Some(Ok(())) => {
+                                                    tx.commit().map_err(|error| error.to_string())
+                                                }
+                                                Some(Err(error)) => Err(error.to_string()),
+                                                None => {
+                                                    tx.commit().map_err(|error| error.to_string())
+                                                }
+                                            },
+                                            false => tx.commit().map_err(|error| error.to_string()),
+                                        },
+                                        Err(error) => Err(error.to_string()),
+                                    }
+                                }
                                 Err(error) => Err(error.to_string()),
                             }
                         }
@@ -496,7 +726,11 @@ pub async fn update_staff_scoped(
         state.invalidate_user_sessions_except(&args.id, &session_token);
     }
 
-    Ok(to_staff_dto(&user, &roles))
+    let profile = match &args.profile {
+        Some(p) => Some(p.clone().into_profile()),
+        None => previous_profile.and_then(|(_, _, _, _, _, p)| p),
+    };
+    Ok(to_staff_dto(&user, &roles, profile.as_ref()))
 }
 
 // ── Bootstrap first owner (no authentication required) ────────────────
@@ -640,6 +874,8 @@ mod tests {
             role_id: "r1".into(),
             role_name: "Manager".into(),
             is_active: true,
+            national_id_masked: "*****6789".into(),
+            is_profile_complete: true,
         };
         let d = format!("{dto:?}");
         assert!(d.contains("jdoe"));
@@ -656,6 +892,8 @@ mod tests {
             role_id: "r2".into(),
             role_name: "Cashier".into(),
             is_active: false,
+            national_id_masked: "****".into(),
+            is_profile_complete: false,
         };
         let json = serde_json::to_value(&dto).unwrap();
         assert_eq!(json["username"], "asmith");

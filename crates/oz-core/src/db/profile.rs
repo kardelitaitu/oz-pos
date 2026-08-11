@@ -351,17 +351,27 @@ impl Store<'_> {
         let tx = self.conn.unchecked_transaction()?;
         let store = Store::new(&tx);
         let user = store.create_user(username, pin_hash, display_name, role_id)?;
-        store.update_user_profile(&user.id, profile)?;
+        store.write_user_profile(&user.id, profile)?;
         tx.commit()?;
         Ok(user)
     }
 
-    /// Update a user's profile columns (validated). The sensitive fields
-    /// (national id, monthly pay) are encrypted before storage; a
-    /// deterministic hash of the national id preserves the unique-when-
-    /// present invariant. Duplicate email / national id surface as
-    /// field-level conflicts via the unique indexes.
+    /// Update a user's profile columns (validated). Single-statement and
+    /// therefore atomic on its own — safe to call inside an existing
+    /// transaction (no nested BEGIN).
     pub fn update_user_profile(
+        &self,
+        user_id: &str,
+        profile: &UserProfile,
+    ) -> Result<(), CoreError> {
+        self.write_user_profile(user_id, profile)
+    }
+
+    /// The shared profile-column write: validates, encrypts the sensitive
+    /// fields (national id, monthly pay), records the national-id
+    /// uniqueness hash, and issues one UPDATE. Duplicate email / national
+    /// id surface as field-level conflicts via the unique indexes.
+    pub fn write_user_profile(
         &self,
         user_id: &str,
         profile: &UserProfile,
@@ -516,16 +526,24 @@ impl Store<'_> {
         }))
     }
 
-    /// Assign a role, but deny when the target user's profile is
-    /// incomplete and the new role grants any sensitive permission (ADR #35
-    /// D6: management-role assignment and sensitive grants require a
-    /// complete profile). Non-sensitive roles stay assignable so legacy
-    /// incomplete users can keep working at the checkout.
-    pub fn assign_role_guarded(
+    /// Pure gate for [`Store::assign_role_guarded`]: a role that grants
+    /// sensitive permissions cannot be assigned to a user whose profile is
+    /// incomplete (ADR #35 D6). Only fires when the role actually changes —
+    /// re-saving the same role (e.g. editing a name) is not a new grant.
+    /// Transaction-safe — call it before any role write inside an existing
+    /// transaction.
+    pub fn require_role_assignable(
         &self,
         target_user_id: &str,
         new_role_id: &str,
-    ) -> Result<crate::User, CoreError> {
+    ) -> Result<(), CoreError> {
+        let current_role = self
+            .get_user(target_user_id)?
+            .map(|u| u.role_id)
+            .unwrap_or_default();
+        if current_role == new_role_id {
+            return Ok(());
+        }
         let profile =
             self.get_user_profile(target_user_id)?
                 .ok_or_else(|| CoreError::NotFound {
@@ -539,6 +557,20 @@ impl Store<'_> {
                     .into(),
             });
         }
+        Ok(())
+    }
+
+    /// Assign a role, but deny when the target user's profile is
+    /// incomplete and the new role grants any sensitive permission (ADR #35
+    /// D6: management-role assignment and sensitive grants require a
+    /// complete profile). Non-sensitive roles stay assignable so legacy
+    /// incomplete users can keep working at the checkout.
+    pub fn assign_role_guarded(
+        &self,
+        target_user_id: &str,
+        new_role_id: &str,
+    ) -> Result<crate::User, CoreError> {
+        self.require_role_assignable(target_user_id, new_role_id)?;
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         self.conn.execute(
             "UPDATE users SET role_id = ?1, updated_at = ?2 WHERE id = ?3",

@@ -348,6 +348,7 @@ pub fn run() {
             commands::staff::list_roles_scoped,
             commands::staff::create_staff_scoped,
             commands::staff::update_staff_scoped,
+            commands::staff::get_staff_profile_scoped,
             commands::staff::bootstrap_owner,
             commands::categories::list_categories,
             commands::categories::list_categories_scoped,
