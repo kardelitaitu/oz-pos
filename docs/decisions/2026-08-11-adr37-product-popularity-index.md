@@ -1,0 +1,196 @@
+# ADR #37: Product Popularity Index — Weighted Activity Score for Retail Sorting
+
+Date: 2026-08-11
+
+Status: Accepted
+
+## Context
+
+The retail POS product grid (ADR #36) needs a **popularity sort**: order
+products by how popular they are, so the items customers actually want surface
+first. The product owner requested a score driven by three signals: **sold**,
+**searched**, and **edited**. The agreed scope is the full V2 design — all
+three signals blended — not a sales-only v1.
+
+Current state of each signal:
+
+1. **Sold** — durable history already exists. `sale_lines` (sku, qty) joined to
+   `sales` (`status = 'completed'`, created_at) is the authoritative record,
+   and `query_top_products` in `crates/oz-reporting/src/daily_summary.rs`
+   (plus `Store::top_products` in `db/reports.rs`) already aggregates it. No
+   new write path needed for the dominant signal — including historical
+   backfill.
+2. **Searched** — nothing exists. Retail search is client-side filtering
+   (`RetailPosScreen.tsx` searchQuery, `ProductLookupScreen.tsx`), so a search
+   that results in a sale currently leaves no trace. Tracking requires a new
+   event ledger and a light IPC write.
+3. **Edited** — nothing per-product. The audit log (`010_audit_log.sql`) is a
+   generic trail, not a counter. ADR #36 D5 wires the retail edit modal to
+   `update_product_scoped`, which gives a natural hook for an edit event.
+
+Two design hazards drive the formula:
+
+- **Recency.** "Popularity" must mean *recent* popularity. A product that sold
+  1,000 units six months ago and nothing since should not rule the sort.
+- **Small catalogs.** A product with two sales must not outrank a steady
+  1,000-sale seller. Any raw counter is full of flukes at retail catalog
+  scale; the score needs Bayesian-style smoothing toward the catalog mean.
+
+## Decision
+
+### D1 — Score formula: decayed, smoothed, weighted
+
+```
+score = 0.6·Sales′ + 0.3·Search′ + 0.1·Edits′
+```
+
+Each raw component is a **recency-decayed event count** over a 90-day window:
+
+```
+raw_c = Σ_t events(t) × λ^t        t = days ago, λ = 0.93, window = 90 days
+```
+
+- **Sales raw** = units sold per day (`sale_lines.qty`, completed sales only).
+- **Search raw** = acted-upon searches per day (search → product added to cart).
+- **Edits raw** = product edit events per day.
+
+Each component is then **Bayesian-smoothed** toward the catalog mean (the
+IMDb weighted-rating approach):
+
+```
+c′ = (mean_c × m + raw_c × v) / (m + v)     v = contributing event count, m = 5
+```
+
+- **Decay (λ = 0.93/day)** gives ~30 effective days of memory and no window
+  cliff — a product fades out smoothly instead of vanishing when it exits a
+  flat window.
+- **Smoothing (m = 5)** shrinks low-evidence scores toward the catalog mean, so
+  a 2-sale fluke ranks mid-catalog, not #1, until it earns its place. This is
+  the single most important property for a small catalog.
+- **Weights 60/30/10** reflect signal confidence. Sales is the correct dominant
+  signal; search is strong but noisier (raw search counts are polluted by typos
+  and "we don't carry it" lookups, which is why only acted-upon searches count);
+  edits are *operational attention*, not customer popularity, and are
+  deliberately capped at 10% so data cleanup cannot distort the sort.
+
+### D2 — Signal sources
+
+- **Sales**: read from `sale_lines` — it is already the durable, synced ledger.
+  No new sale-event rows; a single-SKU recompute re-aggregates the product's
+  `sale_lines` directly. Backfill is free from existing history.
+- **Search**: new `product_activity` rows with `event_type = 'search'`,
+  emitted only when a product is added to the cart from a **non-empty search**
+  (the `RetailPosScreen` search flow and the `ProductLookupScreen` Stock
+  Inquiry sub-view). Search events fire through a new fire-and-forget command
+  (D3).
+- **Edits**: `product_activity` rows with `event_type = 'edit'`, emitted by the
+  retail product-update path (ADR #36 D5 `update_product_scoped`) in the same
+  transaction.
+
+### D3 — Storage, computation, and IPC
+
+One migration, `133_product_activity.sql` (registered in the `ALL` array,
+unique prefix after 132):
+
+```sql
+CREATE TABLE IF NOT EXISTS product_activity (
+    id         TEXT PRIMARY KEY,
+    sku        TEXT NOT NULL,
+    event_type TEXT NOT NULL CHECK (event_type IN ('search', 'edit')),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_product_activity_sku ON product_activity(sku);
+
+ALTER TABLE products ADD COLUMN popularity_score REAL NOT NULL DEFAULT 0;
+```
+
+- The ledger keeps **history**, the column keeps the **materialized score**:
+  history lets the formula be retuned later without a migration; the column
+  makes sorting O(1) and rides through the existing PERF-08 catalog cache in
+  `ProductDto`.
+- **`popularity.rs`** in `crates/oz-reporting` (beside `query_top_products`):
+  a pure, unit-tested function `compute_score(units_by_day, searches_by_day,
+  edits_by_day, catalog_mean) -> f64` implementing D1.
+- **Recompute strategy:** single-SKU recompute after each contributing event —
+  sale completion (for the sold SKUs), search record, edit record — plus a
+  full-catalog backfill pass on first run and a repair command. Reads are
+  always O(1) per product; writes are a ledger row plus a single-row UPDATE.
+- **New IPC:** `record_product_search_scoped(sessionToken, sku)` in both
+  clients (registered in `lib.rs`) — fire-and-forget, no return payload, must
+  never block or fail the add-to-cart it accompanies. Edit events ride
+  `update_product_scoped` (no new command).
+
+### D4 — Local-only (never synced)
+
+`popularity_score` and `product_activity` are **excluded from cloud sync**.
+Popularity is a per-store sort aid: each store recomputes its sales component
+from its own local `sale_lines`, and search/edit events are local actions. The
+sync surface (ADR #36 D2 touched `SnapshotProduct`) is untouched by this ADR,
+consistent with the cost-residency philosophy — popularity is derived, local,
+and cheap to recompute, so it has no business on the wire.
+
+### D5 — Sort integration
+
+- The retail grid `SortField` union gains **`'popularity'`**.
+  **The default sort on load is popularity descending** (most popular first),
+  with SKU as the tiebreak (deterministic order for equal scores).
+- The existing click-to-sort header behavior is unchanged: clicking any
+  sortable column header (SKU, Stock, Name, Price) switches the sort to that
+  column and toggles its direction on repeat clicks. **Popularity is itself a
+  sortable option in the same control** — first click sorts descending (most
+  popular first, the natural direction), repeat click flips to ascending — so
+  the operator can leave and return to popularity at any time.
+- `ProductDto` carries `popularity_score`; the sort is applied client-side on
+  the cached catalog (PERF-08), matching how the existing sort fields work.
+- A cosmetic 🔥 badge for the top-N popular products is optional and deferred
+  (D6).
+
+### D6 — Explicitly deferred
+
+- Breadth weighting (`× ln(1 + distinct transactions)`) — optional refinement
+  that rewards reach over one-customer bulk; the ledger can support it later.
+- Per-category or per-period popularity, and the demand-forecasting
+  integration (existing research doc) — out of scope.
+- Surfacing the score in analytics exports — the data will be available to the
+  analytics tool through the local store DB (same path as cost, ADR #36 D2).
+
+## Consequences
+
+- The retail grid sorts by meaningful recent popularity from day one: the
+  sales component is backfilled from existing `sale_lines`, while search/edit
+  accumulate from zero.
+- New products get a fair cold start — Bayesian smoothing places them mid-
+  catalog rather than bottom (or a fluky top).
+- Small footprint: one ledger row per search/edit, one single-row score
+  recompute per event, O(1) sort reads. No sync surface change.
+- Edits cannot distort the ranking (10% weight, smoothed).
+
+## Tradeoffs / risks
+
+- **Search IPC is a per-add round trip.** Mitigation: fire-and-forget with
+  errors logged, never surfaced, and never awaited before the cart update; the
+  offline queue is not involved (a dropped event costs one popularity tick).
+- **Decay, window, and weights are opinions.** Mitigation: the ledgers preserve
+  history, so retuning is a formula change in `popularity.rs`, not a migration.
+- **Materialized score can go stale** if a recompute path is missed. Mitigation:
+  exhaustive recompute hooks (sale completion, search, edit, backfill) plus a
+  staleness test that exercises each hook.
+- **Deleted products lose popularity history** (the same caveat already
+  documented for `top_products` in audit/03 REP-13). Accepted — popularity is a
+  live-sort aid, not an archival report.
+
+## Verification
+
+- `popularity.rs`: unit tests for decay math (λ, window edge), Bayesian
+  smoothing (low-evidence shrink toward mean, m boundary), weight blend, empty
+  catalog, single-event catalog.
+- Migration: `product_activity` table + `popularity_score` column exist;
+  registry/filesystem parity and monotonic-prefix tests stay green.
+- Commands: `record_product_search_scoped` writes a ledger row (scoped auth);
+  `update_product_scoped` writes an edit row in the same transaction;
+  `complete_sale` recomputes the sold SKUs' scores; backfill command produces
+  expected scores from seeded `sale_lines`.
+- UI: grid defaults to popularity sort, tiebreaks on SKU, `ProductDto`
+  carries `popularity_score`; add-from-search fires the event (mocked IPC,
+  non-blocking); i18n key for the sort option in both bundles.
+- The single verification pass from ADR #36 covers the combined change.
