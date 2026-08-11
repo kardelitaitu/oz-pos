@@ -33,6 +33,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { minorUnitExponent } from '@/types/domain';
+import { sumRevenueByCurrency } from './revenueTotals';
 import './SalesReportScreen.css';
 
 const PIE_COLORS = [
@@ -95,10 +96,13 @@ export default function SalesReportScreen() {
   const [comparePeriod, setComparePeriod] = useState(false);
   const [prevRevenueData, setPrevRevenueData] = useState<RevenueRow[]>([]);
 
-  const currency: string =
-    revenueData.length > 0
-      ? (revenueData[0] as RevenueRow).currency
-      : 'USD';
+  const revenueTotals = sumRevenueByCurrency(revenueData);
+  const multiCurrencyPeriod = revenueTotals.length > 1;
+  // Single-currency periods keep the exact pre-existing display; the chart
+  // tooltip still uses the first-seen currency (multi-currency chart
+  // semantics are a tracked follow-up, not this fix).
+  const currency: string = revenueTotals[0]?.currency ?? 'USD';
+  const totalRevenue = revenueTotals[0]?.total_minor ?? 0;
 
   const fetchData = useCallback(() => {
     setLoading(true);
@@ -243,11 +247,13 @@ export default function SalesReportScreen() {
     });
   };
 
-  // P9-3: Calculate deltas
-  const prevTotalRevenue = useMemo(
-    () => prevRevenueData.reduce((s: number, r) => s + r.total_minor, 0),
+  // P9-3: Calculate deltas — per-currency, never across a collapsed sum.
+  const prevRevenueTotals = useMemo(
+    () => sumRevenueByCurrency(prevRevenueData),
     [prevRevenueData],
   );
+  const prevTotalRevenue = prevRevenueTotals[0]?.total_minor ?? 0;
+  const prevMultiCurrencyPeriod = prevRevenueTotals.length > 1;
   const prevTotalOrders = useMemo(
     () => prevRevenueData.reduce((s: number, r) => r.sale_count + s, 0),
     [prevRevenueData],
@@ -311,16 +317,16 @@ export default function SalesReportScreen() {
 
   const revenueKey =
     view === 'daily' ? 'date' : view === 'weekly' ? 'week_start' : 'month';
-  const totalRevenue = revenueData.reduce(
-    (s: number, r) => s + r.total_minor,
-    0,
-  );
   const totalOrders = revenueData.reduce(
     (s: number, r) => r.sale_count + s,
     0,
   );
 
-  const revenueDelta = comparePeriod && prevTotalRevenue > 0
+  const canCompareRevenue = comparePeriod
+    && !multiCurrencyPeriod
+    && !prevMultiCurrencyPeriod
+    && prevTotalRevenue > 0;
+  const revenueDelta = canCompareRevenue
     ? ((totalRevenue - prevTotalRevenue) / prevTotalRevenue) * 100
     : null;
   const ordersDelta = comparePeriod && prevTotalOrders > 0
@@ -443,7 +449,9 @@ export default function SalesReportScreen() {
         <div className="sales-report-totals">
           <span>
             <Localized id="sales-report-total-revenue">Total</Localized>:{' '}
-            {fmtCurrency(totalRevenue, currency)}
+            {multiCurrencyPeriod
+              ? revenueTotals.map((t) => fmtCurrency(t.total_minor, t.currency)).join(' · ')
+              : fmtCurrency(totalRevenue, currency)}
             {revenueDelta !== null && (
               <span className={`comparison-delta ${revenueDelta >= 0 ? 'comparison-delta--positive' : 'comparison-delta--negative'}`}>
                 <span>{revenueDelta >= 0 ? '▲' : '▼'}</span>

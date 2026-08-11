@@ -281,6 +281,54 @@ describe('SalesReportScreen', () => {
     });
   });
 
+  // ── REP-02: multi-currency periods never collapse into one total ──
+
+  it('shows per-currency totals when the period spans multiple currencies', async () => {
+    // Backend groups by currency, so a two-currency period arrives as two
+    // rows with DIFFERENT currency codes (audit REP-02: the UI must never
+    // sum minor units across currencies). 10000 USD + 500000 IDR collapsed
+    // and formatted as the first row's currency would read "$5,100.00".
+    mockGetDailyRevenue.mockResolvedValue([
+      buildDailyRevenue({ date: '2026-08-01', total_minor: 10000, currency: 'USD', sale_count: 1 }),
+      buildDailyRevenue({ date: '2026-08-01', total_minor: 500000, currency: 'IDR', sale_count: 2 }),
+    ]);
+    mockGetTopProducts.mockResolvedValue([]);
+    mockGetHourlyHeatmap.mockResolvedValue([]);
+    mockGetCategoryBreakdown.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      // Each currency's total renders in its own currency…
+      expect(screen.getByText(/\$100\.00/)).toBeTruthy();
+      expect(screen.getByText(/IDR 500,000/)).toBeTruthy();
+      // …and the collapsed single total (510000 minor units formatted as
+      // USD) must NOT appear.
+      expect(screen.queryByText(/\$5,100\.00/)).toBeNull();
+    });
+  });
+
+  it('hides the collapsed comparison delta when either period spans currencies', async () => {
+    // Both the current and previous period resolve to the same multi-
+    // currency rows; a single percentage over mixed currencies is
+    // meaningless and must not render.
+    mockGetDailyRevenue.mockResolvedValue([
+      buildDailyRevenue({ date: '2026-08-01', total_minor: 10000, currency: 'USD', sale_count: 1 }),
+      buildDailyRevenue({ date: '2026-08-01', total_minor: 500000, currency: 'IDR', sale_count: 2 }),
+    ]);
+    mockGetTopProducts.mockResolvedValue([]);
+    mockGetHourlyHeatmap.mockResolvedValue([]);
+    mockGetCategoryBreakdown.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByText(/IDR 500,000/)).toBeTruthy();
+    });
+    // Turn period comparison on; the prev-period fetch uses the same mock.
+    fireEvent.click(screen.getByRole('button', { name: 'Compare to previous period' }));
+    await waitFor(() => {
+      // The totals are per-currency; no single % delta over mixed currencies.
+      expect(screen.queryByText(/%/)).toBeNull();
+    });
+  });
+
   it('renders the bar chart and revenue section', async () => {
     resolveDefaultData();
     renderScreen();
