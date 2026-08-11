@@ -90,6 +90,51 @@ export interface StaffMemberDto {
   role_id: string;
   role_name: string;
   is_active: boolean;
+  /** National id rendered last-4 masked (ADR #35 D6) — the full value never
+   * appears in the list payload. */
+  national_id_masked: string;
+  /** Whether all 8 required profile fields are present — incomplete users
+   * are flagged and management-role assignment is gated on this. */
+  is_profile_complete: boolean;
+}
+
+/**
+ * ADR #35 D6 profile fields carried by the staff create/edit IPC args. All
+ * optional on the wire — the form enforces the 9 required fields locally
+ * with field-level errors before submission, and the backend validates
+ * again at creation.
+ */
+export interface ProfileArgs {
+  date_of_birth?: string;
+  phone?: string;
+  national_id_type?: string;
+  national_id?: string;
+  email?: string;
+  monthly_take_home_minor?: number;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  job_title?: string;
+  notes?: string;
+  address?: string;
+  language?: string;
+  avatar?: string;
+  tax_id?: string;
+  national_id_expires_at?: string;
+  emergency_contact_relationship?: string;
+  hire_date?: string;
+}
+
+/**
+ * A staff profile as seen by the caller (ADR #35 D6): full sensitive values
+ * only when the explicit grants are held, national id always last-4 masked,
+ * reads audited by the backend.
+ */
+export interface ProfileViewDto extends ProfileArgs {
+  user_id: string;
+  username: string;
+  display_name: string;
+  national_id_masked: string;
+  is_complete: boolean;
 }
 
 /** A role definition with display name and description. */
@@ -110,6 +155,8 @@ export interface CreateStaffScopedArgs {
   pin: string;
   display_name: string;
   role_id: string;
+  /** ADR #35 D6 profile fields — creation requires the 9 mandatory fields. */
+  profile: ProfileArgs;
 }
 
 /** Arguments for updating a staff member via a session-scoped command. */
@@ -126,6 +173,11 @@ export interface UpdateStaffScopedArgs {
    * update (single IPC call). Omit to leave workspace assignments untouched.
    */
   workspace_keys?: string[];
+  /**
+   * ADR #35 D6 profile fields (validated + encrypted at rest by the backend).
+   * Omit to leave the profile columns untouched.
+   */
+  profile?: ProfileArgs;
 }
 
 /** List all staff members (caller resolved from session token). */
@@ -149,6 +201,17 @@ export const updateStaffScoped = (
   args: UpdateStaffScopedArgs,
 ): Promise<StaffMemberDto> =>
   loggedInvoke<StaffMemberDto>('update_staff_scoped', { sessionToken, args });
+
+/**
+ * Load a staff member's full profile as the session user sees it (ADR #35
+ * D6). Sensitive fields are withheld/masked without the explicit grants and
+ * reads are audited by the backend.
+ */
+export const getStaffProfileScoped = (
+  sessionToken: string,
+  userId: string,
+): Promise<ProfileViewDto> =>
+  loggedInvoke<ProfileViewDto>('get_staff_profile_scoped', { sessionToken, userId });
 
 // ── Session Token (ADR #4 / ADR #7) ───────────────────────────────
 

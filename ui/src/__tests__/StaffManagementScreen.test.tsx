@@ -15,9 +15,28 @@ const SAMPLE_ROLES = [
 ];
 
 const SAMPLE_STAFF = [
-  { id: 'staff-1', username: 'jane', display_name: 'Jane Smith', role_id: 'role-1', role_name: 'owner', is_active: true },
-  { id: 'staff-2', username: 'john', display_name: 'John Doe', role_id: 'role-3', role_name: 'cashier', is_active: false },
+  { id: 'staff-1', username: 'jane', display_name: 'Jane Smith', role_id: 'role-1', role_name: 'owner', is_active: true, national_id_masked: '*****6789', is_profile_complete: true },
+  { id: 'staff-2', username: 'john', display_name: 'John Doe', role_id: 'role-3', role_name: 'cashier', is_active: false, national_id_masked: '****', is_profile_complete: false },
 ];
+
+/** A complete ADR #35 D6 profile as `get_staff_profile_scoped` returns it. */
+const SAMPLE_PROFILE = {
+  user_id: 'staff-2',
+  username: 'john',
+  display_name: 'John Doe',
+  date_of_birth: '1990-05-14',
+  phone: '+14155550123',
+  national_id_type: 'ssn',
+  national_id: '123456789',
+  national_id_masked: '*****6789',
+  email: 'john@example.com',
+  monthly_take_home_minor: 5_000_000,
+  emergency_contact_name: 'Jane',
+  emergency_contact_phone: '+14155550987',
+  job_title: '',
+  notes: '',
+  is_complete: true,
+};
 
 const { invokeMock } = vi.hoisted(() => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -52,6 +71,7 @@ beforeEach(() => {
     if (cmd === 'list_roles_scoped') return Promise.resolve(SAMPLE_ROLES);
     if (cmd === 'create_staff_scoped') return Promise.resolve({ ...SAMPLE_STAFF[0], username: 'newuser' });
     if (cmd === 'update_staff_scoped') return Promise.resolve(SAMPLE_STAFF[0]);
+    if (cmd === 'get_staff_profile_scoped') return Promise.resolve(SAMPLE_PROFILE);
     if (cmd === 'list_all_workspaces_scoped') return Promise.resolve([
       { key: 'restaurant', name: 'Restaurant', description: 'Dine-in service', icon: 'restaurant' },
       { key: 'store', name: 'Retail Store', description: 'Retail counter', icon: 'store' },
@@ -64,6 +84,18 @@ beforeEach(() => {
 
 async function waitForTable() {
   await screen.findByRole('table', { name: /staff members/i });
+}
+
+/** Fill the 8 required profile fields in the add/edit dialog. */
+async function fillRequiredProfile(dialog: HTMLElement) {
+  fireEvent.change(within(dialog).getByLabelText('Date of Birth *'), { target: { value: '1990-05-14' } });
+  fireEvent.change(within(dialog).getByLabelText('Phone *'), { target: { value: '+14155550123' } });
+  fireEvent.change(within(dialog).getByLabelText('National ID Type *'), { target: { value: 'ssn' } });
+  fireEvent.change(within(dialog).getByLabelText('National ID *'), { target: { value: '123456789' } });
+  fireEvent.change(within(dialog).getByLabelText('Email *'), { target: { value: 'new@example.com' } });
+  fireEvent.change(within(dialog).getByLabelText('Monthly Take-Home Pay *'), { target: { value: '5000000' } });
+  fireEvent.change(within(dialog).getByLabelText('Emergency Contact *'), { target: { value: 'Bob' } });
+  fireEvent.change(within(dialog).getByLabelText('Emergency Contact Phone *'), { target: { value: '+14155550987' } });
 }
 
 describe('StaffManagementScreen', () => {
@@ -138,7 +170,11 @@ describe('StaffManagementScreen', () => {
     // Edit John (inactive) and save a profile change.
     const editBtn = screen.getByRole('button', { name: /edit.*john doe/i });
     fireEvent.click(editBtn);
-    const dialog = screen.getByRole('dialog');
+    const dialog = await screen.findByRole('dialog');
+    // ADR #35 D6: the edit form is pre-filled from get_staff_profile_scoped.
+    await waitFor(() => {
+      expect(within(dialog).getByLabelText('Date of Birth *')).toHaveValue('1990-05-14');
+    }, FAST_WAIT);
     fireEvent.change(within(dialog).getByRole('textbox', { name: /display name/i }), { target: { value: 'John D.' } });
     fireEvent.click(within(dialog).getByRole('button', { name: /update/i }));
 
@@ -243,7 +279,10 @@ describe('StaffManagementScreen', () => {
     fireEvent.change(within(dialog).getByPlaceholderText(/enter pin/i), { target: { value: '1234' } });
 
     // Select a role
-    fireEvent.change(within(dialog).getByRole('combobox', { name: /role/i }), { target: { value: 'role-3' } });
+    fireEvent.change(within(dialog).getByRole('combobox', { name: /^role/i }), { target: { value: 'role-3' } });
+
+    // ADR #35 D6: creation requires the 9 mandatory fields.
+    await fillRequiredProfile(dialog);
 
     // Click Create
     fireEvent.click(within(dialog).getByRole('button', { name: /create/i }));
@@ -262,6 +301,58 @@ describe('StaffManagementScreen', () => {
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     }, FAST_WAIT);
+  });
+
+  // ── ADR #35 D6 UI behaviors ────────────────────────────────────
+
+  it('renders the national id masked to last-4 in the list', async () => {
+    renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
+    await waitForTable();
+    expect(screen.getByText('*****6789')).toBeInTheDocument();
+    expect(screen.queryByText('123456789')).not.toBeInTheDocument();
+  });
+
+  it('flags incomplete-profile users with a badge', async () => {
+    renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
+    await waitForTable();
+    // John (staff-2) has is_profile_complete: false.
+    expect(screen.getAllByText(/profile incomplete/i).length).toBeGreaterThan(0);
+  });
+
+  it('disables role and workspace assignment while the profile is incomplete', async () => {
+    renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
+    await waitForTable();
+    fireEvent.click(screen.getByRole('button', { name: /edit.*john doe/i }));
+    const dialog = await screen.findByRole('dialog');
+    await waitFor(() => {
+      expect(within(dialog).getByLabelText('Date of Birth *')).toHaveValue('1990-05-14');
+    }, FAST_WAIT);
+    // Role selector and workspace section are disabled for incomplete
+    // profiles (a disabled fieldset drops its children from the a11y tree,
+    // so assert on the fieldset itself).
+    expect(within(dialog).getByRole('combobox', { name: /^role/i })).toBeDisabled();
+    expect(within(dialog).getByRole('group', { name: /workspace access/i })).toBeDisabled();
+  });
+
+  it('blocks create submission with per-field errors when a required profile field is missing', async () => {
+    renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
+    await waitForTable();
+    fireEvent.click(screen.getByRole('button', { name: /add staff/i }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByRole('textbox', { name: /username/i }), { target: { value: 'newuser' } });
+    fireEvent.change(within(dialog).getByRole('textbox', { name: /display name/i }), { target: { value: 'New User' } });
+    fireEvent.change(within(dialog).getByPlaceholderText(/enter pin/i), { target: { value: '1234' } });
+    fireEvent.change(within(dialog).getByRole('combobox', { name: /^role/i }), { target: { value: 'role-3' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /create/i }));
+
+    // The submit must be blocked and per-field errors shown (localized).
+    await waitFor(() => {
+      expect(within(dialog).getAllByText(/date of birth is required/i).length).toBeGreaterThan(0);
+    }, FAST_WAIT);
+    expect(within(dialog).getAllByText(/email address is required/i).length).toBeGreaterThan(0);
+    expect(invokeMock).not.toHaveBeenCalledWith('create_staff_scoped', expect.anything());
+    // The dialog stays open.
+    expect(within(dialog).getByRole('button', { name: /create/i })).toBeInTheDocument();
   });
 
   it('handles save failure gracefully in add modal', async () => {

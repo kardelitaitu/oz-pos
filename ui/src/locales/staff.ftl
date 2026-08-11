@@ -136,3 +136,55 @@ staff-login-connection-connected = Connected
 staff-login-connection-disconnected = Disconnected
 staff-login-connection-auth = Auth
 staff-login-connection-sync = Sync
+
+# ── ADR #35 D6 user profile (spec 0049) ─────────────────────────────────
+
+staff-col-id = ID
+staff-id-masked-aria = National ID (masked)
+staff-profile-incomplete = Profile incomplete
+staff-profile-incomplete-edit-hint = Complete this member's profile to unlock role and workspace assignment.
+staff-profile-section-label = Profile
+staff-field-dob-label = Date of Birth *
+staff-field-dob-aria = Date of birth (required)
+staff-field-phone-label = Phone *
+staff-field-phone-aria = Phone number (required)
+staff-field-national-id-type-label = National ID Type *
+staff-field-national-id-type-aria = National ID type (required)
+staff-national-id-type-select = Select type
+staff-national-id-type-ssn = SSN (US)
+staff-national-id-type-nik = NIK / KTP (Indonesia)
+staff-field-national-id-label = National ID *
+staff-field-national-id-aria = National ID number (required)
+staff-field-email-label = Email *
+staff-field-email-aria = Email address (required)
+staff-field-pay-label = Monthly Take-Home Pay *
+staff-field-pay-aria = Monthly take-home pay (required)
+staff-field-emergency-name-label = Emergency Contact *
+staff-field-emergency-name-aria = Emergency contact name (required)
+staff-field-emergency-phone-label = Emergency Contact Phone *
+staff-field-emergency-phone-aria = Emergency contact phone (required)
+staff-field-job-title-label = Job Title
+staff-field-job-title-aria = Job title
+staff-field-notes-label = Notes
+staff-field-notes-aria = Notes
+staff-field-address-label = Address
+staff-field-address-aria = Address
+staff-field-tax-id-label = Tax ID
+staff-field-tax-id-aria = Tax ID
+staff-field-hire-date-label = Hire Date
+staff-field-hire-date-aria = Hire date
+
+# Per-field validation errors (localized, shown inline)
+staff-error-dob-required = Date of birth is required.
+staff-error-phone-required = Phone number is required.
+staff-error-national-id-type-required = National ID type is required.
+staff-error-national-id-required = National ID is required.
+staff-error-email-required = Email address is required.
+staff-error-pay-required = Monthly take-home pay is required.
+staff-error-emergency-name-required = Emergency contact name is required.
+staff-error-emergency-phone-required = Emergency contact phone is required.
+staff-error-email-invalid = Enter a valid email address.
+staff-error-phone-invalid = Phone must be in +country number format.
+staff-error-national-id-invalid = National ID must be 9 digits (SSN) or 16 digits (NIK).
+staff-error-pay-invalid = Enter a positive amount.
+staff-error-dob-invalid = Use YYYY-MM-DD format.

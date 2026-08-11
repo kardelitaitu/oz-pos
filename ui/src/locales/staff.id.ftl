@@ -158,3 +158,55 @@ staff-login-connection-auth = Auth
 staff-login-connection-sync = Sinkron
 
 # ── Product Management ──
+
+# ── ADR #35 D6 profil pengguna (spec 0049) ─────────────────────────────
+
+staff-col-id = ID
+staff-id-masked-aria = Nomor identitas (disamarkan)
+staff-profile-incomplete = Profil belum lengkap
+staff-profile-incomplete-edit-hint = Lengkapi profil anggota ini untuk membuka penetapan peran dan workspace.
+staff-profile-section-label = Profil
+staff-field-dob-label = Tanggal Lahir *
+staff-field-dob-aria = Tanggal lahir (wajib)
+staff-field-phone-label = Telepon *
+staff-field-phone-aria = Nomor telepon (wajib)
+staff-field-national-id-type-label = Jenis Nomor Identitas *
+staff-field-national-id-type-aria = Jenis nomor identitas (wajib)
+staff-national-id-type-select = Pilih jenis
+staff-national-id-type-ssn = SSN (AS)
+staff-national-id-type-nik = NIK / KTP (Indonesia)
+staff-field-national-id-label = Nomor Identitas *
+staff-field-national-id-aria = Nomor identitas (wajib)
+staff-field-email-label = Email *
+staff-field-email-aria = Alamat email (wajib)
+staff-field-pay-label = Gaji Bersih Bulanan *
+staff-field-pay-aria = Gaji bersih bulanan (wajib)
+staff-field-emergency-name-label = Kontak Darurat *
+staff-field-emergency-name-aria = Nama kontak darurat (wajib)
+staff-field-emergency-phone-label = Telepon Kontak Darurat *
+staff-field-emergency-phone-aria = Telepon kontak darurat (wajib)
+staff-field-job-title-label = Jabatan
+staff-field-job-title-aria = Jabatan
+staff-field-notes-label = Catatan
+staff-field-notes-aria = Catatan
+staff-field-address-label = Alamat
+staff-field-address-aria = Alamat
+staff-field-tax-id-label = NPWP
+staff-field-tax-id-aria = NPWP
+staff-field-hire-date-label = Tanggal Bergabung
+staff-field-hire-date-aria = Tanggal bergabung
+
+# Error validasi per bidang (dilokalkan, tampil di bawah bidang)
+staff-error-dob-required = Tanggal lahir wajib diisi.
+staff-error-phone-required = Nomor telepon wajib diisi.
+staff-error-national-id-type-required = Jenis nomor identitas wajib diisi.
+staff-error-national-id-required = Nomor identitas wajib diisi.
+staff-error-email-required = Alamat email wajib diisi.
+staff-error-pay-required = Gaji bersih bulanan wajib diisi.
+staff-error-emergency-name-required = Nama kontak darurat wajib diisi.
+staff-error-emergency-phone-required = Telepon kontak darurat wajib diisi.
+staff-error-email-invalid = Masukkan alamat email yang valid.
+staff-error-phone-invalid = Telepon harus dalam format +kode negara nomor.
+staff-error-national-id-invalid = Nomor identitas harus 9 digit (SSN) atau 16 digit (NIK).
+staff-error-pay-invalid = Masukkan jumlah positif.
+staff-error-dob-invalid = Gunakan format YYYY-MM-DD.
