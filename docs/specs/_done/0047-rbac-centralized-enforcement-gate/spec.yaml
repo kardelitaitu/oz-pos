@@ -1,6 +1,6 @@
 id: 0047-rbac-centralized-enforcement-gate
 title: RBAC centralized fail-closed enforcement gate
-status: needs-human-approval
+status: implemented
 owner: OZ-POS maintainers
 implementer: Buffy
 priority: P1
@@ -11,7 +11,7 @@ scope:
   - apps/desktop-client/src/commands/exchange_rates.rs
   - apps/desktop-client/src/commands/*.rs
   - apps/tablet-client/src/commands/*.rs
-  - docs/specs/_active/0047-rbac-centralized-enforcement-gate/
+  - docs/specs/_done/0047-rbac-centralized-enforcement-gate/
 
 problem:
   - Permission enforcement is a per-command `require_permission_for_user(...)`

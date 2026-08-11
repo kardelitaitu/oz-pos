@@ -1,5 +1,9 @@
 # RBAC centralized fail-closed enforcement gate
 
+> **Status: IMPLEMENTED — 2026-08-11.** Shipped in two commits
+> (`47fcf6a5`, `ef0707e1`); moved to `_done/`. See §10 for the completion
+> record. The sections below are the original plan as approved.
+
 ## 1. Decision requested
 
 Introduce the single backend `require_permission(permission)` gate that ADR
@@ -94,3 +98,53 @@ The gate wraps the existing checks; reverting it restores the per-command
 pattern without data or schema impact. The pinned command-set test is the
 canary — if it flags false positives (a gated command that was already
 internal), the list is corrected deliberately, not broadened silently.
+
+## 10. Completion record (2026-08-11)
+
+**What shipped.**
+
+- `Store::require_permission(user_id, required)` in `oz-core` is the single
+  fail-closed authorizer (ADR #35 D3): the 0046 registry is the only
+  vocabulary (unregistered key denies even the `*` Owner grant), and an
+  unknown/inactive user or unresolvable role denies as
+  `CoreError::PermissionDenied` (role-missing is a denial, never `Internal`).
+- Both clients' `authz.rs` became thin wrappers mapping
+  `CoreError::PermissionDenied` to the existing `AppError::PermissionDenied`
+  wire shape — `kind: "permissionDenied"` unchanged, no UI contract change.
+- The tablet's dead role-based `require_permission` (zero callers, a second
+  parallel enforcement path) was removed per §7's "the gate must be the only
+  authorizer".
+- New `apps/desktop-client/tests/gate_audit.rs` pins the full gated-command
+  census of both clients: every command module with its gate-call count and
+  permission keys, bidirectionally. A new command module, a dropped gate
+  call, or a changed key surface fails the suite and forces a deliberate,
+  reviewed pin update. Every gated key resolves through its real constant to
+  `is_registered` (renaming a constant breaks the match arm); raw
+  string-literal permissions at gate call sites are pinned out of existence.
+
+**Deviations from the plan.**
+
+- The census pins at *module* granularity (gate-call count + key surface per
+  file), not per command function: a new command inside an already-pinned
+  module that adds a gate call changes the count and is caught, but one that
+  silently skips the gate has no intent signal for the suite to detect —
+  that remains review's job, documented in the test's module docs.
+- The Red for the census was demonstrated with deliberately corrupted pins
+  (wrong count, missing module), both caught; the registry-linkage assertion
+  was initially written comparing constant names to registry values and
+  self-corrected to resolve names through the real constants.
+- Runnable verification was partially blocked by running app binaries
+  (`oz-pos-app` via another agent's `cargo run`, `oz-pos-tablet` via
+  `tauri dev`); area-scoped `--lib` suites ran normally, and the audit test
+  was executed by running its built harness directly against current
+  sources.
+
+**Verify evidence.** Gate 8/8 (oz-core `db::staff` 50/50) · desktop
+`authz`/`customers`/`exchange_rates` 56/56 · tablet 55/55 · `gate_audit`
+3/3 · `cargo fmt --check` clean · clippy `-D warnings` clean on oz-core,
+oz-pos-app, oz-pos-tablet · drift guard clean · enforcement sweep: zero
+`.authorize()`/`has_permission()` callers in `apps/` and `modules/` outside
+the gate.
+
+**Commits.** `47fcf6a5` (feat: centralized gate + client wrappers),
+`ef0707e1` (test: pinned gated-command census).

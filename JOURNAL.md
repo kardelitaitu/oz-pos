@@ -3816,7 +3816,8 @@ blocked by running app binaries (oz-pos-app running via another agent's
 rule; the audit test was run by executing the built harness directly against
 current sources.
 
-**Commits:** (see git log — feat gate + test census)
+**Commits:** `47fcf6a5` (feat: centralized gate + client wrappers), `ef0707e1`
+(test: pinned gated-command census).
 
 **Risks / follow-ups:** the census pins *modules*, not command fns — a new
 command inside an already-pinned module with a gate call changes the count
