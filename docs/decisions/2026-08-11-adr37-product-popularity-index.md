@@ -61,9 +61,10 @@ IMDb weighted-rating approach):
 c′ = (mean_c × m + raw_c × v) / (m + v)     v = contributing event count, m = 5
 ```
 
-- **Decay (λ = 0.93/day)** gives ~30 effective days of memory and no window
-  cliff — a product fades out smoothly instead of vanishing when it exits a
-  flat window.
+- **Decay (λ = 0.93/day)** gives ≈ 2 weeks of effective memory
+  (1/(1−λ) ≈ 14 days) inside a 90-day hard window, with no window cliff — a
+  product fades out smoothly instead of vanishing when it exits a flat
+  window. At the window edge λ^90 ≈ 0.0015, so truncation loses nothing.
 - **Smoothing (m = 5)** shrinks low-evidence scores toward the catalog mean, so
   a 2-sale fluke ranks mid-catalog, not #1, until it earns its place. This is
   the single most important property for a small catalog.
@@ -127,7 +128,9 @@ Popularity is a per-store sort aid: each store recomputes its sales component
 from its own local `sale_lines`, and search/edit events are local actions. The
 sync surface (ADR #36 D2 touched `SnapshotProduct`) is untouched by this ADR,
 consistent with the cost-residency philosophy — popularity is derived, local,
-and cheap to recompute, so it has no business on the wire.
+and cheap to recompute, so it has no business on the wire. The sync product
+upsert imports only its snapshot columns, so `popularity_score` and
+`product_activity` rows are never transferred or overwritten by a pull.
 
 ### D5 — Sort integration
 
@@ -176,8 +179,9 @@ and cheap to recompute, so it has no business on the wire.
   exhaustive recompute hooks (sale completion, search, edit, backfill) plus a
   staleness test that exercises each hook.
 - **Deleted products lose popularity history** (the same caveat already
-  documented for `top_products` in audit/03 REP-13). Accepted — popularity is a
-  live-sort aid, not an archival report.
+  documented for `top_products` in audit/03 REP-05 — deleting a product
+  erases its historical sales from product-level aggregates). Accepted —
+  popularity is a live-sort aid, not an archival report.
 
 ## Verification
 

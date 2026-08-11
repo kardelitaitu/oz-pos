@@ -118,9 +118,11 @@ because it is read from the local store DB, not the cloud.
 - **Stock total (D1 "total unit"):** the enriched product queries compute
   stock as `SUM(stock_summary.qty)` across all locations for the product
   (`stock_summary` is the canonical per-location ledger since ADR-19),
-  falling back to `0`. The legacy `inventory` LEFT JOIN is replaced. This
-  applies to the retail-facing queries; the Product Management screen is
-  untouched.
+  falling back to `0`. The legacy `inventory` LEFT JOIN is replaced. The query
+  change is shared, so every consumer of the enriched product reads — retail
+  grid, Stock Inquiry, lookup, and the Product Management screen's stock
+  column — shows the location total. "Untouched" for the Product Management
+  screen means no UI/feature changes, not a different stock value.
 - **Foundation DTOs** (`foundation/src/dto.rs`): `CreateProductDto` gains
   `cost_minor: i64` (default 0), `brand`, `rack_location`, `notes`, `unit`
   (Option<String>), `is_active: bool` (default true), `default_supplier_id`
@@ -156,8 +158,8 @@ operator's preferred order:
 - A **hide-inactive filter** in the grid toolbar hides `is_active = 0`
   products by default (status is managed in the Edit modal, D5).
 - The **Stock column shows the total across locations** (D1). Sort remains on
-  the existing four fields; adding brand/cost sort is a cheap follow-up, not a
-  requirement.
+  the existing four fields (a `popularity` sort lands with ADR #37); adding
+  brand/cost sort is a cheap follow-up, not a requirement.
 
 ### D5 — Cost editing surfaces (retail POS only)
 
@@ -233,9 +235,10 @@ shown here — per D4/D5 it is never rendered outside the Add/Edit modals.
 - **Free-text brand/rack** means no autocomplete or referential integrity.
   Accepted: normalized tables are deferred (D7).
 - **Stock-total query change** touches every consumer of the enriched product
-  queries (retail grid, Stock Inquiry, lookup). Risk is low (single shared
-  query shape) but the change is verified by the existing product-query unit
-  tests, updated for the SUM semantics.
+  queries (retail grid, Stock Inquiry, lookup, and the Product Management
+  screen's stock column). Risk is low (single shared query shape) but the
+  change is verified by the existing product-query unit tests, updated for the
+  SUM semantics.
 - **Retail add/edit persistence** changes the contract of two modal flows that
   were intentionally local in demo mode; existing UI tests that assert
   local-state behavior are updated to the scoped-command contract.
