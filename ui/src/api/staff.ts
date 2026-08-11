@@ -18,6 +18,13 @@ export interface LoginSessionDto {
   display_name: string;
   role_name: string;
   role_id: string;
+  /**
+   * Permission keys granted by the user's role, verbatim from the backend
+   * registry (may include the `*` wildcard — use `hasGrantedPermission`
+   * rather than a raw `includes` check). UI gates mirror the backend
+   * instead of role-name strings.
+   */
+  permissions: string[];
 }
 
 /** Result of a successful staff login. */

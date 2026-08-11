@@ -69,6 +69,7 @@ const DEFAULT_SESSION: LoginSessionDto = {
   display_name: 'Alice',
   role_name: 'cashier',
   role_id: 'role-cashier',
+  permissions: [],
 };
 
 function makeWorkspace(overrides: Partial<WorkspaceDto> = {}): WorkspaceDto {

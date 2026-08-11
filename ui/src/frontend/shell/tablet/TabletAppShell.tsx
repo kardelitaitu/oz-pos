@@ -83,20 +83,21 @@ export default function TabletAppShell() {
   }, []);
 
   const userRole = session?.role_name ?? '';
+  const userPermissions = session?.permissions;
 
   const handleNavigate = useCallback((route: string) => {
     const target = getPage(route);
-    if (target && !isPageAccessible(target, userRole)) {
+    if (target && !isPageAccessible(target, userRole, userPermissions)) {
       const accessiblePages = ['pos', 'products', 'sales-history', 'sales-dashboard'];
       const fallback = accessiblePages.find((r) => {
         const p = getPage(r);
-        return p && isPageAccessible(p, userRole);
+        return p && isPageAccessible(p, userRole, userPermissions);
       }) ?? 'products';
       setCurrentRoute(fallback);
       return;
     }
     setCurrentRoute(route);
-  }, [userRole]);
+  }, [userRole, userPermissions]);
 
   const handleComplete = useCallback(async (state: WizardState) => {
     await completeSetup({
@@ -197,13 +198,15 @@ export default function TabletAppShell() {
   // with a dynamic bottom tab bar from workspace_type_screens.
   const pageRegistration = getPage(currentRoute);
   const PageComponent = pageRegistration?.component ?? null;
-  const pageDenied = pageRegistration && !isPageAccessible(pageRegistration, userRole);
+  const pageDenied = pageRegistration && !isPageAccessible(pageRegistration, userRole, userPermissions);
 
   return (
     <TabletAppLayout
       route={currentRoute}
       onNavigate={handleNavigate}
-      {...(featuresLoaded ? { enabledFeatures: enabled, userRole } : { userRole })}
+      {...(featuresLoaded
+        ? { enabledFeatures: enabled, userRole, ...(userPermissions && { permissions: userPermissions }) }
+        : { userRole, ...(userPermissions && { permissions: userPermissions }) })}
       workspaceScreens={workspaceScreens}
     >
       {pageDenied ? (

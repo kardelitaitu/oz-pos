@@ -49,6 +49,13 @@ export interface PageRegistration {
   feature?: string;
   /** Optional role required to access this page. 'manager' includes owner. */
   requiredRole?: RequiredRole;
+  /**
+   * Optional permission key required to access this page (0046 registry,
+   * e.g. `analytics:view`). When set AND the session carries granted keys,
+   * the permission check is authoritative (wildcard-aware); without
+   * permission data (mocks/tests) it falls back to `requiredRole`.
+   */
+  requiredPermission?: string;
   /** Optional SVG icon element for nav items. */
   icon?: React.ReactNode;
   /** When true, the page renders fullscreen without sidebar or topbar. */
@@ -77,15 +84,22 @@ export function getPage(route: string): PageRegistration | undefined {
 }
 
 /**
- * Check whether a page is accessible by the given user role.
- * Returns true if the page has no requiredRole, or the user's role satisfies it.
+ * Check whether a page is accessible by the given user role (and, when the
+ * session carries granted keys, the page's required permission).
+ * Returns true if the page has no gate, or the gate is satisfied.
  */
 export function isPageAccessible(
   registration: PageRegistration | undefined,
   userRole: string | undefined,
+  permissions?: string[],
 ): boolean {
-  if (!registration || !registration.requiredRole) return true;
-  return hasRequiredRole(userRole, registration.requiredRole);
+  if (!registration) return true;
+  return passesGate(
+    registration.requiredRole,
+    registration.requiredPermission,
+    userRole,
+    permissions,
+  );
 }
 
 /**
@@ -103,16 +117,56 @@ export function getAllPages(): PageRegistration[] {
 export function getEnabledPages(
   enabledFeatures?: Set<string>,
   userRole?: string,
+  permissions?: string[],
 ): PageRegistration[] {
   return Array.from(pages.values()).filter((p) => {
     if (p.feature && enabledFeatures && !enabledFeatures.has(p.feature)) {
       return false;
     }
-    if (p.requiredRole && !hasRequiredRole(userRole, p.requiredRole)) {
-      return false;
-    }
-    return true;
+    return passesGate(p.requiredRole, p.requiredPermission, userRole, permissions);
   });
+}
+
+/**
+ * Combined access gate: a registration with `requiredPermission` is
+ * authoritative when the session carries granted keys (wildcard-aware,
+ * mirroring the backend `has_permission`); without permission data it falls
+ * back to `requiredRole`. Registrations with neither gate pass.
+ */
+export function passesGate(
+  requiredRole: RequiredRole | undefined,
+  requiredPermission: string | undefined,
+  userRole: string | undefined,
+  permissions: string[] | undefined,
+): boolean {
+  if (requiredPermission) {
+    if (permissions !== undefined) {
+      return hasGrantedPermission(permissions, requiredPermission);
+    }
+    return requiredRole ? hasRequiredRole(userRole, requiredRole) : true;
+  }
+  if (requiredRole) {
+    return hasRequiredRole(userRole, requiredRole);
+  }
+  return true;
+}
+
+/**
+ * Backend-mirroring permission check (platform-core `has_permission`):
+ * exact key match, the global `*` wildcard, or a `<domain>:*` wildcard.
+ * Never use a raw `Array.includes` on the granted keys — the Owner preset
+ * grants `["*"]`.
+ */
+export function hasGrantedPermission(
+  granted: string[] | undefined,
+  required: string,
+): boolean {
+  if (!granted) return false;
+  const domain = required.includes(':') ? required.split(':')[0]! : required;
+  const wildcardDomain = `${domain}:*`;
+  return granted.some((key) =>
+    key === required || key === '*' || key === wildcardDomain
+  );
 }
 
 /**

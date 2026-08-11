@@ -29,7 +29,7 @@ vi.mock('@/contexts/CurrencyContext', () => ({
 import AnalyticsScreen from '@/features/analytics/AnalyticsScreen';
 import { registerAnalyticsFeature } from '@/features/analytics/register';
 import { registerStaffFeature } from '@/features/staff/register';
-import { getEnabledPages, clearPages } from '@/platform/ui/page-registry';
+import { getEnabledPages, clearPages, hasGrantedPermission } from '@/platform/ui/page-registry';
 import { getNavItems, clearNavItems } from '@/platform/ui/menu-registry';
 
 const summaryRows = [
@@ -144,5 +144,33 @@ describe('analytics page role gate (0046 taxonomy)', () => {
   it('manager-gated pages stay visible to admin (admin is manager-level)', () => {
     const pages = getEnabledPages(undefined, 'admin');
     expect(pages.some((p) => p.route === 'staff')).toBe(true);
+  });
+
+  it('permission gate is authoritative when the session carries granted keys', () => {
+    // A custom staff-role user WITH the grant sees analytics (0046 registry
+    // is the source of truth, not the role name).
+    const granted = getEnabledPages(undefined, 'staff', ['sales:process', 'analytics:view']);
+    expect(granted.some((p) => p.route === 'analytics')).toBe(true);
+    // A manager WITHOUT the grant is denied even though 'management' role
+    // would admit them — the permission check overrides the role fallback.
+    const denied = getEnabledPages(undefined, 'manager', ['sales:process', 'sales:view']);
+    expect(denied.some((p) => p.route === 'analytics')).toBe(false);
+    // Owner's global wildcard satisfies the key.
+    const owner = getEnabledPages(undefined, 'owner', ['*']);
+    expect(owner.some((p) => p.route === 'analytics')).toBe(true);
+    // An explicit empty key list is authoritative (no implicit role grant).
+    const empty = getEnabledPages(undefined, 'owner', []);
+    expect(empty.some((p) => p.route === 'analytics')).toBe(false);
+  });
+});
+
+describe('hasGrantedPermission (backend has_permission mirror)', () => {
+  it('matches exact keys, the global wildcard, and domain wildcards', () => {
+    expect(hasGrantedPermission(['analytics:view'], 'analytics:view')).toBe(true);
+    expect(hasGrantedPermission(['*'], 'analytics:view')).toBe(true);
+    expect(hasGrantedPermission(['analytics:*'], 'analytics:view')).toBe(true);
+    expect(hasGrantedPermission(['sales:*'], 'analytics:view')).toBe(false);
+    expect(hasGrantedPermission(['analytics:view'], 'sales:create')).toBe(false);
+    expect(hasGrantedPermission(undefined, 'analytics:view')).toBe(false);
   });
 });

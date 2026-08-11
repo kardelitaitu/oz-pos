@@ -16,7 +16,7 @@
  */
 
 import type { ReactNode } from 'react';
-import type { RequiredRole } from '@/platform/ui/page-registry';
+import { passesGate, type RequiredRole } from '@/platform/ui/page-registry';
 
 // ── Section names ────────────────────────────────────────────────────
 
@@ -63,6 +63,12 @@ export interface NavItemRegistration {
   feature?: string;
   /** Optional role required to see this nav item. 'manager' includes owner. */
   requiredRole?: RequiredRole;
+  /**
+   * Optional permission key required (0046 registry, e.g. `analytics:view`).
+   * Authoritative when the session carries granted keys; falls back to
+   * `requiredRole` without them. See `passesGate`.
+   */
+  requiredPermission?: string;
   /** Section this nav item belongs to for sidebar grouping. */
   section?: SectionName;
 }
@@ -86,31 +92,14 @@ export function registerNavItem(item: NavItemRegistration): void {
 export function getNavItems(
   enabledFeatures?: Set<string>,
   userRole?: string,
+  permissions?: string[],
 ): NavItemRegistration[] {
   return navItems.filter((item) => {
     if (item.feature && enabledFeatures && !enabledFeatures.has(item.feature)) {
       return false;
     }
-    if (item.requiredRole && !hasNavRole(userRole, item.requiredRole)) {
-      return false;
-    }
-    return true;
+    return passesGate(item.requiredRole, item.requiredPermission, userRole, permissions);
   });
-}
-
-function hasNavRole(userRole: string | undefined, required: RequiredRole): boolean {
-  if (!userRole) return false;
-  const role = userRole.toLowerCase();
-  const isOwner = role === 'owner' || role === 'role-owner';
-  const isAdmin = isOwner || role === 'admin' || role === 'role-admin';
-  const isManager = isAdmin || role === 'manager' || role === 'role-manager';
-  // Legacy 'manager' gate: staff keeps report-level pages (backend grants
-  // Staff REPORTS_VIEW / SHIFTS_VIEW_ANY).
-  const isManagerOrStaff = isManager || role === 'staff' || role === 'role-staff';
-
-  if (required === 'owner') return isOwner;
-  if (required === 'management') return isManager;
-  return isManagerOrStaff;
 }
 
 /**

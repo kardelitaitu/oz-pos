@@ -18,6 +18,8 @@ export interface TabletAppLayoutProps {
   enabledFeatures?: Set<string>;
   /** Current user role for role-based nav filtering. */
   userRole?: string;
+  /** Granted permission keys from the session (0046 registry) for nav filtering. */
+  permissions?: string[];
   /** ADR #4 Phase 3b: workspace type screens for dynamic tab generation.
    *  When provided, the tab bar shows only screens in this list (in order).
    *  When omitted, falls back to the full menu registry. */
@@ -42,13 +44,14 @@ export default function TabletAppLayout({
   children,
   enabledFeatures,
   userRole,
+  permissions,
   workspaceScreens,
 }: TabletAppLayoutProps) {
   const { l10n } = useLocalization();
   // ADR #4 Phase 3b: when workspaceScreens is provided, filter nav items
   // to only those matching the workspace type screens. This creates a
   // dynamic, per-instance tab bar instead of a static one.
-  const allNavItems = getNavItems(enabledFeatures, userRole);
+  const allNavItems = getNavItems(enabledFeatures, userRole, permissions);
   const navItems = workspaceScreens && workspaceScreens.length > 0
     ? allNavItems.filter((item) => workspaceScreens.includes(item.route)).slice(0, 7)
     : allNavItems.slice(0, 7); // max 7 tabs for bottom nav

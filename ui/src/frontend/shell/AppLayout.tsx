@@ -59,6 +59,8 @@ export interface AppLayoutProps {
   enabledFeatures?: Set<string>;
   /** Current user role for role-based nav filtering. */
   userRole?: string;
+  /** Granted permission keys from the session (0046 registry) for nav filtering. */
+  permissions?: string[];
   /** Session token for scoped IPC calls (stock alert bell). */
   sessionToken?: string | null;
 }
@@ -79,10 +81,10 @@ export interface AppLayoutProps {
 /** Routes that render without the top bar (hamburger + store switcher). */
 const ADMIN_ROUTES = new Set(['settings', 'features', 'data-management']);
 
-export default function AppLayout({ route, onNavigate, children, enabledFeatures, userRole, sessionToken }: AppLayoutProps) {
+export default function AppLayout({ route, onNavigate, children, enabledFeatures, userRole, permissions, sessionToken }: AppLayoutProps) {
   const { l10n } = useLocalization();
   const { settings: brandSettings } = useBrand();
-  const navItems = getNavItems(enabledFeatures, userRole);
+  const navItems = getNavItems(enabledFeatures, userRole, permissions);
 
   // ── Sidebar collapse state (persisted to localStorage) ─────
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {

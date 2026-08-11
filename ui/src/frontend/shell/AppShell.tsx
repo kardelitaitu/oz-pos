@@ -310,20 +310,21 @@ export default function AppShell() {
   useWorkspaceNavShortcuts(activeWorkspace, handleBackToPicker);
 
   const userRole = session?.role_name ?? '';
+  const userPermissions = session?.permissions;
 
   const handleNavigate = useCallback((route: AppRoute) => {
     const target = getPage(route);
-    if (target && !isPageAccessible(target, userRole)) {
+    if (target && !isPageAccessible(target, userRole, userPermissions)) {
       const accessiblePages = ['sales', 'products', 'sales-history', 'sales-dashboard'];
       const fallback = accessiblePages.find((r) => {
         const p = getPage(r);
-        return p && isPageAccessible(p, userRole);
+        return p && isPageAccessible(p, userRole, userPermissions);
       }) ?? 'products';
       setCurrentRoute(fallback);
       return;
     }
     setCurrentRoute(route);
-  }, [userRole]);
+  }, [userRole, userPermissions]);
 
   // P12-4: Session lock screen takes precedence over all other views
   if (isLocked && session) {
@@ -402,7 +403,7 @@ export default function AppShell() {
   // Render the current page from the registry, or null if not found.
   const pageRegistration = getPage(currentRoute);
   const PageComponent = pageRegistration?.component ?? null;
-  const pageDenied = pageRegistration && !isPageAccessible(pageRegistration, userRole);
+  const pageDenied = pageRegistration && !isPageAccessible(pageRegistration, userRole, userPermissions);
 
   // Workspace fullscreen — restaurant POS hides the sidebar.
   // KDS is a separate workspace screen, navigated to via the chef button in PosScreen.
@@ -518,7 +519,9 @@ export default function AppShell() {
         route={currentRoute}
         onNavigate={handleNavigate}
         sessionToken={sessionToken}
-        {...(featuresLoaded ? { enabledFeatures: enabled, userRole } : { userRole })}
+        {...(featuresLoaded
+          ? { enabledFeatures: enabled, userRole, ...(userPermissions && { permissions: userPermissions }) }
+          : { userRole, ...(userPermissions && { permissions: userPermissions }) })}
       >
         {pageDenied ? (
           <PermissionDenied

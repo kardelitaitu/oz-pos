@@ -823,6 +823,14 @@ const handlers: Record<string, (args: unknown) => unknown> = {
         display_name: staff.role.charAt(0).toUpperCase() + staff.role.slice(1),
         role_name: staff.role,
         role_id: staff.role === 'owner' ? '1' : staff.role === 'manager' ? '2' : '3',
+        // Granted keys mirror the role presets (Owner = global wildcard;
+        // manager carries analytics:view; staff/cashier does not) so the
+        // dev preview gates on permissions like the real backend.
+        permissions: staff.role === 'owner'
+          ? ['*']
+          : staff.role === 'manager'
+            ? ['sales:process', 'sales:view', 'reports:view', 'analytics:view', 'staff:read']
+            : ['sales:process', 'sales:view'],
       },
       // audit/06 parity: the real backend mints a short-lived picker
       // ticket at login; without it the workspace picker never loads
@@ -834,7 +842,13 @@ const handlers: Record<string, (args: unknown) => unknown> = {
 
   'bootstrap_owner': (_args) => {
     return {
-      session: { user_id: 'owner-1', display_name: 'Owner', role_name: 'owner', role_id: '1' },
+      session: {
+        user_id: 'owner-1',
+        display_name: 'Owner',
+        role_name: 'owner',
+        role_id: '1',
+        permissions: ['*'],
+      },
       // audit/06 parity: the first-owner flow also mints a picker ticket.
       picker_ticket: `mock-picker-owner-1-${Date.now()}`,
     };

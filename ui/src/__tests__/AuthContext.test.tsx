@@ -37,7 +37,7 @@ function TestConsumer() {
       </button>
       <button
         data-testid="swap-btn"
-        onClick={() => swapSession({ display_name: 'Bob', role_name: 'cashier', user_id: 'u2', role_id: 'r2' })}
+        onClick={() => swapSession({ display_name: 'Bob', role_name: 'cashier', user_id: 'u2', role_id: 'r2', permissions: [] })}
       >
         Swap
       </button>
@@ -64,7 +64,7 @@ describe('AuthContext', () => {
 
   it('stores the picker ticket from login and clears it on logout', async () => {
     mockStaffLogin.mockResolvedValue({
-      session: { display_name: 'Alice', role_name: 'cashier', user_id: 'u1', role_id: 'r1' },
+      session: { display_name: 'Alice', role_name: 'cashier', user_id: 'u1', role_id: 'r1', permissions: [] },
       picker_ticket: 'ticket-abc',
     });
     await renderProvider();
@@ -87,7 +87,7 @@ describe('AuthContext', () => {
   it('sets loading=true during login and resolves with session', async () => {
     mockStaffLogin.mockImplementation(
       () => new Promise((resolve) => setTimeout(() => resolve({
-        session: { display_name: 'Alice', role_name: 'manager', user_id: 'u1', role_id: 'r1' },
+        session: { display_name: 'Alice', role_name: 'manager', user_id: 'u1', role_id: 'r1', permissions: ['analytics:view'] },
         picker_ticket: 'ticket-1',
       }), 100)),
     );
@@ -131,7 +131,7 @@ describe('AuthContext', () => {
 
   it('logs out and clears session and error', async () => {
     mockStaffLogin.mockResolvedValue({
-      session: { display_name: 'Alice', role_name: 'cashier', user_id: 'u1', role_id: 'r1' },
+      session: { display_name: 'Alice', role_name: 'cashier', user_id: 'u1', role_id: 'r1', permissions: [] },
       picker_ticket: 'ticket-1',
     });
     await renderProvider();
@@ -148,7 +148,7 @@ describe('AuthContext', () => {
 
   it('isManager=true for manager role', async () => {
     mockStaffLogin.mockResolvedValue({
-      session: { display_name: 'Bob', role_name: 'manager', user_id: 'u2', role_id: 'r2' },
+      session: { display_name: 'Bob', role_name: 'manager', user_id: 'u2', role_id: 'r2', permissions: ['analytics:view'] },
       picker_ticket: 'ticket-2',
     });
     await renderProvider();
@@ -163,7 +163,7 @@ describe('AuthContext', () => {
 
   it('isOwner=true and isManager=true for the backend Owner role name', async () => {
     mockStaffLogin.mockResolvedValue({
-      session: { display_name: 'Eve', role_name: 'Owner', user_id: 'u3', role_id: 'role-owner' },
+      session: { display_name: 'Eve', role_name: 'Owner', user_id: 'u3', role_id: 'role-owner', permissions: ['*'] },
       picker_ticket: 'ticket-3',
     });
     await renderProvider();
@@ -177,7 +177,7 @@ describe('AuthContext', () => {
 
   it('normalizes the backend Manager role name for permission gates', async () => {
     mockStaffLogin.mockResolvedValue({
-      session: { display_name: 'Mia', role_name: 'Manager', user_id: 'u4', role_id: 'role-manager' },
+      session: { display_name: 'Mia', role_name: 'Manager', user_id: 'u4', role_id: 'role-manager', permissions: ['analytics:view'] },
       picker_ticket: 'ticket-4',
     });
     await renderProvider();
@@ -192,7 +192,7 @@ describe('AuthContext', () => {
   describe('swapSession (ADR #6 hot-swap)', () => {
     it('replaces session without changing loading state', async () => {
       mockStaffLogin.mockResolvedValue({
-        session: { display_name: 'Alice', role_name: 'cashier', user_id: 'u1', role_id: 'r1' },
+        session: { display_name: 'Alice', role_name: 'cashier', user_id: 'u1', role_id: 'r1', permissions: [] },
         picker_ticket: 'ticket-1',
       });
       await renderProvider();
@@ -229,7 +229,7 @@ describe('AuthContext', () => {
 
     it('does not call staffLogin API', async () => {
       mockStaffLogin.mockResolvedValue({
-        session: { display_name: 'Alice', role_name: 'cashier', user_id: 'u1', role_id: 'r1' },
+        session: { display_name: 'Alice', role_name: 'cashier', user_id: 'u1', role_id: 'r1', permissions: [] },
         picker_ticket: 'ticket-1',
       });
       await renderProvider();

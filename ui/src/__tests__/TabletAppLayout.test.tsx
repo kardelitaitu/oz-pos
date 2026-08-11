@@ -101,7 +101,7 @@ describe('TabletAppLayout', () => {
 
     renderLayout({ enabledFeatures: features });
 
-    expect(mockGetNavItems).toHaveBeenCalledWith(features, undefined);
+    expect(mockGetNavItems).toHaveBeenCalledWith(features, undefined, undefined);
   });
 
   it('passes userRole to getNavItems', () => {
@@ -109,7 +109,7 @@ describe('TabletAppLayout', () => {
 
     renderLayout({ userRole: 'manager' });
 
-    expect(mockGetNavItems).toHaveBeenCalledWith(undefined, 'manager');
+    expect(mockGetNavItems).toHaveBeenCalledWith(undefined, 'manager', undefined);
   });
 
   it('has tablist role with aria-label', () => {
