@@ -1,6 +1,6 @@
 id: 0048-rbac-assignment-model-and-taxonomy
 title: RBAC assignment model and role taxonomy alignment
-status: needs-human-approval
+status: implemented
 owner: OZ-POS maintainers
 implementer: Buffy
 priority: P1

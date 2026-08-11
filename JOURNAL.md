@@ -4093,3 +4093,14 @@ Remaining risks / follow-ups:
 
 Commits: ea826188 (feat(rbac): assignment write path + DTO surface), 782a6bc0 (feat(rbac): five-role staff screen + assignment editor), 0c32994e (docs)
 Tests: oz-core 1746/1746 (assignments 13, profile 17), desktop 893/893 (staff 41), tablet 429/429 (staff 19), gate_audit 3/3, contract 7/7, staff screen 21/21; fmt/clippy (changed area)/drift/bundle-parity/i18n-lint all clean.
+
+### 2026-08-11 — 0048 closed out to _done
+
+All five cycles (1 schema, 2a taxonomy, 2b gate, 2c retirement, 3
+write path + UI) shipped and verified: oz-core 1746/1746, desktop
+893/893, tablet 429/429, gate_audit 3/3, contract 7/7, screen 21/21,
+fmt/clippy/drift/parity clean. spec.yaml flipped to `implemented`;
+folder moved to `docs/specs/_done/0048-rbac-assignment-model-and-taxonomy`.
+Remaining follow-ups recorded in the cycle-3 entry: the workspace login
+picker still resolves legacy tables (audit/06 territory) and the legacy
+`workspace_keys` arg is now dead UI-side.

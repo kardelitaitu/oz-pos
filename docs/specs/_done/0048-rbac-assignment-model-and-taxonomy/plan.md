@@ -161,6 +161,10 @@ reverting the assignment tables.
 
 ## 10. Progress record (2026-08-11)
 
+Status: **IMPLEMENTED** — all five cycles shipped and verified; the
+acceptance criteria are met (see validation.md). Moved to `_done/` on
+2026-08-11.
+
 ### Cycle 1 — assignment schema + explicit-all scope evaluation (DONE)
 
 - Migration `128_assignments.sql`: `assignments` (user_id PK, role_id,
