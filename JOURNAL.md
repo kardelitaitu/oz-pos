@@ -3614,7 +3614,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verify:** gate files 60/60 (i18nBundle 19/19 incl. new gate test) · **full UI 280 files / 4,830 tests (+7)** · typecheck ✓ · eslint 0 errors · `lint:i18n.sh` clean end-to-end · drift guard clean.
 
-**Commits:** (to be back-filled)
+**Commits:** `9ed6d636` (feat(i18n): gate localized attrs against id translations, fix 6)
 
 **Deliberately NOT done:** no en-missing-attribute check (a site localizing an attribute NEITHER bundle defines — the round-164 journal's noted gap — is a site-side bug, still open); no value/attribute-shape parity beyond presence (a message whose en side is value-only but id side is attribute-only, or vice versa, is only caught when a site localizes the attribute — the shape mismatch without a site is dead translation text, harmless); no check that attribute VALUES in id use only en-declared vars (the round-165 drift scan already covers var names in attributes present in both).
 
