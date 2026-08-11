@@ -213,6 +213,7 @@ export default function TabletAppShell() {
         <PermissionDenied
           action={pageRegistration?.label ?? ''}
           requiredRole={pageRegistration?.requiredRole ?? ''}
+          requiredPermission={pageRegistration?.requiredPermission}
         />
       ) : PageComponent ? (
         <LazyBoundary>

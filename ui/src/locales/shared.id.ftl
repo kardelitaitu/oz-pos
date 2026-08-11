@@ -123,6 +123,8 @@ locale-id = Bahasa Indonesia
 # Permission denied
 permission-denied-title = Akses Ditolak
 permission-denied-desc = { $action } memerlukan peran { $requiredRole }.
+permission-denied-perm-desc = Anda tidak memiliki izin untuk mengakses { $action }.
+permission-denied-perm-key = (izin yang diperlukan: { $permission })
 permission-denied-current = Anda masuk sebagai { $displayName } ({ $roleName }).
 permission-denied-go-back = Kembali
 

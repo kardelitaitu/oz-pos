@@ -4335,3 +4335,29 @@ Tests: platform-core 237, modules-staff 12 (permission_keys 3), desktop
 auth+staff 56, tablet auth+staff 29, gate_audit 3, wiring_audit 6; UI
 AnalyticsScreen 9 (gate + hasGrantedPermission) + shells/auth/workspace 77;
 typecheck 0, fmt/clippy/drift/i18n-parity clean.
+
+### 2026-08-11 — Permission-aware PermissionDenied screen
+
+Problem: after the session began carrying granted permission keys (0046),
+the analytics page (and any future permission-gated page) was refused by a
+`PermissionDenied` screen that only said "X requires a <role> role". That
+was misleading — the real gate is the registry grant, not the role name,
+and a custom role could be denied despite a manager-level role name.
+
+Solution: `PermissionDenied` accepts an optional `requiredPermission`. When
+set, it reports "You don't have permission to access {action}" and shows
+the raw key (e.g. `analytics:view`) as a muted mono diagnostic line so an
+admin can see exactly which grant is missing; without it, the original
+role message renders unchanged. Both shells pass the page registration's
+`requiredPermission` through. New `permission-denied-perm-desc` /
+`permission-denied-perm-key` strings in both shared bundles (parity clean);
+the key line uses the existing `permission-denied-key` class (screenExtraction
+clean). The prop is declared `string | undefined` to satisfy
+exactOptionalPropertyTypes when a page registration has no key.
+
+Red-first: the new test asserted the permission message + key line render
+and the role message is absent, and failed before the component change.
+
+Commits: pending
+Tests: PermissionDenied 10, screenExtraction 138, full UI 4890/4890 (285
+files); typecheck 0, fmt/clippy/drift/i18n-parity clean.

@@ -7,14 +7,22 @@ interface PermissionDeniedProps {
   action: string;
   /** The minimum role required (e.g. "Manager" or "Owner"). */
   requiredRole: string;
+  /**
+   * Optional permission key that was required (0046 registry, e.g.
+   * `analytics:view`). When set, the screen reports the missing permission
+   * instead of a role — the real gate is the registry grant.
+   * `| undefined` permits passing an absent page registration's key.
+   */
+  requiredPermission?: string | undefined;
   /** Optional: called when the user dismisses the screen. */
   onDismiss?: () => void;
 }
 
 /**
  * Friendly error screen shown when a cashier tries a manager-only action.
+ * Permission-gated pages (e.g. analytics:view) report the missing key.
  */
-export default function PermissionDenied({ action, requiredRole, onDismiss }: PermissionDeniedProps) {
+export default function PermissionDenied({ action, requiredRole, requiredPermission, onDismiss }: PermissionDeniedProps) {
   const { session } = useAuth();
 
   return (
@@ -31,11 +39,27 @@ export default function PermissionDenied({ action, requiredRole, onDismiss }: Pe
           <Localized id="permission-denied-title">Access Denied</Localized>
         </h2>
 
-        <p className="permission-denied-desc">
-          <Localized id="permission-denied-desc" vars={{ action, requiredRole }}>
-            <span><strong>{action}</strong> requires a <strong>{requiredRole}</strong> role.</span>
-          </Localized>
-        </p>
+        {requiredPermission ? (
+          <p className="permission-denied-desc">
+            <Localized id="permission-denied-perm-desc" vars={{ action }}>
+              <span>You don&apos;t have permission to access <strong>{action}</strong>.</span>
+            </Localized>
+          </p>
+        ) : (
+          <p className="permission-denied-desc">
+            <Localized id="permission-denied-desc" vars={{ action, requiredRole }}>
+              <span><strong>{action}</strong> requires a <strong>{requiredRole}</strong> role.</span>
+            </Localized>
+          </p>
+        )}
+
+        {requiredPermission && (
+          <p className="permission-denied-key">
+            <Localized id="permission-denied-perm-key" vars={{ permission: requiredPermission }}>
+              <span>(required permission: {requiredPermission})</span>
+            </Localized>
+          </p>
+        )}
 
         {session && (
           <p className="permission-denied-current">

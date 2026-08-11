@@ -140,6 +140,8 @@ modal-close-aria = Close dialog
 # Permission Denied
 permission-denied-title = Access Denied
 permission-denied-desc = { $action } requires a { $requiredRole } role.
+permission-denied-perm-desc = You don't have permission to access { $action }.
+permission-denied-perm-key = (required permission: { $permission })
 permission-denied-current = You are logged in as { $displayName } ({ $roleName }).
 permission-denied-go-back = Go back
 

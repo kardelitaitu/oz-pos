@@ -505,6 +505,7 @@ export default function AppShell() {
       <PermissionDenied
         action={pageRegistration!.label}
         requiredRole={pageRegistration!.requiredRole!}
+        requiredPermission={pageRegistration!.requiredPermission}
       />
     ) : PageComponent ? (
       <LazyBoundary>
@@ -527,6 +528,7 @@ export default function AppShell() {
           <PermissionDenied
             action={pageRegistration!.label}
             requiredRole={pageRegistration!.requiredRole!}
+            requiredPermission={pageRegistration!.requiredPermission}
           />
         ) : PageComponent ? (
           <LazyBoundary>
