@@ -9,10 +9,10 @@
 export PYTHONHASHSEED=0
 
 # Git for Windows/MSYS hooks can inherit fragile pipe handles from GUI clients
-# and agent shells. Keep hook-triggered rebuilds sequential by default there;
-# explicit GRAPHIFY_MAX_WORKERS still wins for users who want parallelism.
+# and agent shells. Override the default (1) to use more cores on machines
+# with high thread counts; explicit GRAPHIFY_MAX_WORKERS still wins.
 if [ -n "${WINDIR:-}" ] || [ -n "${MSYSTEM:-}" ]; then
-    export GRAPHIFY_MAX_WORKERS="${GRAPHIFY_MAX_WORKERS:-1}"
+    export GRAPHIFY_MAX_WORKERS="${GRAPHIFY_MAX_WORKERS:-16}"
 fi
 
 # Skip during rebase/merge/cherry-pick to avoid blocking --continue with unstaged changes
@@ -205,16 +205,25 @@ else:
 # Run codebase memory indexing in the background for supported subdirectories.
 # Uses the CLI directly (MCP-invoked indexing does not reliably handle all folder types).
 # Note: ui/src is indexed per-subfolder because the full directory is too large for one pass.
+#
+# Performance tuning for high core-count machines:
+#   RAYON_NUM_THREADS — controls the CBM indexer's internal Rust thread pool per process.
+#   All 14 projects are launched in parallel (&), so total threads in flight = 14 x RAYON_NUM_THREADS.
+#   With a 32-thread CPU, 4 threads per process (14 x 4 = 56 logical threads) is a good balance
+#   that keeps the system responsive without thrashing. Raise to 8 if you want maximum speed.
+export RAYON_NUM_THREADS="${RAYON_NUM_THREADS:-4}"
+
 _CBM_EXE="C:/Users/Dika/AppData/Local/Programs/codebase-memory-mcp/codebase-memory-mcp.exe"
 _REPO_ROOT="C:/My Script/oz-pos"
 
 if [ -f "$_CBM_EXE" ]; then
     # Index backend Rust crates and other top-level source dirs
+    # Using 'full' mode: adds semantic/similarity edges for smarter search_graph results.
     for _DIR in crates apps platform modules foundation gateway; do
         if [ -d "$_REPO_ROOT/$_DIR" ]; then
             "$_CBM_EXE" cli index_repository \
                 --repo-path "$_REPO_ROOT/$_DIR" \
-                --mode moderate \
+                --mode full \
                 --name "oz-pos-$_DIR" >/dev/null 2>&1 &
         fi
     done
@@ -223,7 +232,7 @@ if [ -f "$_CBM_EXE" ]; then
         if [ -d "$_REPO_ROOT/ui/src/$_UIDIR" ]; then
             "$_CBM_EXE" cli index_repository \
                 --repo-path "$_REPO_ROOT/ui/src/$_UIDIR" \
-                --mode moderate \
+                --mode full \
                 --name "oz-pos-ui-$_UIDIR" >/dev/null 2>&1 &
         fi
     done
