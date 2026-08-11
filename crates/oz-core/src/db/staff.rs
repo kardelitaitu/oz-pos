@@ -626,11 +626,16 @@ mod tests {
 
     fn seed_users(conn: &Connection) {
         store(conn).seed_default_roles().unwrap();
+        // role-lite: a narrow custom role (sales:view only) standing in for
+        // the retired cashier role � the gate tests below pin its LIMITED
+        // grants (view yes, void no), which role-staff no longer provides.
         conn.execute_batch(
-            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
-                ('user-1', 'alice',   'hash_alice',   'Alice',   'role-cashier', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
-                ('user-2', 'bob',     'hash_bob',     'Bob',     'role-owner',   1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
-                ('user-3', 'carol',   'hash_carol',   'Carol',   'role-cashier', 0, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-lite', 'Lite', 'Limited sales view', '[\"sales:view\"]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
+                ('user-1', 'alice',   'hash_alice',   'Alice',   'role-lite',   1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
+                ('user-2', 'bob',     'hash_bob',     'Bob',     'role-owner',  1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
+                ('user-3', 'carol',   'hash_carol',   'Carol',   'role-lite',   0, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
         ).unwrap();
     }
 
@@ -984,30 +989,23 @@ mod tests {
         let conn = fresh();
         seed_roles(&conn);
         let roles = store(&conn).list_roles().unwrap();
-        assert_eq!(roles.len(), 8);
-        // Ordered by name: admin, auditor, cashier, custom, kitchen, manager,
-        // owner, staff.
+        assert_eq!(roles.len(), 6);
+        // Ordered by name: admin, auditor, custom, manager, owner, staff.
         assert_eq!(roles[0].name, "Admin");
         assert_eq!(roles[0].id, "role-admin");
         assert_eq!(roles[1].name, "Auditor");
         assert_eq!(roles[1].id, "role-auditor");
-        assert_eq!(roles[2].name, "Cashier");
-        assert_eq!(roles[2].id, "role-cashier");
-        assert_eq!(roles[3].name, "Custom");
-        assert_eq!(roles[3].id, "role-custom");
-        assert_eq!(roles[3].permissions, "[]");
-        assert_eq!(roles[4].name, "Kitchen");
-        assert_eq!(roles[4].id, "role-kitchen");
-        assert!(roles[4].permissions.contains("kds:view"));
-        assert!(roles[4].permissions.contains("kds:update"));
-        assert_eq!(roles[5].name, "Manager");
-        assert_eq!(roles[5].id, "role-manager");
-        assert_eq!(roles[6].name, "Owner");
-        assert_eq!(roles[6].id, "role-owner");
-        assert_eq!(roles[7].name, "Staff");
-        assert_eq!(roles[7].id, "role-staff");
-        assert!(!roles[7].permissions.contains("settings:read"));
-        assert!(!roles[7].permissions.contains("settings:edit"));
+        assert_eq!(roles[2].name, "Custom");
+        assert_eq!(roles[2].id, "role-custom");
+        assert_eq!(roles[2].permissions, "[]");
+        assert_eq!(roles[3].name, "Manager");
+        assert_eq!(roles[3].id, "role-manager");
+        assert_eq!(roles[4].name, "Owner");
+        assert_eq!(roles[4].id, "role-owner");
+        assert_eq!(roles[5].name, "Staff");
+        assert_eq!(roles[5].id, "role-staff");
+        assert!(!roles[5].permissions.contains("settings:read"));
+        assert!(!roles[5].permissions.contains("settings:edit"));
     }
 
     #[test]
@@ -1122,7 +1120,7 @@ mod tests {
         let u = store(&conn).get_user("user-1").unwrap().unwrap();
         assert_eq!(u.username, "alice");
         assert_eq!(u.display_name, "Alice");
-        assert_eq!(u.role_id, "role-cashier");
+        assert_eq!(u.role_id, "role-lite");
         assert!(u.is_active);
     }
 
@@ -1163,11 +1161,11 @@ mod tests {
         let conn = fresh();
         seed_roles(&conn);
         let u = store(&conn)
-            .create_user("diana", "hash_diana", "Diana", "role-cashier")
+            .create_user("diana", "hash_diana", "Diana", "role-staff")
             .unwrap();
         assert_eq!(u.username, "diana");
         assert_eq!(u.display_name, "Diana");
-        assert_eq!(u.role_id, "role-cashier");
+        assert_eq!(u.role_id, "role-staff");
         assert!(u.is_active);
         assert!(!u.id.is_empty());
     }
@@ -1177,7 +1175,7 @@ mod tests {
         let conn = fresh();
         seed_roles(&conn);
         let err = store(&conn)
-            .create_user("", "hash", "Diana", "role-cashier")
+            .create_user("", "hash", "Diana", "role-staff")
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "username"));
     }
@@ -1187,7 +1185,7 @@ mod tests {
         let conn = fresh();
         seed_roles(&conn);
         let err = store(&conn)
-            .create_user("diana", "hash", "   ", "role-cashier")
+            .create_user("diana", "hash", "   ", "role-staff")
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "display_name"));
     }
@@ -1221,7 +1219,7 @@ mod tests {
         let conn = fresh();
         seed_users(&conn);
         let updated = store(&conn)
-            .update_user("user-1", "alice", "Alice", "role-cashier", false)
+            .update_user("user-1", "alice", "Alice", "role-staff", false)
             .unwrap();
         assert!(!updated.is_active);
     }
@@ -1240,7 +1238,7 @@ mod tests {
         let conn = fresh();
         seed_users(&conn);
         let err = store(&conn)
-            .update_user("user-1", "alice", "", "role-cashier", true)
+            .update_user("user-1", "alice", "", "role-staff", true)
             .unwrap_err();
         assert!(matches!(err, CoreError::Validation { field, .. } if field == "display_name"));
     }
@@ -1268,7 +1266,7 @@ mod tests {
         let conn = fresh();
         seed_roles(&conn);
         let u = store(&conn)
-            .create_user("ALICE_UPPER", "hash", "Alice Upper", "role-cashier")
+            .create_user("ALICE_UPPER", "hash", "Alice Upper", "role-staff")
             .unwrap();
         assert_eq!(u.username, "alice_upper", "username should be lowercased");
     }
@@ -1278,7 +1276,7 @@ mod tests {
         let conn = fresh();
         seed_roles(&conn);
         let u = store(&conn)
-            .create_user("MiXeDcAsE", "hash", "Mixed", "role-cashier")
+            .create_user("MiXeDcAsE", "hash", "Mixed", "role-staff")
             .unwrap();
         assert_eq!(u.username, "mixedcase");
     }
@@ -1288,7 +1286,7 @@ mod tests {
         let conn = fresh();
         seed_roles(&conn);
         store(&conn)
-            .create_user("CASE_USER", "hash", "Case User", "role-cashier")
+            .create_user("CASE_USER", "hash", "Case User", "role-staff")
             .unwrap();
         // Lookup with the normalized (lowercase) form should find it.
         let u = store(&conn)

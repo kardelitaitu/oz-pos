@@ -122,10 +122,6 @@ pub mod builtin_roles {
     pub const OWNER: &str = "role-owner";
     /// Manager — can manage products, categories, and view reports.
     pub const MANAGER: &str = "role-manager";
-    /// Cashier — can process sales and manage the daily register.
-    pub const CASHIER: &str = "role-cashier";
-    /// Kitchen — can view and update KDS orders.
-    pub const KITCHEN: &str = "role-kitchen";
     /// Staff — operational role with Manager-level access minus settings.
     pub const STAFF: &str = "role-staff";
     /// Custom — fully flexible role with no preset permissions.

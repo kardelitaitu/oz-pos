@@ -61,7 +61,7 @@ pub struct LoginSession {
     pub user_id: String,
     /// Display name shown on the UI.
     pub display_name: String,
-    /// Role name (e.g. "owner", "manager", "cashier").
+    /// Role name (e.g. "owner", "manager", "staff").
     pub role_name: String,
     /// Role id.
     pub role_id: String,
@@ -120,14 +120,14 @@ mod tests {
         let session = LoginSession {
             user_id: "u1".into(),
             display_name: "Alice".into(),
-            role_name: "cashier".into(),
-            role_id: "role-cashier".into(),
+            role_name: "staff".into(),
+            role_id: "role-staff".into(),
         };
         let json = serde_json::to_string(&session).unwrap();
         let back: LoginSession = serde_json::from_str(&json).unwrap();
         assert_eq!(back.user_id, "u1");
         assert_eq!(back.display_name, "Alice");
-        assert_eq!(back.role_name, "cashier");
+        assert_eq!(back.role_name, "staff");
     }
 
     #[test]
@@ -164,13 +164,13 @@ mod tests {
         let session = LoginSession {
             user_id: "u1".into(),
             display_name: "Alice".into(),
-            role_name: "cashier".into(),
-            role_id: "role-cashier".into(),
+            role_name: "staff".into(),
+            role_id: "role-staff".into(),
         };
         let json = serde_json::to_value(&session).unwrap();
         assert_eq!(json["user_id"], "u1");
         assert_eq!(json["display_name"], "Alice");
-        assert_eq!(json["role_name"], "cashier");
-        assert_eq!(json["role_id"], "role-cashier");
+        assert_eq!(json["role_name"], "staff");
+        assert_eq!(json["role_id"], "role-staff");
     }
 }

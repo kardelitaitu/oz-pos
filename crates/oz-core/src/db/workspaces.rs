@@ -1241,8 +1241,8 @@ mod tests {
         // for stock-keeping is 'warehouse', not 'inventory'.
         assert!(ws.iter().any(|w| w.key == "warehouse"));
         assert!(ws.iter().any(|w| w.key == "admin"));
-        // ADR #35 D5 (migration 128): 'retail-pos' is the cashier workspace
-        // that role-cashier users fold into as Staff assignments.
+        // ADR #35 D5 (migration 128): 'retail-pos' is the legacy cashier
+        // workspace that role-cashier users fold into as Staff assignments.
         assert!(ws.iter().any(|w| w.key == "retail-pos"));
         let kds = ws.iter().find(|w| w.key == "kds").unwrap();
         assert_eq!(kds.name, "Kitchen Display");

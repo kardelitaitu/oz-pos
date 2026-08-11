@@ -852,7 +852,7 @@ mod tests {
     #[tokio::test]
     async fn create_user_returns_201() {
         let token = auth::create_token("test", Some(1), None).unwrap();
-        let body = r#"{"username":"newstaff","pin_hash":"abc123","display_name":"New Staff","role_id":"role-cashier"}"#;
+        let body = r#"{"username":"newstaff","pin_hash":"abc123","display_name":"New Staff","role_id":"role-staff"}"#;
         let req = auth_post_json("/api/v1/users", &token.token, body);
         let resp = test_app_with_roles().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::CREATED);
@@ -876,7 +876,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_user_requires_auth() {
-        let body = r#"{"username":"staff","pin_hash":"hash","display_name":"Staff","role_id":"role-cashier"}"#;
+        let body = r#"{"username":"staff","pin_hash":"hash","display_name":"Staff","role_id":"role-staff"}"#;
         let req = post_json("/api/v1/users", body);
         let resp = test_app_with_roles().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);

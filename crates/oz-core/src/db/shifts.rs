@@ -438,9 +438,9 @@ mod tests {
     fn seed_user(conn: &Connection) {
         conn.execute_batch(
             "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
-                ('role-cashier', 'cashier', 'Cashier', '[]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+                ('role-staff', 'staff', 'Staff', '[]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
              INSERT INTO users (id, username, pin_hash, display_name, role_id, created_at, updated_at) VALUES
-                ('user-1', 'alice', 'hash', 'Alice', 'role-cashier', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
+                ('user-1', 'alice', 'hash', 'Alice', 'role-staff', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
         ).unwrap();
     }
 

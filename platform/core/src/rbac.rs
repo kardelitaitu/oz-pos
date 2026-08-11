@@ -51,7 +51,7 @@ pub struct AuthorizationError {
 /// what actions they can perform in the POS.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Role {
-    /// Unique identifier (UUID or short slug like "role-cashier").
+    /// Unique identifier (UUID or short slug like "role-custom").
     pub id: String,
     /// Human-readable name (e.g. "Owner", "Manager", "Cashier").
     pub name: String,
@@ -271,11 +271,8 @@ pub mod builtin_roles {
     pub const ADMIN: &str = "role-admin";
     /// Auditor — global, read-only.
     pub const AUDITOR: &str = "role-auditor";
-    /// Cashier — can process sales and manage the daily register.
-    pub const CASHIER: &str = "role-cashier";
-    /// Kitchen — can view and update KDS orders.
-    pub const KITCHEN: &str = "role-kitchen";
     /// Staff — operational role with Manager-level access minus settings.
+    /// The retired cashier/kitchen roles fold into Staff (migration 129).
     pub const STAFF: &str = "role-staff";
     /// Custom — fully flexible role with no preset permissions.
     pub const CUSTOM: &str = "role-custom";
@@ -405,40 +402,6 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::TERMINALS_DELETE,
             permissions::KDS_VIEW,
             permissions::KDS_UPDATE,
-        ],
-    },
-    RolePreset {
-        id: builtin_roles::CASHIER,
-        name: "Cashier",
-        description: "Can process sales and manage the daily register.",
-        permissions: &[
-            permissions::SALES_PROCESS,
-            permissions::SALES_VIEW,
-            permissions::SALES_DISCOUNT,
-            permissions::SALES_SPLIT,
-            permissions::PAYMENTS_CASH,
-            permissions::PAYMENTS_CARD,
-            permissions::CUSTOMERS_CREATE,
-            permissions::CUSTOMERS_VIEW,
-            permissions::LOYALTY_VIEW,
-            permissions::LOYALTY_EARN,
-            permissions::LOYALTY_REDEEM,
-            permissions::DISCOUNTS_APPLY,
-            permissions::INVENTORY_VIEW,
-            permissions::SHIFTS_OPEN,
-            permissions::SHIFTS_CLOSE,
-            permissions::WORKSPACES_SWITCH,
-        ],
-    },
-    RolePreset {
-        id: builtin_roles::KITCHEN,
-        name: "Kitchen",
-        description: "Can view and update KDS orders and manage the order queue.",
-        permissions: &[
-            permissions::KDS_VIEW,
-            permissions::KDS_UPDATE,
-            permissions::SALES_VIEW,
-            permissions::WORKSPACES_SWITCH,
         ],
     },
     RolePreset {
@@ -641,47 +604,72 @@ mod preset_tests {
     }
 
     #[test]
-    fn cashier_preset_includes_basic_sales() {
-        let preset = &ROLE_PRESETS[2];
-        assert_eq!(preset.id, builtin_roles::CASHIER);
-        assert!(preset.permissions.contains(&permissions::SALES_PROCESS));
-        assert!(preset.permissions.contains(&permissions::PAYMENTS_CASH));
-        assert!(preset.permissions.contains(&permissions::SHIFTS_OPEN));
-    }
-
-    #[test]
-    fn cashier_lacks_management_permissions() {
-        let preset = &ROLE_PRESETS[2];
-        assert!(!preset.permissions.contains(&permissions::SETTINGS_EDIT));
-        assert!(!preset.permissions.contains(&permissions::STAFF_CREATE));
-        assert!(!preset.permissions.contains(&permissions::SALES_VOID));
-        assert!(!preset.permissions.contains(&permissions::REPORTS_VIEW));
-        assert!(!preset.permissions.contains(&permissions::PRODUCTS_CREATE));
-    }
-
-    #[test]
     fn location_manage_permission_follows_inventory_roles() {
         // LOC-06: location CRUD/rebind is a management capability, not a sales
-        // one. Manager and Staff (inventory managers) hold it; cashier must not
-        // be able to create/rename/deactivate or rebind locations.
+        // one. Manager and Staff (inventory managers) hold it; a bare Custom
+        // role must not be able to create/rename/deactivate or rebind
+        // locations.
         let manager = &ROLE_PRESETS[1];
         assert!(
             manager
                 .permissions
                 .contains(&permissions::INVENTORY_LOCATIONS_MANAGE)
         );
-        let staff = &ROLE_PRESETS[4];
+        let staff = &ROLE_PRESETS[2];
         assert!(
             staff
                 .permissions
                 .contains(&permissions::INVENTORY_LOCATIONS_MANAGE)
         );
-        let cashier = &ROLE_PRESETS[2];
+        let custom = ROLE_PRESETS
+            .iter()
+            .find(|p| p.id == builtin_roles::CUSTOM)
+            .expect("custom preset");
         assert!(
-            !cashier
+            !custom
                 .permissions
                 .contains(&permissions::INVENTORY_LOCATIONS_MANAGE)
         );
+    }
+
+    #[test]
+    fn presets_contain_no_retired_roles() {
+        // ADR #35 D4 (spec 0048 c2c): the cashier/kitchen roles are retired.
+        // Migration 129 removes their rows; the presets must never seed them
+        // again, and Staff (their folding target) must cover their access.
+        for preset in ROLE_PRESETS {
+            assert_ne!(preset.id, "role-cashier");
+            assert_ne!(preset.id, "role-kitchen");
+        }
+        let staff = ROLE_PRESETS
+            .iter()
+            .find(|p| p.id == builtin_roles::STAFF)
+            .expect("staff preset");
+        for key in [
+            permissions::SALES_PROCESS,
+            permissions::SALES_VIEW,
+            permissions::SALES_DISCOUNT,
+            permissions::SALES_SPLIT,
+            permissions::PAYMENTS_CASH,
+            permissions::PAYMENTS_CARD,
+            permissions::CUSTOMERS_CREATE,
+            permissions::CUSTOMERS_VIEW,
+            permissions::LOYALTY_VIEW,
+            permissions::LOYALTY_EARN,
+            permissions::LOYALTY_REDEEM,
+            permissions::DISCOUNTS_APPLY,
+            permissions::INVENTORY_VIEW,
+            permissions::SHIFTS_OPEN,
+            permissions::SHIFTS_CLOSE,
+            permissions::WORKSPACES_SWITCH,
+            permissions::KDS_VIEW,
+            permissions::KDS_UPDATE,
+        ] {
+            assert!(
+                staff.permissions.contains(&key),
+                "Staff must cover {key} for the folded cashier/kitchen users"
+            );
+        }
     }
 
     #[test]
@@ -703,7 +691,7 @@ mod preset_tests {
 
     #[test]
     fn staff_preset_excludes_settings() {
-        let preset = &ROLE_PRESETS[4];
+        let preset = &ROLE_PRESETS[2];
         assert_eq!(preset.id, builtin_roles::STAFF);
         assert_eq!(preset.name, "Staff");
         assert!(!preset.permissions.contains(&permissions::SETTINGS_READ));
@@ -796,7 +784,7 @@ mod preset_tests {
     #[test]
     fn staff_preset_has_manager_count_minus_settings() {
         let manager = &ROLE_PRESETS[1];
-        let staff = &ROLE_PRESETS[4];
+        let staff = &ROLE_PRESETS[2];
         // Staff should have exactly 2 fewer permissions than Manager (settings:read, settings:edit)
         assert_eq!(
             staff.permissions.len(),
@@ -1099,9 +1087,9 @@ mod tests {
 
     #[test]
     fn new_role() {
-        let r = Role::new("role-cashier", "Cashier");
-        assert_eq!(r.id, "role-cashier");
-        assert_eq!(r.name, "Cashier");
+        let r = Role::new("role-lite", "Lite");
+        assert_eq!(r.id, "role-lite");
+        assert_eq!(r.name, "Lite");
         assert!(r.description.is_empty());
         assert_eq!(r.permissions, "[]");
     }
@@ -1167,7 +1155,8 @@ mod tests {
     #[test]
     fn builtin_role_constants_are_distinct() {
         assert_ne!(builtin_roles::OWNER, builtin_roles::MANAGER);
-        assert_ne!(builtin_roles::MANAGER, builtin_roles::CASHIER);
+        assert_ne!(builtin_roles::MANAGER, builtin_roles::ADMIN);
+        assert_ne!(builtin_roles::STAFF, builtin_roles::CUSTOM);
     }
 
     // ── has_permission — wildcard resolution ──────────────────────

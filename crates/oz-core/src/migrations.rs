@@ -756,6 +756,10 @@ pub const ALL: &[Migration] = &[
         sql: include_str!("../migrations/128_assignments.sql"),
     },
     Migration {
+        id: "129_retire_cashier_kitchen.sql",
+        sql: include_str!("../migrations/129_retire_cashier_kitchen.sql"),
+    },
+    Migration {
         id: "130_user_profiles.sql",
         sql: include_str!("../migrations/130_user_profiles.sql"),
     },
@@ -3252,6 +3256,80 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM assignments", [], |r| r.get(0))
             .unwrap();
         assert_eq!(after, 5, "migration 128 must be idempotent");
+    }
+
+    // ── ADR #35 D4 (migration 129): retire cashier/kitchen roles ────
+    //
+    // The five-role taxonomy replaces the legacy cashier/kitchen roles.
+    // Migration 128 already folded their assignments into role-staff; 129
+    // re-points any remaining users.role_id / assignments.role_id references
+    // and removes the role rows so presets and DB agree.
+    #[test]
+    fn migration_129_retires_cashier_and_kitchen_roles() {
+        let idx = ALL
+            .iter()
+            .position(|m| m.id == "129_retire_cashier_kitchen.sql")
+            .expect("129_retire_cashier_kitchen.sql registered");
+        let mut conn = fresh();
+        platform_core::database::run(&mut conn, &ALL[..idx]).unwrap();
+
+        // Legacy rows referencing the retired roles.
+        conn.execute_batch(
+            "INSERT INTO roles (id, name, permissions) VALUES
+                 ('role-cashier', 'cashier', '[\"sales:process\"]'),
+                 ('role-kitchen', 'kitchen', '[\"kds:view\"]'),
+                 ('role-staff', 'staff', '[\"sales:view\"]');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
+                 ('u-cashier', 'cashier', 'h', 'Cashier', 'role-cashier', 1, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'),
+                 ('u-kitchen', 'kitchen', 'h', 'Kitchen', 'role-kitchen', 1, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'),
+                 ('u-staff', 'staff', 'h', 'Staff', 'role-staff', 1, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
+             INSERT INTO assignments (user_id, role_id, scope_mode, branch_scope, workspace_scope) VALUES
+                 ('u-cashier', 'role-cashier', 'scoped', 'all', 'list'),
+                 ('u-staff', 'role-staff', 'global', 'all', 'all');",
+        )
+        .unwrap();
+
+        // Apply 129 only.
+        platform_core::database::run(&mut conn, &ALL[idx..]).unwrap();
+
+        // Roles are gone.
+        let retired: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM roles WHERE id IN ('role-cashier', 'role-kitchen')",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(retired, 0, "cashier/kitchen role rows must be removed");
+
+        // Users and assignments re-pointed to role-staff.
+        let orphans: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM users WHERE role_id IN ('role-cashier', 'role-kitchen')",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(orphans, 0, "no user may keep a retired role_id");
+        let role: String = conn
+            .query_row(
+                "SELECT role_id FROM users WHERE id = 'u-cashier'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(role, "role-staff");
+        let arole: String = conn
+            .query_row(
+                "SELECT role_id FROM assignments WHERE user_id = 'u-cashier'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(arole, "role-staff");
+
+        // Re-running stays idempotent (module convention).
+        platform_core::database::run(&mut conn, &ALL[idx..]).unwrap();
     }
 
     // ── ADR #35 D6 (migration 130): user profile columns ────────────

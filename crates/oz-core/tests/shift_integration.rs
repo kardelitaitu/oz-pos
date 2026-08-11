@@ -16,10 +16,10 @@ fn store(conn: &rusqlite::Connection) -> Store<'_> {
 fn seed_users(conn: &rusqlite::Connection) {
     conn.execute_batch(
         "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
-            ('role-cashier', 'Cashier', 'Cashier role', '[]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
+            ('role-staff', 'Staff', 'Staff role', '[]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
             ('role-manager', 'Manager', 'Manager role', '[]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
          INSERT INTO users (id, username, pin_hash, display_name, role_id, created_at, updated_at) VALUES
-            ('user-alice', 'alice', 'hash1', 'Alice', 'role-cashier', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
+            ('user-alice', 'alice', 'hash1', 'Alice', 'role-staff', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
             ('user-bob', 'bob', 'hash2', 'Bob', 'role-manager', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
     ).unwrap();
 }

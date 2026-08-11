@@ -104,7 +104,7 @@ mod tests {
     fn session_context_creation() {
         let ctx = SessionContext::new(
             "user-1".into(),
-            "role-cashier".into(),
+            "role-staff".into(),
             "term-1".into(),
             "store-downtown".into(),
             "default-restaurant-pos".into(),
@@ -113,7 +113,7 @@ mod tests {
             100,
         );
         assert_eq!(ctx.user_id, "user-1");
-        assert_eq!(ctx.role_id, "role-cashier");
+        assert_eq!(ctx.role_id, "role-staff");
         assert_eq!(ctx.terminal_id, "term-1");
         assert_eq!(ctx.store_id, "store-downtown");
         assert_eq!(ctx.instance_id, "default-restaurant-pos");

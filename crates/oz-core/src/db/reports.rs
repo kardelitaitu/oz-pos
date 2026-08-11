@@ -482,13 +482,13 @@ mod tests {
         // Ensure a role exists for the FK reference.
         conn.execute(
             "INSERT OR IGNORE INTO roles (id, name, description, permissions, created_at, updated_at)
-             VALUES ('role-cashier', 'cashier', '', '[]', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
+             VALUES ('role-staff', 'staff', '', '[]', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
             [],
         )
         .unwrap();
         conn.execute(
             "INSERT OR IGNORE INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
-             VALUES (?1, ?1, 'x', ?1, 'role-cashier', 1, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
+             VALUES (?1, ?1, 'x', ?1, 'role-staff', 1, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
             rusqlite::params![id],
         )
         .unwrap();

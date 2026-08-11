@@ -561,10 +561,11 @@ mod tests {
         let conn = oz_core::migrations::fresh_db();
         let store = Store::new(&conn);
         store.seed_default_roles().unwrap();
-        conn.execute(
-            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
-             VALUES ('user-kitchen', 'kitchen', 'hash', 'Kitchen', 'role-kitchen', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
-            [],
+        conn.execute_batch(
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-lite', 'Lite', 'Limited', '[\"sales:view\"]', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-kitchen', 'kitchen', 'hash', 'Kitchen', 'role-lite', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
         )
         .unwrap();
 
@@ -576,7 +577,7 @@ mod tests {
             "kitchen-token".into(),
             SessionContext::new(
                 "user-kitchen".into(),
-                "role-kitchen".into(),
+                "role-lite".into(),
                 "terminal-1".into(),
                 "store-kitchen".into(),
                 "instance-1".into(),
@@ -604,10 +605,11 @@ mod tests {
         let conn = oz_core::migrations::fresh_db();
         let store = Store::new(&conn);
         store.seed_default_roles().unwrap();
-        conn.execute(
-            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
-             VALUES ('user-kitchen', 'kitchen', 'hash', 'Kitchen', 'role-kitchen', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
-            [],
+        conn.execute_batch(
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-lite', 'Lite', 'Limited', '[\"sales:view\"]', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-kitchen', 'kitchen', 'hash', 'Kitchen', 'role-lite', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
         )
         .unwrap();
 
@@ -619,7 +621,7 @@ mod tests {
             "kitchen-token".into(),
             SessionContext::new(
                 "user-kitchen".into(),
-                "role-kitchen".into(),
+                "role-lite".into(),
                 "terminal-1".into(),
                 "store-kitchen".into(),
                 "instance-1".into(),

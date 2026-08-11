@@ -567,14 +567,17 @@ mod tests {
 
     #[tokio::test]
     async fn scoped_customer_command_denies_user_without_permission() {
-        // Kitchen role lacks customers:create (ROLE_PRESETS).
+        // A narrow custom role (no customers:* grants) — the new role-staff
+        // preset includes customers:create, so a limited user must use a
+        // custom role instead (0048 retirement sweep).
         let conn = oz_core::migrations::fresh_db();
         let store = Store::new(&conn);
         store.seed_default_roles().unwrap();
-        conn.execute(
-            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
-             VALUES ('user-kitchen', 'kitchen', 'hash', 'Kitchen', 'role-kitchen', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
-            [],
+        conn.execute_batch(
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-lite', 'Lite', 'Limited', '[\"sales:view\"]', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-kitchen', 'kitchen', 'hash', 'Kitchen', 'role-lite', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
         )
         .unwrap();
 
@@ -586,7 +589,7 @@ mod tests {
             "kitchen-token".into(),
             SessionContext::new(
                 "user-kitchen".into(),
-                "role-kitchen".into(),
+                "role-lite".into(),
                 "terminal-1".into(),
                 "store-kitchen".into(),
                 "instance-1".into(),
@@ -607,17 +610,18 @@ mod tests {
 
     #[tokio::test]
     async fn list_customers_scoped_denies_user_without_view_permission() {
-        // Kitchen role lacks customers:view (ROLE_PRESETS) — CRM-02: the
-        // scoped list must enforce the declared view permission, not just
-        // resolve the store. Before the fix a valid kitchen session could
-        // enumerate every customer (name, email, phone, notes).
+        // The limited role lacks customers:view (CRM-02): the scoped list
+        // must enforce the declared view permission, not just resolve the
+        // store. Before the fix a valid limited session could enumerate
+        // every customer (name, email, phone, notes).
         let conn = oz_core::migrations::fresh_db();
         let store = Store::new(&conn);
         store.seed_default_roles().unwrap();
-        conn.execute(
-            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
-             VALUES ('user-kitchen', 'kitchen', 'hash', 'Kitchen', 'role-kitchen', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
-            [],
+        conn.execute_batch(
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-lite', 'Lite', 'Limited', '[\"sales:view\"]', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-kitchen', 'kitchen', 'hash', 'Kitchen', 'role-lite', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
         )
         .unwrap();
 
@@ -629,7 +633,7 @@ mod tests {
             "kitchen-token".into(),
             SessionContext::new(
                 "user-kitchen".into(),
-                "role-kitchen".into(),
+                "role-lite".into(),
                 "terminal-1".into(),
                 "store-kitchen".into(),
                 "instance-1".into(),

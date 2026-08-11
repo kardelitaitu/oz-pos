@@ -21,7 +21,7 @@ fn seed_roles(conn: &Connection) {
     conn.execute_batch(
         "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
             ('role-owner',   'owner',   'Full access',           '[\"*\"]',                                 '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
-            ('role-cashier', 'cashier', 'Process sales',         '[\"sales:process\"]',                     '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
+            ('role-staff',   'staff',   'Operational access',      '[\"sales:process\"]',                     '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
             ('role-manager', 'manager', 'Manage products + sales','[\"products:crud\",\"sales:void\"]',  '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
     ).unwrap();
 }
@@ -30,11 +30,11 @@ fn seed_users(conn: &Connection) {
     conn.execute_batch(
         "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
             ('role-owner',   'owner',   'Full access',    '[\"*\"]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
-            ('role-cashier', 'cashier', 'Process sales',  '[\"sales:process\"]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+            ('role-staff',   'staff',   'Operational access', '[\"sales:process\"]', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
          INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
-            ('user-1', 'alice',   'hash_alice',   'Alice',   'role-cashier', 1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
+            ('user-1', 'alice',   'hash_alice',   'Alice',   'role-staff',   1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
             ('user-2', 'bob',     'hash_bob',     'Bob',     'role-owner',   1, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z'),
-            ('user-3', 'carol',   'hash_carol',   'Carol',   'role-cashier', 0, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
+            ('user-3', 'carol',   'hash_carol',   'Carol',   'role-staff',   0, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');"
     ).unwrap();
 }
 
@@ -139,20 +139,20 @@ fn delete_role_with_active_users_rejected_by_fk() {
     let conn = setup();
     seed_users(&conn);
 
-    // 'role-cashier' has 2 users assigned (user-1/Alice, user-3/Carol).
+    // 'role-staff' has 2 users assigned (user-1/Alice, user-3/Carol).
     // Deleting it should fail due to FK constraint.
-    let result = conn.execute("DELETE FROM roles WHERE id = 'role-cashier'", []);
+    let result = conn.execute("DELETE FROM roles WHERE id = 'role-staff'", []);
     assert!(result.is_err(), "should not delete role with active users");
 
     // Verify the role still exists.
     let count: i64 = conn
         .query_row(
-            "SELECT COUNT(*) FROM roles WHERE id = 'role-cashier'",
+            "SELECT COUNT(*) FROM roles WHERE id = 'role-staff'",
             [],
             |r| r.get(0),
         )
         .unwrap();
-    assert_eq!(count, 1, "role-cashier should still exist");
+    assert_eq!(count, 1, "role-staff should still exist");
 }
 
 #[test]
@@ -267,9 +267,9 @@ fn roles_listed_in_alphabetical_order() {
     seed_roles(&conn);
     let roles = store(&conn).list_roles().unwrap();
     assert_eq!(roles.len(), 3);
-    assert_eq!(roles[0].name, "cashier");
-    assert_eq!(roles[1].name, "manager");
-    assert_eq!(roles[2].name, "owner");
+    assert_eq!(roles[0].name, "manager");
+    assert_eq!(roles[1].name, "owner");
+    assert_eq!(roles[2].name, "staff");
 }
 
 // ── User: Timestamps ──────────────────────────────────────────────────
@@ -281,7 +281,7 @@ fn user_created_at_is_iso8601() {
     let s = store(&conn);
 
     let u = s
-        .create_user("ts-user", "hash", "Timestamp User", "role-cashier")
+        .create_user("ts-user", "hash", "Timestamp User", "role-staff")
         .unwrap();
     assert!(!u.created_at.is_empty(), "created_at should be populated");
     assert!(
@@ -310,7 +310,7 @@ fn user_updated_at_increases_on_update() {
     let s = store(&conn);
 
     let updated = s
-        .update_user("user-1", "alice", "Alice Updated", "role-cashier", true)
+        .update_user("user-1", "alice", "Alice Updated", "role-staff", true)
         .unwrap();
     assert!(
         !updated.updated_at.is_empty(),
@@ -344,7 +344,7 @@ fn user_deactivate_and_reactivate() {
 
     // Deactivate an active user.
     let deactivated = s
-        .update_user("user-1", "alice", "Alice", "role-cashier", false)
+        .update_user("user-1", "alice", "Alice", "role-staff", false)
         .unwrap();
     assert!(!deactivated.is_active, "user should be deactivated");
 
@@ -354,7 +354,7 @@ fn user_deactivate_and_reactivate() {
 
     // Reactivate the same user.
     let reactivated = s
-        .update_user("user-1", "alice", "Alice", "role-cashier", true)
+        .update_user("user-1", "alice", "Alice", "role-staff", true)
         .unwrap();
     assert!(reactivated.is_active, "user should be reactivated");
 
@@ -371,7 +371,7 @@ fn deactivate_already_inactive_user() {
 
     // user-3 (Carol) is already inactive.
     let updated = s
-        .update_user("user-3", "carol", "Carol", "role-cashier", false)
+        .update_user("user-3", "carol", "Carol", "role-staff", false)
         .unwrap();
     assert!(!updated.is_active, "user should remain inactive");
 }
@@ -384,7 +384,7 @@ fn reactivate_deactivated_user() {
 
     // user-3 (Carol) starts inactive. Reactivate her.
     let reactivated = s
-        .update_user("user-3", "carol", "Carol", "role-cashier", true)
+        .update_user("user-3", "carol", "Carol", "role-staff", true)
         .unwrap();
     assert!(reactivated.is_active, "user should be reactivated");
 }
@@ -414,7 +414,7 @@ fn user_role_reassignment() {
     seed_users(&conn);
     let s = store(&conn);
 
-    // Alice (user-1) is cashier. Promote her to owner.
+    // Alice (user-1) starts as staff. Promote her to owner.
     let updated = s
         .update_user("user-1", "alice", "Alice", "role-owner", true)
         .unwrap();
@@ -435,10 +435,10 @@ fn reassign_to_same_role_is_idempotent() {
     let s = store(&conn);
 
     let updated = s
-        .update_user("user-1", "alice", "Alice", "role-cashier", true)
+        .update_user("user-1", "alice", "Alice", "role-staff", true)
         .unwrap();
     assert_eq!(
-        updated.role_id, "role-cashier",
+        updated.role_id, "role-staff",
         "same role should be preserved"
     );
 }
@@ -480,23 +480,16 @@ fn multiple_users_with_same_role() {
     seed_roles(&conn);
     let s = store(&conn);
 
-    s.create_user("u1", "hash1", "User One", "role-cashier")
+    s.create_user("u1", "hash1", "User One", "role-staff")
         .unwrap();
-    s.create_user("u2", "hash2", "User Two", "role-cashier")
+    s.create_user("u2", "hash2", "User Two", "role-staff")
         .unwrap();
-    s.create_user("u3", "hash3", "User Three", "role-cashier")
+    s.create_user("u3", "hash3", "User Three", "role-staff")
         .unwrap();
 
     let users = s.list_users().unwrap();
-    let cashiers: Vec<&User> = users
-        .iter()
-        .filter(|u| u.role_id == "role-cashier")
-        .collect();
-    assert_eq!(
-        cashiers.len(),
-        3,
-        "all three users should have role-cashier"
-    );
+    let cashiers: Vec<&User> = users.iter().filter(|u| u.role_id == "role-staff").collect();
+    assert_eq!(cashiers.len(), 3, "all three users should have role-staff");
 }
 
 // ── User: Delete does not affect role ─────────────────────────────────
@@ -511,9 +504,9 @@ fn delete_user_does_not_affect_role() {
     s.delete_user("user-1").unwrap();
 
     // The role should still exist.
-    let role = s.get_role("role-cashier").unwrap().unwrap();
+    let role = s.get_role("role-staff").unwrap().unwrap();
     assert_eq!(
-        role.name, "cashier",
+        role.name, "staff",
         "role should still exist after user deletion"
     );
 
@@ -523,7 +516,7 @@ fn delete_user_does_not_affect_role() {
     assert!(
         remaining
             .iter()
-            .all(|u| u.role_id == "role-owner" || u.role_id == "role-cashier")
+            .all(|u| u.role_id == "role-owner" || u.role_id == "role-staff")
     );
 }
 
@@ -540,7 +533,7 @@ fn user_with_unicode_display_name() {
             "i18n-user",
             "hash",
             "José María — 佐藤", // mixed Latin-1 supplement + CJK
-            "role-cashier",
+            "role-staff",
         )
         .unwrap();
     assert_eq!(u.display_name, "José María — 佐藤");
@@ -556,7 +549,7 @@ fn user_username_with_leading_trailing_spaces_is_trimmed() {
     let s = store(&conn);
 
     let u = s
-        .create_user("  spaced-user  ", "hash", "Spaced User", "role-cashier")
+        .create_user("  spaced-user  ", "hash", "Spaced User", "role-staff")
         .unwrap();
     assert_eq!(u.username, "spaced-user", "username should be trimmed");
 }
@@ -587,5 +580,5 @@ fn update_pin_hash_only_via_raw_sql() {
     assert_eq!(loaded.username, "alice");
     assert_eq!(loaded.display_name, "Alice");
     assert!(loaded.is_active);
-    assert_eq!(loaded.role_id, "role-cashier");
+    assert_eq!(loaded.role_id, "role-staff");
 }

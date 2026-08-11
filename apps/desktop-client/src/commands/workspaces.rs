@@ -1018,14 +1018,18 @@ mod tests {
     use platform_core::StoreDatabaseManager;
     use tauri::Manager as _;
 
-    /// Seed the GLOBAL identity DB with an owner and a cashier.
+    /// Seed the GLOBAL identity DB with an owner and a limited user whose
+    /// role has no workspace-type grants (so it sees no instances — the
+    /// retired cashier role behaved the same way; 0048 sweep).
     fn seed_global_users(conn: &rusqlite::Connection) {
         let store = Store::new(conn);
         store.seed_default_roles().unwrap();
         conn.execute_batch(
-            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-lite', 'Lite', 'Limited', '[\"sales:view\"]', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
                 ('user-owner',   'owner',   'hash', 'Owner',   'role-owner',   1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z'),
-                ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-cashier', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
+                ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-lite',    1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
         )
         .unwrap();
     }
@@ -1247,7 +1251,7 @@ mod tests {
             .unwrap();
         assert!(
             cashier_rows.is_empty(),
-            "cashier role must not see owner-level instances, got {cashier_rows:?}"
+            "limited role must not see owner-level instances, got {cashier_rows:?}"
         );
     }
 
@@ -1313,7 +1317,7 @@ mod tests {
             "cashier-token".into(),
             oz_core::session::SessionContext::new(
                 "user-cashier".into(),
-                "role-cashier".into(),
+                "role-lite".into(),
                 "terminal-1".into(),
                 "store-a".into(),
                 "ws-a-1".into(),
@@ -1327,7 +1331,7 @@ mod tests {
             .build(tauri::generate_context!())
             .unwrap();
 
-        // The session token binds the real role — a cashier session listing
+        // The session token binds the real role — a limited session listing
         // store-a must not see owner-level instances (same as the ticket path).
         let rows =
             list_workspaces_for_store_scoped("cashier-token".into(), "store-a".into(), app.state())

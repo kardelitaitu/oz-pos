@@ -8288,9 +8288,18 @@ mod tests {
         {
             let store = Store::new(&global);
             store.seed_default_roles().unwrap();
+            // role-lite: narrow custom role without staff:* — the new
+            // role-staff preset grants staff:update, which would flip the
+            // denial below (0048 retirement sweep).
+            global
+                .execute_batch(
+                    "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                        ('role-lite', 'Lite', 'Limited', '[\"sales:view\"]', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
+                )
+                .unwrap();
             for (id, username, role_id) in [
                 ("user-owner", "owner", "role-owner"),
-                ("user-cashier", "cashier", "role-cashier"),
+                ("user-cashier", "cashier", "role-lite"),
             ] {
                 global
                     .execute(
@@ -8332,7 +8341,7 @@ mod tests {
             cashier_token.clone(),
             SessionContext::new(
                 "user-cashier".into(),
-                "role-cashier".into(),
+                "role-lite".into(),
                 "terminal-2".into(),
                 store_id.into(),
                 "instance-2".into(),
@@ -8355,7 +8364,7 @@ mod tests {
         let denied = can_save_topology(cashier_token, app.state()).await;
         assert!(
             matches!(denied, Err(AppError::PermissionDenied(_))),
-            "a cashier session must be denied by the capability probe, got {denied:?}"
+            "a limited session must be denied by the capability probe, got {denied:?}"
         );
     }
 

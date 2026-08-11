@@ -198,8 +198,8 @@ mod tests {
     #[test]
     fn re_exports_are_accessible() {
         // Verify that re-exported types compile and are accessible.
-        let role = Role::new("role-cashier", "Cashier");
-        assert_eq!(role.name, "Cashier");
+        let role = Role::new("role-staff", "Staff");
+        assert_eq!(role.name, "Staff");
 
         let _ = builtin_roles::OWNER;
         let _ = seed_users::ADMIN;

@@ -158,7 +158,7 @@ async fn fetch_snapshot_decodes_postgres_types_without_credentials() {
              VALUES ('tax-1', 'VAT', 1100, TRUE, FALSE);
              INSERT INTO users
                  (id, username, pin_hash, display_name, role_id, is_active)
-             VALUES ('user-1', 'cashier', 'must-not-leak', 'Cashier', 'role-cashier', TRUE);",
+             VALUES ('user-1', 'staff', 'must-not-leak', 'Staff', 'role-staff', TRUE);",
         )
         .await
         .expect("seed snapshot rows");

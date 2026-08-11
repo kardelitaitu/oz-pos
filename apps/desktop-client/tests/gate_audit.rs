@@ -116,7 +116,7 @@ static PINNED_DESKTOP: &[(&str, usize, &[&str])] = &[
     ("shifts", 4, &["SHIFTS_CLOSE", "SHIFTS_OPEN"]),
     (
         "staff",
-        5,
+        6,
         &[
             "STAFF_CREATE",
             "STAFF_MANAGE_ROLES",
@@ -222,7 +222,7 @@ static PINNED_TABLET: &[(&str, usize, &[&str])] = &[
     ("setup", 0, &[]),
     (
         "staff",
-        5,
+        6,
         &[
             "STAFF_CREATE",
             "STAFF_MANAGE_ROLES",

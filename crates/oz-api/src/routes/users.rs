@@ -26,7 +26,7 @@ pub struct CreateUserRequest {
     pub pin_hash: String,
     /// Display name shown in the UI.
     pub display_name: String,
-    /// Role ID (e.g. "role-cashier", "role-owner").
+    /// Role ID (e.g. "role-staff", "role-owner").
     pub role_id: String,
 }
 
@@ -109,12 +109,12 @@ mod tests {
 
     #[test]
     fn create_user_request_minimal() {
-        let json = r#"{"username":"alice","pin_hash":"hash123","display_name":"Alice","role_id":"role-cashier"}"#;
+        let json = r#"{"username":"alice","pin_hash":"hash123","display_name":"Alice","role_id":"role-staff"}"#;
         let req: CreateUserRequest = serde_json::from_str(json).unwrap();
         assert_eq!(req.username, "alice");
         assert_eq!(req.pin_hash, "hash123");
         assert_eq!(req.display_name, "Alice");
-        assert_eq!(req.role_id, "role-cashier");
+        assert_eq!(req.role_id, "role-staff");
     }
 
     #[test]

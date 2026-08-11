@@ -53,23 +53,19 @@ mod tests {
     use super::*;
     use oz_core::migrations;
     use oz_core::permissions;
-    use rusqlite::params;
 
     fn seeded_store() -> rusqlite::Connection {
         let conn = migrations::fresh_db();
         let store = Store::new(&conn);
         store.seed_default_roles().unwrap();
-        conn.execute(
-            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?6)",
-            params![
-                "user-cashier",
-                "cashier",
-                "hash",
-                "Cashier",
-                "role-cashier",
-                "2026-07-31T00:00:00.000Z"
-            ],
+        // role-lite: narrow custom role with loyalty:view only — the new
+        // role-staff preset grants loyalty:manage too, which would flip the
+        // LOYALTY_MANAGE denial below (0048 retirement sweep).
+        conn.execute_batch(
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-lite', 'Lite', 'Limited loyalty view', '[\"loyalty:view\"]', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-lite', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
         )
         .unwrap();
         conn

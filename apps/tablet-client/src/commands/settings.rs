@@ -1043,7 +1043,7 @@ mod tests {
             token.into(),
             SessionContext::new(
                 user_id.into(),
-                "role-cashier".into(),
+                "role-staff".into(),
                 "terminal-1".into(),
                 store_id.into(),
                 "instance-1".into(),

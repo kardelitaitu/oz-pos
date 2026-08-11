@@ -1005,15 +1005,18 @@ mod tests {
     use tauri::Manager as _;
 
     /// Seed the GLOBAL identity DB with an owner (all permissions) and a
-    /// cashier (no staff permissions). Users/roles are global records
+    /// limited user (no staff permissions — the retired cashier role maps
+    /// to a narrow custom role, 0048 sweep). Users/roles are global records
     /// (ADR #4 / ADR #7); store-scoped DBs contain no users.
     fn seed_global_users(conn: &rusqlite::Connection) {
         let store = Store::new(conn);
         store.seed_default_roles().unwrap();
         conn.execute_batch(
-            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-lite', 'Lite', 'Limited', '[\"sales:view\"]', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
                 ('user-owner',   'owner',   'hash', 'Owner',   'role-owner',   1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z'),
-                ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-cashier', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
+                ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-lite',    1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
         )
         .unwrap();
     }
@@ -1064,7 +1067,7 @@ mod tests {
                 username: "mallory".into(),
                 pin: "1234".into(),
                 display_name: "Mallory".into(),
-                role_id: "role-cashier".into(),
+                role_id: "role-staff".into(),
                 caller_user_id: "user-owner".into(), // forged
             },
             app.state(),
@@ -1116,7 +1119,7 @@ mod tests {
                 username: "mallory".into(),
                 pin: "1234".into(),
                 display_name: "Mallory".into(),
-                role_id: "role-cashier".into(),
+                role_id: "role-staff".into(),
                 profile: complete_profile_args(),
             },
             app.state(),
@@ -1136,7 +1139,7 @@ mod tests {
             conn,
             "cashier-token",
             "user-cashier",
-            "role-cashier",
+            "role-lite",
             "store-a",
         );
         let app = tauri::test::mock_builder()
@@ -1150,7 +1153,7 @@ mod tests {
                 username: "mallory".into(),
                 pin: "1234".into(),
                 display_name: "Mallory".into(),
-                role_id: "role-cashier".into(),
+                role_id: "role-staff".into(),
                 profile: complete_profile_args(),
             },
             app.state(),
@@ -1176,7 +1179,7 @@ mod tests {
                 username: "mallory".into(),
                 pin: "1234".into(),
                 display_name: "Mallory".into(),
-                role_id: "role-cashier".into(),
+                role_id: "role-staff".into(),
                 profile: complete_profile_args(),
             },
             app.state(),
@@ -1184,7 +1187,7 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(result.username, "mallory");
-        assert_eq!(result.role_name, "Cashier");
+        assert_eq!(result.role_name, "Staff");
     }
 
     #[tokio::test]
@@ -1195,7 +1198,7 @@ mod tests {
             conn,
             "cashier-token",
             "user-cashier",
-            "role-cashier",
+            "role-lite",
             "store-a",
         );
         let app = tauri::test::mock_builder()
@@ -1272,9 +1275,11 @@ mod tests {
         let store = Store::new(&conn);
         store.seed_default_roles().unwrap();
         conn.execute_batch(
-            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-lite', 'Lite', 'Limited', '[\"sales:view\"]', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
                 ('user-manager', 'manager', 'hash', 'Manager', 'role-manager', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z'),
-                ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-cashier', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
+                ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-lite', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
         )
         .unwrap();
         let state = scoped_state_with_token(
@@ -1358,9 +1363,11 @@ mod tests {
         let store = Store::new(&conn);
         store.seed_default_roles().unwrap();
         conn.execute_batch(
-            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
+            "INSERT INTO roles (id, name, description, permissions, created_at, updated_at) VALUES
+                ('role-lite', 'Lite', 'Limited', '[\"sales:view\"]', '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');
+             INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at) VALUES
                 ('user-owner', 'owner', 'hash', 'Owner', 'role-owner', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z'),
-                ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-cashier', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
+                ('user-cashier', 'cashier', 'hash', 'Cashier', 'role-lite', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z');",
         )
         .unwrap();
         let state =
@@ -1411,7 +1418,7 @@ mod tests {
                 id: "user-cashier".into(),
                 username: "cashier".into(),
                 display_name: "Cashier".into(),
-                role_id: "role-cashier".into(),
+                role_id: "role-lite".into(),
                 is_active: true,
                 pin: Some("9876".into()),
                 workspace_keys: None,
@@ -1441,7 +1448,7 @@ mod tests {
             "cashier-old-session".into(),
             SessionContext::new(
                 "user-cashier".into(),
-                "role-cashier".into(),
+                "role-lite".into(),
                 "terminal-1".into(),
                 "store-a".into(),
                 "instance-1".into(),
@@ -1461,7 +1468,7 @@ mod tests {
                 id: "user-cashier".into(),
                 username: "cashier".into(),
                 display_name: "Cashier".into(),
-                role_id: "role-cashier".into(),
+                role_id: "role-lite".into(),
                 is_active: true,
                 pin: Some("9876".into()),
                 workspace_keys: None,
@@ -1558,7 +1565,7 @@ mod tests {
                 id: "user-cashier".into(),
                 username: "cashier".into(),
                 display_name: "Cashier".into(),
-                role_id: "role-cashier".into(),
+                role_id: "role-lite".into(),
                 is_active: true,
                 pin: Some("9876".into()),
                 workspace_keys: None,
@@ -1598,7 +1605,7 @@ mod tests {
             "cashier-stale-terminal".into(),
             SessionContext::new(
                 "user-cashier".into(),
-                "role-cashier".into(),
+                "role-lite".into(),
                 "terminal-2".into(),
                 "store-a".into(),
                 "instance-1".into(),
@@ -1632,7 +1639,7 @@ mod tests {
                 id: "user-cashier".into(),
                 username: "cashier".into(),
                 display_name: "Cashier".into(),
-                role_id: "role-cashier".into(),
+                role_id: "role-lite".into(),
                 is_active: true,
                 pin: Some("9876".into()),
                 workspace_keys: None,
@@ -1672,7 +1679,7 @@ mod tests {
                 id: "user-cashier".into(),
                 username: "cashier-updated".into(),
                 display_name: "Cashier Updated".into(),
-                role_id: "role-cashier".into(),
+                role_id: "role-lite".into(),
                 is_active: true,
                 pin: None,
                 // This key violates the workspace FK and forces the second
@@ -1713,7 +1720,7 @@ mod tests {
                 id: "user-cashier".into(),
                 username: "cashier".into(),
                 display_name: "Cashier".into(),
-                role_id: "role-cashier".into(),
+                role_id: "role-lite".into(),
                 is_active: true,
                 pin: Some("12".into()),
                 workspace_keys: None,
@@ -1733,7 +1740,7 @@ mod tests {
             conn,
             "cashier-token",
             "user-cashier",
-            "role-cashier",
+            "role-lite",
             "store-a",
         );
         let app = tauri::test::mock_builder()
@@ -1753,7 +1760,7 @@ mod tests {
             conn,
             "cashier-token",
             "user-cashier",
-            "role-cashier",
+            "role-lite",
             "store-a",
         );
         let app = tauri::test::mock_builder()
@@ -1825,7 +1832,7 @@ mod tests {
                 username: "storeb-cashier".into(),
                 pin: "1234".into(),
                 display_name: "Store B Cashier".into(),
-                role_id: "role-cashier".into(),
+                role_id: "role-staff".into(),
                 profile: complete_profile_args(),
             },
             app.state(),
@@ -1939,7 +1946,7 @@ mod tests {
         let store = Store::new(&conn);
         store.seed_default_roles().unwrap();
         store
-            .create_user("existing", "hash", "Existing", "role-cashier")
+            .create_user("existing", "hash", "Existing", "role-staff")
             .unwrap();
 
         let args = BootstrapOwnerArgs {

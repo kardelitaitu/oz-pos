@@ -252,7 +252,7 @@ fn build_schemas() -> Value {
                 "username": { "type": "string", "description": "Unique username for login" },
                 "pin_hash": { "type": "string", "description": "PIN hash for authentication" },
                 "display_name": { "type": "string", "description": "Display name shown in the UI" },
-                "role_id": { "type": "string", "description": "Role ID (must reference an existing role)", "example": "role-cashier" }
+                "role_id": { "type": "string", "description": "Role ID (must reference an existing role)", "example": "role-staff" }
             }
         },
         "SaleLineItem": {
@@ -500,7 +500,7 @@ fn build_paths() -> Value {
             "post": {
                 "tags": ["Users"],
                 "summary": "Create a new user account",
-                "description": "Creates a staff user with a PIN hash and role assignment. Requires seeded roles (role-cashier, role-manager, role-owner).",
+                "description": "Creates a staff user with a PIN hash and role assignment. Requires seeded roles (role-staff, role-manager, role-owner).",
                 "operationId": "createUser",
                 "security": [{ "bearerAuth": [] }],
                 "requestBody": {

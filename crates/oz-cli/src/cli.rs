@@ -280,7 +280,7 @@ pub enum UserAction {
         pin_hash: String,
         /// Display name shown on the POS UI.
         display_name: String,
-        /// Role id (e.g. "role-owner", "role-cashier").
+        /// Role id (e.g. "role-owner", "role-staff").
         role_id: String,
     },
 }
@@ -525,7 +525,7 @@ mod tests {
             "jdoe",
             "hash123",
             "John Doe",
-            "role-cashier",
+            "role-staff",
         ])
         .unwrap();
         assert!(matches!(
