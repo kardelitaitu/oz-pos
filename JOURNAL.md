@@ -3706,7 +3706,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verify:** oz-pos-app + oz-pos-tablet customers modules 46/46 each · clippy -D warnings clean on both clients · cargo fmt --all -- --check clean · drift guard clean.
 
-**Commits:** `31b1fe6d` (test(loyalty): pin the earn/redeem projection guards from migration 107) · `<hash>` (fix(crm): enforce customers:view on list_customers_scoped)
+**Commits:** `31b1fe6d` (test(loyalty): pin the earn/redeem projection guards from migration 107) · `ab070ee0` (fix(crm): enforce customers:view on list_customers_scoped)
 
 **Audit-status finding (why the loyalty slice died):** LOY-02 (earn idempotency) and LOY-04's DB boundary are ALREADY remediated — migration 107_loyalty_integrity.sql (dedupe + balance rebuild + uq_loyalty_earn_sale/uq_loyalty_redeem_sale + tier triggers) and the app-level dedup landed in 12547e9d (2026-08-01), one day AFTER the 07-31 audit, and the audit report was never re-stamped. The audit's Open markers for LOY-02/LOY-04 are stale. The DB-boundary guards were completely unpinned though — shipped as a separate `test(loyalty)` commit closing the LOY-12 duplicate-sale/redemption test gap.
 
