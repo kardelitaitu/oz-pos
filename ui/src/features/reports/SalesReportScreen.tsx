@@ -22,12 +22,14 @@ import {
   getTopProducts,
   getHourlyHeatmap,
   getCategoryBreakdown,
+  getCategoryPopularity,
   type DailyRevenueRow,
   type WeeklyRevenueRow,
   type MonthlyRevenueRow,
   type TopProductRow,
   type HourlyHeatmapRow,
   type CategoryBreakdownRow,
+  type CategoryPopularityRow,
 } from '@/api/reports';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
@@ -95,6 +97,9 @@ export default function SalesReportScreen() {
   const [categoryBreakdown, setCategoryBreakdown] = useState<
     CategoryBreakdownRow[]
   >([]);
+  const [categoryPopularity, setCategoryPopularity] = useState<
+    CategoryPopularityRow[]
+  >([]);
 
   // P9-3: Period comparison
   const [comparePeriod, setComparePeriod] = useState(false);
@@ -130,12 +135,14 @@ export default function SalesReportScreen() {
       getTopProducts(startDate, endDate, 10, sessionToken, rankByProfit ? 'profit' : 'revenue'),
       getHourlyHeatmap(startDate, endDate, sessionToken),
       getCategoryBreakdown(startDate, endDate, sessionToken),
+      getCategoryPopularity(sessionToken, 3),
     ])
-      .then(([rev, top, heat, cat]) => {
+      .then(([rev, top, heat, cat, catPop]) => {
         setRevenueData(rev);
         setTopProducts(top);
         setHeatmap(heat);
         setCategoryBreakdown(cat);
+        setCategoryPopularity(catPop);
       })
       .catch((e) => {
         setError(e.message ?? String(e));
@@ -612,6 +619,57 @@ export default function SalesReportScreen() {
           )}
         </Card>
       </div>
+
+      <Card shadow="sm" className="sales-report-chart-card">
+        <Localized id="sales-report-category-popularity">
+          <h2 className="sales-report-section-title">Category Popularity</h2>
+        </Localized>
+        {categoryPopularity.length === 0 ? (
+          <p className="sales-report-no-data">
+            <Localized id="no-results">
+              <span>No results</span>
+            </Localized>
+          </p>
+        ) : (
+          <div className="sales-report-top-table">
+            <div className="sales-report-top-header">
+              <span>
+                <Localized id="sales-report-category-popularity-category">Category</Localized>
+              </span>
+              <span>
+                <Localized id="sales-report-category-popularity-products">Products</Localized>
+              </span>
+              <span>
+                <Localized id="sales-report-category-popularity-mean">Popularity</Localized>
+              </span>
+              <span>
+                <Localized id="sales-report-category-popularity-top">Top Products</Localized>
+              </span>
+            </div>
+            {categoryPopularity.map((cat) => (
+              <div key={cat.category_id || 'uncategorized'} className="sales-report-top-row">
+                <span>
+                  {cat.category_name ??
+                    requiredLocalized(l10n, 'sales-report-category-popularity-uncategorized')}
+                </span>
+                <span>{cat.product_count}</span>
+                <span
+                  title={requiredLocalized(l10n, 'sales-report-category-popularity-mean-tip')}
+                >
+                  {cat.catalog_ratio > 0
+                    ? `${cat.catalog_ratio.toFixed(1)}×`
+                    : '—'}
+                </span>
+                <span>
+                  {cat.top_products
+                    .map((t) => `${t.rank}. ${t.name}`)
+                    .join(' · ')}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
 
       <Card shadow="sm" className="sales-report-chart-card">
         <Localized id="heatmap-title">

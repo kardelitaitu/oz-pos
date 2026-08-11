@@ -444,6 +444,7 @@ pub fn run() {
                 commands::reports::get_weekly_revenue_scoped,
                 commands::reports::get_monthly_revenue_scoped,
                 commands::reports::get_top_products_scoped,
+                commands::reports::get_category_popularity_scoped,
                 commands::reports::get_hourly_heatmap_scoped,
                 commands::reports::get_low_stock_alerts_scoped,
                 commands::reports::get_category_breakdown_scoped,

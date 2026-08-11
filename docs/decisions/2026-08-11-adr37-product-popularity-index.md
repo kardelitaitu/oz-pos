@@ -160,8 +160,14 @@ upsert imports only its snapshot columns, so `popularity_score` and
   caches per-category smoothing means (`popularity.category_means`) and
   scores each product against its own category, so the grid's popularity sort
   is fair within a selected category; uncategorized products fall back to the
-  global mean. Per-period popularity and the demand-forecasting integration
-  remain out of scope.
+  global mean. The per-category evolution (2026-08-12) then surfaced those
+  standings as a first-class report: `Store::category_popularity` in
+  `crates/oz-core/src/db/popularity.rs` returns every category's product
+  count, mean score, ratio to the catalog average, and top-N products ranked
+  by score with category-relative rank + percentile, exposed as
+  `get_category_popularity_scoped` in both clients and rendered as the
+  Category Popularity card on the sales report. Per-period popularity and the
+  demand-forecasting integration remain out of scope.
 - Surfacing the score in analytics exports — the data will be available to the
   analytics tool through the local store DB (same path as cost, ADR #36 D2).
 

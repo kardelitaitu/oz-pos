@@ -7,6 +7,7 @@
 use tauri::{State, command};
 
 use oz_core::db::Store;
+use oz_core::db::popularity::CategoryPopularityRow;
 use oz_core::db::reports::{
     CategoryBreakdownRow, DailyRevenueRow, HourlyHeatmapRow, LowStockAlert, MonthlyRevenueRow,
     TopProductRow, WeeklyRevenueRow,
@@ -157,6 +158,36 @@ pub async fn get_top_products_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     Ok(Store::new(&db).top_products(&start_date, &end_date, limit, &order_by)?)
+}
+
+/// Per-category popularity limits: a category's leaderboard needs only a
+/// handful of entries (the UI shows the top 3).
+const MAX_CATEGORY_TOP: i64 = 20;
+
+fn validate_category_top(top_per_category: i64) -> Result<(), AppError> {
+    if !(1..=MAX_CATEGORY_TOP).contains(&top_per_category) {
+        return Err(AppError::Invalid(format!(
+            "top per category must be between 1 and {MAX_CATEGORY_TOP}"
+        )));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+/// Get per-category popularity standings for the session's store: each
+/// category's mean score, its ratio to the catalog average, and its
+/// top products ranked by popularity (ADR #37 per-category evolution).
+pub async fn get_category_popularity_scoped(
+    session_token: String,
+    top_per_category: i64,
+    state: State<'_, AppState>,
+) -> Result<Vec<CategoryPopularityRow>, AppError> {
+    validate_category_top(top_per_category)?;
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).category_popularity(top_per_category)?)
 }
 
 #[command]

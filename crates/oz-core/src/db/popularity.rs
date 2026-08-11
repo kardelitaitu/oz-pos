@@ -32,6 +32,42 @@ const CATEGORY_MEANS: &str = "popularity.category_means";
 /// sales_votes, search_raw, search_votes, edits_raw, edits_votes)`.
 type ProductSignals = (String, Option<String>, f64, f64, f64, f64, f64, f64);
 
+/// One product inside a category's popularity leaderboard.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CategoryTopProduct {
+    /// Product SKU.
+    pub sku: String,
+    /// Product display name.
+    pub name: String,
+    /// Materialized popularity score (category-smoothed, ADR #37 D6).
+    pub popularity_score: f64,
+    /// 1-based rank within the category by score (descending, SKU tiebreak).
+    pub rank: i64,
+    /// Category-relative standing: 1.0 = most popular in the category,
+    /// 0.0 = least, evenly spaced; 1.0 for single-product categories.
+    pub percentile: f64,
+}
+
+/// Per-category popularity summary (ADR #37 — the per-category evolution:
+/// the smoothing means are used for scoring, and this query surfaces the
+/// resulting category standings for the reporting layer).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CategoryPopularityRow {
+    /// Category id; empty string for uncategorized products.
+    pub category_id: String,
+    /// Category name; `None` for uncategorized (the UI localizes the label).
+    pub category_name: Option<String>,
+    /// Number of products in the category.
+    pub product_count: i64,
+    /// Mean popularity score across the category's products.
+    pub mean_score: f64,
+    /// `mean_score` relative to the catalog-wide mean (1.0 = average,
+    /// 2.0 = twice as popular as the catalog average; 0.0 when no scores).
+    pub catalog_ratio: f64,
+    /// The category's most popular products, ranked by score.
+    pub top_products: Vec<CategoryTopProduct>,
+}
+
 /// Days between an ISO date and today; out-of-range becomes `i64::MAX` so the
 /// formula window filters it out.
 fn days_ago(day: &str) -> i64 {
@@ -49,6 +85,123 @@ fn window_modifier() -> String {
 }
 
 impl Store<'_> {
+    /// Per-category popularity standings over the whole catalog.
+    ///
+    /// Returns every category (including the `""` bucket for uncategorized
+    /// products) with its product count, mean materialized score, the mean
+    /// relative to the catalog average, and the top `top_per_category`
+    /// products ranked by score with their category-relative rank and
+    /// percentile. Reads are O(catalog) against the materialized column, so
+    /// it is cheap and never touches the ledgers.
+    pub fn category_popularity(
+        &self,
+        top_per_category: i64,
+    ) -> Result<Vec<CategoryPopularityRow>, CoreError> {
+        let catalog_mean: f64 = self
+            .conn
+            .query_row("SELECT AVG(popularity_score) FROM products", [], |r| {
+                r.get(0)
+            })
+            .unwrap_or(0.0);
+
+        // Per-category aggregates: count + mean score.
+        let mut cats: HashMap<String, CategoryPopularityRow> = HashMap::new();
+        {
+            let mut stmt = self.conn.prepare(
+                "SELECT p.category_id, c.name, COUNT(*) AS cnt, AVG(p.popularity_score) AS mean
+                 FROM products p
+                 LEFT JOIN categories c ON p.category_id = c.id
+                 GROUP BY p.category_id",
+            )?;
+            let rows = stmt.query_map([], |r| {
+                Ok((
+                    r.get::<_, Option<String>>(0)?,
+                    r.get::<_, Option<String>>(1)?,
+                    r.get::<_, i64>(2)?,
+                    r.get::<_, f64>(3)?,
+                ))
+            })?;
+            for row in rows {
+                let (category, name, cnt, mean) = row?;
+                let key = category.unwrap_or_default();
+                cats.insert(
+                    key.clone(),
+                    CategoryPopularityRow {
+                        category_id: key,
+                        category_name: name,
+                        product_count: cnt,
+                        mean_score: mean,
+                        catalog_ratio: if catalog_mean > 0.0 {
+                            mean / catalog_mean
+                        } else {
+                            0.0
+                        },
+                        top_products: Vec::new(),
+                    },
+                );
+            }
+        }
+
+        // Ranked products per category (score desc, SKU tiebreak).
+        let mut per_cat: HashMap<String, Vec<(String, String, f64)>> = HashMap::new();
+        {
+            let mut stmt = self.conn.prepare(
+                "SELECT p.category_id, p.sku, p.name, p.popularity_score
+                 FROM products p
+                 ORDER BY p.category_id, p.popularity_score DESC, p.sku ASC",
+            )?;
+            let rows = stmt.query_map([], |r| {
+                Ok((
+                    r.get::<_, Option<String>>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, f64>(3)?,
+                ))
+            })?;
+            for row in rows {
+                let (category, sku, name, score) = row?;
+                per_cat
+                    .entry(category.unwrap_or_default())
+                    .or_default()
+                    .push((sku, name, score));
+            }
+        }
+
+        for (key, rows) in per_cat {
+            let count = rows.len() as f64;
+            let top: Vec<CategoryTopProduct> = rows
+                .into_iter()
+                .take(top_per_category.max(0) as usize)
+                .enumerate()
+                .map(|(i, (sku, name, score))| CategoryTopProduct {
+                    sku,
+                    name,
+                    popularity_score: score,
+                    rank: i as i64 + 1,
+                    // Linear spread: best = 1.0, worst = 0.0 (1.0 when the
+                    // category holds a single product).
+                    percentile: if count > 1.0 {
+                        (count - 1.0 - i as f64) / (count - 1.0)
+                    } else {
+                        1.0
+                    },
+                })
+                .collect();
+            if let Some(cat) = cats.get_mut(&key) {
+                cat.top_products = top;
+            }
+        }
+
+        let mut out: Vec<CategoryPopularityRow> = cats.into_values().collect();
+        out.sort_by(|a, b| {
+            b.mean_score
+                .partial_cmp(&a.mean_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.category_id.cmp(&b.category_id))
+        });
+        Ok(out)
+    }
+
     /// Daily completed-sale unit counts for one SKU over the window.
     fn sale_day_counts(&self, sku: &str) -> Result<Vec<DayCount>, CoreError> {
         let mut stmt = self.conn.prepare(
@@ -681,6 +834,85 @@ mod tests {
             "single-SKU recompute must reuse the category means \
              (full-pass={full_pass_score}, recomputed={after})"
         );
+    }
+
+    #[test]
+    fn category_popularity_ranks_categories_and_top_products() {
+        let conn = fresh();
+        seed_category(&conn, "cat-hot", "Hot");
+        seed_category(&conn, "cat-quiet", "Quiet");
+        for (sku, cat, score) in [
+            ("HOT-A", "cat-hot", 9.0),
+            ("HOT-B", "cat-hot", 5.0),
+            ("HOT-C", "cat-hot", 3.0),
+            ("HOT-D", "cat-hot", 1.0),
+            ("QUIET-1", "cat-quiet", 4.0),
+            ("QUIET-2", "cat-quiet", 2.0),
+            ("NO-CAT", "", 6.0),
+        ] {
+            let id = uuid::Uuid::now_v7().to_string();
+            let cat = if cat.is_empty() { None } else { Some(cat) };
+            conn.execute(
+                "INSERT INTO products (id, sku, name, price_minor, currency, category_id, \
+                 popularity_score, created_at, updated_at) VALUES (?1, ?2, ?2, 1000, 'USD', \
+                 ?3, ?4, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+                params![id, sku, cat, score],
+            )
+            .unwrap();
+        }
+
+        let store = Store::new(&conn);
+        let rows = store.category_popularity(3).unwrap();
+
+        // Catalog mean = (9+5+3+1+4+2+6)/7 = 4.2857…
+        assert_eq!(rows.len(), 3, "hot, quiet, and the uncategorized bucket");
+
+        let hot = rows.iter().find(|r| r.category_id == "cat-hot").unwrap();
+        assert_eq!(hot.category_name.as_deref(), Some("Hot"));
+        assert_eq!(hot.product_count, 4);
+        assert!((hot.mean_score - 4.5).abs() < 1e-9);
+        assert!((hot.catalog_ratio - 4.5 / (30.0 / 7.0)).abs() < 1e-9);
+        // Top-3 limited to 3, ranked by score with SKU tiebreak.
+        let top: Vec<(&str, i64, f64)> = hot
+            .top_products
+            .iter()
+            .map(|t| (t.sku.as_str(), t.rank, t.percentile))
+            .collect();
+        assert_eq!(
+            top,
+            vec![
+                ("HOT-A", 1, 1.0),
+                ("HOT-B", 2, 2.0 / 3.0),
+                ("HOT-C", 3, 1.0 / 3.0)
+            ]
+        );
+
+        let uncat = rows.iter().find(|r| r.category_id.is_empty()).unwrap();
+        assert_eq!(uncat.category_name, None);
+        assert_eq!(uncat.product_count, 1);
+        // Single-product category: percentile is 1.0 by definition.
+        assert_eq!(uncat.top_products[0].percentile, 1.0);
+
+        // Categories sort by mean score descending: hot (4.5) > uncat (6.0)?
+        // No — the uncategorized bucket's mean is 6.0, so it ranks first.
+        assert_eq!(rows[0].category_id, "");
+        assert_eq!(rows[1].category_id, "cat-hot");
+        assert_eq!(rows[2].category_id, "cat-quiet");
+        assert!((rows[2].mean_score - 3.0).abs() < 1e-9);
+
+        // top_per_category=1 keeps only the leader.
+        let one = store.category_popularity(1).unwrap();
+        let hot_one = one.iter().find(|r| r.category_id == "cat-hot").unwrap();
+        assert_eq!(hot_one.top_products.len(), 1);
+        assert_eq!(hot_one.top_products[0].sku, "HOT-A");
+    }
+
+    #[test]
+    fn category_popularity_empty_catalog() {
+        let conn = fresh();
+        let store = Store::new(&conn);
+        let rows = store.category_popularity(3).unwrap();
+        assert!(rows.is_empty(), "no products → no category rows");
     }
 
     #[test]

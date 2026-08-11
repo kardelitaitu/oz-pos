@@ -85,6 +85,33 @@ export interface CategoryBreakdownRow {
   percentage: number;
 }
 
+/** One product inside a category's popularity leaderboard. */
+export interface CategoryTopProduct {
+  sku: string;
+  name: string;
+  /** Materialized popularity score (category-smoothed). */
+  popularity_score: number;
+  /** 1-based rank within the category by score. */
+  rank: number;
+  /** Category-relative standing: 1.0 = most popular, 0.0 = least. */
+  percentile: number;
+}
+
+/** Per-category popularity standings (ADR #37 per-category evolution). */
+export interface CategoryPopularityRow {
+  /** Category id; empty string for uncategorized products. */
+  category_id: string;
+  /** Category name; `null` for uncategorized. */
+  category_name: string | null;
+  product_count: number;
+  /** Mean popularity score across the category's products. */
+  mean_score: number;
+  /** `mean_score` relative to the catalog mean (1.0 = average). */
+  catalog_ratio: number;
+  /** The category's most popular products, ranked by score. */
+  top_products: CategoryTopProduct[];
+}
+
 /** Get daily revenue aggregates for a date range in the active store. */
 export const getDailyRevenue = (
   startDate: string,
@@ -136,6 +163,18 @@ export const getTopProducts = (
     endDate,
     limit,
     orderBy,
+  });
+
+/** Get per-category popularity standings for the active store: each
+ * category's mean score, its ratio to the catalog average, and its top
+ * `topPerCategory` products ranked by popularity. */
+export const getCategoryPopularity = (
+  sessionToken: string,
+  topPerCategory = 3,
+): Promise<CategoryPopularityRow[]> =>
+  loggedInvoke<CategoryPopularityRow[]>('get_category_popularity_scoped', {
+    sessionToken: sessionToken ?? '',
+    topPerCategory,
   });
 
 /** Get hourly sales heatmap data for a date range in the active store. */

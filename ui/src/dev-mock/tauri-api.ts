@@ -1913,6 +1913,50 @@ const handlers: Record<string, (args: unknown) => unknown> = {
       ? rows.sort((a, b) => b.gross_profit_minor - a.gross_profit_minor)
       : rows;
   },
+  'get_category_popularity': (args) => {
+    const { topPerCategory } = (args ?? {}) as { topPerCategory?: number };
+    const top = Math.max(1, Math.min(topPerCategory ?? 3, 20));
+    // Deterministic pseudo-scores so the mock preview looks alive: earlier
+    // products (higher stock) get higher popularity.
+    const scored = MOCK_PRODUCTS.map((p, i) => ({
+      sku: p.sku,
+      name: p.name,
+      category: p.category ?? '',
+      popularity_score: Math.round((10 - (i % 10)) * 10) / 10,
+    }));
+    const byCat = new Map<string, typeof scored>();
+    for (const s of scored) {
+      const list = byCat.get(s.category) ?? [];
+      list.push(s);
+      byCat.set(s.category, list);
+    }
+    const all = scored.map((s) => s.popularity_score);
+    const catalogMean = all.length
+      ? all.reduce((a, b) => a + b, 0) / all.length
+      : 0;
+    const rows = [...byCat.entries()].map(([category, items]) => {
+      items.sort((a, b) => b.popularity_score - a.popularity_score);
+      const mean = items.reduce((s, it) => s + it.popularity_score, 0) / items.length;
+      return {
+        category_id: category || '',
+        category_name: category || null,
+        product_count: items.length,
+        mean_score: Math.round(mean * 10) / 10,
+        catalog_ratio: catalogMean > 0 ? Math.round((mean / catalogMean) * 10) / 10 : 0,
+        top_products: items.slice(0, top).map((it, i) => ({
+          sku: it.sku,
+          name: it.name,
+          popularity_score: it.popularity_score,
+          rank: i + 1,
+          percentile: items.length > 1
+            ? Math.round(((items.length - 1 - i) / (items.length - 1)) * 100) / 100
+            : 1,
+        })),
+      };
+    });
+    rows.sort((a, b) => b.mean_score - a.mean_score);
+    return rows;
+  },
   'get_hourly_heatmap': () => [0, 3, 5, 8, 11].flatMap((day) =>
     [9, 12, 15, 18].map((hour, i) => ({
       day_of_week: day,
@@ -2165,6 +2209,7 @@ const SCOPED_ALIASES: Array<[string, string]> = [
   ['get_weekly_revenue_scoped', 'get_weekly_revenue'],
   ['get_monthly_revenue_scoped', 'get_monthly_revenue'],
   ['get_top_products_scoped', 'get_top_products'],
+  ['get_category_popularity_scoped', 'get_category_popularity'],
   ['get_hourly_heatmap_scoped', 'get_hourly_heatmap'],
   ['get_category_breakdown_scoped', 'get_category_breakdown'],
   ['get_menu_engineering_scoped', 'get_menu_engineering'],

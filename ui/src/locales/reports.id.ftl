@@ -27,6 +27,13 @@ top-products-margin = Margin
 sales-report-top-rank-aria = Urutkan produk terlaris berdasarkan
 sales-report-top-rank-revenue-aria = Urutkan berdasarkan pendapatan
 sales-report-top-rank-profit-aria = Urutkan berdasarkan laba kotor
+sales-report-category-popularity = Popularitas Kategori
+sales-report-category-popularity-category = Kategori
+sales-report-category-popularity-products = Produk
+sales-report-category-popularity-mean = Popularitas
+sales-report-category-popularity-mean-tip = Rata-rata kategori vs. rata-rata katalog
+sales-report-category-popularity-top = Penjual Teratas
+sales-report-category-popularity-uncategorized = Tanpa Kategori
 
 heatmap-title = Jam Tersibuk
 heatmap-hour = Jam

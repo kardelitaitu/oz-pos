@@ -53,6 +53,13 @@ sales-report-heatmap-aria = Hourly heatmap
 sales-report-top-rank-aria = Rank top products by
 sales-report-top-rank-revenue-aria = Rank by revenue
 sales-report-top-rank-profit-aria = Rank by gross profit
+sales-report-category-popularity = Category Popularity
+sales-report-category-popularity-category = Category
+sales-report-category-popularity-products = Products
+sales-report-category-popularity-mean = Popularity
+sales-report-category-popularity-mean-tip = Category average vs. catalog average
+sales-report-category-popularity-top = Top Sellers
+sales-report-category-popularity-uncategorized = Uncategorized
 `;
 
 // ── Mock recharts ─────────────────────────────────────────────────
@@ -76,6 +83,7 @@ const mockGetMonthlyRevenue = vi.fn();
 const mockGetTopProducts = vi.fn();
 const mockGetHourlyHeatmap = vi.fn();
 const mockGetCategoryBreakdown = vi.fn();
+const mockGetCategoryPopularity = vi.fn();
 const mockPrintSalesReceipt = vi.fn();
 
 vi.mock('@/api/reports', () => ({
@@ -85,6 +93,7 @@ vi.mock('@/api/reports', () => ({
   getTopProducts: (...args: unknown[]) => mockGetTopProducts(...args),
   getHourlyHeatmap: (...args: unknown[]) => mockGetHourlyHeatmap(...args),
   getCategoryBreakdown: (...args: unknown[]) => mockGetCategoryBreakdown(...args),
+  getCategoryPopularity: (...args: unknown[]) => mockGetCategoryPopularity(...args),
 }));
 
 vi.mock('@/api/sales', () => ({
@@ -196,11 +205,28 @@ function renderScreen() {
   );
 }
 
+function buildCategoryPopularity(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    category_id: 'cat-drinks',
+    category_name: 'Drinks',
+    product_count: 3,
+    mean_score: 2.5,
+    catalog_ratio: 1.7,
+    top_products: [
+      { sku: 'DRINK-1', name: 'Latte', popularity_score: 4, rank: 1, percentile: 1 },
+      { sku: 'DRINK-2', name: 'Mocha', popularity_score: 2, rank: 2, percentile: 0.5 },
+      { sku: 'DRINK-3', name: 'Tea', popularity_score: 1, rank: 3, percentile: 0 },
+    ],
+    ...overrides,
+  };
+}
+
 function resolveDefaultData() {
   mockGetDailyRevenue.mockResolvedValue([buildDailyRevenue()]);
   mockGetTopProducts.mockResolvedValue([buildTopProduct()]);
   mockGetHourlyHeatmap.mockResolvedValue([buildHeatmap()]);
   mockGetCategoryBreakdown.mockResolvedValue([buildCategory()]);
+  mockGetCategoryPopularity.mockResolvedValue([buildCategoryPopularity()]);
 }
 
 // ── Tests ────────────────────────────────────────────────────────
@@ -212,6 +238,9 @@ describe('SalesReportScreen', () => {
     mockGetTopProducts.mockImplementation(() => new Promise(() => {}));
     mockGetHourlyHeatmap.mockImplementation(() => new Promise(() => {}));
     mockGetCategoryBreakdown.mockImplementation(() => new Promise(() => {}));
+    // Category popularity defaults to empty (not pending) so tests that
+    // override only the other mocks still resolve the shared Promise.all.
+    mockGetCategoryPopularity.mockResolvedValue([]);
     mockPrintSalesReceipt.mockResolvedValue(undefined);
   });
 
@@ -229,6 +258,7 @@ describe('SalesReportScreen', () => {
     mockGetTopProducts.mockRejectedValue(new Error('Server offline'));
     mockGetHourlyHeatmap.mockRejectedValue(new Error('Server offline'));
     mockGetCategoryBreakdown.mockRejectedValue(new Error('Server offline'));
+    mockGetCategoryPopularity.mockRejectedValue(new Error('Server offline'));
     renderScreen();
     await waitFor(() => {
       expect(screen.getByText('An error occurred')).toBeTruthy();
@@ -541,6 +571,54 @@ describe('SalesReportScreen', () => {
     });
   });
 
+  // ── Category popularity ──────────────────────────────────────
+  it('renders the category popularity leaderboard', async () => {
+    resolveDefaultData();
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByText('Category Popularity')).toBeTruthy();
+      // Category row: name, count, catalog ratio, ranked top products
+      // ('3' also appears as a heatmap hour header, so use getAllByText).
+      expect(screen.getByText('Drinks')).toBeTruthy();
+      expect(screen.getAllByText('3').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText('1.7×')).toBeTruthy();
+      expect(screen.getByText('1. Latte · 2. Mocha · 3. Tea')).toBeTruthy();
+    });
+  });
+
+  it('localizes the uncategorized label when category_name is null', async () => {
+    mockGetDailyRevenue.mockResolvedValue([buildDailyRevenue()]);
+    mockGetTopProducts.mockResolvedValue([]);
+    mockGetHourlyHeatmap.mockResolvedValue([]);
+    mockGetCategoryBreakdown.mockResolvedValue([]);
+    mockGetCategoryPopularity.mockResolvedValue([
+      buildCategoryPopularity({
+        category_id: '',
+        category_name: null,
+        catalog_ratio: 0,
+        top_products: [],
+      }),
+    ]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByText('Uncategorized')).toBeTruthy();
+      expect(screen.getByText('—')).toBeTruthy();
+    });
+  });
+
+  it('shows "No results" when category popularity is empty', async () => {
+    mockGetDailyRevenue.mockResolvedValue([buildDailyRevenue()]);
+    mockGetTopProducts.mockResolvedValue([]);
+    mockGetHourlyHeatmap.mockResolvedValue([]);
+    mockGetCategoryBreakdown.mockResolvedValue([]);
+    mockGetCategoryPopularity.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      const noResultsElements = screen.getAllByText('No results');
+      expect(noResultsElements.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
   // ── Hourly heatmap ───────────────────────────────────────────
   it('renders heatmap section with title', async () => {
     resolveDefaultData();
@@ -791,7 +869,8 @@ describe('SalesReportScreen', () => {
       // Revenue section still renders (heading + $0.00 total)
       expect(screen.getAllByText('Revenue').length).toBeGreaterThanOrEqual(1);
       // Category breakdown and top products both show "No results"
-      expect(screen.getAllByText('No results').length).toBe(2);
+      // Top products, category breakdown, and category popularity.
+      expect(screen.getAllByText('No results').length).toBe(3);
       // Heatmap shows "No data"
       expect(screen.getByText('No data')).toBeTruthy();
     });

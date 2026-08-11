@@ -16,6 +16,7 @@ import {
   getHourlyHeatmap,
   getLowStockAlerts,
   getCategoryBreakdown,
+  getCategoryPopularity,
   getMenuEngineering,
   buildCustomReport,
 } from '@/api/reports';
@@ -34,6 +35,7 @@ describe('reports.ts scoped IPC contract', () => {
     await getHourlyHeatmap('2026-07-01', '2026-07-31', 'session-1');
     await getLowStockAlerts(5, 'session-1');
     await getCategoryBreakdown('2026-07-01', '2026-07-31', 'session-1');
+    await getCategoryPopularity('session-1', 3);
 
     expect(mockInvoke).toHaveBeenNthCalledWith(1, 'get_daily_revenue_scoped', {
       sessionToken: 'session-1',
@@ -55,6 +57,10 @@ describe('reports.ts scoped IPC contract', () => {
       sessionToken: 'session-1',
       startDate: '2026-07-01',
       endDate: '2026-07-31',
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(8, 'get_category_popularity_scoped', {
+      sessionToken: 'session-1',
+      topPerCategory: 3,
     });
   });
 
