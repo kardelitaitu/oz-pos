@@ -167,3 +167,68 @@ profile state means no legacy row is ever blocked. Each privacy rule ships
 with its own test, so a rule that proves operationally wrong (e.g. masking
 frustrating a workflow) can be adjusted independently without reverting the
 schema.
+
+## 10. Progress record
+
+Status: **IN PROGRESS** — cycles 1–3 implemented and committed; the slice is
+complete but awaiting human approval to close (spec.yaml stays
+`needs-human-approval` until then, per the 0046/0047 close-out convention).
+
+### Cycle 1 — schema + validation + incomplete state (`6b76d3e0`)
+
+- Migration `130_user_profiles.sql`: the 17 profile columns on `users`
+  (nullable — "mandatory" is enforced at creation) plus unique email and
+  national-id indexes; the D6 not-collected fields are pinned absent by the
+  migration test.
+- `db::profile::UserProfile` with `is_complete()` and `validate()`
+  (ssn=9/nik=16, E.164 phone, non-future DOB, positive pay, field-level
+  errors); `create_user_with_profile` is transactional.
+
+### Cycle 2a — sensitive keys (`d9990925`)
+
+- `staff:read_identity`, `staff:read_payroll`, `staff:edit_notes` registered
+  as sensitive (never wildcard-eligible), granted to Manager/Admin/Staff
+  presets, withheld from Auditor; pinned by the registry test.
+
+### Cycle 2b — sensitive handling (`abc7949e`)
+
+- `national_id` + `monthly_take_home_minor` encrypted at rest
+  (`crypto::encrypt_profile_field` / `decrypt_profile_field`); migration 131
+  adds `national_id_hash` + unique index so the unique-when-present invariant
+  survives nonce-randomised ciphertext.
+- `get_user_profile_viewed_by` → `ProfileView`: full values only with the
+  explicit grants, national id always last-4 masked (`mask_last4`), every
+  sensitive read audited (access, never values), corrupt ciphertext fails
+  closed.
+- `assign_role_guarded` / `require_role_assignable`: management-role
+  assignment gated on a complete profile (fires only on actual role change).
+- Retention (`deactivation_preserves_profile`) and residency
+  (`SnapshotUser` wire-format pin) tests.
+
+### Cycle 3 — IPC + UI (this commit)
+
+- `CreateStaffScopedArgs`/`UpdateStaffScopedArgs` gain the 17 profile
+  fields in both clients; `create_staff_scoped` → `create_user_with_profile`;
+  `update_staff_scoped` runs the role gate + profile write atomically inside
+  its existing transaction and restores the profile on workspace-assignment
+  rollback.
+- New `get_staff_profile_scoped` command returns the viewer-gated
+  `ProfileViewDto` (masked/withheld per grants, reads audited); registered on
+  both clients.
+- `StaffMemberDto` gains `national_id_masked` + `is_profile_complete`; the
+  list renders the masked id and the incomplete badge.
+- Staff screen: 17-field profile form with localized per-field validation of
+  the 9 mandatory fields, masked ID column, incomplete badge, and disabled
+  role/workspace controls for incomplete members; i18n keys in both
+  `staff.ftl` bundles (parity verified).
+- `api-staff-contract.test.ts` pins the new wire shape.
+
+### Known deviations
+
+- Encryption uses `oz_core::crypto` (domain-separated AES-GCM, static key)
+  rather than the oz-security keyring — oz-security depends on oz-core, so
+  the dependency direction the spec implies is impossible; the static key
+  follows the `encrypt_smtp_at_rest` precedent (readable after a DB restore
+  on another machine). Masking lives in oz-core for the same reason.
+- `cargo clippy -D warnings` reports 2 pre-existing errors in
+  `topology.rs` (untouched by 0049); the changed area is clean.

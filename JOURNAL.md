@@ -3989,3 +3989,43 @@ abc7949e (feat(profile): encrypt, mask, audit, gate, retain)
 Tests: 1 registry + 3 crypto + 6 profile + 1 migration + 1 sync new;
 oz-core lib 1727/1727, platform-core 237/237, platform-sync 276/276,
 fmt/clippy -D warnings/drift clean.
+
+### 2026-08-11 — 0049 c3: profile IPC args + staff screen (masked ID, incomplete gating, contract test)
+
+Problem: the profile contract from cycles 1-2 had no front-end: the staff
+IPC args carried no profile fields, so creation could not collect the 9
+mandatory items and the list/detail could not render the masked national id
+or the incomplete-profile flag.
+
+Solution: both clients' CreateStaffScopedArgs/UpdateStaffScopedArgs gain the
+17 ADR #35 D6 profile fields. create_staff_scoped now goes through the
+validating, transactional create_user_with_profile. update_staff_scoped runs
+require_role_assignable (the incomplete-profile gate) and writes the profile
+columns atomically inside its existing transaction via the new
+transaction-safe write_user_profile, restoring the profile on
+workspace-assignment rollback. New get_staff_profile_scoped command returns
+the viewer-gated ProfileViewDto (full sensitive values only with
+staff:read_identity / staff:read_payroll; reads audited by oz-core). The
+staff screen collects all 17 fields with localized per-field validation of
+the 9 mandatory ones, renders the masked national id column, flags
+incomplete profiles with a badge, and disables the role + workspace
+assignment controls for incomplete members; the api-staff-contract test pins
+the new wire shape; i18n keys land in both bundles (parity verified).
+
+Decisions: (1) transaction-safe write_user_profile — update_user_profile
+opened its own transaction, which would nest-BEGIN inside the client's
+update transaction; the shared single-statement write is safe in both
+contexts. (2) The incomplete gate only fires when the role actually changes
+(re-saving the same role is not a new grant) — otherwise every edit of an
+owner's name would be denied for legacy rows. (3) UI form collects the full
+17-field set (matching the agreed optional list); a disabled fieldset drops
+its children from the a11y tree, so the incomplete-disabled assertion targets
+the fieldset role.
+
+Commits: ecae8b52 (feat(profile): staff IPC profile fields + viewer-gated
+profile command + staff screen), 57e98628 (feat(ui): staff profile form),
+<backfilled> (docs(0049): spec progress)
+Tests: desktop staff 40/40, tablet staff 19/19, UI screen 17/17,
+contract 4/4; oz-core 1727/1727, platform-core 237/237, platform-sync
+276/276; fmt/clippy (changed area)/bundle-parity/drift clean. Two pre-existing
+clippy errors in topology.rs (untouched) noted.
