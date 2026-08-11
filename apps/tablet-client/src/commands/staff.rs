@@ -318,6 +318,10 @@ pub struct RoleDto {
     pub name: String,
     /// Human-readable description.
     pub description: String,
+    /// Granted permission keys, verbatim from the role's permissions JSON
+    /// (may include `"*"`). Shown in the staff screen so an admin can see
+    /// exactly what each role can do.
+    pub permissions: Vec<String>,
 }
 
 #[command]
@@ -519,10 +523,14 @@ pub async fn list_roles_scoped(
     drop(db);
     Ok(roles
         .into_iter()
-        .map(|r| RoleDto {
-            id: r.id,
-            name: r.name,
-            description: r.description,
+        .map(|r| {
+            let permissions = r.permission_keys();
+            RoleDto {
+                id: r.id,
+                name: r.name,
+                description: r.description,
+                permissions,
+            }
         })
         .collect())
 }
@@ -945,6 +953,7 @@ mod tests {
             id: "r1".into(),
             name: "Admin".into(),
             description: "Full access".into(),
+            permissions: vec![],
         };
         let d = format!("{dto:?}");
         assert!(d.contains("Admin"));
@@ -957,6 +966,7 @@ mod tests {
             id: "r2".into(),
             name: "Viewer".into(),
             description: String::new(),
+            permissions: vec![],
         };
         let json = serde_json::to_value(&dto).unwrap();
         assert_eq!(json["name"], "Viewer");

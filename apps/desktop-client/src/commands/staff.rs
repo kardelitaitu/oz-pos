@@ -320,6 +320,10 @@ pub struct RoleDto {
     pub name: String,
     /// Human-readable description.
     pub description: String,
+    /// Granted permission keys, verbatim from the role's permissions JSON
+    /// (may include `"*"`). Shown in the staff screen so an admin can see
+    /// exactly what each role can do.
+    pub permissions: Vec<String>,
 }
 
 #[tauri::command]
@@ -524,10 +528,14 @@ pub async fn list_roles_scoped(
     drop(db);
     Ok(roles
         .into_iter()
-        .map(|r| RoleDto {
-            id: r.id,
-            name: r.name,
-            description: r.description,
+        .map(|r| {
+            let permissions = r.permission_keys();
+            RoleDto {
+                id: r.id,
+                name: r.name,
+                description: r.description,
+                permissions,
+            }
         })
         .collect())
 }
@@ -958,6 +966,7 @@ mod tests {
             id: "r1".into(),
             name: "Admin".into(),
             description: "Full access".into(),
+            permissions: vec![],
         };
         let d = format!("{dto:?}");
         assert!(d.contains("Admin"));
@@ -969,6 +978,7 @@ mod tests {
             id: "r2".into(),
             name: "Viewer".into(),
             description: String::new(),
+            permissions: vec![],
         };
         let json = serde_json::to_value(&dto).unwrap();
         assert_eq!(json["name"], "Viewer");
@@ -1812,6 +1822,29 @@ mod tests {
 
         let result = list_roles_scoped("cashier-token".into(), app.state()).await;
         assert!(matches!(result, Err(AppError::PermissionDenied(_))));
+    }
+
+    #[tokio::test]
+    async fn scoped_list_roles_carries_each_roles_granted_permission_keys() {
+        // The staff screen shows what each role can do — the role listing
+        // must carry the granted keys verbatim (Owner = global wildcard,
+        // a narrow custom role = its exact grants).
+        let conn = oz_core::migrations::fresh_db();
+        seed_global_users(&conn);
+        let state =
+            scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let roles = list_roles_scoped("owner-token".into(), app.state())
+            .await
+            .unwrap();
+        let owner = roles.iter().find(|r| r.id == "role-owner").unwrap();
+        assert_eq!(owner.permissions, vec!["*"]);
+        let lite = roles.iter().find(|r| r.id == "role-lite").unwrap();
+        assert_eq!(lite.permissions, vec!["sales:view"]);
     }
 
     #[tokio::test]
