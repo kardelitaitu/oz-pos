@@ -496,6 +496,45 @@ fn parse_server_migrated(body: &str) -> Option<String> {
 mod tests {
     use super::*;
 
+    // ADR #35 D6 / spec 0049 residency: the sync wire format for users
+    // carries only the operational fields — profile columns (national id,
+    // monthly pay, tax id, emergency contact, etc.) must never travel over
+    // the sync channel. Adding one here breaks the pin deliberately.
+    #[test]
+    fn snapshot_user_wire_format_has_no_profile_fields() {
+        let user = SnapshotUser {
+            id: "u-1".into(),
+            username: "alice".into(),
+            display_name: "Alice".into(),
+            role_id: "role-staff".into(),
+            is_active: true,
+            created_at: Some("2026-01-01T00:00:00Z".into()),
+            updated_at: Some("2026-01-01T00:00:00Z".into()),
+        };
+        let json = serde_json::to_value(&user).unwrap();
+        let obj = json.as_object().expect("snapshot user is a JSON object");
+        let keys: Vec<&String> = obj.keys().collect();
+        for banned in [
+            "national_id",
+            "national_id_hash",
+            "monthly_take_home_minor",
+            "tax_id",
+            "email",
+            "phone",
+            "date_of_birth",
+            "emergency_contact_name",
+            "emergency_contact_phone",
+            "notes",
+            "address",
+            "hire_date",
+        ] {
+            assert!(
+                !keys.contains(&&banned.to_string()),
+                "sensitive/profile field {banned} must never sync"
+            );
+        }
+    }
+
     #[test]
     fn transport_construction() {
         let transport = SyncTransport::new("http://localhost:3099", None);

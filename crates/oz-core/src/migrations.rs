@@ -759,6 +759,10 @@ pub const ALL: &[Migration] = &[
         id: "130_user_profiles.sql",
         sql: include_str!("../migrations/130_user_profiles.sql"),
     },
+    Migration {
+        id: "131_user_profiles_national_id_hash.sql",
+        sql: include_str!("../migrations/131_user_profiles_national_id_hash.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.
@@ -3327,6 +3331,46 @@ mod tests {
                 "{banned} is on the D6 not-collected list and must not appear"
             );
         }
+
+        // Re-running migrations stays idempotent (module convention).
+        run(&mut conn).unwrap();
+    }
+
+    // ── ADR #35 D6 (migration 131): national-id uniqueness hash ─────
+    //
+    // national_id is encrypted at rest (nonce-randomised ciphertext), so the
+    // ciphertext column can no longer enforce uniqueness — the deterministic
+    // hash column + unique index carry the "unique when present" invariant.
+    #[test]
+    fn migration_131_adds_national_id_hash_column_and_index() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        let cols: Vec<String> = conn
+            .prepare("SELECT name FROM pragma_table_info('users')")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        assert!(
+            cols.contains(&"national_id_hash".to_string()),
+            "users must gain national_id_hash"
+        );
+
+        let idx: Vec<String> = conn
+            .prepare(
+                "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='users' AND name LIKE 'idx_users_%'",
+            )
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        assert!(
+            idx.contains(&"idx_users_national_id_hash".into()),
+            "national_id_hash unique index"
+        );
 
         // Re-running migrations stays idempotent (module convention).
         run(&mut conn).unwrap();

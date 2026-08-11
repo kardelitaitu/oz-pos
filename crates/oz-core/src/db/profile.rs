@@ -14,7 +14,10 @@
 
 use rusqlite::{OptionalExtension, params};
 
+use crate::audit::AuditEntry;
+use crate::crypto::{decrypt_profile_field, encrypt_profile_field};
 use crate::error::CoreError;
+use crate::{permission_registry, permissions};
 
 use super::Store;
 
@@ -205,25 +208,115 @@ const PROFILE_COLUMNS: &str = "date_of_birth, phone, national_id_type, national_
      hire_date";
 
 /// The same columns as `col = ?N` assignments, in parameter order (UPDATE).
+/// `national_id` and `monthly_take_home_minor` hold ciphertext and
+/// `national_id_hash` carries the plaintext hash that preserves uniqueness.
 const PROFILE_ASSIGNMENTS: &str = "date_of_birth=?1, phone=?2, national_id_type=?3, \
-     national_id=?4, email=?5, monthly_take_home_minor=?6, emergency_contact_name=?7, \
-     emergency_contact_phone=?8, job_title=?9, notes=?10, address=?11, language=?12, avatar=?13, \
-     tax_id=?14, national_id_expires_at=?15, emergency_contact_relationship=?16, hire_date=?17";
+     national_id=?4, national_id_hash=?5, email=?6, monthly_take_home_minor=?7, \
+     emergency_contact_name=?8, emergency_contact_phone=?9, job_title=?10, notes=?11, \
+     address=?12, language=?13, avatar=?14, tax_id=?15, national_id_expires_at=?16, \
+     emergency_contact_relationship=?17, hire_date=?18";
+
+/// The profile of a user as seen by a specific viewer (ADR #35 D6):
+/// sensitive fields are withheld or masked unless the viewer holds the
+/// explicit sensitive grants, and reads are audited by
+/// [`Store::get_user_profile_viewed_by`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProfileView {
+    /// Login username (not sensitive).
+    pub username: String,
+    /// Display name (not sensitive).
+    pub display_name: String,
+    /// ISO date of birth (not sensitive).
+    pub date_of_birth: Option<String>,
+    /// Phone in E.164 form (not sensitive).
+    pub phone: Option<String>,
+    /// `"ssn"` or `"nik"` — the *type* is not sensitive.
+    pub national_id_type: Option<String>,
+    /// Full national id — present only when the viewer holds
+    /// `staff:read_identity`.
+    pub national_id: Option<String>,
+    /// Last-4 masked national id — always present, never reveals more.
+    pub national_id_masked: String,
+    /// Lowercase email (an identifier only, per ADR #35 D6 non-goals).
+    pub email: Option<String>,
+    /// Monthly take-home pay in minor units — present only when the viewer
+    /// holds `staff:read_payroll`.
+    pub monthly_take_home_minor: Option<i64>,
+    /// Emergency contact name (not sensitive).
+    pub emergency_contact_name: Option<String>,
+    /// Emergency contact phone (not sensitive).
+    pub emergency_contact_phone: Option<String>,
+    /// Job title (not sensitive).
+    pub job_title: String,
+    /// Free-text notes (not sensitive).
+    pub notes: String,
+    /// Street address (not sensitive).
+    pub address: Option<String>,
+    /// UI language preference (not sensitive).
+    pub language: Option<String>,
+    /// Avatar reference (not sensitive).
+    pub avatar: Option<String>,
+    /// Tax id — present only when the viewer holds `staff:read_identity`.
+    pub tax_id: Option<String>,
+    /// National id document expiry (not sensitive).
+    pub national_id_expires_at: Option<String>,
+    /// Emergency contact relationship (not sensitive).
+    pub emergency_contact_relationship: Option<String>,
+    /// Hire date (not sensitive).
+    pub hire_date: Option<String>,
+    /// Whether all 8 required profile fields are present.
+    pub is_complete: bool,
+}
+
+/// Deterministic SHA-256 hex digest (national-id uniqueness hash).
+fn sha256_hex(value: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(value.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
+/// Mask a value to its last 4 characters (ADR #35 D6: national_id renders
+/// last-4 in every UI surface; the full value only via the explicit grant).
+pub fn mask_last4(value: &str) -> String {
+    let len = value.chars().count();
+    if len == 0 {
+        return "****".to_string();
+    }
+    if len <= 4 {
+        return "*".repeat(len);
+    }
+    let last4: String = value.chars().skip(len - 4).collect();
+    format!("{}{last4}", "*".repeat(len - 4))
+}
+
+/// Decrypt a stored ciphertext, failing closed (never plaintext) on error.
+fn decrypt_sensitive(cipher: Option<String>) -> Option<String> {
+    cipher.and_then(|c| decrypt_profile_field(&c).ok())
+}
 
 impl Store<'_> {
     /// Load a user's profile, or `None` when the user does not exist.
+    ///
+    /// Returns the *decrypted* sensitive values (national id, monthly pay).
+    /// This is the domain accessor — callers must enforce the explicit
+    /// sensitive grants before exposing these; use
+    /// [`Store::get_user_profile_viewed_by`] for the enforcement-aware path.
     pub fn get_user_profile(&self, user_id: &str) -> Result<Option<UserProfile>, CoreError> {
         let sql = format!("SELECT {PROFILE_COLUMNS} FROM users WHERE id = ?1");
         let profile = self
             .conn
             .query_row(&sql, params![user_id], |row| {
+                let pay_cipher: Option<String> = row.get(5)?;
+                let monthly_take_home_minor =
+                    decrypt_sensitive(pay_cipher).and_then(|s| s.parse::<i64>().ok());
                 Ok(UserProfile {
                     date_of_birth: row.get(0)?,
                     phone: row.get(1)?,
                     national_id_type: row.get(2)?,
-                    national_id: row.get(3)?,
+                    national_id: decrypt_sensitive(row.get(3)?),
                     email: row.get(4)?,
-                    monthly_take_home_minor: row.get(5)?,
+                    monthly_take_home_minor,
                     emergency_contact_name: row.get(6)?,
                     emergency_contact_phone: row.get(7)?,
                     job_title: row.get(8)?,
@@ -263,26 +356,40 @@ impl Store<'_> {
         Ok(user)
     }
 
-    /// Update a user's profile columns (validated). Duplicate email /
-    /// national_id surface as field-level conflicts via the unique indexes.
+    /// Update a user's profile columns (validated). The sensitive fields
+    /// (national id, monthly pay) are encrypted before storage; a
+    /// deterministic hash of the national id preserves the unique-when-
+    /// present invariant. Duplicate email / national id surface as
+    /// field-level conflicts via the unique indexes.
     pub fn update_user_profile(
         &self,
         user_id: &str,
         profile: &UserProfile,
     ) -> Result<(), CoreError> {
         profile.validate()?;
+        let national_id_cipher = profile
+            .national_id
+            .as_deref()
+            .map(encrypt_profile_field)
+            .transpose()?;
+        let pay_cipher = profile
+            .monthly_take_home_minor
+            .map(|v| encrypt_profile_field(&v.to_string()))
+            .transpose()?;
+        let national_id_hash = profile.national_id.as_deref().map(sha256_hex);
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let sql =
-            format!("UPDATE users SET {PROFILE_ASSIGNMENTS}, updated_at = ?18 WHERE id = ?19");
+            format!("UPDATE users SET {PROFILE_ASSIGNMENTS}, updated_at = ?19 WHERE id = ?20");
         let result = self.conn.execute(
             &sql,
             params![
                 &profile.date_of_birth,
                 &profile.phone,
                 &profile.national_id_type,
-                &profile.national_id,
+                national_id_cipher,
+                national_id_hash,
                 &profile.email,
-                &profile.monthly_take_home_minor,
+                pay_cipher,
                 &profile.emergency_contact_name,
                 &profile.emergency_contact_phone,
                 &profile.job_title,
@@ -309,7 +416,8 @@ impl Store<'_> {
                         field: "email",
                     });
                 }
-                if msg.contains("users.national_id") {
+                // Order matters: the hash message contains "users.national_id".
+                if msg.contains("users.national_id_hash") || msg.contains("users.national_id") {
                     return Err(CoreError::Conflict {
                         entity: "user",
                         field: "national_id",
@@ -323,6 +431,157 @@ impl Store<'_> {
                 id: user_id.to_owned(),
             }),
             Ok(_) => Ok(()),
+        }
+    }
+
+    /// The profile of `target_user_id` as seen by `viewer_user_id`: the
+    /// sensitive fields (national id, tax id, monthly pay) are returned in
+    /// full only when the viewer holds the explicit sensitive grants, and
+    /// every such read produces an audit event recording access (never
+    /// values). The national id always renders last-4 masked.
+    pub fn get_user_profile_viewed_by(
+        &self,
+        viewer_user_id: &str,
+        target_user_id: &str,
+    ) -> Result<Option<ProfileView>, CoreError> {
+        let Some(profile) = self.get_user_profile(target_user_id)? else {
+            return Ok(None);
+        };
+        let Some(user) = self.get_user(target_user_id)? else {
+            return Ok(None);
+        };
+
+        let read_identity =
+            self.has_permission_quiet(viewer_user_id, permissions::STAFF_READ_IDENTITY)?;
+        let read_payroll =
+            self.has_permission_quiet(viewer_user_id, permissions::STAFF_READ_PAYROLL)?;
+
+        if read_identity {
+            self.log_audit(&AuditEntry::new(
+                viewer_user_id,
+                "staff.identity.read",
+                Some("user"),
+                Some(target_user_id),
+                Some(r#"{"fields":["national_id","tax_id"]}"#),
+                "success",
+            ))?;
+        }
+        if read_payroll {
+            self.log_audit(&AuditEntry::new(
+                viewer_user_id,
+                "staff.payroll.read",
+                Some("user"),
+                Some(target_user_id),
+                Some(r#"{"fields":["monthly_take_home_minor"]}"#),
+                "success",
+            ))?;
+        }
+
+        let is_complete = profile.is_complete();
+        let national_id_masked = profile
+            .national_id
+            .as_deref()
+            .map(mask_last4)
+            .unwrap_or_else(|| "****".to_string());
+        Ok(Some(ProfileView {
+            username: user.username,
+            display_name: user.display_name,
+            date_of_birth: profile.date_of_birth,
+            phone: profile.phone,
+            national_id_type: profile.national_id_type,
+            national_id: if read_identity {
+                profile.national_id.clone()
+            } else {
+                None
+            },
+            national_id_masked,
+            email: profile.email,
+            monthly_take_home_minor: if read_payroll {
+                profile.monthly_take_home_minor
+            } else {
+                None
+            },
+            emergency_contact_name: profile.emergency_contact_name,
+            emergency_contact_phone: profile.emergency_contact_phone,
+            job_title: profile.job_title,
+            notes: profile.notes,
+            address: profile.address,
+            language: profile.language,
+            avatar: profile.avatar,
+            tax_id: if read_identity { profile.tax_id } else { None },
+            national_id_expires_at: profile.national_id_expires_at,
+            emergency_contact_relationship: profile.emergency_contact_relationship,
+            hire_date: profile.hire_date,
+            is_complete,
+        }))
+    }
+
+    /// Assign a role, but deny when the target user's profile is
+    /// incomplete and the new role grants any sensitive permission (ADR #35
+    /// D6: management-role assignment and sensitive grants require a
+    /// complete profile). Non-sensitive roles stay assignable so legacy
+    /// incomplete users can keep working at the checkout.
+    pub fn assign_role_guarded(
+        &self,
+        target_user_id: &str,
+        new_role_id: &str,
+    ) -> Result<crate::User, CoreError> {
+        let profile =
+            self.get_user_profile(target_user_id)?
+                .ok_or_else(|| CoreError::NotFound {
+                    entity: "user",
+                    id: target_user_id.to_owned(),
+                })?;
+        if !profile.is_complete() && self.role_grants_sensitive(new_role_id)? {
+            return Err(CoreError::Validation {
+                field: "profile",
+                message: "incomplete profile blocks management-role assignment; complete the profile first"
+                    .into(),
+            });
+        }
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        self.conn.execute(
+            "UPDATE users SET role_id = ?1, updated_at = ?2 WHERE id = ?3",
+            params![new_role_id, now, target_user_id],
+        )?;
+        self.conn.execute(
+            "INSERT INTO assignments (user_id, role_id, scope_mode, branch_scope, workspace_scope, updated_at)
+             VALUES (?1, ?2, 'global', 'all', 'all', ?3)
+             ON CONFLICT(user_id) DO UPDATE SET role_id = excluded.role_id, updated_at = excluded.updated_at",
+            params![target_user_id, new_role_id, now],
+        )?;
+        self.get_user(target_user_id)?
+            .ok_or_else(|| CoreError::NotFound {
+                entity: "user",
+                id: target_user_id.to_owned(),
+            })
+    }
+
+    /// Whether a role's grant set contains any sensitive permission (or the
+    /// global `*`, which the Owner seed alone may hold).
+    fn role_grants_sensitive(&self, role_id: &str) -> Result<bool, CoreError> {
+        let perms: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT permissions FROM roles WHERE id = ?1",
+                params![role_id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        let Some(perms) = perms else { return Ok(false) };
+        let granted: Vec<String> = serde_json::from_str(&perms).unwrap_or_default();
+        Ok(granted
+            .iter()
+            .any(|g| g == "*" || permission_registry::is_sensitive(g)))
+    }
+
+    /// Grant check that treats a denied verdict as `false` rather than an
+    /// error (unknown viewer / missing grant both deny, fail closed).
+    fn has_permission_quiet(&self, user_id: &str, key: &str) -> Result<bool, CoreError> {
+        match self.require_permission(user_id, key) {
+            Ok(()) => Ok(true),
+            Err(CoreError::PermissionDenied(_)) => Ok(false),
+            Err(e) => Err(e),
         }
     }
 }
@@ -646,5 +905,221 @@ mod tests {
         let conn = migrations::fresh_db();
         let store = Store::new(&conn);
         assert!(store.get_user_profile("no-such-user").unwrap().is_none());
+    }
+
+    // ── ADR #35 D6 sensitive handling ────────────────────────────────
+
+    fn insert_role(conn: &rusqlite::Connection, id: &str, perms: &[&str]) {
+        let json = serde_json::to_string(perms).unwrap();
+        conn.execute(
+            "INSERT INTO roles (id, name, permissions) VALUES (?1, ?2, ?3)",
+            params![id, id, json],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn write_encrypts_national_id_and_pay_at_rest() {
+        let conn = migrations::fresh_db();
+        insert_role(&conn, "role-staff", &["sales:view"]);
+        let store = Store::new(&conn);
+        let user = store
+            .create_user_with_profile("alice", "hash", "Alice", "role-staff", &complete_profile())
+            .unwrap();
+
+        // Raw SQL must never see the plaintext sensitive values.
+        let (raw_id, raw_pay): (Option<String>, Option<String>) = conn
+            .query_row(
+                "SELECT national_id, monthly_take_home_minor FROM users WHERE id = ?1",
+                params![user.id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        let raw_id = raw_id.unwrap();
+        let raw_pay = raw_pay.unwrap();
+        assert_ne!(raw_id, "123456789", "national_id must be encrypted at rest");
+        assert_ne!(raw_pay, "5000000", "monthly pay must be encrypted at rest");
+
+        // The stored ciphertext round-trips through the domain read path.
+        let loaded = store.get_user_profile(&user.id).unwrap().unwrap();
+        assert_eq!(loaded.national_id.as_deref(), Some("123456789"));
+        assert_eq!(loaded.monthly_take_home_minor, Some(5_000_000));
+
+        // A deterministic hash column preserves uniqueness (nonce-randomised
+        // ciphertext would otherwise dodge the unique index).
+        let hash: Option<String> = conn
+            .query_row(
+                "SELECT national_id_hash FROM users WHERE id = ?1",
+                params![user.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(hash.is_some(), "national_id_hash must be populated");
+    }
+
+    #[test]
+    fn view_without_grants_masks_and_withholds() {
+        let conn = migrations::fresh_db();
+        insert_role(&conn, "role-target", &["sales:view"]);
+        insert_role(&conn, "role-viewer", &["staff:read"]);
+        let store = Store::new(&conn);
+        let target = store
+            .create_user_with_profile("target", "h", "T", "role-target", &complete_profile())
+            .unwrap();
+        let viewer = store
+            .create_user("viewer", "h", "V", "role-viewer")
+            .unwrap();
+
+        let view = store
+            .get_user_profile_viewed_by(&viewer.id, &target.id)
+            .unwrap()
+            .expect("target exists");
+        assert_eq!(view.national_id_masked, "*****6789", "masked to last-4");
+        assert!(view.national_id.is_none(), "full national_id withheld");
+        assert!(view.tax_id.is_none(), "tax_id withheld");
+        assert!(
+            view.monthly_take_home_minor.is_none(),
+            "pay withheld without staff:read_payroll"
+        );
+        assert!(view.is_complete);
+    }
+
+    #[test]
+    fn view_with_grants_returns_full_values_and_audits() {
+        let conn = migrations::fresh_db();
+        insert_role(
+            &conn,
+            "role-mgr",
+            &["staff:read", "staff:read_identity", "staff:read_payroll"],
+        );
+        let store = Store::new(&conn);
+        let target = store
+            .create_user_with_profile("target", "h", "T", "role-mgr", &complete_profile())
+            .unwrap();
+        let viewer = store.create_user("viewer", "h", "V", "role-mgr").unwrap();
+
+        let view = store
+            .get_user_profile_viewed_by(&viewer.id, &target.id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(view.national_id.as_deref(), Some("123456789"));
+        assert_eq!(view.monthly_take_home_minor, Some(5_000_000));
+        assert_eq!(view.national_id_masked, "*****6789");
+
+        // Read audit: one entry per sensitive field group, access only.
+        let entries = store.list_audit_entries(10, 0).unwrap();
+        let actions: Vec<String> = entries.iter().map(|e| e.action.clone()).collect();
+        assert!(
+            actions.contains(&"staff.identity.read".to_string()),
+            "identity read must be audited, got {actions:?}"
+        );
+        assert!(
+            actions.contains(&"staff.payroll.read".to_string()),
+            "payroll read must be audited, got {actions:?}"
+        );
+        for e in &entries {
+            assert!(
+                !e.details.contains("123456789") && !e.details.contains("5000000"),
+                "audit records access, not values: {}",
+                e.details
+            );
+        }
+    }
+
+    #[test]
+    fn corrupt_ciphertext_fails_closed() {
+        let conn = migrations::fresh_db();
+        insert_role(
+            &conn,
+            "role-viewer",
+            &["staff:read_identity", "staff:read_payroll"],
+        );
+        let store = Store::new(&conn);
+        let viewer = store
+            .create_user("viewer", "h", "V", "role-viewer")
+            .unwrap();
+        let target = store
+            .create_user_with_profile("target", "h", "T", "role-viewer", &complete_profile())
+            .unwrap();
+
+        // Corrupt the stored ciphertext directly.
+        conn.execute(
+            "UPDATE users SET national_id = 'garbage', monthly_take_home_minor = 'garbage' WHERE id = ?1",
+            params![target.id],
+        )
+        .unwrap();
+
+        let view = store
+            .get_user_profile_viewed_by(&viewer.id, &target.id)
+            .unwrap()
+            .unwrap();
+        assert!(
+            view.national_id.is_none(),
+            "corrupt ciphertext must never yield plaintext"
+        );
+        assert!(
+            view.monthly_take_home_minor.is_none(),
+            "corrupt pay ciphertext must fail closed"
+        );
+        // Masked value cannot leak the plaintext either.
+        assert!(!view.national_id_masked.contains("123456789"));
+    }
+
+    #[test]
+    fn assign_role_guarded_denies_incomplete_profile() {
+        let conn = migrations::fresh_db();
+        insert_role(&conn, "role-basic", &["sales:view"]);
+        insert_role(&conn, "role-sens", &["staff:read", "staff:read_identity"]);
+        let store = Store::new(&conn);
+        // Legacy user: no profile columns → incomplete.
+        let user = store
+            .create_user("legacy", "h", "Legacy", "role-basic")
+            .unwrap();
+
+        // Sensitive-granting role → denied while incomplete.
+        let err = store
+            .assign_role_guarded(&user.id, "role-sens")
+            .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                CoreError::Validation {
+                    field: "profile",
+                    ..
+                }
+            ),
+            "incomplete profile must block sensitive-granting role, got {err:?}"
+        );
+
+        // Non-sensitive role → allowed even when incomplete.
+        store.assign_role_guarded(&user.id, "role-basic").unwrap();
+
+        // Completing the profile unlocks the sensitive-granting role.
+        let mut profile = complete_profile();
+        profile.email = Some("legacy@example.com".into());
+        store.update_user_profile(&user.id, &profile).unwrap();
+        store.assign_role_guarded(&user.id, "role-sens").unwrap();
+        let role = store.get_user(&user.id).unwrap().unwrap().role_id;
+        assert_eq!(role, "role-sens");
+    }
+
+    #[test]
+    fn deactivation_preserves_profile() {
+        let conn = migrations::fresh_db();
+        insert_role(&conn, "role-staff", &["sales:view"]);
+        let store = Store::new(&conn);
+        let user = store
+            .create_user_with_profile("alice", "h", "A", "role-staff", &complete_profile())
+            .unwrap();
+        store
+            .update_user(&user.id, "alice", "A", "role-staff", false)
+            .unwrap();
+        let profile = store.get_user_profile(&user.id).unwrap().unwrap();
+        assert!(
+            profile.is_complete(),
+            "deactivation must never delete identity/payroll/emergency data"
+        );
+        assert_eq!(profile.national_id.as_deref(), Some("123456789"));
+        assert_eq!(profile.monthly_take_home_minor, Some(5_000_000));
     }
 }

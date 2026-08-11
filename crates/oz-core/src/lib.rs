@@ -204,6 +204,7 @@ pub use loyalty::{LoyaltyAccount, LoyaltyAccountWithDetails, LoyaltyTier, Loyalt
 pub use money::{Currency, Money, format_minor};
 pub use offline::{OfflineQueueItem, OfflineQueueStatus, SyncPriority};
 pub use payment::{Payment, PaymentSplitArg};
+pub use platform_core::permission_registry;
 pub use platform_core::rbac::{AuthorizationError, has_permission, permissions};
 pub use product::{Product, ProductType};
 pub use product_bundle::{BundleItem, BundleWithItems, ProductBundle};
