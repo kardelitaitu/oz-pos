@@ -15,17 +15,23 @@ const reportsFtl = `
 dashboard-region-aria = Dashboard
 dashboard-stock-alerts-aria = Low stock alerts
 dashboard-stock-left = left
+dashboard-popularity-trend = Popularity Trend
+dashboard-popularity-trend-aria = Popularity of the top category over the last 7 days
+dashboard-popularity-trend-empty = No popularity data yet
+sales-report-category-popularity-uncategorized = Uncategorized
 `;
 
 // ── mock API functions ─────────────────────────────────────────────────
 const mockGetDailyRevenue = vi.fn();
 const mockGetTopProducts = vi.fn();
 const mockGetLowStockAlerts = vi.fn();
+const mockGetCategoryPopularityTrend = vi.fn();
 
 vi.mock('@/api/reports', () => ({
   getDailyRevenue: (...args: unknown[]) => mockGetDailyRevenue(...args),
   getTopProducts: (...args: unknown[]) => mockGetTopProducts(...args),
   getLowStockAlerts: (...args: unknown[]) => mockGetLowStockAlerts(...args),
+  getCategoryPopularityTrend: (...args: unknown[]) => mockGetCategoryPopularityTrend(...args),
 }));
 
 vi.mock('@/components/Card', () => ({
@@ -101,6 +107,9 @@ describe('DashboardScreen', () => {
     mockGetDailyRevenue.mockImplementation(() => new Promise(() => {}));
     mockGetTopProducts.mockImplementation(() => new Promise(() => {}));
     mockGetLowStockAlerts.mockImplementation(() => new Promise(() => {}));
+    // Trend defaults to empty (not pending) so tests that override only
+    // the other mocks still resolve the shared Promise.all.
+    mockGetCategoryPopularityTrend.mockResolvedValue([]);
   });
 
   // ── Loading ────────────────────────────────────────────────────────
@@ -116,6 +125,7 @@ describe('DashboardScreen', () => {
     mockGetDailyRevenue.mockRejectedValue(error);
     mockGetTopProducts.mockRejectedValue(error);
     mockGetLowStockAlerts.mockRejectedValue(error);
+    mockGetCategoryPopularityTrend.mockRejectedValue(error);
     renderScreen();
     await waitFor(() => {
       expect(screen.getByText('An error occurred')).toBeTruthy();
@@ -252,6 +262,36 @@ describe('DashboardScreen', () => {
       const bar = screen.getByRole('img');
       expect(bar).toBeTruthy();
       expect(bar.getAttribute('aria-label')).toMatch(/1,000\.00|1\.000/);
+    });
+  });
+
+  // ── Popularity trend sparkline ─────────────────────────────────────
+  it('renders the popularity trend sparkline for the top category', async () => {
+    mockGetDailyRevenue.mockResolvedValue([]);
+    mockGetTopProducts.mockResolvedValue([]);
+    mockGetLowStockAlerts.mockResolvedValue([]);
+    mockGetCategoryPopularityTrend.mockResolvedValue([
+      { period_start: '2026-07-01', category_id: 'cat-drinks', category_name: 'Drinks', score: 1, units_sold: 2, distinct_transactions: 1, searches: 0, edits: 0 },
+      { period_start: '2026-07-02', category_id: 'cat-drinks', category_name: 'Drinks', score: 3, units_sold: 4, distinct_transactions: 2, searches: 1, edits: 0 },
+    ]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByText('Popularity Trend')).toBeTruthy();
+      expect(screen.getByText('Drinks')).toBeTruthy();
+      const bars = document.querySelectorAll('.dashboard-sparkline-bar');
+      expect(bars.length).toBe(2);
+      const img = screen.getByRole('img', { name: 'Popularity of the top category over the last 7 days' });
+      expect(img).toBeTruthy();
+    });
+  });
+
+  it('shows "No popularity data yet" when the trend is empty', async () => {
+    mockGetDailyRevenue.mockResolvedValue([]);
+    mockGetTopProducts.mockResolvedValue([]);
+    mockGetLowStockAlerts.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByText('No popularity data yet')).toBeTruthy();
     });
   });
 

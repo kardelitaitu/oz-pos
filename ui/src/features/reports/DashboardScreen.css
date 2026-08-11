@@ -99,6 +99,36 @@
   font-size: var(--text-sm);
 }
 
+/* Popularity trend sparkline — top category's daily scores over 7 days */
+.dashboard-sparkline {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-4);
+}
+
+.dashboard-sparkline-category {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-fg);
+  min-width: 8rem;
+}
+
+.dashboard-sparkline-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-1);
+  height: 3.5rem;
+  flex: 1;
+}
+
+.dashboard-sparkline-bar {
+  flex: 1;
+  min-width: 0.25rem;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: var(--color-accent, #4f46e5);
+  opacity: 0.85;
+}
+
 .dashboard-low-stock-list {
   list-style: none;
   margin: 0;

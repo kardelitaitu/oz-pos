@@ -6,9 +6,11 @@ import {
   getDailyRevenue,
   getTopProducts,
   getLowStockAlerts,
+  getCategoryPopularityTrend,
   type DailyRevenueRow,
   type TopProductRow,
   type LowStockAlert,
+  type CategoryTrendPoint,
 } from '@/api/reports';
 import { Card } from '@/components/Card';
 import { Spinner } from '@/components/Spinner';
@@ -47,6 +49,7 @@ export default function DashboardScreen() {
   const [weeklyRevenue, setWeeklyRevenue] = useState<DailyRevenueRow[]>([]);
   const [topProduct, setTopProduct] = useState<TopProductRow | null>(null);
   const [lowStock, setLowStock] = useState<LowStockAlert[]>([]);
+  const [popularityTrend, setPopularityTrend] = useState<CategoryTrendPoint[]>([]);
 
   useEffect(() => {
     const t = today();
@@ -56,12 +59,14 @@ export default function DashboardScreen() {
       getDailyRevenue(w, t, sessionToken),
       getTopProducts(t, t, 1, sessionToken),
       getLowStockAlerts(10, sessionToken),
+      getCategoryPopularityTrend(sessionToken, w, t, 'daily', 1),
     ])
-      .then(([rev, weekRev, top, stock]) => {
+      .then(([rev, weekRev, top, stock, trend]) => {
         setRevenue(rev);
         setWeeklyRevenue(weekRev);
         setTopProduct(top[0] ?? null);
         setLowStock(stock);
+        setPopularityTrend(trend);
       })
       .catch((e) => {
         setError(e.message ?? String(e));
@@ -160,6 +165,43 @@ export default function DashboardScreen() {
             </div>
           ))}
         </div>
+      </Card>
+
+      <Card shadow="sm" className="dashboard-section">
+        <Localized id="dashboard-popularity-trend">
+          <h2 className="dashboard-section-title">Popularity Trend</h2>
+        </Localized>
+        {popularityTrend.length === 0 ? (
+          <p className="dashboard-no-data">
+            <Localized id="dashboard-popularity-trend-empty">
+              <span>No popularity data yet</span>
+            </Localized>
+          </p>
+        ) : (
+          <div
+            className="dashboard-sparkline"
+            role="img"
+            aria-label={requiredLocalized(l10n, 'dashboard-popularity-trend-aria')}
+          >
+            <span className="dashboard-sparkline-category">
+              {popularityTrend[0]!.category_name ??
+                requiredLocalized(l10n, 'sales-report-category-popularity-uncategorized')}
+            </span>
+            <div className="dashboard-sparkline-bars">
+              {popularityTrend.map((p) => {
+                const max = Math.max(...popularityTrend.map((x) => x.score), 0.0001);
+                return (
+                  <div
+                    key={p.period_start}
+                    className="dashboard-sparkline-bar"
+                    style={{ height: `${Math.max(6, (p.score / max) * 100)}%` }}
+                    title={`${p.period_start}: ${p.score.toFixed(1)}`}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        )}
       </Card>
 
       <Card shadow="sm" className="dashboard-section">
