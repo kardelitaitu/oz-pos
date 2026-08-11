@@ -207,11 +207,14 @@ else:
 # Note: ui/src is indexed per-subfolder because the full directory is too large for one pass.
 #
 # Performance tuning for high core-count machines:
-#   RAYON_NUM_THREADS — controls the CBM indexer's internal Rust thread pool per process.
-#   All 14 projects are launched in parallel (&), so total threads in flight = 14 x RAYON_NUM_THREADS.
-#   With a 32-thread CPU, 4 threads per process (14 x 4 = 56 logical threads) is a good balance
-#   that keeps the system responsive without thrashing. Raise to 8 if you want maximum speed.
-export RAYON_NUM_THREADS="${RAYON_NUM_THREADS:-4}"
+#   RAYON_NUM_THREADS  — controls the CBM indexer's internal Rust thread pool per process.
+#   CBM_MEM_BUDGET_MB  — caps RAM per process (default = 50% of total RAM = 32GB on this machine).
+#
+#   With a 32-thread CPU and 14 parallel processes, RAYON_NUM_THREADS=16 gives each
+#   process 16 threads to saturate the CPU while CBM_MEM_BUDGET_MB=16384 keeps each
+#   process capped at 16GB so they don't compete for RAM.
+export RAYON_NUM_THREADS="${RAYON_NUM_THREADS:-16}"
+export CBM_MEM_BUDGET_MB="${CBM_MEM_BUDGET_MB:-16384}"
 
 _CBM_EXE="C:/Users/Dika/AppData/Local/Programs/codebase-memory-mcp/codebase-memory-mcp.exe"
 _REPO_ROOT="C:/My Script/oz-pos"
