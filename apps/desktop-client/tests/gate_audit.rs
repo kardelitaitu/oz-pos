@@ -94,10 +94,18 @@ static PINNED_DESKTOP: &[(&str, usize, &[&str])] = &[
         &["SALES_DISCOUNT", "SALES_OVERRIDE_PRICE", "SALES_PROCESS"],
     ),
     ("product_variants", 0, &[]),
+    // 6 -> 11: role-gated cost editing (ADR #36 D7) gates cost writes on
+    // PRODUCTS_EDIT_COST in create/update (+3 gate tests exercising the
+    // permission memberships live inside mod tests, which the strip keeps).
     (
         "products",
-        6,
-        &["PRODUCTS_CREATE", "PRODUCTS_DELETE", "PRODUCTS_UPDATE"],
+        11,
+        &[
+            "PRODUCTS_CREATE",
+            "PRODUCTS_DELETE",
+            "PRODUCTS_EDIT_COST",
+            "PRODUCTS_UPDATE",
+        ],
     ),
     (
         "promotions",
@@ -207,10 +215,17 @@ static PINNED_TABLET: &[(&str, usize, &[&str])] = &[
         &["SALES_DISCOUNT", "SALES_OVERRIDE_PRICE", "SALES_PROCESS"],
     ),
     ("product_variants", 0, &[]),
+    // 3 -> 5: role-gated cost editing (ADR #36 D7) gates cost writes on
+    // PRODUCTS_EDIT_COST in create/update.
     (
         "products",
-        3,
-        &["PRODUCTS_CREATE", "PRODUCTS_DELETE", "PRODUCTS_UPDATE"],
+        5,
+        &[
+            "PRODUCTS_CREATE",
+            "PRODUCTS_DELETE",
+            "PRODUCTS_EDIT_COST",
+            "PRODUCTS_UPDATE",
+        ],
     ),
     (
         "promotions",
@@ -463,6 +478,7 @@ fn permission_value(name: &str) -> &'static str {
         "LOYALTY_VIEW" => p::LOYALTY_VIEW,
         "PRODUCTS_CREATE" => p::PRODUCTS_CREATE,
         "PRODUCTS_DELETE" => p::PRODUCTS_DELETE,
+        "PRODUCTS_EDIT_COST" => p::PRODUCTS_EDIT_COST,
         "PRODUCTS_UPDATE" => p::PRODUCTS_UPDATE,
         "PROMOTIONS_APPLY" => p::PROMOTIONS_APPLY,
         "PROMOTIONS_CREATE" => p::PROMOTIONS_CREATE,

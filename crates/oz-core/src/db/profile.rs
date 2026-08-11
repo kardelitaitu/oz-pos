@@ -121,6 +121,7 @@ impl UserProfile {
         }
 
         // 2. National id type: ssn (US) or nik (Indonesian KTP) only.
+        // SAFETY: national_id_type is guaranteed present by the is_none() guard above.
         let id_type = self.national_id_type.as_deref().unwrap();
         if id_type != "ssn" && id_type != "nik" {
             return Err(validation(
@@ -130,6 +131,7 @@ impl UserProfile {
         }
 
         // 3. National id shape: exactly 9 digits (ssn) or 16 (nik).
+        // SAFETY: national_id is guaranteed present by the is_none() guard above.
         let id = self.national_id.as_deref().unwrap();
         let expected = if id_type == "ssn" { 9 } else { 16 };
         if id.len() != expected || !id.bytes().all(|b| b.is_ascii_digit()) {

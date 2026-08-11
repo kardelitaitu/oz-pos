@@ -1172,9 +1172,11 @@ export default function StaffManagementScreen() {
                   <Localized id="staff-assignment-branches-label">
                     <span className="staff-mgmt-dimension-label">Branches</span>
                   </Localized>
-                  <label className="staff-mgmt-ws-checkbox">
+                  <label className="staff-mgmt-ws-checkbox" htmlFor="staff-assignment-all-branches">
                     <input
+                      id="staff-assignment-all-branches"
                       type="checkbox"
+                      aria-label={requiredLocalized(l10n, 'staff-assignment-all-branches')}
                       checked={form.branchesAll}
                       onChange={() =>
                         setForm((prev) => ({ ...prev, branchesAll: !prev.branchesAll, branchIds: [] }))
@@ -1205,9 +1207,11 @@ export default function StaffManagementScreen() {
                   <Localized id="staff-assignment-workspaces-label">
                     <span className="staff-mgmt-dimension-label">Workspaces</span>
                   </Localized>
-                  <label className="staff-mgmt-ws-checkbox">
+                  <label className="staff-mgmt-ws-checkbox" htmlFor="staff-assignment-all-workspaces">
                     <input
+                      id="staff-assignment-all-workspaces"
                       type="checkbox"
+                      aria-label={requiredLocalized(l10n, 'staff-assignment-all-workspaces')}
                       checked={form.workspacesAll}
                       onChange={() =>
                         setForm((prev) => ({
