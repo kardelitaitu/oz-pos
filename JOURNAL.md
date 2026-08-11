@@ -3723,7 +3723,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verify:** SalesReportScreen 32/32 (+2) · revenueTotals 3/3 · DashboardScreen/SalesDashboard/MultiStoreDashboard 26/26 unchanged · tsc --noEmit clean · eslint 0 errors, 0 warnings on changed files · drift guard clean.
 
-**Commits:** `<hash>` (fix(reports): never collapse multi-currency revenue into one total)
+**Commits:** `d8bdc38f` (fix(reports): never collapse multi-currency revenue into one total)
 
 **Deliberately NOT done:** no DashboardScreen change (same defect class — the todayCurrency KPI and the mixed-scale weekly bars still collapse; tracked as the immediate next slice); no chart fix (the recharts tooltip still formats every bar with the first currency — per-currency series is a display-policy slice); no printReport change (it still collapses totalMinor into a single-currency receipt — needs a multi-currency receipt policy); no export change (already per-row). Policy note: the audit offered three options — this slice chose "render separate totals per currency" over "restrict the report to one currency" or "convert via recorded exchange rates" (no rate conversion exists in the product yet; conversion would need a recorded-rate policy).
 
