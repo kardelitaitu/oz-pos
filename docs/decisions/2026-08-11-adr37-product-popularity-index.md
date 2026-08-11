@@ -109,9 +109,13 @@ ALTER TABLE products ADD COLUMN popularity_score REAL NOT NULL DEFAULT 0;
   history lets the formula be retuned later without a migration; the column
   makes sorting O(1) and rides through the existing PERF-08 catalog cache in
   `ProductDto`.
-- **`popularity.rs`** in `crates/oz-reporting` (beside `query_top_products`):
-  a pure, unit-tested function `compute_score(units_by_day, searches_by_day,
-  edits_by_day, catalog_mean) -> f64` implementing D1.
+- **`popularity.rs`** in `crates/oz-core` (not `crates/oz-reporting` as
+  originally scoped): `src/popularity.rs` holds the pure, unit-tested function
+  `compute_score(units_by_day, searches_by_day, edits_by_day, catalog_mean)
+  -> f64` implementing D1, and `db/popularity.rs` holds the store-layer
+  recompute/ledger access. The formula sits beside the code that writes scores
+  (sale completion, search/edit recording, full-catalog backfill pass) rather
+  than beside the reporting queries.
 - **Recompute strategy:** single-SKU recompute after each contributing event —
   sale completion (for the sold SKUs), search record, edit record — plus a
   full-catalog backfill pass on first run and a repair command. Reads are
