@@ -35,7 +35,8 @@ loyalty-tier-colour-aria =
 loyalty-save-tier-error = Gagal menyimpan tingkatan
 loyalty-load-error = Gagal memuat data loyalitas
 
-loyalty-table-actions = Tindakan
+loyalty-table-actions =
+    .aria-label = Tindakan
 loyalty-expand = Perluas
 loyalty-collapse = Tutup
 loyalty-expand-account = Perluas { $name }

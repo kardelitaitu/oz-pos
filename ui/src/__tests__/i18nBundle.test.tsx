@@ -17,7 +17,12 @@ import { renderInAct } from '@/test-utils/renderInAct';
 import { screen } from '@testing-library/react';
 import { Localized, LocalizationProvider, ReactLocalization } from '@fluent/react';
 import { getBundle, getAvailableLocales } from '@/i18n';
-import { scanLocaleFiles, scanLocalizedVars, scanTranslationVars } from '@/i18n/barePlaceholderScan';
+import {
+  scanLocaleFiles,
+  scanLocalizedVars,
+  scanTranslationVars,
+  scanAttributeOmissions,
+} from '@/i18n/barePlaceholderScan';
 import { withFluentLocale } from '@/locales/test-utils';
 import sharedId from '@/locales/shared.id.ftl?raw';
 import sharedEn from '@/locales/shared.ftl?raw';
@@ -520,5 +525,16 @@ describe('i18n Localized-vars cross-check (round 164)', () => {
 describe('i18n translation-var drift scan (round 165)', () => {
   it('finds no var drift across every id bundle against its en counterpart', () => {
     expect(scanTranslationVars()).toEqual([]);
+  });
+});
+
+// Round 166: the localized-attribute omission check. A site localizes
+// an attribute via `attrs`; when the id translation omits that
+// attribute (message exists, key missing) it is silently unset for
+// Indonesian users. Driven by the site attrs so only rendered
+// attributes count. Same gate, fails closed.
+describe('i18n localized-attribute omission scan (round 166)', () => {
+  it('finds no localized attribute omitted by any id translation', () => {
+    expect(scanAttributeOmissions()).toEqual([]);
   });
 });

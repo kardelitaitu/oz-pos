@@ -448,3 +448,94 @@ export function scanTranslationVars(): TranslationVarDriftHit[] {
   }
   return hits;
 }
+
+// ── Localized-attribute omission (round 166) ─────────────────────
+//
+// A site localizes an attribute via `attrs={{ 'aria-label': true }}`.
+// When the id translation omits that attribute — the message exists
+// but lacks the key — the attribute is silently UNSET for Indonesian
+// users: no error, no fallback, invisible to key-level parity (which
+// counts messages, not attributes) and to the var-drift scan (no vars
+// involved). Only the site's attrs tell us which attributes are
+// actually rendered, so the gate is driven by them.
+
+export interface AttributeOmissionHit {
+  file: string;
+  line: number;
+  id: string;
+  /** The localized attributes the id translation omits. */
+  attrs: string[];
+}
+
+/**
+ * Pure omission decision: of the attributes a site localizes, which
+ * exist in the en message but are missing from the id message? An
+ * attribute en ALSO lacks is a site-side bug (both locales silently
+ * unset), not translation drift — out of this gate's scope.
+ */
+export function localizedAttributeOmission(
+  attrsKeys: string[],
+  enAttrs: ReadonlySet<string>,
+  idAttrs: ReadonlySet<string>,
+): string[] {
+  return attrsKeys.filter((attr) => enAttrs.has(attr) && !idAttrs.has(attr));
+}
+
+/**
+ * Repo-wide omission scan: every `<Localized>` site's statically-known
+ * `attrs` keys must exist in the en message's attributes AND in the id
+ * translation's. Sites with unresolvable `attrs` expressions are
+ * skipped (documented, like the vars scan); ids missing from en or id
+ * are the parity gate's job. Reports one hit per affected site.
+ */
+export function scanAttributeOmissions(): AttributeOmissionHit[] {
+  const ftlModules = import.meta.glob(['../locales/*.ftl', '!../locales/*.id.ftl'], {
+    query: '?raw',
+    import: 'default',
+    eager: true,
+  });
+  const enDeclared = new Map<string, MessageVarContract>();
+  for (const source of Object.values(ftlModules)) {
+    for (const [id, contract] of messageDeclaredVars(source as string)) {
+      enDeclared.set(id, contract);
+    }
+  }
+
+  const idModules = import.meta.glob('../locales/*.id.ftl', {
+    query: '?raw',
+    import: 'default',
+    eager: true,
+  });
+  const idDeclared = new Map<string, MessageVarContract>();
+  for (const source of Object.values(idModules)) {
+    for (const [id, contract] of messageDeclaredVars(source as string)) {
+      idDeclared.set(id, contract);
+    }
+  }
+
+  const tsxModules = import.meta.glob(['../**/*.tsx', '!../**/__tests__/**'], {
+    query: '?raw',
+    import: 'default',
+    eager: true,
+  });
+  const hits: AttributeOmissionHit[] = [];
+  for (const [path, source] of Object.entries(tsxModules)) {
+    for (const site of findLocalizedSites(source as string)) {
+      if (site.attrsKeys === null) continue; // unresolvable attrs expression — documented
+      if (site.attrsKeys.length === 0) continue;
+      const enContract = enDeclared.get(site.id);
+      if (enContract === undefined) continue; // missing en key — the parity gate owns that
+      const idContract = idDeclared.get(site.id);
+      if (idContract === undefined) continue; // untranslated message — the parity gate owns that
+      const omitted = localizedAttributeOmission(
+        site.attrsKeys,
+        new Set(enContract.attributes.keys()),
+        new Set(idContract.attributes.keys()),
+      );
+      if (omitted.length > 0) {
+        hits.push({ file: path, line: site.line, id: site.id, attrs: omitted });
+      }
+    }
+  }
+  return hits;
+}

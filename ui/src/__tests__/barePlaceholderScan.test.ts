@@ -18,6 +18,8 @@ import {
   findLocalizedSites,
   scanLocalizedVars,
   scanTranslationVars,
+  scanAttributeOmissions,
+  localizedAttributeOmission,
   translationVarDrift,
   varsMismatch,
   type MessageVarContract,
@@ -284,6 +286,50 @@ describe('scanTranslationVars (repo integrity)', () => {
     // only provide the en contract's vars (round 164 gates that). This
     // runs in the same gate as the en-side cross-check.
     expect(scanTranslationVars()).toEqual([]);
+  });
+});
+
+// ── Attribute omission (round 166) ───────────────────────────────
+//
+// A site localizes an attribute via `attrs={{ 'aria-label': true }}`;
+// when the id translation omits that attribute (the message exists but
+// lacks the key), the attribute is silently unset for Indonesian
+// users — no error, no fallback. Key-level parity can't see it (it
+// counts messages, not attributes); the var drift scan can't see it
+// (no vars involved). Only the site's attrs tell us which attributes
+// are actually rendered, so the gate is driven by them.
+
+describe('localizedAttributeOmission', () => {
+  const enAttrs = new Set(['aria-label', 'title']);
+
+  it('is clean when the id translation keeps every localized attribute', () => {
+    expect(localizedAttributeOmission(['aria-label'], enAttrs, new Set(['aria-label']))).toEqual([]);
+  });
+
+  it('flags a localized attribute the id translation omits', () => {
+    expect(localizedAttributeOmission(['aria-label'], enAttrs, new Set())).toEqual(['aria-label']);
+  });
+
+  it('flags only the omitted ones from a mixed set', () => {
+    expect(
+      localizedAttributeOmission(['aria-label', 'title'], enAttrs, new Set(['title'])),
+    ).toEqual(['aria-label']);
+  });
+
+  it('ignores an attribute en ALSO lacks (site-side bug, not translation drift)', () => {
+    expect(localizedAttributeOmission(['placeholder'], enAttrs, new Set())).toEqual([]);
+  });
+
+  it('is clean for an empty attrs set', () => {
+    expect(localizedAttributeOmission([], enAttrs, new Set())).toEqual([]);
+  });
+});
+
+describe('scanAttributeOmissions (repo integrity)', () => {
+  it('finds no localized attribute omitted by any id translation', () => {
+    // An omitted attribute is silently unset for Indonesian users.
+    // Driven by the site attrs, so only rendered attributes count.
+    expect(scanAttributeOmissions()).toEqual([]);
   });
 });
 
