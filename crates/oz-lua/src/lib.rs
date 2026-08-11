@@ -1163,4 +1163,81 @@ result = factorial(10)
         let errors = lua.validate_order(&lines, 700, "USD").unwrap();
         assert!(errors.is_empty());
     }
+
+    /// The fuzz-target sandbox contract, pinned here so the harness and
+    /// the crate can never drift apart again (fuzz crash 20260811-041231:
+    /// the target asserted `os` was nil, but the sandbox deliberately
+    /// keeps a restricted os table — the assert panicked on every input,
+    /// minimized to the 4-byte `loca`). The contract the fuzz target now
+    /// checks after loading malicious input:
+    ///   - `os` → restricted table: date/time/clock present, no
+    ///     execute/remove/rename/exit;
+    ///   - everything else in the dangerous list → nil;
+    ///   - the VM stays recoverable (apply_discount returns Ok).
+    #[test]
+    fn sandbox_contract_survives_the_fuzz_crash_input() {
+        let lua = LuaRuntime::new().unwrap();
+        // The exact crash input: a 4-byte truncated Lua keyword. Loading it
+        // is a syntax error (handled), never a panic or abort.
+        assert!(lua.load_str("loca").is_err());
+
+        let globals = lua.inner().globals();
+
+        let os_val: mlua::Value = globals.get("os").unwrap();
+        let os_table = match os_val {
+            mlua::Value::Table(t) => t,
+            _ => panic!("os must be the restricted table after malicious input"),
+        };
+        for safe_key in ["date", "time", "clock"] {
+            assert!(
+                !matches!(
+                    os_table.get::<_, mlua::Value>(safe_key).unwrap(),
+                    mlua::Value::Nil
+                ),
+                "restricted os.{safe_key} should survive malicious input"
+            );
+        }
+        for dangerous_key in ["execute", "remove", "rename", "exit"] {
+            assert!(
+                matches!(
+                    os_table.get::<_, mlua::Value>(dangerous_key).unwrap(),
+                    mlua::Value::Nil
+                ),
+                "os.{dangerous_key} should be nil after malicious input"
+            );
+        }
+
+        for name in [
+            "io",
+            "loadfile",
+            "dofile",
+            "require",
+            "package",
+            "debug",
+            "rawget",
+            "rawset",
+            "rawequal",
+            "rawlen",
+            "collectgarbage",
+            "module",
+            "load",
+        ] {
+            assert!(
+                matches!(
+                    globals.get::<_, mlua::Value>(name).unwrap(),
+                    mlua::Value::Nil
+                ),
+                "dangerous global '{name}' should be nil after malicious input"
+            );
+        }
+
+        // The VM must stay recoverable after the failed load.
+        let lines = [CartLineData {
+            sku: "loca".to_string(),
+            qty: 1,
+            unit_price_minor: 100,
+            currency: "USD".to_string(),
+        }];
+        assert!(lua.apply_discount(&lines).is_ok());
+    }
 }
