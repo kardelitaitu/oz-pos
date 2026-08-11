@@ -4387,7 +4387,7 @@ for a selected role, swaps on role change, and is absent before
 selection; the contract test pins `list_roles_scoped`'s sessionToken +
 no-args shape and the returned grants.
 
-Commits: pending
+Commits: a4aa2e23 (backend), 29215c3a (ui + docs)
 Tests: desktop staff 41, tablet 435, gate_audit 3, wiring_audit 6; UI
 4893/4893 (285 files) incl. staff screen 22 + contract 8; typecheck 0,
 fmt/clippy/drift/i18n-parity clean.
