@@ -207,12 +207,8 @@ else:
 # Note: ui/src is indexed per-subfolder because the full directory is too large for one pass.
 #
 # Performance tuning for high core-count machines:
-#   RAYON_NUM_THREADS  — controls the CBM indexer's internal Rust thread pool per process.
-#   CBM_MEM_BUDGET_MB  — caps RAM per process (default = 50% of total RAM = 32GB on this machine).
-#
-#   With a 32-thread CPU and 14 parallel processes, RAYON_NUM_THREADS=16 gives each
-#   process 16 threads to saturate the CPU while CBM_MEM_BUDGET_MB=16384 keeps each
-#   process capped at 16GB so they don't compete for RAM.
+#   RAYON_NUM_THREADS  — controls the CBM indexer's internal Rust thread pool.
+#   CBM_MEM_BUDGET_MB  — caps RAM usage (default = 50% of total RAM).
 export RAYON_NUM_THREADS="${RAYON_NUM_THREADS:-32}"
 export CBM_MEM_BUDGET_MB="${CBM_MEM_BUDGET_MB:-16384}"
 
@@ -220,24 +216,13 @@ _CBM_EXE="C:/Users/Dika/AppData/Local/Programs/codebase-memory-mcp/codebase-memo
 _REPO_ROOT="C:/My Script/oz-pos"
 
 if [ -f "$_CBM_EXE" ]; then
-    # Index backend Rust crates and other top-level source dirs
-    # Using 'full' mode: adds semantic/similarity edges for smarter search_graph results.
-    for _DIR in crates apps platform modules foundation gateway; do
-        if [ -d "$_REPO_ROOT/$_DIR" ]; then
-            "$_CBM_EXE" cli index_repository \
-                --repo-path "$_REPO_ROOT/$_DIR" \
-                --mode full \
-                --name "oz-pos-$_DIR" >/dev/null 2>&1 &
-        fi
-    done
-    # Index frontend as a single unified project (ui/src was previously broken by
-    # Windows 'nul' ghost device files that have since been deleted).
-    if [ -d "$_REPO_ROOT/ui/src" ]; then
-        "$_CBM_EXE" cli index_repository \
-            --repo-path "$_REPO_ROOT/ui/src" \
-            --mode full \
-            --name "oz-pos-ui" >/dev/null 2>&1 &
-    fi
+    # Index the entire repo as a single unified project.
+    # Root was previously broken by Windows 'nul' ghost device files (now deleted).
+    # .cbmignore at the root excludes node_modules, target, dist, logs, binaries, etc.
+    "$_CBM_EXE" cli index_repository \
+        --repo-path "$_REPO_ROOT" \
+        --mode full \
+        --name "oz-pos" >/dev/null 2>&1 &
 fi
 # codebase-memory-mcp auto-index end
 
