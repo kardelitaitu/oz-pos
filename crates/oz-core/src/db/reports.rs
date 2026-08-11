@@ -36,6 +36,13 @@ pub struct WeeklyRevenueRow {
     pub currency: String,
     /// Number of completed sales in this week.
     pub sale_count: i64,
+    /// Cost of goods sold in minor units (Σ current cost × qty over the
+    /// week's completed-sale lines; 0 when no costs are recorded).
+    pub cogs_minor: i64,
+    /// Gross profit in minor units: revenue − COGS.
+    pub gross_profit_minor: i64,
+    /// Gross margin as a percentage of revenue; 0.0 when revenue is 0.
+    pub gross_margin_percent: f64,
 }
 
 /// Monthly revenue aggregation.
@@ -49,6 +56,13 @@ pub struct MonthlyRevenueRow {
     pub currency: String,
     /// Number of completed sales in this month.
     pub sale_count: i64,
+    /// Cost of goods sold in minor units (Σ current cost × qty over the
+    /// month's completed-sale lines; 0 when no costs are recorded).
+    pub cogs_minor: i64,
+    /// Gross profit in minor units: revenue − COGS.
+    pub gross_profit_minor: i64,
+    /// Gross margin as a percentage of revenue; 0.0 when revenue is 0.
+    pub gross_margin_percent: f64,
 }
 
 /// Top product ranking.
@@ -141,6 +155,24 @@ pub struct CategoryBreakdownRow {
 }
 
 impl Store<'_> {
+    /// Map the shared revenue/COGS columns of the aggregation rows.
+    fn revenue_profit_fields(row: &rusqlite::Row<'_>) -> rusqlite::Result<(i64, i64, i64, f64)> {
+        let total_minor: i64 = row.get("total_minor")?;
+        let cogs_minor: i64 = row.get("cogs_minor")?;
+        let gross_profit_minor = total_minor - cogs_minor;
+        let gross_margin_percent = if total_minor > 0 {
+            gross_profit_minor as f64 / total_minor as f64 * 100.0
+        } else {
+            0.0
+        };
+        Ok((
+            total_minor,
+            cogs_minor,
+            gross_profit_minor,
+            gross_margin_percent,
+        ))
+    }
+
     /// Daily revenue for a date range.
     pub fn daily_revenue(
         &self,
@@ -169,14 +201,8 @@ impl Store<'_> {
              ORDER BY date ASC",
         )?;
         let rows = stmt.query_map(params![start_date, end_date], |row| {
-            let total_minor: i64 = row.get("total_minor")?;
-            let cogs_minor: i64 = row.get("cogs_minor")?;
-            let gross_profit_minor = total_minor - cogs_minor;
-            let gross_margin_percent = if total_minor > 0 {
-                gross_profit_minor as f64 / total_minor as f64 * 100.0
-            } else {
-                0.0
-            };
+            let (total_minor, cogs_minor, gross_profit_minor, gross_margin_percent) =
+                Self::revenue_profit_fields(row)?;
             Ok(DailyRevenueRow {
                 date: row.get("date")?,
                 total_minor,
@@ -196,20 +222,36 @@ impl Store<'_> {
         start_date: &str,
         end_date: &str,
     ) -> Result<Vec<WeeklyRevenueRow>, CoreError> {
+        // COGS is a correlated subquery keyed on the same week expression, so
+        // joining sale_lines never multiplies revenue/count per sale line.
         let mut stmt = self.conn.prepare(
-            "SELECT DATE(created_at, 'weekday 0', '-7 days') AS week_start,
-                    SUM(total_minor) AS total_minor, currency, COUNT(*) AS sale_count
-             FROM sales
-             WHERE status = 'completed' AND DATE(created_at) BETWEEN ?1 AND ?2
-             GROUP BY week_start, currency
+            "SELECT DATE(s.created_at, 'weekday 0', '-7 days') AS week_start,
+                    SUM(s.total_minor) AS total_minor, s.currency AS currency,
+                    COUNT(*) AS sale_count,
+                    (SELECT COALESCE(SUM(COALESCE(p2.cost_minor, 0) * sl2.qty), 0)
+                     FROM sale_lines sl2
+                     JOIN sales s2 ON sl2.sale_id = s2.id
+                     LEFT JOIN products p2 ON sl2.sku = p2.sku
+                     WHERE s2.status = 'completed'
+                       AND s2.currency = s.currency
+                       AND DATE(s2.created_at, 'weekday 0', '-7 days')
+                           = DATE(s.created_at, 'weekday 0', '-7 days')) AS cogs_minor
+             FROM sales s
+             WHERE s.status = 'completed' AND DATE(s.created_at) BETWEEN ?1 AND ?2
+             GROUP BY week_start, s.currency
              ORDER BY week_start ASC",
         )?;
         let rows = stmt.query_map(params![start_date, end_date], |row| {
+            let (total_minor, cogs_minor, gross_profit_minor, gross_margin_percent) =
+                Self::revenue_profit_fields(row)?;
             Ok(WeeklyRevenueRow {
                 week_start: row.get("week_start")?,
-                total_minor: row.get("total_minor")?,
+                total_minor,
                 currency: row.get("currency")?,
                 sale_count: row.get("sale_count")?,
+                cogs_minor,
+                gross_profit_minor,
+                gross_margin_percent,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
@@ -221,20 +263,35 @@ impl Store<'_> {
         start_date: &str,
         end_date: &str,
     ) -> Result<Vec<MonthlyRevenueRow>, CoreError> {
+        // COGS is a correlated subquery keyed on the same YYYY-MM expression,
+        // so joining sale_lines never multiplies revenue/count per line.
         let mut stmt = self.conn.prepare(
-            "SELECT SUBSTR(created_at, 1, 7) AS month,
-                    SUM(total_minor) AS total_minor, currency, COUNT(*) AS sale_count
-             FROM sales
-             WHERE status = 'completed' AND DATE(created_at) BETWEEN ?1 AND ?2
-             GROUP BY month, currency
+            "SELECT SUBSTR(s.created_at, 1, 7) AS month,
+                    SUM(s.total_minor) AS total_minor, s.currency AS currency,
+                    COUNT(*) AS sale_count,
+                    (SELECT COALESCE(SUM(COALESCE(p2.cost_minor, 0) * sl2.qty), 0)
+                     FROM sale_lines sl2
+                     JOIN sales s2 ON sl2.sale_id = s2.id
+                     LEFT JOIN products p2 ON sl2.sku = p2.sku
+                     WHERE s2.status = 'completed'
+                       AND s2.currency = s.currency
+                       AND SUBSTR(s2.created_at, 1, 7) = SUBSTR(s.created_at, 1, 7)) AS cogs_minor
+             FROM sales s
+             WHERE s.status = 'completed' AND DATE(s.created_at) BETWEEN ?1 AND ?2
+             GROUP BY month, s.currency
              ORDER BY month ASC",
         )?;
         let rows = stmt.query_map(params![start_date, end_date], |row| {
+            let (total_minor, cogs_minor, gross_profit_minor, gross_margin_percent) =
+                Self::revenue_profit_fields(row)?;
             Ok(MonthlyRevenueRow {
                 month: row.get("month")?,
-                total_minor: row.get("total_minor")?,
+                total_minor,
                 currency: row.get("currency")?,
                 sale_count: row.get("sale_count")?,
+                cogs_minor,
+                gross_profit_minor,
+                gross_margin_percent,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
@@ -625,6 +682,27 @@ mod tests {
             .unwrap();
         assert!(!rows.is_empty());
         assert_eq!(rows[0].total_minor, 600);
+        // No costs seeded → COGS 0, profit equals revenue.
+        assert_eq!(rows[0].cogs_minor, 0);
+        assert_eq!(rows[0].gross_profit_minor, 600);
+        assert_eq!(rows[0].gross_margin_percent, 100.0);
+    }
+
+    #[test]
+    fn weekly_revenue_gross_profit_from_product_costs() {
+        let conn = fresh();
+        seed_completed_sale(&conn, "STEAK", 2, 2500);
+        conn.execute(
+            "UPDATE products SET cost_minor = 800 WHERE sku = 'STEAK'",
+            [],
+        )
+        .unwrap();
+        let rows = store(&conn)
+            .weekly_revenue("2000-01-01", "2099-12-31")
+            .unwrap();
+        assert_eq!(rows[0].total_minor, 5000);
+        assert_eq!(rows[0].cogs_minor, 1600);
+        assert_eq!(rows[0].gross_profit_minor, 3400);
     }
 
     // ── Monthly revenue ────────────────────────────────────────────
@@ -647,6 +725,27 @@ mod tests {
             .unwrap();
         assert!(!rows.is_empty());
         assert_eq!(rows[0].total_minor, 500);
+        // No costs seeded → COGS 0, profit equals revenue.
+        assert_eq!(rows[0].cogs_minor, 0);
+        assert_eq!(rows[0].gross_profit_minor, 500);
+        assert_eq!(rows[0].gross_margin_percent, 100.0);
+    }
+
+    #[test]
+    fn monthly_revenue_gross_profit_from_product_costs() {
+        let conn = fresh();
+        seed_completed_sale(&conn, "STEAK", 2, 2500);
+        conn.execute(
+            "UPDATE products SET cost_minor = 800 WHERE sku = 'STEAK'",
+            [],
+        )
+        .unwrap();
+        let rows = store(&conn)
+            .monthly_revenue("2000-01-01", "2099-12-31")
+            .unwrap();
+        assert_eq!(rows[0].total_minor, 5000);
+        assert_eq!(rows[0].cogs_minor, 1600);
+        assert_eq!(rows[0].gross_profit_minor, 3400);
     }
 
     // ── Top products ───────────────────────────────────────────────

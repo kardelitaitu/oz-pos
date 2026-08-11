@@ -118,21 +118,31 @@ function buildDailyRevenue(overrides: Partial<{ date: string; total_minor: numbe
   };
 }
 
-function buildWeeklyRevenue(overrides: Partial<{ week_start: string; total_minor: number; currency: string; sale_count: number }> = {}) {
+function buildWeeklyRevenue(overrides: Partial<{ week_start: string; total_minor: number; currency: string; sale_count: number; cogs_minor: number; gross_profit_minor: number; gross_margin_percent: number }> = {}) {
+  const total_minor = overrides.total_minor ?? 500000;
+  const cogs_minor = overrides.cogs_minor ?? 200000;
   return {
     week_start: overrides.week_start ?? '2026-06-29',
-    total_minor: overrides.total_minor ?? 500000,
+    total_minor,
     currency: overrides.currency ?? 'USD',
     sale_count: overrides.sale_count ?? 45,
+    cogs_minor,
+    gross_profit_minor: overrides.gross_profit_minor ?? total_minor - cogs_minor,
+    gross_margin_percent: overrides.gross_margin_percent ?? 60,
   };
 }
 
-function buildMonthlyRevenue(overrides: Partial<{ month: string; total_minor: number; currency: string; sale_count: number }> = {}) {
+function buildMonthlyRevenue(overrides: Partial<{ month: string; total_minor: number; currency: string; sale_count: number; cogs_minor: number; gross_profit_minor: number; gross_margin_percent: number }> = {}) {
+  const total_minor = overrides.total_minor ?? 2000000;
+  const cogs_minor = overrides.cogs_minor ?? 800000;
   return {
     month: overrides.month ?? '2026-07',
-    total_minor: overrides.total_minor ?? 2000000,
+    total_minor,
     currency: overrides.currency ?? 'USD',
     sale_count: overrides.sale_count ?? 180,
+    cogs_minor,
+    gross_profit_minor: overrides.gross_profit_minor ?? total_minor - cogs_minor,
+    gross_margin_percent: overrides.gross_margin_percent ?? 60,
   };
 }
 
@@ -301,6 +311,30 @@ describe('SalesReportScreen', () => {
       expect(screen.getByText(/\$2,100\.00/)).toBeTruthy();
       // Margin % = 210000 / 350000 = 60%
       expect(screen.getByText(/\(60\.0%\)/)).toBeTruthy();
+    });
+  });
+
+  it('shows gross profit total in weekly view too (HPP exposure)', async () => {
+    resolveDefaultData();
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getByTestId('bar-chart')).toBeTruthy();
+    });
+
+    // Weekly rows carry the same HPP fields now.
+    mockGetWeeklyRevenue.mockResolvedValue([
+      buildWeeklyRevenue({ total_minor: 500000, cogs_minor: 300000, sale_count: 45 }),
+    ]);
+    mockGetDailyRevenue.mockClear();
+    mockGetWeeklyRevenue.mockClear();
+
+    await userEvent.setup().click(screen.getByRole('radio', { name: 'weekly' }));
+
+    await waitFor(() => {
+      // Gross profit = 500000 − 300000 = 200000 → $2,000.00
+      expect(screen.getByText(/\$2,000\.00/)).toBeTruthy();
+      // Margin % = 200000 / 500000 = 40%
+      expect(screen.getByText(/\(40\.0%\)/)).toBeTruthy();
     });
   });
 

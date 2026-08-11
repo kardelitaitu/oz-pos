@@ -29,9 +29,9 @@ export interface GrossProfitTotal {
 }
 
 /**
- * Sum gross profit and COGS per currency for daily revenue rows (the only
- * granularity that carries HPP figures). Rows without the fields (weekly /
- * monthly) contribute zero — never summed across currencies.
+ * Sum gross profit and COGS per currency for revenue rows carrying HPP
+ * figures (daily, weekly, and monthly). Rows without the fields contribute
+ * zero — never summed across currencies.
  */
 export function sumGrossProfitByCurrency(
   rows: ReadonlyArray<{

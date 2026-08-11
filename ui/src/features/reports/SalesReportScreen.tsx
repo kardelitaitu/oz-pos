@@ -475,8 +475,8 @@ export default function SalesReportScreen() {
               </span>
             )}
           </span>
-          {/* HPP exposure: gross profit only exists on the daily granularity */}
-          {view === 'daily' && revenueData.length > 0 && (() => {
+          {/* HPP exposure: gross profit per period (daily, weekly, monthly) */}
+          {revenueData.length > 0 && (() => {
             const profitTotals = sumGrossProfitByCurrency(revenueData);
             return (
               <span>
