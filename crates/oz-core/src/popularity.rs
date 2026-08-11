@@ -117,6 +117,56 @@ pub fn compute_score(
     )
 }
 
+/// A linear least-squares forecast over a recent per-period unit series.
+///
+/// Simple next-period estimate used by the demand-forecast surface: the
+/// slope is fitted over the series' own index (period 0..n−1) and projected
+/// one period ahead (`x = n`). Two or fewer points fall back to the recent
+/// average (no trend can be fit).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct UnitForecast {
+    /// Fitted slope — units per period; 0 when fewer than 2 points.
+    pub trend_per_period: f64,
+    /// Baseline — mean units per period over the series.
+    pub recent_avg_units: f64,
+    /// Predicted units for the next period (never negative).
+    pub forecast_units: i64,
+}
+
+/// Fit [`UnitForecast`] to a chronological units series (oldest first).
+pub fn linear_forecast(units: &[f64]) -> UnitForecast {
+    let n = units.len() as f64;
+    if n == 0.0 {
+        return UnitForecast {
+            trend_per_period: 0.0,
+            recent_avg_units: 0.0,
+            forecast_units: 0,
+        };
+    }
+    let mean_y = units.iter().sum::<f64>() / n;
+    if units.len() < 2 {
+        return UnitForecast {
+            trend_per_period: 0.0,
+            recent_avg_units: mean_y,
+            forecast_units: mean_y.round().max(0.0) as i64,
+        };
+    }
+    let mean_x = (n - 1.0) / 2.0;
+    let (mut num, mut den) = (0.0, 0.0);
+    for (i, y) in units.iter().enumerate() {
+        let x = i as f64;
+        num += (x - mean_x) * (y - mean_y);
+        den += (x - mean_x) * (x - mean_x);
+    }
+    let slope = if den > 0.0 { num / den } else { 0.0 };
+    let intercept = mean_y - slope * mean_x;
+    UnitForecast {
+        trend_per_period: slope,
+        recent_avg_units: mean_y,
+        forecast_units: (intercept + slope * n).max(0.0).round() as i64,
+    }
+}
+
 /// Weighted blend over already-computed raw values (full-pass path).
 ///
 /// Ten positional args mirror the three (raw, votes) signal pairs plus the
@@ -236,6 +286,39 @@ mod tests {
         // No units → raw 0 × factor = 0 regardless of transaction count.
         let score = compute_score(&empty, 10, &empty, &empty, 0.0, 0.0, 0.0);
         assert_eq!(score, 0.0);
+    }
+
+    #[test]
+    fn linear_forecast_fits_a_perfect_line() {
+        // 10, 12, 14, 16 → slope 2/day, next period = 18.
+        let f = linear_forecast(&[10.0, 12.0, 14.0, 16.0]);
+        assert!((f.trend_per_period - 2.0).abs() < 1e-9);
+        assert_eq!(f.forecast_units, 18);
+        assert!((f.recent_avg_units - 13.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn linear_forecast_flat_series_has_zero_slope() {
+        let f = linear_forecast(&[7.0, 7.0, 7.0, 7.0]);
+        assert_eq!(f.trend_per_period, 0.0);
+        assert_eq!(f.forecast_units, 7);
+    }
+
+    #[test]
+    fn linear_forecast_declining_never_goes_negative() {
+        // 20, 10, 5 → steep decline; the next-period projection would be
+        // negative, so it must floor at 0.
+        let f = linear_forecast(&[20.0, 10.0, 5.0]);
+        assert!(f.trend_per_period < 0.0);
+        assert!(f.forecast_units >= 0, "forecast must never be negative");
+    }
+
+    #[test]
+    fn linear_forecast_single_point_falls_back_to_average() {
+        let f = linear_forecast(&[9.0]);
+        assert_eq!(f.trend_per_period, 0.0);
+        assert_eq!(f.forecast_units, 9);
+        assert_eq!(linear_forecast(&[]).forecast_units, 0);
     }
 
     #[test]

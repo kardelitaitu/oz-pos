@@ -7,7 +7,7 @@
 use tauri::{State, command};
 
 use oz_core::db::Store;
-use oz_core::db::popularity::{CategoryPopularityRow, CategoryTrendPoint};
+use oz_core::db::popularity::{CategoryForecastRow, CategoryPopularityRow, CategoryTrendPoint};
 use oz_core::db::reports::{
     CategoryBreakdownRow, DailyRevenueRow, HourlyHeatmapRow, LowStockAlert, MonthlyRevenueRow,
     TopProductRow, WeeklyRevenueRow,
@@ -233,6 +233,25 @@ pub async fn get_category_popularity_trend_scoped(
         &granularity,
         top_categories,
     )?)
+}
+
+#[tauri::command]
+/// Get the next-period demand forecast per top category (simple linear fit
+/// over the popularity trend series' recent units) for the session's store.
+pub async fn get_category_forecast_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    granularity: String,
+    top_categories: i64,
+    state: State<'_, AppState>,
+) -> Result<Vec<CategoryForecastRow>, AppError> {
+    validate_trend_args(&granularity, top_categories)?;
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).category_forecast(&start_date, &end_date, &granularity, top_categories)?)
 }
 
 #[command]

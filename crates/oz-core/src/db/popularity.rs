@@ -48,6 +48,21 @@ pub struct CategoryTopProduct {
     pub percentile: f64,
 }
 
+/// A per-category next-period demand forecast derived from the trend series.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CategoryForecastRow {
+    /// Category id; empty string for uncategorized products.
+    pub category_id: String,
+    /// Category name; `None` for uncategorized (the UI localizes the label).
+    pub category_name: Option<String>,
+    /// Predicted units sold in the next period (never negative).
+    pub forecast_units: i64,
+    /// Fitted trend — units per period; 0 when fewer than 2 points.
+    pub trend_per_period: f64,
+    /// Baseline — mean units per period over the recent series.
+    pub recent_avg_units: f64,
+}
+
 /// One (period, category) point of the popularity trend series.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct CategoryTrendPoint {
@@ -111,6 +126,61 @@ fn window_modifier() -> String {
 pub const TREND_GRANULARITIES: [&str; 3] = ["daily", "weekly", "monthly"];
 
 impl Store<'_> {
+    /// Next-period demand forecast per top category (simple linear fit).
+    ///
+    /// Reuses [`Store::category_popularity_trend`] for the period series,
+    /// then fits [`crate::popularity::linear_forecast`] over each category's
+    /// recent per-period units (the last up-to-6 points) to project the next
+    /// period. Categories with a single point fall back to their recent
+    /// average; results sort by forecast descending. Prototype-level
+    /// forecast — the demand-forecasting research (2026-07-20) may replace
+    /// the linear fit with a learned model later.
+    pub fn category_forecast(
+        &self,
+        start_date: &str,
+        end_date: &str,
+        granularity: &str,
+        top_categories: i64,
+    ) -> Result<Vec<CategoryForecastRow>, CoreError> {
+        const MAX_SERIES_POINTS: usize = 6;
+
+        let points =
+            self.category_popularity_trend(start_date, end_date, granularity, top_categories)?;
+        // (category_id) → (name, chronological units series).
+        let mut groups: HashMap<String, (Option<String>, Vec<f64>)> = HashMap::new();
+        for p in points {
+            let entry = groups
+                .entry(p.category_id.clone())
+                .or_insert((p.category_name, Vec::new()));
+            entry.1.push(p.units_sold as f64);
+        }
+
+        let mut out: Vec<CategoryForecastRow> = Vec::new();
+        for (category_id, (name, series)) in groups {
+            let tail = series
+                .iter()
+                .rev()
+                .take(MAX_SERIES_POINTS)
+                .copied()
+                .collect::<Vec<f64>>();
+            let tail = tail.into_iter().rev().collect::<Vec<f64>>();
+            let f = crate::popularity::linear_forecast(&tail);
+            out.push(CategoryForecastRow {
+                category_id,
+                category_name: name,
+                forecast_units: f.forecast_units,
+                trend_per_period: f.trend_per_period,
+                recent_avg_units: f.recent_avg_units,
+            });
+        }
+        out.sort_by(|a, b| {
+            b.forecast_units
+                .cmp(&a.forecast_units)
+                .then_with(|| a.category_id.cmp(&b.category_id))
+        });
+        Ok(out)
+    }
+
     /// Per-period popularity trend for the top `top_categories` categories.
     ///
     /// Buckets the sale/search/edit ledgers by `granularity` (`daily`,
@@ -1268,6 +1338,76 @@ mod tests {
             "monthly bucket is YYYY-MM"
         );
         assert_eq!(points[0].units_sold, 1);
+    }
+
+    #[test]
+    fn category_forecast_projects_next_period_from_trend_series() {
+        let conn = fresh();
+        seed_category(&conn, "cat-a", "A");
+        seed_category(&conn, "cat-b", "B");
+        let mk = |sku: &str, cat: &str, days_ago: i64, units: i64| {
+            let id = uuid::Uuid::now_v7().to_string();
+            let ts = chrono::Utc::now()
+                .checked_sub_signed(chrono::Duration::days(days_ago))
+                .unwrap()
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+            conn.execute(
+                "INSERT INTO products (id, sku, name, price_minor, currency, category_id, created_at, updated_at) \
+                 VALUES (?1, ?2, ?2, 1000, 'USD', ?3, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+                params![id, sku, cat],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at) VALUES
+                 (?1, ?2, 'USD', 1, 'completed', ?3, ?3)",
+                params![format!("sale-{sku}"), units * 1000, ts],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position) VALUES
+                 (?1, ?2, ?3, ?4, 1000, ?5, 'USD', 1)",
+                params![format!("sl-{sku}"), format!("sale-{sku}"), sku, units, units * 1000],
+            )
+            .unwrap();
+        };
+        // cat-a: 10 → 12 → 14 → 16 units over the last 4 days (slope 2).
+        mk("A-0", "cat-a", 3, 10);
+        mk("A-1", "cat-a", 2, 12);
+        mk("A-2", "cat-a", 1, 14);
+        mk("A-3", "cat-a", 0, 16);
+        // cat-b: flat 5 units a day.
+        mk("B-0", "cat-b", 3, 5);
+        mk("B-1", "cat-b", 2, 5);
+        mk("B-2", "cat-b", 1, 5);
+        mk("B-3", "cat-b", 0, 5);
+
+        let store = Store::new(&conn);
+        let rows = store
+            .category_forecast("2000-01-01", "2099-12-31", "daily", 5)
+            .unwrap();
+
+        let a = rows.iter().find(|r| r.category_id == "cat-a").unwrap();
+        assert_eq!(a.forecast_units, 18, "10,12,14,16 → next = 18");
+        assert!((a.trend_per_period - 2.0).abs() < 1e-9);
+        assert!((a.recent_avg_units - 13.0).abs() < 1e-9);
+
+        let b = rows.iter().find(|r| r.category_id == "cat-b").unwrap();
+        assert_eq!(b.forecast_units, 5, "flat series → 5");
+        assert_eq!(b.trend_per_period, 0.0);
+
+        // Sorted by forecast descending: cat-a (18) before cat-b (5).
+        assert_eq!(rows[0].category_id, "cat-a");
+        assert_eq!(rows[1].category_id, "cat-b");
+    }
+
+    #[test]
+    fn category_forecast_empty_catalog() {
+        let conn = fresh();
+        let store = Store::new(&conn);
+        let rows = store
+            .category_forecast("2000-01-01", "2099-12-31", "daily", 5)
+            .unwrap();
+        assert!(rows.is_empty());
     }
 
     #[test]
