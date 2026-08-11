@@ -634,6 +634,7 @@ pub fn run() {
             commands::refunds::lookup_sale_by_receipt_barcode,
             commands::refunds::lookup_sale_by_receipt_barcode_scoped,
             commands::reports::get_menu_engineering_scoped,
+            commands::reports::get_sale_line_margins_scoped,
             commands::reports::get_daily_revenue_scoped,
             commands::reports::get_weekly_revenue_scoped,
             commands::reports::get_monthly_revenue_scoped,

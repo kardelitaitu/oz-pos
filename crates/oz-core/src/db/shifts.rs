@@ -341,6 +341,36 @@ impl Store<'_> {
         // Cash payouts for this shift.
         let cash_payouts = self.list_cash_payouts(shift_id)?;
 
+        // ── Gross profit (HPP) ────────────────────────────────────────
+        // Revenue is the completed-sale totals (same source as the hourly
+        // breakdown and the shift's stored total). COGS is the sum of
+        // current product cost × qty over the completed-sale lines, matching
+        // the reporting layer's cost semantics (costs are not snapshotted
+        // per line). Lines whose product is unknown fall back to a zero cost.
+        let gross_revenue_minor: i64 = self.conn.query_row(
+            "SELECT COALESCE(SUM(total_minor), 0) FROM sales
+             WHERE user_id = ?1 AND created_at >= ?2 AND created_at <= ?3
+               AND status = 'completed'",
+            params![user, start, end],
+            |r| r.get(0),
+        )?;
+        let cogs_minor: i64 = self.conn.query_row(
+            "SELECT COALESCE(SUM(COALESCE(p.cost_minor, 0) * sl.qty), 0)
+             FROM sale_lines sl
+             JOIN sales s ON sl.sale_id = s.id
+             LEFT JOIN products p ON sl.sku = p.sku
+             WHERE s.user_id = ?1 AND s.created_at >= ?2 AND s.created_at <= ?3
+               AND s.status = 'completed'",
+            params![user, start, end],
+            |r| r.get(0),
+        )?;
+        let gross_profit_minor = gross_revenue_minor - cogs_minor;
+        let gross_margin_percent = if gross_revenue_minor > 0 {
+            gross_profit_minor as f64 / gross_revenue_minor as f64 * 100.0
+        } else {
+            0.0
+        };
+
         Ok(ShiftReport {
             shift,
             payment_breakdown,
@@ -349,6 +379,9 @@ impl Store<'_> {
             sale_count,
             void_count,
             refund_count,
+            cogs_minor,
+            gross_profit_minor,
+            gross_margin_percent,
         })
     }
 
@@ -397,6 +430,13 @@ pub struct ShiftReport {
     pub void_count: i64,
     /// Number of refund transactions in this shift.
     pub refund_count: i64,
+    /// Cost of goods sold in minor units (Σ current product cost × qty over
+    /// completed-sale lines). 0 when no lines or costs are recorded.
+    pub cogs_minor: i64,
+    /// Gross profit in minor units: completed-sale revenue − COGS.
+    pub gross_profit_minor: i64,
+    /// Gross margin as a percentage of revenue; 0.0 when revenue is 0.
+    pub gross_margin_percent: f64,
 }
 
 /// Payment method totals within a shift's time window.
@@ -760,6 +800,55 @@ mod tests {
         );
         let total_from_hours: i64 = report.hourly_breakdown.iter().map(|h| h.total_minor).sum();
         assert_eq!(total_from_hours, 1000, "hourly totals match sales");
+
+        // Gross profit: no sale lines were inserted, so COGS is 0 and the
+        // profit equals the completed-sale revenue (1000).
+        assert_eq!(report.cogs_minor, 0);
+        assert_eq!(report.gross_profit_minor, 1000);
+        assert_eq!(report.gross_margin_percent, 100.0);
+    }
+
+    #[test]
+    fn get_shift_report_gross_profit_from_product_costs() {
+        let conn = fresh();
+        seed_user(&conn);
+        let s = store(&conn);
+
+        let shift = s.open_shift("user-1", None, 200).unwrap();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        // Two products with known costs; a completed sale of 2× STEAK
+        // (2500 − 800) and a voided sale that must NOT contribute COGS.
+        conn.execute_batch(&format!(
+            "INSERT INTO products (id, sku, name, price_minor, currency, cost_minor, created_at, updated_at) VALUES
+             ('p-1', 'STEAK', 'Steak', 2500, 'USD', 800, '{now}', '{now}'),
+             ('p-2', 'SODA',  'Soda',  300,  'USD', 100, '{now}', '{now}');
+             INSERT INTO sales (id, user_id, status, total_minor, payment_method, currency, line_count, created_at, updated_at) VALUES
+             ('sale-g1', 'user-1', 'completed', 5000, 'cash', 'USD', 1, '{now}', '{now}'),
+             ('sale-g2', 'user-1', 'completed', 900,  'card', 'USD', 1, '{now}', '{now}'),
+             ('sale-g3', 'user-1', 'voided',    500,  'cash', 'USD', 1, '{now}', '{now}');
+             INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position) VALUES
+             ('sl-1', 'sale-g1', 'STEAK', 2, 2500, 5000, 'USD', 1),
+             ('sl-2', 'sale-g2', 'SODA',  3, 300,  900,  'USD', 1),
+             ('sl-3', 'sale-g3', 'STEAK', 1, 2500, 2500, 'USD', 1);"
+        ))
+        .unwrap();
+
+        s.close_shift(&shift.id, 800, None).unwrap();
+        let report = s.get_shift_report(&shift.id).unwrap();
+
+        // Revenue = completed sales only: 5000 + 900 = 5900.
+        // COGS = (800 × 2) + (100 × 3) = 1900 (the voided line is excluded).
+        // Gross profit = 5900 − 1900 = 4000 (~67.8% margin).
+        assert_eq!(report.sale_count, 2);
+        assert_eq!(report.cogs_minor, 1900);
+        assert_eq!(report.gross_profit_minor, 4000);
+        let expected_margin = 4000.0 / 5900.0 * 100.0;
+        assert!(
+            (report.gross_margin_percent - expected_margin).abs() < 1e-9,
+            "margin was {}",
+            report.gross_margin_percent
+        );
     }
 
     #[test]

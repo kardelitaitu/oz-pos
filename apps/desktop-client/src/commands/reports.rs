@@ -82,6 +82,25 @@ pub async fn get_menu_engineering_scoped(
 }
 
 #[tauri::command]
+/// Get per-line cost and margin for a single sale (HPP exposure).
+///
+/// Enriches every line of the sale with the product's current cost, the
+/// line margin, and the margin percentage (see `oz_reporting::margin`).
+pub async fn get_sale_line_margins_scoped(
+    session_token: String,
+    sale_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<oz_reporting::margin::SaleLineMargin>, AppError> {
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(oz_reporting::margin::query_sale_lines_with_margin(
+        &db, &sale_id,
+    )?)
+}
+
+#[tauri::command]
 /// Get daily revenue.
 pub async fn get_daily_revenue(
     state: State<'_, AppState>,
