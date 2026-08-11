@@ -4104,3 +4104,38 @@ folder moved to `docs/specs/_done/0048-rbac-assignment-model-and-taxonomy`.
 Remaining follow-ups recorded in the cycle-3 entry: the workspace login
 picker still resolves legacy tables (audit/06 territory) and the legacy
 `workspace_keys` arg is now dead UI-side.
+
+### 2026-08-11 — picker rewire: scoped assignments constrain the login picker
+
+Problem: the pre-session workspace picker (`list_workspaces` via picker
+ticket) resolved workspaces through the legacy model only — role
+workspace types, user_store_access, explicit instance assignment — so a
+scoped assignment set in the 0048 staff editor had no effect on what a
+member could pick at login.
+
+Solution: both clients' `list_workspaces` now load the user's assignment
+from the global identity DB alongside the real role and scope-filter the
+legacy listing through `matches_scope(store_id, type_key)` — the store
+(branch) and the workspace type must both be in scope, fail closed.
+Global assignments and legacy users without an assignment row pass
+through unchanged. Red-first: `scoped_assignment_filters_picker_workspace_list`
+(owner scoped to store-pos must not see the kds instance) and
+`scoped_assignment_branch_dimension_denies_out_of_scope_store` (store-b
+lists nothing) on both clients.
+
+Decisions: workspace key == instance type_key (the vocabulary the ADR's
+`workspaces(key)` dimension uses), branch == store_profiles.id (the
+requested store). Filtering happens after the legacy resolution so the
+owner bypass / store access / role types still apply first.
+
+Remaining risks / follow-ups: the POST-session listings
+(`list_workspaces_scoped`, `list_workspaces_for_store_scoped`) and the
+session gate (`require_permission_for_session` → non-scoped
+`require_permission_for_user`) are not yet assignment-aware — a scoped
+member could switch workspaces within their session into an
+out-of-scope type. A "scoped sessions" slice should extend the gate and
+the session-scoped listings.
+
+Commits: pending (this slice)
+Tests: desktop 895/895 (workspaces 20 incl. 2 new), tablet 431/431
+(workspaces 16 incl. 2 new); fmt/clippy/drift clean.
