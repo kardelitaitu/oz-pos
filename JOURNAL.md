@@ -4064,7 +4064,7 @@ record. (3) `modules/staff` CASHIER/KITCHEN consts were dead code — removed.
 (4) Did NOT fix the pre-existing topology.rs clippy errors (MutexGuard across
 await, assert_eq literal bool) — unchanged from HEAD, outside this slice.
 
-Commits: <pending>
+Commits: 880be215 (feat(rbac): retire cashier/kitchen roles + sweep), df3c30ae (docs)
 Tests: oz-core 1728/1728, platform-core 236/236, platform-sync, both clients
 (890 + 428), oz-api/oz-cli, gate_audit 3/3; fmt/clippy (changed area)/drift
 guard clean. Note: `modules-inventory` currently does not compile — another
