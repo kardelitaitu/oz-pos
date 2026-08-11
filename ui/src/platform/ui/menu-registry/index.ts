@@ -102,14 +102,15 @@ function hasNavRole(userRole: string | undefined, required: RequiredRole): boole
   if (!userRole) return false;
   const role = userRole.toLowerCase();
   const isOwner = role === 'owner' || role === 'role-owner';
-  const isManager = isOwner ||
-    role === 'manager' ||
-    role === 'role-manager' ||
-    role === 'staff' ||
-    role === 'role-staff';
+  const isAdmin = isOwner || role === 'admin' || role === 'role-admin';
+  const isManager = isAdmin || role === 'manager' || role === 'role-manager';
+  // Legacy 'manager' gate: staff keeps report-level pages (backend grants
+  // Staff REPORTS_VIEW / SHIFTS_VIEW_ANY).
+  const isManagerOrStaff = isManager || role === 'staff' || role === 'role-staff';
 
   if (required === 'owner') return isOwner;
-  return isManager;
+  if (required === 'management') return isManager;
+  return isManagerOrStaff;
 }
 
 /**

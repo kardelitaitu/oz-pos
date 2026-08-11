@@ -20,6 +20,7 @@ import kioskEn from '../locales/kiosk.ftl?raw';
 import loyaltyEn from '../locales/loyalty.ftl?raw';
 import shiftsEn from '../locales/shifts.ftl?raw';
 import reportsEn from '../locales/reports.ftl?raw';
+import analyticsEn from '../locales/analytics.ftl?raw';
 import multiStoreEn from '../locales/multi-store.ftl?raw';
 import stockTransfersEn from '../locales/stock-transfers.ftl?raw';
 import giftCardsEn from '../locales/gift-cards.ftl?raw';
@@ -46,6 +47,7 @@ import kioskId from '../locales/kiosk.id.ftl?raw';
 import loyaltyId from '../locales/loyalty.id.ftl?raw';
 import shiftsId from '../locales/shifts.id.ftl?raw';
 import reportsId from '../locales/reports.id.ftl?raw';
+import analyticsId from '../locales/analytics.id.ftl?raw';
 import multiStoreId from '../locales/multi-store.id.ftl?raw';
 import stockTransfersId from '../locales/stock-transfers.id.ftl?raw';
 import giftCardsId from '../locales/gift-cards.id.ftl?raw';
@@ -59,7 +61,7 @@ const enFTL = [
   sharedEn, salesEn, productsEn, settingsEn, staffEn,
   customersEn, taxEn, currencyEn, inventoryEn, tablesEn,
   terminalsEn, offlineEn, bundlesEn, promotionsEn, kdsEn,
-  kioskEn, loyaltyEn, shiftsEn, reportsEn, multiStoreEn,
+  kioskEn, loyaltyEn, shiftsEn, reportsEn, analyticsEn, multiStoreEn,
   stockTransfersEn, giftCardsEn, purchasingEn, stockCountingEn,
 ].join('\n');
 
@@ -67,7 +69,7 @@ const idFTL = [
   sharedId, salesId, productsId, settingsId, staffId,
   customersId, taxId, currencyId, inventoryId, tablesId,
   terminalsId, offlineId, bundlesId, promotionsId, kdsId,
-  kioskId, loyaltyId, shiftsId, reportsId, multiStoreId,
+  kioskId, loyaltyId, shiftsId, reportsId, analyticsId, multiStoreId,
   stockTransfersId, giftCardsId, purchasingId, stockCountingId,
 ].join('\n');
 

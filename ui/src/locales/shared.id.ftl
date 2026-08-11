@@ -197,6 +197,7 @@ nav-offline-queue = Antrian Offline
 nav-shifts = Shift
 nav-bundles = Bundel
 nav-dashboard-report = Dasbor
+nav-analytics = Analitik Staf
 nav-sales-report = Laporan Penjualan
 nav-inventory-report = Laporan Stok
 nav-design-system = Sistem Desain

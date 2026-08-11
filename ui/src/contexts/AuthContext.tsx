@@ -137,9 +137,11 @@ export function AuthProvider({ children, onLogin }: AuthProviderProps) {
   const isManager =
     normalizedRoleName === "manager" ||
     normalizedRoleName === "owner" ||
+    normalizedRoleName === "admin" ||
     normalizedRoleName === "staff" ||
     normalizedRoleName === "role-manager" ||
     normalizedRoleName === "role-owner" ||
+    normalizedRoleName === "role-admin" ||
     normalizedRoleName === "role-staff";
   const isOwner =
     normalizedRoleName === "owner" ||

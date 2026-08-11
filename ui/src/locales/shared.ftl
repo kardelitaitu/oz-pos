@@ -206,6 +206,7 @@ nav-bundles = Bundles
 nav-settings = Settings
 nav-general = General
 nav-dashboard-report = Dashboard
+nav-analytics = Staff Analytics
 nav-sales-report = Sales Report
 nav-inventory-report = Inventory Report
 nav-design-system = Design System

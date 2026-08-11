@@ -20,8 +20,13 @@ import type { ComponentType, LazyExoticComponent } from 'react';
 
 // ── Types ──────────────────────────────────────────────────────────
 
-/** Role levels used for page access gating. */
-export type RequiredRole = 'manager' | 'owner';
+/**
+ * Role levels used for page access gating.
+ * - 'manager'    — owner, admin, manager, and (legacy) staff.
+ * - 'management' — owner, admin, and manager only (analytics, taxonomy-0046).
+ * - 'owner'      — owner only.
+ */
+export type RequiredRole = 'manager' | 'owner' | 'management';
 
 /**
  * A page component may be a plain component or a `lazy()`-loaded
@@ -119,14 +124,15 @@ function hasRequiredRole(userRole: string | undefined, required: RequiredRole): 
   if (!userRole) return false;
   const role = userRole.toLowerCase();
   const isOwner = role === 'owner' || role === 'role-owner';
-  const isManager = isOwner ||
-    role === 'manager' ||
-    role === 'role-manager' ||
-    role === 'staff' ||
-    role === 'role-staff';
+  const isAdmin = isOwner || role === 'admin' || role === 'role-admin';
+  const isManager = isAdmin || role === 'manager' || role === 'role-manager';
+  // Legacy 'manager' gate: staff keeps report-level pages (backend grants
+  // Staff REPORTS_VIEW / SHIFTS_VIEW_ANY).
+  const isManagerOrStaff = isManager || role === 'staff' || role === 'role-staff';
 
   if (required === 'owner') return isOwner;
-  return isManager;
+  if (required === 'management') return isManager;
+  return isManagerOrStaff;
 }
 
 /**
