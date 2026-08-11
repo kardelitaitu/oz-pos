@@ -3691,7 +3691,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verify:** WSL: real-target replay clean · `loca` crash input clean · 30s fuzz clean (202,535 runs, peak RSS 440 MB) · oz-lua 63/63 (incl. the round-170 contract pin) · `rustfmt --check` on the target ✓ · drift guard clean. Windows note: libFuzzer cannot link on MSVC (`clang_rt.asan_dynamic_runtime_thunk-x86_64.lib` missing; `--sanitizer none` leaves `__stop___sancov_pcs` unresolved) — WSL remains the fuzz execution environment, as in round 170.
 
-**Commits:** `<hash>` (fix(lua): align libfuzzer sandbox assert with the restricted-os contract)
+**Commits:** `c327f17a` (fix(lua): align libfuzzer sandbox assert with the restricted-os contract)
 
 **Deliberately NOT done:** no extraction of the check into a testable lib function (the oz-lua contract pin + the CI run of the real target cover the regression; a lib would need new CI wiring to run anyway — noted as a follow-up); no change to the other six fuzz targets (re-audited this round: none has a post-load sandbox assert — the round-170 "contract audit" follow-up found exactly one stale copy, this one); no clippy on the fuzz crate (not a repo gate; no_main + libFuzzer linkage makes it awkward).
 
