@@ -27,6 +27,8 @@ export interface AuthContextOverrides {
   displayName?: string;
   isManager?: boolean;
   isOwner?: boolean;
+  /** Effective permission keys (mirrors the backend registry; empty = none). */
+  permissions?: string[];
 }
 
 /**
@@ -48,6 +50,7 @@ export function createAuthContextMock(overrides: AuthContextOverrides = {}) {
     displayName = 'Kasir Test',
     isManager = false,
     isOwner = false,
+    permissions = [],
   } = overrides;
 
   return () => ({
@@ -58,6 +61,7 @@ export function createAuthContextMock(overrides: AuthContextOverrides = {}) {
       token,
       role_id: roleId,
       display_name: displayName,
+      permissions,
     },
     loading: false,
     error: null,

@@ -19,6 +19,7 @@ import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { useFeatures, FEATURES } from '@/hooks/useFeatures';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { lookupProductBySkuScoped, lookupByBarcodeScoped, createProductScoped, updateProductScoped, adjustStockScoped, recordProductSearchScoped, type ProductDto, type CategoryDto } from '@/api/products';
+import { hasGrantedPermission } from '@/platform/ui/page-registry';
 import { openProductImagesScoped } from '@/api/browser';
 import { loadCatalog, invalidateCatalog } from '@/utils/catalog-cache';
 import { usePagedList } from '@/hooks/usePagedList';
@@ -105,6 +106,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const { goToWorkspacePicker } = useWorkspaceNav();
   const { addToast } = useToast();
   const { session, isManager } = useAuth();
+  // ADR #36 D7: cost editing is manager+ only (products:edit_cost). The
+  // backend enforces the write; this only gates the UI field and payload.
+  const canEditCost = hasGrantedPermission(session?.permissions, 'products:edit_cost');
   const { sessionToken: rawToken, setActiveWorkspace } = useWorkspace();
   const sessionToken = rawToken || '';
   const userId = session?.user_id ?? '';
@@ -567,8 +571,9 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         productType: updatedProduct.product_type,
         taxRateIds: updatedProduct.tax_rate_ids,
         // PATCH attributes (ADR #36): absent/null keeps for cost, null clears
-        // the text fields.
-        costMinor: updatedProduct.cost_minor ?? null,
+        // the text fields. Cost is omitted entirely without products:edit_cost
+        // (the backend rejects cost writes for staff regardless).
+        costMinor: canEditCost ? (updatedProduct.cost_minor ?? null) : undefined,
         brand: updatedProduct.brand ?? null,
         rackLocation: updatedProduct.rack_location ?? null,
         notes: updatedProduct.notes ?? null,
@@ -589,7 +594,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     } catch (err) {
       addToast({ message: plainErrorMessage(err, requiredLocalized(l10nRef.current, 'retail-toast-save-product-failed')), type: 'error' });
     }
-  }, [products, categories, addToast, sessionToken]);
+  }, [products, categories, addToast, sessionToken, canEditCost]);
 
   const handleSaveNewCategory = useCallback((newCat: CategoryDto) => {
     setCategories((prev) => [...prev, newCat]);
@@ -618,7 +623,8 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         initialStock: newProd.stock_qty ?? 0,
         productType: newProd.product_type,
         taxRateIds: newProd.tax_rate_ids,
-        costMinor: newProd.cost_minor ?? 0,
+        // Cost is only sent when the session may write it (ADR #36 D7).
+        costMinor: canEditCost ? (newProd.cost_minor ?? 0) : 0,
         brand: newProd.brand ?? null,
         rackLocation: newProd.rack_location ?? null,
         notes: newProd.notes ?? null,
@@ -629,7 +635,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     } catch (err) {
       addToast({ message: plainErrorMessage(err, requiredLocalized(l10nRef.current, 'retail-toast-save-product-failed')), type: 'error' });
     }
-  }, [categories, addToast, sessionToken]);
+  }, [categories, addToast, sessionToken, canEditCost]);
 
   const filteredProducts = useMemo(() => {
     let list = products.filter((p) => p.product_type === 'retail');
@@ -1586,6 +1592,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
         onClickHeldCarts={() => { if (!isAnyOverlayOpen()) setShowHeldCartsList(true); }}
       />
       <RetailModals
+        canEditCost={canEditCost}
         shift={{
           activeShift,
           openShiftExit: { shouldRender: retailOpenShiftExit.shouldRender, exiting: retailOpenShiftExit.exiting, requestClose: retailOpenShiftExit.requestClose },

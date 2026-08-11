@@ -124,6 +124,12 @@ pub const REGISTRY: &[PermissionEntry] = &[
         sensitive: false,
         description: "Legacy composite seed key — product create/read/update/delete. Kept byte-identical.",
     },
+    PermissionEntry {
+        key: "products:edit_cost",
+        family: "products",
+        sensitive: false,
+        description: "Set or override a product's cost (HPP). Granted to manager/admin presets only — cost is local-only (ADR #36 D7).",
+    },
     // ── inventory ────────────────────────────────────────────────
     PermissionEntry {
         key: "inventory:view",

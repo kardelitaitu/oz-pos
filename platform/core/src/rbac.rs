@@ -349,6 +349,7 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::PRODUCTS_IMPORT,
             permissions::PRODUCTS_EXPORT,
             permissions::PRODUCTS_CRUD,
+            permissions::PRODUCTS_EDIT_COST,
             permissions::INVENTORY_VIEW,
             permissions::INVENTORY_ADJUST,
             permissions::INVENTORY_TRANSFER,
@@ -496,6 +497,7 @@ pub const ROLE_PRESETS: &[RolePreset] = &[
             permissions::PRODUCTS_IMPORT,
             permissions::PRODUCTS_EXPORT,
             permissions::PRODUCTS_CRUD,
+            permissions::PRODUCTS_EDIT_COST,
             permissions::INVENTORY_VIEW,
             permissions::INVENTORY_ADJUST,
             permissions::INVENTORY_TRANSFER,
@@ -787,21 +789,24 @@ mod preset_tests {
     fn staff_preset_has_manager_count_minus_settings() {
         let manager = &ROLE_PRESETS[1];
         let staff = &ROLE_PRESETS[2];
-        // Staff should have exactly 3 fewer permissions than Manager
-        // (settings:read, settings:edit, analytics:view) — the analytics
-        // surface is a management review tool deliberately withheld from
-        // Staff (owner/admin/manager only, ADR #35 D4 taxonomy).
+        // Staff should have exactly 4 fewer permissions than Manager
+        // (settings:read, settings:edit, analytics:view, and the manager-only
+        // products:edit_cost) — analytics is a management review tool
+        // deliberately withheld from Staff (owner/admin/manager only,
+        // ADR #35 D4 taxonomy), and cost editing is manager+ only (ADR #36
+        // D7).
         assert_eq!(
             staff.permissions.len(),
-            manager.permissions.len() - 3,
-            "Staff should have all Manager permissions except settings and analytics"
+            manager.permissions.len() - 4,
+            "Staff should have all Manager permissions except settings, analytics, and edit_cost"
         );
-        // Verify every Manager permission except settings + analytics is
-        // present in Staff
+        // Verify every Manager permission except settings + analytics +
+        // edit_cost is present in Staff
         for perm in manager.permissions {
             if *perm != permissions::SETTINGS_READ
                 && *perm != permissions::SETTINGS_EDIT
                 && *perm != permissions::ANALYTICS_VIEW
+                && *perm != permissions::PRODUCTS_EDIT_COST
             {
                 assert!(
                     staff.permissions.contains(perm),
@@ -852,6 +857,10 @@ pub mod permissions {
     /// Legacy composite seed key (create/read/update/delete) kept
     /// byte-identical — registered in the permission registry (spec 0046).
     pub const PRODUCTS_CRUD: &str = "products:crud";
+    /// Set or override a product's cost (HPP). Manager+ only — cost is
+    /// local-only and sensitive (ADR #36 D7); staff can create/update
+    /// products without ever touching cost.
+    pub const PRODUCTS_EDIT_COST: &str = "products:edit_cost";
 
     // ── Inventory ─────────────────────────────────────────────────
     /// View stock levels.
@@ -1031,6 +1040,7 @@ pub const ALL_ENFORCED: &[&str] = &[
     permissions::PRODUCTS_IMPORT,
     permissions::PRODUCTS_EXPORT,
     permissions::PRODUCTS_CRUD,
+    permissions::PRODUCTS_EDIT_COST,
     permissions::INVENTORY_VIEW,
     permissions::INVENTORY_ADJUST,
     permissions::INVENTORY_TRANSFER,

@@ -100,4 +100,49 @@ describe('AddProductModal', () => {
     );
     expect(handleClose).toHaveBeenCalled();
   });
+
+  it('hides the cost field and saves cost 0 when canEditCost is false (ADR #36 D7)', async () => {
+    const user = userEvent.setup();
+    const handleSave = vi.fn();
+    const handleClose = vi.fn();
+
+    render(
+      <AddProductModal
+        categories={sampleCategories}
+        isOpen={true}
+        onClose={handleClose}
+        onSave={handleSave}
+        canEditCost={false}
+      />,
+      { wrapper },
+    );
+
+    // Cost label falls back to the JSX default (no FTL key in this test
+    // bundle) — it must not be rendered for non-permitted sessions.
+    expect(screen.queryByText('Cost (IDR)')).not.toBeInTheDocument();
+    // The other ADR #36 fields still render.
+    expect(screen.getByLabelText('Unit')).toBeInTheDocument();
+
+    const nameInput = screen.getByPlaceholderText('e.g. Logitech G Pro X Wireless Mouse');
+    await user.type(nameInput, 'Staff-Created Product');
+    await user.click(screen.getByRole('button', { name: 'Create Product' }));
+
+    expect(handleSave).toHaveBeenCalledWith(
+      expect.objectContaining({ cost_minor: 0 }),
+    );
+    expect(handleClose).toHaveBeenCalled();
+  });
+
+  it('shows the cost field by default (manager session)', () => {
+    render(
+      <AddProductModal
+        categories={sampleCategories}
+        isOpen={true}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+      />,
+      { wrapper },
+    );
+    expect(screen.getByText('Cost (IDR)')).toBeInTheDocument();
+  });
 });

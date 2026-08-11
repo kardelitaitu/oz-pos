@@ -10,6 +10,8 @@ export interface AddProductModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (newProduct: ProductDto) => void;
+  /** ADR #36 D7: false hides the Cost field (products:edit_cost is manager+ only). */
+  canEditCost?: boolean;
 }
 
 export const AddProductModal: React.FC<AddProductModalProps> = ({
@@ -17,6 +19,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   isOpen,
   onClose,
   onSave,
+  canEditCost = true,
 }) => {
   const { l10n } = useLocalization();
   const [sku, setSku] = useState('');
@@ -88,7 +91,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       product_type: 'retail',
       low_stock_threshold: Math.max(0, lowThreshold === '' ? 0 : lowThreshold),
       high_stock_threshold: Math.max(0, highThreshold === '' ? 0 : highThreshold),
-      cost_minor: Math.max(0, costMinor === '' ? 0 : costMinor),
+      cost_minor: canEditCost ? Math.max(0, costMinor === '' ? 0 : costMinor) : 0,
       brand: brand.trim() || null,
       rack_location: rackLocation.trim() || null,
       notes: notes.trim() || null,
@@ -277,6 +280,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
 
           {/* ── ADR #36 attributes ── */}
           <div className="retail-edit-form-row">
+            {canEditCost && (
             <div className="retail-edit-form-group">
               <Localized id="retail-edit-field-cost">
                 <label htmlFor="add-product-cost" className="retail-edit-label">
@@ -296,6 +300,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 }}
               />
             </div>
+            )}
 
             <div className="retail-edit-form-group">
               <Localized id="retail-edit-field-unit">

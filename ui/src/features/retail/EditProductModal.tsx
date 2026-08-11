@@ -10,6 +10,8 @@ export interface EditProductModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (updatedProduct: ProductDto) => void;
+  /** ADR #36 D7: false hides the Cost field + override hint (manager+ only). */
+  canEditCost?: boolean;
 }
 
 export const EditProductModal: React.FC<EditProductModalProps> = ({
@@ -17,6 +19,7 @@ export const EditProductModal: React.FC<EditProductModalProps> = ({
   isOpen,
   onClose,
   onSave,
+  canEditCost = true,
 }) => {
   const { l10n } = useLocalization();
   const [name, setName] = useState('');
@@ -242,6 +245,7 @@ export const EditProductModal: React.FC<EditProductModalProps> = ({
 
           {/* ── ADR #36 attributes ── */}
           <div className="retail-edit-form-row">
+            {canEditCost && (
             <div className="retail-edit-form-group">
               <Localized id="retail-edit-field-cost">
                 <label htmlFor="edit-product-cost" className="retail-edit-label">
@@ -266,6 +270,7 @@ export const EditProductModal: React.FC<EditProductModalProps> = ({
                 </div>
               )}
             </div>
+            )}
 
             <div className="retail-edit-form-group">
               <Localized id="retail-edit-field-unit">

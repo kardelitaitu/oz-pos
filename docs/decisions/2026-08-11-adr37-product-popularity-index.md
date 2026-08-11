@@ -156,8 +156,12 @@ upsert imports only its snapshot columns, so `popularity_score` and
 
 - Breadth weighting (`× ln(1 + distinct transactions)`) — optional refinement
   that rewards reach over one-customer bulk; the ledger can support it later.
-- Per-category or per-period popularity, and the demand-forecasting
-  integration (existing research doc) — out of scope.
+- Per-category popularity — ✅ implemented (2026-08-12): the full pass now
+  caches per-category smoothing means (`popularity.category_means`) and
+  scores each product against its own category, so the grid's popularity sort
+  is fair within a selected category; uncategorized products fall back to the
+  global mean. Per-period popularity and the demand-forecasting integration
+  remain out of scope.
 - Surfacing the score in analytics exports — the data will be available to the
   analytics tool through the local store DB (same path as cost, ADR #36 D2).
 

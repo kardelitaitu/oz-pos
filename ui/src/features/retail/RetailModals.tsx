@@ -26,6 +26,9 @@ export interface ExitAnim {
 // ── Props interface ────────────────────────────────────────────────
 
 export interface RetailModalsProps {
+  // ADR #36 D7: whether the session may view/edit product cost (HPP).
+  canEditCost: boolean;
+
   // ── Shift modals ────────────────────
   shift: {
     activeShift: ShiftDto | null;
@@ -182,6 +185,7 @@ export default function RetailModals(props: RetailModalsProps) {
     editProduct,
     addCategory,
     addProduct,
+    canEditCost,
     showQuickReturnRefund,
     quickReturnSale,
     quickReturnRefundDone,
@@ -748,6 +752,7 @@ export default function RetailModals(props: RetailModalsProps) {
         isOpen={editProduct.isOpen}
         onClose={editProduct.onClose}
         onSave={editProduct.onSave}
+        canEditCost={canEditCost}
       />
 
       {/* ── Add Category modal ──────────────── */}
@@ -763,6 +768,7 @@ export default function RetailModals(props: RetailModalsProps) {
         isOpen={addProduct.isOpen}
         onClose={addProduct.onClose}
         onSave={addProduct.onSave}
+        canEditCost={canEditCost}
       />
 
       {/* ── Quick Return modal ──────────────── */}

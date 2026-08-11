@@ -94,7 +94,15 @@ vi.mock('@/api/customers', async () => {
 
 vi.mock('@/contexts/AuthContext', async () => {
   const { createAuthContextMock } = await import('@/__tests__/test-utils/mocks/contexts');
-  return { useAuth: createAuthContextMock() };
+  // ADR #36 D7: cost editing is manager+ only — these attribute tests
+  // exercise the Cost field, so the session must hold products:edit_cost.
+  return {
+    useAuth: createAuthContextMock({
+      roleName: 'manager',
+      isManager: true,
+      permissions: ['products:edit_cost'],
+    }),
+  };
 });
 
 vi.mock('@/contexts/WorkspaceContext', async () => {

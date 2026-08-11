@@ -632,6 +632,12 @@ pub async fn create_product_scoped(
 ) -> Result<CreateProductResult, AppError> {
     let session = state.resolve_session(&session_token)?;
     require_permission_for_session(&state, &session, permissions::PRODUCTS_CREATE).await?;
+    // ADR #36 D7: setting a cost (HPP) requires the manager-only
+    // products:edit_cost permission — staff can create products without
+    // ever touching cost.
+    if args.cost_minor != 0 {
+        require_permission_for_session(&state, &session, permissions::PRODUCTS_EDIT_COST).await?;
+    }
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -882,6 +888,12 @@ pub async fn update_product_scoped(
 ) -> Result<UpdateProductResult, AppError> {
     let session = state.resolve_session(&session_token)?;
     require_permission_for_session(&state, &session, permissions::PRODUCTS_UPDATE).await?;
+    // ADR #36 D7: changing a product's cost (HPP) requires the manager-only
+    // products:edit_cost permission. A PATCH that does not touch cost
+    // (cost_minor absent) stays open to PRODUCTS_UPDATE holders.
+    if args.cost_minor.is_some() {
+        require_permission_for_session(&state, &session, permissions::PRODUCTS_EDIT_COST).await?;
+    }
     let conn = state
         .db_manager
         .open_store(&session.store_id)
@@ -1123,6 +1135,7 @@ mod tests {
     use super::*;
     use oz_core::migrations;
     use rusqlite::Connection;
+    use tauri::Manager as _;
 
     fn fresh_conn() -> Connection {
         migrations::fresh_db()
@@ -1569,6 +1582,181 @@ mod tests {
         let session = state.resolve_session("tok-valid").unwrap();
         assert_eq!(session.store_id, "default");
         assert_eq!(session.type_key, "restaurant-pos");
+    }
+
+    fn seeded_cost_gate_app() -> tauri::App<tauri::test::MockRuntime> {
+        let conn = oz_core::migrations::fresh_db();
+        let store = Store::new(&conn);
+        store.seed_default_roles().unwrap();
+        // role-staff holds PRODUCTS_CREATE/PRODUCTS_UPDATE but NOT
+        // PRODUCTS_EDIT_COST (ADR #36 D7 — manager+ only).
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-staff', 'staff', 'hash', 'Staff', 'role-staff', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z'),
+                    ('user-manager', 'manager', 'hash', 'Manager', 'role-manager', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        let state = AppState::for_test_with_conn(conn);
+        for (token, user, role) in [
+            ("staff-token", "user-staff", "role-staff"),
+            ("manager-token", "user-manager", "role-manager"),
+        ] {
+            state.session_store.write().unwrap().insert(
+                token.into(),
+                oz_core::session::SessionContext::new(
+                    user.into(),
+                    role.into(),
+                    "terminal-1".into(),
+                    "store-1".into(),
+                    "instance-1".into(),
+                    "pos".into(),
+                    None,
+                    0,
+                ),
+            );
+        }
+        tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap()
+    }
+
+    fn create_args(sku: &str, cost_minor: i64) -> CreateProductScopedArgs {
+        CreateProductScopedArgs {
+            sku: sku.into(),
+            name: sku.into(),
+            price_minor: 100,
+            currency: "USD".into(),
+            category_id: None,
+            barcode: None,
+            initial_stock: 0,
+            tax_rate_ids: vec![],
+            product_type: "retail".into(),
+            cost_minor,
+            brand: None,
+            rack_location: None,
+            notes: None,
+            unit: None,
+            is_active: true,
+            default_supplier_id: None,
+        }
+    }
+
+    fn update_args(sku: &str, cost_minor: Option<i64>) -> UpdateProductScopedArgs {
+        UpdateProductScopedArgs {
+            sku: sku.into(),
+            name: sku.into(),
+            price_minor: 100,
+            currency: "USD".into(),
+            category_id: None,
+            barcode: None,
+            tax_rate_ids: vec![],
+            product_type: Some("retail".into()),
+            cost_minor,
+            brand: None,
+            rack_location: None,
+            notes: None,
+            unit: None,
+            is_active: None,
+            default_supplier_id: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn create_product_scoped_denies_cost_without_edit_cost_permission() {
+        let app = seeded_cost_gate_app();
+
+        // Staff creating a product WITHOUT cost passes the gate (the test
+        // state has no store DB, so the call then fails internally — the
+        // point is it is NOT a permission denial).
+        let no_cost = create_product_scoped(
+            "staff-token".into(),
+            create_args("SKU-NO-COST", 0),
+            app.state(),
+        )
+        .await;
+        assert!(!matches!(no_cost, Err(AppError::PermissionDenied(_))));
+
+        // Staff setting a cost is rejected outright.
+        let with_cost = create_product_scoped(
+            "staff-token".into(),
+            create_args("SKU-COST", 100),
+            app.state(),
+        )
+        .await;
+        assert!(matches!(with_cost, Err(AppError::PermissionDenied(_))));
+
+        // Manager passes the gate (then fails on the missing store DB, not
+        // on the permission).
+        let manager = create_product_scoped(
+            "manager-token".into(),
+            create_args("SKU-MGR", 100),
+            app.state(),
+        )
+        .await;
+        assert!(!matches!(manager, Err(AppError::PermissionDenied(_))));
+    }
+
+    #[tokio::test]
+    async fn update_product_scoped_denies_cost_change_without_edit_cost_permission() {
+        let app = seeded_cost_gate_app();
+
+        // Staff PATCH without touching cost passes the gate.
+        let no_cost = update_product_scoped(
+            "staff-token".into(),
+            update_args("SKU-1", None),
+            app.state(),
+        )
+        .await;
+        assert!(!matches!(no_cost, Err(AppError::PermissionDenied(_))));
+
+        // Staff PATCH that changes cost is rejected.
+        let with_cost = update_product_scoped(
+            "staff-token".into(),
+            update_args("SKU-1", Some(100)),
+            app.state(),
+        )
+        .await;
+        assert!(matches!(with_cost, Err(AppError::PermissionDenied(_))));
+
+        // Manager PATCH with cost passes the gate.
+        let manager = update_product_scoped(
+            "manager-token".into(),
+            update_args("SKU-1", Some(100)),
+            app.state(),
+        )
+        .await;
+        assert!(!matches!(manager, Err(AppError::PermissionDenied(_))));
+    }
+
+    #[test]
+    fn edit_cost_permission_membership_is_manager_only() {
+        let conn = oz_core::migrations::fresh_db();
+        let store = Store::new(&conn);
+        store.seed_default_roles().unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-staff', 'staff', 'hash', 'Staff', 'role-staff', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z'),
+                    ('user-manager', 'manager', 'hash', 'Manager', 'role-manager', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z'),
+                    ('user-owner', 'owner', 'hash', 'Owner', 'role-owner', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        let store = Store::new(&conn);
+        // Owner (`*`) and Manager presets hold it; Staff does not.
+        assert!(
+            require_permission_for_user(&store, "user-owner", permissions::PRODUCTS_EDIT_COST)
+                .is_ok()
+        );
+        assert!(
+            require_permission_for_user(&store, "user-manager", permissions::PRODUCTS_EDIT_COST)
+                .is_ok()
+        );
+        assert!(matches!(
+            require_permission_for_user(&store, "user-staff", permissions::PRODUCTS_EDIT_COST),
+            Err(AppError::PermissionDenied(_))
+        ));
     }
 
     #[test]

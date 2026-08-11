@@ -200,10 +200,12 @@ shown here — per D4/D5 it is never rendered outside the Add/Edit modals.
   receive) — deferred; cost is manual by decision.
 - **Margin % / stock-value columns** — deferred; the data (price, cost, total
   stock) is stored and queryable, and will feed the analytics tool.
-- **Role-gated cost access** — the cost field in the Add/Edit modals is
-  reachable by any retail POS session for now; if staff/cashier access is
-  granted later, gate cost editing on a permission key (ADR #35 pattern) —
-  never UI-only.
+- **Role-gated cost access** — ✅ implemented (2026-08-12): cost writes are
+  gated server-side on the `products:edit_cost` permission (granted to the
+  owner/manager/admin presets, withheld from staff) in both clients' scoped
+  product commands, and the Cost field + restock override hint are hidden in
+  the retail Add/Edit modals for sessions without it — UI-only would have
+  been rejected; the backend is the enforcement.
 - **Product Management screen columns** — untouched in this change.
 - **Brand as a lookup table** — free text for now; a normalized `brands` table
   is a future decision if filtering/reporting demands it.

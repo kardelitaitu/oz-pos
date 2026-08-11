@@ -382,6 +382,12 @@ pub async fn create_product(
         let store = Store::new(&db);
 
         require_permission_for_user(&store, &args.user_id, permissions::PRODUCTS_CREATE)?;
+        // ADR #36 D7: setting a cost (HPP) requires the manager-only
+        // products:edit_cost permission — staff can create products without
+        // ever touching cost.
+        if args.cost_minor != 0 {
+            require_permission_for_user(&store, &args.user_id, permissions::PRODUCTS_EDIT_COST)?;
+        }
 
         let currency: oz_core::Currency = args
             .currency
@@ -521,6 +527,12 @@ pub async fn update_product(
     let store = Store::new(&db);
 
     require_permission_for_user(&store, &args.user_id, permissions::PRODUCTS_UPDATE)?;
+    // ADR #36 D7: changing a product's cost (HPP) requires the manager-only
+    // products:edit_cost permission. A PATCH that does not touch cost
+    // (cost_minor absent) stays open to PRODUCTS_UPDATE holders.
+    if args.cost_minor.is_some() {
+        require_permission_for_user(&store, &args.user_id, permissions::PRODUCTS_EDIT_COST)?;
+    }
 
     let currency: oz_core::Currency = args
         .currency

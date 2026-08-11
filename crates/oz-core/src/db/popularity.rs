@@ -19,6 +19,18 @@ use super::Store;
 const MEAN_SALES: &str = "popularity.mean.sales";
 const MEAN_SEARCH: &str = "popularity.mean.search";
 const MEAN_EDITS: &str = "popularity.mean.edits";
+/// Settings key caching per-category means as JSON
+/// (`{"<category_id>": {"sales": s, "search": q, "edits": e}, "": {…}}`,
+/// where the `""` entry is the global fallback for uncategorized products).
+/// Per-category popularity (ADR #37 D6): each product is smoothed toward its
+/// own category's mean so a quiet category's products are not drowned by a
+/// hot one — the retail grid's popularity sort becomes fair within a
+/// selected category.
+const CATEGORY_MEANS: &str = "popularity.category_means";
+
+/// One product's full-pass raw signals: `(sku, category_id, sales_raw,
+/// sales_votes, search_raw, search_votes, edits_raw, edits_votes)`.
+type ProductSignals = (String, Option<String>, f64, f64, f64, f64, f64, f64);
 
 /// Days between an ISO date and today; out-of-range becomes `i64::MAX` so the
 /// formula window filters it out.
@@ -84,8 +96,8 @@ impl Store<'_> {
         Ok(out)
     }
 
-    /// Read a cached catalog mean from `settings` (0.0 when absent).
-    fn read_mean(&self, key: &str) -> f64 {
+    /// Read a raw `settings` value (None when absent).
+    fn read_setting(&self, key: &str) -> Option<String> {
         self.conn
             .query_row(
                 "SELECT value FROM settings WHERE key = ?1",
@@ -93,19 +105,67 @@ impl Store<'_> {
                 |r| r.get::<_, String>(0),
             )
             .ok()
+    }
+
+    /// Read a cached catalog mean from `settings` (0.0 when absent).
+    fn read_mean(&self, key: &str) -> f64 {
+        self.read_setting(key)
             .and_then(|v| v.parse().ok())
             .unwrap_or(0.0)
     }
 
-    /// Cache a catalog mean in `settings`.
-    fn write_mean(&self, key: &str, value: f64) -> Result<(), CoreError> {
+    /// Look up the cached smoothing means for a product's category.
+    ///
+    /// Returns the category's means when the per-category map (written by
+    /// the last full pass) has an entry for it; falls back to the `""`
+    /// global entry, then to the legacy `MEAN_*` keys (fresh DB).
+    fn category_means(&self, category: &str) -> Option<(f64, f64, f64)> {
+        let raw = self.read_setting(CATEGORY_MEANS)?;
+        let map: serde_json::Value = serde_json::from_str(&raw).ok()?;
+        let entry = map.get(category).or_else(|| map.get(""))?;
+        Some((
+            entry.get("sales").and_then(|v| v.as_f64()).unwrap_or(0.0),
+            entry.get("search").and_then(|v| v.as_f64()).unwrap_or(0.0),
+            entry.get("edits").and_then(|v| v.as_f64()).unwrap_or(0.0),
+        ))
+    }
+
+    /// Smoothing means for a single SKU: its category's cached means, else
+    /// the global fallback.
+    fn sku_means(&self, sku: &str) -> (f64, f64, f64) {
+        let category: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT category_id FROM products WHERE sku = ?1",
+                params![sku],
+                |r| r.get(0),
+            )
+            .ok()
+            .flatten();
+        if let Some(means) = category.as_deref().and_then(|cat| self.category_means(cat)) {
+            return means;
+        }
+        (
+            self.read_mean(MEAN_SALES),
+            self.read_mean(MEAN_SEARCH),
+            self.read_mean(MEAN_EDITS),
+        )
+    }
+
+    /// Cache a raw `settings` value (JSON or number string).
+    fn write_setting(&self, key: &str, value: &str) -> Result<(), CoreError> {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         self.conn.execute(
             "INSERT INTO settings (key, value, updated_at) VALUES (?1, ?2, ?3)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
-            params![key, value.to_string(), now],
+            params![key, value, now],
         )?;
         Ok(())
+    }
+
+    /// Cache a catalog mean in `settings`.
+    fn write_mean(&self, key: &str, value: f64) -> Result<(), CoreError> {
+        self.write_setting(key, &value.to_string())
     }
 
     /// Record an acted-upon search (ADR #37 D2) and refresh the SKU's score.
@@ -128,13 +188,14 @@ impl Store<'_> {
         let sales = self.sale_day_counts(sku)?;
         let searches = self.activity_day_counts(sku, "search")?;
         let edits = self.activity_day_counts(sku, "edit")?;
+        let (mean_sales, mean_search, mean_edits) = self.sku_means(sku);
         let score = compute_score(
             &sales,
             &searches,
             &edits,
-            self.read_mean(MEAN_SALES),
-            self.read_mean(MEAN_SEARCH),
-            self.read_mean(MEAN_EDITS),
+            mean_sales,
+            mean_search,
+            mean_edits,
         );
         self.conn.execute(
             "UPDATE products SET popularity_score = ?1 WHERE sku = ?2",
@@ -206,18 +267,21 @@ impl Store<'_> {
             }
         }
 
-        // ── Per-product raw + votes, and catalog means ────────────────
-        let mut products: Vec<(String, f64, f64, f64, f64, f64, f64)> = Vec::new();
+        // ── Per-product raw + votes, grouped by category ───────────────
+        let mut products: Vec<ProductSignals> = Vec::new();
         {
-            let mut stmt = self.conn.prepare("SELECT sku FROM products")?;
-            let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+            let mut stmt = self.conn.prepare("SELECT sku, category_id FROM products")?;
+            let rows = stmt.query_map([], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?))
+            })?;
             for row in rows {
-                let sku = row?;
+                let (sku, category) = row?;
                 let s_events = sales.get(&sku).map(Vec::as_slice).unwrap_or(&[]);
                 let q_events = searches.get(&sku).map(Vec::as_slice).unwrap_or(&[]);
                 let e_events = edits.get(&sku).map(Vec::as_slice).unwrap_or(&[]);
                 products.push((
                     sku,
+                    category,
                     decayed_sum(s_events),
                     total_events(s_events),
                     decayed_sum(q_events),
@@ -228,41 +292,73 @@ impl Store<'_> {
             }
         }
 
+        // Global means — the fallback for uncategorized products and the
+        // `""` entry of the per-category cache.
         let n = products.len() as f64;
         let mean_sales = if n > 0.0 {
-            products.iter().map(|p| p.1).sum::<f64>() / n
+            products.iter().map(|p| p.2).sum::<f64>() / n
         } else {
             0.0
         };
         let mean_search = if n > 0.0 {
-            products.iter().map(|p| p.3).sum::<f64>() / n
+            products.iter().map(|p| p.4).sum::<f64>() / n
         } else {
             0.0
         };
         let mean_edits = if n > 0.0 {
-            products.iter().map(|p| p.5).sum::<f64>() / n
+            products.iter().map(|p| p.6).sum::<f64>() / n
         } else {
             0.0
         };
 
+        // Per-category means (ADR #37 D6): each product is smoothed toward
+        // its own category's mean, so a quiet category is not drowned by a
+        // hot one. `""` = uncategorized bucket, kept in the map as the
+        // explicit global entry.
+        let mut cat_sums: HashMap<String, (f64, f64, f64, f64)> = HashMap::new();
+        for p in &products {
+            let key = p.1.clone().unwrap_or_default();
+            let entry = cat_sums.entry(key).or_insert((0.0, 0.0, 0.0, 0.0));
+            entry.0 += p.2;
+            entry.1 += p.4;
+            entry.2 += p.6;
+            entry.3 += 1.0;
+        }
+        let mut cat_means: HashMap<String, (f64, f64, f64)> = HashMap::new();
+        for (cat, (sr, qr, er, count)) in cat_sums {
+            if count > 0.0 {
+                cat_means.insert(cat, (sr / count, qr / count, er / count));
+            }
+        }
+        cat_means.insert(String::new(), (mean_sales, mean_search, mean_edits));
+
+        // Persist the per-category cache as JSON, and keep the global
+        // MEAN_* keys (single-SKU fallback before the first full pass).
+        let mut cat_json = serde_json::Map::new();
+        for (cat, (ms, mq, me)) in &cat_means {
+            cat_json.insert(
+                cat.clone(),
+                serde_json::json!({ "sales": ms, "search": mq, "edits": me }),
+            );
+        }
+        self.write_setting(
+            CATEGORY_MEANS,
+            &serde_json::Value::Object(cat_json).to_string(),
+        )?;
         self.write_mean(MEAN_SALES, mean_sales)?;
         self.write_mean(MEAN_SEARCH, mean_search)?;
         self.write_mean(MEAN_EDITS, mean_edits)?;
 
         // ── Write scores (one transaction: the per-SKU updates are atomic) ─
         let tx = self.conn.unchecked_transaction()?;
-        for (sku, sr, sv, qr, qv, er, ev) in products {
-            let score = crate::popularity::score_from_raw(
-                sr,
-                sv,
-                qr,
-                qv,
-                er,
-                ev,
-                mean_sales,
-                mean_search,
-                mean_edits,
-            );
+        for (sku, category, sr, sv, qr, qv, er, ev) in products {
+            let key = category.unwrap_or_default();
+            let (ms, mq, me) =
+                cat_means
+                    .get(&key)
+                    .copied()
+                    .unwrap_or((mean_sales, mean_search, mean_edits));
+            let score = crate::popularity::score_from_raw(sr, sv, qr, qv, er, ev, ms, mq, me);
             tx.execute(
                 "UPDATE products SET popularity_score = ?1 WHERE sku = ?2",
                 params![score, sku],
@@ -431,6 +527,159 @@ mod tests {
             score_raw_share <= pending_influence + 1e-9
                 && pending_influence < crate::popularity::WEIGHT_SALES * seven_units,
             "backfilled score must reflect completed sales only (pending excluded)"
+        );
+    }
+
+    fn seed_category(conn: &rusqlite::Connection, id: &str, name: &str) {
+        conn.execute(
+            "INSERT OR IGNORE INTO categories (id, name, colour, icon, created_at, updated_at) \
+             VALUES (?1, ?2, '#06b6d4', '', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+            params![id, name],
+        )
+        .unwrap();
+    }
+
+    /// Seed a product in a category with `units` sold today (completed sale).
+    fn seed_sold_in_category(
+        conn: &rusqlite::Connection,
+        sku: &str,
+        category: Option<&str>,
+        units: i64,
+    ) {
+        let id = uuid::Uuid::now_v7().to_string();
+        conn.execute(
+            "INSERT INTO products (id, sku, name, price_minor, currency, category_id, created_at, updated_at) \
+             VALUES (?1, ?2, ?2, 1000, 'USD', ?3, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+            params![id, sku, category],
+        )
+        .unwrap();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        conn.execute(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at) VALUES
+             (?1, ?2, 'USD', 1, 'completed', ?3, ?3)",
+            params![format!("sale-{sku}"), units * 1000, now],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position) VALUES
+             (?1, ?2, ?3, ?4, 1000, ?5, 'USD', 1)",
+            params![format!("sl-{sku}"), format!("sale-{sku}"), sku, units, units * 1000],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn full_pass_smooths_toward_category_mean_not_catalog_mean() {
+        // A hot category (5 × 100 units) inflates the catalog mean to 63.125.
+        // Global smoothing then pulls the LOWEST-evidence product up hardest
+        // (closest to the inflated mean), inverting the ranking inside the
+        // quiet category — the 1-unit seller would outrank the 2-unit seller.
+        // Per-category means keep the ordering honest: 2 units beats 1 unit
+        // within the quiet category.
+        let conn = fresh();
+        seed_category(&conn, "cat-hot", "Hot");
+        seed_category(&conn, "cat-quiet", "Quiet");
+        for i in 0..5 {
+            seed_sold_in_category(&conn, &format!("HOT-{i}"), Some("cat-hot"), 100);
+        }
+        seed_sold_in_category(&conn, "QUIET-2", Some("cat-quiet"), 2);
+        seed_sold_in_category(&conn, "QUIET-1", Some("cat-quiet"), 1);
+        // An uncategorized product uses the global fallback.
+        seed_sold_in_category(&conn, "NO-CAT", None, 2);
+
+        let store = Store::new(&conn);
+        store.recompute_all_popularity().unwrap();
+
+        let score = |sku: &str| -> f64 {
+            conn.query_row(
+                "SELECT popularity_score FROM products WHERE sku = ?1",
+                params![sku],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        let (two, one) = (score("QUIET-2"), score("QUIET-1"));
+        assert!(
+            two > one,
+            "within the quiet category the 2-unit seller must outrank the \
+             1-unit seller (two={two}, one={one})"
+        );
+        // Reference: the catalog-mean blend (mean 63.125) inverts that
+        // ordering — the whole pathology per-category popularity fixes.
+        let catalog_mean = 63.125;
+        let global_two = crate::popularity::compute_score(
+            &[DayCount {
+                days_ago: 0,
+                count: 2,
+            }],
+            &[],
+            &[],
+            catalog_mean,
+            0.0,
+            0.0,
+        );
+        let global_one = crate::popularity::compute_score(
+            &[DayCount {
+                days_ago: 0,
+                count: 1,
+            }],
+            &[],
+            &[],
+            catalog_mean,
+            0.0,
+            0.0,
+        );
+        assert!(
+            global_one > global_two,
+            "catalog-mean blend must invert the ordering (one={global_one}, two={global_two})"
+        );
+        // Uncategorized falls back to the global mean (identical inputs to
+        // the catalog blend above).
+        let no_cat = score("NO-CAT");
+        assert!(
+            (no_cat - global_two).abs() < 1e-9,
+            "uncategorized must use the global mean, not the quiet category's \
+             (no-cat={no_cat}, expected={global_two})"
+        );
+        // The hot category still ranks highest.
+        let hot = score("HOT-0");
+        assert!(hot > two, "hot category must still outrank the quiet one");
+    }
+
+    #[test]
+    fn single_sku_recompute_uses_cached_category_means() {
+        let conn = fresh();
+        seed_category(&conn, "cat-hot", "Hot");
+        seed_category(&conn, "cat-quiet", "Quiet");
+        for i in 0..5 {
+            seed_sold_in_category(&conn, &format!("HOT-{i}"), Some("cat-hot"), 100);
+        }
+        seed_sold_in_category(&conn, "QUIET-1", Some("cat-quiet"), 2);
+
+        let store = Store::new(&conn);
+        store.recompute_all_popularity().unwrap();
+        let full_pass_score: f64 = conn
+            .query_row(
+                "SELECT popularity_score FROM products WHERE sku = 'QUIET-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+
+        // A later single-SKU recompute (e.g. after a search event) must
+        // reproduce the same category-relative score via the JSON cache.
+        store.recompute_popularity("QUIET-1").unwrap();
+        let after: f64 = conn
+            .query_row(
+                "SELECT popularity_score FROM products WHERE sku = 'QUIET-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            (full_pass_score - after).abs() < 1e-9,
+            "single-SKU recompute must reuse the category means \
+             (full-pass={full_pass_score}, recomputed={after})"
         );
     }
 
