@@ -4071,3 +4071,25 @@ guard clean. Note: `modules-inventory` currently does not compile — another
 agent's in-flight ADR #36/37 field additions (models.rs has new Product
 fields, repository.rs not yet updated); unrelated to this slice, left
 untouched.
+
+### 2026-08-11 — 0048 cycle 3: assignment write path + five-role staff screen
+
+Problem: the assignment model (migration 128) had no write path — `set_user_workspaces_legacy` still wrote the STORE-scoped legacy tables, so the staff screen could never express `scope_mode` or the branch dimension, and `list_roles_scoped` returned every DB role instead of the ADR #35 D4 taxonomy.
+
+Solution:
+- oz-core: `Store::set_assignment` (transactional) + `write_assignment_scope` (in-tx writer, joins an open transaction — no nested BEGIN), both replacing the dimension rows so toggling list→all never leaves stale grants; `create_user_with_profile` takes an optional `AssignmentSpec` so a scoped assignment is atomic with user creation. Red-first: `set_assignment_writes_scoped_dimensions`, `set_assignment_replaces_existing_scope_and_clears_stale_rows`, `write_assignment_scope_joins_an_open_transaction`.
+- Both clients: `AssignmentDto` on `StaffMemberDto` (legacy users resolve global all/all), optional `assignment` args on create/update, written inside the existing update transaction (profile + role + scope are one commit now — no compensation needed for the new model; the legacy `workspace_keys` path stays for compat).
+- UI: the role dropdown filters to the five preset ids in Owner→Auditor order (custom roles have no UI per 0048 non-goals); the assignment editor gained scope_mode radios and per-dimension branch (store profiles) + workspace pickers with explicit all/list; save blocks an empty list dimension; the workspace table column derives from the DTO assignment (dropped the per-member `get_user_workspaces_scoped` round trips). i18n keys in both bundles; `api-staff-contract` pins the wire shape (7/7); screen tests 21/21 (taxonomy, pre-fill, scoped save, empty-list block).
+
+Decisions:
+- Branch picker source is `list_store_profiles` (store_profiles.id is the branch id the assignment model scopes on — no FK, semantic reference per ADR #35 D5).
+- The editor stays edit-only (as before); create keeps the default global assignment unless args carry one.
+- The assignment write deliberately REPLACES the legacy store-DB workspace write for UI callers, but `workspace_keys` remains on the wire for backward compat (the workspace login picker still reads legacy tables).
+
+Remaining risks / follow-ups:
+- The workspace LOGIN picker still resolves legacy `user_workspaces`/instances; a future slice can rewire it to the assignment model (audit/06 territory).
+- The legacy `workspace_keys` arg is now dead UI-side; removing it from the wire is a compat decision for a later slice.
+- Two unblocking fixes land in the worktree only (NOT committed): cache.rs test literals and both clients' products.rs fixture completed for the other agent's in-flight ADR #36 fields — they compile only with that WIP present, so they must ride with it.
+
+Commits: pending (this slice)
+Tests: oz-core 1746/1746 (assignments 13, profile 17), desktop 893/893 (staff 41), tablet 429/429 (staff 19), gate_audit 3/3, contract 7/7, staff screen 21/21; fmt/clippy (changed area)/drift/bundle-parity/i18n-lint all clean.

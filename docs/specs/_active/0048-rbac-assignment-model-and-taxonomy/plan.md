@@ -196,18 +196,33 @@ reverting the assignment tables.
   (role-only conflict update preserves scope rows). Both clients expose
   `require_permission_for_user_scoped`. Commit `054b3f7c`.
 
-### Cycle 2c — retirement + seed sweep (REMAINING)
+### Cycle 2c — retirement + seed sweep (DONE)
 
-- Migration `129`: re-point `users.role_id` to `role-staff` for
-  cashier/kitchen users and delete the two role rows (lands with the gate
-  already assignment-aware, so no behavior gap). Remove the CASHIER/KITCHEN
-  presets + constants. Sweep the role-id test seeds across both clients
-  (~22 files) — staff-like fixtures to `role-staff`, limited-access
-  assertions to a narrow custom role.
+- Migration `129_retire_cashier_kitchen.sql` re-points `users.role_id` and
+  `assignments.role_id` from cashier/kitchen → `role-staff` and deletes the
+  two role rows (lands with the gate already assignment-aware, so no
+  behavior gap). CASHIER/KITCHEN presets + constants removed from
+  platform-core and modules-staff. The ~22-file role-id seed sweep: staff
+  -like fixtures → `role-staff`; limited-access denial assertions →
+  fixture-local `role-lite` custom role. gate_audit staff.rs pins bumped
+  5→6 (0049 cycle 3 added a gate call without updating the pin). Commit
+  `880be215` (code, 43 files) + `df3c30ae`/`76572279` (docs).
 
-### Cycle 3 — front-end (REMAINING)
+### Cycle 3 — front-end + assignment write path (DONE)
 
-- Staff screen presents the five-role taxonomy (no cashier/kitchen options),
-  assignment editor gains `scope_mode` + per-dimension branch/workspace
-  pickers, strings in both `staff.ftl` bundles, new `api-staff-contract`
-  test, and the UI checks in validation.md.
+- `Store::set_assignment` / `write_assignment_scope` (oz-core): transactional
+  upsert of the assignment scope + dimension rows, safe inside an open
+  transaction; `create_user_with_profile` takes an optional assignment spec.
+- `AssignmentDto`/`AssignmentArgs` on both clients: the staff DTO carries
+  the effective assignment, create/update args carry the scope and write it
+  atomically (create via `create_user_with_profile`, update inside the
+  existing update transaction — no nested BEGIN).
+- Staff screen presents the five-role taxonomy only (Owner → Admin → Manager
+  → Staff → Auditor, custom roles filtered out); the assignment editor gains
+  `scope_mode` (global | scoped) with per-dimension branch (store profiles)
+  and workspace pickers, each an explicit `all` or list; the workspace
+  column derives from the DTO assignment. Saving blocks an empty list
+  dimension (a deny, never an implicit "all").
+- Strings in both `staff.ftl` bundles (parity clean); the
+  `api-staff-contract` test pins the assignment wire shape; screen tests
+  cover the taxonomy, pre-fill, save, and empty-list block.
