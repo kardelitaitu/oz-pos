@@ -1,5 +1,11 @@
 # User profile data contract with sensitive-field handling
 
+> **Status: IMPLEMENTED — 2026-08-11.** Shipped in seven commits
+> (`6b76d3e0` schema+validation, `d9990925` sensitive keys,
+> `abc7949e` at-rest security, `ecae8b52` backend IPC, `57e98628` staff
+> screen, `0a909c4b` + `f194eca2` docs); moved to `_done/`. See §10 for the
+> completion record. The sections below are the original plan as approved.
+
 ## 1. Decision requested
 
 Implement ADR #35 D6 end to end: the 9 mandatory-at-creation profile fields
@@ -168,11 +174,11 @@ with its own test, so a rule that proves operationally wrong (e.g. masking
 frustrating a workflow) can be adjusted independently without reverting the
 schema.
 
-## 10. Progress record
+## 10. Completion record
 
-Status: **IN PROGRESS** — cycles 1–3 implemented and committed; the slice is
-complete but awaiting human approval to close (spec.yaml stays
-`needs-human-approval` until then, per the 0046/0047 close-out convention).
+Status: **IMPLEMENTED** — all three cycles shipped and verified; the
+acceptance criteria are met (see validation.md). Moved to `_done/` on
+2026-08-11.
 
 ### Cycle 1 — schema + validation + incomplete state (`6b76d3e0`)
 

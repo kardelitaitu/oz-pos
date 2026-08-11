@@ -1,6 +1,6 @@
 id: 0049-user-profile-data
 title: User profile data contract with sensitive-field handling
-status: needs-human-approval
+status: implemented
 owner: OZ-POS maintainers
 implementer: Buffy
 priority: P1
@@ -12,7 +12,7 @@ scope:
   - apps/desktop-client/src/commands/staff.rs
   - apps/tablet-client/src/commands/staff.rs
   - crates/oz-security/src/
-  - docs/specs/_active/0049-user-profile-data/
+  - docs/specs/_done/0049-user-profile-data/
   - ui/src/features/staff/StaffManagementScreen.tsx
   - ui/src/api/staff.ts
   - ui/src/__tests__/StaffManagementScreen.test.tsx
