@@ -225,6 +225,36 @@
   margin-top: var(--space-1);
 }
 
+/* Role permission keys (0046) — read-only chips under the role selector */
+.staff-mgmt-role-permissions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.staff-mgmt-role-permissions-label {
+  font-size: var(--text-sm);
+  color: var(--color-fg-secondary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.staff-mgmt-role-permissions-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.staff-mgmt-role-permission-chip {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+  font-family: var(--font-mono, monospace);
+  color: var(--color-fg-secondary);
+  background: var(--color-bg-subtle, rgba(0, 0, 0, 0.05));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+}
+
 .staff-mgmt-incomplete-badge {
   margin-left: var(--space-2);
   vertical-align: middle;

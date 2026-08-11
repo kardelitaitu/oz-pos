@@ -73,6 +73,7 @@ staff-pin-edit-placeholder =
 staff-pin-placeholder =
     .placeholder = Masukkan PIN
 staff-field-role-label = Peran *
+staff-role-permissions-label = Izin peran
 staff-role-select-default = Pilih peran…
 staff-btn-cancel = Batal
 staff-btn-update = Perbarui

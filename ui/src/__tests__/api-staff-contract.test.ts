@@ -21,6 +21,7 @@ import {
   createStaffScoped,
   updateStaffScoped,
   getStaffProfileScoped,
+  listRolesScoped,
   type AssignmentArgs,
 } from '@/api/staff';
 
@@ -152,6 +153,17 @@ describe('staff.ts scoped IPC contract (ADR #35 D6 profile fields)', () => {
     expect(mockInvoke).toHaveBeenCalledWith('list_staff_scoped', {
       sessionToken: 'session-1',
     });
+  });
+
+  it('listRolesScoped keeps its sessionToken + no-args shape and returns granted keys', async () => {
+    mockInvoke.mockResolvedValue([
+      { id: 'role-manager', name: 'Manager', description: 'M', permissions: ['analytics:view'] },
+    ]);
+    const roles = await listRolesScoped('session-1');
+    expect(mockInvoke).toHaveBeenCalledWith('list_roles_scoped', {
+      sessionToken: 'session-1',
+    });
+    expect(roles[0]!.permissions).toEqual(['analytics:view']);
   });
 
   it('updateStaffScoped sends the assignment scope (ADR #35 D5 / 0048)', async () => {

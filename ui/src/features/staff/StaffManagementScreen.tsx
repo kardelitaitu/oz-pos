@@ -612,6 +612,9 @@ export default function StaffManagementScreen() {
   const isEditing = editingId !== null;
   const selectableRoles = taxonomyRoles(roles);
   const hasRoleSelected = selectableRoles.length > 0;
+  // The role chosen in the editor — its granted permission keys render as
+  // read-only chips so an admin sees exactly what the role can do (0046).
+  const selectedRole = selectableRoles.find((r) => r.id === form.roleId) ?? null;
 
   return (
     <div className="staff-mgmt" onContextMenu={(e) => e.preventDefault()}>
@@ -887,6 +890,26 @@ export default function StaffManagementScreen() {
                       ariaLabel={l10n.getString('staff-field-role-label')}
                     />
                   </label>
+                )}
+
+                {/* Granted permission keys for the selected role (0046) —
+                    read-only chips; the backend list_roles_scoped carries
+                    them verbatim from the role's permissions JSON. */}
+                {selectedRole && selectedRole.permissions.length > 0 && (
+                  <div className="staff-mgmt-role-permissions">
+                    <Localized id="staff-role-permissions-label">
+                      <span className="staff-mgmt-role-permissions-label">Role permissions</span>
+                    </Localized>
+                    <div
+                      className="staff-mgmt-role-permissions-chips"
+                      role="list"
+                      aria-label={l10n.getString('staff-role-permissions-label')}
+                    >
+                      {selectedRole.permissions.map((p) => (
+                        <span key={p} className="staff-mgmt-role-permission-chip" role="listitem">{p}</span>
+                      ))}
+                    </div>
+                  </div>
                 )}
 
         {/* ── Profile section (ADR #35 D6) ──────────────────────── */}

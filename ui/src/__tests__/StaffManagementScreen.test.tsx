@@ -9,13 +9,13 @@ import StaffManagementScreen from '@/features/staff/StaffManagementScreen';
 const FAST_WAIT = { interval: 5, timeout: 500 } as const;
 
 const SAMPLE_ROLES = [
-  { id: 'role-owner', name: 'owner', description: 'Owner' },
-  { id: 'role-admin', name: 'admin', description: 'Admin' },
-  { id: 'role-manager', name: 'manager', description: 'Manager' },
-  { id: 'role-staff', name: 'staff', description: 'Staff' },
-  { id: 'role-auditor', name: 'auditor', description: 'Auditor' },
+  { id: 'role-owner', name: 'owner', description: 'Owner', permissions: ['*'] },
+  { id: 'role-admin', name: 'admin', description: 'Admin', permissions: ['staff:read', 'reports:view', 'analytics:view'] },
+  { id: 'role-manager', name: 'manager', description: 'Manager', permissions: ['sales:view', 'reports:view', 'analytics:view', 'staff:read'] },
+  { id: 'role-staff', name: 'staff', description: 'Staff', permissions: ['sales:process', 'sales:view'] },
+  { id: 'role-auditor', name: 'auditor', description: 'Auditor', permissions: ['reports:view', 'audit:view'] },
   // A custom role must never appear in the five-role taxonomy dropdown.
-  { id: 'role-custom', name: 'custom', description: 'Custom' },
+  { id: 'role-custom', name: 'custom', description: 'Custom', permissions: [] },
 ];
 
 /** Global fallback assignment (ADR #35 D5) carried by the staff DTO. */
@@ -432,6 +432,28 @@ describe('StaffManagementScreen', () => {
       expect.stringMatching(/auditor/i),
     ]);
     expect(options.join(' | ')).not.toMatch(/custom/i);
+  });
+
+  it('shows the selected role\'s granted permission keys as chips', async () => {
+    renderWithProvidersSync(<StaffManagementScreen />, staffFtl);
+    await waitForTable();
+    fireEvent.click(screen.getByRole('button', { name: /add staff/i }));
+    const dialog = screen.getByRole('dialog');
+    const combobox = within(dialog).getByRole('combobox', { name: /^role/i });
+
+    // No role selected yet — no chip row.
+    expect(screen.queryByText('Role permissions')).not.toBeInTheDocument();
+
+    fireEvent.change(combobox, { target: { value: 'role-manager' } });
+    // The chip row renders the role's granted keys (0046) verbatim.
+    expect(screen.getByText('Role permissions')).toBeInTheDocument();
+    expect(screen.getByText('analytics:view')).toBeInTheDocument();
+    expect(screen.getByText('staff:read')).toBeInTheDocument();
+
+    // Switching roles swaps the chips.
+    fireEvent.change(combobox, { target: { value: 'role-staff' } });
+    expect(screen.queryByText('analytics:view')).not.toBeInTheDocument();
+    expect(screen.getByText('sales:process')).toBeInTheDocument();
   });
 
   // ── Assignment editor (ADR #35 D5 / spec 0048) ───────────────────

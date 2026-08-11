@@ -176,11 +176,16 @@ export interface ProfileViewDto extends ProfileArgs {
   is_complete: boolean;
 }
 
-/** A role definition with display name and description. */
+/** A role definition with display name, description, and granted keys. */
 export interface RoleDto {
   id: string;
   name: string;
   description: string;
+  /**
+   * Granted permission keys, verbatim from the role's permissions JSON
+   * (may include the `*` wildcard — display as-is, do not gate on it).
+   */
+  permissions: string[];
 }
 
 // ── Session-scoped Staff Management (ADR #7 · audit/06 STAFF-01) ───

@@ -1548,10 +1548,10 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     { id: 'staff-3', username: 'kasir', display_name: 'Cashier', role_id: '3', role_name: 'cashier', is_active: true },
   ],
   'list_roles_scoped': () => [
-    { id: '1', name: 'Owner', description: 'Full access to all settings' },
-    { id: '2', name: 'Manager', description: 'Daily operations and reports' },
-    { id: '3', name: 'Cashier', description: 'Process sales and refunds' },
-    { id: '4', name: 'Kitchen', description: 'Kitchen display access' },
+    { id: '1', name: 'Owner', description: 'Full access to all settings', permissions: ['*'] },
+    { id: '2', name: 'Manager', description: 'Daily operations and reports', permissions: ['sales:view', 'reports:view', 'analytics:view', 'staff:read'] },
+    { id: '3', name: 'Cashier', description: 'Process sales and refunds', permissions: ['sales:process', 'sales:view'] },
+    { id: '4', name: 'Kitchen', description: 'Kitchen display access', permissions: ['kds:view'] },
   ],
   'create_staff_scoped': (args) => {
     const a = (args as { username?: string; display_name?: string; role_id?: string; pin?: string }) ?? {};

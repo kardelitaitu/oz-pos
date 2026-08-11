@@ -44,6 +44,7 @@ staff-pin-edit-placeholder =
 staff-pin-placeholder =
     .placeholder = Enter PIN
 staff-field-role-label = Role *
+staff-role-permissions-label = Role permissions
 staff-role-select-default = Select a role…
 staff-btn-cancel = Cancel
 staff-btn-update = Update

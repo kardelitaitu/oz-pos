@@ -4361,3 +4361,33 @@ and the role message is absent, and failed before the component change.
 Commits: a25f31fb
 Tests: PermissionDenied 10, screenExtraction 138, full UI 4890/4890 (285
 files); typecheck 0, fmt/clippy/drift/i18n-parity clean.
+
+### 2026-08-11 — Role grants visible in the staff screen (0046)
+
+Problem: an admin could pick a role for a staff member but had no way to
+see what that role could actually do — the permission registry (0046)
+stayed invisible behind the backend gate.
+
+Solution: `list_roles_scoped` now carries each role's granted permission
+keys verbatim (`RoleDto.permissions` via `Role::permission_keys()`, the
+same resolution the login session uses), and the staff editor renders the
+selected role's keys as read-only mono chips under the role selector.
+Owner shows `*`, manager shows its exact grants, staff its narrow set —
+what you see is the registry, not a hand-maintained list. Both clients
+mirror the DTO; dev-mock roles return realistic grants; new
+`staff-role-permissions-label` strings in both staff bundles (parity
+clean); chips use the `--color-bg-subtle` token fallback pattern already
+established in this file.
+
+Red-first: the desktop Rust test pinned Owner -> `["*"]` and a narrow
+custom role -> `["sales:view"]` and failed on empty lists before the
+mapping was wired (partial-move fix: compute `permission_keys()` before
+moving `r.description`). UI: the screen test asserts the chip row renders
+for a selected role, swaps on role change, and is absent before
+selection; the contract test pins `list_roles_scoped`'s sessionToken +
+no-args shape and the returned grants.
+
+Commits: pending
+Tests: desktop staff 41, tablet 435, gate_audit 3, wiring_audit 6; UI
+4893/4893 (285 files) incl. staff screen 22 + contract 8; typecheck 0,
+fmt/clippy/drift/i18n-parity clean.
