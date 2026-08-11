@@ -257,13 +257,13 @@ describe('CloudSyncSettings', () => {
   //  Server URL field
   // ═══════════════════════════════════════════════════════════════
 
-  it('renders server URL input with placeholder', async () => {
+  it('falls back to the local server URL when none is configured', async () => {
     await waitForSyncSection();
 
     const urlInput = getServerUrlInput();
     expect(urlInput).toBeInTheDocument();
     expect(urlInput.type).toBe('url');
-    expect(urlInput).toHaveValue('');
+    expect(urlInput).toHaveValue('http://localhost:3099');
   });
 
   it('updates server URL input value when typing', async () => {
@@ -415,12 +415,12 @@ describe('CloudSyncSettings', () => {
   //  Enabled toggle
   // ═══════════════════════════════════════════════════════════════
 
-  it('renders enabled toggle unchecked by default', async () => {
+  it('enables cloud sync by default when no setting is configured', async () => {
     await waitForSyncSection();
 
     const checkbox = getEnabledCheckbox();
     expect(checkbox).toBeInTheDocument();
-    expect(checkbox.checked).toBe(false);
+    expect(checkbox.checked).toBe(true);
   });
 
   it('toggles enabled state on click', async () => {
@@ -431,10 +431,10 @@ describe('CloudSyncSettings', () => {
     const wrapper = checkbox.closest('.settings-toggle') as HTMLLabelElement;
 
     await user.click(wrapper);
-    expect(checkbox.checked).toBe(true);
+    expect(checkbox.checked).toBe(false);
 
     await user.click(wrapper);
-    expect(checkbox.checked).toBe(false);
+    expect(checkbox.checked).toBe(true);
   });
 
   it('sends enabled flag to backend on save', async () => {
@@ -443,6 +443,7 @@ describe('CloudSyncSettings', () => {
 
     const checkbox = getEnabledCheckbox();
     const wrapper = checkbox.closest('.settings-toggle') as HTMLLabelElement;
+    await user.click(wrapper);
     await user.click(wrapper);
 
     fireEvent.click(screen.getByRole('button', { name: /save settings/i }));
@@ -460,30 +461,16 @@ describe('CloudSyncSettings', () => {
   //  Not-configured hint
   // ═══════════════════════════════════════════════════════════════
 
-  it('shows not-configured hint when serverUrl is null and enabled is false', async () => {
+  it('does not show a not-configured hint with the fallback sync settings', async () => {
     await waitForSyncSection();
 
-    expect(screen.getByText(/not configured/i)).toBeInTheDocument();
+    expect(screen.queryByText(/not configured/i)).not.toBeInTheDocument();
   });
 
-  it('hides not-configured hint when enabled toggle is on', async () => {
-    const user = userEvent.setup();
+  it('keeps the not-configured hint hidden while fallback sync is enabled', async () => {
     await waitForSyncSection();
 
-    // Initially: not configured
-    expect(screen.getByText(/not configured/i)).toBeInTheDocument();
-
-    // Toggle enabled ON
-    const checkbox = getEnabledCheckbox();
-    const wrapper = checkbox.closest('.settings-toggle') as HTMLLabelElement;
-    await user.click(wrapper);
-    fireEvent.click(screen.getByRole('button', { name: /save settings/i }));
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /saved!/i })).toBeInTheDocument();
-    });
-
-    // Hint should be gone because enabled is now true
+    expect(getEnabledCheckbox().checked).toBe(true);
     expect(screen.queryByText(/not configured/i)).not.toBeInTheDocument();
   });
 
@@ -491,10 +478,10 @@ describe('CloudSyncSettings', () => {
   //  Sync Now button
   // ═══════════════════════════════════════════════════════════════
 
-  it('does not render Sync Now button when sync is unconfigured', async () => {
+  it('renders Sync Now when fallback sync is configured', async () => {
     await waitForSyncSection();
 
-    expect(screen.queryByRole('button', { name: /sync now/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /sync now/i })).toBeInTheDocument();
   });
 
   it('renders Sync Now button when serverUrl is set', async () => {
@@ -628,8 +615,8 @@ describe('CloudSyncSettings', () => {
   it('updates serverUrl in sync state after save so not-configured hint disappears', async () => {
     await waitForSyncSection();
 
-    // Initially: not configured
-    expect(screen.getByText(/not configured/i)).toBeInTheDocument();
+    // The fallback settings are already configured.
+    expect(screen.queryByText(/not configured/i)).not.toBeInTheDocument();
 
     // Fill server URL and save
     fireEvent.change(getServerUrlInput(), { target: { value: 'https://sync.example.com' } });
