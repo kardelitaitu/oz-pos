@@ -3738,7 +3738,7 @@ Commit hygiene: 2/2 contract hunks, 1/4 editor hunks, 2/5 screen hunks (the agen
 
 **Verify:** oz-pos-app + oz-pos-tablet exchange_rates modules 4/4 each · clippy -D warnings clean on both clients · cargo fmt --all -- --check clean · drift guard clean.
 
-**Commits:** `<hash>` (fix(currency): validate currency pair, ISO codes, and effective date on create)
+**Commits:** `ca759a73` (fix(currency): validate currency pair, ISO codes, and effective date on create)
 
 **Deliberately NOT done:** no repository-level validation inside modules/currency (the command boundary is the IPC surface; a second direct caller of `CurrencyRepository` would need its own guard — follow-up); no source-length bound (the audit's minor item); no UI change (already prevents same-pair + type=date); no CUR-03 work (scoping is a separate finding).
 
