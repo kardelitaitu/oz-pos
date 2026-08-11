@@ -69,6 +69,11 @@ export interface LowStockAlert {
   name: string;
   current_qty: number;
   threshold: number;
+  currency: string;
+  /** Selling price per unit in minor units. */
+  price_minor: number;
+  /** Cost (HPP) per unit in minor units. */
+  cost_minor: number;
 }
 
 /** Sales breakdown by product category. */

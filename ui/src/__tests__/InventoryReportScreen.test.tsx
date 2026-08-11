@@ -26,6 +26,11 @@ inv-report-csv-header-sku = SKU
 inv-report-csv-header-product = Product
 inv-report-csv-header-stock = Current Stock
 inv-report-csv-header-threshold = Threshold
+inv-report-csv-header-unit-price = Unit Price
+inv-report-csv-header-unit-cost = Unit Cost
+inv-report-csv-header-unit-margin = Unit Margin
+inv-report-csv-header-margin = Margin
+inv-report-csv-header-stock-value = Stock Value
 inv-report-no-results = No results found
 `;
 
@@ -73,6 +78,9 @@ function buildSampleAlert(overrides: Partial<{
   name: string;
   current_qty: number;
   threshold: number;
+  currency: string;
+  price_minor: number;
+  cost_minor: number;
 }> = {}) {
   return {
     product_id: overrides.product_id ?? 'prod-1',
@@ -80,6 +88,9 @@ function buildSampleAlert(overrides: Partial<{
     name: overrides.name ?? 'Test Product',
     current_qty: overrides.current_qty ?? 5,
     threshold: overrides.threshold ?? 10,
+    currency: overrides.currency ?? 'USD',
+    price_minor: overrides.price_minor ?? 1500,
+    cost_minor: overrides.cost_minor ?? 900,
   };
 }
 
@@ -269,6 +280,38 @@ describe('InventoryReportScreen', () => {
     createElementSpy.mockRestore();
     URL.createObjectURL = origCreateObjectURL;
     URL.revokeObjectURL = origRevokeObjectURL;
+  });
+
+  it('exports cost, margin, and stock-value columns in the CSV', async () => {
+    mockGetLowStockAlerts.mockResolvedValue([
+      buildSampleAlert({ sku: 'SKU001', name: 'Widget', current_qty: 5, price_minor: 1500, cost_minor: 900 }),
+    ]);
+    const createUrl = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake');
+    const revokeUrl = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Export CSV')).toBeTruthy());
+    fireEvent.click(screen.getByText('Export CSV'));
+    await waitFor(() => expect(clickSpy).toHaveBeenCalled());
+    const blob = createUrl.mock.calls[0]![0] as Blob;
+    const text = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(blob);
+    });
+    // Header line is unquoted; data cells are quoted.
+    expect(text).toContain('Threshold,Unit Price,Unit Cost,Unit Margin,Margin,Stock Value');
+    // Price $15.00, cost $9.00, unit margin $6.00, margin 40.0%, stock value $45.00
+    // (id-ID locale renders decimals with commas: "$ 15,00").
+    expect(text).toContain('"$ 15,00"');
+    expect(text).toContain('"$ 9,00"');
+    expect(text).toContain('"$ 6,00"');
+    expect(text).toContain('"40.0%"');
+    expect(text).toContain('"$ 45,00"');
+    createUrl.mockRestore();
+    revokeUrl.mockRestore();
+    clickSpy.mockRestore();
   });
 
   // ── ARIA ───────────────────────────────────────────────────────────

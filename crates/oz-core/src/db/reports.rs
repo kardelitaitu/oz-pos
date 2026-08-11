@@ -113,6 +113,12 @@ pub struct LowStockAlert {
     pub current_qty: i64,
     /// Low-stock threshold that triggered the alert.
     pub threshold: i64,
+    /// Product currency code.
+    pub currency: String,
+    /// Product selling price per unit in minor units.
+    pub price_minor: i64,
+    /// Product cost (HPP) per unit in minor units.
+    pub cost_minor: i64,
 }
 
 /// A row from the `stock_alert_events` table (ADR-18 §9e).
@@ -380,7 +386,9 @@ impl Store<'_> {
     #[deprecated(note = "use low_stock_alerts_at_location instead")]
     pub fn low_stock_alerts(&self, threshold: i64) -> Result<Vec<LowStockAlert>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT p.id AS product_id, p.sku, p.name, COALESCE(i.qty, 0) AS current_qty,
+            "SELECT p.id AS product_id, p.sku, p.name, p.currency,
+                    p.price_minor, p.cost_minor,
+                    COALESCE(i.qty, 0) AS current_qty,
                     ?1 AS threshold
              FROM products p
              LEFT JOIN inventory i ON p.id = i.product_id
@@ -394,6 +402,9 @@ impl Store<'_> {
                 name: row.get("name")?,
                 current_qty: row.get("current_qty")?,
                 threshold: row.get("threshold")?,
+                currency: row.get("currency")?,
+                price_minor: row.get("price_minor")?,
+                cost_minor: row.get("cost_minor")?,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
@@ -412,7 +423,8 @@ impl Store<'_> {
         default_threshold: i64,
     ) -> Result<Vec<LowStockAlert>, CoreError> {
         let mut stmt = self.conn.prepare(
-            "SELECT p.id AS product_id, p.sku, p.name,
+            "SELECT p.id AS product_id, p.sku, p.name, p.currency,
+                    p.price_minor, p.cost_minor,
                     COALESCE(ss.qty, 0) AS current_qty,
                     COALESCE(
                         (SELECT st.threshold FROM stock_thresholds st
@@ -444,6 +456,9 @@ impl Store<'_> {
                 name: row.get("name")?,
                 current_qty: row.get("current_qty")?,
                 threshold: row.get("threshold")?,
+                currency: row.get("currency")?,
+                price_minor: row.get("price_minor")?,
+                cost_minor: row.get("cost_minor")?,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)

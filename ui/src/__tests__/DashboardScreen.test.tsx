@@ -73,13 +73,16 @@ function buildTopProductRow(overrides: Partial<{ product_id: string; sku: string
   };
 }
 
-function buildLowStockAlert(overrides: Partial<{ product_id: string; sku: string; name: string; current_qty: number; threshold: number }> = {}) {
+function buildLowStockAlert(overrides: Partial<{ product_id: string; sku: string; name: string; current_qty: number; threshold: number; currency: string; price_minor: number; cost_minor: number }> = {}) {
   return {
     product_id: overrides.product_id ?? 'prod-lo',
     sku: overrides.sku ?? 'SKU-LOW',
     name: overrides.name ?? 'Milk',
     current_qty: overrides.current_qty ?? 3,
     threshold: overrides.threshold ?? 10,
+    currency: overrides.currency ?? 'USD',
+    price_minor: overrides.price_minor ?? 1500,
+    cost_minor: overrides.cost_minor ?? 900,
   };
 }
 
