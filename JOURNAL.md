@@ -4330,7 +4330,7 @@ Decisions / tradeoffs:
   behavioral tests (staff_login returns `["*"]` for owner, round-trip,
   malformed-JSON) pinned the new behavior before wiring the population.
 
-Commits: pending
+Commits: dcf576e0 (backend), 3e0b32b5 (ui), docs (this commit)
 Tests: platform-core 237, modules-staff 12 (permission_keys 3), desktop
 auth+staff 56, tablet auth+staff 29, gate_audit 3, wiring_audit 6; UI
 AnalyticsScreen 9 (gate + hasGrantedPermission) + shells/auth/workspace 77;
