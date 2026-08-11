@@ -534,81 +534,7 @@ pub fn validate_grants(grants: &[String], allow_global: bool) -> Result<(), Vec<
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rbac::permissions;
-
-    /// The complete enforced key inventory — every `rbac::permissions`
-    /// constant plus the two legacy seed keys (`products:crud`,
-    /// `categories:manage`).
-    const ALL: &[&str] = &[
-        permissions::SALES_PROCESS,
-        permissions::SALES_VOID,
-        permissions::SALES_REFUND,
-        permissions::SALES_VIEW,
-        permissions::SALES_DISCOUNT,
-        permissions::SALES_SPLIT,
-        permissions::SALES_OVERRIDE_PRICE,
-        permissions::PRODUCTS_CREATE,
-        permissions::PRODUCTS_READ,
-        permissions::PRODUCTS_UPDATE,
-        permissions::PRODUCTS_DELETE,
-        permissions::PRODUCTS_IMPORT,
-        permissions::PRODUCTS_EXPORT,
-        permissions::PRODUCTS_CRUD,
-        permissions::INVENTORY_VIEW,
-        permissions::INVENTORY_ADJUST,
-        permissions::INVENTORY_TRANSFER,
-        permissions::INVENTORY_COUNT,
-        permissions::INVENTORY_LOCATIONS_MANAGE,
-        permissions::STAFF_CREATE,
-        permissions::STAFF_READ,
-        permissions::STAFF_UPDATE,
-        permissions::STAFF_DELETE,
-        permissions::STAFF_MANAGE_ROLES,
-        permissions::SETTINGS_READ,
-        permissions::SETTINGS_EDIT,
-        permissions::REPORTS_VIEW,
-        permissions::REPORTS_EXPORT,
-        permissions::REPORTS_SCHEDULE,
-        permissions::SHIFTS_OPEN,
-        permissions::SHIFTS_CLOSE,
-        permissions::SHIFTS_VIEW_ANY,
-        permissions::AUDIT_VIEW,
-        permissions::AUDIT_EXPORT,
-        permissions::PAYMENTS_CASH,
-        permissions::PAYMENTS_CARD,
-        permissions::PAYMENTS_REFUND,
-        permissions::PAYMENTS_SETTLE,
-        permissions::CUSTOMERS_CREATE,
-        permissions::CUSTOMERS_VIEW,
-        permissions::CUSTOMERS_EDIT,
-        permissions::CUSTOMERS_DELETE,
-        permissions::LOYALTY_VIEW,
-        permissions::LOYALTY_EARN,
-        permissions::LOYALTY_REDEEM,
-        permissions::LOYALTY_MANAGE,
-        permissions::TABLES_ASSIGN,
-        permissions::TABLES_MERGE,
-        permissions::TABLES_SPLIT,
-        permissions::TABLES_CLOSE,
-        permissions::DISCOUNTS_APPLY,
-        permissions::DISCOUNTS_CREATE,
-        permissions::DISCOUNTS_MANAGE,
-        permissions::WORKSPACES_SWITCH,
-        permissions::KDS_VIEW,
-        permissions::KDS_UPDATE,
-        permissions::PROMOTIONS_CREATE,
-        permissions::PROMOTIONS_EDIT,
-        permissions::PROMOTIONS_DELETE,
-        permissions::PROMOTIONS_APPLY,
-        permissions::TABLES_CREATE,
-        permissions::TABLES_EDIT,
-        permissions::TABLES_DELETE,
-        permissions::TERMINALS_REGISTER,
-        permissions::TERMINALS_EDIT,
-        permissions::TERMINALS_DELETE,
-        permissions::CATEGORIES_MANAGE,
-        permissions::PLUGINS_MANAGE,
-    ];
+    use crate::rbac::{ALL_ENFORCED, permissions};
 
     /// The sensitive keys per ADR #35 D2: voids, refunds, settlement,
     /// role management, and bulk export are never wildcard-eligible.
@@ -628,7 +554,7 @@ mod tests {
 
     #[test]
     fn every_permission_constant_is_registered() {
-        for &p in ALL {
+        for &p in ALL_ENFORCED {
             assert!(is_registered(p), "unregistered enforced key: {p}");
         }
     }
@@ -637,7 +563,7 @@ mod tests {
     fn every_registry_key_is_a_known_constant() {
         for e in REGISTRY {
             assert!(
-                ALL.contains(&e.key),
+                ALL_ENFORCED.contains(&e.key),
                 "registry key not in the constant inventory: {}",
                 e.key
             );
@@ -646,7 +572,7 @@ mod tests {
 
     #[test]
     fn sensitive_classification_is_explicit() {
-        for &p in ALL {
+        for &p in ALL_ENFORCED {
             let entry = lookup(p).expect("every enforced key must be registered");
             assert_eq!(
                 entry.sensitive,
@@ -656,33 +582,39 @@ mod tests {
         }
     }
 
+    /// Every family present in the registry, sorted for stable output.
+    fn families() -> Vec<&'static str> {
+        let mut families: Vec<&'static str> = REGISTRY.iter().map(|e| e.family).collect();
+        families.sort_unstable();
+        families.dedup();
+        families
+    }
+
     #[test]
-    fn sensitive_families_are_not_wildcardable() {
-        for w in ["sales:*", "payments:*", "staff:*", "reports:*", "audit:*"] {
-            assert!(
-                validate_grant(w, false).is_err(),
-                "wildcard {w} must be rejected: it would grant sensitive keys"
-            );
+    fn wildcard_is_rejected_for_every_family_with_a_sensitive_key() {
+        for family in families() {
+            let wildcard = format!("{family}:*");
+            let has_sensitive = REGISTRY.iter().any(|e| e.family == family && e.sensitive);
+            if has_sensitive {
+                assert!(
+                    validate_grant(&wildcard, false).is_err(),
+                    "wildcard {wildcard} must be rejected: the family contains sensitive keys"
+                );
+            }
         }
     }
 
     #[test]
-    fn operational_families_are_wildcardable() {
-        for w in [
-            "products:*",
-            "inventory:*",
-            "settings:*",
-            "customers:*",
-            "tables:*",
-            "discounts:*",
-            "shifts:*",
-            "loyalty:*",
-            "kds:*",
-        ] {
-            assert!(
-                validate_grant(w, false).is_ok(),
-                "operational wildcard {w} must be allowed"
-            );
+    fn wildcard_is_accepted_for_every_family_without_sensitive_keys() {
+        for family in families() {
+            let wildcard = format!("{family}:*");
+            let has_sensitive = REGISTRY.iter().any(|e| e.family == family && e.sensitive);
+            if !has_sensitive {
+                assert!(
+                    validate_grant(&wildcard, false).is_ok(),
+                    "operational wildcard {wildcard} must be allowed"
+                );
+            }
         }
     }
 

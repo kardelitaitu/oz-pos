@@ -168,9 +168,9 @@ impl Role {
 /// # Examples
 ///
 /// - `"sales:void"` — void a completed sale
-/// - `"products:edit"` — create/update/delete products
+/// - `"products:update"` — update existing product details
 /// - `"settings:edit"` — modify store settings
-/// - `"staff:manage"` — create/update/delete staff users
+/// - `"staff:update"` — update an existing staff member
 /// - `"reports:view"` — view sales reports
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Permission {
@@ -825,6 +825,84 @@ pub mod permissions {
     pub const PLUGINS_MANAGE: &str = "plugins:manage";
 }
 
+/// The complete inventory of enforced permission constants, in one place.
+///
+/// This is the anchor for the registry's bidirectional inventory test
+/// (spec 0046): every key here must be registered, and every registered key
+/// must appear here. Growing the system means adding a constant in
+/// [`permissions`] and an entry in `permission_registry::REGISTRY` — the
+/// inventory test fails if any of the three drift apart.
+pub const ALL_ENFORCED: &[&str] = &[
+    permissions::SALES_PROCESS,
+    permissions::SALES_VOID,
+    permissions::SALES_REFUND,
+    permissions::SALES_VIEW,
+    permissions::SALES_DISCOUNT,
+    permissions::SALES_SPLIT,
+    permissions::SALES_OVERRIDE_PRICE,
+    permissions::PRODUCTS_CREATE,
+    permissions::PRODUCTS_READ,
+    permissions::PRODUCTS_UPDATE,
+    permissions::PRODUCTS_DELETE,
+    permissions::PRODUCTS_IMPORT,
+    permissions::PRODUCTS_EXPORT,
+    permissions::PRODUCTS_CRUD,
+    permissions::INVENTORY_VIEW,
+    permissions::INVENTORY_ADJUST,
+    permissions::INVENTORY_TRANSFER,
+    permissions::INVENTORY_COUNT,
+    permissions::INVENTORY_LOCATIONS_MANAGE,
+    permissions::STAFF_CREATE,
+    permissions::STAFF_READ,
+    permissions::STAFF_UPDATE,
+    permissions::STAFF_DELETE,
+    permissions::STAFF_MANAGE_ROLES,
+    permissions::SETTINGS_READ,
+    permissions::SETTINGS_EDIT,
+    permissions::REPORTS_VIEW,
+    permissions::REPORTS_EXPORT,
+    permissions::REPORTS_SCHEDULE,
+    permissions::SHIFTS_OPEN,
+    permissions::SHIFTS_CLOSE,
+    permissions::SHIFTS_VIEW_ANY,
+    permissions::AUDIT_VIEW,
+    permissions::AUDIT_EXPORT,
+    permissions::PAYMENTS_CASH,
+    permissions::PAYMENTS_CARD,
+    permissions::PAYMENTS_REFUND,
+    permissions::PAYMENTS_SETTLE,
+    permissions::CUSTOMERS_CREATE,
+    permissions::CUSTOMERS_VIEW,
+    permissions::CUSTOMERS_EDIT,
+    permissions::CUSTOMERS_DELETE,
+    permissions::LOYALTY_VIEW,
+    permissions::LOYALTY_EARN,
+    permissions::LOYALTY_REDEEM,
+    permissions::LOYALTY_MANAGE,
+    permissions::TABLES_ASSIGN,
+    permissions::TABLES_MERGE,
+    permissions::TABLES_SPLIT,
+    permissions::TABLES_CLOSE,
+    permissions::DISCOUNTS_APPLY,
+    permissions::DISCOUNTS_CREATE,
+    permissions::DISCOUNTS_MANAGE,
+    permissions::WORKSPACES_SWITCH,
+    permissions::KDS_VIEW,
+    permissions::KDS_UPDATE,
+    permissions::PROMOTIONS_CREATE,
+    permissions::PROMOTIONS_EDIT,
+    permissions::PROMOTIONS_DELETE,
+    permissions::PROMOTIONS_APPLY,
+    permissions::TABLES_CREATE,
+    permissions::TABLES_EDIT,
+    permissions::TABLES_DELETE,
+    permissions::TERMINALS_REGISTER,
+    permissions::TERMINALS_EDIT,
+    permissions::TERMINALS_DELETE,
+    permissions::CATEGORIES_MANAGE,
+    permissions::PLUGINS_MANAGE,
+];
+
 // ── Tests ───────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -1047,74 +1125,7 @@ mod tests {
 
     #[test]
     fn all_permission_constants_contain_colon() {
-        let all = [
-            permissions::SALES_PROCESS,
-            permissions::SALES_VOID,
-            permissions::SALES_REFUND,
-            permissions::SALES_VIEW,
-            permissions::SALES_DISCOUNT,
-            permissions::SALES_SPLIT,
-            permissions::PRODUCTS_CREATE,
-            permissions::PRODUCTS_READ,
-            permissions::PRODUCTS_UPDATE,
-            permissions::PRODUCTS_DELETE,
-            permissions::PRODUCTS_IMPORT,
-            permissions::PRODUCTS_EXPORT,
-            permissions::PRODUCTS_CRUD,
-            permissions::INVENTORY_VIEW,
-            permissions::INVENTORY_ADJUST,
-            permissions::INVENTORY_TRANSFER,
-            permissions::INVENTORY_COUNT,
-            permissions::INVENTORY_LOCATIONS_MANAGE,
-            permissions::STAFF_CREATE,
-            permissions::STAFF_READ,
-            permissions::STAFF_UPDATE,
-            permissions::STAFF_DELETE,
-            permissions::STAFF_MANAGE_ROLES,
-            permissions::SETTINGS_READ,
-            permissions::SETTINGS_EDIT,
-            permissions::REPORTS_VIEW,
-            permissions::REPORTS_EXPORT,
-            permissions::REPORTS_SCHEDULE,
-            permissions::SHIFTS_OPEN,
-            permissions::SHIFTS_CLOSE,
-            permissions::SHIFTS_VIEW_ANY,
-            permissions::AUDIT_VIEW,
-            permissions::AUDIT_EXPORT,
-            permissions::PAYMENTS_CASH,
-            permissions::PAYMENTS_CARD,
-            permissions::PAYMENTS_REFUND,
-            permissions::PAYMENTS_SETTLE,
-            permissions::CUSTOMERS_CREATE,
-            permissions::CUSTOMERS_VIEW,
-            permissions::CUSTOMERS_EDIT,
-            permissions::CUSTOMERS_DELETE,
-            permissions::LOYALTY_VIEW,
-            permissions::LOYALTY_EARN,
-            permissions::LOYALTY_REDEEM,
-            permissions::LOYALTY_MANAGE,
-            permissions::TABLES_ASSIGN,
-            permissions::TABLES_MERGE,
-            permissions::TABLES_SPLIT,
-            permissions::TABLES_CLOSE,
-            permissions::DISCOUNTS_APPLY,
-            permissions::DISCOUNTS_CREATE,
-            permissions::DISCOUNTS_MANAGE,
-            permissions::WORKSPACES_SWITCH,
-            permissions::PROMOTIONS_CREATE,
-            permissions::PROMOTIONS_EDIT,
-            permissions::PROMOTIONS_DELETE,
-            permissions::PROMOTIONS_APPLY,
-            permissions::TABLES_CREATE,
-            permissions::TABLES_EDIT,
-            permissions::TABLES_DELETE,
-            permissions::TERMINALS_REGISTER,
-            permissions::TERMINALS_EDIT,
-            permissions::TERMINALS_DELETE,
-            permissions::CATEGORIES_MANAGE,
-            permissions::PLUGINS_MANAGE,
-        ];
-        for &p in &all {
+        for &p in ALL_ENFORCED {
             assert!(p.contains(':'), "constant {p} is missing ':' separator");
         }
     }
@@ -1122,75 +1133,8 @@ mod tests {
     #[test]
     fn permission_constants_are_unique() {
         use std::collections::HashSet;
-        let all = [
-            permissions::SALES_PROCESS,
-            permissions::SALES_VOID,
-            permissions::SALES_REFUND,
-            permissions::SALES_VIEW,
-            permissions::SALES_DISCOUNT,
-            permissions::SALES_SPLIT,
-            permissions::PRODUCTS_CREATE,
-            permissions::PRODUCTS_READ,
-            permissions::PRODUCTS_UPDATE,
-            permissions::PRODUCTS_DELETE,
-            permissions::PRODUCTS_IMPORT,
-            permissions::PRODUCTS_EXPORT,
-            permissions::PRODUCTS_CRUD,
-            permissions::INVENTORY_VIEW,
-            permissions::INVENTORY_ADJUST,
-            permissions::INVENTORY_TRANSFER,
-            permissions::INVENTORY_COUNT,
-            permissions::INVENTORY_LOCATIONS_MANAGE,
-            permissions::STAFF_CREATE,
-            permissions::STAFF_READ,
-            permissions::STAFF_UPDATE,
-            permissions::STAFF_DELETE,
-            permissions::STAFF_MANAGE_ROLES,
-            permissions::SETTINGS_READ,
-            permissions::SETTINGS_EDIT,
-            permissions::REPORTS_VIEW,
-            permissions::REPORTS_EXPORT,
-            permissions::REPORTS_SCHEDULE,
-            permissions::SHIFTS_OPEN,
-            permissions::SHIFTS_CLOSE,
-            permissions::SHIFTS_VIEW_ANY,
-            permissions::AUDIT_VIEW,
-            permissions::AUDIT_EXPORT,
-            permissions::PAYMENTS_CASH,
-            permissions::PAYMENTS_CARD,
-            permissions::PAYMENTS_REFUND,
-            permissions::PAYMENTS_SETTLE,
-            permissions::CUSTOMERS_CREATE,
-            permissions::CUSTOMERS_VIEW,
-            permissions::CUSTOMERS_EDIT,
-            permissions::CUSTOMERS_DELETE,
-            permissions::LOYALTY_VIEW,
-            permissions::LOYALTY_EARN,
-            permissions::LOYALTY_REDEEM,
-            permissions::LOYALTY_MANAGE,
-            permissions::TABLES_ASSIGN,
-            permissions::TABLES_MERGE,
-            permissions::TABLES_SPLIT,
-            permissions::TABLES_CLOSE,
-            permissions::DISCOUNTS_APPLY,
-            permissions::DISCOUNTS_CREATE,
-            permissions::DISCOUNTS_MANAGE,
-            permissions::WORKSPACES_SWITCH,
-            permissions::PROMOTIONS_CREATE,
-            permissions::PROMOTIONS_EDIT,
-            permissions::PROMOTIONS_DELETE,
-            permissions::PROMOTIONS_APPLY,
-            permissions::TABLES_CREATE,
-            permissions::TABLES_EDIT,
-            permissions::TABLES_DELETE,
-            permissions::TERMINALS_REGISTER,
-            permissions::TERMINALS_EDIT,
-            permissions::TERMINALS_DELETE,
-            permissions::CATEGORIES_MANAGE,
-            permissions::PLUGINS_MANAGE,
-        ];
         let mut seen = HashSet::new();
-        for &p in &all {
+        for &p in ALL_ENFORCED {
             assert!(seen.insert(p), "duplicate permission constant: {p}");
         }
     }

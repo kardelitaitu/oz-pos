@@ -8,6 +8,8 @@
 //! - [`database`] — migration runner and connection pool
 //! - [`auth`] — PIN hashing, verification, and login session types
 //! - [`rbac`] — Role-Based Access Control primitives (Role, Permission)
+//! - [`permission_registry`] — code-resident permission registry with
+//!   write-time grant validation (ADR #35 D3 / spec 0046)
 //! - [`settings`] — generic key-value settings store with typed helpers
 //! - [`error`] — shared error type ([`PlatformError`])
 
