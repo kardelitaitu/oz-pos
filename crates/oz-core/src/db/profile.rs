@@ -338,7 +338,9 @@ impl Store<'_> {
     /// mandatory fields, inserts the user + default global assignment, then
     /// writes the profile columns — all in one transaction so a profile
     /// conflict (duplicate email / national id) rolls the user back instead
-    /// of leaving a partial row.
+    /// of leaving a partial row. When `assignment` is `Some`, the user's
+    /// single effective assignment is set to that scope instead of the
+    /// default global one, atomically with the rest (spec 0048).
     pub fn create_user_with_profile(
         &self,
         username: &str,
@@ -346,12 +348,16 @@ impl Store<'_> {
         display_name: &str,
         role_id: &str,
         profile: &UserProfile,
+        assignment: Option<&crate::db::assignments::AssignmentSpec>,
     ) -> Result<crate::User, CoreError> {
         profile.validate()?;
         let tx = self.conn.unchecked_transaction()?;
         let store = Store::new(&tx);
         let user = store.create_user(username, pin_hash, display_name, role_id)?;
         store.write_user_profile(&user.id, profile)?;
+        if let Some(spec) = assignment {
+            store.write_assignment_scope(&user.id, role_id, spec)?;
+        }
         tx.commit()?;
         Ok(user)
     }
@@ -838,7 +844,7 @@ mod tests {
         let store = Store::new(&conn);
         let profile = complete_profile();
         let user = store
-            .create_user_with_profile("alice", "hash", "Alice", "role-staff", &profile)
+            .create_user_with_profile("alice", "hash", "Alice", "role-staff", &profile, None)
             .unwrap();
         let loaded = store
             .get_user_profile(&user.id)
@@ -858,14 +864,21 @@ mod tests {
         .unwrap();
         let store = Store::new(&conn);
         store
-            .create_user_with_profile("alice", "hash", "Alice", "role-staff", &complete_profile())
+            .create_user_with_profile(
+                "alice",
+                "hash",
+                "Alice",
+                "role-staff",
+                &complete_profile(),
+                None,
+            )
             .unwrap();
 
         // Duplicate email.
         let mut dup_email = complete_profile();
         dup_email.national_id = Some("987654321".into()); // different id, same email
         let err = store
-            .create_user_with_profile("bob", "hash", "Bob", "role-staff", &dup_email)
+            .create_user_with_profile("bob", "hash", "Bob", "role-staff", &dup_email, None)
             .unwrap_err();
         assert!(
             matches!(err, CoreError::Conflict { field: "email", .. }),
@@ -876,7 +889,7 @@ mod tests {
         let mut dup_id = complete_profile();
         dup_id.email = Some("bob@example.com".into()); // different email, same id
         let err = store
-            .create_user_with_profile("bob", "hash", "Bob", "role-staff", &dup_id)
+            .create_user_with_profile("bob", "hash", "Bob", "role-staff", &dup_id, None)
             .unwrap_err();
         assert!(
             matches!(
@@ -956,7 +969,14 @@ mod tests {
         insert_role(&conn, "role-staff", &["sales:view"]);
         let store = Store::new(&conn);
         let user = store
-            .create_user_with_profile("alice", "hash", "Alice", "role-staff", &complete_profile())
+            .create_user_with_profile(
+                "alice",
+                "hash",
+                "Alice",
+                "role-staff",
+                &complete_profile(),
+                None,
+            )
             .unwrap();
 
         // Raw SQL must never see the plaintext sensitive values.
@@ -996,7 +1016,7 @@ mod tests {
         insert_role(&conn, "role-viewer", &["staff:read"]);
         let store = Store::new(&conn);
         let target = store
-            .create_user_with_profile("target", "h", "T", "role-target", &complete_profile())
+            .create_user_with_profile("target", "h", "T", "role-target", &complete_profile(), None)
             .unwrap();
         let viewer = store
             .create_user("viewer", "h", "V", "role-viewer")
@@ -1026,7 +1046,7 @@ mod tests {
         );
         let store = Store::new(&conn);
         let target = store
-            .create_user_with_profile("target", "h", "T", "role-mgr", &complete_profile())
+            .create_user_with_profile("target", "h", "T", "role-mgr", &complete_profile(), None)
             .unwrap();
         let viewer = store.create_user("viewer", "h", "V", "role-mgr").unwrap();
 
@@ -1071,7 +1091,7 @@ mod tests {
             .create_user("viewer", "h", "V", "role-viewer")
             .unwrap();
         let target = store
-            .create_user_with_profile("target", "h", "T", "role-viewer", &complete_profile())
+            .create_user_with_profile("target", "h", "T", "role-viewer", &complete_profile(), None)
             .unwrap();
 
         // Corrupt the stored ciphertext directly.
@@ -1141,7 +1161,7 @@ mod tests {
         insert_role(&conn, "role-staff", &["sales:view"]);
         let store = Store::new(&conn);
         let user = store
-            .create_user_with_profile("alice", "h", "A", "role-staff", &complete_profile())
+            .create_user_with_profile("alice", "h", "A", "role-staff", &complete_profile(), None)
             .unwrap();
         store
             .update_user(&user.id, "alice", "A", "role-staff", false)

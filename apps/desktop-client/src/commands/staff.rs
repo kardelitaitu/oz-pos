@@ -7,6 +7,7 @@ use tauri::State;
 
 use oz_core::auth::hash_pin;
 use oz_core::db::Store;
+use oz_core::db::assignments::{Assignment, AssignmentSpec, ScopeMode};
 use oz_core::db::profile::{UserProfile, mask_last4};
 use oz_core::permissions;
 use oz_core::{Role, User};
@@ -19,6 +20,42 @@ use crate::error::AppError;
 use crate::state::AppState;
 
 // ── Staff member DTO ────────────────────────────────────────────────
+
+/// A user's single effective assignment as seen by the front-end (ADR #35
+/// D5 / spec 0048): scope mode plus the per-dimension explicit-all flag and
+/// list. Legacy users without an assignment row resolve as global all/all.
+#[derive(Debug, Serialize)]
+pub struct AssignmentDto {
+    /// `"global"` or `"scoped"`.
+    pub scope_mode: String,
+    /// Branch dimension is explicit `all`.
+    pub branches_all: bool,
+    /// Branch ids in scope when `branches_all` is false.
+    pub branch_ids: Vec<String>,
+    /// Workspace dimension is explicit `all`.
+    pub workspaces_all: bool,
+    /// Workspace keys in scope when `workspaces_all` is false.
+    pub workspace_keys: Vec<String>,
+}
+
+/// The assignment scope carried by the staff create/edit IPC args (ADR #35
+/// D5 / spec 0048): `scope_mode` plus the per-dimension explicit-all flag
+/// and list. Empty lists never mean "all" — the `*_all` flags are the
+/// explicit marker, so `list` with no ids is a deny.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct AssignmentArgs {
+    /// `"global"` or `"scoped"`.
+    pub scope_mode: String,
+    /// Branch dimension is explicit `all`.
+    pub branches_all: bool,
+    /// Branch ids in scope when `branches_all` is false.
+    pub branch_ids: Vec<String>,
+    /// Workspace dimension is explicit `all`.
+    pub workspaces_all: bool,
+    /// Workspace keys in scope when `workspaces_all` is false.
+    pub workspace_keys: Vec<String>,
+}
 
 /// Staff member as seen by the front-end (no pin_hash exposed).
 #[derive(Debug, Serialize)]
@@ -41,6 +78,8 @@ pub struct StaffMemberDto {
     /// Whether all 8 required profile fields are present — incomplete users
     /// are flagged and management-role assignment is gated on this.
     pub is_profile_complete: bool,
+    /// The user's single effective assignment (ADR #35 D5 / spec 0048).
+    pub assignment: AssignmentDto,
 }
 
 /// The 17 profile fields carried by the staff create/edit IPC args (ADR #35
@@ -191,7 +230,12 @@ impl From<oz_core::db::profile::ProfileView> for ProfileViewDto {
     }
 }
 
-fn to_staff_dto(user: &User, roles: &[Role], profile: Option<&UserProfile>) -> StaffMemberDto {
+fn to_staff_dto(
+    user: &User,
+    roles: &[Role],
+    profile: Option<&UserProfile>,
+    assignment: Option<&Assignment>,
+) -> StaffMemberDto {
     let role_name = roles
         .iter()
         .find(|r| r.id == user.role_id)
@@ -209,7 +253,46 @@ fn to_staff_dto(user: &User, roles: &[Role], profile: Option<&UserProfile>) -> S
             .map(mask_last4)
             .unwrap_or_else(|| "****".to_string()),
         is_profile_complete: profile.map(|p| p.is_complete()).unwrap_or(false),
+        assignment: assignment_dto(assignment),
     }
+}
+
+/// Render an assignment for the wire. Legacy users without an assignment
+/// row (pre-0048 databases) resolve as global all/all — the same effective
+/// semantics as `users.role_id` alone.
+fn assignment_dto(assignment: Option<&Assignment>) -> AssignmentDto {
+    match assignment {
+        Some(a) => AssignmentDto {
+            scope_mode: a.scope_mode.as_str().to_string(),
+            branches_all: a.branches_all,
+            branch_ids: a.branches.clone(),
+            workspaces_all: a.workspaces_all,
+            workspace_keys: a.workspaces.clone(),
+        },
+        None => AssignmentDto {
+            scope_mode: ScopeMode::Global.as_str().to_string(),
+            branches_all: true,
+            branch_ids: vec![],
+            workspaces_all: true,
+            workspace_keys: vec![],
+        },
+    }
+}
+
+/// Parse the wire `scope_mode` string, rejecting anything else.
+fn parse_scope_mode(s: &str) -> Result<ScopeMode, AppError> {
+    ScopeMode::parse(s).ok_or_else(|| AppError::Invalid(format!("invalid scope_mode: {s}")))
+}
+
+/// Map the wire args to an oz-core assignment spec.
+fn assignment_spec(args: &AssignmentArgs) -> Result<AssignmentSpec, AppError> {
+    Ok(AssignmentSpec {
+        scope_mode: parse_scope_mode(&args.scope_mode)?,
+        branches_all: args.branches_all,
+        branches: args.branch_ids.clone(),
+        workspaces_all: args.workspaces_all,
+        workspaces: args.workspace_keys.clone(),
+    })
 }
 
 // ── List staff ─────────────────────────────────────────────────────
@@ -341,6 +424,10 @@ pub struct CreateStaffScopedArgs {
     /// ADR #35 D6 profile fields — creation requires the 9 mandatory fields
     /// (validated by `create_user_with_profile`).
     pub profile: ProfileArgs,
+    /// Optional assignment scope (spec 0048). When `Some`, the user is
+    /// created with this scope instead of the default global all/all.
+    #[serde(default)]
+    pub assignment: Option<AssignmentArgs>,
 }
 
 /// Arguments for updating a staff member from a session token.
@@ -376,6 +463,12 @@ pub struct UpdateStaffScopedArgs {
     /// `Some`, they are written atomically with the user update.
     #[serde(default)]
     pub profile: Option<ProfileArgs>,
+    /// Optional assignment scope (ADR #35 D5 / spec 0048). When `Some`, it
+    /// is written atomically with the user + profile update inside the same
+    /// transaction (replaces the legacy store-scoped workspace write for
+    /// callers using the new model).
+    #[serde(default)]
+    pub assignment: Option<AssignmentArgs>,
 }
 
 /// List staff members. Caller identity is resolved from the session token.
@@ -394,7 +487,8 @@ pub async fn list_staff_scoped(
         .iter()
         .map(|u| {
             let profile = store.get_user_profile(&u.id).ok().flatten();
-            to_staff_dto(u, &roles, profile.as_ref())
+            let assignment = store.assignment_for_user(&u.id).ok().flatten();
+            to_staff_dto(u, &roles, profile.as_ref(), assignment.as_ref())
         })
         .collect();
     drop(db);
@@ -474,17 +568,25 @@ pub async fn create_staff_scoped(
     require_permission_for_user(&store, &session.user_id, permissions::STAFF_CREATE)?;
     enforce_role_assignment_policy(&store, &session.user_id, None, &args.role_id, true)?;
     let profile = args.profile.into_profile();
+    let assignment = args.assignment.as_ref().map(assignment_spec).transpose()?;
     let user = store.create_user_with_profile(
         &username,
         &pin_hash,
         display_name,
         &args.role_id,
         &profile,
+        assignment.as_ref(),
     )?;
     let roles = store.list_roles()?;
+    let assignment = store.assignment_for_user(&user.id)?;
     drop(db);
 
-    Ok(to_staff_dto(&user, &roles, Some(&profile)))
+    Ok(to_staff_dto(
+        &user,
+        &roles,
+        Some(&profile),
+        assignment.as_ref(),
+    ))
 }
 
 /// Enforce role-assignment policy (STAFF-02).
@@ -623,6 +725,14 @@ pub async fn update_staff_scoped(
             store.write_user_profile(&args.id, &profile.clone().into_profile())?;
         }
 
+        // ADR #35 D5 (spec 0048): the assignment scope rides the same
+        // transaction — in-tx writer, no nested BEGIN. `update_user` above
+        // already synced the assignment role; this replaces only the scope.
+        if let Some(spec) = &args.assignment {
+            let spec = assignment_spec(spec)?;
+            store.write_assignment_scope(&args.id, &args.role_id, &spec)?;
+        }
+
         // Hash server-side; never accept plaintext beyond the command boundary.
         let pin_rotated = if let Some(pin) = args.pin.as_deref().filter(|p| !p.is_empty()) {
             validate_min_length("pin", pin, 4).map_err(|e| AppError::Invalid(e.to_string()))?;
@@ -743,7 +853,17 @@ pub async fn update_staff_scoped(
         Some(p) => Some(p.clone().into_profile()),
         None => previous_profile.and_then(|(_, _, _, _, _, p)| p),
     };
-    Ok(to_staff_dto(&user, &roles, profile.as_ref()))
+    let assignment = {
+        let db = state.db.lock().await;
+        let store = Store::new(&db);
+        store.assignment_for_user(&args.id)?
+    };
+    Ok(to_staff_dto(
+        &user,
+        &roles,
+        profile.as_ref(),
+        assignment.as_ref(),
+    ))
 }
 
 // ── Bootstrap first owner (no authentication required) ────────────────
@@ -897,6 +1017,7 @@ mod tests {
             is_active: true,
             national_id_masked: "*****6789".into(),
             is_profile_complete: true,
+            assignment: assignment_dto(None),
         };
         let d = format!("{dto:?}");
         assert!(d.contains("jdoe"));
@@ -914,6 +1035,7 @@ mod tests {
             is_active: false,
             national_id_masked: "****".into(),
             is_profile_complete: false,
+            assignment: assignment_dto(None),
         };
         let json = serde_json::to_value(&dto).unwrap();
         assert_eq!(json["username"], "asmith");
@@ -1121,6 +1243,7 @@ mod tests {
                 display_name: "Mallory".into(),
                 role_id: "role-staff".into(),
                 profile: complete_profile_args(),
+                assignment: None,
             },
             app.state(),
         )
@@ -1155,6 +1278,7 @@ mod tests {
                 display_name: "Mallory".into(),
                 role_id: "role-staff".into(),
                 profile: complete_profile_args(),
+                assignment: None,
             },
             app.state(),
         )
@@ -1181,6 +1305,7 @@ mod tests {
                 display_name: "Mallory".into(),
                 role_id: "role-staff".into(),
                 profile: complete_profile_args(),
+                assignment: None,
             },
             app.state(),
         )
@@ -1217,6 +1342,7 @@ mod tests {
                 pin: None,
                 workspace_keys: None,
                 profile: None,
+                assignment: None,
             },
             app.state(),
         )
@@ -1259,6 +1385,7 @@ mod tests {
                 display_name: "New Owner".into(),
                 role_id: "role-owner".into(),
                 profile: complete_profile_args(),
+                assignment: None,
             },
             app.state(),
         )
@@ -1305,6 +1432,7 @@ mod tests {
                 pin: None,
                 workspace_keys: None,
                 profile: None,
+                assignment: None,
             },
             app.state(),
         )
@@ -1350,6 +1478,7 @@ mod tests {
                 pin: None,
                 workspace_keys: None,
                 profile: None,
+                assignment: None,
             },
             app.state(),
         )
@@ -1389,6 +1518,7 @@ mod tests {
                 pin: None,
                 workspace_keys: None,
                 profile: None,
+                assignment: None,
             },
             app.state(),
         )
@@ -1423,6 +1553,7 @@ mod tests {
                 pin: Some("9876".into()),
                 workspace_keys: None,
                 profile: None,
+                assignment: None,
             },
             app.state(),
         )
@@ -1473,6 +1604,7 @@ mod tests {
                 pin: Some("9876".into()),
                 workspace_keys: None,
                 profile: None,
+                assignment: None,
             },
             app.state(),
         )
@@ -1528,6 +1660,7 @@ mod tests {
                 pin: Some("4321".into()),
                 workspace_keys: None,
                 profile: None,
+                assignment: None,
             },
             app.state(),
         )
@@ -1542,6 +1675,56 @@ mod tests {
             st.resolve_session("owner-stale-terminal"),
             Err(AppError::InvalidSession)
         ));
+    }
+
+    #[tokio::test]
+    async fn scoped_update_staff_writes_assignment_scope_atomically() {
+        let conn = oz_core::migrations::fresh_db();
+        seed_global_users(&conn);
+        let state =
+            scoped_state_with_token(conn, "owner-token", "user-owner", "role-owner", "store-a");
+        let app = tauri::test::mock_builder()
+            .manage(state)
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        update_staff_scoped(
+            "owner-token".into(),
+            UpdateStaffScopedArgs {
+                id: "user-cashier".into(),
+                username: "cashier".into(),
+                display_name: "Cashier".into(),
+                role_id: "role-lite".into(),
+                is_active: true,
+                pin: None,
+                workspace_keys: None,
+                profile: None,
+                // ADR #35 D5 (spec 0048): scoped assignment with explicit
+                // all/list per dimension — `retail-pos` is FK-valid (seeded
+                // by migration 128), branch ids are store_profiles ids.
+                assignment: Some(AssignmentArgs {
+                    scope_mode: "scoped".into(),
+                    branches_all: false,
+                    branch_ids: vec!["store-a".into()],
+                    workspaces_all: false,
+                    workspace_keys: vec!["retail-pos".into()],
+                }),
+            },
+            app.state(),
+        )
+        .await
+        .unwrap();
+
+        let st = app.state::<AppState>();
+        let db = st.db.lock().await;
+        let assignment = Store::new(&db)
+            .assignment_for_user("user-cashier")
+            .unwrap()
+            .expect("assignment");
+        assert_eq!(assignment.scope_mode, ScopeMode::Scoped);
+        assert!(!assignment.branches_all && !assignment.workspaces_all);
+        assert_eq!(assignment.branches, vec!["store-a"]);
+        assert_eq!(assignment.workspaces, vec!["retail-pos"]);
     }
 
     #[tokio::test]
@@ -1570,6 +1753,7 @@ mod tests {
                 pin: Some("9876".into()),
                 workspace_keys: None,
                 profile: None,
+                assignment: None,
             },
             app.state(),
         )
@@ -1644,6 +1828,7 @@ mod tests {
                 pin: Some("9876".into()),
                 workspace_keys: None,
                 profile: None,
+                assignment: None,
             },
             app.state(),
         )
@@ -1686,6 +1871,7 @@ mod tests {
                 // database write to fail after the profile transaction.
                 workspace_keys: Some(vec!["missing-workspace".into()]),
                 profile: None,
+                assignment: None,
             },
             app.state(),
         )
@@ -1725,6 +1911,7 @@ mod tests {
                 pin: Some("12".into()),
                 workspace_keys: None,
                 profile: None,
+                assignment: None,
             },
             app.state(),
         )
@@ -1834,6 +2021,7 @@ mod tests {
                 display_name: "Store B Cashier".into(),
                 role_id: "role-staff".into(),
                 profile: complete_profile_args(),
+                assignment: None,
             },
             app.state(),
         )
