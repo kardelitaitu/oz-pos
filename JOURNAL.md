@@ -4283,7 +4283,7 @@ Decisions / tradeoffs:
 - Kept the analytics aggregates in store-scoped DBs (per-store by design);
   the GLOBAL identity DB is only read for display names.
 
-Commits: pending
+Commits: 7a042477 (backend), bd9465a9 (ui), docs (this commit)
 Tests: oz-core 1758/1758 (analytics 7), platform-core 236/236, desktop
 905/905 (analytics+authz 14, gate_audit 3, wiring_audit 6), tablet 434/434,
 UI 4884/4884 (285 files) incl. AnalyticsScreen 6 + contract 2 +
