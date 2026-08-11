@@ -3917,3 +3917,37 @@ available but no command adopts it yet (adoption happens where commands
 carry branch/workspace context); the staff screen still lists six roles
 (UI is cycle 3). Auditor's exports are deliberately excluded — revisit if
 the product wants auditor-export.
+
+### 2026-08-11 — 0049 c1: user profile schema + validation + store API
+
+Problem: ADR #35 D6 (spec 0049) defines the user-profile data contract — 9
+mandatory-at-creation items (username + full name on `users`, plus 8 new
+profile fields) and optional fields — but `users` has none of the columns and
+no field-level validation, so the staff screen cannot collect or round-trip
+the contract.
+
+Solution: migration 130 adds the 17 profile columns to `users` (nullable in
+SQL — "mandatory" is enforced at creation, legacy rows enter the
+incomplete-profile state instead of being rejected) plus unique indexes on
+email and national_id ("unique when present": SQLite UNIQUE allows multiple
+NULLs). New `db::profile` module: `UserProfile` with `is_complete()`
+(8 required fields) and `validate()` (required-first field errors,
+ssn=9/nik=16 digit shape, email well-formed, phone E.164 7..=14 digits,
+DOB not in the future, pay strictly positive). Store API: `get_user_profile`,
+`create_user_with_profile` (validates then inserts user + assignment +
+profile in one transaction so a profile conflict rolls the user back),
+`update_user_profile` (maps unique-index violations to field-level
+`Conflict`). The D6 not-collected fields (gender, religion, marital status,
+ethnicity, blood type, bank account, shift/availability) are absent from the
+schema by design and pinned by the migration test.
+
+Decisions: (1) nullable SQL + creation-time enforcement, not CHECK
+constraints — keeps the incomplete-profile state reachable for legacy rows
+and direct-SQL inserts; (2) phone capped at 14 digits after `+` per the
+spec's pinned test (stricter than ITU-T's real 15-digit E.164 max);
+(3) atomic create via `unchecked_transaction` — the duplicate-email test
+exposed that a naive user-then-profile sequence leaves a partial row.
+
+Commits: 6b76d3e0 (feat: profile schema + validation + store API)
+Tests: 12 profile + 1 migration new; oz-core lib 1717/1717, staff_integration
+25/25, fmt/clippy -D warnings/drift clean.
