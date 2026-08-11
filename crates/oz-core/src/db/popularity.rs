@@ -32,6 +32,9 @@ const CATEGORY_MEANS: &str = "popularity.category_means";
 /// sales_votes, search_raw, search_votes, edits_raw, edits_votes)`.
 type ProductSignals = (String, Option<String>, f64, f64, f64, f64, f64, f64);
 
+/// A category's forecast input: name + chronological (period date, units).
+type ForecastSeries = (Option<String>, Vec<(chrono::NaiveDate, f64)>);
+
 /// One product inside a category's popularity leaderboard.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct CategoryTopProduct {
@@ -129,12 +132,14 @@ impl Store<'_> {
     /// Next-period demand forecast per top category (simple linear fit).
     ///
     /// Reuses [`Store::category_popularity_trend`] for the period series,
-    /// then fits [`crate::popularity::linear_forecast`] over each category's
-    /// recent per-period units (the last up-to-6 points) to project the next
-    /// period. Categories with a single point fall back to their recent
-    /// average; results sort by forecast descending. Prototype-level
-    /// forecast — the demand-forecasting research (2026-07-20) may replace
-    /// the linear fit with a learned model later.
+    /// then fits over each category's recent per-period units (last up-to-14
+    /// points) to project the next period: day-of-week seasonality (via
+    /// [`crate::popularity::seasonal_daily_forecast`]) for daily series of a
+    /// full week or more, otherwise a plain linear fit
+    /// ([`crate::popularity::linear_forecast`]). Categories with a single
+    /// point fall back to their recent average; results sort by forecast
+    /// descending. Prototype-level forecast — the demand-forecasting
+    /// research (2026-07-20) may replace the fit with a learned model later.
     pub fn category_forecast(
         &self,
         start_date: &str,
@@ -142,17 +147,22 @@ impl Store<'_> {
         granularity: &str,
         top_categories: i64,
     ) -> Result<Vec<CategoryForecastRow>, CoreError> {
-        const MAX_SERIES_POINTS: usize = 6;
+        // Up to two weeks of history: enough for the daily seasonality fit
+        // (which needs a full week minimum) while keeping the series recent.
+        const MAX_SERIES_POINTS: usize = 14;
 
         let points =
             self.category_popularity_trend(start_date, end_date, granularity, top_categories)?;
-        // (category_id) → (name, chronological units series).
-        let mut groups: HashMap<String, (Option<String>, Vec<f64>)> = HashMap::new();
+        // (category_id) → (name, chronological (period date, units) series).
+        let mut groups: HashMap<String, ForecastSeries> = HashMap::new();
         for p in points {
+            let date = chrono::NaiveDate::parse_from_str(&p.period_start, "%Y-%m-%d").ok();
             let entry = groups
                 .entry(p.category_id.clone())
                 .or_insert((p.category_name, Vec::new()));
-            entry.1.push(p.units_sold as f64);
+            if let Some(d) = date {
+                entry.1.push((d, p.units_sold as f64));
+            }
         }
 
         let mut out: Vec<CategoryForecastRow> = Vec::new();
@@ -162,9 +172,24 @@ impl Store<'_> {
                 .rev()
                 .take(MAX_SERIES_POINTS)
                 .copied()
-                .collect::<Vec<f64>>();
-            let tail = tail.into_iter().rev().collect::<Vec<f64>>();
-            let f = crate::popularity::linear_forecast(&tail);
+                .collect::<Vec<(chrono::NaiveDate, f64)>>();
+            let tail = tail
+                .into_iter()
+                .rev()
+                .collect::<Vec<(chrono::NaiveDate, f64)>>();
+            // Daily series of at least a full week get day-of-week
+            // seasonality (weak Mondays, strong weekends); shorter or
+            // weekly/monthly series use the plain linear fit.
+            let f = if granularity == "daily" && tail.len() >= 7 {
+                let next = tail
+                    .last()
+                    .map(|(d, _)| *d + chrono::Duration::days(1))
+                    .unwrap_or_else(|| chrono::Utc::now().date_naive());
+                crate::popularity::seasonal_daily_forecast(&tail, next)
+            } else {
+                let units: Vec<f64> = tail.iter().map(|(_, u)| *u).collect();
+                crate::popularity::linear_forecast(&units)
+            };
             out.push(CategoryForecastRow {
                 category_id,
                 category_name: name,
@@ -832,6 +857,7 @@ impl Store<'_> {
 mod tests {
     use super::*;
     use crate::migrations;
+    use chrono::Datelike;
 
     fn fresh() -> rusqlite::Connection {
         migrations::fresh_db()
@@ -1398,6 +1424,64 @@ mod tests {
         // Sorted by forecast descending: cat-a (18) before cat-b (5).
         assert_eq!(rows[0].category_id, "cat-a");
         assert_eq!(rows[1].category_id, "cat-b");
+    }
+
+    #[test]
+    fn category_forecast_daily_weekend_seasonality() {
+        // Two flat weeks with a weekend boost: Mon–Fri 6, Sat–Sun 12. The
+        // next-day projection must respect the target weekday (a Monday
+        // stays weak, a Sunday stays strong) instead of the flat mean 8.
+        let conn = fresh();
+        seed_category(&conn, "cat-s", "S");
+        let start = chrono::NaiveDate::from_ymd_opt(2026, 8, 3).unwrap(); // Monday
+        for i in 0..14 {
+            let d = start + chrono::Duration::days(i);
+            let dow = d.weekday().num_days_from_monday();
+            let units = if dow >= 5 { 12 } else { 6 };
+            let id = uuid::Uuid::now_v7().to_string();
+            conn.execute(
+                "INSERT INTO products (id, sku, name, price_minor, currency, category_id, created_at, updated_at) \
+                 VALUES (?1, ?2, ?2, 1000, 'USD', 'cat-s', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z')",
+                params![id, format!("S-{i}")],
+            )
+            .unwrap();
+            let ts = d
+                .and_hms_opt(12, 0, 0)
+                .unwrap()
+                .and_utc()
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+            conn.execute(
+                "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at) VALUES
+                 (?1, ?2, 'USD', 1, 'completed', ?3, ?3)",
+                params![format!("sale-S-{i}"), units * 1000, ts],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position) VALUES
+                 (?1, ?2, ?3, ?4, 1000, ?5, 'USD', 1)",
+                params![format!("sl-S-{i}"), format!("sale-S-{i}"), format!("S-{i}"), units, units * 1000],
+            )
+            .unwrap();
+        }
+
+        let store = Store::new(&conn);
+        let rows = store
+            .category_forecast("2000-01-01", "2099-12-31", "daily", 5)
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        let row = &rows[0];
+        // Last day is a Sunday (2026-08-16 + …): the next day is Monday.
+        // Two flat weeks → slope 0, forecast = mean × index[Mon] = 6.
+        let last = start + chrono::Duration::days(13); // Sunday
+        let next = last + chrono::Duration::days(1); // Monday
+        assert_eq!(
+            next.weekday().num_days_from_monday(),
+            0,
+            "next day is Monday"
+        );
+        assert_eq!(row.forecast_units, 6, "Monday projection must stay weak");
+        // (10×6 + 4×12) / 14 = 108/14 ≈ 7.714.
+        assert!((row.recent_avg_units - 108.0 / 14.0).abs() < 1e-9);
     }
 
     #[test]

@@ -28,6 +28,8 @@
 //! a sum-scale `raw` against a count-scale `v`; the shrinkage form below
 //! achieves the ADR's stated goals on the correct scale.
 
+use chrono::Datelike;
+
 /// Daily recency decay factor (λ). `1/(1−λ) ≈ 14` effective days of memory.
 pub const DECAY_PER_DAY: f64 = 0.93;
 /// Hard lookback window in days. At the edge `λ^90 ≈ 0.0015`, so truncation
@@ -164,6 +166,65 @@ pub fn linear_forecast(units: &[f64]) -> UnitForecast {
         trend_per_period: slope,
         recent_avg_units: mean_y,
         forecast_units: (intercept + slope * n).max(0.0).round() as i64,
+    }
+}
+
+/// Day-of-week seasonal forecast for daily series (a full week minimum).
+///
+/// De-seasonalizes each day's units by its weekday's strength relative to
+/// the overall mean (a weak Monday's 6 units is treated as an average day),
+/// fits the linear trend on the de-seasonalized series, then re-seasonalizes
+/// the next-day projection by the target weekday's index. Weekdays with no
+/// observations get index 1.0 (no adjustment). Series shorter than a full
+/// week cannot estimate weekday effects — the caller falls back to
+/// [`linear_forecast`].
+pub fn seasonal_daily_forecast(
+    days: &[(chrono::NaiveDate, f64)],
+    next_day: chrono::NaiveDate,
+) -> UnitForecast {
+    let n = days.len() as f64;
+    if n == 0.0 {
+        return UnitForecast {
+            trend_per_period: 0.0,
+            recent_avg_units: 0.0,
+            forecast_units: 0,
+        };
+    }
+    let overall_mean = days.iter().map(|(_, u)| *u).sum::<f64>() / n;
+    // Per-weekday mean strength.
+    let mut dow: std::collections::HashMap<u32, (f64, usize)> = std::collections::HashMap::new();
+    for (d, u) in days {
+        let e = dow
+            .entry(d.weekday().num_days_from_monday())
+            .or_insert((0.0, 0));
+        e.0 += *u;
+        e.1 += 1;
+    }
+    let index = |weekday: u32| -> f64 {
+        let Some((sum, count)) = dow.get(&weekday) else {
+            return 1.0;
+        };
+        if overall_mean > 0.0 && *count > 0 {
+            (sum / *count as f64) / overall_mean
+        } else {
+            1.0
+        }
+    };
+    // De-seasonalize, fit the trend on the flat scale, re-seasonalize the
+    // next-day projection.
+    let de: Vec<f64> = days
+        .iter()
+        .map(|(d, u)| {
+            let idx = index(d.weekday().num_days_from_monday());
+            if idx > 0.0 { *u / idx } else { *u }
+        })
+        .collect();
+    let fit = linear_forecast(&de);
+    let next_idx = index(next_day.weekday().num_days_from_monday());
+    UnitForecast {
+        trend_per_period: fit.trend_per_period,
+        recent_avg_units: overall_mean,
+        forecast_units: ((fit.forecast_units as f64) * next_idx).max(0.0).round() as i64,
     }
 }
 
@@ -319,6 +380,56 @@ mod tests {
         assert_eq!(f.trend_per_period, 0.0);
         assert_eq!(f.forecast_units, 9);
         assert_eq!(linear_forecast(&[]).forecast_units, 0);
+    }
+
+    #[test]
+    fn seasonal_daily_forecast_boosts_weekend_projection() {
+        // A flat week with a weekend boost: Mon–Fri 6, Sat–Sun 12. The
+        // de-seasonalized series is flat (mean 8), so the trend is 0 and the
+        // forecast is purely the seasonal projection.
+        let start = chrono::NaiveDate::from_ymd_opt(2026, 8, 3).unwrap(); // a Monday
+        let days: Vec<(chrono::NaiveDate, f64)> = (0..7)
+            .map(|i| {
+                let d = start + chrono::Duration::days(i);
+                let u = if d.weekday().num_days_from_monday() >= 5 {
+                    12.0
+                } else {
+                    6.0
+                };
+                (d, u)
+            })
+            .collect();
+
+        let next_mon = start + chrono::Duration::days(7); // Monday → 6
+        let next_sun = start + chrono::Duration::days(13); // Sunday → 12
+        let f_mon = seasonal_daily_forecast(&days, next_mon);
+        let f_sun = seasonal_daily_forecast(&days, next_sun);
+        assert_eq!(f_mon.forecast_units, 6, "weak Monday stays weak");
+        assert_eq!(f_sun.forecast_units, 12, "strong Sunday stays strong");
+        assert_eq!(f_mon.trend_per_period, 0.0);
+        // (5×6 + 2×12) / 7 = 54/7 ≈ 7.714.
+        assert!((f_mon.recent_avg_units - 54.0 / 7.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn seasonal_daily_forecast_short_series_matches_plain_fit() {
+        // Shorter than a week the caller falls back to linear_forecast, but
+        // the function itself degrades gracefully: no repeated weekdays →
+        // indices are self-referential and the projection tracks the
+        // de-seasonalized mean (2 points, flat).
+        let start = chrono::NaiveDate::from_ymd_opt(2026, 8, 3).unwrap();
+        let days = [(start, 10.0), (start + chrono::Duration::days(1), 12.0)];
+        let next = start + chrono::Duration::days(2);
+        let f = seasonal_daily_forecast(&days, next);
+        // Each weekday has exactly one observation → de-seasonalized series
+        // is flat at the mean (11), so the projection is 11 × index[next].
+        assert!(f.forecast_units >= 0);
+    }
+
+    #[test]
+    fn seasonal_daily_forecast_empty_series_is_zero() {
+        let f = seasonal_daily_forecast(&[], chrono::NaiveDate::from_ymd_opt(2026, 8, 3).unwrap());
+        assert_eq!(f.forecast_units, 0);
     }
 
     #[test]

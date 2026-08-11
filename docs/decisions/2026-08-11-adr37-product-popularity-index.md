@@ -184,8 +184,11 @@ upsert imports only its snapshot columns, so `popularity_score` and
   least-squares model over each category's recent trend units (last ≤6
   points) and projects the next period, exposed as
   `get_category_forecast_scoped` and rendered as the Demand Forecast table
-  on the sales report; the learned on-device model from the 2026-07-20
-  research remains out of scope.
+  on the sales report; daily series of a full week or more are first
+  de-seasonalized by day-of-week (weak Mondays, strong weekends) before the
+  fit (`seasonal_daily_forecast`), so the next-day projection respects the
+  weekday pattern; the learned on-device model from the 2026-07-20 research
+  remains out of scope.
 - Surfacing the score in analytics exports — the data will be available to the
   analytics tool through the local store DB (same path as cost, ADR #36 D2).
 
