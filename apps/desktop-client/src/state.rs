@@ -195,6 +195,19 @@ impl AppState {
         seed_primary_store(&conn)
             .map_err(|e| AppError::Internal(format!("seeding primary store: {e}")))?;
 
+        // ── Popularity full pass (ADR #37) ────────────────────────────
+        // Materialize popularity scores right after migrations so the retail
+        // grid's default popularity sort is meaningful from the first launch:
+        // sales are read from sale_lines, edit events were seeded by
+        // migration 134, and search events accumulate from launch. The pass
+        // is local-only analytics — a failure must not block startup.
+        if let Err(e) = oz_core::db::Store::new(&conn).recompute_all_popularity() {
+            tracing::warn!(
+                error = %e,
+                "popularity full pass failed; retail popularity sort falls back"
+            );
+        }
+
         // ── Cache layer initialisation (read settings BEFORE moving conn) ──
         let redis_url = oz_core::Settings::get_redis_url(&conn).unwrap_or_else(|e| {
             tracing::warn!(error = %e, "failed to read redis_url setting, falling back to localhost");

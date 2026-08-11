@@ -110,6 +110,19 @@ impl AppState {
         migrations::run(&mut conn)
             .map_err(|e| AppError::Internal(format!("running migrations: {e}")))?;
 
+        // ── Popularity full pass (ADR #37) ────────────────────────────
+        // Materialize popularity scores right after migrations so product
+        // lookups rank recently-managed items from the first launch (sales
+        // come from sale_lines, edit events were seeded by migration 134,
+        // search events accumulate from launch). Local-only analytics — a
+        // failure must not block startup.
+        if let Err(e) = oz_core::db::Store::new(&conn).recompute_all_popularity() {
+            tracing::warn!(
+                error = %e,
+                "popularity full pass failed; product popularity sort falls back"
+            );
+        }
+
         // ── Session TTL ──────────────────────────────────────────────
         // Read from settings; default 24h. 0 or missing = no expiry.
         let session_ttl_seconds: i64 = oz_core::Settings::get(&conn, "session.ttl_seconds")

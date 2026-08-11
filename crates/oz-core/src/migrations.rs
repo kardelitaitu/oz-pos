@@ -783,6 +783,17 @@ pub const ALL: &[Migration] = &[
         id: "133_product_activity.sql",
         sql: include_str!("../migrations/133_product_activity.sql"),
     },
+    // ── ADR #37 backfill: seed popularity from pre-feature history ──
+    // product_activity starts empty on upgrade; 134 seeds one synthetic
+    // 'edit' event per product at its last update timestamp (within the
+    // decay window) so the retail grid's default popularity sort ranks
+    // recently-managed products from day one. Sales need no seeding — the
+    // full-catalog pass at store open reads sale_lines directly. Search
+    // history was never recorded, so that signal starts cold by design.
+    Migration {
+        id: "134_popularity_backfill.sql",
+        sql: include_str!("../migrations/134_popularity_backfill.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.
@@ -1123,6 +1134,93 @@ mod tests {
             fresh_schema, upgrade_schema,
             "fresh install and upgrade path diverged — schema drift (RUST-09/RUST-10)"
         );
+    }
+
+    // ── Backfill migration 134: seed popularity edit events ──
+    //
+    // On upgrade, product_activity starts empty so the popularity formula
+    // has no search/edit history. 134 seeds one synthetic 'edit' event per
+    // product at its most recent update timestamp (within the 90-day decay
+    // window), letting the retail grid's default popularity sort rank
+    // recently-managed products from day one.
+    #[test]
+    fn migration_134_backfills_edit_events_from_product_timestamps() {
+        // 1. Fully-migrated DB (as an upgrade would): 134 ran against an
+        //    empty catalog, so no rows were seeded.
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        // 2. Simulate a pre-existing catalog: products updated inside the
+        //    window, outside it, and one kept alive only by a recent price
+        //    change.
+        fn ts(days_ago: i64) -> String {
+            chrono::Utc::now()
+                .checked_sub_signed(chrono::Duration::days(days_ago))
+                .unwrap()
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+        }
+        // Capture once: the migration stores timestamps verbatim, so the
+        // assertions below must compare against the exact same strings.
+        let (recent_updated, old_updated, price_updated, price_created) =
+            (ts(2), ts(300), ts(10), ts(400));
+        conn.execute_batch(
+            &format!(
+                "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at, price_updated_at) VALUES
+                ('p-recent', 'SKU-RECENT', 'Recent', 1000, 'USD', '{price_created}', '{recent_updated}', ''),
+                ('p-old',    'SKU-OLD',    'Old',    1000, 'USD', '{price_created}', '{old_updated}', ''),
+                ('p-price',  'SKU-PRICE',  'Price',  1000, 'USD', '{price_created}', '{old_updated}', '{price_updated}');",
+            ),
+        )
+        .unwrap();
+
+        // 3. Mark 134 as not yet applied and re-run migrations (the upgrade
+        //    path that ships this migration on an existing store).
+        conn.execute(
+            "DELETE FROM schema_migrations WHERE id = '134_popularity_backfill.sql'",
+            [],
+        )
+        .unwrap();
+        run(&mut conn).unwrap();
+
+        // 4. Exactly the in-window products get one synthetic edit event,
+        //    dated at their most recent modification.
+        let mut stmt = conn
+            .prepare("SELECT sku, created_at FROM product_activity WHERE event_type = 'edit'")
+            .unwrap();
+        let rows: Vec<(String, String)> = stmt
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        drop(stmt);
+
+        let mut by_sku: std::collections::HashMap<String, String> = rows.into_iter().collect();
+        assert_eq!(
+            by_sku.len(),
+            2,
+            "backfill must seed exactly the in-window products (got: {by_sku:?})"
+        );
+        let recent = by_sku.remove("SKU-RECENT").expect("recent product seeded");
+        assert_eq!(
+            recent, recent_updated,
+            "event must be dated at the product's last update"
+        );
+        let price = by_sku.remove("SKU-PRICE").expect("price product seeded");
+        assert_eq!(
+            price, price_updated,
+            "price_updated_at wins when it is newer than updated_at"
+        );
+        assert!(
+            !by_sku.contains_key("SKU-OLD"),
+            "product last touched outside the decay window must not be seeded"
+        );
+
+        // 5. Idempotence: a second re-run must not duplicate rows.
+        run(&mut conn).unwrap();
+        let total: i64 = conn
+            .query_row("SELECT COUNT(*) FROM product_activity", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(total, 2, "migration 134 must run exactly once");
     }
 
     // ── Repair migration 120: re-seed default workspace instances ──

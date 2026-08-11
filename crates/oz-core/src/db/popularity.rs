@@ -249,7 +249,8 @@ impl Store<'_> {
         self.write_mean(MEAN_SEARCH, mean_search)?;
         self.write_mean(MEAN_EDITS, mean_edits)?;
 
-        // ── Write scores ──────────────────────────────────────────────
+        // ── Write scores (one transaction: the per-SKU updates are atomic) ─
+        let tx = self.conn.unchecked_transaction()?;
         for (sku, sr, sv, qr, qv, er, ev) in products {
             let score = crate::popularity::score_from_raw(
                 sr,
@@ -262,11 +263,12 @@ impl Store<'_> {
                 mean_search,
                 mean_edits,
             );
-            self.conn.execute(
+            tx.execute(
                 "UPDATE products SET popularity_score = ?1 WHERE sku = ?2",
                 params![score, sku],
             )?;
         }
+        tx.commit()?;
         Ok(())
     }
 }
@@ -429,6 +431,62 @@ mod tests {
             score_raw_share <= pending_influence + 1e-9
                 && pending_influence < crate::popularity::WEIGHT_SALES * seven_units,
             "backfilled score must reflect completed sales only (pending excluded)"
+        );
+    }
+
+    #[test]
+    fn full_pass_ranks_backfilled_edit_events_by_recency() {
+        // Day-one upgrade: migration 134 seeded one synthetic edit event per
+        // recently-touched product at its last update. With zero sales and
+        // zero searches the full pass must rank the most-recently managed
+        // product first, a product last touched 80 days ago below the
+        // catalog mean (stale), and an untouched product exactly at it.
+        let conn = fresh();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let ts = |days_ago: i64| {
+            chrono::Utc::now()
+                .checked_sub_signed(chrono::Duration::days(days_ago))
+                .unwrap()
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+        };
+        conn.execute_batch(
+            &format!(
+                "INSERT INTO products (id, sku, name, price_minor, currency, created_at, updated_at) VALUES
+                ('p-a', 'SKU-A', 'Managed today',    1000, 'USD', '{now}', '{now}'),
+                ('p-b', 'SKU-B', 'Touched 80d ago',  1000, 'USD', '{}', '{}'),
+                ('p-c', 'SKU-C', 'Never touched',    1000, 'USD', '{}', '{}');",
+                ts(400),
+                ts(80),
+                ts(400),
+                ts(400),
+            ),
+        )
+        .unwrap();
+        // The ledger rows migration 134 would have written.
+        conn.execute_batch(&format!(
+            "INSERT INTO product_activity (id, sku, event_type, created_at) VALUES
+                ('backfill-edit-p-a', 'SKU-A', 'edit', '{now}'),
+                ('backfill-edit-p-b', 'SKU-B', 'edit', '{}');",
+            ts(80),
+        ))
+        .unwrap();
+
+        let store = Store::new(&conn);
+        store.recompute_all_popularity().unwrap();
+
+        let score = |sku: &str| -> f64 {
+            conn.query_row(
+                "SELECT popularity_score FROM products WHERE sku = ?1",
+                params![sku],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        let (a, b, c) = (score("SKU-A"), score("SKU-B"), score("SKU-C"));
+        assert!(
+            a > c && c > b && a > 0.0,
+            "day-one sort must rank recently-managed products first \
+             (A={a}, C={c}, B={b})"
         );
     }
 }
