@@ -33,7 +33,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { minorUnitExponent } from '@/types/domain';
-import { sumRevenueByCurrency } from './revenueTotals';
+import { sumGrossProfitByCurrency, sumRevenueByCurrency } from './revenueTotals';
 import './SalesReportScreen.css';
 
 const PIE_COLORS = [
@@ -475,6 +475,23 @@ export default function SalesReportScreen() {
               </span>
             )}
           </span>
+          {/* HPP exposure: gross profit only exists on the daily granularity */}
+          {view === 'daily' && revenueData.length > 0 && (() => {
+            const profitTotals = sumGrossProfitByCurrency(revenueData);
+            return (
+              <span>
+                <Localized id="sales-report-total-gross-profit">Gross Profit</Localized>:{' '}
+                {profitTotals.map((t) => fmtCurrency(t.gross_profit_minor, t.currency)).join(' · ')}
+                <span className={`comparison-delta ${profitTotals.every((t) => t.gross_profit_minor >= 0) ? 'comparison-delta--positive' : 'comparison-delta--negative'}`}>
+                  <span>
+                    {profitTotals.length === 1 && totalRevenue > 0
+                      ? `(${((profitTotals[0]!.gross_profit_minor / totalRevenue) * 100).toFixed(1)}%)`
+                      : ''}
+                  </span>
+                </span>
+              </span>
+            );
+          })()}
         </div>
       </Card>
 

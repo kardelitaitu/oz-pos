@@ -6,6 +6,12 @@ export interface DailyRevenueRow {
   total_minor: number;
   currency: string;
   sale_count: number;
+  /** Cost of goods sold in minor units (HPP × qty over completed lines). */
+  cogs_minor: number;
+  /** Gross profit in minor units: revenue − COGS. */
+  gross_profit_minor: number;
+  /** Gross margin as a percentage of revenue. */
+  gross_margin_percent: number;
 }
 
 /** Weekly revenue aggregate for a date range. */

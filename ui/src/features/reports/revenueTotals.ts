@@ -20,3 +20,35 @@ export function sumRevenueByCurrency(
   }
   return Array.from(totals, ([currency, total_minor]) => ({ currency, total_minor }));
 }
+
+/** One currency's summed gross profit and COGS for a report period. */
+export interface GrossProfitTotal {
+  currency: string;
+  gross_profit_minor: number;
+  cogs_minor: number;
+}
+
+/**
+ * Sum gross profit and COGS per currency for daily revenue rows (the only
+ * granularity that carries HPP figures). Rows without the fields (weekly /
+ * monthly) contribute zero — never summed across currencies.
+ */
+export function sumGrossProfitByCurrency(
+  rows: ReadonlyArray<{
+    currency: string;
+    gross_profit_minor?: number;
+    cogs_minor?: number;
+  }>,
+): GrossProfitTotal[] {
+  const profit = new Map<string, number>();
+  const cogs = new Map<string, number>();
+  for (const row of rows) {
+    profit.set(row.currency, (profit.get(row.currency) ?? 0) + (row.gross_profit_minor ?? 0));
+    cogs.set(row.currency, (cogs.get(row.currency) ?? 0) + (row.cogs_minor ?? 0));
+  }
+  return Array.from(profit, ([currency, gross_profit_minor]) => ({
+    currency,
+    gross_profit_minor,
+    cogs_minor: cogs.get(currency) ?? 0,
+  }));
+}

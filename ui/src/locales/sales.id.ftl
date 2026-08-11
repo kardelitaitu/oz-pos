@@ -12,6 +12,7 @@ sales-report-end-date = Tanggal Akhir
 sales-report-apply = Terapkan
 sales-report-total-revenue = Total Pendapatan
 sales-report-total-orders = Total Pesanan
+sales-report-total-gross-profit = Laba Kotor:
 sales-report-export-csv = Ekspor CSV
 sales-report-export-pdf = Ekspor PDF
 

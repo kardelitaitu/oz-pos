@@ -28,6 +28,7 @@ sales-report-revenue-chart = Revenue
 sales-report-revenue-label = Revenue (minor units)
 sales-report-total-revenue = Total
 sales-report-total-orders = Orders
+sales-report-total-gross-profit = Gross Profit
 sales-report-category-breakdown = By Category
 sales-report-top-products = Top Products
 sales-report-rank = #
@@ -103,12 +104,17 @@ vi.mock('@/features/reports/SalesReportScreen.css', () => ({}));
 
 // ── Test helpers ──────────────────────────────────────────────────
 
-function buildDailyRevenue(overrides: Partial<{ date: string; total_minor: number; currency: string; sale_count: number }> = {}) {
+function buildDailyRevenue(overrides: Partial<{ date: string; total_minor: number; currency: string; sale_count: number; cogs_minor: number; gross_profit_minor: number; gross_margin_percent: number }> = {}) {
+  const total_minor = overrides.total_minor ?? 150000;
+  const cogs_minor = overrides.cogs_minor ?? 60000;
   return {
     date: overrides.date ?? '2026-07-01',
-    total_minor: overrides.total_minor ?? 150000,
+    total_minor,
     currency: overrides.currency ?? 'USD',
     sale_count: overrides.sale_count ?? 12,
+    cogs_minor,
+    gross_profit_minor: overrides.gross_profit_minor ?? total_minor - cogs_minor,
+    gross_margin_percent: overrides.gross_margin_percent ?? 60,
   };
 }
 
@@ -278,6 +284,23 @@ describe('SalesReportScreen', () => {
       expect(screen.getByText(/\$3,500\.00/)).toBeTruthy();
       // 8 orders (5 + 3)
       expect(screen.getByText(/8/)).toBeTruthy();
+    });
+  });
+
+  it('shows gross profit total in daily view (HPP exposure)', async () => {
+    mockGetDailyRevenue.mockResolvedValue([
+      buildDailyRevenue({ total_minor: 250000, cogs_minor: 100000, sale_count: 5 }),
+      buildDailyRevenue({ total_minor: 100000, cogs_minor: 40000, sale_count: 3 }),
+    ]);
+    mockGetTopProducts.mockResolvedValue([]);
+    mockGetHourlyHeatmap.mockResolvedValue([]);
+    mockGetCategoryBreakdown.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => {
+      // Gross profit = (250000 − 100000) + (100000 − 40000) = 210000 → $2,100.00
+      expect(screen.getByText(/\$2,100\.00/)).toBeTruthy();
+      // Margin % = 210000 / 350000 = 60%
+      expect(screen.getByText(/\(60\.0%\)/)).toBeTruthy();
     });
   });
 

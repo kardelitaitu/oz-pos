@@ -12,6 +12,7 @@ sales-report-hourly-heatmap = Busiest Hours
 sales-report-top-products = Top Products
 sales-report-total-revenue = Total:
 sales-report-total-orders = Orders:
+sales-report-total-gross-profit = Gross Profit:
 sales-report-export-csv = Export CSV
 sales-report-revenue-label = Revenue
 sales-report-rank = #

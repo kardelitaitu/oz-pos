@@ -16,6 +16,13 @@ pub struct DailyRevenueRow {
     pub currency: String,
     /// Number of completed sales on this date.
     pub sale_count: i64,
+    /// Cost of goods sold in minor units (Σ current cost × qty over the
+    /// date's completed-sale lines; 0 when no costs are recorded).
+    pub cogs_minor: i64,
+    /// Gross profit in minor units: revenue − COGS.
+    pub gross_profit_minor: i64,
+    /// Gross margin as a percentage of revenue; 0.0 when revenue is 0.
+    pub gross_margin_percent: f64,
 }
 
 /// Weekly revenue aggregation.
@@ -140,20 +147,44 @@ impl Store<'_> {
         start_date: &str,
         end_date: &str,
     ) -> Result<Vec<DailyRevenueRow>, CoreError> {
+        // COGS is a correlated subquery: joining sale_lines directly would
+        // multiply revenue/count by the line count per sale, so revenue stays
+        // on the sales table and only the cost side joins the lines. Costs
+        // use the product's current cost_minor (reporting-layer semantics).
         let mut stmt = self.conn.prepare(
-            "SELECT DATE(created_at) AS date, SUM(total_minor) AS total_minor,
-                    currency, COUNT(*) AS sale_count
-             FROM sales
-             WHERE status = 'completed' AND DATE(created_at) BETWEEN ?1 AND ?2
-             GROUP BY DATE(created_at), currency
+            "SELECT DATE(s.created_at) AS date,
+                    SUM(s.total_minor) AS total_minor,
+                    s.currency AS currency,
+                    COUNT(*) AS sale_count,
+                    (SELECT COALESCE(SUM(COALESCE(p2.cost_minor, 0) * sl2.qty), 0)
+                     FROM sale_lines sl2
+                     JOIN sales s2 ON sl2.sale_id = s2.id
+                     LEFT JOIN products p2 ON sl2.sku = p2.sku
+                     WHERE s2.status = 'completed'
+                       AND s2.currency = s.currency
+                       AND DATE(s2.created_at) = DATE(s.created_at)) AS cogs_minor
+             FROM sales s
+             WHERE s.status = 'completed' AND DATE(s.created_at) BETWEEN ?1 AND ?2
+             GROUP BY DATE(s.created_at), s.currency
              ORDER BY date ASC",
         )?;
         let rows = stmt.query_map(params![start_date, end_date], |row| {
+            let total_minor: i64 = row.get("total_minor")?;
+            let cogs_minor: i64 = row.get("cogs_minor")?;
+            let gross_profit_minor = total_minor - cogs_minor;
+            let gross_margin_percent = if total_minor > 0 {
+                gross_profit_minor as f64 / total_minor as f64 * 100.0
+            } else {
+                0.0
+            };
             Ok(DailyRevenueRow {
                 date: row.get("date")?,
-                total_minor: row.get("total_minor")?,
+                total_minor,
                 currency: row.get("currency")?,
                 sale_count: row.get("sale_count")?,
+                cogs_minor,
+                gross_profit_minor,
+                gross_margin_percent,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
@@ -540,6 +571,38 @@ mod tests {
         assert_eq!(rows[0].total_minor, 1150);
         assert_eq!(rows[0].sale_count, 2);
         assert_eq!(rows[0].currency, "USD");
+        // No costs were set on the seeded products → COGS 0, profit = revenue.
+        assert_eq!(rows[0].cogs_minor, 0);
+        assert_eq!(rows[0].gross_profit_minor, 1150);
+        assert_eq!(rows[0].gross_margin_percent, 100.0);
+    }
+
+    #[test]
+    fn daily_revenue_gross_profit_from_product_costs() {
+        let conn = fresh();
+        // Seed a sale with a costed product and one with no cost at all.
+        seed_completed_sale(&conn, "STEAK", 2, 2500);
+        conn.execute(
+            "UPDATE products SET cost_minor = 800 WHERE sku = 'STEAK'",
+            [],
+        )
+        .unwrap();
+        seed_completed_sale(&conn, "FREE", 1, 500);
+
+        let rows = store(&conn)
+            .daily_revenue("2000-01-01", "2099-12-31")
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        // Revenue 5500, COGS 2 × 800 = 1600 → profit 3900 (~70.9%).
+        assert_eq!(rows[0].total_minor, 5500);
+        assert_eq!(rows[0].cogs_minor, 1600);
+        assert_eq!(rows[0].gross_profit_minor, 3900);
+        let expected = 3900.0 / 5500.0 * 100.0;
+        assert!(
+            (rows[0].gross_margin_percent - expected).abs() < 1e-9,
+            "margin was {}",
+            rows[0].gross_margin_percent
+        );
     }
 
     // ── Weekly revenue ─────────────────────────────────────────────

@@ -439,6 +439,9 @@ mod tests {
                 total_minor: 1000,
                 currency: "USD".into(),
                 sale_count: 1,
+                cogs_minor: 0,
+                gross_profit_minor: 1000,
+                gross_margin_percent: 100.0,
             }],
             weekly_revenue: vec![crate::db::reports::WeeklyRevenueRow {
                 week_start: "2026-01-01".into(),
