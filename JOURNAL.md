@@ -4029,3 +4029,45 @@ Tests: desktop staff 40/40, tablet staff 19/19, UI screen 17/17,
 contract 4/4; oz-core 1727/1727, platform-core 237/237, platform-sync
 276/276; fmt/clippy (changed area)/bundle-parity/drift clean. Two pre-existing
 clippy errors in topology.rs (untouched) noted.
+
+### 2026-08-11 — 0048 2c: retire cashier/kitchen roles + seed sweep
+
+Problem: the five-role taxonomy (Owner/Admin/Auditor/Manager/Staff/Custom)
+was live, but the legacy `role-cashier` / `role-kitchen` role rows, presets,
+constants, and ~22 seed fixtures still referenced them — the taxonomy was
+half-retired. Migration 129 removed the rows, so every fixture seeding those
+ids violated the FK at test time.
+
+Solution: completed the retirement in one sweep:
+- Migration `129` re-points `users.role_id` and `assignments.role_id` from
+  cashier/kitchen to `role-staff` and deletes the role rows (idempotent).
+- platform-core: CASHIER/KITCHEN constants, presets, and their index
+  assertions removed; regression test pins no preset id is cashier/kitchen.
+- Seed sweep with two mappings: **staff-like fixtures → `role-staff`**
+  (shifts, sales, reports, session, integrations, auth, tax/settings — the
+  latter two because staff still lacks settings:*) and **limited-access
+  assertions → a narrow custom `role-lite`** (gate/loyalty/inventory/customer/
+  category/transfer/topology/workspace/staff denial tests, which pinned
+  cashier's narrow grants that role-staff now supersedes).
+- The staff command tests needed a second distinction: update-target args use
+  `role-lite` (same role → the incomplete-profile gate skips), create-target
+  args use `role-staff` (an existing preset).
+- gate_audit census pins for staff.rs bumped 5→6: 0049 cycle 3's
+  `get_staff_profile_scoped` added a gate call without updating the pin —
+  the deliberate-pin review signal caught it.
+
+Decisions: (1) `role-lite` is a per-fixture custom role with exactly the
+grant the test needs, NOT a new taxonomy role — it is never seeded by
+presets. (2) Kept the migration-128 round-trip test's legacy cashier/kitchen
+seed data — it tests the migration itself and is the correct historical
+record. (3) `modules/staff` CASHIER/KITCHEN consts were dead code — removed.
+(4) Did NOT fix the pre-existing topology.rs clippy errors (MutexGuard across
+await, assert_eq literal bool) — unchanged from HEAD, outside this slice.
+
+Commits: <pending>
+Tests: oz-core 1728/1728, platform-core 236/236, platform-sync, both clients
+(890 + 428), oz-api/oz-cli, gate_audit 3/3; fmt/clippy (changed area)/drift
+guard clean. Note: `modules-inventory` currently does not compile — another
+agent's in-flight ADR #36/37 field additions (models.rs has new Product
+fields, repository.rs not yet updated); unrelated to this slice, left
+untouched.
