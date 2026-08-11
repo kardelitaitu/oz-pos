@@ -875,12 +875,15 @@ fn run_bootstrap_owner(
 
     tracing::info!(username = %username, "owner account bootstrapped");
 
+    let permissions = role.permission_keys();
+
     Ok(BootstrapOwnerResult {
         session: oz_core::auth::LoginSession {
             user_id: user.id,
             display_name: user.display_name,
             role_name: role.name,
             role_id: role.id,
+            permissions,
         },
         // The command wrapper attaches the picker ticket after the pure
         // function returns (it needs the per-process secret).
@@ -1921,12 +1924,14 @@ mod tests {
                 display_name: "Owner".into(),
                 role_name: "Owner".into(),
                 role_id: "role-owner".into(),
+                permissions: vec!["*".into()],
             },
             picker_ticket: String::new(),
         };
         let json = serde_json::to_value(&result).unwrap();
         assert_eq!(json["session"]["user_id"], "u1");
         assert_eq!(json["session"]["role_name"], "Owner");
+        assert_eq!(json["session"]["permissions"], serde_json::json!(["*"]));
     }
 
     #[test]
@@ -1937,6 +1942,7 @@ mod tests {
                 display_name: "Alice".into(),
                 role_name: "Owner".into(),
                 role_id: "role-owner".into(),
+                permissions: vec![],
             },
             picker_ticket: String::new(),
         };

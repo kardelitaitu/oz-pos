@@ -49,6 +49,18 @@ impl Role {
         has_permission(&granted, required)
     }
 
+    /// The raw permission keys granted by this role, verbatim from the
+    /// `permissions` JSON (e.g. `["sales:process"]` or `["*"]`).
+    ///
+    /// Serializing this list on the login session lets the frontend mirror
+    /// [`Self::authorize`]'s wildcard semantics (`*`, `<domain>:*`) instead
+    /// of inferring access from role-name strings. Malformed JSON yields an
+    /// empty list — a role whose grants cannot be parsed authorizes nothing.
+    #[must_use]
+    pub fn permission_keys(&self) -> Vec<String> {
+        serde_json::from_str(&self.permissions).unwrap_or_default()
+    }
+
     /// Authorize or return AuthorizationError.
     pub fn authorize(&self, required: &str) -> Result<(), AuthorizationError> {
         if self.has_permission(required) {
@@ -180,5 +192,32 @@ impl From<String> for UserId {
 impl From<&str> for UserId {
     fn from(s: &str) -> Self {
         Self(s.to_owned())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn permission_keys_returns_verbatim_grants() {
+        let role = Role::new("role-x", "X")
+            .with_permissions_json(r##"["sales:process", "analytics:view"]"##);
+        assert_eq!(
+            role.permission_keys(),
+            vec!["sales:process", "analytics:view"]
+        );
+    }
+
+    #[test]
+    fn permission_keys_preserves_global_wildcard() {
+        let role = Role::new("role-owner", "Owner").with_permissions_json(r##"["*"]"##);
+        assert_eq!(role.permission_keys(), vec!["*"]);
+    }
+
+    #[test]
+    fn permission_keys_malformed_json_is_empty() {
+        let role = Role::new("role-x", "X").with_permissions_json("not-json");
+        assert!(role.permission_keys().is_empty());
     }
 }

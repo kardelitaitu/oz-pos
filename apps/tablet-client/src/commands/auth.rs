@@ -221,12 +221,17 @@ pub async fn staff_login(
         now_ts + picker_ticket::PICKER_TICKET_TTL_SECS,
     );
 
+    // Granted keys ride the session so UI gates mirror the backend
+    // registry (wildcards included) instead of role-name strings.
+    let permissions = role.permission_keys();
+
     Ok(StaffLoginResult {
         session: LoginSession {
             user_id: user.id,
             display_name: user.display_name,
             role_name: role.name,
             role_id: role.id,
+            permissions,
         },
         picker_ticket,
     })
@@ -459,6 +464,7 @@ mod tests {
                 display_name: "Alice".into(),
                 role_name: "Manager".into(),
                 role_id: "r1".into(),
+                permissions: vec!["analytics:view".into()],
             },
             picker_ticket: String::new(),
         };
@@ -477,6 +483,7 @@ mod tests {
                 display_name: "Bob".into(),
                 role_name: "Cashier".into(),
                 role_id: "r2".into(),
+                permissions: vec![],
             },
             picker_ticket: String::new(),
         };
@@ -552,6 +559,44 @@ mod tests {
             .as_deref(),
             Some("user-owner"),
             "login must mint a ticket bound to the authenticated user"
+        );
+    }
+
+    #[tokio::test]
+    async fn staff_login_returns_granted_permission_keys() {
+        // Parity with the desktop client: the session carries the role's
+        // granted keys verbatim (Owner's preset grants the global `"*"`
+        // wildcard) so UI gates can mirror the backend registry.
+        let conn = migrations::fresh_db();
+        let store = Store::new(&conn);
+        store.seed_default_roles().unwrap();
+        let hash = oz_core::auth::hash_pin("1234").unwrap();
+        conn.execute(
+            "INSERT INTO users (id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at)
+             VALUES ('user-owner', 'owner', ?1, 'Owner', 'role-owner', 1, '2026-07-31T00:00:00.000Z', '2026-07-31T00:00:00.000Z')",
+            [hash],
+        )
+        .unwrap();
+        let app = tauri::test::mock_builder()
+            .manage(AppState::for_test_with_conn(conn))
+            .build(tauri::generate_context!())
+            .unwrap();
+
+        let result = staff_login(
+            StaffLoginArgs {
+                username: "owner".into(),
+                pin: "1234".into(),
+                device_id: None,
+            },
+            app.state(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            result.session.permissions,
+            vec!["*".to_string()],
+            "owner login must carry the role's granted keys (global wildcard)"
         );
     }
 
