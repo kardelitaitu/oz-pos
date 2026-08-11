@@ -445,37 +445,81 @@ export default function SalesHistoryScreen() {
     return s ? s.display_name : userId.slice(0, 8);
   }, [staff]);
 
-  const handleExportCsv = useCallback(() => {
-    const headers = [
-      l10n.getString('sales-history-export-id'),
-      l10n.getString('sales-history-export-date'),
-      l10n.getString('sales-history-export-total'),
-      l10n.getString('sales-history-export-items'),
-      l10n.getString('sales-history-export-status'),
-      l10n.getString('sales-history-export-payment'),
-      l10n.getString('sales-history-export-cashier'),
-    ];
-    // Export ALL filtered results, not just current page.
-    const rows = filteredSales.map((s) => [
-      s.id,
-      new Date(s.createdAt).toLocaleString(),
-      formatMoney(s.total),
-      String(s.lineCount),
-      s.status,
-      s.paymentMethod ?? '',
-      cashierName(s.userId),
-    ]);
-    const bom = '\uFEFF';
-    const csv = [headers.join(','), ...rows.map((r) => r.map((c) => `"${c}"`).join(','))].join('\n');
-    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `sales-export-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    a.remove();
-  }, [filteredSales, cashierName, l10n]);
+  const [csvExporting, setCsvExporting] = useState(false);
+
+  const handleExportCsv = useCallback(async () => {
+    if (csvExporting) return;
+    setCsvExporting(true);
+    try {
+      const headers = [
+        l10n.getString('sales-history-export-id'),
+        l10n.getString('sales-history-export-date'),
+        l10n.getString('sales-history-export-total'),
+        l10n.getString('sales-history-export-items'),
+        l10n.getString('sales-history-export-status'),
+        l10n.getString('sales-history-export-payment'),
+        l10n.getString('sales-history-export-cashier'),
+        l10n.getString('sales-history-export-sku'),
+        l10n.getString('sales-history-export-product'),
+        l10n.getString('sales-history-export-qty'),
+        l10n.getString('sales-history-export-unit-price'),
+        l10n.getString('sales-history-export-unit-cost'),
+        l10n.getString('sales-history-export-line-margin'),
+        l10n.getString('sales-history-export-margin-pct'),
+      ];
+      // Export ALL filtered results, not just current page — one CSV row per
+      // sale line, with per-line cost (HPP) and margin from the report layer.
+      const withLines = await Promise.all(
+        filteredSales.map(async (s) => {
+          const margins = sessionToken
+            ? await getSaleLineMarginsScoped(sessionToken, s.id).catch(() => [] as SaleLineMarginDto[])
+            : [];
+          return { sale: s, margins };
+        }),
+      );
+      const rows: string[][] = [];
+      for (const { sale: s, margins } of withLines) {
+        const context = [
+          s.id,
+          new Date(s.createdAt).toLocaleString(),
+          formatMoney(s.total),
+          String(s.lineCount),
+          s.status,
+          s.paymentMethod ?? '',
+          cashierName(s.userId),
+        ];
+        if (margins.length === 0) {
+          // Margins unavailable (e.g. IPC down) — emit the summary row alone.
+          rows.push([...context, '', '', '', '', '', '', '']);
+          continue;
+        }
+        for (const l of margins) {
+          rows.push([
+            ...context,
+            l.sku,
+            l.name,
+            String(l.qty),
+            formatMoney({ minor_units: l.unit_price_minor, currency: s.total.currency }),
+            formatMoney({ minor_units: l.unit_cost_minor, currency: s.total.currency }),
+            formatMoney({ minor_units: l.margin_minor, currency: s.total.currency }),
+            `${l.margin_percent.toFixed(1)}%`,
+          ]);
+        }
+      }
+      const bom = '\uFEFF';
+      const csv = [headers.join(','), ...rows.map((r) => r.map((c) => `"${c}"`).join(','))].join('\n');
+      const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `sales-export-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      a.remove();
+    } finally {
+      setCsvExporting(false);
+    }
+  }, [filteredSales, cashierName, l10n, sessionToken, csvExporting]);
 
   // ── Focus trap refs ───────────────────────────────
   const voidPanelRef = useRef<HTMLDivElement>(null);
@@ -529,8 +573,12 @@ export default function SalesHistoryScreen() {
         </div>
         <div className="sales-history-header-actions">
           <Localized id="sales-history-export-csv">
-            <button type="button" className="sales-history-export-btn" onClick={handleExportCsv}>
-              <span>Export CSV</span>
+            <button type="button" className="sales-history-export-btn" onClick={handleExportCsv} disabled={csvExporting}>
+              {csvExporting ? (
+                <Localized id="sales-history-exporting"><span>Exporting…</span></Localized>
+              ) : (
+                <span>Export CSV</span>
+              )}
             </button>
           </Localized>
         </div>

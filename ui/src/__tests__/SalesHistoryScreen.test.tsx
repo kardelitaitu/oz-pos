@@ -190,6 +190,45 @@ describe('SalesHistoryScreen', () => {
     });
   });
 
+  it('exports per-line cost and margin columns to CSV', async () => {
+    const user = userEvent.setup();
+    mockListSales.mockResolvedValue([sampleSales[0]!]);
+    mockGetSaleLineMargins.mockResolvedValue([
+      {
+        sale_line_id: 'line-1', sku: 'SKU-001', name: 'Widget', qty: 2,
+        unit_price_minor: 25000, line_total_minor: 50000,
+        unit_cost_minor: 15000, margin_minor: 20000, margin_percent: 40,
+      },
+    ]);
+    const createUrl = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake');
+    const revokeUrl = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    renderWithFluentSync(<SalesHistoryScreen />, salesFtl, sharedFtl);
+    await waitFor(() => expect(screen.getByText('Export CSV')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Export CSV' }));
+    await waitFor(() => expect(clickSpy).toHaveBeenCalled());
+    const blob = createUrl.mock.calls[0]![0] as Blob;
+    // jsdom's Blob lacks .text() — read via FileReader.
+    const text = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(blob);
+    });
+    // New per-line headers (header line is unquoted, data cells are quoted)
+    expect(text).toContain('Cashier,SKU,Product,Qty,Unit Price,Unit Cost,Line Margin,Margin %');
+    // Per-line row: sale context + cost/margin (HPP 15000 IDR, margin 40%)
+    expect(text).toContain('"SKU-001"');
+    expect(text).toContain('"Widget"');
+    expect(text).toContain('"Rp 25.000"');
+    expect(text).toContain('"Rp 15.000"');
+    expect(text).toContain('"Rp 20.000"');
+    expect(text).toContain('"40.0%"');
+    createUrl.mockRestore();
+    revokeUrl.mockRestore();
+    clickSpy.mockRestore();
+  });
+
   // ── Detail modal ─────────────────────────────────────────────
 
   it('opens detail modal when View is clicked', async () => {

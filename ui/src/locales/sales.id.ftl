@@ -345,6 +345,14 @@ sales-history-export-items = Item
 sales-history-export-status = Status
 sales-history-export-payment = Pembayaran
 sales-history-export-cashier = Kasir
+sales-history-export-sku = SKU
+sales-history-export-product = Produk
+sales-history-export-qty = Qty
+sales-history-export-unit-price = Harga Satuan
+sales-history-export-unit-cost = HPP Satuan
+sales-history-export-line-margin = Margin Baris
+sales-history-export-margin-pct = Margin %
+sales-history-exporting = Mengekspor…
 sales-history-pull-to-refresh = Tarik ke bawah untuk memperbarui
 sales-history-release-to-refresh = Lepaskan untuk memperbarui
 

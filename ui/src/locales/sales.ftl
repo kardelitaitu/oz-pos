@@ -314,6 +314,14 @@ sales-history-export-items = Items
 sales-history-export-status = Status
 sales-history-export-payment = Payment
 sales-history-export-cashier = Cashier
+sales-history-export-sku = SKU
+sales-history-export-product = Product
+sales-history-export-qty = Qty
+sales-history-export-unit-price = Unit Price
+sales-history-export-unit-cost = Unit Cost
+sales-history-export-line-margin = Line Margin
+sales-history-export-margin-pct = Margin %
+sales-history-exporting = Exporting…
 sales-history-pull-to-refresh = Pull down to refresh
 sales-history-release-to-refresh = Release to refresh
 
