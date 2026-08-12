@@ -174,6 +174,15 @@ impl Store<'_> {
                 message: "customer name must not be empty".into(),
             });
         }
+        if name.len() > 255 {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: format!(
+                    "customer name must not exceed 255 characters, got {}",
+                    name.len()
+                ),
+            });
+        }
 
         let id = uuid::Uuid::now_v7().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
@@ -219,6 +228,15 @@ impl Store<'_> {
             return Err(CoreError::Validation {
                 field: "name",
                 message: "customer name must not be empty".into(),
+            });
+        }
+        if name.len() > 255 {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: format!(
+                    "customer name must not exceed 255 characters, got {}",
+                    name.len()
+                ),
             });
         }
 

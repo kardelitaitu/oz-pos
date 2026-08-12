@@ -347,10 +347,22 @@ impl Store<'_> {
                 message: "SKU must not be empty".into(),
             });
         }
+        if sku.len() > 50 {
+            return Err(CoreError::Validation {
+                field: "sku",
+                message: format!("SKU must not exceed 50 characters, got {}", sku.len()),
+            });
+        }
         if name.trim().is_empty() {
             return Err(CoreError::Validation {
                 field: "name",
                 message: "name must not be empty".into(),
+            });
+        }
+        if name.len() > 255 {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: format!("name must not exceed 255 characters, got {}", name.len()),
             });
         }
         if price.minor_units < 0 {
@@ -1038,10 +1050,22 @@ impl Store<'_> {
                 message: "SKU must not be empty".into(),
             });
         }
+        if sku.len() > 50 {
+            return Err(CoreError::Validation {
+                field: "sku",
+                message: format!("SKU must not exceed 50 characters, got {}", sku.len()),
+            });
+        }
         if name.trim().is_empty() {
             return Err(CoreError::Validation {
                 field: "name",
                 message: "name must not be empty".into(),
+            });
+        }
+        if name.len() > 255 {
+            return Err(CoreError::Validation {
+                field: "name",
+                message: format!("name must not exceed 255 characters, got {}", name.len()),
             });
         }
         if price.minor_units < 0 {

@@ -317,10 +317,28 @@ impl Store<'_> {
                 message: "username must not be empty".into(),
             });
         }
+        if username.len() > 100 {
+            return Err(CoreError::Validation {
+                field: "username",
+                message: format!(
+                    "username must not exceed 100 characters, got {}",
+                    username.len()
+                ),
+            });
+        }
         if display_name.trim().is_empty() {
             return Err(CoreError::Validation {
                 field: "display_name",
                 message: "display name must not be empty".into(),
+            });
+        }
+        if display_name.len() > 255 {
+            return Err(CoreError::Validation {
+                field: "display_name",
+                message: format!(
+                    "display name must not exceed 255 characters, got {}",
+                    display_name.len()
+                ),
             });
         }
 
