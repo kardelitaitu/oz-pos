@@ -4775,3 +4775,18 @@ Two regression pins:
 **Commits:** (pending)
 **Tests:** audit 4/4 (+2) · editor 541/541 · full UI suite 4,975/4,975 · typecheck clean · eslint 0 errors (10 pre-existing warnings, none new) · i18n lint clean.
 **Risks / follow-ups:** the setter-name filter (/History|Redo|Undo/i) is the declared coverage boundary — a stack named entirely differently (e.g. `setSnapshots`) would not match; that's the documented limitation of a name-based drift guard, and the topology's `setHistory`/`setRedo` are the canonical names to copy. CustomerManagementScreen's `setHistory(null)/setHistory(h)` is correctly NOT flagged (direct-value state, no updater push).
+
+## 2026-08-12 — Source-audit scanner extracted into a shared test helper
+
+**Problem:** The history-entry audit (f7d6fe84 → 50133b52) grew its own comment/string stripper, balanced updater extractor, original-index mapper and whole-tree walker — ~120 lines of copy-paste bait. The next drift-guard audit over source text would re-implement the same fragile scanner, and every copy would drift independently.
+
+**Solution:** `ui/src/__tests__/test-utils/sourceAudit.ts` — the shared scanner, moved verbatim and exported: `stripCommentsAndStrings` (with the origIndexAt original-index map), `extractUpdaterBodies` (balanced `set<…>((prev) => …)` extraction), `scanUpdaters` (one-stop: strip → extract → map indices back to the original source), `lineNumberAt`, and `collectSourceFiles` (recursive walk excluding __tests__/node_modules/hidden/.d.ts). `topologyHistoryEntryAudit.test.ts` now imports these and keeps only its domain rule (History/Redo/Undo-named setters pushing via `...prev`; historyEntry-or-declared-exception; the 4-site + retail-exception baselines). The helper is unit-tested on its own (8 tests).
+
+**TDD rigor:**
+- Red: 8 helper unit tests (module-missing Red). Two test bugs surfaced and were fixed (the first emitted char after a line comment is the preserved newline, so origIndexAt[0] maps to the newline not 's'; and backslash Windows paths broke an endsWith assertion — normalize before suffix checks).
+- Green: helper module + audit refactor. One refactor regression caught by the safety net: I switched the tree scan from `relative(UI_SRC, file)` to absolute paths, breaking the retail exception match — the two whole-tree tests failed, fixed by restoring the relative conversion.
+- Mutation re-verified: re-running the raw-`setRedo`-in-RetailPosScreen experiment against the REFACTORED audit still fails with the identical `RetailPosScreen.tsx:352` message — the extraction is behavior-identical through the shared helper.
+
+**Commits:** (pending)
+**Tests:** sourceAudit 8/8 (+8) · audit 4/4 · full UI suite 4,983/4,983 · typecheck clean · eslint 0 errors (10 pre-existing warnings, none new) · i18n lint clean.
+**Risks / follow-ups:** none. Future drift-guard audits over source text should import from test-utils/sourceAudit instead of re-implementing the scanner.

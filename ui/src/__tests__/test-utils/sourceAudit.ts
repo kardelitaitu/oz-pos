@@ -1,0 +1,139 @@
+// ── Shared source-audit scanner ────────────────────────────────────
+//
+// Static source-scanning primitives for drift-guard audits
+// (topologyHistoryEntryAudit, …): comment/string stripping with an
+// original-index map, balanced updater-body extraction, line numbers, and
+// the recursive whole-tree file walk. Audits that scan source text should
+// use these instead of re-implementing their own stripper/extractor, so
+// every audit shares one (unit-tested) scanner.
+//
+// Usage:
+//   import { scanUpdaters, lineNumberAt } from '@/__tests__/test-utils/sourceAudit';
+
+import { readdirSync } from 'fs';
+import { join } from 'path';
+//
+//   const src = readFileSync(file, 'utf-8');
+//   const sites = scanUpdaters(src).filter((s) => s.body.includes('...prev'));
+//   // sites[i].index is an ORIGINAL-source index — use lineNumberAt(src, i).
+
+/** One `set<…>((prev) => …)` updater occurrence. */
+export interface UpdaterSite {
+  /** The setter's name (e.g. `setHistory`, `setRedo`). */
+  setter: string;
+  /** The updater body — everything after `((prev) => ` up to its close. */
+  body: string;
+  /** ORIGINAL-source index of the setter's first character. */
+  index: number;
+}
+
+/** Remove comments and string literals so structural scanning cannot be
+ *  unbalanced by prose parens inside comments or string content. Also
+ *  returns origIndexAt[i] — the ORIGINAL source index of the i-th emitted
+ *  char — so scan positions can be mapped back for accurate line numbers. */
+export function stripCommentsAndStrings(src: string): { stripped: string; origIndexAt: number[] } {
+  let out = '';
+  const origIndexAt: number[] = [];
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i]!;
+    const n = src[i + 1];
+    if (c === '/' && n === '/') {
+      while (i < src.length && src[i] !== '\n') i += 1;
+    } else if (c === '/' && n === '*') {
+      i += 2;
+      while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) i += 1;
+      i += 2;
+    } else if (c === '"' || c === "'") {
+      const q = c;
+      i += 1;
+      while (i < src.length) {
+        if (src[i] === '\\') i += 2;
+        else if (src[i] === q) {
+          i += 1;
+          break;
+        } else i += 1;
+      }
+    } else if (c === '`') {
+      i += 1;
+      while (i < src.length) {
+        if (src[i] === '\\') i += 2;
+        else if (src[i] === '`') {
+          i += 1;
+          break;
+        } else if (src[i] === '$' && src[i + 1] === '{') {
+          let d = 1;
+          i += 2;
+          while (i < src.length && d > 0) {
+            if (src[i] === '{') d += 1;
+            else if (src[i] === '}') d -= 1;
+            i += 1;
+          }
+        } else i += 1;
+      }
+    } else {
+      out += c;
+      origIndexAt.push(i);
+      i += 1;
+    }
+  }
+  return { stripped: out, origIndexAt };
+}
+
+/** Extract every `set<…>((prev) => …)` updater body via balanced
+ *  delimiters. Works on comment/string-stripped source (see
+ *  stripCommentsAndStrings); `index` is a stripped-source index. */
+export function extractUpdaterBodies(src: string): UpdaterSite[] {
+  const out: UpdaterSite[] = [];
+  const re = /(set[A-Za-z0-9_$]*)\(\(prev\)\s*=>\s*/g;
+  for (const m of src.matchAll(re)) {
+    const start = m.index! + m[0].length;
+    let depth = 0;
+    let i = start;
+    for (; i < src.length; i += 1) {
+      const c = src[i]!;
+      if (c === '(' || c === '{' || c === '[') depth += 1;
+      else if (c === ')' || c === '}' || c === ']') {
+        depth -= 1;
+        if (depth < 0) break;
+      }
+    }
+    out.push({ setter: m[1]!, body: src.slice(start, i), index: m.index! });
+  }
+  return out;
+}
+
+/** One-stop scan of a raw source file: strip comments/strings, extract the
+ *  updater bodies, and map every site's index back to the ORIGINAL source
+ *  (so lineNumberAt reports true lines). */
+export function scanUpdaters(src: string): UpdaterSite[] {
+  const { stripped, origIndexAt } = stripCommentsAndStrings(src);
+  return extractUpdaterBodies(stripped).map((u) => ({
+    ...u,
+    index: origIndexAt[u.index] ?? u.index,
+  }));
+}
+
+/** 1-based line number of `index` in the original `src`. */
+export function lineNumberAt(src: string, index: number): number {
+  return src.slice(0, index).split('\n').length;
+}
+
+/** Recursively collect production .ts/.tsx sources under `dir` (tests and
+ *  build artifacts excluded — audits target application code). */
+export function collectSourceFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === 'node_modules' || entry.name === '__tests__' || entry.name.startsWith('.')) continue;
+      out.push(...collectSourceFiles(full));
+    } else if (
+      (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) &&
+      !entry.name.endsWith('.d.ts')
+    ) {
+      out.push(full);
+    }
+  }
+  return out;
+}

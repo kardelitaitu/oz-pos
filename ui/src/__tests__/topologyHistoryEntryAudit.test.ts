@@ -9,19 +9,21 @@
  *
  * This is a static source audit, same approach as
  * noiseDitherCompliance.test.ts / themeTokenCompliance.test.ts — no browser
- * needed. It scans ALL of ui/src for undo/redo-stack entry-creation sites
- * (any `set<…>((prev) => …)` updater whose setter names History/Redo/Undo
- * and whose body spreads `prev` into a new array — append or prepend) and
- * asserts every one either routes through historyEntry or is declared in
- * DOCUMENTED_EXCEPTIONS below. The topology editor's four sanitized sites
- * are the only non-exempt producers; a NEW raw push anywhere in the tree —
- * especially a future graph editor's own stack — fails until it is routed
- * through historyEntry or explicitly declared.
+ * needed. The scanner primitives (comment/string stripping, balanced
+ * updater extraction, whole-tree walk) live in the shared
+ * test-utils/sourceAudit helper; this file owns the domain rule: every
+ * undo/redo-stack entry-creation site across ALL of ui/src must route
+ * through historyEntry or be declared in DOCUMENTED_EXCEPTIONS. The
+ * topology editor's four sanitized sites are the only non-exempt
+ * producers; a NEW raw push anywhere in the tree — especially a future
+ * graph editor's own stack — fails until it is routed through
+ * historyEntry or explicitly declared.
  */
 
 import { describe, expect, it } from 'vitest';
-import { readdirSync, readFileSync } from 'fs';
-import { join, relative, resolve } from 'path';
+import { readFileSync } from 'fs';
+import { relative, resolve } from 'path';
+import { collectSourceFiles, lineNumberAt, scanUpdaters } from '@/__tests__/test-utils/sourceAudit';
 
 /* ── Paths ───────────────────────────────────────────────────── */
 
@@ -56,116 +58,12 @@ const DOCUMENTED_EXCEPTIONS: { file: string; setter: string; reason: string }[] 
   },
 ];
 
-/* ── Scanner ──────────────────────────────────────────────────── */
-
-/** Remove comments and string literals so structural scanning cannot be
- *  unbalanced by prose parens inside comments or string content. Also
- *  returns origIndexAt[i] — the ORIGINAL source index of the i-th emitted
- *  char — so scan positions can be mapped back for accurate line numbers. */
-function stripCommentsAndStrings(src: string): { stripped: string; origIndexAt: number[] } {
-  let out = '';
-  const origIndexAt: number[] = [];
-  let i = 0;
-  while (i < src.length) {
-    const c = src[i]!;
-    const n = src[i + 1];
-    if (c === '/' && n === '/') {
-      while (i < src.length && src[i] !== '\n') i += 1;
-    } else if (c === '/' && n === '*') {
-      i += 2;
-      while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) i += 1;
-      i += 2;
-    } else if (c === '"' || c === "'") {
-      const q = c;
-      i += 1;
-      while (i < src.length) {
-        if (src[i] === '\\') i += 2;
-        else if (src[i] === q) {
-          i += 1;
-          break;
-        } else i += 1;
-      }
-    } else if (c === '`') {
-      i += 1;
-      while (i < src.length) {
-        if (src[i] === '\\') i += 2;
-        else if (src[i] === '`') {
-          i += 1;
-          break;
-        } else if (src[i] === '$' && src[i + 1] === '{') {
-          let d = 1;
-          i += 2;
-          while (i < src.length && d > 0) {
-            if (src[i] === '{') d += 1;
-            else if (src[i] === '}') d -= 1;
-            i += 1;
-          }
-        } else i += 1;
-      }
-    } else {
-      out += c;
-      origIndexAt.push(i);
-      i += 1;
-    }
-  }
-  return { stripped: out, origIndexAt };
-}
-
-interface UpdaterSite {
-  setter: string;
-  body: string;
-  index: number;
-}
-
-/** Extract every `set<…>((prev) => …)` updater body via balanced
- *  delimiters (on comment/string-stripped source). */
-function extractUpdaterBodies(src: string): UpdaterSite[] {
-  const out: UpdaterSite[] = [];
-  const re = /(set[A-Za-z0-9_$]*)\(\(prev\)\s*=>\s*/g;
-  for (const m of src.matchAll(re)) {
-    const start = m.index! + m[0].length;
-    let depth = 0;
-    let i = start;
-    for (; i < src.length; i += 1) {
-      const c = src[i]!;
-      if (c === '(' || c === '{' || c === '[') depth += 1;
-      else if (c === ')' || c === '}' || c === ']') {
-        depth -= 1;
-        if (depth < 0) break;
-      }
-    }
-    out.push({ setter: m[1]!, body: src.slice(start, i), index: m.index! });
-  }
-  return out;
-}
-
 /** An undo/redo-stack entry creator: a History/Redo/Undo-named setter whose
- *  updater pushes by spreading `prev` into a new array (append or prepend).
- *  site.index is an ORIGINAL-source index (mapped through origIndexAt). */
-function historyEntryCreators(src: string): UpdaterSite[] {
-  const { stripped, origIndexAt } = stripCommentsAndStrings(src);
-  return extractUpdaterBodies(stripped)
-    .filter((u) => /History|Redo|Undo/i.test(u.setter) && u.body.includes('...prev'))
-    .map((u) => ({ ...u, index: origIndexAt[u.index] ?? u.index }));
-}
-
-/** Recursively collect production .ts/.tsx sources under `dir` (tests and
- *  build artifacts excluded — the audit targets application code). */
-function collectSourceFiles(dir: string): string[] {
-  const out: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (entry.name === 'node_modules' || entry.name === '__tests__' || entry.name.startsWith('.')) continue;
-      out.push(...collectSourceFiles(full));
-    } else if (
-      (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) &&
-      !entry.name.endsWith('.d.ts')
-    ) {
-      out.push(full);
-    }
-  }
-  return out;
+ *  updater pushes by spreading `prev` into a new array (append or prepend). */
+function historyEntryCreators(src: string) {
+  return scanUpdaters(src).filter(
+    (u) => /History|Redo|Undo/i.test(u.setter) && u.body.includes('...prev'),
+  );
 }
 
 /* ── Editor-scoped audit (line-precise messages) ───────────────── */
@@ -174,13 +72,11 @@ describe('history-entry producer audit', () => {
   const source = readFileSync(EDITOR_SRC, 'utf-8');
   const creating = historyEntryCreators(source);
 
-  const lineOf = (index: number) => source.slice(0, index).split('\n').length;
-
   it('every entry-creating setHistory/setRedo updater goes through historyEntry', () => {
     for (const site of creating) {
       expect(
         site.body,
-        `${site.setter} entry creation at line ${lineOf(site.index)} must build the entry with ` +
+        `${site.setter} entry creation at line ${lineNumberAt(source, site.index)} must build the entry with ` +
           'historyEntry() (topologyHistoryIntegrity) — a raw { nodes, wires } push is a ' +
           'corruption hole that skips push-time wire sanitization.',
       ).toContain('historyEntry');
@@ -188,7 +84,7 @@ describe('history-entry producer audit', () => {
   });
 
   it('the number of entry-creation sites matches the drift-guard baseline', () => {
-    const sites = creating.map((u) => `${u.setter} (line ${lineOf(u.index)})`).join('\n  ');
+    const sites = creating.map((u) => `${u.setter} (line ${lineNumberAt(source, u.index)})`).join('\n  ');
     expect(
       creating.length,
       `expected exactly ${EXPECTED_ENTRY_CREATORS} entry-creation site(s), found ${creating.length}:\n  ` +
@@ -202,7 +98,9 @@ describe('history-entry producer audit', () => {
 /* ── Whole-tree audit ──────────────────────────────────────────── */
 
 describe('history-entry producer audit — whole ui/src', () => {
-  interface TreeSite extends UpdaterSite {
+  interface TreeSite {
+    setter: string;
+    body: string;
     file: string;
     line: number;
   }
@@ -212,9 +110,10 @@ describe('history-entry producer audit — whole ui/src', () => {
     const src = readFileSync(file, 'utf-8');
     for (const site of historyEntryCreators(src)) {
       treeSites.push({
-        ...site,
+        setter: site.setter,
+        body: site.body,
         file: relative(UI_SRC, file).replace(/\\/g, '/'),
-        line: src.slice(0, site.index).split('\n').length,
+        line: lineNumberAt(src, site.index),
       });
     }
   }
@@ -234,7 +133,7 @@ describe('history-entry producer audit — whole ui/src', () => {
     }
   });
 
-  it('the only non-exempt entry creators are the topology editor\'s four sanitized sites', () => {
+  it("the only non-exempt entry creators are the topology editor's four sanitized sites", () => {
     const nonExempt = treeSites.filter((s) => !isExempt(s));
     const listing = nonExempt.map((s) => `${s.file}:${s.line} ${s.setter}`).join('\n  ');
     expect(
