@@ -937,4 +937,105 @@ mod tests {
         assert_eq!(j_d["items"].as_array().unwrap().len(), 1);
         assert_eq!(j_d["items"][0]["id"], def_id);
     }
+
+    /// Full lifecycle: free tenant push → rejected → Stripe webhook
+    /// upgrades plan → same push now accepted.
+    #[tokio::test]
+    async fn lifecycle_free_tenant_upgraded_via_webhook_can_sync() {
+        let secret = "whsec_lifecycle_test";
+        let state = CloudServerState {
+            db: Arc::new(Mutex::new(fresh_db())),
+            started_at: Instant::now(),
+            stripe_webhook_secret: Some(secret.to_string()),
+            square_webhook_signature_key: None,
+            square_webhook_url: None,
+        };
+        let mut config = test_config();
+        config.enforce_plans = true;
+        config.stripe_webhook_secret = Some(secret.to_string());
+        let rate_limiter = crate::rate_limit::RateLimiterState::new();
+        let app = build_router(state.clone(), rate_limiter, &config);
+
+        let tenant = "lifecycle-tenant";
+        let sale_id = uuid::Uuid::now_v7().to_string();
+        let body = format!(
+            r#"[{{"id":"{sale_id}","action":"complete_sale","payload":"{{}}","status":"pending","retry_count":0,"last_error":null,"created_at":"2026-01-01T00:00:00Z","synced_at":null}}]"#
+        );
+
+        // Step 1: Push as free tenant → rejected
+        let req = authed_post("/api/sync/push", &body, Some(tenant));
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::FORBIDDEN,
+            "free tenant must be rejected when plan enforcement is on"
+        );
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json["error"], "plan_required");
+
+        // Step 2: Fire Stripe webhook to upgrade tenant to pro
+        let webhook_payload = serde_json::json!({
+            "type": "customer.subscription.created",
+            "data": { "object": {
+                "id": "sub_lifecycle",
+                "customer": "cus_lifecycle",
+                "status": "active",
+                "metadata": { "tenant_id": tenant },
+            }},
+        });
+        let webhook_bytes = serde_json::to_vec(&webhook_payload).unwrap();
+        let sig = lifecycle_stripe_signature(&webhook_bytes, secret);
+
+        let webhook_req = Request::builder()
+            .method("POST")
+            .uri("/api/webhooks/stripe")
+            .header("Content-Type", "application/json")
+            .header("Stripe-Signature", &sig)
+            .body(Body::from(webhook_bytes))
+            .unwrap();
+        let webhook_resp = app.clone().oneshot(webhook_req).await.unwrap();
+        assert_eq!(
+            webhook_resp.status(),
+            StatusCode::OK,
+            "webhook must upgrade tenant successfully"
+        );
+        let wb = webhook_resp.into_body().collect().await.unwrap().to_bytes();
+        let wj: serde_json::Value = serde_json::from_slice(&wb).unwrap();
+        assert_eq!(wj["plan"], "pro", "tenant must be upgraded to pro");
+
+        // Step 3: Push same sale again → now accepted
+        let req2 = authed_post("/api/sync/push", &body, Some(tenant));
+        let resp2 = app.oneshot(req2).await.unwrap();
+        assert_eq!(
+            resp2.status(),
+            StatusCode::OK,
+            "upgraded tenant must be able to sync"
+        );
+        let b2 = resp2.into_body().collect().await.unwrap().to_bytes();
+        let j2: serde_json::Value = serde_json::from_slice(&b2).unwrap();
+        let results = j2["results"]
+            .as_array()
+            .expect("push response must have results array");
+        assert_eq!(results.len(), 1, "one push item → one outcome");
+        assert_eq!(
+            results[0]["outcome"], "accepted",
+            "the sale must be accepted after plan upgrade"
+        );
+    }
+
+    /// HMAC-SHA256 Stripe signature helper for the lifecycle test.
+    fn lifecycle_stripe_signature(payload: &[u8], secret: &str) -> String {
+        use hmac::{Hmac, Mac};
+        use sha2::Sha256;
+        let timestamp = "1719000000";
+        let mut signed_bytes = Vec::with_capacity(timestamp.len() + 1 + payload.len());
+        signed_bytes.extend_from_slice(timestamp.as_bytes());
+        signed_bytes.push(b'.');
+        signed_bytes.extend_from_slice(payload);
+        let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).unwrap();
+        mac.update(&signed_bytes);
+        let expected = hex::encode(mac.finalize().into_bytes());
+        format!("t={},v1={}", timestamp, expected)
+    }
 }
