@@ -163,7 +163,10 @@ export default function AnalyticsScreen() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState('');
   const [paletteIndex, setPaletteIndex] = useState(0);
+  const [scrollProgress, setScrollProgress] = useState(0);
+  const [toasts, setToasts] = useState<{ id: number; message: string }[]>([]);
   const paletteInputRef = useRef<HTMLInputElement | null>(null);
+  const toastId = useRef(0);
   const [cardOrder, setCardOrder] = useState<string[]>([]);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
@@ -186,7 +189,17 @@ export default function AnalyticsScreen() {
 
   const zoomIn = () => setZoomLevel((z) => Math.min(ZOOM_MAX, +(z + ZOOM_STEP).toFixed(2)));
   const zoomOut = () => setZoomLevel((z) => Math.max(ZOOM_MIN, +(z - ZOOM_STEP).toFixed(2)));
-  const zoomReset = () => setZoomLevel(1);
+  const zoomReset = () => {
+    setZoomLevel(1);
+    showToast(l10n.getString('analytics-toast-zoom-reset'));
+  };
+
+  // Transient toast feedback — auto-dismisses per toast
+  const showToast = (message: string) => {
+    const id = ++toastId.current;
+    setToasts((t) => [...t.slice(-2), { id, message }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 2600);
+  };
 
   // Persist zoom across sessions
   useEffect(() => {
@@ -286,6 +299,7 @@ export default function AnalyticsScreen() {
     order.splice(i, 1);
     order.splice(j, 0, from);
     persistOrder(order);
+    showToast(l10n.getString('analytics-toast-layout-saved'));
   };
 
   const isDefaultOrder = JSON.stringify(cardOrder) === JSON.stringify(defaultOrder);
@@ -297,6 +311,7 @@ export default function AnalyticsScreen() {
       /* storage unavailable */
     }
     setCardOrder(defaultOrder);
+    showToast(l10n.getString('analytics-toast-layout-reset'));
   };
 
   // ── Command palette (Ctrl/Cmd+K) ──────────────────────────────
@@ -798,6 +813,7 @@ export default function AnalyticsScreen() {
               onClick={() => {
                 const next = !allCollapsed;
                 setAllCollapsed(next);
+                showToast(l10n.getString(next ? 'analytics-toast-collapsed' : 'analytics-toast-expanded'));
                 // Collapsing all while a card is expanded would otherwise
                 // leave the grid showing only that card — restore the grid
                 // so the toggle visibly does what its label promises.
@@ -826,7 +842,10 @@ export default function AnalyticsScreen() {
             <button
               type="button"
               className="analytics-action-btn"
-              onClick={startRecalculating.current}
+              onClick={() => {
+                startRecalculating.current?.();
+                showToast(l10n.getString('analytics-toast-refreshing'));
+              }}
               aria-label={l10n.getString('analytics-action-refresh-aria')}
               title={l10n.getString('analytics-action-refresh-aria')}
             >
@@ -915,8 +934,14 @@ export default function AnalyticsScreen() {
       <main
         className="analytics-main"
         ref={mainRef}
-        onScroll={(e) => setShowScrollTop(e.currentTarget.scrollTop > 240)}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          setShowScrollTop(el.scrollTop > 240);
+          const max = el.scrollHeight - el.clientHeight;
+          setScrollProgress(max > 0 ? Math.min(1, el.scrollTop / max) : 0);
+        }}
       >
+        <div className="analytics-scroll-progress" style={{ width: `${scrollProgress * 100}%` }} />
         {/* View status — card count + workspace + time view */}
         <div className="analytics-status">
           <span className="analytics-status-item">
@@ -1057,6 +1082,15 @@ export default function AnalyticsScreen() {
           </button>
         )}
       </main>
+
+      {/* Transient action feedback toasts */}
+      {toasts.length > 0 && (
+        <div className="analytics-toasts" role="status" aria-live="polite">
+          {toasts.map((t) => (
+            <div key={t.id} className="analytics-toast">{t.message}</div>
+          ))}
+        </div>
+      )}
 
       {/* Command palette overlay (Ctrl/Cmd+K) */}
       {paletteOpen && (

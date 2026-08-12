@@ -376,6 +376,49 @@ describe('AnalyticsScreen layout shell', () => {
     expect(screen.getByText(`${from.value} – ${to.value}`)).toBeTruthy();
   });
 
+  it('shows a toast on actions and auto-dismisses it', () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    // Zoom in then reset — reset shows a toast
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reset zoom to 100%' }));
+    expect(screen.getByText('Zoom reset to 100%')).toBeTruthy();
+
+    // Toast auto-dismisses after its lifetime
+    act(() => { vi.advanceTimersByTime(2700); });
+    expect(screen.queryByText('Zoom reset to 100%')).toBeNull();
+  });
+
+  it('shows a layout-saved toast when cards are reordered', () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    const cards = () => [...document.querySelectorAll('.analytics-card')];
+    const heat = cards()[0]!;
+    const staff = cards().find((c) => c.querySelector('.analytics-card-title')?.textContent === 'Staff Performance')!;
+    fireEvent.dragStart(heat);
+    fireEvent.dragOver(staff);
+    fireEvent.drop(staff);
+    fireEvent.dragEnd(heat);
+
+    expect(screen.getByText('Layout saved')).toBeTruthy();
+  });
+
+  it('fills the scroll progress bar as the main area scrolls', () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    const main = document.querySelector('.analytics-main') as HTMLElement;
+    const bar = document.querySelector('.analytics-scroll-progress') as HTMLElement;
+    expect(bar.style.width).toBe('0%');
+
+    // Halfway: scrollHeight - clientHeight = 1000, scrollTop = 500
+    Object.defineProperty(main, 'scrollHeight', { value: 1600, configurable: true });
+    Object.defineProperty(main, 'clientHeight', { value: 600, configurable: true });
+    Object.defineProperty(main, 'scrollTop', { value: 500, configurable: true });
+    fireEvent.scroll(main);
+    expect(bar.style.width).toBe('50%');
+  });
+
   it('shows the scroll-to-top button after scrolling the main area', () => {
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 
