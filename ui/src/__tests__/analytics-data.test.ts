@@ -79,9 +79,13 @@ import {
 } from '@/features/analytics/analytics-data';
 
 describe('rangeForGranularity — inclusive date windows', () => {
-  it('daily is anchored to today', () => {
+  it('daily spans the current week (Monday-first) ending today', () => {
     const r = rangeForGranularity('daily', '2026-08-01', '2026-08-31');
-    expect(r.from).toBe(r.to);
+    // The week view must produce a multi-point series (Peak != Low), so the
+    // window is Monday..today rather than a single day.
+    const start = new Date(`${r.from}T00:00:00`);
+    expect(start.getDay()).toBe(1);
+    expect(r.to >= r.from).toBe(true);
     expect(r.from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
@@ -365,6 +369,73 @@ describe('loaders — raw rows mapped to card shapes', () => {
       workspace: 'retail', granularity: 'daily', from: '2026-07-27', to: '2026-07-27', sessionToken: 's',
     });
     expect(buckets[0]?.value).toBe(Math.round(1250000 / 12));
+  });
+
+  it('loadRevenue zero-fills days without sales rows', async () => {
+    const { getDailyRevenue } = await import('@/api/reports');
+    (getDailyRevenue as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { date: '2026-07-27', total_minor: 1000, currency: 'USD', sale_count: 1, cogs_minor: 0, gross_profit_minor: 1000, gross_margin_percent: 100 },
+      { date: '2026-07-29', total_minor: 3000, currency: 'USD', sale_count: 3, cogs_minor: 0, gross_profit_minor: 3000, gross_margin_percent: 100 },
+    ]);
+    const buckets = await loadRevenue({
+      workspace: 'retail', granularity: 'daily', from: '2026-07-27', to: '2026-07-29', sessionToken: 's',
+    });
+    // The backend GROUP BYs completed sales per day (no zero-fill), so a
+    // day without sales has no row — the axis must still cover it as 0.
+    expect(buckets).toEqual([
+      { label: '07-27', value: 1000 },
+      { label: '07-28', value: 0 },
+      { label: '07-29', value: 3000 },
+    ]);
+  });
+
+  it('loadRevenue zero-fills weeks without sales rows (Monday-first)', async () => {
+    const { getWeeklyRevenue } = await import('@/api/reports');
+    (getWeeklyRevenue as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { week_start: '2026-07-20', total_minor: 5000, currency: 'USD', sale_count: 5, cogs_minor: 0, gross_profit_minor: 5000, gross_margin_percent: 100 },
+    ]);
+    const buckets = await loadRevenue({
+      workspace: 'retail', granularity: 'weekly', from: '2026-07-20', to: '2026-07-26', sessionToken: 's',
+    });
+    // Range Mon 07-20 → Sun 07-26 covers the week starting 07-20 only.
+    expect(buckets).toEqual([{ label: '07-20', value: 5000 }]);
+
+    // A two-week range (through Sun 08-02) adds the empty week 07-27.
+    const two = await loadRevenue({
+      workspace: 'retail', granularity: 'weekly', from: '2026-07-20', to: '2026-08-02', sessionToken: 's',
+    });
+    expect(two).toEqual([
+      { label: '07-20', value: 5000 },
+      { label: '07-27', value: 0 },
+    ]);
+  });
+
+  it('loadRevenue zero-fills months without sales rows', async () => {
+    const { getMonthlyRevenue } = await import('@/api/reports');
+    (getMonthlyRevenue as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { month: '2026-07', total_minor: 7000, currency: 'USD', sale_count: 7, cogs_minor: 0, gross_profit_minor: 7000, gross_margin_percent: 100 },
+    ]);
+    const buckets = await loadRevenue({
+      workspace: 'retail', granularity: 'monthly', from: '2026-07-01', to: '2026-08-31', sessionToken: 's',
+    });
+    expect(buckets).toEqual([
+      { label: '07', value: 7000 },
+      { label: '08', value: 0 },
+    ]);
+  });
+
+  it('loadAov zero-fills the same gaps on the shared revenue axis', async () => {
+    const { getDailyRevenue } = await import('@/api/reports');
+    (getDailyRevenue as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { date: '2026-07-27', total_minor: 24000, currency: 'USD', sale_count: 6, cogs_minor: 0, gross_profit_minor: 24000, gross_margin_percent: 100 },
+    ]);
+    const buckets = await loadAov({
+      workspace: 'retail', granularity: 'daily', from: '2026-07-27', to: '2026-07-28', sessionToken: 's',
+    });
+    expect(buckets).toEqual([
+      { label: '07-27', value: 4000 },
+      { label: '07-28', value: 0 },
+    ]);
   });
 
   it('loadBasketSize buckets daily rows with weighted averages', async () => {

@@ -47,14 +47,17 @@ vi.mock('@/contexts/CurrencyContext', () => ({
 // The cards now load through the scoped reporting commands. jsdom has no
 // Tauri backend, so mock the API modules with deterministic rows that
 // produce the asserted labels (KPIs, ranked lists, alert rows, charts).
-const mockGetDailyRevenue = vi.fn(() => Promise.resolve([
-  { date: '2026-07-27', total_minor: 1250000, currency: 'USD', sale_count: 12, cogs_minor: 500000, gross_profit_minor: 750000, gross_margin_percent: 60 },
+// Revenue mocks anchor rows to the queried range — the loaders zero-fill
+// the range's buckets, so an off-range fixed date would render a $0 card.
+const dailyRevenueRow = (date: string) => ({
+  date, total_minor: 1250000, currency: 'USD', sale_count: 12, cogs_minor: 500000, gross_profit_minor: 750000, gross_margin_percent: 60,
+});
+const mockGetDailyRevenue = vi.fn((startDate?: string, _endDate?: string, _token?: string) => Promise.resolve([dailyRevenueRow(startDate ?? '2026-07-27')]));
+const mockGetWeeklyRevenue = vi.fn((startDate?: string, _endDate?: string, _token?: string) => Promise.resolve([
+  { week_start: startDate ?? '2026-07-21', total_minor: 8500000, currency: 'USD', sale_count: 65, cogs_minor: 3400000, gross_profit_minor: 5100000, gross_margin_percent: 60 },
 ]));
-const mockGetWeeklyRevenue = vi.fn(() => Promise.resolve([
-  { week_start: '2026-07-21', total_minor: 8500000, currency: 'USD', sale_count: 65, cogs_minor: 3400000, gross_profit_minor: 5100000, gross_margin_percent: 60 },
-]));
-const mockGetMonthlyRevenue = vi.fn(() => Promise.resolve([
-  { month: '2026-07', total_minor: 35000000, currency: 'USD', sale_count: 280, cogs_minor: 14000000, gross_profit_minor: 21000000, gross_margin_percent: 60 },
+const mockGetMonthlyRevenue = vi.fn((startDate?: string, _endDate?: string, _token?: string) => Promise.resolve([
+  { month: (startDate ?? '2026-07').slice(0, 7), total_minor: 35000000, currency: 'USD', sale_count: 280, cogs_minor: 14000000, gross_profit_minor: 21000000, gross_margin_percent: 60 },
 ]));
 const mockGetTopProducts = vi.fn(() => Promise.resolve([
   { product_id: 'p1', sku: 'SKU-001', name: 'Espresso', total_qty: 45, total_minor: 90000, cogs_minor: 30000, gross_profit_minor: 60000, gross_margin_percent: 66.7 },
@@ -130,9 +133,11 @@ const mockGetMenuEngineering = vi.fn(() => Promise.resolve({
 }));
 
 vi.mock('@/api/reports', () => ({
-  getDailyRevenue: () => mockGetDailyRevenue(),
-  getWeeklyRevenue: () => mockGetWeeklyRevenue(),
-  getMonthlyRevenue: () => mockGetMonthlyRevenue(),
+  // Args MUST forward to the vi.fn so range-anchored rows (zero-fill)
+  // and any arg-asserting test see the real query window.
+  getDailyRevenue: (startDate: string, endDate: string, token: string) => mockGetDailyRevenue(startDate, endDate, token),
+  getWeeklyRevenue: (startDate: string, endDate: string, token: string) => mockGetWeeklyRevenue(startDate, endDate, token),
+  getMonthlyRevenue: (startDate: string, endDate: string, token: string) => mockGetMonthlyRevenue(startDate, endDate, token),
   getTopProducts: () => mockGetTopProducts(),
   getHourlyHeatmap: () => mockGetHourlyHeatmap(),
   getLowStockAlerts: () => mockGetLowStockAlerts(),
@@ -1184,9 +1189,10 @@ describe('smartScale — expanded card fills the available area', () => {
 });
 
 describe('AnalyticsScreen card error surface', () => {
-  const ORIGINAL_DAILY = [
-    { date: '2026-07-27', total_minor: 1250000, currency: 'USD', sale_count: 12, cogs_minor: 500000, gross_profit_minor: 750000, gross_margin_percent: 60 },
-  ];
+  // Range-anchored row: the loaders zero-fill against the queried window,
+  // so a fixed date would be dropped (rendering a $0 card) once the daily
+  // window widens to the current week.
+  const ORIGINAL_DAILY = (startDate?: string) => [dailyRevenueRow(startDate ?? '2026-07-27')];
 
   /** Fire any pending recalculation timer and flush the IPC microtasks. */
   const flushRecalc = async () => {
@@ -1199,7 +1205,9 @@ describe('AnalyticsScreen card error surface', () => {
     localStorage.clear();
     clearAnalyticsCache();
     mockGetDailyRevenue.mockReset();
-    mockGetDailyRevenue.mockResolvedValue(ORIGINAL_DAILY);
+    mockGetDailyRevenue.mockImplementation((startDate?: string) =>
+      Promise.resolve(ORIGINAL_DAILY(startDate)),
+    );
   });
 
   afterEach(() => {
@@ -1242,7 +1250,9 @@ describe('AnalyticsScreen card error surface', () => {
     expect(screen.getAllByRole('alert').length).toBeGreaterThanOrEqual(1);
 
     // Backend is healthy again — refresh wipes cache + failures and retries.
-    mockGetDailyRevenue.mockResolvedValue(ORIGINAL_DAILY);
+    mockGetDailyRevenue.mockImplementation((startDate?: string) =>
+      Promise.resolve(ORIGINAL_DAILY(startDate)),
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Refresh data' }));
     await flushRecalc();
 
@@ -1264,6 +1274,13 @@ describe('AnalyticsScreen currency locale', () => {
   beforeEach(() => {
     localStorage.clear();
     clearAnalyticsCache();
+    // The error-surface describe resets the daily mock to a fixed-date row;
+    // restore the range-anchored implementation (zero-fill drops rows that
+    // fall outside the queried range, so a leaked fixed date renders $0).
+    mockGetDailyRevenue.mockReset();
+    mockGetDailyRevenue.mockImplementation((startDate?: string) =>
+      Promise.resolve([dailyRevenueRow(startDate ?? '2026-07-27')]),
+    );
   });
 
   afterEach(() => {

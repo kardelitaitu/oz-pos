@@ -97,8 +97,14 @@ export function rangeForGranularity(
   const y = now.getFullYear();
   const m = now.getMonth();
   switch (g) {
-    case 'daily':
-      return { from: isoDay(now), to: isoDay(now) };
+    case 'daily': {
+      // Daily shows the current week (Monday-first), bucketed per day — the
+      // same window the heatmap's weekday view covers. A single-day window
+      // would produce a one-point series where Peak == Low.
+      const dow = (now.getDay() + 6) % 7;
+      const start = new Date(y, m, now.getDate() - dow);
+      return { from: isoDay(start), to: isoDay(now) };
+    }
     case 'weekly': {
       // Monday-first week start.
       const dow = (now.getDay() + 6) % 7;
@@ -309,25 +315,83 @@ async function revenueRows(q: AnalyticsQuery): Promise<
   }
 }
 
-/** Per-bucket label for a raw revenue row. */
-function rowLabel(g: Granularity, r: DailyRevenueRow | WeeklyRevenueRow | MonthlyRevenueRow): string {
-  const raw = 'date' in r ? r.date : 'week_start' in r ? r.week_start : r.month;
-  return revenueLabel(g, raw);
+/** Raw bucket key (date / week_start / month) for a revenue row. */
+function rowKey(r: DailyRevenueRow | WeeklyRevenueRow | MonthlyRevenueRow): string {
+  return 'date' in r ? r.date : 'week_start' in r ? r.week_start : r.month;
 }
 
-/** Revenue per bucket (Revenue Overview card). */
+/** The date `days` after `iso` (UTC-anchored, exact-day arithmetic). */
+function addDaysUtc(iso: string, days: number): string {
+  return new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+}
+
+/**
+ * Every raw bucket key the granularity's axis must cover within
+ * [from, to]. The backend GROUP BYs completed sales and returns only
+ * buckets WITH sales, so the loaders zero-fill against this
+ * enumeration: daily keys are dates, weekly keys are Monday week
+ * starts, monthly/yearly keys are YYYY-MM.
+ */
+function bucketKeys(g: Granularity, from: string, to: string): string[] {
+  const keys: string[] = [];
+  if (g === 'monthly' || g === 'yearly') {
+    let cur = from.slice(0, 7);
+    const end = to.slice(0, 7);
+    while (cur <= end) {
+      keys.push(cur);
+      const [y, m] = cur.split('-').map(Number);
+      cur = m === 12 ? `${y! + 1}-01` : `${y}-${String(m! + 1).padStart(2, '0')}`;
+    }
+  } else if (g === 'weekly') {
+    let cur = weekStartKey(from);
+    const end = weekStartKey(to);
+    while (cur <= end) {
+      keys.push(cur);
+      cur = addDaysUtc(cur, 7);
+    }
+  } else {
+    let cur = from;
+    const end = to;
+    while (cur <= end) {
+      keys.push(cur);
+      cur = addDaysUtc(cur, 1);
+    }
+  }
+  return keys;
+}
+
+/** Revenue per bucket (Revenue Overview card), zero-filled to the range. */
 export async function loadRevenue(q: AnalyticsQuery): Promise<Bucket[]> {
   const rows = await revenueRows(q);
-  return rows.map((r) => ({ label: rowLabel(q.granularity, r), value: r.total_minor }));
+  // Sum per raw key — the backend can emit one row per (day, currency).
+  const byKey = new Map<string, number>();
+  for (const r of rows) {
+    byKey.set(rowKey(r), (byKey.get(rowKey(r)) ?? 0) + r.total_minor);
+  }
+  return bucketKeys(q.granularity, q.from, q.to).map((key) => ({
+    label: revenueLabel(q.granularity, key),
+    value: byKey.get(key) ?? 0,
+  }));
 }
 
-/** Average order value per bucket (AOV card). */
+/** Average order value per bucket (AOV card), zero-filled to the range. */
 export async function loadAov(q: AnalyticsQuery): Promise<Bucket[]> {
   const rows = await revenueRows(q);
-  return rows.map((r) => ({
-    label: rowLabel(q.granularity, r),
-    value: r.sale_count > 0 ? Math.round(r.total_minor / r.sale_count) : 0,
-  }));
+  const byKey = new Map<string, { total: number; count: number }>();
+  for (const r of rows) {
+    const key = rowKey(r);
+    const agg = byKey.get(key) ?? { total: 0, count: 0 };
+    agg.total += r.total_minor;
+    agg.count += r.sale_count;
+    byKey.set(key, agg);
+  }
+  return bucketKeys(q.granularity, q.from, q.to).map((key) => {
+    const agg = byKey.get(key);
+    return {
+      label: revenueLabel(q.granularity, key),
+      value: agg && agg.count > 0 ? Math.round(agg.total / agg.count) : 0,
+    };
+  });
 }
 
 /** Staff analytics (shared Staff Performance + restaurant Top Waitstaff). */

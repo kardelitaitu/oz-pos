@@ -154,8 +154,12 @@ function Kpi({ value, label, tone }: { value: string; label: string; tone?: 'goo
   );
 }
 
-/** Small delta pill (▲/▼ % vs previous period). */
-function DeltaChip({ value, tone }: { value: number; tone?: 'good' | 'bad' }) {
+/**
+ * Small delta pill (▲/▼ %). The "vs previous period" suffix renders only
+ * in compare mode — off-mode chips are in-period trends (first→last
+ * bucket), so labeling them as period-over-period would be a lie.
+ */
+function DeltaChip({ value, tone, compare }: { value: number; tone?: 'good' | 'bad'; compare?: boolean }) {
   const { l10n } = useLocalization();
   const up = value >= 0;
   // For metrics where up is bad (voids, refunds, restock cost, turn time)
@@ -163,7 +167,7 @@ function DeltaChip({ value, tone }: { value: number; tone?: 'good' | 'bad' }) {
   const good = tone === 'bad' ? !up : up;
   return (
     <span className={`analytics-delta${good ? ' analytics-delta--up' : ' analytics-delta--down'}`}>
-      {up ? '▲' : '▼'} {Math.abs(value).toFixed(1)}% {l10n.getString('analytics-card-vs-prev')}
+      {up ? '▲' : '▼'} {Math.abs(value).toFixed(1)}%{compare ? ` ${l10n.getString('analytics-card-vs-prev')}` : ''}
     </span>
   );
 }
@@ -325,7 +329,7 @@ function RevenueCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title
     <Visual className="analytics-card-visual--revenue">
       <div className="analytics-kpi-row">
         <Kpi value={short(total)} label={l10n.getString('analytics-card-total-revenue')} />
-        {delta !== null && <DeltaChip value={delta} />}
+        {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
       </div>
       <div className="analytics-card-chart" role="img" aria-label={title}>
         <ReactEChartsCore echarts={echarts} option={option!} style={{ height: chartHeight('revenue', expanded) }} notMerge />
@@ -374,7 +378,7 @@ function AovCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: st
     <Visual>
       <div className="analytics-kpi-row">
         <Kpi value={fmt(avg)} label={l10n.getString('analytics-card-aov')} />
-        {delta !== null && <DeltaChip value={delta} />}
+        {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
       </div>
       <div className="analytics-card-chart" role="img" aria-label={title}>
         <ReactEChartsCore echarts={echarts} option={option!} style={{ height: chartHeight('aov', expanded) }} notMerge />
@@ -403,7 +407,7 @@ function StaffCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: 
     <Visual>
       <div className="analytics-kpi-row">
         <Kpi value={short(totalSales)} label={l10n.getString('analytics-card-staff-sales')} />
-        {delta !== null && <DeltaChip value={delta} />}
+        {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
       </div>
       <RankedList rows={rows} ariaLabel={title} limit={expanded ? undefined : 5} />
     </Visual>
@@ -437,7 +441,7 @@ function CustomersCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
     <Visual className="analytics-card-visual--split">
       <div className="analytics-kpi-row">
         <Kpi value={String(total)} label={l10n.getString('analytics-card-customers-total')} />
-        {delta !== null && <DeltaChip value={delta} />}
+        {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
       </div>
       <div className="analytics-card-chart analytics-card-chart--donut" role="img" aria-label={title}>
         <ReactEChartsCore echarts={echarts} option={option!} style={{ height: chartHeight('customers', expanded) }} notMerge />
@@ -496,7 +500,7 @@ function PaymentsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; titl
     <Visual className="analytics-card-visual--split">
       <div className="analytics-kpi-row">
         {topSeg && <Kpi value={`${topSeg.name} · ${topPct}%`} label={l10n.getString('analytics-card-payments-top')} />}
-        {delta !== null && <DeltaChip value={delta} />}
+        {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
       </div>
       <div className="analytics-card-chart" role="img" aria-label={title}>
         <ReactEChartsCore echarts={echarts} option={option!} style={{ height: chartHeight('payments', expanded) }} notMerge />
@@ -524,7 +528,7 @@ function DiscountsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
     <Visual>
       <div className="analytics-kpi-row">
         <Kpi value={`${discountShare.toFixed(1)}%`} label={l10n.getString('analytics-card-discounts-share')} />
-        {delta !== null && <DeltaChip value={delta} />}
+        {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
       </div>
       <RankedList rows={rows} ariaLabel={title} limit={expanded ? undefined : 5} />
     </Visual>
@@ -549,7 +553,7 @@ function RefundsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title
         <Kpi value={String(summary.void_count)} label={l10n.getString('analytics-card-refunds-count')} tone="bad" />
         <Kpi value={fmt(summary.void_total_minor)} label={l10n.getString('analytics-card-refunds-amount')} tone="bad" />
       </div>
-      {delta !== null && <p className="analytics-card-insight"><DeltaChip value={delta} tone="bad" /></p>}
+      {delta !== null && <p className="analytics-card-insight"><DeltaChip value={delta} tone="bad" compare={compare === true} /></p>}
       <RankedList rows={rows} ariaLabel={title} limit={expanded ? undefined : 5} />
     </Visual>
   );
@@ -576,7 +580,7 @@ function TopItemsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; titl
     <Visual>
       <div className="analytics-kpi-row">
         {topName && <Kpi value={topName} label={l10n.getString('analytics-card-top-product')} />}
-        {delta !== null && <DeltaChip value={delta} />}
+        {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
       </div>
       <RankedList rows={rows} ariaLabel={title} limit={expanded ? undefined : 5} />
     </Visual>
@@ -607,7 +611,7 @@ function CategoryCard({ q, title, expanded, compare }: { q: AnalyticsQuery; titl
     <Visual className="analytics-card-visual--split">
       <div className="analytics-kpi-row">
         {topName && <Kpi value={topName} label={l10n.getString('analytics-card-category-top')} />}
-        {delta !== null && <DeltaChip value={delta} />}
+        {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
       </div>
       <div className="analytics-card-chart analytics-card-chart--donut" role="img" aria-label={title}>
         <ReactEChartsCore echarts={echarts} option={option!} style={{ height: chartHeight('category', expanded) }} notMerge />
@@ -659,7 +663,7 @@ function BasketCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title:
         <Kpi value={avg > 0 ? avg.toFixed(1) : '—'} label={l10n.getString('analytics-card-basket-items')} />
         <Kpi value={orders > 0 ? String(orders) : '—'} label={l10n.getString('analytics-card-basket-orders')} />
       </div>
-      {delta !== null && <p className="analytics-card-insight"><DeltaChip value={delta} /></p>}
+      {delta !== null && <p className="analytics-card-insight"><DeltaChip value={delta} compare={compare === true} /></p>}
       <div className="analytics-card-chart" role="img" aria-label={title}>
         <ReactEChartsCore echarts={echarts} option={option!} style={{ height: chartHeight('basket', expanded) }} notMerge />
       </div>
@@ -712,7 +716,7 @@ function InventoryCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
         <Kpi value={daysOfStock > 0 ? `${daysOfStock}d` : '—'} label={l10n.getString('analytics-card-inventory-days')} />
         <Kpi value={String(skus)} label={l10n.getString('analytics-card-inventory-skus')} />
       </div>
-      {delta !== null && <p className="analytics-card-insight"><DeltaChip value={delta} /></p>}
+      {delta !== null && <p className="analytics-card-insight"><DeltaChip value={delta} compare={compare === true} /></p>}
       <div className="analytics-card-chart" role="img" aria-label={title}>
         <ReactEChartsCore echarts={echarts} option={option!} style={{ height: chartHeight('inventory', expanded) }} notMerge />
       </div>
@@ -746,7 +750,7 @@ function LowStockCard({ q, title, expanded, compare }: { q: AnalyticsQuery; titl
         <Kpi value={String(rows.length)} label={l10n.getString('analytics-card-low-stock-items')} />
         <Kpi value={String(criticalCount)} label={l10n.getString('analytics-card-low-stock-critical')} tone="bad" />
       </div>
-      {delta !== null && <p className="analytics-card-insight"><DeltaChip value={delta} tone="bad" /></p>}
+      {delta !== null && <p className="analytics-card-insight"><DeltaChip value={delta} tone="bad" compare={compare === true} /></p>}
       <ul className="analytics-alert-list" aria-label={title}>
         {shown.map((r) => {
           const critical = r.stock <= 5;
@@ -803,7 +807,7 @@ function TablesCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title:
     <Visual>
       <div className="analytics-kpi-row">
         <Kpi value={avgTurn > 0 ? `${avgTurn}m` : '—'} label={l10n.getString('analytics-card-tables-turn')} />
-        {delta !== null && <DeltaChip value={delta} {...(compare ? { tone: 'bad' as const } : {})} />}
+        {delta !== null && <DeltaChip value={delta} compare={compare === true} {...(compare ? { tone: 'bad' as const } : {})} />}
       </div>
       <div className="analytics-card-chart" role="img" aria-label={title}>
         <ReactEChartsCore echarts={echarts} option={option!} style={{ height: chartHeight('tables', expanded) }} notMerge />
@@ -876,7 +880,7 @@ function OccupancyCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
             </span>
           )}
         </div>
-        {delta !== null && <p className="analytics-card-insight"><DeltaChip value={delta} /></p>}
+        {delta !== null && <p className="analytics-card-insight"><DeltaChip value={delta} compare={compare === true} /></p>}
         <div className="analytics-card-chart" role="img" aria-label={l10n.getString('analytics-card-occupancy-hourly')}>
           <ReactEChartsCore echarts={echarts} option={option} style={{ height: chartHeight('occupancy', expanded) }} notMerge />
         </div>
@@ -896,14 +900,16 @@ function WaitstaffCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
     .sort((a, b) => b.sale_total_minor - a.sale_total_minor)
     .map((r) => ({ name: r.display_name, value: r.sale_total_minor, display: short(r.sale_total_minor) }));
   const rows = rowDeltas(buildRows(staff), prevStaff ? buildRows(prevStaff) : null);
-  const totalSales = rows.reduce((s, r) => s + r.value, 0);
-  const prevTotal = prevStaff ? prevStaff.reduce((s, r) => s + r.sale_total_minor, 0) : 0;
-  const delta = compare ? periodDelta(totalSales, prevTotal) : null;
+  // "Total covers" is a count (orders served), not a money figure — sum the
+  // sale counts so the KPI matches its label.
+  const totalCovers = staff.reduce((s, r) => s + r.sale_count, 0);
+  const prevCovers = prevStaff ? prevStaff.reduce((s, r) => s + r.sale_count, 0) : 0;
+  const delta = compare ? periodDelta(totalCovers, prevCovers) : null;
   return (
     <Visual>
       <div className="analytics-kpi-row">
-        <Kpi value={short(totalSales)} label={l10n.getString('analytics-card-waitstaff-total')} />
-        {delta !== null && <DeltaChip value={delta} />}
+        <Kpi value={totalCovers.toLocaleString()} label={l10n.getString('analytics-card-waitstaff-total')} />
+        {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
       </div>
       <RankedList rows={rows} ariaLabel={title} limit={expanded ? undefined : 5} />
     </Visual>
@@ -928,7 +934,7 @@ function VoidsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: 
       <div className="analytics-kpi-tiles">
         <Kpi value={String(totalQty)} label={l10n.getString('analytics-card-voids-count')} tone="bad" />
       </div>
-      {delta !== null && <p className="analytics-card-insight"><DeltaChip value={delta} tone="bad" /></p>}
+      {delta !== null && <p className="analytics-card-insight"><DeltaChip value={delta} tone="bad" compare={compare === true} /></p>}
       <RankedList rows={rows} ariaLabel={title} limit={expanded ? undefined : 5} />
     </Visual>
   );
