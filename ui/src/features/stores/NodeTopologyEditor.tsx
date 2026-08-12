@@ -603,6 +603,17 @@ function isTopologyRevisionConflict(err: unknown): boolean {
  *  issue set, short enough to feel responsive. */
 const ISSUES_COUNT_SETTLE_MS = 300;
 
+/** True when the OS requests reduced motion (WCAG 2.3.3). The simulation
+ *  pulse is JS-driven on a 30ms interval — CSS @media gates cannot stop
+ *  the state churn — so the interval and the pulse position consult this
+ *  directly. jsdom has no matchMedia: the safe default is false (animate),
+ *  and the reduced-motion tests stub matchMedia to pin the gated path. */
+function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
 /** Milliseconds the selection-announcement waits after the LAST selection
  *  change before speaking. Long enough to absorb a marquee drag that
  *  flicks 1→2→3 (one announcement, on the final set), short enough that a
@@ -1571,7 +1582,11 @@ export default function NodeTopologyEditor({
   const pulsePoints = new Map<string, { x: number; y: number }>();
   const hiddenPulseDots: Array<{ x: number; y: number }> = [];
   if (isSimulating) {
-    const t = simPulseStep / 100;
+    // Reduced motion: the interval below never runs, so simPulseStep stays
+    // 0 — pin the pulse at the wire midpoint instead so the flow
+    // visualization is static (visible mid-path, never under the source
+    // card) rather than a frozen dot collapsed onto the start port.
+    const t = prefersReducedMotion() ? 0.5 : simPulseStep / 100;
     for (const wire of wires) {
       const geo = wireGeometries.get(wire.id);
       if (!geo) continue;
@@ -2757,6 +2772,10 @@ export default function NodeTopologyEditor({
 
   useEffect(() => {
     if (!isSimulating) return;
+    // WCAG 2.3.3: a reduced-motion user still sees the flow (static pulse at
+    // the wire midpoint — see the pulse computation) but the 30ms interval
+    // never churns React state behind their back.
+    if (prefersReducedMotion()) return;
     const interval = setInterval(() => {
       setSimPulseStep((prev) => (prev + 1) % 100);
     }, 30);

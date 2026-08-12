@@ -1,4 +1,15 @@
 
+## 2026-08-12 — TDD cycle: simulation pulse ignores prefers-reduced-motion (WCAG 2.3.3)
+
+### The Test Order Simulation churned React state on a 30ms interval regardless of the OS motion preference
+**Problem:** Fourth review pass. The editor's CSS has `prefers-reduced-motion` gates everywhere, and the journal shows a prior reduced-motion fix (SessionLockScreen rate-limit pulse), but the simulation's pulse is JS-driven: a `setInterval(…, 30)` advances `simPulseStep` which re-renders every wire's pulse dot along its bezier — CSS media queries cannot stop that state churn. A reduced-motion user who clicked "Test Order Simulation" got a full-speed flickering pulse across the canvas, a WCAG 2.3.3 (animation from interactions) failure. The reduced-motion compliance suite covered FastPINOverlay and SessionLockScreen but not the editor.
+
+**Solution:** Red→Green. (1) Red — a simulation test stubbing `matchMedia` to `(prefers-reduced-motion: reduce)` showed the dot moving (cx 320 → 328.16) after 300ms of ticks. (2) Green — a module-scope `prefersReducedMotion()` helper (safe fallback false in jsdom, which lacks matchMedia) gates the interval AND the pulse position: reduced-motion users still see the flow as a STATIC pulse pinned at the wire midpoint (t=0.5 — a frozen t=0 dot would sit under the source card), with zero interval churn; the button and stop/clear behaviors are unchanged.
+
+**Validation:** simulation block 10/10 (incl. the new gated test, Red confirmed) · topology + reduced-motion + animation suites 587/587 · full UI suite 4,915 tests · eslint 0 errors · typecheck · i18n lint clean.
+
+**Deliberately NOT done:** the pulse is pinned at the midpoint rather than offering a manual step-through — a step control is a product decision. The helper checks the preference once per render/effect-run (a live OS-setting change mid-simulation takes effect on the next tick; not worth a listener for a 30ms feature).
+
 ## 2026-08-12 — TDD cycle: a11y suite extended to the finder, compare overlay, and validation panel
 
 ### The editor's axe coverage covered only the initial render — every interactive state was unguarded

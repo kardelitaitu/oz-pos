@@ -5914,6 +5914,44 @@ describe('NodeTopologyEditor — simulation pulse', () => {
     // geometry is ever edited).
     expect(after!.getAttribute('cx')).not.toBe(beforeCx);
   });
+
+  it('keeps the pulse static under prefers-reduced-motion (no 30ms churn)', () => {
+    vi.useFakeTimers();
+    // jsdom has no matchMedia — simulate the OS reduce preference so the
+    // 30ms interval must not churn React state (WCAG 2.3.3).
+    vi.stubGlobal('matchMedia', vi.fn(() => ({
+      matches: true,
+      media: '(prefers-reduced-motion: reduce)',
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })));
+    try {
+      renderEditor();
+
+      fireEvent.click(screen.getByText('Test Order Simulation'));
+      const pulse = () => document.querySelector('.wire-simulation-pulse') as SVGCircleElement | null;
+      expect(pulse()).not.toBeNull();
+      const beforeCx = pulse()!.getAttribute('cx');
+
+      // Many ticks — a gated interval never moves the dot.
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+
+      expect(pulse()).not.toBeNull();
+      expect(pulse()!.getAttribute('cx')).toBe(beforeCx);
+
+      // The flow visualization is static, not gone.
+      fireEvent.click(screen.getByText('Stop Simulation'));
+      expect(pulse()).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
 
 // ── Simulation pulse vs canvas mutations ────────────────────────
