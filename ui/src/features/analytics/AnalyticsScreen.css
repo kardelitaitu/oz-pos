@@ -9,3 +9,10 @@
 .analytics-workspace-select { flex-shrink: 0; }
 .analytics-workspace-select-input { height: 2.25rem; padding: 0 var(--space-3); border: 1px solid #e2e8f0; border-radius: var(--radius-sm); background: #fff; color: #1a1a2e; font-size: var(--text-sm); cursor: pointer; }
 .analytics-workspace-select-input:focus { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+
+/* Granularity toggle */
+.analytics-granularity { display: flex; gap: 0; border: 1px solid #e2e8f0; border-radius: var(--radius-md); overflow: hidden; }
+.analytics-granularity-btn { padding: var(--space-1) var(--space-3); border: none; background: #fff; color: #64748b; font-size: var(--text-sm); cursor: pointer; }
+.analytics-granularity-btn:not(:last-child) { border-right: 1px solid #e2e8f0; }
+.analytics-granularity-btn--active { background: var(--color-primary); color: #fff; }
+.analytics-granularity-btn:hover:not(.analytics-granularity-btn--active) { background: #f1f5f9; }

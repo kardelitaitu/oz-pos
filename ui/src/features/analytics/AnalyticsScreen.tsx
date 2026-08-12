@@ -31,6 +31,7 @@ function today(): string { return isoDay(new Date()); }
 function daysAgo(n: number): string { const d = new Date(); d.setDate(d.getDate() - n); return isoDay(d); }
 
 type WorkspaceView = 'retail' | 'restaurant';
+type Granularity = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
 interface KpiData {
   totalShifts: number; closedShifts: number;
@@ -47,6 +48,7 @@ export default function AnalyticsScreen() {
   const { currency } = useCurrency();
 
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('retail');
+  const [granularity, setGranularity] = useState<Granularity>('daily');
   const [fromDraft, setFromDraft] = useState(daysAgo(29));
   const [toDraft, setToDraft] = useState(today());
   const [from, setFrom] = useState(daysAgo(29));
@@ -84,6 +86,9 @@ export default function AnalyticsScreen() {
   }, [sessionToken, from, to, workspaceView]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Reset granularity to daily when switching workspace
+  useEffect(() => { setGranularity('daily'); }, [workspaceView]);
 
   const selectedRow = useMemo(() => rows.find((r) => r.user_id === selectedUserId) ?? null, [rows, selectedUserId]);
   const daily = useMemo(() => allDailyMap.get(selectedUserId) ?? [], [allDailyMap, selectedUserId]);
@@ -222,6 +227,15 @@ export default function AnalyticsScreen() {
         <Localized id="analytics-btn-apply">
           <button type="button" className="analytics-apply-btn" onClick={applyFilters} aria-label={l10n.getString('analytics-btn-apply')}>Apply</button>
         </Localized>
+        <div className="analytics-granularity" role="radiogroup" aria-label={l10n.getString('analytics-granularity-aria')}>
+          {(['daily', 'weekly', 'monthly', 'yearly'] as Granularity[]).map((g) => (
+            <button key={g} type="button"
+              className={`analytics-granularity-btn${granularity === g ? ' analytics-granularity-btn--active' : ''}`}
+              onClick={() => setGranularity(g)} role="radio" aria-checked={granularity === g}>
+              <Localized id={`analytics-granularity-${g}`}><span>{g}</span></Localized>
+            </button>
+          ))}
+        </div>
         {rows.length > 0 && (
           <button type="button" className="analytics-export-btn"
             onClick={() => downloadCsv(`analytics-${from}-to-${to}.csv`,

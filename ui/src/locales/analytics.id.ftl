@@ -55,3 +55,8 @@ analytics-back-aria = .aria-label = Kembali ke beranda
 analytics-workspace-select-aria = .aria-label = Pilih tipe workspace
 analytics-workspace-retail = Retail
 analytics-workspace-restaurant = Restoran
+analytics-granularity-aria = .aria-label = Granularitas waktu
+analytics-granularity-daily = Harian
+analytics-granularity-weekly = Mingguan
+analytics-granularity-monthly = Bulanan
+analytics-granularity-yearly = Tahunan

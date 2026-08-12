@@ -55,3 +55,8 @@ analytics-back-aria = .aria-label = Back to home
 analytics-workspace-select-aria = .aria-label = Select workspace type
 analytics-workspace-retail = Retail
 analytics-workspace-restaurant = Restaurant
+analytics-granularity-aria = .aria-label = Time granularity
+analytics-granularity-daily = Daily
+analytics-granularity-weekly = Weekly
+analytics-granularity-monthly = Monthly
+analytics-granularity-yearly = Yearly
