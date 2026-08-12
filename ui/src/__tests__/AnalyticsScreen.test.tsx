@@ -30,7 +30,7 @@ vi.mock('@/hooks/useWorkspaceNav', () => ({
   useWorkspaceNav: () => ({ goToWorkspacePicker: mockGoToPicker }),
 }));
 
-import AnalyticsScreen, { nextExpandedKey, daysInCurrentMonth } from '@/features/analytics/AnalyticsScreen';
+import AnalyticsScreen, { nextExpandedKey, daysInCurrentMonth, smartScale } from '@/features/analytics/AnalyticsScreen';
 import { registerAnalyticsFeature } from '@/features/analytics/register';
 import { registerStaffFeature } from '@/features/staff/register';
 import { getEnabledPages, clearPages, hasGrantedPermission } from '@/platform/ui/page-registry';
@@ -249,6 +249,34 @@ describe('AnalyticsScreen layout shell', () => {
     expect(screen.getAllByRole('button', { name: 'Expand card' }).length).toBeGreaterThan(0);
   });
 
+  it('smart-expands every card — each one fills the grid and restores', () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    // Skip the initial recalculation skeleton instantly
+    flushRecalc();
+
+    const cardCount = screen.getAllByRole('button', { name: 'Expand card' }).length;
+    expect(cardCount).toBeGreaterThan(1);
+
+    // Loop over every card: expand it, verify it is the only expanded card,
+    // then restore it before moving to the next one
+    for (let i = 0; i < cardCount; i++) {
+      fireEvent.click(screen.getAllByRole('button', { name: 'Expand card' })[i]!);
+
+      expect(document.querySelectorAll('.analytics-card--expanded').length).toBe(1);
+      // The expanded card always carries the scaled content wrapper
+      const content = document.querySelector('.analytics-card--expanded .analytics-card-content');
+      expect(content).toBeTruthy();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Restore card' }));
+      expect(screen.getAllByRole('button', { name: 'Expand card' }).length).toBe(cardCount);
+    }
+
+    // Nothing stays expanded after the loop
+    expect(document.querySelectorAll('.analytics-card--expanded').length).toBe(0);
+  });
+
   it('renders the analytics card grid with workspace-appropriate titles', () => {
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 
@@ -346,6 +374,33 @@ describe('nextExpandedKey — single-expansion invariant', () => {
         expect(next === null || next === current).toBe(true);
       }
     }
+  });
+});
+
+describe('smartScale — expanded card fills the available area', () => {
+  it('returns 1 when layout has not been measured', () => {
+    expect(smartScale({ w: 800, h: 600 }, { w: 0, h: 0 })).toBe(1);
+    expect(smartScale({ w: 0, h: 0 }, { w: 200, h: 150 })).toBe(1);
+  });
+
+  it('fills both axes when content is smaller than the area', () => {
+    expect(smartScale({ w: 800, h: 600 }, { w: 200, h: 150 })).toBe(4);
+  });
+
+  it('is constrained by the narrower axis', () => {
+    // Width allows 2x, height allows 6x → width wins
+    expect(smartScale({ w: 800, h: 600 }, { w: 400, h: 100 })).toBe(2);
+    // Height allows 1.5x, width allows 8x → height wins
+    expect(smartScale({ w: 800, h: 600 }, { w: 100, h: 400 })).toBe(1.5);
+  });
+
+  it('caps the scale at the max to avoid absurd blow-ups', () => {
+    expect(smartScale({ w: 1000, h: 1000 }, { w: 100, h: 100 }, 4)).toBe(4);
+    expect(smartScale({ w: 1000, h: 1000 }, { w: 100, h: 100 }, 2)).toBe(2);
+  });
+
+  it('never shrinks content below 1x', () => {
+    expect(smartScale({ w: 400, h: 300 }, { w: 2000, h: 1500 })).toBe(1);
   });
 });
 

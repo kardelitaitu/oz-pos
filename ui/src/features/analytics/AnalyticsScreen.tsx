@@ -27,6 +27,20 @@ export function nextExpandedKey(current: string | null, cid: string): string | n
   return current;
 }
 
+/**
+ * Scale factor that enlarges `content` to fill `available` without
+ * overflowing either axis, capped at `max`. Returns 1 when the sizes
+ * are unknown (e.g. layout not yet measured).
+ */
+export function smartScale(
+  available: { w: number; h: number },
+  content: { w: number; h: number },
+  max = 4,
+): number {
+  if (available.w <= 0 || available.h <= 0 || content.w <= 0 || content.h <= 0) return 1;
+  return Math.max(1, Math.min(max, Math.min(available.w / content.w, available.h / content.h)));
+}
+
 function isoToday(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -102,7 +116,9 @@ export default function AnalyticsScreen() {
   const [calculating, setCalculating] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [expandScale, setExpandScale] = useState(1);
   const calcTimer = useRef<ReturnType<typeof setTimeout>>();
+  const expandedBodyRef = useRef<HTMLDivElement | null>(null);
 
   const MIN_ZOOM = 0.6;
   const MAX_ZOOM = 1.6;
@@ -123,6 +139,22 @@ export default function AnalyticsScreen() {
 
   const zoomIn = () => setZoomLevel((z) => Math.min(MAX_ZOOM, +(z + ZOOM_STEP).toFixed(2)));
   const zoomOut = () => setZoomLevel((z) => Math.max(MIN_ZOOM, +(z - ZOOM_STEP).toFixed(2)));
+
+  // Smart scaling: when a card is expanded, scale its content to fill the
+  // available body area (works for any card — heatmap, table, or chart).
+  useEffect(() => {
+    if (!expandedKey) {
+      setExpandScale(1);
+      return;
+    }
+    const body = expandedBodyRef.current;
+    const content = body?.querySelector<HTMLElement>('.analytics-card-content');
+    if (!body || !content) return;
+    setExpandScale(smartScale(
+      { w: body.clientWidth, h: body.clientHeight },
+      { w: content.offsetWidth, h: content.offsetHeight },
+    ));
+  }, [expandedKey, granularity, workspaceView, calculating]);
 
   // Filter cards visible for the current workspace
   const visibleCards = ANALYTICS_CARDS.filter(
@@ -572,23 +604,28 @@ export default function AnalyticsScreen() {
                   </button>
                 </div>
               </div>
-              <div className="analytics-card-body">
-                {calculating ? (
-                  <div className="analytics-card-skeleton">
-                    <div className="skeleton-bar skeleton-bar--sm" />
-                    <div className="skeleton-bar skeleton-bar--lg" />
-                    <div className="skeleton-bar skeleton-bar--md" />
-                    <div className="skeleton-bar skeleton-bar--lg" />
-                    <div className="skeleton-bar skeleton-bar--sm" />
-                  </div>
-                ) : card.key === 'heatmap' ? (
-                  renderHeatmap()
-                ) : (
-                  <div className="analytics-card-placeholder">
-                    {cardPlaceholder(card.key)}
-                    <span className="analytics-card-hint">No data yet</span>
-                  </div>
-                )}
+              <div className="analytics-card-body" ref={isExpanded ? expandedBodyRef : undefined}>
+                <div
+                  className="analytics-card-content"
+                  style={isExpanded ? { transform: `scale(${expandScale})` } : undefined}
+                >
+                  {calculating ? (
+                    <div className="analytics-card-skeleton">
+                      <div className="skeleton-bar skeleton-bar--sm" />
+                      <div className="skeleton-bar skeleton-bar--lg" />
+                      <div className="skeleton-bar skeleton-bar--md" />
+                      <div className="skeleton-bar skeleton-bar--lg" />
+                      <div className="skeleton-bar skeleton-bar--sm" />
+                    </div>
+                  ) : card.key === 'heatmap' ? (
+                    renderHeatmap()
+                  ) : (
+                    <div className="analytics-card-placeholder">
+                      {cardPlaceholder(card.key)}
+                      <span className="analytics-card-hint">No data yet</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             );
