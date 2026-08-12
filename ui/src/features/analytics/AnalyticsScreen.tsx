@@ -972,28 +972,43 @@ const [paletteOpen, setPaletteOpen] = useState(false);
             {showCacheMetrics && (
               <div className="analytics-cache-popover" role="dialog" aria-label={l10n.getString('analytics-cache-metrics-aria')}>
                 <div className="analytics-cache-popover-head">
-                  <h3 className="analytics-cache-popover-title">
-                    <Localized id="analytics-cache-popover-title"><span>Cache metrics</span></Localized>
-                  </h3>
-                  {(() => {
-                    const { totals } = analyticsDataCache.metrics();
-                    const rate = totals.hitRate === null ? '–' : `${Math.round(totals.hitRate * 100)}%`;
-                    return (
-                      <span className="analytics-cache-popover-summary">
-                        <Localized
-                          id="analytics-cache-summary"
-                          vars={{
-                            rate,
-                            hits: String(totals.hits),
-                            misses: String(totals.misses),
-                            expiries: String(totals.expiries),
-                          }}
-                        >
-                          <span>{rate} · {totals.hits} hits · {totals.misses} misses · {totals.expiries} expired</span>
-                        </Localized>
-                      </span>
-                    );
-                  })()}
+                  <div className="analytics-cache-popover-meta">
+                    <h3 className="analytics-cache-popover-title">
+                      <Localized id="analytics-cache-popover-title"><span>Cache metrics</span></Localized>
+                    </h3>
+                    {(() => {
+                      const { totals } = analyticsDataCache.metrics();
+                      const rate = totals.hitRate === null ? '–' : `${Math.round(totals.hitRate * 100)}%`;
+                      return (
+                        <span className="analytics-cache-popover-summary">
+                          <Localized
+                            id="analytics-cache-summary"
+                            vars={{
+                              rate,
+                              hits: String(totals.hits),
+                              misses: String(totals.misses),
+                              expiries: String(totals.expiries),
+                            }}
+                          >
+                            <span>{rate} · {totals.hits} hits · {totals.misses} misses · {totals.expiries} expired</span>
+                          </Localized>
+                        </span>
+                      );
+                    })()}
+                  </div>
+                  <button
+                    type="button"
+                    className="analytics-cache-clear-btn"
+                    onClick={() => {
+                      clearAnalyticsCache();
+                      setMetricsTick((t) => t + 1);
+                      showToast(l10n.getString('analytics-toast-cache-cleared'));
+                    }}
+                    aria-label={l10n.getString('analytics-cache-clear-aria')}
+                    title={l10n.getString('analytics-cache-clear-aria')}
+                  >
+                    <Localized id="analytics-cache-clear"><span>Clear cache</span></Localized>
+                  </button>
                 </div>
                 <table className="analytics-cache-table">
                   <thead>

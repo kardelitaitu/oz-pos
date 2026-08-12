@@ -152,7 +152,7 @@ vi.mock('@/api/tables', () => ({
 }));
 
 import AnalyticsScreen, { nextExpandedKey, daysInCurrentMonth, monthCalendarGrid, smartScale } from '@/features/analytics/AnalyticsScreen';
-import { clearAnalyticsCache } from '@/features/analytics/analytics-cache';
+import { analyticsDataCache, clearAnalyticsCache } from '@/features/analytics/analytics-cache';
 import { registerAnalyticsFeature } from '@/features/analytics/register';
 import { registerStaffFeature } from '@/features/staff/register';
 import { getEnabledPages, clearPages, hasGrantedPermission } from '@/platform/ui/page-registry';
@@ -371,6 +371,28 @@ describe('AnalyticsScreen layout shell', () => {
     // Toggle closes it again.
     fireEvent.click(screen.getByRole('button', { name: 'TTL cache metrics' }));
     expect(screen.queryByRole('dialog', { name: 'TTL cache metrics' })).toBeNull();
+  });
+
+  it('clears the cache from the metrics popover', () => {
+    // Seed the shared cache with a query first.
+    analyticsDataCache.set('card:revenue:retail:daily', { seed: true });
+
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    fireEvent.click(screen.getByRole('button', { name: 'TTL cache metrics' }));
+    const popover = screen.getByRole('dialog', { name: 'TTL cache metrics' });
+    // The seeded key appears in the per-key table (via its short label).
+    expect(popover.textContent).toContain('revenue');
+
+    const clearBtn = screen.getByRole('button', { name: 'Clear the analytics cache' });
+    fireEvent.click(clearBtn);
+
+    // Cache is wiped: the seeded row disappears and cards refetch
+    // (fresh misses appear — proving the old entries were really gone).
+    expect(popover.textContent).not.toContain('revenue');
+    expect(analyticsDataCache.get('card:revenue:retail:daily')).toBeUndefined();
+    expect(analyticsDataCache.metrics().totals).toMatchObject({ hits: 0, expiries: 0 });
+    expect(analyticsDataCache.metrics().totals.misses).toBeGreaterThan(0);
   });
 
   it('opens the command palette with Ctrl+K and runs a filtered action', () => {
