@@ -40,7 +40,7 @@ import type {
   VoidedItemRow,
   VoidedSummaryRow,
 } from './analytics-data';
-import type { StaffAnalyticsRow } from './analytics-data';
+import type { StaffAnalyticsRow, TableOccupancy } from './analytics-data';
 import type { Granularity, WorkspaceView } from './AnalyticsScreen';
 
 echarts.use([EBar, ELine, EPie, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
@@ -663,36 +663,30 @@ function TablesCard({ q, title, expanded }: { q: AnalyticsQuery; title: string; 
 function OccupancyCard({ q, title, expanded }: { q: AnalyticsQuery; title: string; expanded?: boolean | undefined }) {
   const { granularity: g } = q;
   const { l10n } = useLocalization();
-  const occ = useCardData<{ rate: number; peak: number; hourly: { hour: string; pct: number }[] }>(
-    'occupancy',
-    q,
-    () => {
-      const rate = 60 + Math.round(seeded(`occupancy:${g}`)() * 25);
-      const peak = 17 + Math.round(seeded(`occupancy-peak:${g}`)() * 4);
-      const r = seeded(`occupancy-hourly:${g}`);
-      const hourly = OCCUPANCY_HOURS.map((hour, i) => ({
-        hour,
-        pct: Math.min(100, Math.round(OCCUPANCY_SHAPE[i]! * rate + r() * 6)),
-      }));
-      return { rate, peak, hourly };
-    },
-  );
+  // Real live rate from the tables snapshot; no history exists for the
+  // hourly shape, so peak + curve stay demo-shaped (demo chip is shown).
+  const occ = useCardData<TableOccupancy>('occupancy', q);
   const rate = occ ? occ.rate : 0;
-  const peak = occ ? occ.peak : 0;
-  const option = useMemo(() => (occ ? ({
+  const peak = 17 + Math.round(seeded(`occupancy-peak:${g}`)() * 4);
+  const r = seeded(`occupancy-hourly:${g}`);
+  const hourly = OCCUPANCY_HOURS.map((hour, i) => ({
+    hour,
+    pct: Math.min(100, Math.round(OCCUPANCY_SHAPE[i]! * Math.max(rate, 60) + r() * 6)),
+  }));
+  const option = useMemo(() => ({
     grid: { left: 8, right: 8, top: 8, bottom: 0, containLabel: true },
     tooltip: { trigger: 'axis' as const, valueFormatter: (v: unknown) => `${v}%` },
     xAxis: {
-      type: 'category' as const, data: occ.hourly.map((d) => d.hour),
+      type: 'category' as const, data: hourly.map((d) => d.hour),
       axisLabel: { fontSize: 9, color: CHART_TEXT, interval: 1 }, axisLine: { show: false }, axisTick: { show: false },
     },
     yAxis: { type: 'value' as const, show: false, max: 100 },
     series: [{
-      type: 'line' as const, data: occ.hourly.map((d) => d.pct),
+      type: 'line' as const, data: hourly.map((d) => d.pct),
       smooth: true, symbol: 'none', lineStyle: { width: 2, color: '#f59e0b' },
       areaStyle: { opacity: 0.12 }, itemStyle: { color: '#f59e0b' },
     }],
-  }) : null), [occ]);
+  }), [hourly]);
   if (!occ) return <CardLoading />;
   return (
     <Visual demo>
@@ -708,7 +702,7 @@ function OccupancyCard({ q, title, expanded }: { q: AnalyticsQuery; title: strin
           <span>{l10n.getString('analytics-card-occupancy-peak')} · {String(peak).padStart(2, '0')}:00</span>
         </div>
         <div className="analytics-card-chart" role="img" aria-label={l10n.getString('analytics-card-occupancy-hourly')}>
-          <ReactEChartsCore echarts={echarts} option={option!} style={{ height: expanded ? 150 : 64 }} notMerge />
+          <ReactEChartsCore echarts={echarts} option={option} style={{ height: expanded ? 150 : 64 }} notMerge />
         </div>
       </div>
     </Visual>

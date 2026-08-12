@@ -25,6 +25,7 @@ import {
   getVoidedSalesSummary,
   getWeeklyRevenue,
 } from '@/api/reports';
+import { listTablesScoped } from '@/api/tables';
 import type {
   BasketSizeRow,
   CategoryBreakdownRow,
@@ -278,6 +279,41 @@ export async function loadHeatmapRows(q: AnalyticsQuery): Promise<{
   }
 }
 
+/** Live floor-plan occupancy derived from the `tables` snapshot. */
+export interface TableOccupancy {
+  /** Total active tables on the floor plan. */
+  total: number;
+  /** Tables currently `occupied` (linked to an active sale). */
+  occupied: number;
+  /** Percentage of tables currently occupied (0–100). */
+  rate: number;
+  /** Seats in use on occupied tables vs total capacity. */
+  seats_used: number;
+  seats_total: number;
+}
+
+/**
+ * Current occupancy from the live `tables` snapshot (no history exists, so
+ * only the *now* rate is real — peak hour and the hourly curve stay
+ * demo-shaped in the card).
+ */
+export async function loadTableOccupancy(q: AnalyticsQuery): Promise<TableOccupancy> {
+  const tables = await listTablesScoped(q.sessionToken);
+  const active = tables.filter((t) => t.active);
+  const occupied = active.filter((t) => t.status === 'occupied').length;
+  const seatsUsed = active
+    .filter((t) => t.status === 'occupied')
+    .reduce((sum, t) => sum + t.capacity, 0);
+  const seatsTotal = active.reduce((sum, t) => sum + t.capacity, 0);
+  return {
+    total: active.length,
+    occupied,
+    rate: active.length > 0 ? Math.round((occupied / active.length) * 100) : 0,
+    seats_used: seatsUsed,
+    seats_total: seatsTotal,
+  };
+}
+
 /** Everything the dashboard cards need, keyed by card key. */
 export type CardLoaderResult = unknown;
 
@@ -305,10 +341,11 @@ export const CARD_LOADERS: Record<string, (q: AnalyticsQuery) => Promise<CardLoa
       getVoidedSalesSummary(q.from, q.to, q.sessionToken),
       getVoidedItems(q.from, q.to, q.sessionToken, 5),
     ]),
+  occupancy: loadTableOccupancy,
 };
 
 /** Cards that keep deterministic demo data (no backend query yet). */
-export const DEMO_CARDS = new Set(['tables', 'occupancy']);
+export const DEMO_CARDS = new Set(['tables']);
 
 // ── Re-export the raw row types for card-side mapping ───────────────
 

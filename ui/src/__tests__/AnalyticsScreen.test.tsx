@@ -130,6 +130,19 @@ vi.mock('@/api/analytics', () => ({
   getStaffAnalyticsScoped: () => mockGetStaffAnalyticsScoped(),
 }));
 
+// Live floor-plan snapshot for the restaurant occupancy card: 2 of 4
+// active tables occupied → 50% real occupancy rate.
+const mockListTablesScoped = vi.fn(() => Promise.resolve([
+  { id: 'table-01', name: 'Table 1', capacity: 4, pos_x: 10, pos_y: 10, shape: 'circle', width: 8, height: 8, status: 'occupied', active_sale_id: 'sale-1', section: 'Indoor', active: true, sort_order: 1 },
+  { id: 'table-02', name: 'Table 2', capacity: 4, pos_x: 30, pos_y: 10, shape: 'circle', width: 8, height: 8, status: 'occupied', active_sale_id: 'sale-2', section: 'Indoor', active: true, sort_order: 2 },
+  { id: 'table-03', name: 'Table 3', capacity: 2, pos_x: 50, pos_y: 10, shape: 'circle', width: 8, height: 8, status: 'available', active_sale_id: null, section: 'Indoor', active: true, sort_order: 3 },
+  { id: 'table-04', name: 'Table 4', capacity: 6, pos_x: 70, pos_y: 10, shape: 'circle', width: 8, height: 8, status: 'available', active_sale_id: null, section: 'Patio', active: true, sort_order: 4 },
+]));
+
+vi.mock('@/api/tables', () => ({
+  listTablesScoped: () => mockListTablesScoped(),
+}));
+
 import AnalyticsScreen, { nextExpandedKey, daysInCurrentMonth, monthCalendarGrid, smartScale } from '@/features/analytics/AnalyticsScreen';
 import { clearAnalyticsCache } from '@/features/analytics/analytics-cache';
 import { registerAnalyticsFeature } from '@/features/analytics/register';
@@ -873,8 +886,10 @@ describe('AnalyticsScreen layout shell', () => {
     expect(screen.getByText('Top Menu Items')).toBeTruthy();
     expect(screen.getByText('Table Turnover')).toBeTruthy();
 
-    // Occupancy card renders its hourly occupancy curve
+    // Occupancy card renders its hourly occupancy curve and shows the real
+    // live rate from the tables snapshot (2 of 4 occupied → 50%)
     expect(screen.getByLabelText('Occupancy by hour')).toBeTruthy();
+    expect(screen.getByText('50%')).toBeTruthy();
 
     // Waitstaff card: total-sales KPI from staff-analytics mock rows
     expect(screen.getByText('Total covers')).toBeTruthy();

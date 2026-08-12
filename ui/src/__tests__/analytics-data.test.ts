@@ -36,11 +36,22 @@ vi.mock('@/api/analytics', () => ({
   getStaffAnalyticsScoped: vi.fn(() => Promise.resolve([])),
 }));
 
+vi.mock('@/api/tables', () => ({
+  listTablesScoped: vi.fn(() => Promise.resolve([
+    { id: 'table-01', name: 'Table 1', capacity: 4, pos_x: 10, pos_y: 10, shape: 'circle', width: 8, height: 8, status: 'occupied', active_sale_id: 'sale-1', section: 'Indoor', active: true, sort_order: 1 },
+    { id: 'table-02', name: 'Table 2', capacity: 4, pos_x: 30, pos_y: 10, shape: 'circle', width: 8, height: 8, status: 'occupied', active_sale_id: 'sale-2', section: 'Indoor', active: true, sort_order: 2 },
+    { id: 'table-03', name: 'Table 3', capacity: 2, pos_x: 50, pos_y: 10, shape: 'circle', width: 8, height: 8, status: 'available', active_sale_id: null, section: 'Indoor', active: true, sort_order: 3 },
+    { id: 'table-04', name: 'Table 4', capacity: 6, pos_x: 70, pos_y: 10, shape: 'circle', width: 8, height: 8, status: 'available', active_sale_id: null, section: 'Patio', active: true, sort_order: 4 },
+    { id: 'table-05', name: 'Table 5', capacity: 2, pos_x: 20, pos_y: 40, shape: 'circle', width: 8, height: 8, status: 'cleaning', active_sale_id: null, section: 'Indoor', active: false, sort_order: 5 },
+  ])),
+}));
+
 import {
   buildHeatmapIntensities,
   loadAov,
   loadHeatmapRows,
   loadRevenue,
+  loadTableOccupancy,
   normalizeIntensities,
   rangeForGranularity,
   seriesDelta,
@@ -210,5 +221,30 @@ describe('loaders — raw rows mapped to card shapes', () => {
     const yearly = await loadHeatmapRows({ workspace: 'retail', granularity: 'yearly', from, to, sessionToken });
     expect(yearly.weekly.length).toBeGreaterThan(0);
     expect(yearly.hourly.length).toBe(0);
+  });
+
+  it('loadTableOccupancy derives the live rate from the tables snapshot', async () => {
+    const occ = await loadTableOccupancy({
+      workspace: 'restaurant', granularity: 'daily', from: '2026-07-27', to: '2026-07-27', sessionToken: 's',
+    });
+    // 4 active tables, 2 occupied (the inactive 'cleaning' row is excluded)
+    expect(occ.total).toBe(4);
+    expect(occ.occupied).toBe(2);
+    expect(occ.rate).toBe(50);
+    // Seats: occupied 4 + 4 = 8 of 4 + 4 + 2 + 6 = 16 total
+    expect(occ.seats_used).toBe(8);
+    expect(occ.seats_total).toBe(16);
+  });
+
+  it('loadTableOccupancy yields 0 when no active tables exist', async () => {
+    const { listTablesScoped } = await import('@/api/tables');
+    (listTablesScoped as ReturnType<typeof vi.fn>).mockResolvedValueOnce([]);
+    const occ = await loadTableOccupancy({
+      workspace: 'restaurant', granularity: 'daily', from: '2026-07-27', to: '2026-07-27', sessionToken: 's',
+    });
+    expect(occ.total).toBe(0);
+    expect(occ.rate).toBe(0);
+    expect(occ.seats_used).toBe(0);
+    expect(occ.seats_total).toBe(0);
   });
 });
