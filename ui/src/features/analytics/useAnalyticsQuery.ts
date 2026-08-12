@@ -28,6 +28,8 @@ export interface AnalyticsQueryResult<T> {
   status: QueryStatus;
   /** Raw failure when `status === 'error'`; `null` otherwise. */
   error: unknown;
+  /** `false` when the served value came from an entry past its TTL. */
+  fresh?: boolean;
 }
 
 /** Per-key failures, module-level so refresh can clear them globally. */
@@ -42,7 +44,7 @@ export function clearAnalyticsErrors(): void {
 function readCached<T>(key: string): AnalyticsQueryResult<T> | undefined {
   const hit = analyticsDataCache.get(key);
   if (!hit) return undefined;
-  return { data: hit.value as T, status: 'ready', error: null };
+  return { data: hit.value as T, status: 'ready', error: null, fresh: hit.fresh };
 }
 
 /**
@@ -75,7 +77,29 @@ export function useAnalyticsQuery<T>(
   }
 
   const cached = readCached<T>(key);
-  if (cached) return cached;
+  if (cached) {
+    // Stale-while-revalidate: a value past its TTL renders immediately
+    // while a background refetch refreshes the cache for the next render.
+    // A previously-failed key skips revalidation (no retry loop) and a
+    // key already in flight is not double-fetched.
+    if (!cached.fresh && !failures.has(key) && inflight.current !== key) {
+      inflight.current = key;
+      Promise.resolve(fetcher()).then(
+        (value) => {
+          analyticsDataCache.set(key, value);
+          inflight.current = null;
+          failures.delete(key);
+          forceRender((n) => n + 1); // next render reads the fresh hit
+        },
+        (err) => {
+          inflight.current = null;
+          failures.set(key, err);
+          forceRender((n) => n + 1);
+        },
+      );
+    }
+    return cached;
+  }
 
   // A previously failed key stays failed until explicitly cleared —
   // never re-invoke the fetcher implicitly (no infinite retry loop).

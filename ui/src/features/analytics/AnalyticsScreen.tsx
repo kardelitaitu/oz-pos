@@ -170,7 +170,6 @@ export default function AnalyticsScreen() {
   const [granularity, setGranularity] = useState<Granularity>('daily');
   const [customFrom, setCustomFrom] = useState(isoToday());
   const [customTo, setCustomTo] = useState(isoToday());
-  const [calculating, setCalculating] = useState(false);
   const [zoomLevel, setZoomLevel] = useState<number>(() => {
     const saved = Number(localStorage.getItem('oz-analytics-zoom'));
     return saved >= ZOOM_MIN && saved <= ZOOM_MAX ? saved : 1;
@@ -196,7 +195,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   const [cardOrder, setCardOrder] = useState<string[]>([]);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
-  const calcTimer = useRef<ReturnType<typeof setTimeout>>();
+  const [, setRecalcTick] = useState(0);
   const expandedBodyRef = useRef<HTMLDivElement | null>(null);
   const mainRef = useRef<HTMLElement | null>(null);
 
@@ -209,38 +208,34 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   /**
    * Kick off a recalculation. `force` (refresh button / R key) always
    * refetches; otherwise an identical query still fresh in the TTL cache
-   * renders instantly with no skeleton — switching granularity or
-   * workspace back and forth does not refetch identical queries.
+   * renders instantly — switching granularity or workspace back and
+   * forth does not refetch identical queries.
+   *
+   * There is no artificial delay: cards show their own loading skeleton
+   * while their IPC query actually resolves, and the heatmap shows its
+   * skeleton while its query is in flight. The tick just re-renders the
+   * grid so cards re-evaluate their (possibly now-cleared) queries.
    */
   const startRecalculating = useRef<(force?: boolean) => void>();
   startRecalculating.current = (force = false) => {
     const key = analyticsQueryKey(workspaceView, granularity, customFrom, customTo);
-    if (!force && analyticsDataCache.hasFresh(key)) {
-      setCalculating(false);
-      return;
-    }
-    setCalculating(true);
-    clearTimeout(calcTimer.current);
-    calcTimer.current = setTimeout(() => {
-      setCalculating(false);
-      if (force) {
-        // Refresh wipes the cached payloads AND the recorded query
-        // failures so the data actually recomputes; the TTL-bounded
-        // cache refills on the next render.
-        clearAnalyticsCache();
-        clearAnalyticsErrors();
-        return;
-      }
-      // Mark the query computed — revisits within the TTL skip the
-      // recalc skeleton (card payloads were cached when they rendered).
+    if (force) {
+      // Refresh wipes the cached payloads AND the recorded query
+      // failures so the data actually recomputes; the TTL-bounded
+      // cache refills on the next render.
+      clearAnalyticsCache();
+      clearAnalyticsErrors();
+    } else {
+      // Mark the query computed — revisits within the TTL render
+      // instantly (card payloads were cached when they rendered).
       analyticsDataCache.set(key, { computedAt: Date.now() });
-    }, 600);
+    }
+    setRecalcTick((n) => n + 1);
   };
 
   // Recalculate when filters change
   useEffect(() => {
     startRecalculating.current?.();
-    return () => clearTimeout(calcTimer.current);
   }, [workspaceView, granularity, customFrom, customTo]);
 
   const zoomIn = () => setZoomLevel((z) => Math.min(ZOOM_MAX, +(z + ZOOM_STEP).toFixed(2)));
@@ -317,7 +312,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
       { w: body.clientWidth, h: body.clientHeight },
       { w: content.offsetWidth, h: content.offsetHeight },
     ));
-  }, [expandedKey, granularity, workspaceView, calculating]);
+  }, [expandedKey, granularity, workspaceView]);
 
   // Filter cards visible for the current workspace
   const visibleCards = ANALYTICS_CARDS.filter(
@@ -1212,22 +1207,14 @@ const [paletteOpen, setPaletteOpen] = useState(false);
                   className="analytics-card-content"
                   style={isExpanded ? { transform: `scale(${expandScale})` } : undefined}
                 >
-                  {calculating && card.key === 'heatmap' ? (
-                    <div className="analytics-card-skeleton analytics-heat-skeleton">
-                      {Array.from({ length: 28 }, (_, i) => (
-                        <div key={i} className="skeleton-bar skeleton-heat-block" />
-                      ))}
-                    </div>
-                  ) : calculating ? (
-                    <div className="analytics-card-skeleton">
-                      <div className="skeleton-bar skeleton-bar--sm" />
-                      <div className="skeleton-bar skeleton-bar--lg" />
-                      <div className="skeleton-bar skeleton-bar--md" />
-                      <div className="skeleton-bar skeleton-bar--lg" />
-                      <div className="skeleton-bar skeleton-bar--sm" />
-                    </div>
-                  ) : card.key === 'heatmap' ? (
-                    heatmapQuery.status === 'error' ? (
+                  {card.key === 'heatmap' ? (
+                    heatmapQuery.status === 'loading' ? (
+                      <div className="analytics-card-skeleton analytics-heat-skeleton">
+                        {Array.from({ length: 28 }, (_, i) => (
+                          <div key={i} className="skeleton-bar skeleton-heat-block" />
+                        ))}
+                      </div>
+                    ) : heatmapQuery.status === 'error' ? (
                       <div className="analytics-card-error" role="alert">
                         <span className="analytics-card-error-icon" aria-hidden="true">⚠</span>
                         <span className="analytics-card-error-text">

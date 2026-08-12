@@ -933,24 +933,32 @@ describe('AnalyticsScreen layout shell', () => {
     expect(screen.getByText('Total revenue')).toBeTruthy();
   });
 
-  it('refetches an identical query after the TTL expires', async () => {
+  it('revalidates an identical query after the TTL expires (stale-while-revalidate)', async () => {
     vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
     await flushRecalc();
+
+    const dailyCallsBefore = mockGetDailyRevenue.mock.calls.length;
 
     // Let the daily query's 5-minute TTL lapse
     act(() => {
       vi.advanceTimersByTime(5 * 60 * 1000 + 1000);
     });
 
-    // Switch away and back — the cached daily query is now stale, so a
-    // recalc skeleton appears and the data refetches
+    // Switch away and back — the cached daily query is now stale. The
+    // stale value renders instantly (no skeleton, no artificial delay)
+    // while a background revalidation refreshes the cache.
     fireEvent.click(screen.getByRole('radio', { name: 'Weekly' }));
     await flushRecalc();
     fireEvent.click(screen.getByRole('radio', { name: 'Daily' }));
-    expect(document.querySelectorAll('.analytics-card-skeleton').length).toBeGreaterThan(0);
-    await flushRecalc();
+
+    // Stale content is served immediately — no waiting skeleton.
+    expect(screen.getByText('Total revenue')).toBeTruthy();
     expect(document.querySelectorAll('.analytics-card-skeleton').length).toBe(0);
+    await flushRecalc();
+
+    // The background revalidation refetched the expired rows.
+    expect(mockGetDailyRevenue.mock.calls.length).toBeGreaterThan(dailyCallsBefore);
   });
 
   it('refresh always refetches even when the query is cached', async () => {
