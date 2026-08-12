@@ -4831,5 +4831,5 @@ Two regression pins:
 
 **Solution:** slice at 135's actual position — `ALL.iter().position(|m| m.id == "135_sale_line_cost_snapshot.sql")` with an `expect` that fails loudly if 135 is ever removed or renamed. Robust to future migrations being appended; the comment documents why the naive `len()-1` was wrong. The sibling fresh-vs-upgrade fingerprint test (split = 80) was checked and is correct — its split point is deliberately arbitrary.
 
-**Commits:** `(pending)`
+**Commits:** `7af6a6b9` (fix: slice migration-135 test at its position)
 **Tests:** oz-core full suite 2295/2295 (was 1595+669 un-run) · clippy -D warnings clean · fmt clean.
