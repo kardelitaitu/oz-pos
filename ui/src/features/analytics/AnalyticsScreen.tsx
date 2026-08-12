@@ -119,11 +119,34 @@ export default function AnalyticsScreen() {
     : visibleCards;
 
   // Smart heatmap — bucket cells change with the selected granularity.
+  // Yearly renders a 12-month × 4-week grid; other granularities are flat.
   // Intensity is a placeholder until real data is wired.
   const renderHeatmap = () => {
+    const aria = l10n.getString('analytics-card-peak-hours');
+    if (granularity === 'yearly') {
+      return (
+        <div className="analytics-heatmap analytics-heatmap--yearly" role="img" aria-label={aria}>
+          {HEAT_BUCKETS.monthly.map((month, mi) => (
+            <div className="analytics-heat-column" key={month}>
+              <span className="analytics-heat-label">{month}</span>
+              {[0, 1, 2, 3].map((week) => (
+                <div
+                  key={week}
+                  className="analytics-heat-cell"
+                  data-intensity={(mi * 4 + week * 7) % 5}
+                  title={`${month} W${week + 1}`}
+                >
+                  <div className="analytics-heat-block" />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      );
+    }
     const labels = heatLabels(granularity);
     return (
-      <div className="analytics-heatmap" role="img" aria-label={l10n.getString('analytics-card-peak-hours')}>
+      <div className="analytics-heatmap" role="img" aria-label={aria}>
         {labels.map((label, i) => {
           const intensity = (i * 37 + 7) % 5;
           return (

@@ -178,10 +178,11 @@ describe('AnalyticsScreen layout shell', () => {
     await new Promise((r) => setTimeout(r, 650));
     expect(cellCount()).toBe(12);
 
-    // Yearly → 4 quarter buckets
+    // Yearly → 12 month columns × 4 week rows = 48 cells
     await userEvent.click(screen.getByRole('radio', { name: 'Yearly' }));
     await new Promise((r) => setTimeout(r, 650));
-    expect(cellCount()).toBe(4);
+    expect(cellCount()).toBe(48);
+    expect(heatmap()?.querySelectorAll('.analytics-heat-column').length).toBe(12);
   });
 
   it('expands a card to fill the main area and restores it', async () => {
@@ -195,7 +196,8 @@ describe('AnalyticsScreen layout shell', () => {
 
     // Expand the Revenue card (first expand button)
     const expandButtons = screen.getAllByRole('button', { name: 'Expand card' });
-    await userEvent.click(expandButtons[1]);
+    expect(expandButtons.length).toBeGreaterThan(1);
+    await userEvent.click(expandButtons[1]!);
 
     // Only the expanded card remains visible, with a restore button
     expect(screen.getByRole('button', { name: 'Restore card' })).toBeTruthy();

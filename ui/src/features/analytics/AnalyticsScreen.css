@@ -338,6 +338,23 @@
   width: 100%;
 }
 
+/* Yearly: 12 month columns × 4 week rows */
+.analytics-heatmap--yearly {
+  gap: 10px;
+}
+
+.analytics-heat-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.analytics-heat-column .analytics-heat-block {
+  width: 20px;
+  height: 20px;
+}
+
 .analytics-heat-cell {
   display: flex;
   flex-direction: column;
