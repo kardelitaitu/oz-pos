@@ -1,6 +1,6 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { screen } from '@testing-library/react';
+import { act, fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import analyticsFtl from '@/locales/analytics.ftl?raw';
@@ -44,6 +44,20 @@ describe('AnalyticsScreen layout shell', () => {
   beforeEach(() => {
     mockGoToPicker.mockReset();
   });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /**
+   * Fire any pending recalculation timer instantly. Only meaningful when
+   * fake timers are enabled (the tests that need it call `vi.useFakeTimers()`).
+   */
+  const flushRecalc = () => {
+    act(() => {
+      vi.advanceTimersByTime(700);
+    });
+  };
 
   it('renders the three-area layout structure', () => {
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
@@ -156,43 +170,45 @@ describe('AnalyticsScreen layout shell', () => {
     expect(grid.style.zoom).toBe('0.8');
   });
 
-  it('renders a smart heatmap that changes buckets with granularity', async () => {
+  it('renders a smart heatmap that changes buckets with granularity', () => {
+    vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 
     const heatmap = () => document.querySelector('.analytics-heatmap');
     const cellCount = () => heatmap()?.querySelectorAll('.analytics-heat-cell').length ?? 0;
 
-    // Wait for the initial recalculation skeleton to clear
-    await new Promise((r) => setTimeout(r, 650));
+    // Skip the initial recalculation skeleton instantly
+    flushRecalc();
 
     // Default: daily → 7 weekday buckets
     expect(cellCount()).toBe(7);
 
     // Weekly → 24 hours × 7 days
-    await userEvent.click(screen.getByRole('radio', { name: 'Weekly' }));
-    await new Promise((r) => setTimeout(r, 650));
+    fireEvent.click(screen.getByRole('radio', { name: 'Weekly' }));
+    flushRecalc();
     expect(cellCount()).toBe(168);
     expect(heatmap()?.querySelectorAll('.analytics-weekly-row').length).toBe(25); // header + 24 hours
 
     // Monthly → one cell per day of the current month (28–31)
-    await userEvent.click(screen.getByRole('radio', { name: 'Monthly' }));
-    await new Promise((r) => setTimeout(r, 650));
+    fireEvent.click(screen.getByRole('radio', { name: 'Monthly' }));
+    flushRecalc();
     expect(cellCount()).toBe(daysInCurrentMonth());
     expect(cellCount()).toBeGreaterThanOrEqual(28);
     expect(cellCount()).toBeLessThanOrEqual(31);
 
     // Yearly → 12 month columns × 4 week rows = 48 cells
-    await userEvent.click(screen.getByRole('radio', { name: 'Yearly' }));
-    await new Promise((r) => setTimeout(r, 650));
+    fireEvent.click(screen.getByRole('radio', { name: 'Yearly' }));
+    flushRecalc();
     expect(cellCount()).toBe(48);
     expect(heatmap()?.querySelectorAll('.analytics-heat-column').length).toBe(12);
   });
 
-  it('expands a card to fill the main area and restores it', async () => {
+  it('expands a card to fill the main area and restores it', () => {
+    vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 
-    // Wait for the initial recalculation skeleton to clear
-    await new Promise((r) => setTimeout(r, 650));
+    // Skip the initial recalculation skeleton instantly
+    flushRecalc();
 
     // All cards visible before expanding
     expect(screen.getByText('Revenue Overview')).toBeTruthy();
@@ -200,27 +216,28 @@ describe('AnalyticsScreen layout shell', () => {
     // Expand the Revenue card (first expand button)
     const expandButtons = screen.getAllByRole('button', { name: 'Expand card' });
     expect(expandButtons.length).toBeGreaterThan(1);
-    await userEvent.click(expandButtons[1]!);
+    fireEvent.click(expandButtons[1]!);
 
     // Only the expanded card remains visible, with a restore button
     expect(screen.getByRole('button', { name: 'Restore card' })).toBeTruthy();
     expect(screen.getByText('Revenue Overview')).toBeTruthy();
 
     // Restore brings the grid back
-    await userEvent.click(screen.getByRole('button', { name: 'Restore card' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Restore card' }));
     expect(screen.getAllByRole('button', { name: 'Expand card' }).length).toBeGreaterThan(0);
   });
 
-  it('expands exactly one card — expanding another while one is open is ignored', async () => {
+  it('expands exactly one card — expanding another while one is open is ignored', () => {
+    vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 
-    // Wait for the initial recalculation skeleton to clear
-    await new Promise((r) => setTimeout(r, 650));
+    // Skip the initial recalculation skeleton instantly
+    flushRecalc();
 
     // Expand the first card
     const expandButtons = screen.getAllByRole('button', { name: 'Expand card' });
     const first = expandButtons[0]!;
-    await userEvent.click(first);
+    fireEvent.click(first);
 
     // Only the expanded card is rendered — exactly one restore action,
     // and no other expand buttons exist to open a different card
@@ -228,7 +245,7 @@ describe('AnalyticsScreen layout shell', () => {
     expect(screen.queryAllByRole('button', { name: 'Expand card' }).length).toBe(0);
 
     // Restore
-    await userEvent.click(screen.getByRole('button', { name: 'Restore card' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Restore card' }));
     expect(screen.getAllByRole('button', { name: 'Expand card' }).length).toBeGreaterThan(0);
   });
 
