@@ -4790,3 +4790,18 @@ Two regression pins:
 **Commits:** (pending)
 **Tests:** sourceAudit 8/8 (+8) · audit 4/4 · full UI suite 4,983/4,983 · typecheck clean · eslint 0 errors (10 pre-existing warnings, none new) · i18n lint clean.
 **Risks / follow-ups:** none. Future drift-guard audits over source text should import from test-utils/sourceAudit instead of re-implementing the scanner.
+
+## 2026-08-12 — topology.rs split into model/semantics/persistence/commands
+
+**Problem:** `apps/desktop-client/src/commands/topology.rs` was 8,506 lines — 2.8× the repo's ~3k-line per-file guideline. The bulk (6,000 lines, 234 tests) was `mod tests`; production was ~2,500 lines but the file was unreadable as a unit.
+
+**Solution:** Three slices, all pure movement (zero behavior change):
+1. Test extraction into `topology_tests.rs` (committed `d7e77383`; note: a `mod` inside `topology.rs` must live in `topology/topology_tests.rs`, not a sibling file).
+2. Production split: `model.rs` (types + serde + consts), `semantics.rs` (JSON validation engine, Tauri-free), `persistence.rs` (keys, save/load, Apply recovery), `commands.rs` (the four `#[tauri::command]` fns). `topology.rs` is a thin root re-exporting the public surface `lib.rs` registers. Two non-obvious findings: (a) Tauri's `#[command]` macro generates hidden `__cmd__*`/`__tauri_command_name_*` macro wrappers with the fn's visibility — the root must glob `pub use commands::*` or `generate_handler!` fails to resolve them; (b) the `gate_audit` command census only scanned flat `src/commands/*.rs`, so the split zeroed the `topology` pin — it now recurses into split command dirs and sums same-named root files (aggregation is order-safe via merge, not insert).
+3. Test split by subject into `topology_tests.rs` (serde/roundtrip, ~2.6k), `topology_stress_tests.rs` (~1.8k), `topology_command_tests.rs` (~1.6k); helpers made `pub(crate)` and shared via `use super::topology_tests::*`.
+
+**Commits:** `92e30da7` (refactor: the split + census recursion) · `5acfd972` (fix: 3 `needless_borrow`s in `oz-core/src/db/sales.rs` shipped by the concurrent batch-lookup commit `1986a953` — they blocked the workspace clippy gate; fixed separately and attributed).
+
+**Tests:** desktop-client 947/947 · `cargo clippy -p oz-pos-app --all-targets -D warnings` clean · `cargo fmt --all` clean.
+
+**Risks / follow-ups:** the split is mechanical; the semantic engine in `semantics.rs` is Tauri-free and could later move toward `oz-core` if it gains a second consumer. `topology_tests.rs` is still the largest file at ~2.6k — a future split could carve the save/load roundtrip tests further, but it's under the guideline. The `gate_audit` census recursion is depth-agnostic; a nested split (subdir within a command dir) would aggregate recursively under the same module key.
