@@ -1,6 +1,6 @@
 # OZ-POS Architecture
 
-<!-- Audit stamp: 2026-07-31 · Buffy-Agent · status: CORRECTED (7 drifts fixed Jul 31) · F1: 10/10 modules active · F2: 32 ADRs in docs/decisions/ · F3: 11 crates + 4 apps + 10 modules + 4 platform = 29 workspace members · F4: 10/10 modules have README · re-audited 2026-08-08 by docs-auditor: 34 ADRs; RESTRUCTURING.md refs removed (file no longer exists); Module Structure retitled as target-state (modules are Rust-only today) -->
+<!-- Audit stamp: 2026-08-12 · Buffy-Agent · status: ACCURATE · F1: 10/10 modules active · F2: 58 ADRs in docs/decisions/ · F3: 11 crates + 4 platform + 1 foundation + 10 modules + 3 apps = 29 workspace members · F4: 10/10 modules have README · re-audited 2026-08-12: 58 ADRs (was 34), foundation listing corrected, cloud-server config consolidation noted -->
 
 **Version:** 2.0 (Post-Restructuring)
 **Status:** Active — restructuring complete
@@ -364,9 +364,9 @@ oz-pos/
 │
 ├─ crates/            Low-level utility crates
 │   ├─ oz-core/        Database migrations, domain types, Store, sync_client, events
-│   ├─ oz-api/         HTTP API server (axum)
-│   ├─ oz-cli/         CLI tool
-│   ├─ oz-hal/         Hardware abstraction layer (printers, scanners, cash drawers)
+│   ├─ oz-api/         HTTP API server (axum) — now injects config via AppState
+│   ├─ oz-cli/         CLI tool for data import/export and maintenance
+│   ├─ oz-hal/         Hardware abstraction layer (printers, scanners, cash drawers, scales)
 │   ├─ oz-logging/     Structured logging setup
 │   ├─ oz-lua/         Lua scripting integration
 │   ├─ oz-notification/ Email & push notification dispatching
@@ -376,10 +376,19 @@ oz-pos/
 │   └─ oz-security/    Auth, hashing, encryption
 │
 ├─ foundation/        Reusable zero-business-logic code
-│   ├─ contracts/      Core traits (Module, Service, EventHandler)
-│   ├─ errors/         Shared error types (MoneyError, SkuError)
-│   ├─ enums/          Shared enumerations (SaleStatus, PaymentMethod)
-│   └─ money.rs        Money, Currency value objects
+│   ├─ contracts.rs    Core traits (Module, Service, EventHandler)
+│   ├─ errors.rs       Shared error types (MoneyError, SkuError)
+│   ├─ enums.rs        Shared enumerations (SaleStatus, PaymentMethod)
+│   ├─ money.rs        Money, Currency value objects
+│   ├─ barcode.rs      Barcode generation and parsing
+│   ├─ cart.rs         Cart-line domain type
+│   ├─ constants.rs    Shared constants
+│   ├─ contact.rs      Contact-info value objects
+│   ├─ dto.rs          Shared DTOs
+│   ├─ events.rs       Domain event type definitions
+│   ├─ percentage.rs   Percentage value object
+│   ├─ sku.rs          SKU value object
+│   └─ validation.rs   Validation utilities
 │
 ├─ ui/                Frontend (React/TypeScript)
 │   ├─ src/
@@ -458,7 +467,7 @@ Every module must contain:
 - `CHANGELOG.md` — Version history
 
 Every architectural change must create an Architecture Decision Record (ADR).
-As of August 2026 there are 34 ADRs in `docs/decisions/`. Key documents include:
+As of August 2026 there are 58 ADRs in `docs/decisions/`. Key documents include:
 ```
 docs/decisions/2026-01-15-module-system-design.md
 docs/decisions/2026-02-01-event-bus-design.md
@@ -496,8 +505,8 @@ For the full list see the `docs/decisions/` directory.
 not hard deadlines. Every PR should move the codebase closer to the target
 architecture.*
 
-> last audited 09-08-26 by buffy
-> audit: Phase 1 Core Architecture & API Docs Audit
+> last audited 2026-08-12 by buffy
+> audit: Architecture doc drift correction + env-var config consolidation
 
-> status: ACCURATE (verified against actual codebase) · verified accurate: all 33 directories, modules, crates, and platform components exist; Module trait with lifecycle methods confirmed; event bus in platform/kernel/src/event_bus.rs; sync engine functional; 29 workspace members match documented count exactly
+> status: ACCURATE (verified against actual codebase) · verified accurate: 29 workspace members (11 crates + 4 platform + 1 foundation + 10 modules + 3 apps); 58 ADRs in docs/decisions/; foundation crate has 14 source files; cloud-server uses centralized CloudServerConfig (env vars consolidated from 14 scattered reads to 1 struct); OpenAPI spec covers 22 endpoints with 23 named schemas; N+1 SKU lookup fixed in complete_sale_deduction; all clippy warnings resolved workspace-wide
 
