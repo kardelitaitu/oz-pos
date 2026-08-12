@@ -12,6 +12,11 @@ use rusqlite::{Connection, params};
 use crate::cli::SeedDemoArgs;
 
 /// Entry point: dispatch seed-demo based on CLI flags.
+///
+/// Seeds the main database (for cross-store data) and also all per-store
+/// `store-*.sqlite` files in the same directory (for domain data like
+/// products, categories, inventory, customers). The per-store databases
+/// are used by ADR #7 scoped commands (`list_products_scoped`, etc.).
 pub fn run_seed_demo(conn: &Connection, args: &SeedDemoArgs) -> Result<()> {
     // Disable FK checks during bulk seeding for performance and to avoid
     // ordering issues. Demo data is self-consistent; FKs will be checked
@@ -28,6 +33,7 @@ pub fn run_seed_demo(conn: &Connection, args: &SeedDemoArgs) -> Result<()> {
 
     let days = args.days;
 
+    // ── Seed main database ──────────────────────────────────────
     if args.all || args.retail {
         eprintln!("Seeding retail POS demo data ({} days)...", days);
         seed_retail(conn, days)?;
@@ -42,7 +48,141 @@ pub fn run_seed_demo(conn: &Connection, args: &SeedDemoArgs) -> Result<()> {
     }
 
     conn.execute_batch("PRAGMA foreign_keys = ON;")?;
+
+    // ── Seed per-store databases ────────────────────────────────
+    // ADR #7: the desktop app uses per-store SQLite files for domain
+    // data. Products, categories, inventory, and customers need to be
+    // present in those files too (but not sales — those are different
+    // per store).
+    let db_dir = std::path::Path::new(db_path)
+        .parent()
+        .unwrap_or(std::path::Path::new("."));
+    seed_store_databases(db_dir, args, db_path)?;
+
     eprintln!("Done.");
+    Ok(())
+}
+
+/// Find and seed all `store-*.sqlite` databases in `db_dir` with
+/// reference data (products, categories, inventory, customers) from
+/// the main database file at `main_db_path`.
+fn seed_store_databases(
+    db_dir: &std::path::Path,
+    args: &SeedDemoArgs,
+    main_db_path: &str,
+) -> Result<()> {
+    let mut found = false;
+
+    if let Ok(dir) = std::fs::read_dir(db_dir) {
+        for entry in dir.flatten() {
+            let path = entry.path();
+            let fname = path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            // Match store-*.sqlite but exclude WAL/SHM/index files
+            if !fname.starts_with("store-") || !fname.ends_with(".sqlite") {
+                continue;
+            }
+            // Skip journal/WAL files that happen to match the pattern
+            if fname.ends_with("-wal") || fname.ends_with("-shm") {
+                continue;
+            }
+
+            found = true;
+            eprintln!("\nSeeding per-store DB: {}", fname);
+
+            let store_conn = rusqlite::Connection::open(&path)
+                .with_context(|| format!("opening store db {}", path.display()))?;
+            store_conn.execute_batch("PRAGMA foreign_keys = OFF;")?;
+
+            // Run migrations on the store DB (idempotent)
+            {
+                let mut mconn = rusqlite::Connection::open(&path)?;
+                oz_core::migrations::run(&mut mconn)
+                    .with_context(|| format!("migrating store db {}", path.display()))?;
+            }
+
+            // Copy reference data from main to store DB
+            copy_reference_data(main_db_path, &store_conn)?;
+
+            store_conn.execute_batch("PRAGMA foreign_keys = ON;")?;
+            eprintln!("  ✅ store DB seeded");
+        }
+    }
+
+    if !found {
+        eprintln!(
+            "\nNote: no store-*.sqlite files found in {} — per-store databases will be\ncreated lazily when the app runs. Run `oz seed-demo --all --days 90` again after\nopening a workspace in the app to populate newly-created store databases.",
+            db_dir.display()
+        );
+    }
+    let _ = &args; // args consumed for future slicing per-store
+    Ok(())
+}
+
+/// Copy reference data (products, categories, inventory, customers,
+/// tax rates, suppliers) from the main database to a store database.
+fn copy_reference_data(main_db_path: &str, store_conn: &Connection) -> Result<()> {
+    let main_conn = rusqlite::Connection::open(main_db_path)
+        .with_context(|| format!("opening main db {main_db_path} for reference data copy"))?;
+
+    let tables: &[&str] = &[
+        "categories",
+        "products",
+        "inventory",
+        "customers",
+        "tax_rates",
+        "category_taxes",
+        "suppliers",
+    ];
+
+    for table in tables {
+        // Read schema columns from main DB
+        let cols: Vec<String> = main_conn
+            .prepare(&format!("PRAGMA table_info({table})"))?
+            .query_map([], |row| row.get::<_, String>(1))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        if cols.is_empty() {
+            continue;
+        }
+
+        let cols_str = cols.join(",");
+        let placeholders = cols.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+
+        // Read rows from main DB
+        let mut stmt = main_conn.prepare(&format!("SELECT {cols_str} FROM {table}"))?;
+        let rows: Vec<Vec<rusqlite::types::Value>> = stmt
+            .query_map([], |row| {
+                let mut vals = Vec::new();
+                for i in 0..cols.len() {
+                    vals.push(row.get(i)?);
+                }
+                Ok(vals)
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        if rows.is_empty() {
+            continue;
+        }
+
+        // Insert into store DB
+        let insert_sql =
+            format!("INSERT OR IGNORE INTO {table} ({cols_str}) VALUES ({placeholders})");
+        let mut istmt = store_conn.prepare(&insert_sql)?;
+        for row in &rows {
+            let params: Vec<&dyn rusqlite::types::ToSql> = row
+                .iter()
+                .map(|v| v as &dyn rusqlite::types::ToSql)
+                .collect();
+            istmt.execute(params.as_slice())?;
+        }
+    }
+
     Ok(())
 }
 
@@ -267,9 +407,9 @@ fn seed_retail(conn: &Connection, days: u32) -> Result<()> {
                 "pending"
             };
             let payment_method = match rng.gen_range(0u32..100) {
-                0..44 => "cash",
-                45..74 => "qris",
-                75..94 => "debit",
+                0..=44 => "cash",
+                45..=74 => "qris",
+                75..=94 => "debit",
                 _ => "split",
             };
             let customer_id = if rng.gen_bool(0.4) {
@@ -474,9 +614,9 @@ fn seed_restaurant(conn: &Connection, days: u32) -> Result<()> {
                 "pending"
             };
             let payment_method = match rng.gen_range(0u32..100) {
-                0..39 => "cash",
-                40..69 => "qris",
-                70..89 => "debit",
+                0..=39 => "cash",
+                40..=69 => "qris",
+                70..=89 => "debit",
                 _ => "split",
             };
             let _table = format!("table-{:02}", rng.gen_range(1u32..13));
