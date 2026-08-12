@@ -269,7 +269,45 @@ impl Store<'_> {
             terminal_id,
         )
     }
+}
 
+/// Batch-lookup product (id, product_type) for multiple SKUs in a single query.
+///
+/// Returns a `HashMap<SKU, (product_id, product_type)>`. SKUs not found
+/// in the database are absent from the map (caller handles missing entries).
+fn batch_lookup_products(
+    conn: &rusqlite::Connection,
+    skus: &[&str],
+) -> Result<HashMap<String, (String, String)>, CoreError> {
+    if skus.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let placeholders: Vec<String> = (0..skus.len()).map(|i| format!("?{}", i + 1)).collect();
+    let sql = format!(
+        "SELECT sku, id, product_type FROM products WHERE sku IN ({})",
+        placeholders.join(",")
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let params: Vec<&dyn rusqlite::types::ToSql> = skus
+        .iter()
+        .map(|s| s as &dyn rusqlite::types::ToSql)
+        .collect();
+    let rows = stmt.query_map(params.as_slice(), |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+        ))
+    })?;
+    let mut map = HashMap::new();
+    for row in rows {
+        let (sku, id, ptype) = row?;
+        map.insert(sku, (id, ptype));
+    }
+    Ok(map)
+}
+
+impl Store<'_> {
     /// Complete a sale by greedily allocating each tracked line across the
     /// topology-selected locations in route order. All stock checks,
     /// deductions, sale persistence, and deduction provenance remain inside
@@ -319,18 +357,12 @@ impl Store<'_> {
             HashMap::new();
         let mut shortfalls: Vec<Shortfall> = Vec::new();
 
-        for line in &sale.lines {
-            let product_info: Option<(String, String)> = match tx.query_row(
-                "SELECT id, product_type FROM products WHERE sku = ?1",
-                rusqlite::params![line.sku],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            ) {
-                Ok(val) => Some(val),
-                Err(rusqlite::Error::QueryReturnedNoRows) => None,
-                Err(e) => return Err(CoreError::Db(e)),
-            };
+        // Batch-lookup all SKUs in a single query (avoids N+1 per-line SELECT).
+        let skus: Vec<&str> = sale.lines.iter().map(|l| l.sku.as_str()).collect();
+        let product_map = batch_lookup_products(&tx, &skus)?;
 
-            let Some((pid, ptype_str)) = product_info else {
+        for line in &sale.lines {
+            let Some((pid, ptype_str)) = product_map.get(line.sku.as_str()) else {
                 shortfalls.push(Shortfall {
                     sku: line.sku.clone(),
                     product_name: line.sku.clone(),
