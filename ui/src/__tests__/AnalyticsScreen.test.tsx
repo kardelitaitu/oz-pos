@@ -30,6 +30,12 @@ vi.mock('@/hooks/useWorkspaceNav', () => ({
   useWorkspaceNav: () => ({ goToWorkspacePicker: mockGoToPicker }),
 }));
 
+// AnalyticsCardContent (rendered inside each card) formats money via
+// useCurrency — provide the same stub the other screen tests use.
+vi.mock('@/contexts/CurrencyContext', () => ({
+  useCurrency: () => ({ currency: 'USD', setCurrency: vi.fn(), loading: false }),
+}));
+
 import AnalyticsScreen, { nextExpandedKey, daysInCurrentMonth, monthCalendarGrid, smartScale } from '@/features/analytics/AnalyticsScreen';
 import { registerAnalyticsFeature } from '@/features/analytics/register';
 import { registerStaffFeature } from '@/features/staff/register';
@@ -383,10 +389,14 @@ describe('AnalyticsScreen layout shell', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Last 7 days' }));
 
+    // Local calendar dates — matches the screen's local-time date handling
+    // (UTC toISOString can differ from the local date near midnight).
+    const iso = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const expectedFrom = new Date();
     expectedFrom.setDate(expectedFrom.getDate() - 6);
-    expect(from.value).toBe(expectedFrom.toISOString().slice(0, 10));
-    expect(to.value).toBe(new Date().toISOString().slice(0, 10));
+    expect(from.value).toBe(iso(expectedFrom));
+    expect(to.value).toBe(iso(new Date()));
   });
 
   it('collapses all card bodies with the toggle and restores them', () => {
@@ -508,6 +518,41 @@ describe('AnalyticsScreen layout shell', () => {
     flushRecalc();
     expect(cellCount()).toBe(48);
     expect(heatmap()?.querySelectorAll('.analytics-heat-column').length).toBe(12);
+  });
+
+  it('renders designed content in the non-heatmap cards', () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    flushRecalc();
+
+    // Every non-heatmap card shows the demo-data chip (13 retail − heatmap)
+    expect(screen.getAllByText('Demo data').length).toBe(12);
+
+    // Revenue card: total-revenue KPI + a chart carrying the card title
+    expect(screen.getByText('Total revenue')).toBeTruthy();
+    expect(screen.getAllByLabelText('Revenue Overview').length).toBeGreaterThan(0);
+
+    // Staff card: ranked list of four
+    expect(document.querySelectorAll('.analytics-rank-row').length).toBeGreaterThanOrEqual(4);
+
+    // Low-stock card: four alert rows with remaining counts
+    expect(document.querySelectorAll('.analytics-alert-row').length).toBe(4);
+    expect(screen.getAllByText(/\d+ left/).length).toBe(4);
+
+    // Refunds card: KPI tiles
+    expect(document.querySelectorAll('.analytics-kpi-tiles').length).toBeGreaterThan(0);
+  });
+
+  it('keeps card visuals rendering as granularity changes', () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    flushRecalc();
+
+    for (const g of ['Weekly', 'Monthly', 'Yearly']) {
+      fireEvent.click(screen.getByRole('radio', { name: g }));
+      flushRecalc();
+      expect(screen.getAllByText('Demo data').length).toBe(12);
+    }
   });
 
   it('expands a card to fill the main area and restores it', () => {

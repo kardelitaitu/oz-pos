@@ -8,10 +8,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
+import { AnalyticsCardContent } from './AnalyticsCardContent';
 import './AnalyticsScreen.css';
 
-type WorkspaceView = 'retail' | 'restaurant';
-type Granularity = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom';
+export type WorkspaceView = 'retail' | 'restaurant';
+export type Granularity = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom';
 
 const GRANULARITIES: Granularity[] = ['daily', 'weekly', 'monthly', 'yearly', 'custom'];
 
@@ -107,37 +108,39 @@ interface AnalyticsCard {
   key: string;
   /** `null` = appears in both workspaces */
   workspace: WorkspaceView | null;
-  /** Fluent message id */
+  /** Fluent message id for the title */
   titleKey: string;
   /** English fallback shown when the Fluent key is missing */
   title: string;
+  /** Fluent message id for the one-line description (info tooltip) */
+  descKey: string;
   /** `wide` = span 2 columns; `full` = span all columns; default = single */
   size?: 'wide' | 'full';
 }
 
 const ANALYTICS_CARDS: AnalyticsCard[] = [
   // 2×1 wide heatmap
-  { key: 'heatmap',   workspace: null,         titleKey: 'analytics-card-heatmap', title: 'Heat Map', size: 'wide' },
+  { key: 'heatmap',   workspace: null,         titleKey: 'analytics-card-heatmap', title: 'Heat Map', descKey: 'analytics-card-desc-heatmap', size: 'wide' },
   // Shared (both retail and restaurant)
-  { key: 'revenue',   workspace: null,         titleKey: 'analytics-card-revenue',    title: 'Revenue Overview' },
-  { key: 'aov',       workspace: null,         titleKey: 'analytics-card-aov',        title: 'Average Order Value' },
-  { key: 'staff',     workspace: null,         titleKey: 'analytics-card-staff',      title: 'Staff Performance' },
-  { key: 'customers', workspace: null,         titleKey: 'analytics-card-customers',  title: 'New vs Returning Customers' },
-  { key: 'payments',  workspace: null,         titleKey: 'analytics-card-payments',   title: 'Payment Methods' },
-  { key: 'discounts', workspace: null,         titleKey: 'analytics-card-discounts',  title: 'Discounts & Promotions' },
-  { key: 'refunds',   workspace: null,         titleKey: 'analytics-card-refunds',    title: 'Refunds & Voids' },
+  { key: 'revenue',   workspace: null,         titleKey: 'analytics-card-revenue',    title: 'Revenue Overview', descKey: 'analytics-card-desc-revenue' },
+  { key: 'aov',       workspace: null,         titleKey: 'analytics-card-aov',        title: 'Average Order Value', descKey: 'analytics-card-desc-aov' },
+  { key: 'staff',     workspace: null,         titleKey: 'analytics-card-staff',      title: 'Staff Performance', descKey: 'analytics-card-desc-staff' },
+  { key: 'customers', workspace: null,         titleKey: 'analytics-card-customers',  title: 'New vs Returning Customers', descKey: 'analytics-card-desc-customers' },
+  { key: 'payments',  workspace: null,         titleKey: 'analytics-card-payments',   title: 'Payment Methods', descKey: 'analytics-card-desc-payments' },
+  { key: 'discounts', workspace: null,         titleKey: 'analytics-card-discounts',  title: 'Discounts & Promotions', descKey: 'analytics-card-desc-discounts' },
+  { key: 'refunds',   workspace: null,         titleKey: 'analytics-card-refunds',    title: 'Refunds & Voids', descKey: 'analytics-card-desc-refunds' },
   // Retail-only
-  { key: 'top-items', workspace: 'retail',     titleKey: 'analytics-card-top-products', title: 'Top Products' },
-  { key: 'category',  workspace: 'retail',     titleKey: 'analytics-card-category',   title: 'Sales by Category' },
-  { key: 'basket',    workspace: 'retail',     titleKey: 'analytics-card-basket',     title: 'Average Basket Size' },
-  { key: 'inventory', workspace: 'retail',     titleKey: 'analytics-card-inventory',  title: 'Stock Turnover' },
-  { key: 'low-stock', workspace: 'retail',     titleKey: 'analytics-card-low-stock',  title: 'Low Stock Alerts' },
+  { key: 'top-items', workspace: 'retail',     titleKey: 'analytics-card-top-products', title: 'Top Products', descKey: 'analytics-card-desc-top-products' },
+  { key: 'category',  workspace: 'retail',     titleKey: 'analytics-card-category',   title: 'Sales by Category', descKey: 'analytics-card-desc-category' },
+  { key: 'basket',    workspace: 'retail',     titleKey: 'analytics-card-basket',     title: 'Average Basket Size', descKey: 'analytics-card-desc-basket' },
+  { key: 'inventory', workspace: 'retail',     titleKey: 'analytics-card-inventory',  title: 'Stock Turnover', descKey: 'analytics-card-desc-inventory' },
+  { key: 'low-stock', workspace: 'retail',     titleKey: 'analytics-card-low-stock',  title: 'Low Stock Alerts', descKey: 'analytics-card-desc-low-stock' },
   // Restaurant-only
-  { key: 'top-items', workspace: 'restaurant', titleKey: 'analytics-card-top-menu',   title: 'Top Menu Items' },
-  { key: 'tables',    workspace: 'restaurant', titleKey: 'analytics-card-tables',     title: 'Table Turnover' },
-  { key: 'occupancy', workspace: 'restaurant', titleKey: 'analytics-card-occupancy',  title: 'Table Occupancy' },
-  { key: 'waitstaff', workspace: 'restaurant', titleKey: 'analytics-card-waitstaff',  title: 'Top Waitstaff' },
-  { key: 'voids',     workspace: 'restaurant', titleKey: 'analytics-card-voids',      title: 'Voided Items' },
+  { key: 'top-items', workspace: 'restaurant', titleKey: 'analytics-card-top-menu',   title: 'Top Menu Items', descKey: 'analytics-card-desc-top-menu' },
+  { key: 'tables',    workspace: 'restaurant', titleKey: 'analytics-card-tables',     title: 'Table Turnover', descKey: 'analytics-card-desc-tables' },
+  { key: 'occupancy', workspace: 'restaurant', titleKey: 'analytics-card-occupancy',  title: 'Table Occupancy', descKey: 'analytics-card-desc-occupancy' },
+  { key: 'waitstaff', workspace: 'restaurant', titleKey: 'analytics-card-waitstaff',  title: 'Top Waitstaff', descKey: 'analytics-card-desc-waitstaff' },
+  { key: 'voids',     workspace: 'restaurant', titleKey: 'analytics-card-voids',      title: 'Voided Items', descKey: 'analytics-card-desc-voids' },
 ];
 
 // ── Component ─────────────────────────────────────────────────────────
@@ -170,6 +173,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   const [zoomPopover, setZoomPopover] = useState(false);
   const paletteInputRef = useRef<HTMLInputElement | null>(null);
   const toastId = useRef(0);
+  const cardRefs = useRef(new Map<string, HTMLDivElement>());
   const [cardOrder, setCardOrder] = useState<string[]>([]);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
@@ -579,145 +583,6 @@ const [paletteOpen, setPaletteOpen] = useState(false);
     );
   };
 
-  // Render a placeholder chart icon based on card key
-  const cardPlaceholder = (key: string) => {
-    const icons: Record<string, JSX.Element> = {
-      revenue: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
-          strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
-          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-        </svg>
-      ),
-      staff: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
-          strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
-          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-          <circle cx="9" cy="7" r="4" />
-          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-        </svg>
-      ),
-      'top-items': (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
-          strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
-          <line x1="12" y1="20" x2="12" y2="10" />
-          <line x1="18" y1="20" x2="18" y2="4" />
-          <line x1="6" y1="20" x2="6" y2="16" />
-        </svg>
-      ),
-      category: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
-          strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
-          <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
-          <path d="M22 12A10 10 0 0 0 12 2v10z" />
-        </svg>
-      ),
-      tables: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
-          strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-          <line x1="3" y1="9" x2="21" y2="9" />
-          <line x1="9" y1="21" x2="9" y2="9" />
-        </svg>
-      ),
-      payments: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
-          strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
-          <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
-          <line x1="1" y1="10" x2="23" y2="10" />
-        </svg>
-      ),
-      heatmap: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
-          strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
-          <rect x="3" y="3" width="7" height="7" />
-          <rect x="14" y="3" width="7" height="7" />
-          <rect x="3" y="14" width="7" height="7" />
-          <rect x="14" y="14" width="7" height="7" />
-        </svg>
-      ),
-      aov: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
-          strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
-          <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
-          <line x1="7" y1="7" x2="7.01" y2="7" />
-        </svg>
-      ),
-      customers: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
-          strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
-          <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-          <circle cx="8.5" cy="7" r="4" />
-          <line x1="20" y1="8" x2="20" y2="14" />
-          <line x1="23" y1="11" x2="17" y2="11" />
-        </svg>
-      ),
-      discounts: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
-          strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
-          <line x1="19" y1="5" x2="5" y2="19" />
-          <circle cx="6.5" cy="6.5" r="2.5" />
-          <circle cx="17.5" cy="17.5" r="2.5" />
-        </svg>
-      ),
-      refunds: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
-          strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
-          <polyline points="1 4 1 10 7 10" />
-          <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-        </svg>
-      ),
-      basket: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
-          strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
-          <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-          <line x1="3" y1="6" x2="21" y2="6" />
-          <path d="M16 10a4 4 0 0 1-8 0" />
-        </svg>
-      ),
-      inventory: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
-          strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
-          <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-          <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-          <line x1="12" y1="22.08" x2="12" y2="12" />
-        </svg>
-      ),
-      'low-stock': (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
-          strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
-          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-          <line x1="12" y1="9" x2="12" y2="13" />
-          <line x1="12" y1="17" x2="12.01" y2="17" />
-        </svg>
-      ),
-      occupancy: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
-          strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
-          <circle cx="12" cy="12" r="10" />
-          <polyline points="12 6 12 12 16 14" />
-        </svg>
-      ),
-      waitstaff: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
-          strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
-          <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-          <circle cx="8.5" cy="7" r="4" />
-          <polyline points="17 11 19 13 23 9" />
-        </svg>
-      ),
-      voids: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
-          strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
-          <circle cx="12" cy="12" r="10" />
-          <line x1="15" y1="9" x2="9" y2="15" />
-          <line x1="9" y1="9" x2="15" y2="15" />
-        </svg>
-      ),
-    };
-    return icons[key] ?? icons['revenue'];
-  };
-
   return (
     <div className="analytics" role="region" aria-label={l10n.getString('analytics-region-aria')}>
 
@@ -1049,7 +914,25 @@ const [paletteOpen, setPaletteOpen] = useState(false);
             return (
             <div
               key={cid}
+              ref={(el) => { if (el) cardRefs.current.set(cid, el); else cardRefs.current.delete(cid); }}
+              tabIndex={0}
               draggable={!isExpanded}
+              aria-label={card.title}
+              onKeyDown={(e) => {
+                const idx = orderedCards.findIndex((c) => cardId(c) === cid);
+                if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  const next = orderedCards[idx + 1];
+                  if (next) cardRefs.current.get(cardId(next))?.focus();
+                } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  const prev = orderedCards[idx - 1];
+                  if (prev) cardRefs.current.get(cardId(prev))?.focus();
+                } else if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setExpandedKey((current) => nextExpandedKey(current, cid));
+                }
+              }}
               onDragStart={(e) => { setDragId(cid); if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'; }}
               onDragOver={(e) => { e.preventDefault(); if (overId !== cid) setOverId(cid); }}
               onDragLeave={() => setOverId((o) => (o === cid ? null : o))}
@@ -1069,6 +952,20 @@ const [paletteOpen, setPaletteOpen] = useState(false);
                   <h2 className="analytics-card-title">{card.title}</h2>
                 </Localized>
                 <div className="analytics-card-actions">
+                  <button
+                    type="button"
+                    className="analytics-card-action analytics-card-info"
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label={l10n.getString(card.descKey)}
+                    title={l10n.getString(card.descKey)}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                      strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="16" x2="12" y2="12" />
+                      <line x1="12" y1="8" x2="12.01" y2="8" />
+                    </svg>
+                  </button>
                   <button
                     type="button"
                     className="analytics-card-action"
@@ -1157,7 +1054,13 @@ const [paletteOpen, setPaletteOpen] = useState(false);
                   className="analytics-card-content"
                   style={isExpanded ? { transform: `scale(${expandScale})` } : undefined}
                 >
-                  {calculating ? (
+                  {calculating && card.key === 'heatmap' ? (
+                    <div className="analytics-card-skeleton analytics-heat-skeleton">
+                      {Array.from({ length: 28 }, (_, i) => (
+                        <div key={i} className="skeleton-bar skeleton-heat-block" />
+                      ))}
+                    </div>
+                  ) : calculating ? (
                     <div className="analytics-card-skeleton">
                       <div className="skeleton-bar skeleton-bar--sm" />
                       <div className="skeleton-bar skeleton-bar--lg" />
@@ -1168,10 +1071,12 @@ const [paletteOpen, setPaletteOpen] = useState(false);
                   ) : card.key === 'heatmap' ? (
                     renderHeatmap()
                   ) : (
-                    <div className="analytics-card-placeholder">
-                      {cardPlaceholder(card.key)}
-                      <span className="analytics-card-hint">No data yet</span>
-                    </div>
+                    <AnalyticsCardContent
+                      cardKey={card.key}
+                      granularity={granularity}
+                      workspaceView={workspaceView}
+                      title={l10n.getString(card.titleKey)}
+                    />
                   )}
                 </div>
               </div>
