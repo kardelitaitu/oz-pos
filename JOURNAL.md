@@ -1,4 +1,15 @@
 
+## 2026-08-12 — TDD cycle: node finder missing its combobox ARIA contract
+
+### The Ctrl+F finder was a combobox pattern without combobox semantics — screen readers announced no active match
+**Problem:** Second review pass over the topology editor. The node finder (Ctrl+F, round ~165) is structurally a combobox — a filter input driving a `role="listbox"` of `role="option"` matches — but the input stayed a plain textbox with no `role="combobox"`, `aria-expanded`, `aria-controls`, or `aria-activedescendant`, and the listbox/options had no ids. The options' `aria-selected` highlights were invisible to ATs because nothing referenced them: a screen-reader user typing a query heard only the input value, and the Arrow keys moved the highlight visually with zero feedback — so pressing Enter jumped somewhere they had no way to predict.
+
+**Solution:** Red→Green. (1) Red — a finder test asserting the contract failed: listbox id missing, no combobox role/attributes. (2) Green — the input is now `role="combobox"` with `aria-expanded="true"`, `aria-controls="topology-finder-listbox"`, and `aria-activedescendant` pointing at the active option's id (ids are deterministic: `topology-finder-option-<nodeId>`); the listbox and empty-state option got stable ids, and a no-match query points the active descendant at the empty-state option so "no results" is announced instead of a stale highlight. (3) The test also pins the arrow-key wrap (Down ×3 wraps to first, Up wraps to last) so the announced target can never drift from the visual highlight.
+
+**Validation:** finder contract test 1/1 (was Red) · finder block 6/6 · topology suites + a11y 662/662 · full UI suite 4,911 tests · eslint 0 errors · typecheck · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** the options stay non-focusable (the listbox pattern keeps the input as the single tab stop — correct for a quick-jump overlay); no focus trap on the dialog, consistent with the editor's other lightweight overlays. The remaining known candidates for future slices: ADR #34 gates (ticket-routing cardinality, legacy schema migration UI, backend compiler effects) and the dead `topology-tool-warehouse` FTL key.
+
 ## 2026-08-12 — TDD cycle: node cards carried an illegal aria-selected (axe critical)
 
 ### The selectable cards exposed aria-selected on role="group" — a critical axe violation on every card

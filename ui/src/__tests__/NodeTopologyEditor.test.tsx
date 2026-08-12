@@ -8013,6 +8013,40 @@ describe('NodeTopologyEditor — node finder', () => {
     expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(0);
     expect((document.querySelector('.node-canvas-viewport') as HTMLElement).style.transform).toBe(before);
   });
+
+  it('wires the combobox ARIA contract so the active match is announced', () => {
+    // The finder is a combobox pattern (filter input + option list), so the
+    // input must expose aria-expanded / aria-controls / aria-activedescendant
+    // or a screen-reader user gets NO feedback on which match Enter jumps to.
+    renderEditor();
+    openFinder();
+    const input = finderInput()!;
+    const listbox = document.querySelector('.topology-finder-list') as HTMLElement;
+    expect(listbox.id).toBe('topology-finder-listbox');
+    expect(input.getAttribute('role')).toBe('combobox');
+    expect(input.getAttribute('aria-expanded')).toBe('true');
+    expect(input.getAttribute('aria-controls')).toBe('topology-finder-listbox');
+
+    // Default (empty) query matches all three retail nodes — first is active.
+    const options = () => [...document.querySelectorAll('.topology-finder-item')];
+    expect(options()).toHaveLength(3);
+    expect(input.getAttribute('aria-activedescendant')).toBe(options()[0]!.id);
+
+    // ArrowDown moves the highlight (and the announced target) forward, wrapping.
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(input.getAttribute('aria-activedescendant')).toBe(options()[1]!.id);
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(input.getAttribute('aria-activedescendant')).toBe(options()[0]!.id);
+    fireEvent.keyDown(input, { key: 'ArrowUp' });
+    expect(input.getAttribute('aria-activedescendant')).toBe(options()[2]!.id);
+
+    // A query with no matches points at the empty-state option, so the
+    // "no results" state is announced instead of a stale highlight.
+    fireEvent.change(input, { target: { value: 'zzz-none' } });
+    expect(document.querySelector('.topology-finder-empty')).not.toBeNull();
+    expect(input.getAttribute('aria-activedescendant')).toBe('topology-finder-empty');
+  });
 });
 
 // ── Auto-layout ──────────────────────────────────────────────────

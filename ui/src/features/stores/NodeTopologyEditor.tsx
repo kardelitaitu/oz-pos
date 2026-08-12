@@ -6143,6 +6143,15 @@ export default function NodeTopologyEditor({
           {/* ── Node finder (Ctrl+F) — quick jump overlay ─────── */}
           {finderOpen && (() => {
             const activeIndex = Math.min(finderIndex, Math.max(0, finderMatches.length - 1));
+            // The finder is a combobox pattern (filter input + option list):
+            // the input announces its active match via aria-activedescendant
+            // so a screen-reader user knows exactly what Enter will jump to.
+            // The empty-state option carries the "no matches" announcement.
+            const activeDescendant = finderMatches.length > 0
+              ? `topology-finder-option-${finderMatches[activeIndex]!.id}`
+              : finderQuery.trim() !== ''
+                ? 'topology-finder-empty'
+                : undefined;
             return (
               <div
                 className="topology-finder"
@@ -6154,6 +6163,10 @@ export default function NodeTopologyEditor({
                   ref={finderInputRef}
                   className="topology-finder-input"
                   type="text"
+                  role="combobox"
+                  aria-expanded="true"
+                  aria-controls="topology-finder-listbox"
+                  aria-activedescendant={activeDescendant}
                   value={finderQuery}
                   placeholder={l10n.getString('topology-finder-placeholder')}
                   aria-label={l10n.getString('topology-finder-aria')}
@@ -6179,14 +6192,24 @@ export default function NodeTopologyEditor({
                     }
                   }}
                 />
-                <ul className="topology-finder-list" role="listbox">
+                <ul
+                  id="topology-finder-listbox"
+                  className="topology-finder-list"
+                  role="listbox"
+                >
                   {finderMatches.length === 0 ? (
-                    <li className="topology-finder-empty" role="option" aria-selected="false">
+                    <li
+                      id="topology-finder-empty"
+                      className="topology-finder-empty"
+                      role="option"
+                      aria-selected="false"
+                    >
                       {l10n.getString('topology-finder-no-matches')}
                     </li>
                   ) : finderMatches.map((n, i) => (
                     <li
                       key={n.id}
+                      id={`topology-finder-option-${n.id}`}
                       role="option"
                       aria-selected={i === activeIndex}
                       className={`topology-finder-item ${i === activeIndex ? 'is-active' : ''}`}
