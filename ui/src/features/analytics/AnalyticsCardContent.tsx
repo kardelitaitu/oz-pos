@@ -23,16 +23,17 @@ import { cardQueryKey } from './analytics-cache';
 import type { MenuEngineeringRow } from '@/api/reports';
 import {
   CARD_LOADERS,
+  alignPrevHourly,
   periodDelta,
   previousRange,
   seriesDelta,
   turnDelta,
   type AnalyticsQuery,
+  type BasketTrend,
   type Bucket,
   type RankRow,
 } from './analytics-data';
 import type {
-  BasketSizeRow,
   CategoryBreakdownRow,
   CustomerSplitRow,
   DiscountsSummaryRow,
@@ -608,25 +609,49 @@ function CategoryCard({ q, title, expanded, compare }: { q: AnalyticsQuery; titl
         {delta !== null && <DeltaChip value={delta} />}
       </div>
       <div className="analytics-card-chart analytics-card-chart--donut" role="img" aria-label={title}>
-        <ReactEChartsCore echarts={echarts} option={option!} style={{ height: expanded ? 210 : 118 }} notMerge />
+        <ReactEChartsCore echarts={echarts} option={option!} style={{ height: chartHeight('category', expanded) }} notMerge />
       </div>
       <Legend items={names.map((n, i) => ({ name: n, value: `${pcts[i]}%`, color: PALETTE[i % PALETTE.length]! }))} />
     </Visual>
   );
 }
 
-function BasketCard({ q, expanded, compare }: { q: AnalyticsQuery; expanded?: boolean | undefined; compare?: boolean | undefined }) {
+function BasketCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: string; expanded?: boolean | undefined; compare?: boolean | undefined }) {
   const { l10n } = useLocalization();
-  const { data: basket, prev: prevBasket, error } = useCardDataCompare<BasketSizeRow>('basket', q, compare ?? false);
+  const { data: basket, prev: prevBasket, error } = useCardDataCompare<BasketTrend>('basket', q, compare ?? false);
+  const data = basket ? basket.buckets : [];
+  const prevData = prevBasket ? prevBasket.buckets : [];
   const avg = basket ? basket.avg_line_count : 0;
   const orders = basket ? basket.sale_count : 0;
   const prevAvg = prevBasket ? prevBasket.avg_line_count : 0;
+  const peak = data.length ? data.reduce((a, b) => (b.value > a.value ? b : a)) : null;
+  const low = data.length ? data.reduce((a, b) => (b.value < a.value ? b : a)) : null;
   const delta = compare ? periodDelta(avg, prevAvg) : null;
+  const option = useMemo(() => (data.length ? ({
+    grid: { left: 8, right: 8, top: 12, bottom: 0, containLabel: true },
+    tooltip: { trigger: 'axis' as const },
+    xAxis: {
+      type: 'category' as const, data: data.map((d) => d.label),
+      axisLabel: { fontSize: 9, color: CHART_TEXT }, axisLine: { show: false }, axisTick: { show: false },
+    },
+    yAxis: { type: 'value' as const, show: false },
+    series: [
+      {
+        type: 'bar' as const, data: data.map((d) => d.value),
+        itemStyle: { color: '#06b6d4', borderRadius: [3, 3, 0, 0] }, barWidth: '55%',
+      },
+      ...(compare && prevData.length ? [{
+        name: l10n.getString('analytics-card-prev'),
+        type: 'line' as const, data: prevData.map((d) => d.value),
+        smooth: true, symbol: 'none',
+        itemStyle: { color: '#94a3b8' }, lineStyle: { width: 1.5, color: '#94a3b8', type: 'dashed' as const },
+      }] : []),
+    ],
+  }) : null), [data, prevData, compare, l10n]);
   if (error) return <CardError error={error} />;
   if (!basket) return <CardLoading />;
-  // The backend only surfaces the range average, so a per-bucket chart or
-  // peak/low insight would be fabricated. Present the honest aggregate:
-  // average items per order plus the order volume behind that number.
+  // Real per-bucket basket size from the backend — average items per order
+  // per bucket, with the range totals as the KPI tiles.
   return (
     <Visual>
       <div className={`analytics-kpi-tiles${expanded ? ' analytics-kpi-tiles--expanded' : ''}`}>
@@ -634,7 +659,11 @@ function BasketCard({ q, expanded, compare }: { q: AnalyticsQuery; expanded?: bo
         <Kpi value={orders > 0 ? String(orders) : '—'} label={l10n.getString('analytics-card-basket-orders')} />
       </div>
       {delta !== null && <p className="analytics-card-insight"><DeltaChip value={delta} /></p>}
-      <p className="analytics-card-insight">{l10n.getString('analytics-card-basket-range')}</p>
+      <div className="analytics-card-chart" role="img" aria-label={title}>
+        <ReactEChartsCore echarts={echarts} option={option!} style={{ height: chartHeight('basket', expanded) }} notMerge />
+      </div>
+      {peak && <p className="analytics-card-insight">{l10n.getString('analytics-card-peak', { label: peak.label, value: peak.value.toFixed(1) })}</p>}
+      {low && <p className="analytics-card-insight">{l10n.getString('analytics-card-low', { label: low.label, value: low.value.toFixed(1) })}</p>}
     </Visual>
   );
 }
@@ -773,10 +802,10 @@ function TablesCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title:
     <Visual>
       <div className="analytics-kpi-row">
         <Kpi value={avgTurn > 0 ? `${avgTurn}m` : '—'} label={l10n.getString('analytics-card-tables-turn')} />
-        {delta !== null && <DeltaChip value={delta} tone={compare ? 'bad' : undefined} />}
+        {delta !== null && <DeltaChip value={delta} {...(compare ? { tone: 'bad' as const } : {})} />}
       </div>
       <div className="analytics-card-chart" role="img" aria-label={title}>
-        <ReactEChartsCore echarts={echarts} option={option!} style={{ height: expanded ? 240 : 104 }} notMerge />
+        <ReactEChartsCore echarts={echarts} option={option!} style={{ height: chartHeight('tables', expanded) }} notMerge />
       </div>
       {peak && <p className="analytics-card-insight">{l10n.getString('analytics-card-peak', { label: peak.label, value: `${peak.value}m` })}</p>}
       {low && <p className="analytics-card-insight">{l10n.getString('analytics-card-low', { label: low.label, value: `${low.value}m` })}</p>}
@@ -784,17 +813,26 @@ function TablesCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title:
   );
 }
 
-function OccupancyCard({ q, title, expanded }: { q: AnalyticsQuery; title: string; expanded?: boolean | undefined }) {
+function OccupancyCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: string; expanded?: boolean | undefined; compare?: boolean | undefined }) {
   const { l10n } = useLocalization();
   // Real rate from the live tables snapshot + real per-hour completed table
   // orders from the backend — nothing is demo-shaped anymore.
-  const { data: occ, error } = useCardData<TableOccupancy>('occupancy', q);
+  const { data: occ, prev: prevOcc, error } = useCardDataCompare<TableOccupancy>('occupancy', q, compare ?? false);
   const rate = occ ? occ.rate : 0;
   const hourly = occ ? occ.hourly : [];
+  const prevHourly = prevOcc ? prevOcc.hourly : [];
   const peak = occ ? occ.peak_hour : null;
   // The peak-hour bucket carries the raw order count for the meta line;
   // pct/level already share the heatmap's intensity scale.
   const peakBucket = peak !== null ? hourly.find((h) => h.hour === peak) : null;
+  // The live rate is a snapshot, so the compare chip uses table-order
+  // volume across the period (sum of the hourly counts) instead.
+  const totalOrders = hourly.reduce((s, h) => s + h.table_orders, 0);
+  const prevOrders = prevHourly.reduce((s, h) => s + h.table_orders, 0);
+  const delta = compare ? periodDelta(totalOrders, prevOrders) : null;
+  // Align the previous curve by hour — the backend only returns hours with
+  // orders, so index alignment would misplot when the hour sets differ.
+  const prevPct = compare ? alignPrevHourly(hourly, prevHourly) : [];
   const option = useMemo(() => ({
     grid: { left: 8, right: 8, top: 8, bottom: 0, containLabel: true },
     tooltip: { trigger: 'axis' as const, valueFormatter: (v: unknown) => `${v}%` },
@@ -803,12 +841,20 @@ function OccupancyCard({ q, title, expanded }: { q: AnalyticsQuery; title: strin
       axisLabel: { fontSize: 9, color: CHART_TEXT, interval: 1 }, axisLine: { show: false }, axisTick: { show: false },
     },
     yAxis: { type: 'value' as const, show: false, max: 100 },
-    series: [{
-      type: 'line' as const, data: hourly.map((d) => d.pct),
-      smooth: true, symbol: 'none', lineStyle: { width: 2, color: '#f59e0b' },
-      areaStyle: { opacity: 0.12 }, itemStyle: { color: '#f59e0b' },
-    }],
-  }), [hourly]);
+    series: [
+      {
+        type: 'line' as const, data: hourly.map((d) => d.pct),
+        smooth: true, symbol: 'none', lineStyle: { width: 2, color: '#f59e0b' },
+        areaStyle: { opacity: 0.12 }, itemStyle: { color: '#f59e0b' },
+      },
+      ...(compare && prevHourly.length ? [{
+        name: l10n.getString('analytics-card-prev'),
+        type: 'line' as const, data: prevPct,
+        smooth: true, symbol: 'none',
+        itemStyle: { color: '#94a3b8' }, lineStyle: { width: 1.5, color: '#94a3b8', type: 'dashed' as const },
+      }] : []),
+    ],
+  }), [hourly, prevPct, compare, l10n]);
   if (error) return <CardError error={error} />;
   if (!occ) return <CardLoading />;
   return (
@@ -829,48 +875,59 @@ function OccupancyCard({ q, title, expanded }: { q: AnalyticsQuery; title: strin
             </span>
           )}
         </div>
+        {delta !== null && <p className="analytics-card-insight"><DeltaChip value={delta} /></p>}
         <div className="analytics-card-chart" role="img" aria-label={l10n.getString('analytics-card-occupancy-hourly')}>
-          <ReactEChartsCore echarts={echarts} option={option} style={{ height: expanded ? 150 : 64 }} notMerge />
+          <ReactEChartsCore echarts={echarts} option={option} style={{ height: chartHeight('occupancy', expanded) }} notMerge />
         </div>
       </div>
     </Visual>
   );
 }
 
-function WaitstaffCard({ q, title, expanded }: { q: AnalyticsQuery; title: string; expanded?: boolean | undefined }) {
+function WaitstaffCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: string; expanded?: boolean | undefined; compare?: boolean | undefined }) {
   const { l10n } = useLocalization();
   const { short } = useMoney();
-  const { data: staff, error } = useCardData<StaffAnalyticsRow[]>('waitstaff', q);
+  const { data: staff, prev: prevStaff, error } = useCardDataCompare<StaffAnalyticsRow[]>('waitstaff', q, compare ?? false);
   if (error) return <CardError error={error} />;
   if (!staff) return <CardLoading />;
-  const rows: RankRow[] = staff
+  const buildRows = (rows: StaffAnalyticsRow[]): RankRow[] => rows
     .slice()
     .sort((a, b) => b.sale_total_minor - a.sale_total_minor)
     .map((r) => ({ name: r.display_name, value: r.sale_total_minor, display: short(r.sale_total_minor) }));
+  const rows = rowDeltas(buildRows(staff), prevStaff ? buildRows(prevStaff) : null);
   const totalSales = rows.reduce((s, r) => s + r.value, 0);
+  const prevTotal = prevStaff ? prevStaff.reduce((s, r) => s + r.sale_total_minor, 0) : 0;
+  const delta = compare ? periodDelta(totalSales, prevTotal) : null;
   return (
     <Visual>
       <div className="analytics-kpi-row">
         <Kpi value={short(totalSales)} label={l10n.getString('analytics-card-waitstaff-total')} />
+        {delta !== null && <DeltaChip value={delta} />}
       </div>
       <RankedList rows={rows} ariaLabel={title} limit={expanded ? undefined : 5} />
     </Visual>
   );
 }
 
-function VoidsCard({ q, title, expanded }: { q: AnalyticsQuery; title: string; expanded?: boolean | undefined }) {
+function VoidsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: string; expanded?: boolean | undefined; compare?: boolean | undefined }) {
   const { l10n } = useLocalization();
-  const { data: loaded, error } = useCardData<[VoidedSummaryRow, VoidedItemRow[]]>('voids', q);
+  const { data: loaded, prev: prevLoaded, error } = useCardDataCompare<[VoidedSummaryRow, VoidedItemRow[]]>('voids', q, compare ?? false);
   if (error) return <CardError error={error} />;
   if (!loaded) return <CardLoading />;
   const items = loaded[1];
-  const rows: RankRow[] = items.map((it) => ({ name: it.name, value: it.qty, display: `${it.qty}×` }));
+  const rows = rowDeltas(
+    items.map((it) => ({ name: it.name, value: it.qty, display: `${it.qty}×` })),
+    prevLoaded ? prevLoaded[1].map((it) => ({ name: it.name, value: it.qty, display: '' })) : null,
+  );
   const totalQty = rows.reduce((s, r) => s + r.value, 0);
+  const prevQty = prevLoaded ? prevLoaded[1].reduce((s, it) => s + it.qty, 0) : 0;
+  const delta = compare ? periodDelta(totalQty, prevQty) : null;
   return (
     <Visual>
       <div className="analytics-kpi-tiles">
         <Kpi value={String(totalQty)} label={l10n.getString('analytics-card-voids-count')} tone="bad" />
       </div>
+      {delta !== null && <p className="analytics-card-insight"><DeltaChip value={delta} tone="bad" /></p>}
       <RankedList rows={rows} ariaLabel={title} limit={expanded ? undefined : 5} />
     </Visual>
   );
@@ -893,6 +950,8 @@ export interface AnalyticsCardContentProps {
   title: string;
   /** When true the card fills the main area — charts grow and lists uncap. */
   expanded?: boolean | undefined;
+  /** When true cards overlay the previous equal-length period. */
+  compare?: boolean | undefined;
 }
 
 /** Renders the designed content for a non-heatmap analytics card. */
@@ -905,25 +964,26 @@ export function AnalyticsCardContent({
   sessionToken,
   title,
   expanded,
+  compare,
 }: AnalyticsCardContentProps) {
   const q: AnalyticsQuery = { workspace: workspaceView, granularity, from, to, sessionToken };
   switch (cardKey) {
-    case 'revenue': return <RevenueCard q={q} title={title} expanded={expanded} />;
-    case 'aov': return <AovCard q={q} title={title} expanded={expanded} />;
-    case 'staff': return <StaffCard q={q} title={title} expanded={expanded} />;
-    case 'customers': return <CustomersCard q={q} title={title} expanded={expanded} />;
-    case 'payments': return <PaymentsCard q={q} title={title} expanded={expanded} />;
-    case 'discounts': return <DiscountsCard q={q} title={title} expanded={expanded} />;
-    case 'refunds': return <RefundsCard q={q} title={title} expanded={expanded} />;
-    case 'top-items': return <TopItemsCard q={q} title={title} expanded={expanded} />;
-    case 'category': return <CategoryCard q={q} title={title} expanded={expanded} />;
-    case 'basket': return <BasketCard q={q} expanded={expanded} />;
-    case 'inventory': return <InventoryCard q={q} title={title} expanded={expanded} />;
-    case 'low-stock': return <LowStockCard q={q} title={title} expanded={expanded} />;
-    case 'tables': return <TablesCard q={q} title={title} expanded={expanded} />;
-    case 'occupancy': return <OccupancyCard q={q} title={title} expanded={expanded} />;
-    case 'waitstaff': return <WaitstaffCard q={q} title={title} expanded={expanded} />;
-    case 'voids': return <VoidsCard q={q} title={title} expanded={expanded} />;
+    case 'revenue': return <RevenueCard q={q} title={title} expanded={expanded} compare={compare} />;
+    case 'aov': return <AovCard q={q} title={title} expanded={expanded} compare={compare} />;
+    case 'staff': return <StaffCard q={q} title={title} expanded={expanded} compare={compare} />;
+    case 'customers': return <CustomersCard q={q} title={title} expanded={expanded} compare={compare} />;
+    case 'payments': return <PaymentsCard q={q} title={title} expanded={expanded} compare={compare} />;
+    case 'discounts': return <DiscountsCard q={q} title={title} expanded={expanded} compare={compare} />;
+    case 'refunds': return <RefundsCard q={q} title={title} expanded={expanded} compare={compare} />;
+    case 'top-items': return <TopItemsCard q={q} title={title} expanded={expanded} compare={compare} />;
+    case 'category': return <CategoryCard q={q} title={title} expanded={expanded} compare={compare} />;
+    case 'basket': return <BasketCard q={q} title={title} expanded={expanded} compare={compare} />;
+    case 'inventory': return <InventoryCard q={q} title={title} expanded={expanded} compare={compare} />;
+    case 'low-stock': return <LowStockCard q={q} title={title} expanded={expanded} compare={compare} />;
+    case 'tables': return <TablesCard q={q} title={title} expanded={expanded} compare={compare} />;
+    case 'occupancy': return <OccupancyCard q={q} title={title} expanded={expanded} compare={compare} />;
+    case 'waitstaff': return <WaitstaffCard q={q} title={title} expanded={expanded} compare={compare} />;
+    case 'voids': return <VoidsCard q={q} title={title} expanded={expanded} compare={compare} />;
     default: return null;
   }
 }

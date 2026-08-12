@@ -188,6 +188,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   const [collapsedCards, setCollapsedCards] = useState<Set<string>>(new Set());
   const [zoomPopover, setZoomPopover] = useState(false);
   const [showCacheMetrics, setShowCacheMetrics] = useState(false);
+  const [compare, setCompare] = useState(false);
   const [, setMetricsTick] = useState(0);
   const paletteInputRef = useRef<HTMLInputElement | null>(null);
   const toastId = useRef(0);
@@ -760,6 +761,27 @@ const [paletteOpen, setPaletteOpen] = useState(false);
           <div className="analytics-actions">
             <button
               type="button"
+              className={`analytics-action-btn${compare ? ' analytics-action-btn--active' : ''}`}
+              onClick={() => {
+                const next = !compare;
+                setCompare(next);
+                showToast(l10n.getString(next ? 'analytics-toast-compare-on' : 'analytics-toast-compare-off'));
+              }}
+              aria-pressed={compare}
+              aria-label={l10n.getString(compare ? 'analytics-compare-off-aria' : 'analytics-compare-on-aria')}
+              title={l10n.getString(compare ? 'analytics-compare-off-aria' : 'analytics-compare-on-aria')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
+                <path d="M3 7h13" />
+                <path d="M3 12h9" />
+                <path d="M3 17h5" />
+                <polyline points="18 4 22 8 18 12" />
+                <polyline points="14 12 18 16 14 20" />
+              </svg>
+            </button>
+            <button
+              type="button"
               className={`analytics-action-btn${allCollapsed ? ' analytics-action-btn--active' : ''}`}
               onClick={() => {
                 const next = !allCollapsed;
@@ -1252,6 +1274,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
                       sessionToken={sessionToken}
                       title={l10n.getString(card.titleKey)}
                       expanded={isExpanded}
+                      compare={compare}
                     />
                   )}
                 </div>

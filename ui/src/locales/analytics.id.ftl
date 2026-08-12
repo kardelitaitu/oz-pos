@@ -64,6 +64,8 @@ analytics-granularity-custom = Kustom
 analytics-custom-from = Dari
 analytics-custom-to = Hingga
 analytics-action-refresh-aria = Muat ulang data
+analytics-compare-on-aria = Bandingkan dengan periode sebelumnya
+analytics-compare-off-aria = Matikan perbandingan
 analytics-action-zoom-out-aria = Perkecil
 analytics-action-zoom-in-aria = Perbesar
 
@@ -129,8 +131,9 @@ analytics-palette-placeholder = Cari aksi…
 analytics-palette-empty = Tidak ada hasil
 analytics-palette-home = Kembali ke beranda
 
-# ── Visual kartu ──────────────────────────────────────────────
+# ── Visual kartu ────────────────────────────────────────────────
 analytics-card-vs-prev = dibanding periode lalu
+analytics-card-prev = periode sebelumnya
 analytics-rank-up = naik
 analytics-rank-down = turun
 analytics-rank-delta-aria = { $name }: { $dir } { $pct }% dibanding periode lalu
@@ -180,6 +183,8 @@ analytics-toast-layout-saved = Tata letak disimpan
 analytics-toast-layout-reset = Tata letak direset ke default
 analytics-toast-zoom-reset = Zoom direset ke 100%
 analytics-toast-refreshing = Memuat ulang data…
+analytics-toast-compare-on = Membandingkan dengan periode sebelumnya
+analytics-toast-compare-off = Perbandingan dimatikan
 analytics-toast-collapsed = Semua kartu diciutkan
 analytics-toast-expanded = Semua kartu dibentangkan
 analytics-card-menu-aria = Opsi kartu

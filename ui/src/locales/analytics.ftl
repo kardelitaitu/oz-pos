@@ -64,6 +64,8 @@ analytics-granularity-custom = Custom
 analytics-custom-from = From
 analytics-custom-to = To
 analytics-action-refresh-aria = Refresh data
+analytics-compare-on-aria = Compare with previous period
+analytics-compare-off-aria = Turn off comparison
 analytics-action-zoom-out-aria = Zoom out
 analytics-action-zoom-in-aria = Zoom in
 
@@ -131,6 +133,7 @@ analytics-palette-home = Back to home
 
 # ── Card visuals ─────────────────────────────────────────────────
 analytics-card-vs-prev = vs previous period
+analytics-card-prev = previous period
 analytics-rank-up = up
 analytics-rank-down = down
 analytics-rank-delta-aria = { $name }: { $dir } { $pct }% vs previous period
@@ -180,6 +183,8 @@ analytics-toast-layout-saved = Layout saved
 analytics-toast-layout-reset = Layout reset to default
 analytics-toast-zoom-reset = Zoom reset to 100%
 analytics-toast-refreshing = Refreshing data…
+analytics-toast-compare-on = Comparing with previous period
+analytics-toast-compare-off = Comparison off
 analytics-toast-collapsed = All cards collapsed
 analytics-toast-expanded = All cards expanded
 analytics-card-menu-aria = Card options

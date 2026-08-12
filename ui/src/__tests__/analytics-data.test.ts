@@ -23,6 +23,7 @@ vi.mock('@/api/reports', () => ({
   getCategoryBreakdown: vi.fn(() => Promise.resolve([])),
   getMenuEngineering: vi.fn(() => Promise.resolve({ rows: [], median_volume: 0, median_margin: 0 })),
   getBasketSize: vi.fn(() => Promise.resolve({ sale_count: 0, avg_line_count: 0 })),
+  getBasketSizeTrend: vi.fn(() => Promise.resolve([])),
   getCustomerSplit: vi.fn(() => Promise.resolve({ new_count: 0, returning_count: 0 })),
   getPaymentMethodBreakdown: vi.fn(() => Promise.resolve([])),
   getDiscountsSummary: vi.fn(() => Promise.resolve({ sale_count: 0, discounted_sale_count: 0, share_percent: 0, codes: [] })),
@@ -30,6 +31,13 @@ vi.mock('@/api/reports', () => ({
   getVoidedItems: vi.fn(() => Promise.resolve([])),
   getInventoryTurnover: vi.fn(() => Promise.resolve({ units_sold: 0, stock_on_hand: 0, sku_count: 0, range_days: 0 })),
   getInventoryTrend: vi.fn(() => Promise.resolve([])),
+  getTableTurnover: vi.fn(() => Promise.resolve([])),
+  getHourlyOccupancy: vi.fn(() => Promise.resolve([
+    { hour: 11, table_orders: 20 },
+    { hour: 12, table_orders: 40 },
+    { hour: 19, table_orders: 50 },
+    { hour: 20, table_orders: 25 },
+  ])),
 }));
 
 vi.mock('@/api/analytics', () => ({
@@ -48,13 +56,20 @@ vi.mock('@/api/tables', () => ({
 
 import {
   buildHeatmapIntensities,
+  alignPrevHourly,
+  intensityFromPct,
   loadAov,
+  loadBasketSize,
   loadHeatmapRows,
   loadRevenue,
   loadTableOccupancy,
   normalizeIntensities,
+  pctOfPeak,
+  periodDelta,
+  previousRange,
   rangeForGranularity,
   seriesDelta,
+  type AnalyticsQuery,
   weekdayIntensities,
   weeklyHourlyIntensities,
   monthDayIntensities,
@@ -117,16 +132,106 @@ describe('seriesDelta — % change first→last bucket', () => {
   });
 });
 
-describe('normalizeIntensities — 0–4 max-normalized levels', () => {
-  it('maps values to 0–4 with the strongest cell at 4', () => {
+describe('previousRange — equal-length preceding window', () => {
+  it('a single day compares against the day before', () => {
+    const q: AnalyticsQuery = {
+      workspace: 'retail', granularity: 'daily', from: '2026-08-10', to: '2026-08-10', sessionToken: 's',
+    };
+    expect(previousRange(q)).toMatchObject({ from: '2026-08-09', to: '2026-08-09' });
+  });
+
+  it('a multi-day range shifts back by its own span', () => {
+    const q: AnalyticsQuery = {
+      workspace: 'retail', granularity: 'custom', from: '2026-08-05', to: '2026-08-11', sessionToken: 's',
+    };
+    expect(previousRange(q)).toMatchObject({ from: '2026-07-29', to: '2026-08-04' });
+  });
+
+  it('preserves the workspace/granularity/session of the source query', () => {
+    const q: AnalyticsQuery = {
+      workspace: 'restaurant', granularity: 'weekly', from: '2026-08-03', to: '2026-08-09', sessionToken: 'tok',
+    };
+    const prev = previousRange(q);
+    expect(prev.workspace).toBe('restaurant');
+    expect(prev.granularity).toBe('weekly');
+    expect(prev.sessionToken).toBe('tok');
+  });
+});
+
+describe('alignPrevHourly — hour-aligned compare overlay', () => {
+  it('maps previous pct onto the current hour set, filling missing hours with 0', () => {
+    // The backend returns only hours with orders, so the two periods can
+    // have different active hours — index alignment would misplot the
+    // previous curve. Alignment must be by hour, not position.
+    const current = [
+      { hour: 9, pct: 40 },
+      { hour: 10, pct: 60 },
+      { hour: 11, pct: 100 },
+    ];
+    const previous = [
+      { hour: 8, pct: 50 }, // absent from current → 0
+      { hour: 10, pct: 80 }, // present → mapped by hour
+      { hour: 12, pct: 90 }, // absent from current → 0
+    ];
+    expect(alignPrevHourly(current, previous)).toEqual([0, 80, 0]);
+  });
+
+  it('keeps the exact match for identical hour sets regardless of order', () => {
+    const current = [
+      { hour: 9, pct: 50 },
+      { hour: 10, pct: 100 },
+    ];
+    const previous = [
+      { hour: 10, pct: 100 },
+      { hour: 9, pct: 50 },
+    ];
+    expect(alignPrevHourly(current, previous)).toEqual([50, 100]);
+  });
+});
+
+describe('periodDelta — % change vs the previous period', () => {
+  it('computes a one-decimal percent change', () => {
+    expect(periodDelta(150, 100)).toBe(50);
+    expect(periodDelta(90, 100)).toBe(-10);
+  });
+
+  it('returns null without a usable baseline', () => {
+    expect(periodDelta(100, 0)).toBeNull();
+    expect(periodDelta(Number.NaN, 100)).toBeNull();
+  });
+});
+
+describe('shared intensity scale — pctOfPeak + intensityFromPct', () => {
+  it('pctOfPeak is percent of the strongest value with a floor of 1', () => {
+    expect(pctOfPeak([50, 25, 0])).toEqual([100, 50, 0]);
+    // All-zero input stays flat at 0 (no NaN from a 0 denominator)
+    expect(pctOfPeak([0, 0])).toEqual([0, 0]);
+  });
+
+  it('intensityFromPct bins percent-of-peak into the 0–4 heat levels', () => {
+    // level = ⌊pct / 20⌋: 0–19% → 0, 20–39% → 1, … 80–100% → 4
+    expect(intensityFromPct(0)).toBe(0);
+    expect(intensityFromPct(19)).toBe(0);
+    expect(intensityFromPct(20)).toBe(1);
+    expect(intensityFromPct(39)).toBe(1);
+    expect(intensityFromPct(60)).toBe(3);
+    expect(intensityFromPct(80)).toBe(4);
+    expect(intensityFromPct(100)).toBe(4);
+  });
+
+  it('normalizeIntensities and intensityFromPct agree on the same scale', () => {
+    // The heatmap cell levels are exactly the binned occupancy pcts — a
+    // cell at level 3 is the same intensity as an occupancy curve at 60%.
     const map = normalizeIntensities([
-      ['mon', 100],
-      ['tue', 50],
-      ['wed', 0],
+      ['a', 100],
+      ['b', 50],
+      ['c', 20],
+      ['d', 0],
     ]);
-    expect(map.get('mon')).toBe(4);
-    expect(map.get('tue')).toBe(2);
-    expect(map.get('wed')).toBe(0);
+    expect(map.get('a')).toBe(4);
+    expect(map.get('b')).toBe(2);
+    expect(map.get('c')).toBe(1);
+    expect(map.get('d')).toBe(0);
   });
 
   it('handles empty input without NaN', () => {
@@ -205,6 +310,25 @@ describe('loaders — raw rows mapped to card shapes', () => {
     expect(buckets[0]?.value).toBe(Math.round(1250000 / 12));
   });
 
+  it('loadBasketSize buckets daily rows with weighted averages', async () => {
+    const { getBasketSizeTrend } = await import('@/api/reports');
+    (getBasketSizeTrend as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { date: '2026-08-03', sale_count: 10, avg_line_count: 2 },
+      { date: '2026-08-04', sale_count: 20, avg_line_count: 3 },
+    ]);
+    const trend = await loadBasketSize({
+      workspace: 'retail', granularity: 'daily', from: '2026-08-03', to: '2026-08-04', sessionToken: 's',
+    });
+    // One bucket per day, labeled MM-DD
+    expect(trend.buckets).toEqual([
+      { label: '08-03', value: 2 },
+      { label: '08-04', value: 3 },
+    ]);
+    expect(trend.sale_count).toBe(30);
+    // Weighted mean: (10×2 + 20×3) / 30 = 2.666…
+    expect(trend.avg_line_count).toBeCloseTo(2.667, 2);
+  });
+
   it('loadHeatmapRows fetches the granularity-relevant sets', async () => {
     const { from, to, sessionToken } = { from: '2026-07-27', to: '2026-07-27', sessionToken: 's' };
 
@@ -234,6 +358,16 @@ describe('loaders — raw rows mapped to card shapes', () => {
     // Seats: occupied 4 + 4 = 8 of 4 + 4 + 2 + 6 = 16 total
     expect(occ.seats_used).toBe(8);
     expect(occ.seats_total).toBe(16);
+    // Hourly curve: completed table orders normalized to % of the peak
+    // hour (19:00 with 50 orders) on the heatmap's shared 0–4 level scale,
+    // sorted ascending by hour
+    expect(occ.hourly).toEqual([
+      { hour: 11, table_orders: 20, pct: 40, level: 2 },
+      { hour: 12, table_orders: 40, pct: 80, level: 4 },
+      { hour: 19, table_orders: 50, pct: 100, level: 4 },
+      { hour: 20, table_orders: 25, pct: 50, level: 2 },
+    ]);
+    expect(occ.peak_hour).toBe(19);
   });
 
   it('loadTableOccupancy yields 0 when no active tables exist', async () => {
@@ -246,5 +380,7 @@ describe('loaders — raw rows mapped to card shapes', () => {
     expect(occ.rate).toBe(0);
     expect(occ.seats_used).toBe(0);
     expect(occ.seats_total).toBe(0);
+    // The hourly activity query is independent of the floor plan snapshot
+    expect(occ.peak_hour).toBe(19);
   });
 });

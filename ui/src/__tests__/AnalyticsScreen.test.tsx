@@ -76,7 +76,17 @@ const mockGetCategoryBreakdown = vi.fn(() => Promise.resolve([
   { category_id: 'cat1', category_name: 'Beverages', total_minor: 500000, sale_count: 40, percentage: 55 },
   { category_id: 'cat2', category_name: 'Food', total_minor: 300000, sale_count: 25, percentage: 33 },
 ]));
-const mockGetBasketSize = vi.fn(() => Promise.resolve({ sale_count: 100, avg_line_count: 2.5 }));
+// Per-day basket-size rows: 100 total sales, weighted avg 2.5 items/order
+// — a real trend for the basket chart, not a flat range average.
+const mockGetBasketSizeTrend = vi.fn(() => Promise.resolve([
+  { date: '2026-08-03', sale_count: 15, avg_line_count: 2.4 },
+  { date: '2026-08-04', sale_count: 18, avg_line_count: 2.8 },
+  { date: '2026-08-05', sale_count: 12, avg_line_count: 2.2 },
+  { date: '2026-08-06', sale_count: 14, avg_line_count: 2.5 },
+  { date: '2026-08-07', sale_count: 16, avg_line_count: 2.6 },
+  { date: '2026-08-08', sale_count: 13, avg_line_count: 2.3 },
+  { date: '2026-08-09', sale_count: 12, avg_line_count: 2.5 },
+]));
 const mockGetCustomerSplit = vi.fn(() => Promise.resolve({ new_count: 30, returning_count: 70 }));
 const mockGetPaymentMethodBreakdown = vi.fn(() => Promise.resolve([
   { payment_method: 'cash', total_minor: 600000, sale_count: 30 },
@@ -128,7 +138,7 @@ vi.mock('@/api/reports', () => ({
   getLowStockAlerts: () => mockGetLowStockAlerts(),
   getCategoryBreakdown: () => mockGetCategoryBreakdown(),
   getMenuEngineering: () => mockGetMenuEngineering(),
-  getBasketSize: () => mockGetBasketSize(),
+  getBasketSizeTrend: () => mockGetBasketSizeTrend(),
   getCustomerSplit: () => mockGetCustomerSplit(),
   getPaymentMethodBreakdown: () => mockGetPaymentMethodBreakdown(),
   getDiscountsSummary: () => mockGetDiscountsSummary(),
@@ -762,11 +772,11 @@ describe('AnalyticsScreen layout shell', () => {
     expect(screen.getAllByText(/· \d+×/).length).toBeGreaterThan(0);
     expect(screen.getAllByText('Espresso').length).toBeGreaterThanOrEqual(2);
 
-    // Basket card: honest aggregate tiles (avg items/order + order volume)
-    // instead of a fabricated per-bucket chart
+    // Basket card: aggregate tiles (avg items/order + order volume) above
+    // a real per-bucket trend chart carrying the card title
     expect(screen.getByText('items / order')).toBeTruthy();
     expect(screen.getByText('orders')).toBeTruthy();
-    expect(screen.getByText('Average across the selected range')).toBeTruthy();
+    expect(screen.getAllByLabelText('Average Basket Size').length).toBeGreaterThan(0);
 
     // Customers card: new-customer share insight; low-stock: critical tile
     expect(screen.getByText(/new customers/)).toBeTruthy();
@@ -915,6 +925,31 @@ describe('AnalyticsScreen layout shell', () => {
     const expanded = document.querySelector('.analytics-card--expanded') as HTMLElement;
     expect(expanded.querySelectorAll('.analytics-rank-row').length).toBe(2);
     expect(expanded.textContent).toContain('Croissant');
+  });
+
+  it('overlays the previous period on every card when compare mode is on', async () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    await flushRecalc();
+
+    // Compare off: no vs-previous-period chips anywhere
+    expect(screen.queryByText(/vs previous period/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Turn off comparison' })).toBeNull();
+
+    // Toggle compare on
+    fireEvent.click(screen.getByRole('button', { name: 'Compare with previous period' }));
+    expect(screen.getByRole('button', { name: 'Turn off comparison' })).toBeTruthy();
+    await flushRecalc();
+
+    // Every card now surfaces a period-over-period chip. The daily mocks
+    // return the same rows for both windows, so the change is 0.0%.
+    const chips = screen.getAllByText(/vs previous period/);
+    expect(chips.length).toBeGreaterThan(3);
+
+    // Toggling off removes the chips again
+    fireEvent.click(screen.getByRole('button', { name: 'Turn off comparison' }));
+    await flushRecalc();
+    expect(screen.queryByText(/vs previous period/)).toBeNull();
   });
 
   it('serves an identical query from the cache without a recalc skeleton', async () => {

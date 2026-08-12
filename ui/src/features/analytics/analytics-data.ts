@@ -8,7 +8,7 @@
 //! money display formatting lives in the UI layer (the cards' `useMoney`).
 
 import {
-  getBasketSize,
+  getBasketSizeTrend,
   getCategoryBreakdown,
   getCustomerSplit,
   getDailyRevenue,
@@ -30,6 +30,7 @@ import {
 import { listTablesScoped } from '@/api/tables';
 import type {
   BasketSizeRow,
+  BasketTrendRow,
   CategoryBreakdownRow,
   CustomerSplitRow,
   DailyRevenueRow,
@@ -136,13 +137,15 @@ export function seriesDelta(buckets: Bucket[]): number | null {
  * the current window starts).
  */
 export function previousRange(q: AnalyticsQuery): AnalyticsQuery {
-  const from = new Date(`${q.from}T00:00:00`);
-  const to = new Date(`${q.to}T00:00:00`);
-  const spanDays = Math.max(1, Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1);
-  const prevTo = new Date(from.getTime() - 86_400_000);
-  const prevFrom = new Date(prevTo.getTime() - (spanDays - 1) * 86_400_000);
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
-  return { ...q, from: iso(prevFrom), to: iso(prevTo) };
+  // All arithmetic is UTC-anchored (`...Z` + toISOString), so the window
+  // shifts by whole calendar days in every timezone — never by hours.
+  const fromMs = Date.parse(`${q.from}T00:00:00Z`);
+  const toMs = Date.parse(`${q.to}T00:00:00Z`);
+  const spanDays = Math.max(1, Math.round((toMs - fromMs) / 86_400_000) + 1);
+  const prevToMs = fromMs - 86_400_000;
+  const prevFromMs = prevToMs - (spanDays - 1) * 86_400_000;
+  const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+  return { ...q, from: iso(prevFromMs), to: iso(prevToMs) };
 }
 
 /**
@@ -153,6 +156,21 @@ export function previousRange(q: AnalyticsQuery): AnalyticsQuery {
 export function periodDelta(current: number, previous: number): number | null {
   if (previous === 0 || !Number.isFinite(current) || !Number.isFinite(previous)) return null;
   return Math.round(((current - previous) / previous) * 1000) / 10;
+}
+
+/**
+ * Map the previous period's per-hour `pct` onto the current period's hour
+ * set for the compare overlay. The backend returns only hours with orders,
+ * so the two periods can have different active hours — alignment must be
+ * by hour, never by array position. Current hours absent from the previous
+ * period read as 0 (no activity there last period).
+ */
+export function alignPrevHourly(
+  current: { hour: number; pct: number }[],
+  previous: { hour: number; pct: number }[],
+): number[] {
+  const byHour = new Map(previous.map((h) => [h.hour, h.pct]));
+  return current.map((h) => byHour.get(h.hour) ?? 0);
 }
 
 // ── Heatmap intensity builders ──────────────────────────────────────
@@ -392,6 +410,57 @@ export function turnDelta(buckets: Bucket[]): number | null {
   return Math.round(-d * 10) / 10;
 }
 
+/** Basket-size shape for the trend card: per-bucket averages + range total. */
+export interface BasketTrend {
+  /** Per-bucket mean items/order (one bucket per granularity cell). */
+  buckets: Bucket[];
+  /** Completed sales across the range. */
+  sale_count: number;
+  /** Weighted mean line count across the range (matches the KPI tile). */
+  avg_line_count: number;
+}
+
+/**
+ * Basket size per granularity bucket — weighted average of items/order
+ * across each bucket's days, plus the range totals. The daily rows come
+ * from the backend; weekly/monthly/yearly group them like `loadTables`.
+ */
+export async function loadBasketSize(q: AnalyticsQuery): Promise<BasketTrend> {
+  const rows = await getBasketSizeTrend(q.from, q.to, q.sessionToken);
+  if (rows.length === 0) return { buckets: [], sale_count: 0, avg_line_count: 0 };
+  // Group consecutive days into the granularity's buckets.
+  const groups: { key: string; sales: number; lines: number }[] = [];
+  for (const r of rows) {
+    const key =
+      q.granularity === 'weekly'
+        ? weekStartKey(r.date)
+        : q.granularity === 'monthly'
+          ? r.date.slice(0, 7)
+          : q.granularity === 'yearly'
+            ? r.date.slice(0, 4)
+            : r.date;
+    const last = groups[groups.length - 1];
+    const lines = r.sale_count * r.avg_line_count;
+    if (last && last.key === key) {
+      last.sales += r.sale_count;
+      last.lines += lines;
+    } else {
+      groups.push({ key, sales: r.sale_count, lines });
+    }
+  }
+  const buckets: Bucket[] = groups.map((g) => ({
+    label: q.granularity === 'yearly' ? g.key : g.key.slice(5),
+    value: g.sales > 0 ? Math.round((g.lines / g.sales) * 10) / 10 : 0,
+  }));
+  const saleCount = rows.reduce((s, r) => s + r.sale_count, 0);
+  const lineTotal = rows.reduce((s, r) => s + r.sale_count * r.avg_line_count, 0);
+  return {
+    buckets,
+    sale_count: saleCount,
+    avg_line_count: saleCount > 0 ? lineTotal / saleCount : 0,
+  };
+}
+
 /** Live floor-plan occupancy derived from the `tables` snapshot. */
 export interface TableOccupancy {
   /** Total active tables on the floor plan. */
@@ -479,7 +548,7 @@ export const CARD_LOADERS: Record<string, (q: AnalyticsQuery) => Promise<CardLoa
     ]),
   'top-items': loadTopItems,
   category: (q) => getCategoryBreakdown(q.from, q.to, q.sessionToken),
-  basket: (q) => getBasketSize(q.from, q.to, q.sessionToken),
+  basket: loadBasketSize,
   inventory: (q) =>
     Promise.all([
       getInventoryTurnover(q.from, q.to, q.sessionToken, 'default'),
@@ -500,6 +569,7 @@ export const CARD_LOADERS: Record<string, (q: AnalyticsQuery) => Promise<CardLoa
 
 export type {
   BasketSizeRow,
+  BasketTrendRow,
   CategoryBreakdownRow,
   CustomerSplitRow,
   DailyRevenueRow,
