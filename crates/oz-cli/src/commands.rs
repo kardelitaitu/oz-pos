@@ -14,6 +14,8 @@ use oz_core::{CoreError, Currency, FeatureRegistry, Money, SaleStatus, Settings,
 
 use crate::cli::*;
 
+use crate::seed_demo::run_seed_demo;
+
 // ── DB helpers ────────────────────────────────────────────────────────
 
 pub(crate) fn open_db(path: &str) -> Result<Connection> {
@@ -55,6 +57,7 @@ pub fn run() -> Result<()> {
             password,
             dry_run,
         }) => run_import_ozpkg(&conn, &input, &password, dry_run),
+        Some(Command::SeedDemo(args)) => run_seed_demo(&conn, &args),
         None => {
             let mut cmd = Cli::command();
             cmd.print_help()?;

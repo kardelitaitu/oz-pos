@@ -85,6 +85,24 @@ pub enum Command {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Seed demo data for analytics and report development.
+    SeedDemo(SeedDemoArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct SeedDemoArgs {
+    /// Seed retail POS data (store-pos).
+    #[arg(long)]
+    pub retail: bool,
+    /// Seed restaurant POS data (restaurant-pos).
+    #[arg(long)]
+    pub restaurant: bool,
+    /// Seed both retail and restaurant data.
+    #[arg(long)]
+    pub all: bool,
+    /// Number of days of history to generate (default: 90).
+    #[arg(long, default_value = "90")]
+    pub days: u32,
 }
 
 #[derive(Debug, Args)]
