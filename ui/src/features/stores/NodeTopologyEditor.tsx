@@ -73,6 +73,7 @@ import {
 import {
   leftPortVariants,
   wireRelationshipOptions,
+  legacyWireResolutionOptions,
   type WireRelationshipOption,
   NODE_TYPE_ICON,
   workspaceTypeLabel,
@@ -1194,6 +1195,18 @@ export default function NodeTopologyEditor({
 
   /** Anchor for the relationship picker popover (focus + positioning). */
   const relationshipPickerRef = useRef<HTMLDivElement | null>(null);
+  /** Legacy-schema migration dialog (ADR #34 item 7): a fully-unknown
+   *  legacy wire (normalized to legacy-out/legacy-in) cannot be applied —
+   *  the dialog resolves each one in place from the node types' LEGAL
+   *  relationships (never a silent reinterpretation) or deletes it. The
+   *  derived memos and handlers live after liveValidation; only the state
+   *  lives here (the keydown effect below reads it). */
+  const [migrationOpen, setMigrationOpen] = useState(false);
+  /** "Later"/Escape dismisses the dialog for this load session; a fresh
+   *  load resets it so the migration is re-offered. */
+  const migrationDismissedRef = useRef(false);
+  /** Per-wire choice: index into the entry's option list, or 'delete'. */
+  const [migrationSelections, setMigrationSelections] = useState<Record<string, number | 'delete'>>({});
 
   /** Cancel the relationship picker AND the in-flight connection it
    *  belongs to (same cleanup as an incompatible drop). Declared early so
@@ -1976,6 +1989,9 @@ export default function NodeTopologyEditor({
           // bend-drag, for example, would otherwise restore its old start
           // position over a freshly loaded bend).
           resetTransientCanvasState();
+          // A fresh load re-offers the legacy-schema migration dialog even
+          // if a previous load was dismissed with "Later".
+          migrationDismissedRef.current = false;
           // A fresh authoritative load replaces the canvas — the undo/redo
           // stacks hold stale pre-reload states that contradict the loaded
           // instances. Clear them so Undo can never restore a phantom canvas.
@@ -2026,6 +2042,9 @@ export default function NodeTopologyEditor({
         // Reset transient state BEFORE the loaded canvas lands (see
         // resetTransientCanvasState).
         resetTransientCanvasState();
+        // A fresh load re-offers the legacy-schema migration dialog even
+        // if a previous load was dismissed with "Later".
+        migrationDismissedRef.current = false;
         // Fresh authoritative load — drop stale pre-load undo/redo state.
         setHistory([]);
         setRedo([]);
@@ -3103,6 +3122,17 @@ export default function NodeTopologyEditor({
         if (e.key === 'Escape') cancelRelationshipPicker();
         return;
       }
+      if (migrationOpen) {
+        // The legacy-migration dialog owns the keyboard while open: Escape
+        // dismisses it (same contract as Later); everything else must NOT
+        // leak into the canvas — a stray Delete/arrow would otherwise edit
+        // the canvas under the modal.
+        if (e.key === 'Escape') {
+          migrationDismissedRef.current = true;
+          setMigrationOpen(false);
+        }
+        return;
+      }
       if (confirmDelete || confirmDeleteMany || confirmPreset) {
         return;
       }
@@ -3393,7 +3423,7 @@ export default function NodeTopologyEditor({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedNodeIds, selectedWireId, wires, pushHistory, popUndo, popRedo, confirmDelete, confirmDeleteMany, confirmPreset, pan, zoom, deleteNodes, relationshipPicker, cancelRelationshipPicker, selectAllNodes, duplicateSelection, copySelection, pasteClipboard, nodes, onRenameBranch, onRenameWorkspace, zoomToFit, zoomBy, resetView, snapEnabled, cancelDuplicateDrag, cancelNodeMove, convertDragToDuplicate, cancelBendDrag, finderOpen, clearSelection, setNodes]);
+  }, [selectedNodeIds, selectedWireId, wires, pushHistory, popUndo, popRedo, confirmDelete, confirmDeleteMany, confirmPreset, pan, zoom, deleteNodes, relationshipPicker, cancelRelationshipPicker, selectAllNodes, duplicateSelection, copySelection, pasteClipboard, nodes, onRenameBranch, onRenameWorkspace, zoomToFit, zoomBy, resetView, snapEnabled, cancelDuplicateDrag, cancelNodeMove, convertDragToDuplicate, cancelBendDrag, finderOpen, clearSelection, setNodes, migrationOpen]);
 
   const executePresetLoad = useCallback(() => {
     if (confirmPreset) {
@@ -4411,6 +4441,116 @@ export default function NodeTopologyEditor({
     }
     return { byNode, byWire, graphLevel };
   }, [nodes, wires, allowLegacyApply, currentTier]);
+
+  // ── Legacy-schema migration dialog (ADR #34 item 7) ────────────
+  // A fully-unknown legacy wire (normalized to the legacy-out/legacy-in
+  // placeholders) cannot be applied — the pairing table has nothing to say
+  // about it. The dialog lists every ambiguous wire and lets the user
+  // resolve each one in place from the node types' LEGAL relationships
+  // (never a silent reinterpretation), or delete it. Apply stays blocked
+  // until none remain (the ambiguous-legacy-wire gate is unchanged).
+
+  /** Wires currently flagged ambiguous by the live gate — the migration
+   *  candidates. Mirrors the exact error the Apply gate refuses. */
+  const ambiguousLegacyWireIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const [wireId, errs] of liveValidation.byWire) {
+      if (errs.some((e) => e.code === 'ambiguous-legacy-wire')) ids.push(wireId);
+    }
+    return ids;
+  }, [liveValidation]);
+
+  /** Migration entries: each ambiguous wire with its endpoint nodes and the
+   *  legal resolution options derived from the pairing table. Zero options
+   *  means the pair has no legal relationship — delete-only. */
+  const migrationEntries = useMemo(() => {
+    const entries = ambiguousLegacyWireIds
+      .map((id) => {
+        const wire = wires.find((w) => w.id === id);
+        if (!wire) return null;
+        const from = nodeMap.get(wire.fromNodeId);
+        const to = nodeMap.get(wire.toNodeId);
+        if (!from || !to) return null;
+        return { wire, from, to, options: legacyWireResolutionOptions(from, to) };
+      })
+      .filter((e): e is { wire: TopologyWireData; from: TopologyNodeData; to: TopologyNodeData; options: WireRelationshipOption[] } => e !== null);
+    return entries;
+  }, [ambiguousLegacyWireIds, wires, nodeMap]);
+
+  /** The current choice for a wire: the user's explicit selection, else the
+   *  first legal option, else delete-only. */
+  const migrationSelectionFor = (wireId: string, optionsLen: number): number | 'delete' =>
+    migrationSelections[wireId] ?? (optionsLen > 0 ? 0 : 'delete');
+
+  /** Auto-open on load: an unresolved legacy wire gets the migration dialog
+   *  (once per session until dismissed). The dialog re-offers when the
+   *  ambiguity returns — an undo of a migration, or a later edit recreating
+   *  the same legacy wire. */
+  useEffect(() => {
+    if (ambiguousLegacyWireIds.length > 0 && !migrationDismissedRef.current) {
+      setMigrationOpen(true);
+    }
+  }, [ambiguousLegacyWireIds.length]);
+
+  /** Apply the migration: each wire keeps its chosen relationship (semantic
+   *  fields + a label mirroring commitWire's first-wire choices, legacy
+   *  coordinates preserved) or is deleted. ONE undo entry for the whole
+   *  migration; the live gate clears the moment the fields land. */
+  const handleResolveMigration = () => {
+    const entries = migrationEntries;
+    if (entries.length === 0) return;
+    pushHistory();
+    const resolveMap = new Map<string, WireRelationshipOption>();
+    const deleteIds = new Set<string>();
+    for (const entry of entries) {
+      const choice = migrationSelectionFor(entry.wire.id, entry.options.length);
+      if (choice === 'delete') {
+        deleteIds.add(entry.wire.id);
+      } else {
+        const opt = entry.options[choice];
+        if (opt) resolveMap.set(entry.wire.id, opt);
+      }
+    }
+    setWires((prev) =>
+      prev
+        .map((w) => {
+          if (deleteIds.has(w.id)) return null;
+          const opt = resolveMap.get(w.id);
+          if (!opt) return w;
+          const from = nodeMap.get(w.fromNodeId);
+          const to = nodeMap.get(w.toNodeId);
+          return {
+            ...w,
+            fromPortId: opt.fromPortId,
+            toPortId: opt.toPortId,
+            relationshipType: opt.relationshipType,
+            // Mirror commitWire's first-wire label choices so a migrated
+            // wire reads exactly like an authored one.
+            label:
+              opt.relationshipType === 'ticket-routing'
+                ? l10n.getString('topology-wire-label-ticket')
+                : opt.relationshipType === 'inventory-transfer'
+                  ? l10n.getString('topology-wire-label-transfer')
+                  : from?.type === 'workspace' && to?.type === 'warehouse' && opt.relationshipType === 'stock-routing'
+                    ? l10n.getString('topology-wire-label-stock-deduct', { priority: 1 })
+                    : l10n.getString('topology-wire-label-connected'),
+          };
+        })
+        .filter((w): w is TopologyWireData => w !== null),
+    );
+    setMigrationOpen(false);
+    setMigrationSelections({});
+    setLiveAnnouncement(l10n.getString('topology-migration-announce'));
+  };
+
+  /** "Later"/Escape: dismiss the dialog for this load session. The wire
+   *  stays unresolved — the validation panel keeps the error and Apply
+   *  stays blocked until the user resolves it manually or reloads. */
+  const handleLaterMigration = () => {
+    migrationDismissedRef.current = true;
+    setMigrationOpen(false);
+  };
+
 
   /** True when any warehouse carries design-time capacity numbers — the
    *  tier-downgrade notice's trigger. The numbers were authored (Pro)
@@ -6027,6 +6167,72 @@ export default function NodeTopologyEditor({
               >
                 {l10n.getString('topology-relationship-picker-cancel')}
               </button>
+            </div>
+          )}
+          {migrationOpen && migrationEntries.length > 0 && (
+            <div
+              className="topology-migration-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="topology-migration-title"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <h2 id="topology-migration-title">
+                <Localized id="topology-migration-title">Migrate legacy connections</Localized>
+              </h2>
+              <p className="topology-migration-description">
+                <Localized id="topology-migration-description">
+                  These older connections cannot be identified safely. Choose what each one means
+                  so the diagram can be applied. Connections with no compatible meaning must be
+                  deleted and recreated with the labeled ports.
+                </Localized>
+              </p>
+              <ul className="topology-migration-list">
+                {migrationEntries.map((entry) => (
+                  <li key={entry.wire.id} className="topology-migration-entry">
+                    <span className="topology-migration-names">
+                      {entry.from.name} → {entry.to.name}
+                    </span>
+                    <select
+                      aria-label={l10n.getString('topology-migration-select-aria', {
+                        from: entry.from.name,
+                        to: entry.to.name,
+                      })}
+                      value={String(migrationSelectionFor(entry.wire.id, entry.options.length))}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setMigrationSelections((prev) => ({
+                          ...prev,
+                          [entry.wire.id]: value === 'delete' ? 'delete' : Number(value),
+                        }));
+                      }}
+                    >
+                      {entry.options.map((opt, i) => (
+                        <option key={`${opt.fromPortId}|${opt.toPortId}`} value={String(i)}>
+                          {l10n.getString(opt.labelId)}
+                        </option>
+                      ))}
+                      <option value="delete">{l10n.getString('topology-migration-delete')}</option>
+                    </select>
+                  </li>
+                ))}
+              </ul>
+              <footer className="topology-migration-actions">
+                <button
+                  type="button"
+                  className="topology-migration-later"
+                  onClick={handleLaterMigration}
+                >
+                  <Localized id="topology-migration-later">Later</Localized>
+                </button>
+                <button
+                  type="button"
+                  className="topology-migration-resolve"
+                  onClick={handleResolveMigration}
+                >
+                  <Localized id="topology-migration-resolve">Resolve</Localized>
+                </button>
+              </footer>
             </div>
           )}
           <div

@@ -134,6 +134,7 @@ const KNOWN_NOISE_SELECTORS = [
   '.node-selected',
   '.topology-validation-banner',
   '.topology-relationship-picker',
+  '.topology-migration-dialog',
   '.settings-shortcuts-popover',
   '.canvas-hud',
   '.canvas-zoom-controls',

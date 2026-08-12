@@ -4660,3 +4660,20 @@ All three failed under a temporary mutation removing the two both-endpoints filt
 **Test counts:** editor 532/532 (+3, all mutation-verified Red), full UI suite 4,948/4,948, typecheck clean, eslint 0 errors (8 pre-existing warnings), i18n lint + FTL dedupe clean.
 
 **Remaining risks / follow-ups:** The Ctrl+V (pasteClipboard) and Ctrl+D (duplicateSelection) routes have their own pins from prior passes; the mid-move conversion's `cancelDuplicateDrag` wire-filter (`!copyIds.has(w.fromNodeId) && !copyIds.has(w.toNodeId)`) is the one duplicate-path filter still unpinned — a mutation of that alone would strand copied wires in state on Escape. Low severity (the copies are removed with the nodes in the same filter pass), noted as a future slice.
+## 2026-08-12 — Legacy-schema migration UI: resolves ambiguous legacy wires in place (ADR #34 item 7)
+
+**Problem:** The last open ADR #34 product gate. A legacy wire whose business meaning cannot be inferred safely (two ordinary workspaces, store→hardware, corrupt semantic fields) normalizes to the `legacy-out`/`legacy-in` contract placeholders and fails `ambiguous-legacy-wire` — Apply blocked, correct, but the only repair offered was the error text "Delete and reconnect it using the labeled ports": a manual delete + redraw chore. The deterministic identity rules already covered the inferable cases; the unresolvable remainder had no repair surface.
+
+**Solution:** A load-time migration dialog (`.topology-migration-dialog`, role="dialog") that auto-opens whenever the live gate flags ≥1 ambiguous wire and lists each one ("From → To") with a per-wire select of the legal resolutions:
+1. **Option set** — new pure `legacyWireResolutionOptions(source, target)` in topologyCard.ts enumerates source OUTPUT semantics × target INPUT semantics over the pairing table, sharing the socket-semantics iteration order AND the extracted `operationRowAllowed` gate with `wireRelationshipOptions` — the migration UI can never offer a relationship the drag gate rejects, and option order matches the picker. Zero options = delete-only (never a silent reinterpretation).
+2. **Resolve** — writes fromPortId/toPortId/relationshipType + a label mirroring commitWire's first-wire choices, legacy coordinates preserved, ONE undo entry; the live gate clears the moment the fields land.
+3. **Later/Escape** — dismisses for the load session; the wire stays unresolved, the panel error + Apply block remain; a fresh load re-offers.
+4. **Keyboard ownership** — while open the dialog owns the canvas keyboard (mirror of the relationship-picker guard), so a stray Delete/arrow can't edit the canvas under the modal.
+
+Also: 7 new en/id FTL keys (bundle parity clean), dither + token-compliance wiring for the new elevated surface, and the parent ADR item 7's UI half marked resolved with a cross-reference.
+
+**Commits:** (pending) — `feat(topology): legacy-schema migration dialog for ambiguous wires`.
+
+**Test counts:** topologyCard 34/34 (+7, true Red), editor 537/537 (+5, true Red), full UI suite 4,960/4,960, typecheck clean, eslint 0 errors (8 pre-existing warnings), i18n lint + FTL dedupe + bundle parity clean.
+
+**Remaining risks / follow-ups:** (1) the migration upgrades in-memory editor state only — the saved diagram's `schema_version` field isn't bumped on resolve; a future slice could persist the migration choice. (2) The dialog doesn't trap focus (best-effort a11y, matching the relationship picker). (3) stock-routing/inventory-transfer/hardware-connection cardinality closes remain open under item 6.

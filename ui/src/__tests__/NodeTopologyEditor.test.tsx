@@ -124,6 +124,16 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-node-stock-wire-hint': "Connect a workspace's Stock Out or another Warehouse's output to this Warehouse's Stock In.",
   'topology-validation-unknown-wire-endpoint': 'This wire references a node that is not in the graph.',
   'topology-validation-invalid-semantic-connection': 'This wire uses an incompatible port and relationship type.',
+  'topology-validation-ambiguous-legacy-wire': 'This older wire cannot be identified safely. Delete and reconnect it using the labeled ports.',
+  // NOTE: topology-wire-label-* keys are deliberately ABSENT so the
+  // existing label tests pin the raw-key fallback behavior.
+  'topology-migration-title': 'Migrate legacy connections',
+  'topology-migration-description': 'These older connections cannot be identified safely. Choose what each one means so the diagram can be applied. Connections with no compatible meaning must be deleted and recreated with the labeled ports.',
+  'topology-migration-select-aria': 'Connection from {from} to {to}',
+  'topology-migration-delete': 'Delete this wire',
+  'topology-migration-later': 'Later',
+  'topology-migration-resolve': 'Resolve',
+  'topology-migration-announce': 'Legacy connections resolved',
   'topology-field-name': 'Name',
   'topology-field-name-aria': 'Edit name',
   'topology-field-enabled': 'Enabled',
@@ -10238,6 +10248,154 @@ describe('NodeTopologyEditor — Alt+drag to duplicate', () => {
     fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
     expect(getNodeCount()).toBe(1); // exactly ONE undo removes the copy
     expect(nodeBy('a').style.left).toBe('200px');
+  });
+});
+
+// ── Legacy-schema migration dialog (ADR #34 item 7) ────────────
+
+describe('NodeTopologyEditor — legacy-schema migration dialog', () => {
+  beforeEach(() => {
+    mockLoadTopology.mockResolvedValue(null);
+  });
+
+  /** Canonical diagram with ONE unresolvable-by-identity legacy wire: a
+   *  KDS → printer wire carrying NO semantic fields. No identity rule
+   *  folds it (kds→hardware), so it normalizes to legacy-out/legacy-in and
+   *  the graph reports ambiguous-legacy-wire. The kds→hardware pair has
+   *  exactly one legal relationship (ticket-routing). */
+  const ambiguousTicketDiagram = {
+    nodes: [
+      { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+      { id: 'kds-1', type: 'workspace', name: 'Kitchen KDS', x: 380, y: 140, metadata: { typeKey: 'kds' } },
+      { id: 'hw-1', type: 'hardware', name: 'Thermal Printer', x: 680, y: 140 },
+    ],
+    wires: [
+      { id: 'w-amb', from_node_id: 'kds-1', to_node_id: 'hw-1', from_port: 'right', to_port: 'left', direction: 'one-way' },
+    ],
+  } as never;
+
+  it('auto-opens on an ambiguous legacy wire and resolves it in place', async () => {
+    mockLoadTopology.mockResolvedValueOnce(ambiguousTicketDiagram);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+
+    // The migration dialog auto-opens listing the unresolved wire.
+    const dialog = await waitFor(() => {
+      const el = document.querySelector('.topology-migration-dialog') as HTMLElement | null;
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    expect(within(dialog).getByText('Kitchen KDS → Thermal Printer')).toBeInTheDocument();
+
+    // The only legal relationship is offered and pre-selected.
+    const select = within(dialog).getByRole('combobox') as HTMLSelectElement;
+    expect(select.value).toBe('0');
+    expect(within(dialog).getByText('Ticket routing')).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByText('Resolve'));
+
+    await waitFor(() => expect(document.querySelector('.topology-migration-dialog')).toBeNull());
+    // The wire now carries the ticket-routing semantics — its tooltip
+    // label reads like an authored wire.
+    const hitbox = document.querySelector('.wire-hitbox[data-wire-id="w-amb"]') as HTMLElement | null;
+    expect(hitbox?.querySelector('title')?.textContent).toContain('Ticket Print');
+    // The ambiguous-wire error cleared from the validation panel.
+    fireEvent.click(document.querySelector('.topology-issues-btn')!);
+    const panel = document.querySelector('.topology-validation-panel') as HTMLElement | null;
+    expect(panel).not.toBeNull();
+    expect(panel!.textContent).not.toContain('cannot be identified safely');
+  });
+
+  it('one undo restores the unresolved wire and re-offers the dialog', async () => {
+    mockLoadTopology.mockResolvedValueOnce(ambiguousTicketDiagram);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+
+    const dialog = await waitFor(() => {
+      const el = document.querySelector('.topology-migration-dialog') as HTMLElement | null;
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    fireEvent.click(within(dialog).getByText('Resolve'));
+    await waitFor(() => expect(document.querySelector('.topology-migration-dialog')).toBeNull());
+    expect(getWireCount()).toBe(1);
+
+    fireEvent.keyDown(document, { key: 'z', ctrlKey: true });
+    await waitFor(() => expect(getWireCount()).toBe(1));
+    // The wire is back to UNRESOLVED (no ticket label — the tooltip is the
+    // bare toggle hint again) and the ambiguity re-surfaces — the dialog
+    // re-offers itself.
+    const hitbox = document.querySelector('.wire-hitbox[data-wire-id="w-amb"]') as HTMLElement | null;
+    expect(hitbox?.querySelector('title')?.textContent).not.toContain('Ticket Print');
+    await waitFor(() => expect(document.querySelector('.topology-migration-dialog')).not.toBeNull());
+  });
+
+  it('offers delete-only for a legacy wire with no compatible meaning', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-1', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'ws-2', type: 'workspace', name: 'POS B', x: 380, y: 420, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [
+        { id: 'w-owner', from_node_id: 'store-1', to_node_id: 'ws-1', from_port: 'right', to_port: 'left', direction: 'one-way' },
+        // store-pos → store-pos has NO legal pairing row: the wire cannot
+        // be migrated and must be deleted — never silently reinterpreted.
+        { id: 'w-amb', from_node_id: 'ws-1', to_node_id: 'ws-2', from_port: 'right', to_port: 'left', direction: 'one-way' },
+      ],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+
+    const dialog = await waitFor(() => {
+      const el = document.querySelector('.topology-migration-dialog') as HTMLElement | null;
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    const select = within(dialog).getByRole('combobox') as HTMLSelectElement;
+    expect(select.options).toHaveLength(1); // only "Delete this wire"
+    expect(select.value).toBe('delete');
+
+    fireEvent.click(within(dialog).getByText('Resolve'));
+    await waitFor(() => expect(document.querySelector('.topology-migration-dialog')).toBeNull());
+    expect(getWireCount()).toBe(1); // only the owner wire remains
+  });
+
+  it('Later dismisses the dialog and keeps the unresolved wire blocking Apply', async () => {
+    mockLoadTopology.mockResolvedValueOnce(ambiguousTicketDiagram);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+
+    const dialog = await waitFor(() => {
+      const el = document.querySelector('.topology-migration-dialog') as HTMLElement | null;
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    fireEvent.click(within(dialog).getByText('Later'));
+
+    expect(document.querySelector('.topology-migration-dialog')).toBeNull();
+    expect(getWireCount()).toBe(1); // the wire is untouched
+    // The wire is still unresolved — the panel keeps the error, so Apply
+    // stays blocked.
+    fireEvent.click(document.querySelector('.topology-issues-btn')!);
+    const panel = document.querySelector('.topology-validation-panel') as HTMLElement | null;
+    expect(panel).not.toBeNull();
+    expect(panel!.textContent).toContain('cannot be identified safely');
+  });
+
+  it('does not open the dialog for a clean canonical diagram', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-1', type: 'workspace', name: 'POS #1', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [
+        { id: 'w-1', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+      ],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    expect(document.querySelector('.topology-migration-dialog')).toBeNull();
   });
 });
 

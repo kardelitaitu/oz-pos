@@ -13,6 +13,7 @@ import {
   canSemanticPortsConnect,
   isSemanticWireCompatible,
   wireRelationshipOptions,
+  legacyWireResolutionOptions,
   settingsCardForTypeKey,
   topologyUiString,
   workspaceTypeLabel,
@@ -261,6 +262,91 @@ describe('relationship options (ADR #34 multi-semantic slice)', () => {
         labelId: 'topology-relationship-stock-routing',
       },
     ]);
+  });
+
+  describe('legacyWireResolutionOptions — the migration UI option set', () => {
+    it('resolves a legacy Store → workspace wire to exactly Location', () => {
+      const store = node({ type: 'store' });
+      const ws = node({ type: 'workspace', metadata: { typeKey: 'store-pos' } });
+      expect(legacyWireResolutionOptions(store, ws)).toEqual([
+        {
+          fromPortId: 'location-out',
+          toPortId: 'location-in',
+          relationshipType: 'location',
+          labelId: 'topology-relationship-location',
+        },
+      ]);
+    });
+
+    it('offers Stock routing, Transfer, and Operation for a Store POS → warehouse wire', () => {
+      const ws = node({ type: 'workspace', metadata: { typeKey: 'store-pos' } });
+      const wh = node({ type: 'warehouse' });
+      // Same option set as the socket-level drop — the migration UI must
+      // never offer a relationship the drag gate would reject.
+      expect(legacyWireResolutionOptions(ws, wh)).toEqual(wireRelationshipOptions(ws, 'right', wh, 'left'));
+    });
+
+    it('offers Ticket routing for a legacy KDS → hardware wire', () => {
+      const kds = node({ type: 'workspace', metadata: { typeKey: 'kds' } });
+      const hw = node({ type: 'hardware' });
+      expect(legacyWireResolutionOptions(kds, hw)).toEqual([
+        {
+          fromPortId: 'ticket-out',
+          toPortId: 'ticket-in',
+          relationshipType: 'ticket-routing',
+          labelId: 'topology-relationship-ticket-routing',
+        },
+      ]);
+    });
+
+    it('offers Device connection for a legacy hardware → hardware wire', () => {
+      const hw = node({ type: 'hardware' });
+      expect(legacyWireResolutionOptions(hw, hw)).toEqual([
+        {
+          fromPortId: 'device-out',
+          toPortId: 'generic-in',
+          relationshipType: 'hardware-connection',
+          labelId: 'topology-relationship-hardware-connection',
+        },
+      ]);
+    });
+
+    it('yields ZERO options for a legacy workspace → workspace wire (delete-only)', () => {
+      // A plain Store POS feeding another Store POS has no legal pairing
+      // row — this is the classic "cannot be identified safely" case the
+      // migration UI must offer as delete-only, never a silent guess.
+      const ws = node({ type: 'workspace', metadata: { typeKey: 'store-pos' } });
+      expect(legacyWireResolutionOptions(ws, ws)).toEqual([]);
+    });
+
+    it('offers Operation for Restaurant POS → KDS and blocks the Store POS → KDS feed', () => {
+      const resto = node({ type: 'workspace', metadata: { typeKey: 'restaurant-pos' } });
+      const kds = node({ type: 'workspace', metadata: { typeKey: 'kds' } });
+      const storePos = node({ type: 'workspace', metadata: { typeKey: 'store-pos' } });
+      expect(legacyWireResolutionOptions(resto, kds)).toEqual(wireRelationshipOptions(resto, 'right', kds, 'left'));
+      // The generic operation row exists but is not authorable from a
+      // Store POS — the migration UI must not offer it either.
+      expect(legacyWireResolutionOptions(storePos, kds)).toEqual([]);
+    });
+
+    it('offers Stock routing and Transfer for a plain workspace → warehouse wire', () => {
+      const ws = node({ type: 'workspace', metadata: { typeKey: 'general' } });
+      const wh = node({ type: 'warehouse' });
+      expect(legacyWireResolutionOptions(ws, wh)).toEqual([
+        {
+          fromPortId: 'stock-out',
+          toPortId: 'stock-in',
+          relationshipType: 'stock-routing',
+          labelId: 'topology-relationship-stock-routing',
+        },
+        {
+          fromPortId: 'transfer-out',
+          toPortId: 'transfer-in',
+          relationshipType: 'inventory-transfer',
+          labelId: 'topology-relationship-inventory-transfer',
+        },
+      ]);
+    });
   });
 
   it('labels a warehouse input by its attached relationship (Stock In / Transfer In)', () => {

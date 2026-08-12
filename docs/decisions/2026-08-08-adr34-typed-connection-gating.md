@@ -276,6 +276,79 @@ unchanged; their cardinality closes are future slices per item 6.
 
 ---
 
+## Decision — Legacy-schema migration UI (2026-08-12)
+
+Parent ADR open item 7 asks for the UI for unresolved legacy relationships:
+legacy wires whose business meaning cannot be inferred safely must block Apply
+until the user resolves them, and legacy geometry must never be silently
+reinterpreted as a different relationship. The deterministic identity-inference
+rules (`inferredWire`: branch→workspace = location, Restaurant POS→KDS =
+operation, workspace→warehouse = stock, corrupt semantics re-derived) already
+cover the inferable cases; this closes the **unresolvable** remainder.
+
+### The gap
+
+A legacy wire with no legal inference (two ordinary workspaces, a store feeding
+hardware, a corrupt semantic field) normalizes to the `legacy-out`/`legacy-in`
+contract placeholders and fails `ambiguous-legacy-wire` — Apply blocked, but the
+only offered repair was the error text itself: "Delete and reconnect it using
+the labeled ports" — a manual delete + redraw chore on an unlabeled canvas.
+
+### The dialog
+
+A load-time migration dialog (`.topology-migration-dialog`, `role="dialog"`)
+auto-opens whenever the live gate flags ≥1 ambiguous wire, listing each wire
+("From → To" names) with a per-wire `<select>` of the legal resolutions. The
+actions: **Resolve** (apply every current selection in one undo entry) and
+**Later** (dismiss for the load session — the wire stays unresolved, the panel
+error and Apply block remain; Escape behaves like Later). While open, the
+dialog owns the canvas keyboard (mirroring the relationship-picker guard).
+
+### The option set — `legacyWireResolutionOptions`
+
+The per-wire options come from a new pure helper in `topologyCard.ts`:
+`legacyWireResolutionOptions(source, target)` enumerates the source node's
+OUTPUT semantics × the target node's INPUT semantics over the pairing table,
+sharing the exact socket-semantics iteration order and the `operationRowAllowed`
+gate with `wireRelationshipOptions` — so the migration UI can never offer a
+relationship the drag gate would reject, and the option order matches the
+relationship picker. **Zero options = delete-only**: the pair has no legal
+relationship (e.g. Store POS → Store POS), so the dialog's select offers only
+"Delete this wire" — the wire is removed, never silently reinterpreted.
+
+Resolution writes `fromPortId`/`toPortId`/`relationshipType` + a label
+(mirroring `commitWire`'s first-wire label choices) onto the wire in place,
+legacy coordinates preserved, in ONE undo entry; the live gate clears the
+moment the fields land. The `ambiguous-legacy-wire` gate itself is unchanged —
+Apply stays blocked until every ambiguous wire is resolved or deleted, and a
+fresh load re-offers the dialog even after a "Later" dismissal.
+
+### Tests
+
+- `topologyCard.test.ts` (7): `legacyWireResolutionOptions` for store→workspace
+  (location), Store POS→warehouse (stock/transfer/operation — identical to the
+  socket-level options), KDS→hardware (ticket), hardware→hardware (device),
+  plain workspace→warehouse (stock/transfer), Restaurant POS→KDS (operation),
+  and the two zero-option cases (Store POS→Store POS, Store POS→KDS — the
+  generic row is blocked for non-Restaurant POS sources).
+- `NodeTopologyEditor.test.tsx` (5): auto-open + resolve (semantics + ticket
+  label land, panel error clears), one-undo restore (wire unresolved again,
+  dialog re-offers), delete-only flow, Later dismissal (wire untouched, error
+  persists), and a clean-canvas no-dialog control.
+- Editor suite **537/537** + topologyCard **34/34** · full UI suite
+  **4,960/4,960** · typecheck clean · eslint 0 errors · i18n lint + FTL dedupe
+  + bundle parity clean (7 new en/id keys).
+
+### Remaining
+
+Parent item 7's UI half is resolved. The schema-version migration mechanics
+(`schema_version: 1`, the identity-inference rules, strict rejection of
+unresolvable wires at Apply) already existed; a future slice could persist the
+migration choice back into the saved diagram's `schema_version` field rather
+than only upgrading the in-memory editor state.
+
+---
+
 ## Consequences
 
 ### Positive

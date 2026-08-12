@@ -1952,6 +1952,107 @@
   color: var(--color-fg);
 }
 
+/* ── Legacy-schema migration dialog ──────────────────────────────
+   Load-time repair surface for ambiguous legacy wires (ADR #34 item 7):
+   a fixed modal listing each unresolved wire with its legal resolution
+   options. Renders above the canvas overlay chrome (picker z-index 6). */
+.topology-migration-dialog {
+  position: absolute;
+  z-index: 8;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(22rem, calc(100% - 2 * var(--space-4)));
+  max-height: 70%;
+  overflow-y: auto;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.topology-migration-dialog h2 {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-fg);
+}
+
+.topology-migration-description {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+  line-height: 1.45;
+}
+
+.topology-migration-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.topology-migration-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-fg) 4%, transparent);
+  border: 1px solid var(--color-border);
+}
+
+.topology-migration-names {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-fg);
+}
+
+.topology-migration-entry select {
+  font-size: var(--text-sm);
+  color: var(--color-fg);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 4px 6px;
+}
+
+.topology-migration-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.topology-migration-actions button {
+  padding: var(--space-1_5) var(--space-3_5);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.topology-migration-actions .topology-migration-resolve {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-bg);
+}
+
+.topology-migration-actions button:hover,
+.topology-migration-actions button:focus-visible {
+  filter: brightness(1.06);
+}
+
 /* ── Unsaved-changes chip (header) ────────────────────────────────
    A quiet warning pill that appears the moment the canvas diverges from
    the last applied snapshot and disappears on Apply/load/preset. role=

@@ -456,7 +456,13 @@ ADR/specification:
    section. The other non-ownership relationships remain open.
 7. What is the exact `schema_version` migration from geometric ports, including
    the UI for unresolved relationships? Legacy relationships whose meaning is
-   uncertain must block Apply.
+   uncertain must block Apply. **UI portion resolved (2026-08-12):** the
+   load-time migration dialog resolves each ambiguous legacy wire in place from
+   the pairing table's legal options (delete-only when none exist), one undo
+   entry, Apply unchanged until every wire is resolved — see the implementation
+   ADR's [Legacy-schema migration UI](2026-08-08-adr34-typed-connection-gating.md#decision--legacy-schema-migration-ui-2026-08-12)
+   section. The identity-inference rules and `schema_version: 1` persistence
+   already covered the inferable cases.
 8. What are the concrete backend compiler effects and transactional records for
    each initial relationship type? A relationship must not be enabled for Apply
    until its runtime effect is defined and tested.

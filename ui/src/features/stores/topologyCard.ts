@@ -308,6 +308,27 @@ export interface WireRelationshipOption {
   labelId: string;
 }
 
+/** True when a generic pairing row (operation-out → operation-in) is
+ *  authorable between these two node instances. The generic row is
+ *  deliberately narrow: only the concrete operational feeds the runtime
+ *  supports — Restaurant POS → KDS, and Store POS → Warehouse. Shared by
+ *  the socket-level drop options and the legacy-wire migration options so
+ *  the two surfaces can never disagree on the generic row. */
+function operationRowAllowed(
+  row: SemanticPairingRow,
+  source: TopologyNodeData,
+  target: TopologyNodeData,
+): boolean {
+  if (row.relationshipType !== 'generic') return true;
+  if (target.type === 'warehouse') {
+    return source.type === 'workspace' && source.metadata?.['typeKey'] === 'store-pos';
+  }
+  return target.type === 'workspace'
+    && target.metadata?.['typeKey'] === 'kds'
+    && source.type === 'workspace'
+    && source.metadata?.['typeKey'] === 'restaurant-pos';
+}
+
 /** All relationships a drop between a source socket and a target socket
  *  may create, in pairing-table order (primary first). Zero options means
  *  the pair is incompatible; one option means the drop creates that wire
@@ -324,14 +345,42 @@ export function wireRelationshipOptions(
   for (const src of socketSemanticIds(source, sourcePort)) {
     for (const tgt of socketSemanticIds(target, targetPort, targetVariantIndex)) {
       const row = SEMANTIC_PORT_PAIRINGS.find((r) => r.source === src && r.target === tgt);
-      const operationTargetAllowed = row?.relationshipType !== 'generic'
-        || (target.type === 'warehouse'
-          ? source.type === 'workspace' && source.metadata?.['typeKey'] === 'store-pos'
-          : target.type === 'workspace'
-            && target.metadata?.['typeKey'] === 'kds'
-            && source.type === 'workspace'
-            && source.metadata?.['typeKey'] === 'restaurant-pos');
-      if (row && operationTargetAllowed) {
+      if (row && operationRowAllowed(row, source, target)) {
+        options.push({
+          fromPortId: src,
+          toPortId: tgt,
+          relationshipType: row.relationshipType,
+          labelId: row.labelId,
+        });
+      }
+    }
+  }
+  return options;
+}
+
+/** Node-level legacy-wire migration: every legal relationship a legacy
+ *  wire between these two nodes may mean, in pairing-table order. A
+ *  fully-unknown legacy wire (folded to the legacy-out/legacy-in
+ *  placeholders by normalizeTopologyGraph) carries no socket semantics,
+ *  so the resolution enumerates the source node's OUTPUT semantics × the
+ *  target node's INPUT semantics over the pairing table — the same
+ *  contract the drag gate and relationship picker use, without a specific
+ *  socket. Zero options means no legal relationship exists between the
+ *  pair: the wire cannot be migrated and must be deleted and recreated
+ *  with the labeled ports (never silently reinterpreted). */
+export function legacyWireResolutionOptions(
+  source: TopologyNodeData,
+  target: TopologyNodeData,
+): WireRelationshipOption[] {
+  // Mirror wireRelationshipOptions' iteration exactly — socket-semantics
+  // order (not raw pairing-row order), same first-row lookup — so the
+  // migration UI offers options in the same order the relationship picker
+  // shows for a live drop between the same nodes.
+  const options: WireRelationshipOption[] = [];
+  for (const src of socketSemanticIds(source, 'right')) {
+    for (const tgt of socketSemanticIds(target, 'left')) {
+      const row = SEMANTIC_PORT_PAIRINGS.find((r) => r.source === src && r.target === tgt);
+      if (row && operationRowAllowed(row, source, target)) {
         options.push({
           fromPortId: src,
           toPortId: tgt,
