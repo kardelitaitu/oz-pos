@@ -37,6 +37,7 @@ pub fn openapi_spec() -> Value {
             { "name": "Sales", "description": "Sale creation, retrieval, and status transitions" },
             { "name": "Sync", "description": "Offline queue push/pull sync endpoints" },
             { "name": "Plans", "description": "Tenant cloud sync plans (ADR sync-plan-gating)" },
+            { "name": "Terminals", "description": "Terminal registration for client-credential authentication" },
             { "name": "Webhooks", "description": "Third-party payment provider webhook receivers" }
         ],
         "components": {
@@ -290,6 +291,118 @@ fn build_schemas() -> Value {
                 "conflict_count": { "type": "integer", "format": "int64" },
                 "total_items": { "type": "integer", "format": "int64" }
             }
+        },
+        "TokenResponse": {
+            "type": "object",
+            "required": ["token", "expires_at", "token_id"],
+            "properties": {
+                "token": { "type": "string", "description": "Signed JWT string", "example": "eyJhbGciOiJIUzI1NiJ9.eyJ..." },
+                "expires_at": { "type": "string", "format": "date-time", "description": "ISO-8601 expiry timestamp" },
+                "token_id": { "type": "string", "format": "uuid", "description": "Unique token identifier" }
+            }
+        },
+        "CreateTokenResponse": {
+            "type": "object",
+            "required": ["token"],
+            "properties": {
+                "token": { "$ref": "#/components/schemas/TokenResponse" }
+            }
+        },
+        "TaxRateResponse": {
+            "type": "object",
+            "required": ["id", "name", "rate_bps", "is_default", "is_inclusive"],
+            "properties": {
+                "id": { "type": "string", "description": "Unique tax rate ID" },
+                "name": { "type": "string", "description": "Display name", "example": "VAT 10%" },
+                "rate_bps": { "type": "integer", "format": "int64", "description": "Rate in basis points", "example": 1000 },
+                "is_default": { "type": "boolean", "description": "Whether this is the default rate" },
+                "is_inclusive": { "type": "boolean", "description": "Whether tax is inclusive of price" },
+                "tenant_id": { "type": "string", "description": "Owning tenant (from JWT)" },
+                "created_at": { "type": "string", "format": "date-time" }
+            }
+        },
+        "UserResponse": {
+            "type": "object",
+            "required": ["id", "username", "display_name", "role_id"],
+            "properties": {
+                "id": { "type": "string", "description": "Unique user ID" },
+                "username": { "type": "string", "description": "Login username" },
+                "display_name": { "type": "string", "description": "Display name in UI" },
+                "role_id": { "type": "string", "description": "Assigned role ID", "example": "role-staff" },
+                "tenant_id": { "type": "string", "description": "Owning tenant (from JWT)" },
+                "created_at": { "type": "string", "format": "date-time" }
+            }
+        },
+        "SaleDetail": {
+            "type": "object",
+            "required": ["id", "status", "lines", "total", "created_at"],
+            "properties": {
+                "id": { "type": "string", "description": "Unique sale ID" },
+                "status": { "type": "string", "enum": ["pending", "active", "completed", "voided"], "description": "Current sale status" },
+                "lines": { "type": "array", "items": { "$ref": "#/components/schemas/SaleLineItem" }, "description": "Line items with computed line_total" },
+                "total": { "$ref": "#/components/schemas/Money" },
+                "subtotal": { "$ref": "#/components/schemas/Money" },
+                "tax_total": { "$ref": "#/components/schemas/Money" },
+                "created_at": { "type": "string", "format": "date-time" },
+                "updated_at": { "type": "string", "format": "date-time" }
+            }
+        },
+        "SaleStatusResponse": {
+            "type": "object",
+            "required": ["id", "status", "updated_at"],
+            "properties": {
+                "id": { "type": "string", "description": "Sale ID" },
+                "status": { "type": "string", "enum": ["pending", "active", "completed", "voided"], "description": "Updated sale status" },
+                "updated_at": { "type": "string", "format": "date-time", "description": "ISO-8601 timestamp of the update" }
+            }
+        },
+        "PlanResponse": {
+            "type": "object",
+            "required": ["tenant_id", "plan"],
+            "properties": {
+                "tenant_id": { "type": "string", "description": "Tenant/store identifier" },
+                "plan": { "type": "string", "enum": ["free", "pro"], "description": "Current sync plan" }
+            }
+        },
+        "TerminalRegistrationRequest": {
+            "type": "object",
+            "required": ["terminal_id", "label"],
+            "properties": {
+                "terminal_id": { "type": "string", "description": "Unique terminal identifier", "example": "pos-terminal-1" },
+                "label": { "type": "string", "description": "Human-readable label", "example": "Front Counter" },
+                "tenant_id": { "type": "string", "description": "Optional tenant/store ID" }
+            }
+        },
+        "TerminalRegistrationResponse": {
+            "type": "object",
+            "required": ["terminal_id", "secret"],
+            "properties": {
+                "terminal_id": { "type": "string", "description": "Registered terminal ID" },
+                "secret": { "type": "string", "description": "Device secret — store securely; only shown once" }
+            }
+        },
+        "SyncPushItem": {
+            "type": "object",
+            "required": ["id", "table_name", "action", "row_data"],
+            "properties": {
+                "id": { "type": "string", "description": "Queue item ID" },
+                "table_name": { "type": "string", "description": "Target table", "example": "sales" },
+                "action": { "type": "string", "enum": ["insert", "update", "delete"], "description": "CRUD action" },
+                "row_data": { "type": "object", "description": "Serialized row payload" },
+                "created_at": { "type": "string", "format": "date-time" }
+            }
+        },
+        "SyncPushRequest": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/SyncPushItem" },
+            "description": "Array of offline queue items to push"
+        },
+        "SyncPullResponse": {
+            "type": "object",
+            "properties": {
+                "items": { "type": "array", "items": { "$ref": "#/components/schemas/SyncPushItem" }, "description": "Pending items from other terminals" },
+                "server_time": { "type": "string", "format": "date-time", "description": "Current server timestamp for the next pull's `since`" }
+            }
         }
     })
 }
@@ -346,11 +459,30 @@ fn build_paths() -> Value {
                     "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTokenRequest" } } }
                 },
                 "responses": {
-                    "200": { "description": "Token created successfully" },
+                    "200": { "description": "Token created successfully", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTokenResponse" } } } },
                     "400": { "description": "Invalid JSON body", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "415": { "description": "Unsupported content type", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "422": { "description": "Missing required field (label)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "500": { "description": "JWT encoding failed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                }
+            }
+        },
+
+        // ── Terminals ──────────────────────────────────────────────
+        "/api/v1/terminals": {
+            "post": {
+                "tags": ["Terminals"],
+                "summary": "Register a new terminal",
+                "description": "Registers a terminal for client-credential token minting (ADR sync-auth-hardening P3). Returns a device secret that must be stored securely — it is only returned once.",
+                "operationId": "registerTerminal",
+                "requestBody": {
+                    "required": true,
+                    "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TerminalRegistrationRequest" } } }
+                },
+                "responses": {
+                    "201": { "description": "Terminal registered", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TerminalRegistrationResponse" } } } },
+                    "400": { "description": "Missing required field (terminal_id or label)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+                    "409": { "description": "Terminal ID already registered", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
             }
         },
@@ -438,7 +570,7 @@ fn build_paths() -> Value {
                 "operationId": "getMyPlan",
                 "security": [{ "bearerAuth": [] }],
                 "responses": {
-                    "200": { "description": "Effective plan for the authenticated tenant", "content": { "application/json": { "schema": { "type": "object", "properties": { "tenant_id": { "type": "string" }, "plan": { "type": "string", "enum": ["free", "pro"] } } } } } },
+                    "200": { "description": "Effective plan for the authenticated tenant", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PlanResponse" } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
             }
@@ -454,7 +586,7 @@ fn build_paths() -> Value {
                     "content": { "application/json": { "schema": { "type": "object", "properties": { "plan": { "type": "string", "enum": ["free", "pro"] } }, "required": ["plan"] } } }
                 },
                 "responses": {
-                    "200": { "description": "Plan updated", "content": { "application/json": { "schema": { "type": "object", "properties": { "tenant_id": { "type": "string" }, "plan": { "type": "string" } } } } } },
+                    "200": { "description": "Plan updated", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PlanResponse" } } } },
                     "400": { "description": "Unknown plan name", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "401": { "description": "Missing or invalid admin key", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
@@ -489,7 +621,7 @@ fn build_paths() -> Value {
                     "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTaxRateRequest" } } }
                 },
                 "responses": {
-                    "201": { "description": "Tax rate created" },
+                    "201": { "description": "Tax rate created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TaxRateResponse" } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
             }
@@ -508,7 +640,7 @@ fn build_paths() -> Value {
                     "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateUserRequest" } } }
                 },
                 "responses": {
-                    "201": { "description": "User created" },
+                    "201": { "description": "User created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UserResponse" } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
             }
@@ -527,7 +659,7 @@ fn build_paths() -> Value {
                     "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateSaleRequest" } } }
                 },
                 "responses": {
-                    "201": { "description": "Sale created (status: pending)" },
+                    "201": { "description": "Sale created (status: pending)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SaleDetail" } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "422": { "description": "Empty lines array", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
@@ -544,10 +676,12 @@ fn build_paths() -> Value {
                     { "name": "id", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Sale ID to retrieve" }
                 ],
                 "responses": {
-                    "200": { "description": "Sale detail, or null if not found" },
+                    "200": { "description": "Sale detail, or null if not found", "content": { "application/json": { "schema": { "oneOf": [{ "$ref": "#/components/schemas/SaleDetail" }, { "type": "null" }] } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
-            },
+            }
+        },
+        "/api/v1/sales/{id}/status": {
             "patch": {
                 "tags": ["Sales"],
                 "summary": "Update sale status",
@@ -562,7 +696,7 @@ fn build_paths() -> Value {
                     "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UpdateSaleStatusRequest" } } }
                 },
                 "responses": {
-                    "200": { "description": "Status updated" },
+                    "200": { "description": "Status updated", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SaleStatusResponse" } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "404": { "description": "Sale not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "422": { "description": "Invalid status transition", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
@@ -604,9 +738,13 @@ fn build_paths() -> Value {
                     }
                 },
                 "responses": {
-                    "200": { "description": "Items accepted" },
+                    "200": { "description": "Items accepted", "content": { "application/json": { "schema": { "type": "object", "properties": { "accepted": { "type": "integer", "format": "int64" } } } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "429": { "description": "Rate limited (per-tenant)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+                },
+                "requestBody": {
+                    "required": true,
+                    "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SyncPushRequest" } } }
                 }
             }
         },
@@ -631,7 +769,7 @@ fn build_paths() -> Value {
                     }
                 },
                 "responses": {
-                    "200": { "description": "Items to sync (may be empty)" },
+                    "200": { "description": "Items to sync (may be empty)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SyncPullResponse" } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "421": { "description": "Server migrated — use new URL", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
@@ -760,6 +898,8 @@ mod tests {
         assert!(tags.contains(&"Users"));
         assert!(tags.contains(&"Sales"));
         assert!(tags.contains(&"Sync"));
+        assert!(tags.contains(&"Plans"));
+        assert!(tags.contains(&"Terminals"));
         assert!(tags.contains(&"Webhooks"));
     }
 
@@ -806,6 +946,14 @@ mod tests {
         assert!(
             paths.contains_key("/api/v1/sales/{id}"),
             "missing sale by ID"
+        );
+        assert!(
+            paths.contains_key("/api/v1/sales/{id}/status"),
+            "missing sale status update"
+        );
+        assert!(
+            paths.contains_key("/api/v1/terminals"),
+            "missing terminal registration"
         );
         assert!(
             paths.contains_key("/api/sync/status"),
@@ -889,7 +1037,7 @@ mod tests {
             ("/api/v1/users", "post"),
             ("/api/v1/sales", "post"),
             ("/api/v1/sales/{id}", "get"),
-            ("/api/v1/sales/{id}", "patch"),
+            ("/api/v1/sales/{id}/status", "patch"),
             ("/api/sync/status", "get"),
             ("/api/sync/push", "post"),
             ("/api/sync/pull", "post"),
