@@ -63,3 +63,6 @@ analytics-granularity-yearly = Tahunan
 analytics-granularity-custom = Kustom
 analytics-custom-from = Dari
 analytics-custom-to = Hingga
+analytics-action-refresh-aria = Muat ulang data
+analytics-action-zoom-out-aria = Perkecil
+analytics-action-zoom-in-aria = Perbesar

@@ -51,15 +51,28 @@ export default function AnalyticsScreen() {
   const [customFrom, setCustomFrom] = useState(isoToday());
   const [customTo, setCustomTo] = useState(isoToday());
   const [calculating, setCalculating] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1);
   const calcTimer = useRef<ReturnType<typeof setTimeout>>();
 
-  // Recalculate when filters change
-  useEffect(() => {
+  const MIN_ZOOM = 0.6;
+  const MAX_ZOOM = 1.6;
+  const ZOOM_STEP = 0.2;
+
+  const startRecalculating = useRef<() => void>();
+  startRecalculating.current = () => {
     setCalculating(true);
     clearTimeout(calcTimer.current);
     calcTimer.current = setTimeout(() => setCalculating(false), 600);
+  };
+
+  // Recalculate when filters change
+  useEffect(() => {
+    startRecalculating.current?.();
     return () => clearTimeout(calcTimer.current);
   }, [workspaceView, granularity, customFrom, customTo]);
+
+  const zoomIn = () => setZoomLevel((z) => Math.min(MAX_ZOOM, +(z + ZOOM_STEP).toFixed(2)));
+  const zoomOut = () => setZoomLevel((z) => Math.max(MIN_ZOOM, +(z - ZOOM_STEP).toFixed(2)));
 
   // Filter cards visible for the current workspace
   const visibleCards = ANALYTICS_CARDS.filter(
@@ -233,6 +246,53 @@ export default function AnalyticsScreen() {
               </label>
             </div>
           )}
+
+          {/* Action buttons — refresh, zoom out, zoom in */}
+          <div className="analytics-actions">
+            <button
+              type="button"
+              className="analytics-action-btn"
+              onClick={startRecalculating.current}
+              aria-label={l10n.getString('analytics-action-refresh-aria')}
+              title={l10n.getString('analytics-action-refresh-aria')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
+                <polyline points="23 4 23 10 17 10" />
+                <polyline points="1 20 1 14 7 14" />
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className="analytics-action-btn"
+              onClick={zoomOut}
+              aria-label={l10n.getString('analytics-action-zoom-out-aria')}
+              title={l10n.getString('analytics-action-zoom-out-aria')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                <line x1="8" y1="11" x2="14" y2="11" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className="analytics-action-btn"
+              onClick={zoomIn}
+              aria-label={l10n.getString('analytics-action-zoom-in-aria')}
+              title={l10n.getString('analytics-action-zoom-in-aria')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                <line x1="11" y1="8" x2="11" y2="14" />
+                <line x1="8" y1="11" x2="14" y2="11" />
+              </svg>
+            </button>
+          </div>
         </div>
       </nav>
 
@@ -240,7 +300,7 @@ export default function AnalyticsScreen() {
           AREA 3 — Main content: smart analytics card grid
           ══════════════════════════════════════════════════════════ */}
       <main className="analytics-main">
-        <div className="analytics-grid">
+        <div className="analytics-grid" style={{ zoom: zoomLevel }}>
           {visibleCards.map((card) => (
             <div
               key={`${card.key}-${card.workspace ?? 'shared'}`}

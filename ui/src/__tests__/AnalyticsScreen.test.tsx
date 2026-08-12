@@ -132,6 +132,30 @@ describe('AnalyticsScreen layout shell', () => {
     expect(screen.getByLabelText('To')).toBeTruthy();
   });
 
+  it('renders refresh, zoom out, and zoom in action buttons', () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    expect(screen.getByRole('button', { name: 'Refresh data' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Zoom out' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Zoom in' })).toBeTruthy();
+  });
+
+  it('zooms the main grid in and out without affecting title or menu', async () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    const grid = document.querySelector('.analytics-grid') as HTMLElement;
+    expect(grid.style.zoom).toBe('1');
+
+    const zoomIn = screen.getByRole('button', { name: 'Zoom in' });
+    await userEvent.click(zoomIn);
+    expect(grid.style.zoom).toBe('1.2');
+
+    const zoomOut = screen.getByRole('button', { name: 'Zoom out' });
+    await userEvent.click(zoomOut);
+    await userEvent.click(zoomOut);
+    expect(grid.style.zoom).toBe('0.8');
+  });
+
   it('renders the analytics card grid with workspace-appropriate titles', () => {
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 

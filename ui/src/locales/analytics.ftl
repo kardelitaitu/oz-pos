@@ -63,3 +63,6 @@ analytics-granularity-yearly = Yearly
 analytics-granularity-custom = Custom
 analytics-custom-from = From
 analytics-custom-to = To
+analytics-action-refresh-aria = Refresh data
+analytics-action-zoom-out-aria = Zoom out
+analytics-action-zoom-in-aria = Zoom in
