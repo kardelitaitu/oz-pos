@@ -76,10 +76,7 @@ impl From<super::CloudServerState> for SyncState {
 /// Execution order: auth_middleware → plan_middleware → rate_limit_middleware → handler
 /// Axum layers are applied from outside to inside, so the LAST .layer() is the
 /// innermost (closest to the handler).
-pub fn sync_router(state: SyncState) -> Router {
-    let enforce_plans = std::env::var("OZ_ENFORCE_PLANS")
-        .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "on"))
-        .unwrap_or(false);
+pub fn sync_router(state: SyncState, enforce_plans: bool) -> Router {
     sync_router_with_plan_enforcement(state, enforce_plans)
 }
 
@@ -652,7 +649,7 @@ mod tests {
 
     /// Create a test JWT token scoped to the given tenant.
     fn test_token(tenant_id: Option<&str>) -> String {
-        oz_api::auth::create_token("test", Some(24), tenant_id)
+        oz_api::auth::create_token("test", Some(24), tenant_id, None)
             .unwrap()
             .token
     }
@@ -687,11 +684,11 @@ mod tests {
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
             rate_limiter: RateLimiterState::new(),
         };
-        sync_router(state)
+        sync_router(state, false)
     }
 
     fn test_router_with_state(state: SyncState) -> Router {
-        sync_router(state)
+        sync_router(state, false)
     }
 
     /// Build a router with plan enforcement explicitly enabled/disabled,

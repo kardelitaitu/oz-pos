@@ -347,6 +347,9 @@ pub fn build_router(
         // ADR sync-auth-hardening P2: gate token minting with the admin key
         // when configured; open in dev mode when unset.
         admin_key: config.admin_key.clone(),
+        api_secret: config.api_secret.clone().unwrap_or_default(),
+        db_path: config.db_path.clone(),
+        port: config.port,
     };
     let api_router = oz_api::router(api_state);
 
@@ -356,7 +359,7 @@ pub fn build_router(
     // Build the sync router (push/pull endpoints) from sync_api module.
     // P8-1: Share the same RateLimiterState with the cleanup task.
     let sync_state = SyncState::from_with_rate_limiter(state.clone(), rate_limiter);
-    let sync_router = sync_router(sync_state);
+    let sync_router = sync_router(sync_state, config.enforce_plans);
 
     // Build the webhook router (unauthenticated — HMAC signature verification).
     let webhook_router = webhooks::webhooks_router(state.clone());
@@ -470,7 +473,7 @@ mod tests {
 
     /// Create a test JWT token.
     fn test_token(tenant_id: Option<&str>) -> String {
-        oz_api::auth::create_token("test", Some(24), tenant_id)
+        oz_api::auth::create_token("test", Some(24), tenant_id, None)
             .unwrap()
             .token
     }

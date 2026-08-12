@@ -90,6 +90,7 @@ pub async fn create_token_handler(
                     body.expiry_hours,
                     terminal.tenant_id.as_deref(),
                     Some(&terminal.terminal_id),
+                    Some(&state.api_secret),
                 ) {
                     Ok(resp) => Json(CreateTokenResponse { token: resp }).into_response(),
                     Err(e) => {
@@ -126,7 +127,12 @@ pub async fn create_token_handler(
         )
             .into_response();
     }
-    match create_token(&body.label, body.expiry_hours, body.tenant_id.as_deref()) {
+    match create_token(
+        &body.label,
+        body.expiry_hours,
+        body.tenant_id.as_deref(),
+        Some(&state.api_secret),
+    ) {
         Ok(resp) => Json(CreateTokenResponse { token: resp }).into_response(),
         Err(e) => {
             tracing::error!(?e, "JWT encoding failed");
@@ -152,6 +158,9 @@ mod tests {
         AppState {
             db: Arc::new(Mutex::new(oz_core::migrations::fresh_db())),
             admin_key: key.map(|s| s.to_owned()),
+            api_secret: String::new(),
+            db_path: ":memory:".into(),
+            port: 3099,
         }
     }
 

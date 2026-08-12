@@ -140,6 +140,9 @@ mod tests {
         let state = AppState {
             db: Arc::new(Mutex::new(conn)),
             admin_key: None,
+            api_secret: String::new(),
+            db_path: ":memory:".into(),
+            port: 3099,
         };
         router(state)
     }
@@ -166,7 +169,7 @@ mod tests {
     }
 
     fn authed_get(uri: &str, tenant_id: Option<&str>) -> Request<Body> {
-        let token = crate::auth::create_token("test", Some(1), tenant_id)
+        let token = crate::auth::create_token("test", Some(1), tenant_id, None)
             .unwrap()
             .token;
         Request::builder()
@@ -284,6 +287,9 @@ mod tests {
         let state = AppState {
             db: Arc::new(Mutex::new(conn)),
             admin_key: Some("super-secret".to_string()),
+            api_secret: String::new(),
+            db_path: ":memory:".into(),
+            port: 3099,
         };
         let app = router(state);
 
