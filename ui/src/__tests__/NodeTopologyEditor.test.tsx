@@ -413,16 +413,29 @@ describe('NodeTopologyEditor Component', () => {
     expect(screen.getByText('Main Warehouse')).toBeInTheDocument();
   });
 
-  it('renders the branch-diff overlay: ghost cards and card markers', () => {
+  it('renders the branch-diff overlay: ghost cards and card markers', async () => {
+    // Sparse load: the full retail preset fills the 800×600 jsdom rect, so
+    // (400, 20) is a genuinely free spot here (store at (80,140), ws-1 at
+    // (680,140)) — the ghost must render exactly at its saved position
+    // when unobstructed.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Downtown Branch', x: 80, y: 140 },
+        { id: 'ws-1', type: 'workspace', name: 'Retail POS #1', x: 680, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-1', type: 'warehouse', name: 'Main Warehouse', x: 680, y: 420 },
+      ],
+      wires: [],
+    } as never);
     renderEditor({
       compareOverlay: {
-        ghosts: [{ id: 'ws-ghost', name: 'Stock Room', x: 480, y: 360 }],
+        ghosts: [{ id: 'ws-ghost', name: 'Stock Room', x: 400, y: 20 }],
         onlyHere: ['ws-1'],
         differing: ['store-1'],
         otherWires: [],
         sharedByOtherId: [],
       },
     });
+    await waitFor(() => expect(getNodeCount()).toBe(3));
 
     // Other-only workspaces render as ghost cards at the other diagram's
     // saved position — decorative (never a real, interactive card).
@@ -430,7 +443,7 @@ describe('NodeTopologyEditor Component', () => {
       '.topology-overlay-ghost[data-overlay-node-id="ws-ghost"]',
     ) as HTMLElement | null;
     expect(ghost).not.toBeNull();
-    expect(ghostXY(ghost!)).toEqual({ x: 480, y: 360 });
+    expect(ghostXY(ghost!)).toEqual({ x: 400, y: 20 });
     expect(ghost!.textContent).toContain('Stock Room');
     expect(ghost!.getAttribute('aria-hidden')).toBe('true');
 
@@ -449,12 +462,24 @@ describe('NodeTopologyEditor Component', () => {
     expect(wh1.className).not.toContain('topology-node--overlay-');
   });
 
-  it('clamps off-canvas overlay ghosts into the visible canvas and leaves in-view ghosts alone', () => {
+  it('clamps off-canvas overlay ghosts into the visible canvas and leaves in-view ghosts alone', async () => {
+    // Sparse load so the clamped corner (560,360) and the in-view spot
+    // (320,20) are genuinely free — the full retail preset's warehouse
+    // occupies the corner, which would move the far ghost aside instead.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Downtown Branch', x: 80, y: 140 },
+        // Far off-canvas: it must not crowd the clamped corner the far
+        // ghost tests.
+        { id: 'ws-1', type: 'workspace', name: 'Retail POS #1', x: 4000, y: 4000, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [],
+    } as never);
     renderEditor({
       compareOverlay: {
         ghosts: [
           { id: 'ws-ghost-far', name: 'Satellite', x: 4000, y: 4000 },
-          { id: 'ws-ghost-in', name: 'Local', x: 120, y: 360 },
+          { id: 'ws-ghost-in', name: 'Local', x: 320, y: 20 },
         ],
         onlyHere: [],
         differing: [],
@@ -462,6 +487,7 @@ describe('NodeTopologyEditor Component', () => {
         sharedByOtherId: [],
       },
     });
+    await waitFor(() => expect(getNodeCount()).toBe(2));
 
     // The far ghost clamps into the default 800×600 viewport (jsdom has no
     // layout, so the editor falls back to 800×600 at zoom 1, pan 0 — the
@@ -478,7 +504,7 @@ describe('NodeTopologyEditor Component', () => {
       '.topology-overlay-ghost[data-overlay-node-id="ws-ghost-in"]',
     ) as HTMLElement | null;
     expect(inView).not.toBeNull();
-    expect(ghostXY(inView!)).toEqual({ x: 120, y: 360 });
+    expect(ghostXY(inView!)).toEqual({ x: 320, y: 20 });
   });
 
   it('gates the ghost glide off during a pan drag and restores it on release', () => {
@@ -1146,6 +1172,32 @@ describe('NodeTopologyEditor Component', () => {
     expect(
       within(printer as HTMLElement).getByText('A ticket device can receive tickets from only one source.'),
     ).toBeInTheDocument();
+  });
+
+  it('moves a ghost off a live NON-workspace card it would land on (spatial divergence)', () => {
+    // Branch divergence: the other branch's workspace sits where THIS
+    // branch keeps its Branch Location (store at (80,140)). The ghost must
+    // never cover the root card — ALL live card kinds are blockers, not
+    // just workspaces. The 800×600 jsdom canvas has no room to drop the
+    // ghost below the store, so zoom out to 0.8: the visible world-rect
+    // grows to 1000×750 and the stack drops the ghost to 388 = 140 + 240
+    // + 8 gap below the store's bottom edge.
+    renderEditor({
+      compareOverlay: {
+        ghosts: [{ id: 'ws-ghost', name: 'Stock Room', x: 120, y: 240 }],
+        onlyHere: [],
+        differing: [],
+        otherWires: [],
+        sharedByOtherId: [],
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom out' }));
+
+    const ghost = document.querySelector(
+      '.topology-overlay-ghost[data-overlay-node-id="ws-ghost"]',
+    ) as HTMLElement | null;
+    expect(ghost).not.toBeNull();
+    expect(ghostXY(ghost!)).toEqual({ x: 120, y: 388 });
   });
 
   it('clicking the canvas outside the picker dismisses it without creating a wire', async () => {

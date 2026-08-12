@@ -1,4 +1,45 @@
 
+## 2026-08-12 — Migration drift repair: 128_assignments.sql draft-in-place (DB-02) — dev-DB checksum re-recorded
+
+### The app panicked on startup: "migration 128_assignments.sql definition drift: applied checksum 79826c1b… != current 55abc2a6…"
+**Problem:** Same failure mode as the migration 120 incident (2026-08-07 entry), from the same workflow. The 0048 cycle-1 commit `3447c0cf` ("feat(rbac): assignment model with explicit-all scopes (0048 cycle 1)") landed the final `128_assignments.sql` at 08:26 UTC — but the dev DB had already applied a DRAFT of that file at `2026-08-11T08:16:08.639Z` (ten minutes earlier, from a running dev build). The DB-02 drift guard fails closed at startup whenever an applied migration's definition changes, so `oz-pos-app.exe` refused to boot (exit code 101): applied `79826c1b2549d04537a67a245698379e89138ff7b8e5323d8b5bceac7a433a08` != current `55abc2a69f8505f74dbe5e172a432e835ede5b8852932f76001fefab57130551`.
+
+Unlike the 120 case, the committed file is correct — it is the DB record that drifted. The draft applied nothing persistent (no `assignments`/`assignment_branches`/`assignment_workspaces` tables existed in the DB), and the draft bytes were unrecoverable (no `target/debug/deps/liboz_core-*.rlib` artifacts predating the final build remained). The final 128 is fully idempotent (`CREATE TABLE IF NOT EXISTS`, `INSERT OR IGNORE`), which makes a DB-side repair safe: re-apply the committed file and re-record its checksum. No repo change was needed — the repo is right, the dev DB was wrong.
+
+**Recovery (DB-side repair — repo untouched):**
+1. **Back up the dev DB first:** `cp "C:/Users/Dika/AppData/Roaming/com.ozpos.app/oz-pos.db" oz-pos.db.before-128-repair-20260812` (1.4 MB, verified on disk alongside the older `.pre-120-fix` backup).
+2. **Confirm which side drifted:** recompute the committed file's SHA-256 and compare against the `schema_migrations` record — stored `79826c1b…` (draft) vs computed `55abc2a6…` (committed file). Also confirm no `assignments*` tables exist, so the final 128 applies cleanly with no partial-schema conflict.
+3. **Apply the final 128 directly to the dev DB:** `executescript` the committed `crates/oz-core/migrations/128_assignments.sql`. Idempotent by design, so safe on any DB state.
+4. **Re-record the checksum** (this is what the DB-02 guard compares): `UPDATE schema_migrations SET checksum = '<sha256-of-committed-file>' WHERE id = '128_assignments.sql'`. Note the tracking table is `schema_migrations` with columns `id` / `applied_at` / `checksum` — the `id` is the FILE NAME (not the numeric prefix), and there is no `version` column. The original `applied_at` was preserved; only the checksum changed.
+5. **Boot the app to confirm the runner continues:** `timeout 40 ./target/debug/oz-pos-app.exe` ran cleanly to the timeout (exit 124 = no panic); `schema_migrations` now ends at `135_sale_line_cost_snapshot.sql` — migrations 129–135 applied normally during that boot, including `129_retire_cashier_kitchen.sql`, which UPDATES `assignments` and therefore depends on the final 128 having run.
+
+**Checksum verification steps (reusable):**
+```python
+import sqlite3, hashlib
+sql = open("crates/oz-core/migrations/128_assignments.sql", encoding="utf-8").read()
+want = hashlib.sha256(sql.encode("utf-8")).hexdigest()
+conn = sqlite3.connect("C:/Users/Dika/AppData/Roaming/com.ozpos.app/oz-pos.db")
+got = conn.execute("SELECT checksum FROM schema_migrations WHERE id = '128_assignments.sql'").fetchone()[0]
+print("MATCH" if got == want else "MISMATCH")  # stored 55abc2a6… == computed 55abc2a6…
+```
+Post-repair state verified: 3 users → 3 `assignments` rows backfilled, 2 `assignment_workspaces` rows (cashier→`retail-pos`, kitchen→`kds`), and the `retail-pos` workspace seeded — the ADR #35 D5 backfill landed exactly as the committed migration specifies.
+
+**Tablet client checked — no action needed:** the tablet's identifier is `com.ozpos.tablet`, so its DB would live at `%APPDATA%\com.ozpos.tablet\oz-pos.db`. That directory does not exist on this machine, no `oz-pos-tablet` binary was ever built (Android/iOS-only client, `"windows": []`), and no AVD/device exists — the tablet has never opened a database, so it cannot carry drift. On first run it applies 001→135 fresh against the committed files.
+
+**Follow-ups (deliberately NOT done):** this is the SECOND occurrence of the same workflow failure (120 on 2026-08-07, 128 on 2026-08-11). The guard that would catch it at COMMIT time instead of app startup is still not wired: a pre-commit check that diffs migration files against the checksums recorded in the local dev DBs (the 120 entry's follow-up #2). Until then: before editing ANY migration file, check the applied checksum on every dev DB that may have run it — a migration is "applied" the moment any database records its checksum, not when it ships.
+
+
+## 2026-08-12 — TDD cycle: compare-panel ghost cards could cover live Branch Location / Warehouse / Hardware cards — the blocker set was workspace-only
+
+### The other branch's workspace ghosts never avoided THIS branch's non-workspace cards, so spatial divergence plastered ghosts on the root card
+**Problem:** Fifteenth review pass — audited the branch-compare spatial-diff ghosts (`topologyBranchCompare.ts` + the editor's `laidOutGhosts` memo) for stale or overlapping placement when branches diverge. The re-layout pipeline is healthy (memo deps `[compareOverlay, pan, zoom, nodes]` — ghosts re-clamp on pan/zoom/node-move; shared far-ends and drift pairing recompute live; the engine's stacking is deterministic and bounded). But the editor fed `layoutGhosts` ONLY the workspace cards as `occupied` rects (`nodes.filter(n => n.type === 'workspace')`), so a ghost — an other-branch workspace at its SAVED position — rendered ON TOP of this branch's Branch Location, Warehouse, or Hardware cards whenever a divergence put them in the same canvas region. The ghost layer renders after the cards in the same stacking context and the ghost is a 240×240 dashed box, so it visually covered the live card — the root Branch Location included. The engine itself handled arbitrary blockers correctly (its "moves a ghost off a live card" test proves it with a generic rect); the defect was purely the editor's filter. Two pre-existing tests even baked the bug in unknowingly: their ghosts at (480,360)/(4000,4000) clamped onto the default preset's Warehouse (680,140) and asserted the overlap.
+
+**Solution:** Red→Green. (1) Red — an editor test loads the retail preset, places a ghost at (120,240) exactly on the Branch Location card, zooms out to 0.8 (the 800×600 jsdom fallback has no room below the store at zoom 1, so the documented accept-overlap fallback engages there; at 0.8 the visible world-rect grows to 1000×750 and the stack can drop the ghost) and asserts the ghost lands at (120,388) = store.bottom + 8 gap. Unfixed code kept it at (120,240) — Red with the exact predicted numbers. (2) Green — the occupied set now includes EVERY live card (`nodes.map(...)`), one line plus a comment. Two pre-existing ghost tests were re-pointed to sparse loads with genuinely free positions so their intent ("ghost renders at its saved position when unobstructed", "clamps to the corner, leaves in-view ghosts alone") holds without colliding with a live card.
+
+**Validation:** editor suite 524/524 + branch-compare 40/40 (1 new test, true-Red confirmed via stash) · full UI suite 286 files / 4,937 tests · typecheck · eslint 0 errors (8 pre-existing warnings) · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done / noted:** (1) the clamp's visible-rect reads `canvasRef.clientWidth` live but the memo has no canvas-size dependency — a pure window/panel resize with no pan/zoom/node change leaves ghosts clamped to the pre-resize rect until the user pans or zooms (self-healing, low severity, noted as a future slice: a ResizeObserver-driven canvas-size state would fix this class across zoomToFit/minimap too). (2) The engine's greedy down-then-left stack never tries right/up, so a ghost pinned against the top-left corner accepts overlap (documented "accept the overlap" fallback) — acceptable, keeps the layout deterministic.
+
 ## 2026-08-12 — ADR #34 decision + TDD cycle: ticket-routing cardinality — one ticket source per printer, fan-out allowed from a KDS
 
 ### The long-open product gate (parent ADR item 6) is now decided and enforced on both surfaces

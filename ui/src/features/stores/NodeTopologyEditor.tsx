@@ -1674,9 +1674,12 @@ export default function NodeTopologyEditor({
         pan,
         zoom,
       },
-      nodes
-        .filter((n) => n.type === 'workspace')
-        .map((n) => ({ x: n.x, y: n.y, width: NODE_WIDTH, height: NODE_HEIGHT })),
+      // EVERY live card is a blocker, not just workspaces: a ghost (the
+      // other branch's workspace at its saved position) must never cover
+      // this branch's Branch Location, Warehouse, or Hardware card either
+      // — spatial divergence routinely lands an other-only workspace on
+      // this side's root/storage/peripheral cards.
+      nodes.map((n) => ({ x: n.x, y: n.y, width: NODE_WIDTH, height: NODE_HEIGHT })),
     );
   }, [compareOverlay, pan, zoom, nodes]);
 
