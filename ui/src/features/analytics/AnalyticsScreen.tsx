@@ -184,6 +184,30 @@ export default function AnalyticsScreen() {
 
   // ── Render ───────────────────────────────────────────────────────
 
+  if (loading) {
+    return (
+      <div className="analytics analytics--fullscreen" role="region" aria-label={requiredLocalized(l10n, 'analytics-region-aria')}>
+        <button type="button" className="analytics-back-btn" onClick={goToWorkspacePicker} aria-label={l10n.getString('analytics-back-aria')}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg>
+          <Localized id="analytics-back"><span>Back</span></Localized>
+        </button>
+        <Localized id="analytics-title"><h1 className="analytics-title">Staff Analytics</h1></Localized>
+        <div className="analytics-kpi-row">
+          {[1,2,3,4].map((i) => (
+            <div key={i} className="card analytics-kpi analytics-kpi--skeleton"><div className="card-body">
+              <span className="analytics-kpi-label-skeleton" />
+              <span className="analytics-kpi-value-skeleton" />
+            </div></div>
+          ))}
+        </div>
+        <div className="analytics-chart-row">
+          <div className="card analytics-chart-card"><div className="card-body"><h2 className="analytics-card-title">Daily Sales by Staff</h2><div className="analytics-chart-skeleton" /></div></div>
+          <div className="card analytics-table-card"><div className="card-body"><h2 className="analytics-card-title">Staff Summary</h2><div className="analytics-table-skeleton" /></div></div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="analytics analytics--fullscreen" role="region" aria-label={requiredLocalized(l10n, 'analytics-region-aria')}>
       {/* Back button */}

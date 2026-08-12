@@ -236,6 +236,34 @@ export default function DashboardScreen() {
   if (loading) return <div className="dashboard"><Spinner aria-label={l10n.getString('spinner-label')} /></div>;
   if (error) return <div className="dashboard"><p className="dashboard-error">{error}</p></div>;
 
+  if (loading) {
+    return (
+      <div className="dashboard dashboard--fullscreen" role="region" aria-label={requiredLocalized(l10n, 'dashboard-region-aria')}>
+        <button type="button" className="dashboard-back-btn" onClick={goToWorkspacePicker} aria-label={l10n.getString('dashboard-back-aria')}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg>
+          <Localized id="dashboard-back"><span>Back</span></Localized>
+        </button>
+        <Localized id="dashboard-title"><h1 className="dashboard-title">Dashboard</h1></Localized>
+        <div className="dashboard-kpi-row">
+          {[1,2,3,4].map((i) => (
+            <div key={i} className="card dashboard-kpi dashboard-kpi--skeleton"><div className="card-body">
+              <span className="dashboard-kpi-label-skeleton" />
+              <span className="dashboard-kpi-value-skeleton" />
+            </div></div>
+          ))}
+        </div>
+        <div className="dashboard-chart-row">
+          <div className="card dashboard-chart-card"><div className="card-body"><h2 className="dashboard-section-title">Revenue Trend</h2><div className="dashboard-chart-skeleton" /></div></div>
+          <div className="card dashboard-chart-card"><div className="card-body"><h2 className="dashboard-section-title">Category Breakdown</h2><div className="dashboard-chart-skeleton" /></div></div>
+        </div>
+        <div className="dashboard-chart-row">
+          <div className="card dashboard-chart-card"><div className="card-body"><h2 className="dashboard-section-title">Sales Heatmap</h2><div className="dashboard-chart-skeleton" /></div></div>
+          <div className="card dashboard-chart-card"><div className="card-body"><h2 className="dashboard-section-title">Top 10 Products</h2><div className="dashboard-chart-skeleton" /></div></div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="dashboard dashboard--fullscreen" role="region" aria-label={requiredLocalized(l10n, 'dashboard-region-aria')}>
       {/* Back button */}
