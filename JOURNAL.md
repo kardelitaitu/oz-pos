@@ -1,4 +1,15 @@
 
+## 2026-08-12 — TDD cycle: midpoint-ghost click inserted a phantom, non-undoable bend
+
+### A mousedown+mouseup without movement on a wire's midpoint ghost left a permanent bend with no undo entry
+**Problem:** Ninth review pass, the wire-bend gesture audit. `startGhostBendDrag` inserted the bend at mousedown, but the undo entry is only pushed on the first drag MOVEMENT — so a plain click (no drag) on a midpoint ghost inserted a bend that: (1) is a geometric no-op (a midpoint bend on a straight segment renders straight), (2) has NO undo entry (Undo stays disabled for it), and (3) still dirties the canvas — the "Unsaved changes" chip appears for an invisible change and Apply persists the phantom bend. The Escape-cancel and drag paths were already airtight (cancel pops the entry); only the completed click-without-move path leaked.
+
+**Solution:** Red→Green. (1) Red — a test that returns the wire to a clean one-way state (3 clicks cycle the direction back, data-identical → not dirty), then mousedowns+mouseups the ghost with no movement, asserting no bend handle and no dirty chip. It failed with the phantom bend present. (A side lesson: chai's failure formatter walks DOM elements and throws on their getters, masking the assertion — boolean `=== null` forms give a clean failure.) (2) Green — the ghost insertion is DEFERRED to the first drag movement: `startGhostBendDrag` no longer splices at mousedown; the drag object carries `pendingInsert`, and the first mousemove pushes the pre-gesture (unbent) snapshot, splices the fresh bend in at the CURRENT cursor position, and clears the flag. Cancel now removes the bend only when it was actually inserted (pendingInsert cleared) and pops the entry only when moved — a click-without-move is a pure no-op. The existing drag-create / move / Escape-cancel / undo-restores tests all pass unchanged.
+
+**Validation:** bend block 15/15 (1 new, Red-confirmed) · editor suite 517/517 · full UI suite 286 files / 4,924 tests · eslint 0 errors (8 pre-existing warnings) · typecheck · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** the completed-drag-no-op case (drag a bend and return it to its exact start — like the pass-7 node-drag fix) is NOT handled: an existing bend dragged back to startX/startY keeps its entry, and a created bend dropped exactly at the ghost midpoint... is impossible now (the bend is created at the FIRST movement position, so it always exists somewhere real). The existing-bend return-to-start no-op is a smaller marginal case (the bend is visible and the user deliberately manipulated it); noted as a possible future slice rather than expanding this one.
+
 ## 2026-08-12 — TDD cycle: minimap viewport box ignored the −pan/zoom origin
 
 ### The "you are here" box drifted off the diagram as soon as the user panned or zoomed

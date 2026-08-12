@@ -6529,6 +6529,34 @@ describe('NodeTopologyEditor — wire bend editing', () => {
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
   });
 
+  it('a click without drag on a midpoint ghost creates nothing (no phantom bend, no dirty)', () => {
+    renderEditor();
+    // Select w-1 and cycle the direction back to one-way (3 clicks) so the
+    // canvas is CLEAN before the ghost click — the direction-cycle dirty
+    // would otherwise confound the assertion.
+    const hitbox = document.querySelector('.wire-hitbox') as Element;
+    fireEvent.click(hitbox);
+    fireEvent.click(hitbox);
+    fireEvent.click(hitbox);
+    expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
+
+    const ghost = document.querySelector('.wire-bend-ghost') as Element;
+    expect(ghost).not.toBeNull();
+
+    // Mousedown + mouseup on the midpoint ghost with NO movement. Today
+    // this inserts a phantom bend (a midpoint bend on a straight segment
+    // is a geometric no-op) that dirties the canvas, survives Apply, and
+    // has NO undo entry — the entry only pushes on first movement.
+    // Mousedown + mouseup on the midpoint ghost with NO movement.
+    fireEvent.mouseDown(ghost, { button: 0, clientX: 350, clientY: 334 });
+    fireEvent.mouseUp(document, { button: 0 });
+
+    // Boolean forms: chai's failure formatter walks DOM elements and can
+    // throw on their getters, masking the real assertion with a TypeError.
+    expect(document.querySelector('.wire-bend-handle') === null).toBe(true);
+    expect(screen.queryByText('Unsaved changes') === null).toBe(true);
+  });
+
   it('Escape cancels an in-flight bend drag, restoring the bend and popping the entry', () => {
     renderEditor();
     const hitbox = selectFirstWire();
