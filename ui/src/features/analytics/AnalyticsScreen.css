@@ -338,6 +338,20 @@
   width: 100%;
 }
 
+/* Monthly: one cell per day of the month, 7 columns (calendar weeks) */
+.analytics-heatmap--monthly {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px 10px;
+  max-width: 340px;
+  margin: 0 auto;
+}
+
+.analytics-heatmap--monthly .analytics-heat-block {
+  width: 20px;
+  height: 20px;
+}
+
 /* Yearly: 12 month columns × 4 week rows */
 .analytics-heatmap--yearly {
   gap: 10px;

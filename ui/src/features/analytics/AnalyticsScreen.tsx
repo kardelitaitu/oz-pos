@@ -31,6 +31,12 @@ function isoToday(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** Number of days in the current month (28–31). */
+export function daysInCurrentMonth(): number {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+}
+
 // Heatmap time buckets per granularity. Custom falls back to the daily
 // week view until a real range is selected.
 const HEAT_BUCKETS: Record<Exclude<Granularity, 'custom'>, string[]> = {
@@ -131,10 +137,29 @@ export default function AnalyticsScreen() {
     : visibleCards;
 
   // Smart heatmap — bucket cells change with the selected granularity.
-  // Yearly renders a 12-month × 4-week grid; other granularities are flat.
+  // Monthly renders one cell per day of the current month (28–31);
+  // yearly renders a 12-month × 4-week grid; other granularities are flat.
   // Intensity is a placeholder until real data is wired.
   const renderHeatmap = () => {
     const aria = l10n.getString('analytics-card-peak-hours');
+    if (granularity === 'monthly') {
+      const days = daysInCurrentMonth();
+      return (
+        <div className="analytics-heatmap analytics-heatmap--monthly" role="img" aria-label={aria}>
+          {Array.from({ length: days }, (_, i) => (
+            <div
+              key={i}
+              className="analytics-heat-cell"
+              data-intensity={(i * 37 + 7) % 5}
+              title={`Day ${i + 1}`}
+            >
+              <div className="analytics-heat-block" />
+              <span className="analytics-heat-label">{i + 1}</span>
+            </div>
+          ))}
+        </div>
+      );
+    }
     if (granularity === 'yearly') {
       return (
         <div className="analytics-heatmap analytics-heatmap--yearly" role="img" aria-label={aria}>

@@ -30,7 +30,7 @@ vi.mock('@/hooks/useWorkspaceNav', () => ({
   useWorkspaceNav: () => ({ goToWorkspacePicker: mockGoToPicker }),
 }));
 
-import AnalyticsScreen, { nextExpandedKey } from '@/features/analytics/AnalyticsScreen';
+import AnalyticsScreen, { nextExpandedKey, daysInCurrentMonth } from '@/features/analytics/AnalyticsScreen';
 import { registerAnalyticsFeature } from '@/features/analytics/register';
 import { registerStaffFeature } from '@/features/staff/register';
 import { getEnabledPages, clearPages, hasGrantedPermission } from '@/platform/ui/page-registry';
@@ -173,10 +173,12 @@ describe('AnalyticsScreen layout shell', () => {
     await new Promise((r) => setTimeout(r, 650));
     expect(cellCount()).toBe(4);
 
-    // Monthly → 12 month buckets
+    // Monthly → one cell per day of the current month (28–31)
     await userEvent.click(screen.getByRole('radio', { name: 'Monthly' }));
     await new Promise((r) => setTimeout(r, 650));
-    expect(cellCount()).toBe(12);
+    expect(cellCount()).toBe(daysInCurrentMonth());
+    expect(cellCount()).toBeGreaterThanOrEqual(28);
+    expect(cellCount()).toBeLessThanOrEqual(31);
 
     // Yearly → 12 month columns × 4 week rows = 48 cells
     await userEvent.click(screen.getByRole('radio', { name: 'Yearly' }));
