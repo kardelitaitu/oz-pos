@@ -1,4 +1,26 @@
 
+## 2026-08-12 — TDD cycle: node cards carried an illegal aria-selected (axe critical)
+
+### The selectable cards exposed aria-selected on role="group" — a critical axe violation on every card
+**Problem:** A fresh-context review of the topology editor (the most custom-interactive surface in the stores feature) found the ARIA surface well-built except one thing: every node card was `role="group"` with `aria-selected={isSelected}`. role=group supports no selection state — the ARIA spec reserves aria-selected for option/treeitem/gridcell/row/tab — so axe flagged all three preset cards as critical `aria-allowed-attr`. The code comment even acknowledged the schema mismatch ("exposing selection to ATs outweighs the schema pedantry"). Compounding it: the editor was the one major screen with NO axe coverage (7 other screens have a11y tests).
+
+**Solution:** Red→Green. (1) Red — new `NodeTopologyEditor.a11y.test.tsx` (axe via the shared a11y helper, @fluent/react mocked with the TOPOLOGY_EN map like the behavioral suites) failed with the 3 critical violations. (2) Green — the cards stay `role="group"`: no aria-selected role permits their nested rename input, enable checkbox, and port-socket buttons (option/treeitem/gridcell each trip aria-required-parent or nested-interactive, confirmed empirically), so selection now reaches screen readers through the canvas's polite live region with a 120ms settle (a marquee flicker 1→2→3 announces once): single node by name, multi-node as the existing `{ $count } selected`, wire as "Wire selected", clear as "Selection cleared" — three new keys per bundle. (3) The two tests that pinned the old illegal attribute now pin its ABSENCE (guarding the axe regression) and keep the Space-select behavior; four new live-announcement tests cover the spoken contract.
+
+**Validation:** a11y suite 1/1 (was Red) · live-announcements 9/9 · topology suites 661/661 · full UI suite 286 files / 4,910 tests · eslint 0 errors · typecheck · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** keeping aria-selected under ANY legal role would need listbox/grid/tree parent wrappers around the absolutely-positioned cards — a DOM restructure that breaks the canvas and misrepresents its navigation; the live region is the pattern real canvas editors use. The compare-overlay ghost cards render through the same card component and inherit the fix. The cards' remaining eslint disables (no-noninteractive-tabindex / -element-interactions) stay — they document the intentional canvas-card contract, and the axe suite now guards the actual behavior.
+
+## 2026-08-12 — Round 179: storage node visible naming unified on "Warehouse"
+
+### Palette "+ Warehouse" spawned a "New Stock Room" node — the storage surface wore three names
+**Problem:** Clicking the palette's "+ Warehouse" tool (`topology-tool-warehouse-workspace`) spawned a node named "New Stock Room" (`topology-new-warehouse`). Round 69 renamed the storage node's visible surface to "Stock Room", but a later change switched the palette button to "+ Warehouse" while the spawn default, node-type label, settings card, Pro-tier toast, excess badge, tier notice, stock-wire hint, and validation copy all stayed on "Stock Room" — so the same node type read as "Stock Room" and "Warehouse" depending on where you looked. The user's call: the storage concept should be one thing — a warehouse node.
+
+**Solution:** Unified every user-visible storage string on "Warehouse" (en) / "Gudang" (id): spawn default ("New Warehouse"), ws-type label, settings-card title + capacity/stock descriptions, the multi-warehouse Pro toast, excess badge, tier-capacity notice, stock-wire hint, and the four warehouse validation messages. Also updated the code fallbacks (topologyCard map, Localized JSX children in NodeTopologyEditor and topologyWarehouseCard) and the retail preset's wh-1 sample node ("Main Warehouse"). Keys unchanged → bundle parity and the i18n gate untouched; id.ftl aligned to "Gudang" to match the palette's "+ Gudang". Tests aligned in the same pass: TOPOLOGY_EN maps, the i18nBundle pins, and the hardcoded assertions (finder search "stock" → "ware", excess badge "2 Warehouses — 1 allowed", settings-card titles).
+
+**Validation:** full UI suite 285 files / 4,905 tests · i18n lint clean · FTL dedupe clean · typecheck clean.
+
+**Deliberately NOT done:** "Inventory Management" — inventory has been an illegal topology typeKey since round 67 (WORKSPACE_TYPE_KEYS excludes it; TopologyScreen filters it), so a canvas "Inventory Management" node can only be legacy pre-round-67 data that fails validation until dropped. The app-level `default-inventory` workspace seed in WorkspaceContext feeds the workspace list, not the topology, and stays (the inventory module is a real screen). The dead key `topology-tool-warehouse` ("+ Stock Room") was left in place — removing it is a separate cleanup.
+
 ## 2026-08-10 — TDD cycle: topology editor connection/picker state machine
 
 ### Dismissing the relationship picker left the armed connection alive — a later port click could complete a wire from the stale source

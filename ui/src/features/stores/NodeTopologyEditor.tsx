@@ -377,7 +377,7 @@ const PRESET_RETAIL: { nodes: TopologyNodeData[]; wires: TopologyWireData[] } = 
     // historical (80, 140) position — the geometry tests pin it.
     { id: 'store-1', type: 'store', name: 'Downtown Branch', subtitle: 'Primary Store', x: 80, y: 140, telemetryBadge: 'Online (2 POS)', telemetryStatus: 'online' },
     { id: 'ws-1', type: 'workspace', name: 'Retail POS #1', subtitle: 'Main Checkout', x: 380, y: 80, metadata: { typeKey: 'store-pos' }, telemetryBadge: 'Active', telemetryStatus: 'online' },
-    { id: 'wh-1', type: 'warehouse', name: 'Main Stock Room', subtitle: 'Primary Storage', x: 680, y: 140, telemetryBadge: '1,250 items', telemetryStatus: 'online' },
+    { id: 'wh-1', type: 'warehouse', name: 'Main Warehouse', subtitle: 'Primary Storage', x: 680, y: 140, telemetryBadge: '1,250 items', telemetryStatus: 'online' },
   ],
   wires: [
     // Retail POS supplies the warehouse's one primary Operation scope.
@@ -602,6 +602,12 @@ function isTopologyRevisionConflict(err: unknown): boolean {
  *  flicker of a drag or connect gesture that temporarily changes the
  *  issue set, short enough to feel responsive. */
 const ISSUES_COUNT_SETTLE_MS = 300;
+
+/** Milliseconds the selection-announcement waits after the LAST selection
+ *  change before speaking. Long enough to absorb a marquee drag that
+ *  flicks 1→2→3 (one announcement, on the final set), short enough that a
+ *  click or keyboard select still feels immediate. */
+const SELECTION_ANNOUNCE_SETTLE_MS = 120;
 
 /** HUD cursor-position readout, isolated in its own memo component with
  *  its own document mousemove listener and rAF throttle. The readout is
@@ -1438,6 +1444,41 @@ export default function NodeTopologyEditor({
 
   /** O(1) node lookup by id — replaces `nodes.find` in hot paths (wire rendering, etc.). */
   const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
+
+  /** Announce selection changes through the polite live region. The cards
+   *  cannot carry aria-selected (role=group supports no selection state;
+   *  axe flagged it, and no aria-selected role allows their nested
+   *  controls), so the spoken summary IS the screen-reader contract for
+   *  selection. Settled like the issues readout: a marquee that flickers
+   *  1→2→3 announces once with the final set. Wire selection, multi-node
+   *  counts, and clears are all announced. */
+  const selectionAnnounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevSelectionSignatureRef = useRef('');
+  useEffect(() => {
+    const signature = [...selectedNodeIds].sort().join('|') + (selectedWireId ? `|w:${selectedWireId}` : '');
+    if (signature === prevSelectionSignatureRef.current) return;
+    prevSelectionSignatureRef.current = signature;
+    const announce = () => {
+      if (selectedWireId) return l10nRef.current.getString('topology-selection-wire-announce');
+      if (selectedNodeIds.size === 0) return l10nRef.current.getString('topology-selection-clear-announce');
+      if (selectedNodeIds.size === 1) {
+        const onlyId = [...selectedNodeIds][0]!;
+        return l10nRef.current.getString('topology-selection-announce', { name: nodeMap.get(onlyId)?.name ?? onlyId });
+      }
+      return l10nRef.current.getString('topology-status-selection', { count: selectedNodeIds.size });
+    };
+    if (selectionAnnounceTimerRef.current) clearTimeout(selectionAnnounceTimerRef.current);
+    selectionAnnounceTimerRef.current = setTimeout(() => {
+      selectionAnnounceTimerRef.current = null;
+      setLiveAnnouncement(announce());
+    }, SELECTION_ANNOUNCE_SETTLE_MS);
+  }, [selectedNodeIds, selectedWireId, nodeMap]);
+  useEffect(
+    () => () => {
+      if (selectionAnnounceTimerRef.current) clearTimeout(selectionAnnounceTimerRef.current);
+    },
+    [],
+  );
 
   /** User-visible wire label: the custom label, else the endpoint-name join,
    *  else the generic connection fallback. Shared by the context-menu title
@@ -5426,7 +5467,7 @@ export default function NodeTopologyEditor({
               <WarningIcon size={14} />
               <span>
                 <Localized id="topology-tier-capacity-notice">
-                  Stock Room capacity numbers are saved but not enforced on your current plan — upgrade to Pro to use capacity limits.
+                  Warehouse capacity numbers are saved but not enforced on your current plan — upgrade to Pro to use capacity limits.
                 </Localized>
               </span>
             </div>

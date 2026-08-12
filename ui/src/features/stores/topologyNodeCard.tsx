@@ -125,7 +125,7 @@ function TopologyNodeCardImpl({
   isPortCompatible,
 }: TopologyNodeCardProps): ReactNode {
   return (
-    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/role-supports-aria-props -- the canvas card is an interactive unit: selectable (aria-selected), draggable, keyboard-selectable (Enter/Space) and context-menuable; these are its purpose, not incidental handlers
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the canvas card is an interactive unit: selectable, draggable, keyboard-selectable (Enter/Space) and context-menuable; these are its purpose, not incidental handlers
     <div
       onContextMenu={(e) => onOpenNodeMenu(e, node.id)}
       onDoubleClick={() => {
@@ -134,14 +134,15 @@ function TopologyNodeCardImpl({
       data-node-id={node.id}
       className={`topology-node node-type-${node.type} ${isSelected ? 'node-selected' : ''} ${isConnectingSource ? 'node-connecting-source' : ''}${isFresh ? ' node-fresh' : ''}${isDimmed ? ' node-dimmed' : ''}${overlayMarker ? ` topology-node--overlay-${overlayMarker}` : ''}`}
       style={{ left: `${node.x}px`, top: `${node.y}px` }}
+      // role=group — NOT aria-selected: group supports no selection state
+      // and axe flagged every card (critical aria-allowed-attr). The card
+      // also contains real controls (rename, enabled, port sockets), which
+      // no aria-selected role (option/treeitem/gridcell) allows nested.
+      // Selection is announced through the canvas live region instead.
       role="group"
       // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- the selectable card is focusable so Enter/Space select it from the keyboard
       tabIndex={0}
       aria-label={node.name}
-      // role=group doesn't formally list aria-selected, but the
-      // card is the selectable unit of the canvas — exposing
-      // selection to ATs outweighs the schema pedantry.
-      aria-selected={isSelected}
       onMouseEnter={() => onHoverNode(node.id)}
       onMouseLeave={() => onHoverNode((prev) => (prev === node.id ? null : prev))}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(node.id); } }}

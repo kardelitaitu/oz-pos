@@ -36,7 +36,7 @@ export function WarehouseSettingsCard({ node, onChange, capacityLocked = false }
   return (
     <div className="inspector-section" data-testid="warehouse-inspector">
       <h4>
-        <Localized id="topology-warehouse-settings-title">Stock Room Settings</Localized>
+        <Localized id="topology-warehouse-settings-title">Warehouse Settings</Localized>
       </h4>
       <label className="inspector-field">
         <span>
@@ -59,7 +59,7 @@ export function WarehouseSettingsCard({ node, onChange, capacityLocked = false }
           {capacityLocked ? (
             <Localized id="topology-warehouse-capacity-locked-hint">Upgrade to Pro to set capacity limits.</Localized>
           ) : (
-            <Localized id="topology-warehouse-capacity-desc">Max items this Stock Room can hold</Localized>
+            <Localized id="topology-warehouse-capacity-desc">Max items this Warehouse can hold</Localized>
           )}
         </span>
       </label>
@@ -101,7 +101,7 @@ export function WarehouseSettingsCard({ node, onChange, capacityLocked = false }
           }}
         />
         <span className="inspector-hint">
-          <Localized id="topology-warehouse-stock-desc">Items currently stored in this Stock Room</Localized>
+          <Localized id="topology-warehouse-stock-desc">Items currently stored in this Warehouse</Localized>
         </span>
       </label>
     </div>

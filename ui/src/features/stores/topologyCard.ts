@@ -394,7 +394,7 @@ export const TOPOLOGY_UI_FALLBACKS: Readonly<Record<string, string>> = {
   'topology-ws-type-store-pos': 'Store POS',
   'topology-ws-type-restaurant-pos': 'Restaurant POS',
   'topology-ws-type-kds': 'Kitchen Display (KDS)',
-  'topology-ws-type-warehouse': 'Stock Room',
+  'topology-ws-type-warehouse': 'Warehouse',
 };
 
 /** Resolve topology chrome with a safe fallback so a stale or partial

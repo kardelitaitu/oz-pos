@@ -15,7 +15,7 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-new-store-subtitle': 'Branch',
   'topology-new-workspace': 'New Workspace',
   'topology-new-workspace-subtitle': 'Register',
-  'topology-new-warehouse': 'New Stock Room',
+  'topology-new-warehouse': 'New Warehouse',
   'topology-new-warehouse-subtitle': 'Storage',
   'topology-new-hardware': 'New Hardware',
   'topology-new-hardware-subtitle': 'Peripheral',
@@ -212,7 +212,7 @@ describe('Inspector drawer integration (Phase 2)', () => {
 
   // ── P2-I3-4: Warehouse node renders its own settings card ────
 
-  it('selecting a warehouse node renders the Stock Room settings card', async () => {
+  it('selecting a warehouse node renders the Warehouse settings card', async () => {
     renderEditor();
 
     selectNodeByType('warehouse');

@@ -124,8 +124,8 @@ const nativeSpeakerPins: Pin[] = [
   // missing-stock-routing validation key.
   {
     key: 'topology-node-stock-wire-hint',
-    en: "Connect a workspace's Stock Out or another Stock Room's output to this Stock Room's Stock In.",
-    id: 'Hubungkan Stock Out dari workspace atau output Gudang Stok lain ke Stock In Gudang Stok ini.',
+    en: "Connect a workspace's Stock Out or another Warehouse's output to this Warehouse's Stock In.",
+    id: 'Hubungkan Stock Out dari workspace atau output Gudang lain ke Stock In Gudang ini.',
   },
   // Round 90 — fallback toast carries the "stock deduction" sense.
   {

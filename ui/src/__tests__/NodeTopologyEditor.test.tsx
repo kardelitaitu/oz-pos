@@ -41,7 +41,7 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-new-store-subtitle': 'Branch',
   'topology-new-workspace': 'New Workspace',
   'topology-new-workspace-subtitle': 'Register',
-  'topology-new-warehouse': 'New Stock Room',
+  'topology-new-warehouse': 'New Warehouse',
   'topology-new-warehouse-subtitle': 'Storage',
   'topology-new-hardware': 'New Hardware',
   'topology-new-hardware-subtitle': 'Peripheral',
@@ -56,8 +56,8 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-tool-kds-desc': 'Kitchen display workspace',
   'topology-tool-warehouse-workspace': '+ Warehouse',
   'topology-tool-warehouse-workspace-desc': 'Inventory storage workspace',
-  'topology-toast-multi-warehouse': 'Multiple Stock Rooms require a Pro Tier license.',
-  'topology-warehouse-excess-badge': '{count} Stock Rooms — 1 allowed',
+  'topology-toast-multi-warehouse': 'Multiple Warehouses require a Pro Tier license.',
+  'topology-warehouse-excess-badge': '{count} Warehouses — 1 allowed',
   'topology-branch-excess-badge': '{count} Branch Locations — 1 allowed',
   'topology-toast-wire-duplicate': 'A wire already connects these ports.',
   'topology-wire-incompatible': 'These connectors cannot be connected.',
@@ -92,7 +92,7 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-ws-type-restaurant-pos': 'Restaurant POS',
   'topology-ws-type-kds': 'Kitchen Display (KDS)',
   'topology-port-operation-in': 'Operation',
-  'topology-ws-type-warehouse': 'Stock Room',
+  'topology-ws-type-warehouse': 'Warehouse',
   'topology-port-location-out': 'Location',
   'topology-port-location-in': 'Location',
   'topology-port-location-out-aria': 'Location port',
@@ -113,13 +113,13 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-port-input-only': 'Input connectors receive connections; choose an output connector first.',
   'topology-validation-missing-location': 'Connect this workspace to a Branch Location using Location In.',
   'topology-validation-multiple-location': 'A workspace can have only one Location In wire.',
-  'topology-validation-missing-warehouse-input': 'This Stock Room must connect to exactly one Location or Retail POS Operation input.',
-  'topology-validation-multiple-warehouse-inputs': 'This Stock Room can have only one primary connection: Location or Retail POS Operation.',
-  'topology-validation-invalid-warehouse-operation-source': 'Stock Room Operation In must receive an Operation feed from Retail POS.',
+  'topology-validation-missing-warehouse-input': 'This Warehouse must connect to exactly one Location or Retail POS Operation input.',
+  'topology-validation-multiple-warehouse-inputs': 'This Warehouse can have only one primary connection: Location or Retail POS Operation.',
+  'topology-validation-invalid-warehouse-operation-source': 'Warehouse Operation In must receive an Operation feed from Retail POS.',
   'topology-validation-missing-branch': 'Add exactly one Branch Location node.',
   'topology-validation-multiple-branches': 'Keep exactly one Branch Location node in this graph.',
   'topology-validation-invalid-purpose': 'This workspace purpose is not supported by its technical type.',
-  'topology-node-stock-wire-hint': "Connect a workspace's Stock Out or another Stock Room's output to this Stock Room's Stock In.",
+  'topology-node-stock-wire-hint': "Connect a workspace's Stock Out or another Warehouse's output to this Warehouse's Stock In.",
   'topology-validation-unknown-wire-endpoint': 'This wire references a node that is not in the graph.',
   'topology-validation-invalid-semantic-connection': 'This wire uses an incompatible port and relationship type.',
   'topology-field-name': 'Name',
@@ -159,6 +159,9 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-snap-announce': 'Aligned',
   'topology-duplicate-announce': 'Duplicate created',
   'topology-duplicate-cancel-announce': 'Duplicate cancelled',
+  'topology-selection-announce': '{name} selected',
+  'topology-selection-wire-announce': 'Wire selected',
+  'topology-selection-clear-announce': 'Selection cleared',
   'topology-validation-details': 'Issues ({count})',
   'topology-align-aria': 'Align & distribute',
   'topology-align-left': 'Align left',
@@ -406,7 +409,7 @@ describe('NodeTopologyEditor Component', () => {
     expect(screen.getByText('STANDARD TIER')).toBeInTheDocument();
     expect(screen.getByText('Downtown Branch')).toBeInTheDocument();
     expect(screen.getByText('Retail POS #1')).toBeInTheDocument();
-    expect(screen.getByText('Main Stock Room')).toBeInTheDocument();
+    expect(screen.getByText('Main Warehouse')).toBeInTheDocument();
   });
 
   it('renders the branch-diff overlay: ghost cards and card markers', () => {
@@ -1207,7 +1210,7 @@ describe('NodeTopologyEditor Component', () => {
     // The retail preset already contains the warehouse's primary Operation
     // scope, so a Location attempt is rejected as a second primary input.
     expect(getWireCount()).toBe(2);
-    expect(screen.getByText('This Stock Room can have only one primary connection: Location or Retail POS Operation.')).toBeInTheDocument();
+    expect(screen.getByText('This Warehouse can have only one primary connection: Location or Retail POS Operation.')).toBeInTheDocument();
   });
 
   it('highlights only compatible target sockets while connecting', () => {
@@ -1638,16 +1641,22 @@ describe('NodeTopologyEditor Component', () => {
 
   // ── Node-card a11y (P3): selection state + Space activation ─────
 
-  it('exposes selection state via aria-selected on node cards', () => {
+  it('never exposes aria-selected on node cards (role=group does not support it — axe critical)', () => {
+    // role=group carries no selection state; aria-selected on it is an
+    // aria-allowed-attr violation (caught by the a11y suite). Selection
+    // reaches screen readers through the canvas live region instead
+    // (see "accessible live announcements"). This pins the absence so a
+    // future restore of the illegal attribute fails here AND in axe.
     renderEditor();
 
     const cards = document.querySelectorAll('.topology-node');
-    expect(cards[0]!.getAttribute('aria-selected')).toBe('false');
-    expect(cards[1]!.getAttribute('aria-selected')).toBe('false');
+    expect(cards[0]!.getAttribute('aria-selected')).toBeNull();
+    expect(cards[1]!.getAttribute('aria-selected')).toBeNull();
 
     selectFirstNode();
-    expect(cards[0]!.getAttribute('aria-selected')).toBe('true');
-    expect(cards[1]!.getAttribute('aria-selected')).toBe('false');
+    expect(cards[0]!.getAttribute('aria-selected')).toBeNull();
+    expect(cards[0]!.className).toContain('node-selected');
+    expect(cards[1]!.className).not.toContain('node-selected');
   });
 
   it('Space selects the focused card and prevents page scroll', () => {
@@ -1662,7 +1671,8 @@ describe('NodeTopologyEditor Component', () => {
       preventDefault.mockRestore();
     }
     expect(card.className).toContain('node-selected');
-    expect(card.getAttribute('aria-selected')).toBe('true');
+    // Selection is announced via the live region, not aria-selected.
+    expect(card.getAttribute('aria-selected')).toBeNull();
   });
 
   // ── Workspace rename persistence (P3): body + inspector commit ──
@@ -1779,7 +1789,7 @@ describe('NodeTopologyEditor Component', () => {
       renderEditor();
       await waitFor(() => expect(getNodeCount()).toBe(4));
 
-      expect(screen.getByText('Multiple Stock Rooms require a Pro Tier license.')).toBeInTheDocument();
+      expect(screen.getByText('Multiple Warehouses require a Pro Tier license.')).toBeInTheDocument();
     });
 
     it('blocks Apply for two warehouses on standard tier without calling onSave', async () => {
@@ -1793,7 +1803,7 @@ describe('NodeTopologyEditor Component', () => {
       // The live banner already carries the message; the Apply toast adds a
       // second copy — getAllByText pins that the error surfaced (≥1).
       await waitFor(() =>
-        expect(screen.getAllByText('Multiple Stock Rooms require a Pro Tier license.').length).toBeGreaterThanOrEqual(1));
+        expect(screen.getAllByText('Multiple Warehouses require a Pro Tier license.').length).toBeGreaterThanOrEqual(1));
       expect(onSave).not.toHaveBeenCalled();
     });
 
@@ -1817,7 +1827,7 @@ describe('NodeTopologyEditor Component', () => {
       renderEditor({ currentTier: 'premium', onSave });
       await waitFor(() => expect(getNodeCount()).toBe(4));
 
-      expect(screen.queryByText('Multiple Stock Rooms require a Pro Tier license.')).toBeNull();
+      expect(screen.queryByText('Multiple Warehouses require a Pro Tier license.')).toBeNull();
 
       fireEvent.click(screen.getByText('Apply Topology Changes'));
       await waitFor(() => expect(onSave).toHaveBeenCalled());
@@ -1864,7 +1874,7 @@ describe('NodeTopologyEditor Component', () => {
     fireEvent.click(screen.getByText('+ Warehouse'));
 
     const warningToasts = screen.queryAllByText(
-      'Multiple Stock Rooms require a Pro Tier license.',
+      'Multiple Warehouses require a Pro Tier license.',
     );
     expect(warningToasts.length).toBeGreaterThanOrEqual(1);
   });
@@ -3642,7 +3652,7 @@ function BranchDeleteHarness() {
   it('shows a toast when a preset load drops the selected node', () => {
     renderEditor();
 
-    // wh-1 (Main Stock Room) exists only in the retail preset.
+    // wh-1 (Main Warehouse) exists only in the retail preset.
     const warehouse = document.querySelector('.node-type-warehouse') as HTMLElement;
     expect(warehouse).not.toBeNull();
     fireEvent.mouseDown(warehouse, { button: 0 });
@@ -4330,7 +4340,7 @@ describe('NodeTopologyEditor — warehouse tool-card tier lock', () => {
     // handleAddNode guards the tier: toast, no new node.
     expect(getNodeCount()).toBe(before);
     expect(
-      screen.getByText('Multiple Stock Rooms require a Pro Tier license.'),
+      screen.getByText('Multiple Warehouses require a Pro Tier license.'),
     ).toBeInTheDocument();
   });
 
@@ -4354,11 +4364,11 @@ describe('NodeTopologyEditor — warehouse inspector settings card', () => {
     fireEvent.mouseDown(warehouse, { button: 0 });
   };
 
-  it('renders the Stock Room settings card with capacity and low-stock inputs', () => {
+  it('renders the Warehouse settings card with capacity and low-stock inputs', () => {
     renderEditor();
     selectWarehouse();
 
-    expect(screen.getByText('Stock Room Settings')).toBeInTheDocument();
+    expect(screen.getByText('Warehouse Settings')).toBeInTheDocument();
     expect(screen.getByLabelText(/Capacity/)).toBeInTheDocument();
     expect(screen.getByLabelText(/Low-Stock Threshold/)).toBeInTheDocument();
     expect(screen.getByLabelText(/Current Stock/)).toBeInTheDocument();
@@ -4528,7 +4538,7 @@ describe('NodeTopologyEditor — warehouse capacity validation', () => {
   const warehouseNote = () =>
     document.querySelector('.node-type-warehouse')?.querySelector('.node-validation-note');
 
-  it('flags the Stock Room card when stock is at capacity', async () => {
+  it('flags the Warehouse card when stock is at capacity', async () => {
     await renderStockedGraph(1000, 1000);
 
     const note = warehouseNote();
@@ -4536,12 +4546,12 @@ describe('NodeTopologyEditor — warehouse capacity validation', () => {
     expect(note?.textContent).toContain('capacity');
   });
 
-  it('flags the Stock Room card when stock is over capacity', async () => {
+  it('flags the Warehouse card when stock is over capacity', async () => {
     await renderStockedGraph(1200, 1000);
     expect(warehouseNote()).not.toBeNull();
   });
 
-  it('keeps the Stock Room card clean while stock is below capacity', async () => {
+  it('keeps the Warehouse card clean while stock is below capacity', async () => {
     await renderStockedGraph(500, 1000);
     expect(warehouseNote()).toBeNull();
   });
@@ -4784,7 +4794,7 @@ describe('NodeTopologyEditor — validation panel stock-wire action', () => {
     expect(hint).not.toBeNull();
     // Round 84: the guidance covers BOTH sources — a workspace Stock Out
     // or another Stock Room's output (hub-and-spoke transfers).
-    expect(hint?.textContent).toContain('another Stock Room\'s output');
+    expect(hint?.textContent).toContain('another Warehouse\'s output');
   });
 
   it('keeps the hint chip hidden until the action is used', async () => {
@@ -7844,7 +7854,7 @@ describe('NodeTopologyEditor — clipboard & bulk duplication', () => {
         .find((n) => n.classList.contains('node-type-warehouse')) as HTMLElement;
       fireEvent.mouseDown(wh, { button: 0 });
     };
-    const WH_TOAST = 'Multiple Stock Rooms require a Pro Tier license.';
+    const WH_TOAST = 'Multiple Warehouses require a Pro Tier license.';
 
     it('blocks Ctrl+D duplicating the only warehouse on standard tier', async () => {
       renderEditor();
@@ -7959,10 +7969,10 @@ describe('NodeTopologyEditor — node finder', () => {
     expect(input).not.toBeNull();
     expect(document.activeElement).toBe(input);
 
-    fireEvent.change(input!, { target: { value: 'stock' } });
+    fireEvent.change(input!, { target: { value: 'ware' } });
     const items = [...document.querySelectorAll('.topology-finder-item')].map((el) => el.textContent);
     expect(items).toHaveLength(1);
-    expect(items[0]).toContain('Main Stock Room');
+    expect(items[0]).toContain('Main Warehouse');
 
     // No match — the empty state renders instead of a stale list.
     fireEvent.change(input!, { target: { value: 'zzz-none' } });
@@ -7973,7 +7983,7 @@ describe('NodeTopologyEditor — node finder', () => {
     renderEditor();
     openFinder();
     const input = finderInput();
-    fireEvent.change(input!, { target: { value: 'stock' } });
+    fireEvent.change(input!, { target: { value: 'ware' } });
     fireEvent.keyDown(input!, { key: 'Enter' });
 
     // The overlay closes.
@@ -7981,7 +7991,7 @@ describe('NodeTopologyEditor — node finder', () => {
     // The matched node is the selection.
     const selected = [...document.querySelectorAll('.topology-node.node-selected')] as HTMLElement[];
     expect(selected).toHaveLength(1);
-    expect(selected[0]!.textContent).toContain('Main Stock Room');
+    expect(selected[0]!.textContent).toContain('Main Warehouse');
     // The viewport centers the node at the current zoom (canvas is 0×0 in
     // jsdom, so pan = -node center): transform is exactly deterministic.
     const vp = document.querySelector('.node-canvas-viewport') as HTMLElement;
@@ -9558,6 +9568,48 @@ describe('NodeTopologyEditor — accessible live announcements', () => {
     expect(getNodeCount()).toBe(1);
     expect(status().textContent).toBe('Duplicate cancelled');
   });
+
+  // Selection announcements are the screen-reader contract for the
+  // selectable cards (role=group cannot carry aria-selected — see the a11y
+  // suite). The settle timer collapses a marquee flicker into one summary.
+  it('announces a single node selection by name', async () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    expect(status().textContent).toBe('');
+
+    selectFirstNode();
+    await waitFor(() => expect(status().textContent).toBe('Downtown Branch selected'));
+  });
+
+  it('announces a multi-node selection as a settled count', async () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    expect(status().textContent).toBe('');
+
+    fireEvent.keyDown(document, { key: 'a', ctrlKey: true });
+    await waitFor(() => expect(status().textContent).toBe('3 selected'));
+  });
+
+  it('announces a wire selection', async () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+    expect(status().textContent).toBe('');
+
+    const hitbox = document.querySelector('.wire-hitbox');
+    expect(hitbox).not.toBeNull();
+    fireEvent.click(hitbox!);
+    await waitFor(() => expect(status().textContent).toBe('Wire selected'));
+  });
+
+  it('announces when the selection is cleared', async () => {
+    renderEditor();
+    mockCanvasSize(1200, 800);
+
+    selectFirstNode();
+    await waitFor(() => expect(status().textContent).toBe('Downtown Branch selected'));
+    fireEvent.keyDown(canvas(), { key: 'Escape' });
+    await waitFor(() => expect(status().textContent).toBe('Selection cleared'));
+  });
 });
 
 // ── Escape cancels an in-flight move ────────────────────────────
@@ -9924,7 +9976,7 @@ describe('NodeTopologyEditor — tier-limit error node scoping', () => {
     // The message lives in exactly ONE node-scoped item (named, not
     // static), pointing at WH 2 — the second Stock Room the contract flags.
     const matching = Array.from(panel!.querySelectorAll('.topology-validation-item')).filter((el) =>
-      el.textContent?.includes('Multiple Stock Rooms require a Pro Tier license.'),
+      el.textContent?.includes('Multiple Warehouses require a Pro Tier license.'),
     );
     expect(matching).toHaveLength(1);
     const item = matching[0]!;
@@ -9982,7 +10034,7 @@ describe('NodeTopologyEditor — tier-limit error node scoping', () => {
     expect(panel).not.toBeNull();
 
     const matching = Array.from(panel!.querySelectorAll('.topology-validation-item')).filter((el) =>
-      el.textContent?.includes('Multiple Stock Rooms require a Pro Tier license.'),
+      el.textContent?.includes('Multiple Warehouses require a Pro Tier license.'),
     );
     expect(matching).toHaveLength(2);
     expect(matching.map((el) => el.querySelector('.topology-validation-item-node')?.textContent)).toEqual([
@@ -10012,7 +10064,7 @@ describe('NodeTopologyEditor — tier-limit error node scoping', () => {
 
     const wh2Card = document.querySelector('.topology-node[data-node-id="wh-2"]')!;
     expect(wh2Card.querySelector('.node-validation-count-badge')?.textContent).toBe(
-      '2 Stock Rooms — 1 allowed',
+      '2 Warehouses — 1 allowed',
     );
   });
 });
