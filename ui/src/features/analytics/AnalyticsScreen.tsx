@@ -2,8 +2,8 @@
 //!
 //! Top:    back button + title
 //! Menu:   workspace selector (row 1) + time granularity buttons (row 2)
-//!         + optional date range popup when "Custom" is selected
-//! Main:   placeholder for charts, KPIs, and data tables
+//!         + inline custom date range
+//! Main:   smart card grid — cards adapt to retail vs restaurant
 
 import { useState } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
@@ -19,6 +19,29 @@ function isoToday(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+// ── Card definitions ─────────────────────────────────────────────────
+
+interface AnalyticsCard {
+  key: string;
+  /** `null` = appears in both workspaces */
+  workspace: WorkspaceView | null;
+  title: string;
+  width: 'half' | 'full';
+}
+
+const ANALYTICS_CARDS: AnalyticsCard[] = [
+  { key: 'revenue',  workspace: null,          title: 'Revenue Overview',       width: 'half' },
+  { key: 'staff',    workspace: null,          title: 'Staff Performance',      width: 'half' },
+  { key: 'top-items',workspace: 'retail',      title: 'Top Products',           width: 'half' },
+  { key: 'top-items',workspace: 'restaurant',  title: 'Top Menu Items',         width: 'half' },
+  { key: 'category', workspace: 'retail',      title: 'Sales by Category',      width: 'half' },
+  { key: 'tables',   workspace: 'restaurant',  title: 'Table Turnover',         width: 'half' },
+  { key: 'payments', workspace: null,          title: 'Payment Methods',        width: 'half' },
+  { key: 'heatmap',  workspace: null,          title: 'Peak Hours',             width: 'full' },
+];
+
+// ── Component ─────────────────────────────────────────────────────────
+
 export default function AnalyticsScreen() {
   const { l10n } = useLocalization();
   const { goToWorkspacePicker } = useWorkspaceNav();
@@ -27,6 +50,72 @@ export default function AnalyticsScreen() {
   const [granularity, setGranularity] = useState<Granularity>('daily');
   const [customFrom, setCustomFrom] = useState(isoToday());
   const [customTo, setCustomTo] = useState(isoToday());
+
+  // Filter cards visible for the current workspace
+  const visibleCards = ANALYTICS_CARDS.filter(
+    (c) => c.workspace === null || c.workspace === workspaceView,
+  );
+
+  // Render a placeholder chart icon based on card key
+  const cardPlaceholder = (key: string) => {
+    const icons: Record<string, JSX.Element> = {
+      revenue: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
+          strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+        </svg>
+      ),
+      staff: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
+          strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+      ),
+      'top-items': (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
+          strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
+          <line x1="12" y1="20" x2="12" y2="10" />
+          <line x1="18" y1="20" x2="18" y2="4" />
+          <line x1="6" y1="20" x2="6" y2="16" />
+        </svg>
+      ),
+      category: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
+          strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
+          <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
+          <path d="M22 12A10 10 0 0 0 12 2v10z" />
+        </svg>
+      ),
+      tables: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
+          strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+          <line x1="3" y1="9" x2="21" y2="9" />
+          <line x1="9" y1="21" x2="9" y2="9" />
+        </svg>
+      ),
+      payments: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
+          strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
+          <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+          <line x1="1" y1="10" x2="23" y2="10" />
+        </svg>
+      ),
+      heatmap: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
+          strokeLinecap="round" strokeLinejoin="round" width="32" height="32" aria-hidden="true">
+          <rect x="3" y="3" width="7" height="7" />
+          <rect x="14" y="3" width="7" height="7" />
+          <rect x="3" y="14" width="7" height="7" />
+          <rect x="14" y="14" width="7" height="7" />
+        </svg>
+      ),
+    };
+    return icons[key] ?? icons['revenue'];
+  };
 
   return (
     <div className="analytics" role="region" aria-label={l10n.getString('analytics-region-aria')}>
@@ -138,24 +227,26 @@ export default function AnalyticsScreen() {
       </nav>
 
       {/* ══════════════════════════════════════════════════════════
-          AREA 3 — Main content: charts, KPIs, and data tables
+          AREA 3 — Main content: smart analytics card grid
           ══════════════════════════════════════════════════════════ */}
       <main className="analytics-main">
-        <div className="analytics-placeholder">
-          <div className="analytics-placeholder-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-              width="48" height="48" aria-hidden="true"
+        <div className="analytics-grid">
+          {visibleCards.map((card) => (
+            <div
+              key={`${card.key}-${card.workspace ?? 'shared'}`}
+              className={`analytics-card analytics-card--${card.width}`}
             >
-              <line x1="18" y1="20" x2="18" y2="10" />
-              <line x1="12" y1="20" x2="12" y2="4" />
-              <line x1="6" y1="20" x2="6" y2="14" />
-            </svg>
-          </div>
-          <p className="analytics-placeholder-text">
-            Charts and data will appear here.
-            Select a workspace and time range to begin.
-          </p>
+              <div className="analytics-card-header">
+                <h2 className="analytics-card-title">{card.title}</h2>
+              </div>
+              <div className="analytics-card-body">
+                <div className="analytics-card-placeholder">
+                  {cardPlaceholder(card.key)}
+                  <span className="analytics-card-hint">No data yet</span>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </main>
 

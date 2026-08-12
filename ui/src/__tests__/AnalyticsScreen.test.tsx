@@ -132,10 +132,33 @@ describe('AnalyticsScreen layout shell', () => {
     expect(screen.getByLabelText('To')).toBeTruthy();
   });
 
-  it('renders the placeholder content in the main area', () => {
+  it('renders the analytics card grid with workspace-appropriate titles', () => {
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 
-    expect(screen.getByText(/Charts and data will appear here/)).toBeTruthy();
+    // Shared cards appear for retail
+    expect(screen.getByText('Revenue Overview')).toBeTruthy();
+    expect(screen.getByText('Staff Performance')).toBeTruthy();
+    // Retail-specific
+    expect(screen.getByText('Top Products')).toBeTruthy();
+    expect(screen.getByText('Sales by Category')).toBeTruthy();
+    // Full-width
+    expect(screen.getByText('Peak Hours')).toBeTruthy();
+  });
+
+  it('switches card titles when workspace changes to restaurant', async () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    // Retail defaults
+    expect(screen.getByText('Top Products')).toBeTruthy();
+    expect(screen.getByText('Sales by Category')).toBeTruthy();
+
+    // Switch to restaurant
+    const select = screen.getByRole('combobox', { name: '.aria-label = Select workspace type' });
+    await userEvent.selectOptions(select, 'restaurant');
+
+    // Restaurant-specific cards replace retail ones
+    expect(screen.getByText('Top Menu Items')).toBeTruthy();
+    expect(screen.getByText('Table Turnover')).toBeTruthy();
   });
 });
 
