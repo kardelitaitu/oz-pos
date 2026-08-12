@@ -58,11 +58,16 @@ echarts.use([EBar, ELine, EPie, GridComponent, TooltipComponent, LegendComponent
 
 function useMoney() {
   const { currency } = useCurrency();
+  const { l10n } = useLocalization();
   const exp = minorUnitExponent(currency);
+  // Number formatting follows the active Fluent locale (en-US / id) so
+  // currency strings match the rest of the localized UI — never a
+  // hardcoded English locale.
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
   const fmt = (minor: number) =>
-    new Intl.NumberFormat('en', { style: 'currency', currency, maximumFractionDigits: exp }).format(minor / 10 ** exp);
+    new Intl.NumberFormat(numLocale, { style: 'currency', currency, maximumFractionDigits: exp }).format(minor / 10 ** exp);
   const short = (minor: number) =>
-    new Intl.NumberFormat('en', {
+    new Intl.NumberFormat(numLocale, {
       style: 'currency',
       currency,
       notation: 'compact',

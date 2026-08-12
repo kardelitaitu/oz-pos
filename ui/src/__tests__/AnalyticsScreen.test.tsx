@@ -1,10 +1,11 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { act, fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
-import { withFluent } from '@/locales/test-utils';
+import { withFluent, withFluentLocale } from '@/locales/test-utils';
 import analyticsFtl from '@/locales/analytics.ftl?raw';
+import analyticsIdFtl from '@/locales/analytics.id.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
 // --- mocks ---
@@ -1203,6 +1204,34 @@ describe('AnalyticsScreen card error surface', () => {
     expect(screen.queryByRole('alert')).toBeNull();
     expect(mockGetDailyRevenue.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText('$12.5K')).toBeTruthy();
+  });
+});
+
+describe('AnalyticsScreen currency locale', () => {
+  const flushRecalc = async () => {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(700);
+    });
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    clearAnalyticsCache();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('formats currency with the active Fluent locale, not hardcoded English', async () => {
+    vi.useFakeTimers();
+    // Indonesian Fluent bundle → Intl.NumberFormat('id', …).
+    render(withFluentLocale('id', <AnalyticsScreen />, analyticsIdFtl));
+    await flushRecalc();
+
+    // Revenue KPI + peak insight: 1,250,000 minor = US$12,500 → compact
+    // Indonesian form (US$12,5 rb) — proves the locale is not hardcoded.
+    expect(screen.getAllByText(/US\$12,5/).length).toBeGreaterThan(0);
   });
 });
 
