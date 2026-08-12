@@ -970,6 +970,15 @@
   font-size: 16px;
 }
 
+/* Expanded tiles grow to fill the larger card (basket size) */
+.analytics-kpi-tiles--expanded .analytics-kpi {
+  padding: var(--space-4) var(--space-5);
+}
+
+.analytics-kpi-tiles--expanded .analytics-kpi-value {
+  font-size: var(--text-3xl);
+}
+
 /* Delta pill */
 .analytics-delta {
   display: inline-flex;
@@ -1364,6 +1373,29 @@
   font-size: 10px;
   font-weight: 500;
   color: var(--analytics-fg-tertiary);
+}
+
+/* Card query failure — stable error state (no silent retry loop) */
+.analytics-card-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--analytics-warning-bg);
+  color: var(--analytics-warning);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+.analytics-card-error-icon {
+  flex-shrink: 0;
+  font-size: var(--text-base);
+}
+
+.analytics-card-error-text {
+  flex: 1;
 }
 
 /* Skeleton shimmer — one per card during recalculation */

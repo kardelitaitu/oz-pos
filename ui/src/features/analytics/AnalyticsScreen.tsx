@@ -9,10 +9,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
+import { l10nErrorMessage } from '@/utils/app-error';
 import { AnalyticsCardContent } from './AnalyticsCardContent';
 import { analyticsDataCache, analyticsQueryKey, clearAnalyticsCache, cardQueryKey } from './analytics-cache';
 import { buildHeatmapIntensities, loadHeatmapRows, rangeForGranularity } from './analytics-data';
-import { useAnalyticsQuery } from './useAnalyticsQuery';
+import { clearAnalyticsErrors, useAnalyticsQuery } from './useAnalyticsQuery';
 import './AnalyticsScreen.css';
 
 export type WorkspaceView = 'retail' | 'restaurant';
@@ -223,9 +224,11 @@ const [paletteOpen, setPaletteOpen] = useState(false);
     calcTimer.current = setTimeout(() => {
       setCalculating(false);
       if (force) {
-        // Refresh wipes the cached payloads so the data actually
-        // recomputes; the TTL-bounded cache refills on the next render.
+        // Refresh wipes the cached payloads AND the recorded query
+        // failures so the data actually recomputes; the TTL-bounded
+        // cache refills on the next render.
         clearAnalyticsCache();
+        clearAnalyticsErrors();
         return;
       }
       // Mark the query computed — revisits within the TTL skip the
@@ -1224,22 +1227,31 @@ const [paletteOpen, setPaletteOpen] = useState(false);
                       <div className="skeleton-bar skeleton-bar--sm" />
                     </div>
                   ) : card.key === 'heatmap' ? (
-                    <>
-                      {renderHeatmap()}
-                      <div
-                        className="analytics-heat-scale"
-                        role="group"
-                        aria-label={l10n.getString('analytics-heat-scale-aria')}
-                      >
-                        <span className="analytics-heat-scale-label">{l10n.getString('analytics-heat-scale-low')}</span>
-                        {[0, 1, 2, 3, 4].map((i) => (
-                          <span key={i} className="analytics-heat-cell analytics-heat-scale-swatch" data-intensity={i} aria-hidden="true">
-                            <div className="analytics-heat-block" />
-                          </span>
-                        ))}
-                        <span className="analytics-heat-scale-label">{l10n.getString('analytics-heat-scale-high')}</span>
+                    heatmapQuery.status === 'error' ? (
+                      <div className="analytics-card-error" role="alert">
+                        <span className="analytics-card-error-icon" aria-hidden="true">⚠</span>
+                        <span className="analytics-card-error-text">
+                          {l10nErrorMessage(heatmapQuery.error, l10n, 'analytics-card-error-load')}
+                        </span>
                       </div>
-                    </>
+                    ) : (
+                      <>
+                        {renderHeatmap()}
+                        <div
+                          className="analytics-heat-scale"
+                          role="group"
+                          aria-label={l10n.getString('analytics-heat-scale-aria')}
+                        >
+                          <span className="analytics-heat-scale-label">{l10n.getString('analytics-heat-scale-low')}</span>
+                          {[0, 1, 2, 3, 4].map((i) => (
+                            <span key={i} className="analytics-heat-cell analytics-heat-scale-swatch" data-intensity={i} aria-hidden="true">
+                              <div className="analytics-heat-block" />
+                            </span>
+                          ))}
+                          <span className="analytics-heat-scale-label">{l10n.getString('analytics-heat-scale-high')}</span>
+                        </div>
+                      </>
+                    )
                   ) : (
                     <AnalyticsCardContent
                       cardKey={card.key}

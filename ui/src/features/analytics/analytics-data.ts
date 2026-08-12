@@ -14,12 +14,14 @@ import {
   getDailyRevenue,
   getDiscountsSummary,
   getHourlyHeatmap,
+  getHourlyOccupancy,
   getInventoryTrend,
   getInventoryTurnover,
   getLowStockAlerts,
   getMenuEngineering,
   getMonthlyRevenue,
   getPaymentMethodBreakdown,
+  getTableTurnover,
   getTopProducts,
   getVoidedItems,
   getVoidedSalesSummary,
@@ -128,6 +130,31 @@ export function seriesDelta(buckets: Bucket[]): number | null {
   return Math.round(((last - first) / first) * 1000) / 10;
 }
 
+/**
+ * The equal-length window immediately preceding `q` — the comparison
+ * baseline for period-over-period mode (same span, ending the day before
+ * the current window starts).
+ */
+export function previousRange(q: AnalyticsQuery): AnalyticsQuery {
+  const from = new Date(`${q.from}T00:00:00`);
+  const to = new Date(`${q.to}T00:00:00`);
+  const spanDays = Math.max(1, Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1);
+  const prevTo = new Date(from.getTime() - 86_400_000);
+  const prevFrom = new Date(prevTo.getTime() - (spanDays - 1) * 86_400_000);
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  return { ...q, from: iso(prevFrom), to: iso(prevTo) };
+}
+
+/**
+ * % change of `current` vs `previous` (one decimal). Returns `null` when
+ * there is no previous baseline (missing or zero) — callers then omit the
+ * comparison chip instead of showing a misleading ±∞.
+ */
+export function periodDelta(current: number, previous: number): number | null {
+  if (previous === 0 || !Number.isFinite(current) || !Number.isFinite(previous)) return null;
+  return Math.round(((current - previous) / previous) * 1000) / 10;
+}
+
 // ── Heatmap intensity builders ──────────────────────────────────────
 //
 // Cell keys identify the heatmap's fixed grid per granularity:
@@ -138,12 +165,34 @@ export function seriesDelta(buckets: Bucket[]): number | null {
 //
 // Intensities are normalized 0–4 against the strongest cell in the set.
 
+/**
+ * Percent-of-peak (0–100) with a shared `max` baseline — the single
+ * normalization rule behind every intensity scale (heatmap cells and the
+ * occupancy curve), so the same level of business always renders as the
+ * same relative intensity.
+ */
+export function pctOfPeak(values: number[]): number[] {
+  const max = Math.max(1, ...values);
+  return values.map((v) => Math.round((v / max) * 100));
+}
+
+/**
+ * 0–4 heat level for a percent-of-peak value — the binning the heatmap
+ * renders: level = ⌊pct / 20⌋, so 0–19% → 0, 20–39% → 1, … 80–100% → 4.
+ * An occupancy curve at 60% and a heatmap cell at level 3 are the same
+ * intensity.
+ */
+export function intensityFromPct(pct: number): number {
+  return pct <= 0 ? 0 : Math.min(4, Math.floor((pct / 100) * 5));
+}
+
 /** Map `[key, value]` entries to 0–4 levels, max-normalized. */
 export function normalizeIntensities(entries: [string, number][]): Map<string, number> {
   const max = Math.max(1, ...entries.map(([, v]) => v));
   const map = new Map<string, number>();
   for (const [key, v] of entries) {
-    map.set(key, v <= 0 ? 0 : Math.min(4, Math.floor((v / max) * 5)));
+    // Same scale as the occupancy curve: level = ⌊percent-of-peak / 20⌋.
+    map.set(key, intensityFromPct(Math.round((v / max) * 100)));
   }
   return map;
 }
@@ -279,6 +328,70 @@ export async function loadHeatmapRows(q: AnalyticsQuery): Promise<{
   }
 }
 
+/** Completed table-bound orders per day → per-bucket turn minutes. */
+function weekStartKey(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  const dow = (d.getDay() + 6) % 7; // Monday-first
+  d.setDate(d.getDate() - dow);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function monthDays(ym: string): number {
+  const [y, m] = ym.split('-').map(Number);
+  return new Date(y!, m!, 0).getDate();
+}
+
+/**
+ * Average table-turn minutes per granularity bucket. Table service is
+ * recorded as completed KDS orders carrying a table number; each bucket
+ * sums its turns and divides the bucket's service minutes by them
+ * (fewer turns per hour ⇒ longer average turn).
+ */
+export async function loadTables(q: AnalyticsQuery): Promise<Bucket[]> {
+  const rows = await getTableTurnover(q.from, q.to, q.sessionToken);
+  if (rows.length === 0) return [];
+  // Group consecutive days into the granularity's buckets.
+  const groups: { key: string; orders: number; days: number }[] = [];
+  for (const r of rows) {
+    const key =
+      q.granularity === 'weekly'
+        ? weekStartKey(r.date)
+        : q.granularity === 'monthly'
+          ? r.date.slice(0, 7)
+          : q.granularity === 'yearly'
+            ? r.date.slice(0, 4)
+            : r.date;
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) {
+      last.orders += r.table_orders;
+      last.days += 1;
+    } else {
+      groups.push({ key, orders: r.table_orders, days: 1 });
+    }
+  }
+  return groups.map((grp) => {
+    const bucketMinutes =
+      q.granularity === 'yearly'
+        ? 365 * 1440
+        : q.granularity === 'monthly'
+          ? monthDays(grp.key) * 1440
+          : q.granularity === 'weekly'
+            ? 7 * 1440
+            : 1440;
+    return {
+      label: q.granularity === 'yearly' ? grp.key : grp.key.slice(5),
+      value: grp.orders > 0 ? Math.round(bucketMinutes / grp.orders) : 0,
+    };
+  });
+}
+
+/** Table-turn delta: positive when turns got *faster* (minutes dropped). */
+export function turnDelta(buckets: Bucket[]): number | null {
+  const d = seriesDelta(buckets);
+  if (d === null) return null;
+  return Math.round(-d * 10) / 10;
+}
+
 /** Live floor-plan occupancy derived from the `tables` snapshot. */
 export interface TableOccupancy {
   /** Total active tables on the floor plan. */
@@ -290,27 +403,60 @@ export interface TableOccupancy {
   /** Seats in use on occupied tables vs total capacity. */
   seats_used: number;
   seats_total: number;
+  /**
+   * Completed table orders per hour (0–23). `pct` is percent-of-peak on the
+   * same scale as the heatmap (`pctOfPeak`) and `level` is the matching
+   * 0–4 heat level (`intensityFromPct`) — the curve and the heatmap now
+   * share one intensity scale.
+   */
+  hourly: { hour: number; table_orders: number; pct: number; level: number }[];
+  /** Hour (0–23) with the most completed table orders, or null when empty. */
+  peak_hour: number | null;
 }
 
 /**
- * Current occupancy from the live `tables` snapshot (no history exists, so
- * only the *now* rate is real — peak hour and the hourly curve stay
- * demo-shaped in the card).
+ * Real occupancy: the live rate comes from the current `tables` snapshot,
+ * and the hourly curve + peak hour come from completed table orders per
+ * hour of day in the selected range (`hourly_table_activity`).
  */
 export async function loadTableOccupancy(q: AnalyticsQuery): Promise<TableOccupancy> {
-  const tables = await listTablesScoped(q.sessionToken);
+  const [tables, hourlyRows] = await Promise.all([
+    listTablesScoped(q.sessionToken),
+    getHourlyOccupancy(q.from, q.to, q.sessionToken),
+  ]);
   const active = tables.filter((t) => t.active);
   const occupied = active.filter((t) => t.status === 'occupied').length;
   const seatsUsed = active
     .filter((t) => t.status === 'occupied')
     .reduce((sum, t) => sum + t.capacity, 0);
   const seatsTotal = active.reduce((sum, t) => sum + t.capacity, 0);
+  // Shared normalization with the heatmap: percent-of-peak plus the 0–4
+  // heat level, so the curve and the heatmap cells speak the same scale.
+  const pcts = pctOfPeak(hourlyRows.map((r) => r.table_orders));
+  const hourly = hourlyRows
+    .map((r, i) => ({
+      hour: r.hour,
+      table_orders: r.table_orders,
+      pct: pcts[i]!,
+      level: intensityFromPct(pcts[i]!),
+    }))
+    .sort((a, b) => a.hour - b.hour);
+  let peak: number | null = null;
+  let peakCount = 0;
+  for (const r of hourlyRows) {
+    if (r.table_orders > peakCount) {
+      peak = r.hour;
+      peakCount = r.table_orders;
+    }
+  }
   return {
     total: active.length,
     occupied,
     rate: active.length > 0 ? Math.round((occupied / active.length) * 100) : 0,
     seats_used: seatsUsed,
     seats_total: seatsTotal,
+    hourly,
+    peak_hour: peak,
   };
 }
 
@@ -325,7 +471,12 @@ export const CARD_LOADERS: Record<string, (q: AnalyticsQuery) => Promise<CardLoa
   customers: (q) => getCustomerSplit(q.from, q.to, q.sessionToken),
   payments: (q) => getPaymentMethodBreakdown(q.from, q.to, q.sessionToken),
   discounts: (q) => getDiscountsSummary(q.from, q.to, q.sessionToken),
-  refunds: (q) => getVoidedSalesSummary(q.from, q.to, q.sessionToken),
+  refunds: (q) =>
+    Promise.all([
+      getVoidedSalesSummary(q.from, q.to, q.sessionToken),
+      // Higher limit so the expanded card can reveal the full list.
+      getVoidedItems(q.from, q.to, q.sessionToken, 25),
+    ]),
   'top-items': loadTopItems,
   category: (q) => getCategoryBreakdown(q.from, q.to, q.sessionToken),
   basket: (q) => getBasketSize(q.from, q.to, q.sessionToken),
@@ -336,6 +487,7 @@ export const CARD_LOADERS: Record<string, (q: AnalyticsQuery) => Promise<CardLoa
     ]),
   'low-stock': (q) => getLowStockAlerts(10, q.sessionToken),
   waitstaff: loadStaff,
+  tables: loadTables,
   voids: (q) =>
     Promise.all([
       getVoidedSalesSummary(q.from, q.to, q.sessionToken),
@@ -343,9 +495,6 @@ export const CARD_LOADERS: Record<string, (q: AnalyticsQuery) => Promise<CardLoa
     ]),
   occupancy: loadTableOccupancy,
 };
-
-/** Cards that keep deterministic demo data (no backend query yet). */
-export const DEMO_CARDS = new Set(['tables']);
 
 // ── Re-export the raw row types for card-side mapping ───────────────
 

@@ -6,68 +6,118 @@
 //! served instantly — switching granularity or workspace back and forth
 //! does not recompute or refetch.
 //!
-//! `fetcher` may be synchronous (the current deterministic demo
-//! generators) or return a Promise (the real IPC commands once wired);
-//! async fetchers surface a `loading` status until they resolve.
+//! `fetcher` may be synchronous (deterministic helpers) or return a
+//! Promise (the real IPC commands); async fetchers surface a `loading`
+//! status until they resolve.
+//!
+//! Failed fetches do NOT retry on every render. A rejection is recorded
+//! in a module-level error map (keyed by query key) and rendered as a
+//! stable `error` status; the screen's refresh action clears the map via
+//! `clearAnalyticsErrors()` so a user-initiated retry refetches. This
+//! prevents the old behavior where a rejected IPC call re-invoked the
+//! fetcher on every re-render — an infinite retry loop that hammered the
+//! backend with no user-visible result.
 
 import { useRef, useState } from 'react';
 import { analyticsDataCache } from './analytics-cache';
 
-export type QueryStatus = 'loading' | 'ready';
+export type QueryStatus = 'loading' | 'ready' | 'error';
 
 export interface AnalyticsQueryResult<T> {
   data: T | null;
   status: QueryStatus;
+  /** Raw failure when `status === 'error'`; `null` otherwise. */
+  error: unknown;
+}
+
+/** Per-key failures, module-level so refresh can clear them globally. */
+const failures = new Map<string, unknown>();
+
+/** Forget every recorded query failure (called by the refresh action). */
+export function clearAnalyticsErrors(): void {
+  failures.clear();
 }
 
 /** Read the shared cache with the right payload type. */
 function readCached<T>(key: string): AnalyticsQueryResult<T> | undefined {
   const hit = analyticsDataCache.get(key);
   if (!hit) return undefined;
-  return { data: hit.value as T, status: 'ready' };
+  return { data: hit.value as T, status: 'ready', error: null };
 }
 
 /**
  * Cache-first query hook.
  *
- * Sync fetchers (the demo generators) resolve during render, so there
- * is never an empty flash: a miss computes once, stores the result in
- * the shared cache, and every later render reads the cache hit. The
- * write is idempotent and deterministic, which keeps it safe to run
- * during render. Async fetchers render `loading` until the promise
- * resolves, then cache the resolved value.
+ * Sync fetchers resolve during render, so there is never an empty
+ * flash: a miss computes once, stores the result in the shared cache,
+ * and every later render reads the cache hit. The write is idempotent
+ * and deterministic, which keeps it safe to run during render. Async
+ * fetchers render `loading` until the promise resolves, then cache the
+ * resolved value.
+ *
+ * On failure the key is recorded in the module error map and the hook
+ * returns `status: 'error'` on subsequent renders WITHOUT re-invoking
+ * the fetcher. Only `clearAnalyticsErrors()` (refresh) or a new key
+ * (workspace/granularity change) allows a retry.
  */
-export function useAnalyticsQuery<T>(key: string, fetcher: () => T | Promise<T>): AnalyticsQueryResult<T> {
+export function useAnalyticsQuery<T>(
+  key: string,
+  fetcher: () => T | Promise<T>,
+  enabled = true,
+): AnalyticsQueryResult<T> {
   const [, forceRender] = useState(0);
   const inflight = useRef<string | null>(null);
 
+  // Disabled queries (e.g. the previous-period baseline while comparison
+  // mode is off) never fetch and report a neutral loading state.
+  if (!enabled) {
+    return { data: null, status: 'loading', error: null };
+  }
+
   const cached = readCached<T>(key);
   if (cached) return cached;
+
+  // A previously failed key stays failed until explicitly cleared —
+  // never re-invoke the fetcher implicitly (no infinite retry loop).
+  if (failures.has(key)) {
+    return { data: null, status: 'error', error: failures.get(key) };
+  }
 
   // A miss — but skip re-invoking the fetcher while an async request
   // for this same key is already in flight (StrictMode double-renders
   // would otherwise fire the fetch twice).
   if (inflight.current === key) {
-    return { data: null, status: 'loading' };
+    return { data: null, status: 'loading', error: null };
   }
 
-  const out = fetcher();
+  let out: T | Promise<T>;
+  try {
+    out = fetcher();
+  } catch (e) {
+    // Sync fetchers can throw during render — surface as an error
+    // instead of crashing the tree.
+    failures.set(key, e);
+    return { data: null, status: 'error', error: e };
+  }
+
   if (out instanceof Promise) {
     inflight.current = key;
     out.then(
       (value) => {
         analyticsDataCache.set(key, value);
         inflight.current = null;
+        failures.delete(key);
         forceRender((n) => n + 1); // next render reads the cache hit
       },
-      () => {
+      (err) => {
         inflight.current = null;
+        failures.set(key, err);
         forceRender((n) => n + 1);
       },
     );
-    return { data: null, status: 'loading' };
+    return { data: null, status: 'loading', error: null };
   }
 
   analyticsDataCache.set(key, out);
-  return { data: out, status: 'ready' };
+  return { data: out, status: 'ready', error: null };
 }

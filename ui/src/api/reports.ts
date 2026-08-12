@@ -428,6 +428,40 @@ export const getInventoryTrend = (
     endDate,
   });
 
+/** Completed table-bound orders per day (restaurant table turnover). */
+export interface TableTurnoverRow {
+  date: string;
+  table_orders: number;
+}
+
+export const getTableTurnover = (
+  startDate: string,
+  endDate: string,
+  sessionToken: string,
+): Promise<TableTurnoverRow[]> =>
+  loggedInvoke<TableTurnoverRow[]>('get_table_turnover_scoped', {
+    sessionToken: sessionToken ?? '',
+    startDate,
+    endDate,
+  });
+
+/** Completed table-bound orders per hour of day (restaurant occupancy curve). */
+export interface HourlyOccupancyRow {
+  hour: number;
+  table_orders: number;
+}
+
+export const getHourlyOccupancy = (
+  startDate: string,
+  endDate: string,
+  sessionToken: string,
+): Promise<HourlyOccupancyRow[]> =>
+  loggedInvoke<HourlyOccupancyRow[]>('get_hourly_occupancy_scoped', {
+    sessionToken: sessionToken ?? '',
+    startDate,
+    endDate,
+  });
+
 /** A single product row in the menu engineering report. */
 export interface MenuEngineeringRow {
   product_id: string;

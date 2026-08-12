@@ -3,6 +3,7 @@ import React from 'react';
 import { act, fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
+import { withFluent } from '@/locales/test-utils';
 import analyticsFtl from '@/locales/analytics.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
@@ -67,6 +68,8 @@ const mockGetLowStockAlerts = vi.fn(() => Promise.resolve([
   { product_id: 'lo2', sku: 'SKU-LO2', name: 'Beans', current_qty: 7, threshold: 12, currency: 'USD', price_minor: 2500, cost_minor: 1400 },
   { product_id: 'lo3', sku: 'SKU-LO3', name: 'Syrup', current_qty: 2, threshold: 8, currency: 'USD', price_minor: 1800, cost_minor: 1000 },
   { product_id: 'lo4', sku: 'SKU-LO4', name: 'Cups', current_qty: 20, threshold: 25, currency: 'USD', price_minor: 300, cost_minor: 150 },
+  { product_id: 'lo5', sku: 'SKU-LO5', name: 'Oat Milk', current_qty: 4, threshold: 10, currency: 'USD', price_minor: 1200, cost_minor: 700 },
+  { product_id: 'lo6', sku: 'SKU-LO6', name: 'Filter Paper', current_qty: 9, threshold: 12, currency: 'USD', price_minor: 400, cost_minor: 200 },
 ]));
 const mockGetCategoryBreakdown = vi.fn(() => Promise.resolve([
   { category_id: 'cat1', category_name: 'Beverages', total_minor: 500000, sale_count: 40, percentage: 55 },
@@ -99,6 +102,16 @@ const mockGetTableTurnover = vi.fn(() => Promise.resolve([
   { date: '2026-08-11', table_orders: 30 },
   { date: '2026-08-12', table_orders: 25 },
 ]));
+// Real hourly table activity for the occupancy curve — twin-peak shape
+// (lunch ≈ 12:00, dinner ≈ 19:00), so the derived peak hour is 19.
+const mockGetHourlyOccupancy = vi.fn(() => Promise.resolve([
+  { hour: 8, table_orders: 6 },
+  { hour: 12, table_orders: 40 },
+  { hour: 13, table_orders: 32 },
+  { hour: 18, table_orders: 38 },
+  { hour: 19, table_orders: 60 },
+  { hour: 20, table_orders: 44 },
+]));
 const mockGetMenuEngineering = vi.fn(() => Promise.resolve({
   rows: [{ product_id: 'm1', sku: 'SKU-M1', name: 'Pasta', total_volume: 50, unit_price_minor: 10000, unit_cost_minor: 4000, margin_per_unit: 6000, total_margin_minor: 300000, total_revenue_minor: 500000 }],
   median_volume: 25,
@@ -123,6 +136,7 @@ vi.mock('@/api/reports', () => ({
   getInventoryTurnover: () => mockGetInventoryTurnover(),
   getInventoryTrend: () => mockGetInventoryTrend(),
   getTableTurnover: () => mockGetTableTurnover(),
+  getHourlyOccupancy: () => mockGetHourlyOccupancy(),
 }));
 
 const mockGetStaffAnalyticsScoped = vi.fn(() => Promise.resolve([
@@ -705,17 +719,18 @@ describe('AnalyticsScreen layout shell', () => {
     // Staff card: ranked list from the staff-analytics mock rows
     expect(document.querySelectorAll('.analytics-rank-row').length).toBeGreaterThanOrEqual(4);
 
-    // Low-stock card: four mock alert rows with remaining counts,
-    // restock-cost tile, and a suggested reorder chip per row
-    expect(document.querySelectorAll('.analytics-alert-row').length).toBe(4);
-    expect(screen.getAllByText(/\d+ left/).length).toBe(4);
+    // Low-stock card: the compact grid caps at five mock alert rows with
+    // remaining counts, restock-cost tile, and a reorder chip per row
+    expect(document.querySelectorAll('.analytics-alert-row').length).toBe(5);
+    expect(screen.getAllByText(/\d+ left/).length).toBe(5);
     expect(screen.getByText('Est. restock cost')).toBeTruthy();
-    expect(screen.getAllByText(/Order \d+/).length).toBe(4);
+    expect(screen.getAllByText(/Order \d+/).length).toBe(5);
 
-    // Refunds card: KPI tiles from the voided-sales summary
+    // Refunds card: KPI tiles from the voided-sales summary plus the
+    // ranked voided-items list (shares the card's accessible name)
     expect(document.querySelectorAll('.analytics-kpi-tiles').length).toBeGreaterThan(0);
     expect(screen.getByText('Refund count')).toBeTruthy();
-    expect(screen.getByLabelText('Refunds & Voids')).toBeTruthy();
+    expect(screen.getAllByLabelText('Refunds & Voids').length).toBeGreaterThan(0);
 
     // Discounts card: share KPI label (derived, not a hardcoded value)
     expect(screen.getByText('of sales from discounts')).toBeTruthy();
@@ -733,12 +748,20 @@ describe('AnalyticsScreen layout shell', () => {
     expect(screen.getByText('Less')).toBeTruthy();
     expect(screen.getByText('More')).toBeTruthy();
 
-    // Peak/low-bucket insight lines on the trend cards (revenue, AOV, basket)
+    // Peak/low-bucket insight lines on the trend cards (revenue, AOV)
     expect(screen.getAllByText(/Peak:/).length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText(/Low:/).length).toBeGreaterThanOrEqual(2);
 
-    // Top-items rows show units sold alongside the revenue figure
+    // Top-items rows show units sold alongside the revenue figure, and the
+    // card headlines the #1 product (KPI + its ranked row)
     expect(screen.getAllByText(/· \d+×/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Espresso').length).toBeGreaterThanOrEqual(2);
+
+    // Basket card: honest aggregate tiles (avg items/order + order volume)
+    // instead of a fabricated per-bucket chart
+    expect(screen.getByText('items / order')).toBeTruthy();
+    expect(screen.getByText('orders')).toBeTruthy();
+    expect(screen.getByText('Average across the selected range')).toBeTruthy();
 
     // Customers card: new-customer share insight; low-stock: critical tile
     expect(screen.getByText(/new customers/)).toBeTruthy();
@@ -855,6 +878,40 @@ describe('AnalyticsScreen layout shell', () => {
     expect((expandedRevenue.querySelector('[data-testid="echarts-mock"]') as HTMLElement).style.height).toBe('240px');
   });
 
+  it('expands the low-stock card to reveal every alert row', async () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    await flushRecalc();
+
+    // Compact grid caps the alert list at five (six mock rows)
+    const lowStockCard = screen.getByText('Low Stock Alerts').closest('.analytics-card') as HTMLElement;
+    expect(lowStockCard.querySelectorAll('.analytics-alert-row').length).toBe(5);
+
+    // Expanding reveals all six alerts
+    fireEvent.click(lowStockCard.querySelector('button[aria-label="Expand card"]') as HTMLButtonElement);
+    const expanded = document.querySelector('.analytics-card--expanded') as HTMLElement;
+    expect(expanded.querySelectorAll('.analytics-alert-row').length).toBe(6);
+    expect(expanded.textContent).toContain('Filter Paper');
+  });
+
+  it('expands the refunds card to reveal the voided-items list', async () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    await flushRecalc();
+
+    // Refunds card pairs the KPI tiles with the ranked voided-items list
+    const refundsCard = screen.getByText('Refunds & Voids').closest('.analytics-card') as HTMLElement;
+    expect(refundsCard.querySelectorAll('.analytics-rank-row').length).toBe(2);
+    expect(refundsCard.textContent).toContain('Cold Brew');
+    expect(refundsCard.textContent).toContain('2×');
+
+    // Expanded keeps the full list and the summary tiles
+    fireEvent.click(refundsCard.querySelector('button[aria-label="Expand card"]') as HTMLButtonElement);
+    const expanded = document.querySelector('.analytics-card--expanded') as HTMLElement;
+    expect(expanded.querySelectorAll('.analytics-rank-row').length).toBe(2);
+    expect(expanded.textContent).toContain('Croissant');
+  });
+
   it('serves an identical query from the cache without a recalc skeleton', async () => {
     vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
@@ -944,10 +1001,13 @@ describe('AnalyticsScreen layout shell', () => {
     // rows (20/30/25 turns → 72/48/58 min per day, avg 59m)
     expect(screen.getByText('59m')).toBeTruthy();
 
-    // Occupancy card renders its hourly occupancy curve and shows the real
-    // live rate from the tables snapshot (2 of 4 occupied → 50%)
+    // Occupancy card renders its real hourly curve (peak derived from the
+    // hourly-activity mock → 19:00) and the live rate from the tables
+    // snapshot (2 of 4 occupied → 50%)
     expect(screen.getByLabelText('Occupancy by hour')).toBeTruthy();
     expect(screen.getByText('50%')).toBeTruthy();
+    // Peak meta now carries the raw order count behind the peak bucket
+    expect(screen.getByText('Peak hour · 19:00 · 60 table orders')).toBeTruthy();
 
     // Waitstaff card: total-sales KPI from staff-analytics mock rows
     expect(screen.getByText('Total covers')).toBeTruthy();
@@ -1072,6 +1132,77 @@ describe('smartScale — expanded card fills the available area', () => {
 
   it('never shrinks content below 1x', () => {
     expect(smartScale({ w: 400, h: 300 }, { w: 2000, h: 1500 })).toBe(1);
+  });
+});
+
+describe('AnalyticsScreen card error surface', () => {
+  const ORIGINAL_DAILY = [
+    { date: '2026-07-27', total_minor: 1250000, currency: 'USD', sale_count: 12, cogs_minor: 500000, gross_profit_minor: 750000, gross_margin_percent: 60 },
+  ];
+
+  /** Fire any pending recalculation timer and flush the IPC microtasks. */
+  const flushRecalc = async () => {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(700);
+    });
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    clearAnalyticsCache();
+    mockGetDailyRevenue.mockReset();
+    mockGetDailyRevenue.mockResolvedValue(ORIGINAL_DAILY);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('shows a stable error card when an IPC query fails — no retry loop on re-render', async () => {
+    vi.useFakeTimers();
+    mockGetDailyRevenue.mockRejectedValue(new Error('backend boom'));
+
+    const { rerender } = renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    await flushRecalc();
+
+    // Revenue card + heatmap share getDailyRevenue, so both surface the
+    // localized user-safe copy (ERR-05) — never the raw backend message.
+    expect(screen.getAllByRole('alert').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/Couldn't load this chart/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText(/backend boom/)).toBeNull();
+
+    // The failure map suppresses re-invocation: re-render (e.g. a zoom
+    // change or unrelated state update) must NOT refetch — this is the
+    // infinite-retry-loop fix.
+    const callsAfterFirstRender = mockGetDailyRevenue.mock.calls.length;
+    expect(callsAfterFirstRender).toBeGreaterThan(0);
+    await act(async () => {
+      // Rerender with the same Fluent wrapper — a bare `rerender(<Screen />)`
+      // would replace the root without the LocalizationProvider.
+      rerender(withFluent(<AnalyticsScreen />, analyticsFtl, sharedFtl));
+    });
+    expect(screen.getAllByRole('alert').length).toBeGreaterThanOrEqual(1);
+    expect(mockGetDailyRevenue.mock.calls.length).toBe(callsAfterFirstRender);
+  });
+
+  it('recovers after refresh clears the recorded failure', async () => {
+    vi.useFakeTimers();
+    mockGetDailyRevenue.mockRejectedValue(new Error('backend boom'));
+
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    await flushRecalc();
+    expect(screen.getAllByRole('alert').length).toBeGreaterThanOrEqual(1);
+
+    // Backend is healthy again — refresh wipes cache + failures and retries.
+    mockGetDailyRevenue.mockResolvedValue(ORIGINAL_DAILY);
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh data' }));
+    await flushRecalc();
+
+    // The revenue KPI (1,250,000 minor = $12,500 → compact '$12.5K')
+    // now renders data.
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(mockGetDailyRevenue.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('$12.5K')).toBeTruthy();
   });
 });
 
