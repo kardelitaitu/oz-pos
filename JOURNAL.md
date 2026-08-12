@@ -4898,3 +4898,15 @@ Two regression pins:
 **Tests:** analytics-data 38/38 (+4 zero-fill) · AnalyticsScreen 66/66 · full UI suite 292/292, 5106.
 
 **Risks / follow-ups:** zero-fill now gives trend cards an in-period trend chip whenever the series has ≥2 buckets — honest, but a chart that starts at 0 (e.g. a store's first day in the window) now omits the chip entirely (seriesDelta returns null on a zero first bucket). The `loadTables` grouping still carries a dead `days` accumulator. `dev-mock/tauri-api.ts` has an uncommitted collaborator change (retail category filter) unrelated to this slice — left in the tree.
+## 2026-08-13 — Zero-fill extended to Tables / Basket / Inventory trends (TDD)
+
+**Problem:** last cycle zero-filled only the revenue/AOV axis. The other three trend cards still rendered gaps for days without rows: `loadTables` (turn minutes per bucket), `loadBasketSize` (items/order per bucket), and the inventory units-sold line.
+
+**Solution (TDD, Red→Green):** three failing unit tests first (tables/basket/inventory daily-gap → 0), then shared `trendKey`/`trendBucketKeys` helpers (daily/weekly/monthly reuse `bucketKeys`; yearly enumerates YEARS — the tables/basket axis keeps year buckets at yearly granularity, unlike revenue's monthly buckets). `loadTables` and `loadBasketSize` now aggregate into maps keyed by bucket and emit every key in the range; the dead `days` accumulator was removed. `loadInventory` was extracted from the inline `CARD_LOADERS` closure and zero-fills the per-day line at every granularity.
+
+**Second defect surfaced:** the zero-filled 0s are "no data" for rate metrics, not 0-value readings — the tables KPI (mean turn minutes) would have read 45m instead of 59m (a no-orders day is not a 0-minute day), and the off-mode turn chip would have claimed turns got ~100% faster (0 minutes = "infinitely fast"). AovCard/TablesCard now average and trend over `activeBuckets` (value > 0) only; revenue keeps zeros because $0 is a real day for a sum metric. The screen-test basket (previous-week dates) and inventory-trend (off-range dates) mocks were range-anchored like the revenue mocks — zero-fill drops off-range rows.
+
+**Commits:** (see below — fix + journal)
+**Tests:** analytics-data 41/41 (+3) · AnalyticsScreen 66/66 · full UI suite 292/292, 5109.
+
+**Risks / follow-ups:** the tables/basket yearly axis (single year bucket) still diverges from revenue's yearly axis (12 monthly buckets) — a design decision, documented in `trendKey`. Peak/Low insight lines still include zero-filled buckets (a "Low: 08-13 · 0" line for tables), cosmetic. The collaborator's `dev-mock/tauri-api.ts` change remains uncommitted in the tree.
