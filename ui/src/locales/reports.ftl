@@ -60,6 +60,11 @@ dashboard-popularity-trend-empty = No popularity data yet
 dashboard-no-data = No data yet
 dashboard-stock-ok = All stock levels are healthy.
 
+# Dashboard — date range
+dashboard-filter-from = From
+dashboard-filter-to = To
+dashboard-btn-apply = Apply
+
 # Dashboard — granularity toggle
 dashboard-granularity-aria = .aria-label = Time granularity
 dashboard-granularity-daily = Daily

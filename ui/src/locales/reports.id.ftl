@@ -11,6 +11,11 @@ dashboard-no-data = Belum ada data
 dashboard-stock-ok = Semua level stok dalam kondisi baik.
 dashboard-view-report = Lihat Laporan Lengkap
 
+# Dashboard — date range
+dashboard-filter-from = Dari
+dashboard-filter-to = Hingga
+dashboard-btn-apply = Terapkan
+
 # Dashboard — granularity toggle
 dashboard-granularity-aria = .aria-label = Granularitas waktu
 dashboard-granularity-daily = Harian

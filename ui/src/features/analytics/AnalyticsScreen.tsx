@@ -1,8 +1,7 @@
-//! Staff Analytics Screen (analytics:view — owner/admin/manager).
+//! Staff Analytics Screen — KPIs, multi-staff stacked bar, drill-down.
 //!
-//! KPI bar → daily sales stacked bar (ECharts) → staff summary table →
-//! individual deep-dive combo chart. Backed by `get_staff_analytics_scoped`
-//! / `get_staff_analytics_daily_scoped`.
+//! Loads daily data for all staff in parallel to populate the stacked bar
+//! chart. Click a table row to see individual deep-dive combo chart.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
@@ -16,51 +15,27 @@ import { formatMoney } from '@/types/domain';
 import ReactEChartsCore from 'echarts-for-react/lib/core';
 import * as echarts from 'echarts/core';
 import { BarChart, LineChart } from 'echarts/charts';
-import {
-  GridComponent,
-  TooltipComponent,
-  LegendComponent,
-} from 'echarts/components';
+import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import {
-  getStaffAnalyticsScoped,
-  getStaffAnalyticsDailyScoped,
-  type StaffAnalyticsRow,
-  type StaffAnalyticsDailyRow,
+  getStaffAnalyticsScoped, getStaffAnalyticsDailyScoped,
+  type StaffAnalyticsRow, type StaffAnalyticsDailyRow,
 } from '@/api/analytics';
 import './AnalyticsScreen.css';
 
-// ── ECharts minimal bundle ──────────────────────────────────────────
-
 echarts.use([BarChart, LineChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
 
-// ── Date helpers ───────────────────────────────────────────────────
-
-function isoDay(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-function today(): string {
-  return isoDay(new Date());
-}
-function daysAgo(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return isoDay(d);
-}
-
-// ── Types ──────────────────────────────────────────────────────────
+function isoDay(d: Date): string { return d.toISOString().slice(0, 10); }
+function today(): string { return isoDay(new Date()); }
+function daysAgo(n: number): string { const d = new Date(); d.setDate(d.getDate() - n); return isoDay(d); }
 
 interface KpiData {
-  totalShifts: number;
-  closedShifts: number;
-  totalSales: number;
-  totalSalesMinor: number;
-  staffCount: number;
+  totalShifts: number; closedShifts: number;
+  totalSales: number; totalSalesMinor: number; staffCount: number;
 }
 
 // ── Component ───────────────────────────────────────────────────────
 
-/** Staff analytics screen — KPIs, stacked bar chart, drill-down. */
 export default function AnalyticsScreen() {
   const { l10n } = useLocalization();
   const { sessionToken: rawToken } = useWorkspace();
@@ -73,14 +48,12 @@ export default function AnalyticsScreen() {
   const [to, setTo] = useState(today());
   const [rows, setRows] = useState<StaffAnalyticsRow[]>([]);
   const [selectedUserId, setSelectedUserId] = useState('');
-  const [daily, setDaily] = useState<StaffAnalyticsDailyRow[]>([]);
+  // All staff daily data: userId → daily rows
+  const [allDailyMap, setAllDailyMap] = useState<Map<string, StaffAnalyticsDailyRow[]>>(new Map());
   const [loading, setLoading] = useState(true);
-  const [dailyLoading, setDailyLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ── Load summary ─────────────────────────────────────────────────
-
-  const loadSummary = useCallback(async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -89,6 +62,18 @@ export default function AnalyticsScreen() {
       setSelectedUserId((current) =>
         current && result.some((r) => r.user_id === current) ? current : '',
       );
+
+      // Load daily data for all staff in parallel
+      const dailyResults = await Promise.all(
+        result.map((r) =>
+          getStaffAnalyticsDailyScoped(sessionToken, r.user_id, from, to)
+            .then((d) => ({ userId: r.user_id, data: d }))
+            .catch(() => ({ userId: r.user_id, data: [] as StaffAnalyticsDailyRow[] })),
+        ),
+      );
+      const map = new Map<string, StaffAnalyticsDailyRow[]>();
+      for (const { userId, data } of dailyResults) map.set(userId, data);
+      setAllDailyMap(map);
     } catch (e) {
       setError(l10nErrorMessage(e, l10n, 'analytics-error'));
     } finally {
@@ -96,30 +81,19 @@ export default function AnalyticsScreen() {
     }
   }, [sessionToken, from, to]);
 
-  useEffect(() => { loadSummary(); }, [loadSummary]);
-
-  // ── Load daily series ────────────────────────────────────────────
-
-  useEffect(() => {
-    if (!selectedUserId) {
-      setDaily([]);
-      return;
-    }
-    let cancelled = false;
-    setDailyLoading(true);
-    getStaffAnalyticsDailyScoped(sessionToken, selectedUserId, from, to)
-      .then((result) => { if (!cancelled) setDaily(result); })
-      .catch(() => { if (!cancelled) setDaily([]); })
-      .finally(() => { if (!cancelled) setDailyLoading(false); });
-    return () => { cancelled = true; };
-  }, [sessionToken, selectedUserId, from, to]);
+  useEffect(() => { loadData(); }, [loadData]);
 
   const selectedRow = useMemo(
     () => rows.find((r) => r.user_id === selectedUserId) ?? null,
     [rows, selectedUserId],
   );
 
-  // ── Computed KPIs ────────────────────────────────────────────────
+  const daily = useMemo(
+    () => allDailyMap.get(selectedUserId) ?? [],
+    [allDailyMap, selectedUserId],
+  );
+
+  // ── KPIs ──────────────────────────────────────────────────────────
 
   const kpis = useMemo<KpiData>(() => {
     const totalShifts = rows.reduce((s, r) => s + r.shift_count, 0);
@@ -132,69 +106,57 @@ export default function AnalyticsScreen() {
   // ── ECharts: stacked bar — daily sales by staff ──────────────────
 
   const stackedBarOption = useMemo(() => {
+    if (rows.length === 0) return null;
     const staffNames = rows.map((r) => r.display_name);
     const colors = ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#3ba272', '#fc8452', '#9a60b4'];
 
-    if (daily.length > 0 && selectedRow) {
-      const dates = [...new Set(daily.map((d) => d.day))].sort();
-      const nameIdx = staffNames.indexOf(selectedRow.display_name);
-      const series = staffNames.map((name, i) => ({
-        name,
-        type: 'bar' as const,
-        stack: 'total',
-        emphasis: { focus: 'series' as const },
-        itemStyle: { color: colors[i % colors.length] },
-        data: i === nameIdx
-          ? dates.map((date) => {
-              const point = daily.find((d) => d.day === date);
-              return point?.sale_total_minor ?? 0;
-            })
-          : [],
-      }));
+    // Collect all unique dates across all staff
+    const allDates = new Set<string>();
+    for (const [, data] of allDailyMap) {
+      for (const d of data) allDates.add(d.day);
+    }
+    const dates = [...allDates].sort();
+
+    if (dates.length > 0) {
+      const series = staffNames.map((name, i) => {
+        const userId = rows[i]?.user_id ?? '';
+        const staffDaily = allDailyMap.get(userId) ?? [];
+        const dateMap = new Map(staffDaily.map((d) => [d.day, d.sale_total_minor]));
+        return {
+          name, type: 'bar' as const, stack: 'total',
+          emphasis: { focus: 'series' as const },
+          itemStyle: { color: colors[i % colors.length] },
+          data: dates.map((date) => dateMap.get(date) ?? 0),
+        };
+      });
 
       return {
-        tooltip: {
-          trigger: 'axis' as const,
-          axisPointer: { type: 'shadow' as const },
-          valueFormatter: (val: unknown) =>
-            formatMoney({ minor_units: Number(val), currency }),
-        },
+        tooltip: { trigger: 'axis' as const, axisPointer: { type: 'shadow' as const },
+          valueFormatter: (val: unknown) => formatMoney({ minor_units: Number(val), currency }) },
         legend: { top: 0, type: 'scroll' as const },
         grid: { left: '3%', right: '4%', bottom: '3%', top: 40, containLabel: true },
         xAxis: { type: 'category' as const, data: dates, axisLabel: { rotate: 45 } },
-        yAxis: {
-          type: 'value' as const,
-          axisLabel: { formatter: (v: number) => `${(v / 1_000_000).toFixed(1)}M` },
-        },
+        yAxis: { type: 'value' as const, axisLabel: { formatter: (v: number) => `${(v / 1_000_000).toFixed(1)}M` } },
         series,
       };
     }
 
-    // Fallback: show per-staff summary totals as a simple grouped bar
+    // Fallback: grouped bar of per-staff totals
     return {
-      tooltip: {
-        trigger: 'axis' as const,
-        valueFormatter: (val: unknown) =>
-          formatMoney({ minor_units: Number(val), currency }),
-      },
+      tooltip: { trigger: 'axis' as const, valueFormatter: (val: unknown) => formatMoney({ minor_units: Number(val), currency }) },
       legend: { top: 0, type: 'scroll' as const },
       grid: { left: '3%', right: '4%', bottom: '3%', top: 40, containLabel: true },
       xAxis: { type: 'category' as const, data: staffNames },
-      yAxis: {
-        type: 'value' as const,
-        axisLabel: { formatter: (v: number) => `${(v / 1_000_000).toFixed(1)}M` },
-      },
+      yAxis: { type: 'value' as const, axisLabel: { formatter: (v: number) => `${(v / 1_000_000).toFixed(1)}M` } },
       series: [{
-        name: l10n.getString('analytics-kpi-total-sales'),
-        type: 'bar' as const,
+        name: l10n.getString('analytics-kpi-total-sales'), type: 'bar' as const,
         data: rows.map((r) => r.sale_total_minor),
-        itemStyle: { color: colors[0] },
-        emphasis: { focus: 'series' as const },
+        itemStyle: { color: colors[0] }, emphasis: { focus: 'series' as const },
       }],
     };
-  }, [rows, daily, selectedRow, currency, l10n]);
+  }, [rows, allDailyMap, currency, l10n]);
 
-  // ── ECharts: individual deep-dive combo chart ────────────────────
+  // ── Deep-dive combo chart ────────────────────────────────────────
 
   const deepDiveOption = useMemo(() => {
     if (daily.length === 0 || !selectedRow) return null;
@@ -205,82 +167,40 @@ export default function AnalyticsScreen() {
       grid: { left: '3%', right: '4%', bottom: '3%', top: 40, containLabel: true },
       xAxis: { type: 'category' as const, data: dates, axisLabel: { rotate: 45 } },
       yAxis: [
-        {
-          type: 'value' as const,
-          name: l10n.getString('analytics-chart-sales'),
-          axisLabel: { formatter: (v: number) => `${(v / 1_000_000).toFixed(1)}M` },
-        },
-        {
-          type: 'value' as const,
-          name: l10n.getString('analytics-chart-shifts'),
-        },
+        { type: 'value' as const, name: l10n.getString('analytics-chart-sales'), axisLabel: { formatter: (v: number) => `${(v / 1_000_000).toFixed(1)}M` } },
+        { type: 'value' as const, name: l10n.getString('analytics-chart-shifts') },
       ],
       series: [
-        {
-          name: l10n.getString('analytics-chart-sales'),
-          type: 'bar' as const,
-          data: daily.map((d) => d.sale_total_minor),
-          itemStyle: { color: '#5470c6' },
-        },
-        {
-          name: l10n.getString('analytics-chart-shifts'),
-          type: 'line' as const,
-          yAxisIndex: 1,
-          data: daily.map((d) => d.shift_count),
-          itemStyle: { color: '#ee6666' },
-          symbol: 'circle',
-          symbolSize: 6,
-        },
+        { name: l10n.getString('analytics-chart-sales'), type: 'bar' as const, data: daily.map((d) => d.sale_total_minor), itemStyle: { color: '#5470c6' } },
+        { name: l10n.getString('analytics-chart-shifts'), type: 'line' as const, yAxisIndex: 1, data: daily.map((d) => d.shift_count), itemStyle: { color: '#ee6666' }, symbol: 'circle', symbolSize: 6 },
       ],
     };
   }, [daily, selectedRow, l10n]);
 
-  const applyFilters = () => {
-    setFrom(fromDraft);
-    setTo(toDraft);
-  };
+  const applyFilters = () => { setFrom(fromDraft); setTo(toDraft); };
 
   // ── Render ───────────────────────────────────────────────────────
 
   return (
     <div className="analytics" role="region" aria-label={requiredLocalized(l10n, 'analytics-region-aria')}>
-      {/* Header */}
       <div className="analytics-header">
-        <Localized id="analytics-title">
-          <h1 className="analytics-title">Staff Analytics</h1>
-        </Localized>
-        <Localized id="analytics-subtitle">
-          <p className="analytics-subtitle">Per-staff shifts and sales over time</p>
-        </Localized>
+        <Localized id="analytics-title"><h1 className="analytics-title">Staff Analytics</h1></Localized>
+        <Localized id="analytics-subtitle"><p className="analytics-subtitle">Per-staff shifts and sales over time</p></Localized>
       </div>
 
-      {/* Filters */}
       <Card shadow="sm" className="analytics-filters">
         <div className="analytics-filter-field">
-          <label htmlFor="analytics-from" className="analytics-filter-label">
-            <Localized id="analytics-filter-from"><span>From</span></Localized>
-          </label>
-          <input
-            id="analytics-from" type="date" className="analytics-filter-input"
-            value={fromDraft} max={toDraft}
-            onChange={(e) => setFromDraft(e.target.value)}
-            aria-label={l10n.getString('analytics-filter-from')}
-          />
+          <label htmlFor="analytics-from" className="analytics-filter-label"><Localized id="analytics-filter-from"><span>From</span></Localized></label>
+          <input id="analytics-from" type="date" className="analytics-filter-input" value={fromDraft} max={toDraft}
+            onChange={(e) => setFromDraft(e.target.value)} aria-label={l10n.getString('analytics-filter-from')} />
         </div>
         <div className="analytics-filter-field">
-          <label htmlFor="analytics-to" className="analytics-filter-label">
-            <Localized id="analytics-filter-to"><span>To</span></Localized>
-          </label>
-          <input
-            id="analytics-to" type="date" className="analytics-filter-input"
-            value={toDraft} min={fromDraft}
-            onChange={(e) => setToDraft(e.target.value)}
-            aria-label={l10n.getString('analytics-filter-to')}
-          />
+          <label htmlFor="analytics-to" className="analytics-filter-label"><Localized id="analytics-filter-to"><span>To</span></Localized></label>
+          <input id="analytics-to" type="date" className="analytics-filter-input" value={toDraft} min={fromDraft}
+            onChange={(e) => setToDraft(e.target.value)} aria-label={l10n.getString('analytics-filter-to')} />
         </div>
         <Localized id="analytics-btn-apply">
-          <button type="button" className="analytics-apply-btn" onClick={applyFilters}
-            aria-label={l10n.getString('analytics-btn-apply')}>Apply</button>
+          <button type="button" className="analytics-apply-btn" onClick={applyFilters} aria-label={l10n.getString('analytics-btn-apply')}>Apply</button>
         </Localized>
       </Card>
 
@@ -289,98 +209,62 @@ export default function AnalyticsScreen() {
       {loading ? (
         <div className="analytics-loading"><Spinner aria-label={l10n.getString('analytics-loading')} /></div>
       ) : rows.length === 0 ? (
-        <Localized id="analytics-empty">
-          <p className="analytics-empty">No staff activity in this period.</p>
-        </Localized>
+        <Localized id="analytics-empty"><p className="analytics-empty">No staff activity in this period.</p></Localized>
       ) : (
         <>
-          {/* ── KPI Row ──────────────────────────────────── */}
           <div className="analytics-kpi-row">
             <Card shadow="sm" className="analytics-kpi">
-              <span className="analytics-kpi-label">
-                <Localized id="analytics-kpi-shifts"><span>Total Shifts</span></Localized>
-              </span>
+              <span className="analytics-kpi-label"><Localized id="analytics-kpi-shifts"><span>Total Shifts</span></Localized></span>
               <span className="analytics-kpi-value">{kpis.totalShifts}</span>
-              <span className="analytics-kpi-sub">
-                {kpis.closedShifts} {l10n.getString('analytics-kpi-closed')}
-              </span>
+              <span className="analytics-kpi-sub">{kpis.closedShifts} {l10n.getString('analytics-kpi-closed')}</span>
             </Card>
             <Card shadow="sm" className="analytics-kpi">
-              <span className="analytics-kpi-label">
-                <Localized id="analytics-kpi-avg-sale"><span>Avg Sale / Shift</span></Localized>
-              </span>
+              <span className="analytics-kpi-label"><Localized id="analytics-kpi-avg-sale"><span>Avg Sale / Shift</span></Localized></span>
               <span className="analytics-kpi-value">
-                {kpis.totalShifts > 0
-                  ? formatMoney({ minor_units: Math.round(kpis.totalSalesMinor / kpis.totalShifts), currency })
-                  : '-'}
+                {kpis.totalShifts > 0 ? formatMoney({ minor_units: Math.round(kpis.totalSalesMinor / kpis.totalShifts), currency }) : '-'}
               </span>
             </Card>
             <Card shadow="sm" className="analytics-kpi">
-              <span className="analytics-kpi-label">
-                <Localized id="analytics-kpi-top-performer"><span>Top Performer</span></Localized>
-              </span>
+              <span className="analytics-kpi-label"><Localized id="analytics-kpi-top-performer"><span>Top Performer</span></Localized></span>
               <span className="analytics-kpi-value analytics-kpi-value--name">
-                {rows.length > 0
-                  ? rows.reduce((a, b) => a.sale_total_minor > b.sale_total_minor ? a : b).display_name
-                  : '-'}
+                {rows.length > 0 ? rows.reduce((a, b) => a.sale_total_minor > b.sale_total_minor ? a : b).display_name : '-'}
               </span>
             </Card>
             <Card shadow="sm" className="analytics-kpi">
-              <span className="analytics-kpi-label">
-                <Localized id="analytics-kpi-coverage"><span>Coverage</span></Localized>
-              </span>
+              <span className="analytics-kpi-label"><Localized id="analytics-kpi-coverage"><span>Coverage</span></Localized></span>
               <span className="analytics-kpi-value">
                 {kpis.totalShifts > 0 ? `${Math.round((kpis.closedShifts / kpis.totalShifts) * 100)}%` : '-'}
               </span>
-              <span className="analytics-kpi-sub">
-                {kpis.staffCount} {l10n.getString('analytics-kpi-staff')}
-              </span>
+              <span className="analytics-kpi-sub">{kpis.staffCount} {l10n.getString('analytics-kpi-staff')}</span>
             </Card>
           </div>
 
-          {/* ── Stacked bar chart + staff table ───────────── */}
           <div className="analytics-chart-row">
             <Card shadow="sm" className="analytics-chart-card">
-              <Localized id="analytics-chart-daily-sales">
-                <h2 className="analytics-card-title">Daily Sales by Staff</h2>
-              </Localized>
-              {daily.length > 0 ? (
-                <ReactEChartsCore
-                  echarts={echarts}
-                  option={stackedBarOption}
-                  style={{ height: 320 }}
-                  notMerge
-                  aria-label={l10n.getString('analytics-chart-daily-sales-aria')}
-                />
+              <Localized id="analytics-chart-daily-sales"><h2 className="analytics-card-title">Daily Sales by Staff</h2></Localized>
+              {stackedBarOption ? (
+                <ReactEChartsCore echarts={echarts} option={stackedBarOption} style={{ height: 320 }} notMerge
+                  aria-label={l10n.getString('analytics-chart-daily-sales-aria')} />
               ) : (
                 <div className="analytics-chart-placeholder">
-                  <Localized id="analytics-chart-select-hint">
-                    <p className="analytics-empty">Select a staff member to see daily breakdown.</p>
-                  </Localized>
+                  <Localized id="analytics-chart-select-hint"><p className="analytics-empty">No daily breakdown available.</p></Localized>
                 </div>
               )}
             </Card>
             <Card shadow="sm" className="analytics-table-card">
-              <Localized id="analytics-summary-title">
-                <h2 className="analytics-card-title">Staff Summary</h2>
-              </Localized>
+              <Localized id="analytics-summary-title"><h2 className="analytics-card-title">Staff Summary</h2></Localized>
               <div className="analytics-table-wrap">
                 <table className="analytics-table" aria-label={l10n.getString('analytics-summary-title')}>
-                  <thead>
-                    <tr>
-                      <Localized id="analytics-table-staff"><th>Staff</th></Localized>
-                      <Localized id="analytics-table-shifts"><th>Shifts</th></Localized>
-                      <Localized id="analytics-table-sales"><th>Sales</th></Localized>
-                      <Localized id="analytics-table-sales-total"><th>Total</th></Localized>
-                    </tr>
-                  </thead>
+                  <thead><tr>
+                    <Localized id="analytics-table-staff"><th>Staff</th></Localized>
+                    <Localized id="analytics-table-shifts"><th>Shifts</th></Localized>
+                    <Localized id="analytics-table-sales"><th>Sales</th></Localized>
+                    <Localized id="analytics-table-sales-total"><th>Total</th></Localized>
+                  </tr></thead>
                   <tbody>
                     {rows.map((r) => (
-                      <tr
-                        key={r.user_id}
-                        className={r.user_id === selectedUserId ? 'analytics-row--selected' : 'analytics-row'}
-                        onClick={() => setSelectedUserId(r.user_id)}
-                      >
+                      <tr key={r.user_id} onClick={() => setSelectedUserId(r.user_id)}
+                        className={r.user_id === selectedUserId ? 'analytics-row--selected' : 'analytics-row'}>
                         <td className="analytics-cell-name">{r.display_name}</td>
                         <td className="analytics-cell-num">{r.shift_count}</td>
                         <td className="analytics-cell-num">{r.sale_count}</td>
@@ -393,26 +277,16 @@ export default function AnalyticsScreen() {
             </Card>
           </div>
 
-          {/* ── Individual deep-dive ──────────────────────── */}
           {selectedRow && (
             <Card shadow="sm" className="analytics-card">
               <Localized id="analytics-deepdive-title" vars={{ name: selectedRow.display_name }}>
                 <h2 className="analytics-card-title">{selectedRow.display_name} — Daily Detail</h2>
               </Localized>
-              {dailyLoading ? (
-                <div className="analytics-loading"><Spinner aria-label={l10n.getString('analytics-loading')} /></div>
-              ) : deepDiveOption ? (
-                <ReactEChartsCore
-                  echarts={echarts}
-                  option={deepDiveOption}
-                  style={{ height: 280 }}
-                  notMerge
-                  aria-label={l10n.getString('analytics-deepdive-aria', { name: selectedRow.display_name })}
-                />
+              {deepDiveOption ? (
+                <ReactEChartsCore echarts={echarts} option={deepDiveOption} style={{ height: 280 }} notMerge
+                  aria-label={l10n.getString('analytics-deepdive-aria', { name: selectedRow.display_name })} />
               ) : (
-                <Localized id="analytics-deepdive-empty">
-                  <p className="analytics-empty">No daily data available.</p>
-                </Localized>
+                <Localized id="analytics-deepdive-empty"><p className="analytics-empty">No daily data available.</p></Localized>
               )}
             </Card>
           )}

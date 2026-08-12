@@ -189,13 +189,13 @@ describe('DashboardScreen', () => {
   });
 
   // ── KPI cards ──────────────────────────────────────────────────────
-  it('shows KPI labels: Today Revenue, Gross Profit, Orders Today, Top Product', async () => {
+  it('shows KPI labels: Revenue, Gross Profit, Orders, Top Product', async () => {
     resolveAllWithDefaults();
     renderScreen();
     await waitFor(() => {
-      expect(screen.getByText("Today's Revenue")).toBeTruthy();
+      expect(screen.getByText('Revenue')).toBeTruthy();
       expect(screen.getByText('Gross Profit')).toBeTruthy();
-      expect(screen.getByText('Orders Today')).toBeTruthy();
+      expect(screen.getByText('Orders')).toBeTruthy();
       expect(screen.getByText('Top Product')).toBeTruthy();
     });
   });
