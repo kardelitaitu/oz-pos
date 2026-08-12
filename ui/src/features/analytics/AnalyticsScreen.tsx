@@ -15,6 +15,18 @@ type Granularity = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom';
 
 const GRANULARITIES: Granularity[] = ['daily', 'weekly', 'monthly', 'yearly', 'custom'];
 
+/**
+ * Only one card may be expanded at a time.
+ * - clicking the expanded card restores it (`current` → `null`)
+ * - expanding when nothing is open sets the new card (`null` → `cid`)
+ * - expanding another card while one is open is ignored
+ */
+export function nextExpandedKey(current: string | null, cid: string): string | null {
+  if (current === cid) return null;
+  if (current === null) return cid;
+  return current;
+}
+
 function isoToday(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -477,7 +489,7 @@ export default function AnalyticsScreen() {
                   <button
                     type="button"
                     className="analytics-card-action"
-                    onClick={() => setExpandedKey(isExpanded ? null : cid)}
+                    onClick={() => setExpandedKey((current) => nextExpandedKey(current, cid))}
                     aria-label={l10n.getString(isExpanded ? 'analytics-card-restore-aria' : 'analytics-card-expand-aria')}
                     title={l10n.getString(isExpanded ? 'analytics-card-restore-aria' : 'analytics-card-expand-aria')}
                   >

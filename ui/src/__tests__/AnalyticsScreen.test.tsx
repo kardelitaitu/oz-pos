@@ -30,7 +30,7 @@ vi.mock('@/hooks/useWorkspaceNav', () => ({
   useWorkspaceNav: () => ({ goToWorkspacePicker: mockGoToPicker }),
 }));
 
-import AnalyticsScreen from '@/features/analytics/AnalyticsScreen';
+import AnalyticsScreen, { nextExpandedKey } from '@/features/analytics/AnalyticsScreen';
 import { registerAnalyticsFeature } from '@/features/analytics/register';
 import { registerStaffFeature } from '@/features/staff/register';
 import { getEnabledPages, clearPages, hasGrantedPermission } from '@/platform/ui/page-registry';
@@ -208,6 +208,27 @@ describe('AnalyticsScreen layout shell', () => {
     expect(screen.getAllByRole('button', { name: 'Expand card' }).length).toBeGreaterThan(0);
   });
 
+  it('expands exactly one card — expanding another while one is open is ignored', async () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    // Wait for the initial recalculation skeleton to clear
+    await new Promise((r) => setTimeout(r, 650));
+
+    // Expand the first card
+    const expandButtons = screen.getAllByRole('button', { name: 'Expand card' });
+    const first = expandButtons[0]!;
+    await userEvent.click(first);
+
+    // Only the expanded card is rendered — exactly one restore action,
+    // and no other expand buttons exist to open a different card
+    expect(screen.getByRole('button', { name: 'Restore card' })).toBeTruthy();
+    expect(screen.queryAllByRole('button', { name: 'Expand card' }).length).toBe(0);
+
+    // Restore
+    await userEvent.click(screen.getByRole('button', { name: 'Restore card' }));
+    expect(screen.getAllByRole('button', { name: 'Expand card' }).length).toBeGreaterThan(0);
+  });
+
   it('renders the analytics card grid with workspace-appropriate titles', () => {
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 
@@ -282,6 +303,29 @@ describe('analytics page role gate (0046 taxonomy)', () => {
     expect(owner.some((p) => p.route === 'analytics')).toBe(true);
     const empty = getEnabledPages(undefined, 'owner', []);
     expect(empty.some((p) => p.route === 'analytics')).toBe(false);
+  });
+});
+
+describe('nextExpandedKey — single-expansion invariant', () => {
+  it('expands a card when nothing is open', () => {
+    expect(nextExpandedKey(null, 'revenue-shared')).toBe('revenue-shared');
+  });
+
+  it('restores the expanded card when clicked again', () => {
+    expect(nextExpandedKey('revenue-shared', 'revenue-shared')).toBe(null);
+  });
+
+  it('ignores expanding a different card while one is open', () => {
+    expect(nextExpandedKey('revenue-shared', 'heatmap-shared')).toBe('revenue-shared');
+  });
+
+  it('never yields a different card than the one currently expanded', () => {
+    for (const current of ['a', 'b', 'c']) {
+      for (const cid of ['a', 'b', 'c', 'd']) {
+        const next = nextExpandedKey(current, cid);
+        expect(next === null || next === current).toBe(true);
+      }
+    }
   });
 });
 
