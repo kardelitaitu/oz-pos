@@ -73,6 +73,31 @@ toggle = Toggle
 no-results = No results found
 error-occurred = An error occurred
 
+# Common aria-label attributes for generic UI actions
+clear-aria = .aria-label = Clear
+backspace-aria = .aria-label = Backspace
+username-aria = .aria-label = Username
+actions-aria = .aria-label = Actions
+collapse-aria = .aria-label = Collapse sidebar
+notifications-aria = .aria-label = Notifications
+settings-aria = .aria-label = Settings
+export-csv-aria = .aria-label = Export CSV
+search-aria = .aria-label = Search
+workspaces-aria = .aria-label = Workspaces
+developer-tools-aria = .aria-label = Developer tools
+theme-selector-aria = .aria-label = Theme selector
+cancel-refund-aria = .aria-label = Cancel refund
+decrease-qty-aria = .aria-label = Decrease quantity
+increase-qty-aria = .aria-label = Increase quantity
+filter-sales-aria = .aria-label = Filter sales
+filter-status-aria = .aria-label = Filter by status
+from-date-aria = .aria-label = From date
+to-date-aria = .aria-label = To date
+filter-cashier-aria = .aria-label = Filter by cashier
+sales-history-aria = .aria-label = Sales history
+pagination-aria = .aria-label = Pagination
+badge-tooltip-aria = .aria-label = Badge with tooltip
+
 # Audit Log
 audit-log-title = Audit Log
 audit-log-load-more = Load More

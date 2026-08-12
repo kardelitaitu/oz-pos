@@ -364,6 +364,31 @@ auth-create-pin-confirm-placeholder =
     .placeholder = Masukkan ulang PIN
 auth-create-pin-creating = Membuat...
 auth-create-pin-create = Buat Akun Pemilik
+# Common aria-label attributes (Indonesian)
+clear-aria = .aria-label = Hapus
+backspace-aria = .aria-label = Hapus
+username-aria = .aria-label = Nama Pengguna
+actions-aria = .aria-label = Aksi
+collapse-aria = .aria-label = Tutup bilah sisi
+notifications-aria = .aria-label = Notifikasi
+settings-aria = .aria-label = Pengaturan
+export-csv-aria = .aria-label = Ekspor CSV
+search-aria = .aria-label = Cari
+workspaces-aria = .aria-label = Ruang Kerja
+developer-tools-aria = .aria-label = Alat Pengembang
+theme-selector-aria = .aria-label = Pemilih Tema
+cancel-refund-aria = .aria-label = Batalkan pengembalian
+decrease-qty-aria = .aria-label = Kurangi jumlah
+increase-qty-aria = .aria-label = Tambah jumlah
+filter-sales-aria = .aria-label = Filter penjualan
+filter-status-aria = .aria-label = Filter berdasarkan status
+from-date-aria = .aria-label = Dari tanggal
+to-date-aria = .aria-label = Sampai tanggal
+filter-cashier-aria = .aria-label = Filter berdasarkan kasir
+sales-history-aria = .aria-label = Riwayat penjualan
+pagination-aria = .aria-label = Halaman
+badge-tooltip-aria = .aria-label = Lencana dengan keterangan
+
 auth-create-pin-success = Akun pemilik berhasil dibuat!
 auth-create-pin-error-fields = Semua bidang wajib diisi.
 auth-create-pin-error-pin-length = PIN minimal harus 4 karakter.
