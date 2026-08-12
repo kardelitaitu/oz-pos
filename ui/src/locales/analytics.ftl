@@ -46,3 +46,7 @@ analytics-chart-select-hint = Select a staff member from the table to see daily 
 analytics-deepdive-title = { $name } — Daily Detail
 analytics-deepdive-aria = .aria-label = Daily sales and shifts for { $name }
 analytics-deepdive-empty = No daily data available.
+
+# Export
+analytics-export-csv = CSV
+analytics-export-csv-aria = .aria-label = Export staff data as CSV

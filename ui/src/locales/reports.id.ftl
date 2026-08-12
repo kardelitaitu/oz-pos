@@ -168,3 +168,7 @@ custom-report-run-aria = Jalankan laporan
 custom-report-region-aria = Pembuat Laporan Kustom
 custom-report-export-aria = Ekspor CSV
 custom-report-columns-selected = { $selected } / { $total } dipilih
+
+# Export
+dashboard-export-csv = CSV
+dashboard-export-csv-aria = .aria-label = Ekspor data dasbor sebagai CSV

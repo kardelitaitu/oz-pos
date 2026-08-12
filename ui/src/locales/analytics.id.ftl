@@ -46,3 +46,7 @@ analytics-chart-select-hint = Pilih anggota staf dari tabel untuk melihat rincia
 analytics-deepdive-title = { $name } — Detail Harian
 analytics-deepdive-aria = .aria-label = Penjualan dan shift harian untuk { $name }
 analytics-deepdive-empty = Tidak ada data harian.
+
+# Export
+analytics-export-csv = CSV
+analytics-export-csv-aria = .aria-label = Ekspor data staf sebagai CSV

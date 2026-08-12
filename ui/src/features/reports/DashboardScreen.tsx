@@ -12,6 +12,7 @@ import { requiredLocalized } from '@/frontend/shared';
 import { Card } from '@/components/Card';
 import { Spinner } from '@/components/Spinner';
 import { minorUnitExponent } from '@/types/domain';
+import { downloadCsv } from '@/utils/export-csv';
 import ReactEChartsCore from 'echarts-for-react/lib/core';
 import * as echarts from 'echarts/core';
 import { BarChart, LineChart, PieChart, HeatmapChart } from 'echarts/charts';
@@ -236,7 +237,23 @@ export default function DashboardScreen() {
     <div className="dashboard" role="region" aria-label={requiredLocalized(l10n, 'dashboard-region-aria')}>
       {/* Header: title + date range + granularity */}
       <div className="dashboard-header">
-        <Localized id="dashboard-title"><h1 className="dashboard-title">Dashboard</h1></Localized>
+        <div className="dashboard-header-top">
+          <Localized id="dashboard-title"><h1 className="dashboard-title">Dashboard</h1></Localized>
+          {revenueSeries.length > 0 && (
+            <button type="button" className="dashboard-export-btn"
+              onClick={() => downloadCsv(`reports-dashboard-${from}-to-${to}.csv`,
+                [{ key: 'date', label: 'Date' }, { key: 'total', label: 'Revenue' },
+                 { key: 'profit', label: 'Gross Profit' }, { key: 'count', label: 'Orders' }],
+                revenueSeries.map((r) => ({ ...r, total: String(r.total), profit: String(r.profit), count: String(r.count) })),
+              )}
+              aria-label={l10n.getString('dashboard-export-csv-aria')}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              <Localized id="dashboard-export-csv"><span>CSV</span></Localized>
+            </button>
+          )}
+        </div>
         <div className="dashboard-controls">
           <div className="dashboard-date-row">
             <input type="date" className="dashboard-date-input" value={fromDraft} max={toDraft}

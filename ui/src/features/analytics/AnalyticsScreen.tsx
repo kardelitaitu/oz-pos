@@ -12,6 +12,7 @@ import { l10nErrorMessage } from '@/utils/app-error';
 import { Card } from '@/components/Card';
 import { Spinner } from '@/components/Spinner';
 import { formatMoney } from '@/types/domain';
+import { downloadCsv } from '@/utils/export-csv';
 import ReactEChartsCore from 'echarts-for-react/lib/core';
 import * as echarts from 'echarts/core';
 import { BarChart, LineChart } from 'echarts/charts';
@@ -184,8 +185,27 @@ export default function AnalyticsScreen() {
   return (
     <div className="analytics" role="region" aria-label={requiredLocalized(l10n, 'analytics-region-aria')}>
       <div className="analytics-header">
-        <Localized id="analytics-title"><h1 className="analytics-title">Staff Analytics</h1></Localized>
-        <Localized id="analytics-subtitle"><p className="analytics-subtitle">Per-staff shifts and sales over time</p></Localized>
+        <div className="analytics-header-row">
+          <div>
+            <Localized id="analytics-title"><h1 className="analytics-title">Staff Analytics</h1></Localized>
+            <Localized id="analytics-subtitle"><p className="analytics-subtitle">Per-staff shifts and sales over time</p></Localized>
+          </div>
+          {rows.length > 0 && (
+            <button type="button" className="analytics-export-btn"
+              onClick={() => downloadCsv(`staff-analytics-${from}-to-${to}.csv`,
+                [{ key: 'display_name', label: 'Staff' }, { key: 'shift_count', label: 'Shifts' },
+                 { key: 'closed_shift_count', label: 'Closed' }, { key: 'sale_count', label: 'Sales' },
+                 { key: 'sale_total_minor', label: 'Sales Total' }],
+                rows.map((r) => ({ ...r, sale_total_minor: String(r.sale_total_minor) })),
+              )}
+              aria-label={l10n.getString('analytics-export-csv-aria')}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              <Localized id="analytics-export-csv"><span>CSV</span></Localized>
+            </button>
+          )}
+        </div>
       </div>
 
       <Card shadow="sm" className="analytics-filters">

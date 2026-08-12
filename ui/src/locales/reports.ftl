@@ -167,3 +167,7 @@ custom-report-run-aria = Run report
 custom-report-region-aria = Custom Report Builder
 custom-report-export-aria = Export CSV
 custom-report-columns-selected = { $selected } / { $total } selected
+
+# Export
+dashboard-export-csv = CSV
+dashboard-export-csv-aria = .aria-label = Export dashboard data as CSV
