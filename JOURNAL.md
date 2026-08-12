@@ -1,4 +1,15 @@
 
+## 2026-08-12 — TDD cycle: a11y suite extended to the finder, compare overlay, and validation panel
+
+### The editor's axe coverage covered only the initial render — every interactive state was unguarded
+**Problem:** Third review pass. The axe suite added in the pass-1 cycle asserted only the initial render. The surfaces that mattered — the open node finder (whose combobox contract pass 2 fixed), the branch-compare ghost overlay, and the validation panel with its jump/dismiss controls — had zero axe coverage, so a future ARIA regression in any of them (a role change, a lost label, an aria-activedescendant pointing nowhere) would ship silently.
+
+**Solution:** Extended `NodeTopologyEditor.a11y.test.tsx` to axe each state: the finder open with a matching query AND a no-match query (both render option lists); the compare overlay active (`compareOverlay` + `compareFocus` → ghost layer + only-here markers); and the validation panel open (loaded via a canonical-identity diagram with an unwired workspace — the `store_profile_id` fixture pattern from the behavioral suite — then clicking the issues button). All four states pass axe clean, which also re-confirms the pass-1/2 fixes (card role, finder combobox) hold under real interaction states.
+
+**Validation:** a11y suite 4/4 in this file (12/12 across the a11y folder) · full UI suite 4,914 tests · eslint 0 errors · typecheck clean.
+
+**Deliberately NOT done:** no violations were found in the new states — this slice is pure coverage hardening, not a repair. The panel's close-on-jump behavior (rounds 75/109) remains pinned by the behavioral suite; keeping the panel open across jumps would reverse that documented decision and needs a product call. ADR #34 gates (ticket-routing cardinality, legacy schema migration UI) still await product input.
+
 ## 2026-08-12 — TDD cycle: node finder missing its combobox ARIA contract
 
 ### The Ctrl+F finder was a combobox pattern without combobox semantics — screen readers announced no active match

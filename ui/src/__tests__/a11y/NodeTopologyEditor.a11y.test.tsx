@@ -13,7 +13,8 @@
 //! role="option" (the multi-select item role, already used by the editor's
 //! own finder) carries the selection state legitimately.
 
-import { describe, it, vi, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { fireEvent, waitFor } from '@testing-library/react';
 import { renderWithProviders, checkA11y } from './axe-helper';
 import NodeTopologyEditor from '@/features/stores/NodeTopologyEditor';
 import { loadTopology } from '@/api/topology';
@@ -131,9 +132,63 @@ beforeAll(() => {
   (loadTopology as ReturnType<typeof vi.fn>).mockResolvedValue(null);
 });
 
+const COMPARE_OVERLAY = {
+  ghosts: [{ id: 'ghost-1', name: 'Back Office', x: 1100, y: 320 }],
+  onlyHere: ['ws-1'],
+  differing: [],
+  otherWires: [],
+  sharedByOtherId: [],
+};
+
 describe('NodeTopologyEditor a11y', () => {
   it('has no axe violations on initial render', async () => {
     const { container } = renderWithProviders(<NodeTopologyEditor currentTier="standard" />);
+    await checkA11y(container);
+  });
+
+  it('has no axe violations with the node finder open', async () => {
+    const { container } = renderWithProviders(<NodeTopologyEditor currentTier="standard" />);
+    fireEvent.keyDown(document, { key: 'f', ctrlKey: true });
+    const input = container.querySelector('.topology-finder-input') as HTMLInputElement | null;
+    expect(input).not.toBeNull();
+    // A query with matches AND one with no matches both render option lists.
+    fireEvent.change(input!, { target: { value: 'ware' } });
+    await checkA11y(container);
+    fireEvent.change(input!, { target: { value: 'zzz-none' } });
+    await checkA11y(container);
+  });
+
+  it('has no axe violations with the branch-compare overlay active', async () => {
+    const { container } = renderWithProviders(
+      <NodeTopologyEditor currentTier="standard" compareOverlay={COMPARE_OVERLAY} compareFocus />,
+    );
+    // Ghost layer + only-here markers + the compare panel all render.
+    expect(container.querySelector('.topology-overlay-ghost-layer')).not.toBeNull();
+    await checkA11y(container);
+  });
+
+  it('has no axe violations with the validation panel open', async () => {
+    // A diagram with a real issue (workspace with no Location In) so the
+    // issues widget + panel render.
+    // Canonical store identity opts the canvas into strict validation; the
+    // unwired workspace then yields a per-node issue (missing Location In).
+    (loadTopology as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-1', type: 'workspace', name: 'POS', x: 380, y: 80, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [],
+    } as never);
+    const { container } = renderWithProviders(<NodeTopologyEditor currentTier="standard" />);
+    // Wait for the async load to land the two-node diagram (the preset
+    // placeholder validates clean, so the widget only appears post-load).
+    await waitFor(() => {
+      expect(container.querySelectorAll('.topology-node')).toHaveLength(2);
+    });
+    const issuesBtn = container.querySelector('.topology-issues-btn') as HTMLButtonElement | null;
+    expect(issuesBtn).not.toBeNull();
+    fireEvent.click(issuesBtn!);
+    expect(container.querySelector('.topology-validation-panel')).not.toBeNull();
     await checkA11y(container);
   });
 });
