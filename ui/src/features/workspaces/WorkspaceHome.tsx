@@ -128,7 +128,6 @@ const COMING_SOON_CARDS = [
   { name: 'Loyalty', description: 'Coming soon' },
   { name: 'Marketing', description: 'Coming soon' },
   { name: 'Online Orders', description: 'Coming soon' },
-  { name: 'Analytics', description: 'Coming soon' },
 ];
 
 // ── Role color map ────────────────────────────────────────────────
@@ -324,6 +323,23 @@ export default function WorkspaceHome() {
 
   const cashierOnly = useMemo(() => new Set(['restaurant-pos', 'store-pos']), []);
   const kitchenOnly = useMemo(() => new Set(['kds']), []);
+
+  const isAdminOrOwner =
+    roleName === 'owner' ||
+    roleName === 'role-owner' ||
+    roleName === 'admin' ||
+    roleName === 'role-admin';
+
+  // ── Shortcut navigation to analytics / reports (owner/admin only) ──
+  const handleShortcutNav = useCallback(
+    (route: string) => {
+      // Set hash before switching workspace — AppShell respects hash-based
+      // routes when the workspace mounts (see workspace effect in AppShell).
+      window.location.hash = `#/${route}`;
+      setActiveWorkspace('admin');
+    },
+    [setActiveWorkspace],
+  );
 
   const canAccess = useCallback(
     (key: string) =>
@@ -781,6 +797,119 @@ export default function WorkspaceHome() {
                   </button>
                 );
               })}
+
+              {/* ── Analytics & Reports shortcuts (owner/admin only) ── */}
+              {isAdminOrOwner && (
+                <>
+                  {/* Section divider */}
+                  <div className="workspace-section-label" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
+                      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                    </svg>
+                    <Localized id="workspace-home-insights-section">
+                      <span>Insights</span>
+                    </Localized>
+                  </div>
+
+                  {/* Analytics card */}
+                  <button
+                    type="button"
+                    className="workspace-card ws-color-admin"
+                    data-testid="workspace-card"
+                    onClick={() => handleShortcutNav('analytics')}
+                    aria-label={l10n.getString('workspace-home-analytics-aria')}
+                  >
+                    <div className="workspace-card-row">
+                      <div className="workspace-card-icon">
+                        <div className="workspace-card-icon-inner">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="24" height="24" aria-hidden="true">
+                            <path d="M18 20V10" />
+                            <path d="M12 20V4" />
+                            <path d="M6 20v-6" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="workspace-card-body">
+                        <div className="workspace-card-title">
+                          <h2 className="workspace-card-name">
+                            <Localized id="workspace-home-analytics-title">
+                              <span>Analytics</span>
+                            </Localized>
+                          </h2>
+                        </div>
+                        <div className="workspace-card-text">
+                          <p className="workspace-card-desc">
+                            <Localized id="workspace-home-analytics-desc">
+                              <span>Staff performance, sales trends, and shift metrics</span>
+                            </Localized>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Overlay: keyboard shortcut hint */}
+                    <div className="workspace-card-overlay" aria-hidden="true">
+                      <span className="workspace-card-overlay-hint">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="12" height="12">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                          <polyline points="14 2 14 8 20 8" />
+                        </svg>
+                        <Localized id="workspace-home-shortcut-open">
+                          <span>Open</span>
+                        </Localized>
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* Reports (Dashboard) card */}
+                  <button
+                    type="button"
+                    className="workspace-card ws-color-admin"
+                    data-testid="workspace-card"
+                    onClick={() => handleShortcutNav('dashboard')}
+                    aria-label={l10n.getString('workspace-home-reports-aria')}
+                  >
+                    <div className="workspace-card-row">
+                      <div className="workspace-card-icon">
+                        <div className="workspace-card-icon-inner">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="24" height="24" aria-hidden="true">
+                            <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
+                            <path d="M22 12A10 10 0 0 0 12 2v10z" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="workspace-card-body">
+                        <div className="workspace-card-title">
+                          <h2 className="workspace-card-name">
+                            <Localized id="workspace-home-reports-title">
+                              <span>Reports</span>
+                            </Localized>
+                          </h2>
+                        </div>
+                        <div className="workspace-card-text">
+                          <p className="workspace-card-desc">
+                            <Localized id="workspace-home-reports-desc">
+                              <span>Sales, inventory, and custom reports dashboard</span>
+                            </Localized>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Overlay: keyboard shortcut hint */}
+                    <div className="workspace-card-overlay" aria-hidden="true">
+                      <span className="workspace-card-overlay-hint">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="12" height="12">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                          <polyline points="14 2 14 8 20 8" />
+                        </svg>
+                        <Localized id="workspace-home-shortcut-open">
+                          <span>Open</span>
+                        </Localized>
+                      </span>
+                    </div>
+                  </button>
+                </>
+              )}
+
               {COMING_SOON_CARDS.map((cs) => (
                 <div
                   key={cs.name}

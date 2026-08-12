@@ -423,3 +423,13 @@ reset-colour-aria = .aria-label = Reset colour to default
 pick-logo-aria = .aria-label = Pick logo file
 reset-appearance-aria = .aria-label = Reset all appearance settings
 save-appearance-aria = .aria-label = Save appearance
+
+# Workspace home — Insights section (owner/admin only)
+workspace-home-insights-section = Insights
+workspace-home-analytics-title = Analytics
+workspace-home-analytics-desc = Staff performance, sales trends, and shift metrics
+workspace-home-analytics-aria = .aria-label = Open Analytics
+workspace-home-reports-title = Reports
+workspace-home-reports-desc = Sales, inventory, and custom reports dashboard
+workspace-home-reports-aria = .aria-label = Open Reports
+workspace-home-shortcut-open = Open

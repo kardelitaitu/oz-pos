@@ -1271,3 +1271,19 @@
     opacity: 0;
   }
 }
+
+/* ── Section label divider (Analytics & Reports) ─────────────── */
+
+.workspace-section-label {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) 0 var(--space-1) var(--space-1);
+  color: var(--color-fg-tertiary);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  user-select: none;
+}

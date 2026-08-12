@@ -286,7 +286,7 @@ describe('WorkspaceHome', () => {
 
       // Each card should have a shortcut hint (hidden until hover)
       const hints = document.querySelectorAll('button.workspace-card .workspace-card-overlay');
-      expect(hints.length).toBe(5);
+      expect(hints.length).toBe(7);
       expect(hints[0]?.textContent).toMatch(/1/);
       expect(hints[4]?.textContent).toMatch(/5/);
     });
@@ -335,7 +335,7 @@ describe('WorkspaceHome', () => {
         expect(screen.getAllByText('Restaurant POS').length).toBeGreaterThanOrEqual(1);
       });
 
-      const cards = Array.from(document.querySelectorAll('.workspace-card')).filter(c => !c.textContent?.includes('Coming soon'));
+      const cards = Array.from(document.querySelectorAll('.workspace-card')).filter(c => !c.textContent?.includes('Coming soon') && !c.textContent?.includes('Analytics') && !c.textContent?.includes('Reports'));
       expect(cards.length).toBe(5);
       const names = Array.from(cards).map((c) => c.querySelector('.workspace-card-name')?.textContent);
       expect(names).toEqual([
@@ -940,8 +940,12 @@ describe('WorkspaceHome', () => {
       firstCard.focus();
 
       fireEvent.keyDown(document.activeElement!, { key: 'End' });
-      const cards = document.querySelectorAll('.workspace-card');
-      expect(document.activeElement).toBe(cards[4]);
+      // 5 workspace + 2 insights + 3 coming-soon = 10 total cards.
+      // Keyboard nav targets focusable (non-disabled) cards — the last
+      // focusable card is Reports (index 6 among focusables).
+      const allCards = document.querySelectorAll('.workspace-card');
+      expect(allCards.length).toBe(10);
+      expect(document.activeElement).toBe(allCards[6]);
     });
   });
 

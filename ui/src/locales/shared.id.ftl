@@ -426,3 +426,13 @@ reset-colour-aria = .aria-label = Kembalikan warna ke awal
 pick-logo-aria = .aria-label = Pilih file logo
 reset-appearance-aria = .aria-label = Kembalikan semua pengaturan tampilan
 save-appearance-aria = .aria-label = Simpan tampilan
+
+# Workspace home — Insights section (owner/admin only)
+workspace-home-insights-section = Wawasan
+workspace-home-analytics-title = Analitik
+workspace-home-analytics-desc = Performa staf, tren penjualan, dan metrik shift
+workspace-home-analytics-aria = .aria-label = Buka Analitik
+workspace-home-reports-title = Laporan
+workspace-home-reports-desc = Dasbor laporan penjualan, inventaris, dan kustom
+workspace-home-reports-aria = .aria-label = Buka Laporan
+workspace-home-shortcut-open = Buka

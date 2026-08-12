@@ -185,17 +185,25 @@ export default function AppShell() {
   }, []); // run once on mount — addToastRef keeps the callback current
 
   // Navigate to workspace-appropriate route on selection.
+  // When a hash-based shortcut route is present (e.g. from the workspace
+  // home screen's Analytics / Reports cards), respect it instead of the
+  // workspace default.
   const prevWorkspaceRef = useRef(activeWorkspace);
   useEffect(() => {
     if (prevWorkspaceRef.current !== undefined && prevWorkspaceRef.current !== activeWorkspace) {
-      const workspaceRoute: Record<string, string> = {
-        'restaurant-pos': 'sales',
-        'store-pos': 'products',
-        kds: 'kds',
-        inventory: 'inventory',
-        admin: 'settings',
-      };
-      setCurrentRoute(workspaceRoute[activeWorkspace ?? ''] ?? 'products');
+      const hashRoute = window.location.hash.replace('#/', '');
+      if (hashRoute && getPage(hashRoute)) {
+        setCurrentRoute(hashRoute);
+      } else {
+        const workspaceRoute: Record<string, string> = {
+          'restaurant-pos': 'sales',
+          'store-pos': 'products',
+          kds: 'kds',
+          inventory: 'inventory',
+          admin: 'settings',
+        };
+        setCurrentRoute(workspaceRoute[activeWorkspace ?? ''] ?? 'products');
+      }
     }
     prevWorkspaceRef.current = activeWorkspace;
   }, [activeWorkspace]);
