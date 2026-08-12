@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, useCallback, memo, type ReactNode } from 'react';
+import { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback, memo, type ReactNode } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
@@ -1474,6 +1474,33 @@ export default function NodeTopologyEditor({
 
   /** O(1) node lookup by id — replaces `nodes.find` in hot paths (wire rendering, etc.). */
   const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
+
+  /** Position + clamp the relationship picker popover. The picker anchors
+   *  12px LEFT of the target node's edge and translates left/up by its own
+   *  size (CSS translate(-100%,-50%)), so a target flush with the canvas
+   *  edge — common when zoomed — would push the popover off-canvas, where
+   *  the container's overflow:hidden clips its options. The layout effect
+   *  OWNS left/top (the JSX renders none): it re-clamps on every pan/zoom
+   *  while open, and React never rewrites an inline style it did not set.
+   *  offsetWidth/Height are 0 in jsdom (no layout), so the fallbacks keep
+   *  the clamp deterministic in tests; in a real browser the measured box
+   *  is used. */
+  useLayoutEffect(() => {
+    const el = relationshipPickerRef.current;
+    const canvas = canvasRef.current;
+    if (!el || !relationshipPicker || !canvas) return;
+    const anchor = nodeMap.get(relationshipPicker.toNodeId);
+    if (!anchor) return;
+    const cw = canvas.clientWidth;
+    const ch = canvas.clientHeight;
+    const w = el.offsetWidth || 188;
+    const h = el.offsetHeight || 160;
+    const m = 8;
+    const rawLeft = anchor.x * zoom + pan.x - 12;
+    const rawTop = anchor.y * zoom + pan.y + NODE_HEIGHT / 2;
+    el.style.left = `${Math.min(Math.max(rawLeft, m), Math.max(m, cw - w - m))}px`;
+    el.style.top = `${Math.min(Math.max(rawTop, m + h / 2), Math.max(m + h / 2, ch - h / 2 - m))}px`;
+  }, [relationshipPicker, pan, zoom, nodeMap]);
 
   /** Announce selection changes through the polite live region. The cards
    *  cannot carry aria-selected (role=group supports no selection state;
@@ -5939,10 +5966,9 @@ export default function NodeTopologyEditor({
               role="dialog"
               aria-label={l10n.getString('topology-relationship-picker-title')}
               onMouseDown={(e) => e.stopPropagation()}
-              style={{
-                left: pickerAnchor.x * zoom + pan.x - 12,
-                top: pickerAnchor.y * zoom + pan.y + NODE_HEIGHT / 2,
-              }}
+              /* Position is owned by the clamping layout effect above — no
+                 inline left/top here, or React would reset the clamped
+                 values on every unrelated re-render. */
             >
               <div className="topology-relationship-picker-title">
                 {l10n.getString('topology-relationship-picker-title')}

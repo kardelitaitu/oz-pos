@@ -1,4 +1,15 @@
 
+## 2026-08-12 — TDD cycle: the relationship picker could render fully off-canvas when the target sat at the viewport edge
+
+### A multi-option drop near the canvas edge produced an unreachable popover — clipped by the container's overflow:hidden
+**Problem:** Twelfth review pass, auditing the relationship picker (ADR #34 machinery). The picker is anchored 12px LEFT of the target node's edge and translates left/up by its own size (CSS translate(-100%,-50%)), while `.node-canvas-container` clips with overflow:hidden. The position was computed inline as `anchor.x*zoom + pan.x - 12` with NO clamping — so a target node near the left/top edge of the visible viewport (legal negative canvas x, and common when zoomed in) pushed the popover off-canvas. At x=-80 the picker's box spanned -280..-92 screen px — fully invisible; its options (Stock routing / Transfer / Cancel) were unclickable, and since the picker owns the keyboard (Escape only), the user was stuck choosing between Escape and nothing. The context-menu popover (top-left anchored at the cursor) has the same class of risk but far smaller exposure — the cursor is always in-canvas; the picker anchors to a node edge that is routinely flush with the viewport.
+
+**Solution:** Red→Green. (1) Red — a test loads a topology with the warehouse target at x=-80,y=-100 and asserts the picker's left is clamped to the 8px margin (unfixed code rendered '-92px'); a companion guard asserts a mid-canvas target (x=300) keeps its exact anchor position ('288px','260px') so the clamp never over-clamps. (2) Green — the picker's position is now OWNEED by a useLayoutEffect that recomputes it from the anchor and clamps to the canvas bounds on every open/pan/zoom: left ∈ [8, cw-w-8], top ∈ [8+h/2, ch-h/2-8] (the translate(-100%,-50%) box stays fully inside). The JSX no longer sets inline left/top — React would reset the clamped values on every unrelated re-render; the effect owns them. offsetWidth/Height are 0 in jsdom (no layout), so the effect falls back to the CSS min-width (188×160) for a deterministic clamp there and measures the real box in a browser. Placement needed to sit AFTER the nodeMap useMemo (TDZ in the deps array).
+
+**Validation:** picker block (2 new, Red-confirmed via stash) · editor suite 520/520 · full UI suite 286 files / 4,927 tests · typecheck · eslint 0 errors (8 pre-existing warnings) · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** no focus trap for the picker (canvas-click dismissal is the pinned design); the context menu's equivalent edge-clipping risk left as-is (cursor-anchored, far lower exposure) — noted as a future slice if it ever surfaces.
+
 ## 2026-08-12 — Audit: the armed-connection × wire-click "stray edit" is intentional, pinned design — no change
 
 ### The pass-10 residual (wire click mid-connection cycles the wire) resolves to a no-finding; closing it with the evidence trail so it is not re-litigated

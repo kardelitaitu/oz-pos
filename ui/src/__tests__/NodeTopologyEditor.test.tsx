@@ -1190,6 +1190,59 @@ describe('NodeTopologyEditor Component', () => {
     expect(previewLine()).toBeNull();
   });
 
+  it('clamps the picker into the canvas when the target sits at the viewport edge', async () => {
+    // The picker is anchored 12px LEFT of the target node's edge and
+    // translates left by its own width (translate(-100%,-50%)), while the
+    // canvas container clips with overflow:hidden. A target at a negative
+    // canvas x — legal in the model, and common when zoomed/panned — would
+    // put the popover fully off-canvas, making its options unreachable.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-1', type: 'warehouse', name: 'WH', x: -80, y: -100 },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+    mockCanvasSize(1200, 800);
+
+    fireEvent.click(portOf(nodeAt(1), 'right'));
+    fireEvent.click(portOf(nodeAt(2), 'left'));
+    const picker = document.querySelector('.topology-relationship-picker') as HTMLElement;
+    expect(picker).not.toBeNull();
+
+    // Unclamped anchor: x=-80 → left=-92, y=-100 → top=20. The picker must
+    // be clamped to the margin so its whole box (which extends left and up
+    // from the anchor) stays inside the canvas.
+    expect(picker.style.left).toBe('8px');
+    expect(parseInt(picker.style.top, 10)).toBeGreaterThan(8);
+  });
+
+  it('does not over-clamp a picker whose target is well inside the canvas', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'wh-1', type: 'warehouse', name: 'WH', x: 300, y: 140 },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+    mockCanvasSize(1200, 800);
+
+    fireEvent.click(portOf(nodeAt(1), 'right'));
+    fireEvent.click(portOf(nodeAt(2), 'left'));
+    const picker = document.querySelector('.topology-relationship-picker') as HTMLElement;
+    expect(picker).not.toBeNull();
+
+    // Mid-canvas anchors keep their exact anchor-relative position.
+    expect(picker.style.left).toBe('288px');
+    expect(picker.style.top).toBe('260px');
+  });
+
   it('rejects a workspace-to-workspace connection (untyped pair) with an incompatible toast', () => {
     renderEditor();
     // Add a second workspace via the tool rack so a workspace output can
