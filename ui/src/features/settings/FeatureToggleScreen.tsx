@@ -7,7 +7,6 @@
 //! When disabling, only the selected feature is turned off.
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { Skeleton } from '@/components/Skeleton';
@@ -15,6 +14,12 @@ import { Localized, useLocalization } from '@fluent/react';
 import { useToast, useContextMenu, ContextMenu } from '@/frontend/shared';
 import LiveSetupPreview from '@/features/setup/components/LiveSetupPreview';
 import { l10nErrorMessage } from '@/utils/app-error';
+import {
+  listAllFeatures,
+  setFeature,
+  setFeaturesBulk,
+  type FeatureInfo,
+} from '@/api/features';
 import './FeatureToggleScreen.css';
 
 /** Duration (ms) for both the row flash and checkmark overlay to persist after a toggle. */
@@ -22,24 +27,7 @@ const FLASH_DURATION = 1_400;
 
 // ── Types ──────────────────────────────────────────────────────────
 
-export interface FeatureInfo {
-  key: string;
-  name: string;
-  description: string;
-  group: string;
-  enabled: boolean;
-  dependencies: string[];
-}
-
-interface ListAllFeaturesResult {
-  features: FeatureInfo[];
-}
-
-interface SetFeatureResult {
-  success: boolean;
-  features: FeatureInfo[];
-  auto_enabled: string[];
-}
+export type { FeatureInfo };
 
 // ── Group ordering ─────────────────────────────────────────────────
 
@@ -68,20 +56,6 @@ const GROUP_L10N_IDS: Record<string, string> = {
   'Reporting': 'feature-toggle-group-reporting',
   'Advanced': 'feature-toggle-group-advanced',
 };
-
-// ── IPC wrappers ──────────────────────────────────────────────────
-
-async function listAllFeatures(): Promise<ListAllFeaturesResult> {
-  return invoke<ListAllFeaturesResult>('list_all_features');
-}
-
-async function setFeature(key: string, enabled: boolean): Promise<SetFeatureResult> {
-  return invoke<SetFeatureResult>('set_feature', { args: { key, enabled } });
-}
-
-async function setFeaturesBulk(keys: string[], enabled: boolean): Promise<ListAllFeaturesResult> {
-  return invoke<ListAllFeaturesResult>('set_features_bulk', { args: { keys, enabled } });
-}
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
