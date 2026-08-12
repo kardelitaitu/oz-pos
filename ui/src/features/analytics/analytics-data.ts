@@ -442,24 +442,19 @@ function monthDays(ym: string): number {
 
 /**
  * Granularity bucket key for a date in the tables/basket trend loaders:
- * Monday week-start for weekly, YYYY-MM for monthly, the year for yearly.
- * (Differs from the revenue axis, which keeps monthly buckets at yearly.)
+ * Monday week-start for weekly, YYYY-MM for monthly AND yearly (the
+ * yearly axis is one bucket per month, matching the revenue card and
+ * the 12-column yearly heatmap).
  */
 function trendKey(g: Granularity, date: string): string {
   if (g === 'weekly') return weekStartKey(date);
-  if (g === 'monthly') return date.slice(0, 7);
-  if (g === 'yearly') return date.slice(0, 4);
+  if (g === 'monthly' || g === 'yearly') return date.slice(0, 7);
   return date;
 }
 
 /** Every trend bucket key the axis must cover within [from, to]. */
 function trendBucketKeys(g: Granularity, from: string, to: string): string[] {
-  if (g === 'yearly') {
-    const keys: string[] = [];
-    for (let y = Number(from.slice(0, 4)); y <= Number(to.slice(0, 4)); y += 1) keys.push(String(y));
-    return keys;
-  }
-  if (g === 'monthly') return bucketKeys('monthly', from, to);
+  if (g === 'monthly' || g === 'yearly') return bucketKeys('monthly', from, to);
   if (g === 'weekly') return bucketKeys('weekly', from, to);
   return bucketKeys('daily', from, to);
 }
@@ -481,15 +476,13 @@ export async function loadTables(q: AnalyticsQuery): Promise<Bucket[]> {
   return trendBucketKeys(q.granularity, q.from, q.to).map((key) => {
     const orders = ordersByKey.get(key) ?? 0;
     const bucketMinutes =
-      q.granularity === 'yearly'
-        ? 365 * 1440
-        : q.granularity === 'monthly'
-          ? monthDays(key) * 1440
-          : q.granularity === 'weekly'
-            ? 7 * 1440
-            : 1440;
+      q.granularity === 'monthly' || q.granularity === 'yearly'
+        ? monthDays(key) * 1440
+        : q.granularity === 'weekly'
+          ? 7 * 1440
+          : 1440;
     return {
-      label: q.granularity === 'yearly' ? key : key.slice(5),
+      label: key.slice(5),
       value: orders > 0 ? Math.round(bucketMinutes / orders) : 0,
     };
   });
@@ -531,7 +524,7 @@ export async function loadBasketSize(q: AnalyticsQuery): Promise<BasketTrend> {
     const sales = salesByKey.get(key) ?? 0;
     const lines = linesByKey.get(key) ?? 0;
     return {
-      label: q.granularity === 'yearly' ? key : key.slice(5),
+      label: key.slice(5),
       value: sales > 0 ? Math.round((lines / sales) * 10) / 10 : 0,
     };
   });

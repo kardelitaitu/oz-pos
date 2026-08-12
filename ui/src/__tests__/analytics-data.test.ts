@@ -497,6 +497,37 @@ describe('loaders — raw rows mapped to card shapes', () => {
     expect(trend.sale_count).toBe(30);
   });
 
+  it('loadTables buckets yearly granularity by month, not by year', async () => {
+    const { getTableTurnover } = await import('@/api/reports');
+    (getTableTurnover as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { date: '2026-01-15', table_orders: 15 }, // Jan: 31×1440/15 = 2976 min
+      { date: '2026-03-10', table_orders: 20 }, // Mar: 31×1440/20 = 2232 min
+    ]);
+    const buckets = await loadTables({
+      workspace: 'restaurant', granularity: 'yearly', from: '2026-01-01', to: '2026-12-31', sessionToken: 's',
+    });
+    // The yearly axis is one bucket per month — matching the revenue card
+    // and the 12-column yearly heatmap, never a single year bucket.
+    expect(buckets.length).toBe(12);
+    expect(buckets[0]).toEqual({ label: '01', value: 2976 });
+    expect(buckets[1]).toEqual({ label: '02', value: 0 });
+    expect(buckets[2]).toEqual({ label: '03', value: 2232 });
+    expect(buckets[11]).toEqual({ label: '12', value: 0 });
+  });
+
+  it('loadBasketSize buckets yearly granularity by month', async () => {
+    const { getBasketSizeTrend } = await import('@/api/reports');
+    (getBasketSizeTrend as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { date: '2026-02-10', sale_count: 20, avg_line_count: 3 },
+    ]);
+    const trend = await loadBasketSize({
+      workspace: 'retail', granularity: 'yearly', from: '2026-01-01', to: '2026-12-31', sessionToken: 's',
+    });
+    expect(trend.buckets.length).toBe(12);
+    expect(trend.buckets[0]).toEqual({ label: '01', value: 0 });
+    expect(trend.buckets[1]).toEqual({ label: '02', value: 3 });
+  });
+
   it('loadInventory zero-fills days without sales rows on the trend line', async () => {
     const { getInventoryTrend } = await import('@/api/reports');
     (getInventoryTrend as ReturnType<typeof vi.fn>).mockResolvedValue([
