@@ -437,6 +437,22 @@
   min-height: 70vh;
 }
 
+/* Expanded cards scale ranked rows and captions up for readability */
+.analytics-card--expanded .analytics-rank-row {
+  font-size: 13px;
+  gap: 12px;
+}
+
+.analytics-card--expanded .analytics-rank-index {
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+}
+
+.analytics-card--expanded .analytics-card-insight {
+  font-size: 12px;
+}
+
 /* Collapsed (compact) cards shrink to just their header row */
 .analytics-card--collapsed {
   min-height: 0;
@@ -803,6 +819,14 @@
   min-width: 0;
 }
 
+/* One-line insight caption under trend charts */
+.analytics-card-insight {
+  margin: 6px 0 0;
+  font-size: 10px;
+  font-weight: 500;
+  color: #64748b;
+}
+
 .analytics-card-chart--donut {
   max-width: 150px;
   margin: 0 auto;
@@ -1134,6 +1158,28 @@
 .analytics-heat-cell[data-intensity="2"] .analytics-heat-block { background: #93c5fd; }
 .analytics-heat-cell[data-intensity="3"] .analytics-heat-block { background: #3b82f6; }
 .analytics-heat-cell[data-intensity="4"] .analytics-heat-block { background: #1d4ed8; }
+
+/* Heatmap intensity scale legend */
+.analytics-heat-scale {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.analytics-heat-scale-swatch .analytics-heat-block {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+}
+
+.analytics-heat-scale-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: #94a3b8;
+  margin: 0 4px;
+}
 
 .analytics-heat-label {
   font-size: 10px;

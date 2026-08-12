@@ -88,9 +88,15 @@ export function analyticsQueryKey(workspace: string, granularity: string, from: 
   return `query:${workspace}:${granularity}:${from}:${to}`;
 }
 
-/** Canonical cache key for one card's payload. */
-export function cardQueryKey(cardKey: string, workspace: string, granularity: string): string {
-  return `card:${cardKey}:${workspace}:${granularity}`;
+/** Canonical cache key for one card's payload (range optional). */
+export function cardQueryKey(
+  cardKey: string,
+  workspace: string,
+  granularity: string,
+  from = '',
+  to = '',
+): string {
+  return `card:${cardKey}:${workspace}:${granularity}:${from}:${to}`;
 }
 
 /** Shared in-memory cache used by the analytics page and its cards. */

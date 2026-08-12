@@ -167,6 +167,101 @@ pub struct CategoryBreakdownRow {
     pub percentage: f64,
 }
 
+/// Sales revenue split by payment method for a date range.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct PaymentMethodRow {
+    /// Payment method key (`cash`, `card`, `qris`, `ewallet`, … or `other`).
+    pub payment_method: String,
+    /// Total revenue in minor units.
+    pub total_minor: i64,
+    /// Number of completed sales paid this way.
+    pub sale_count: i64,
+}
+
+/// Voided-sale totals for a date range.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct VoidedSummaryRow {
+    /// Number of voided sales.
+    pub void_count: i64,
+    /// Sum of the voided sales' totals in minor units.
+    pub void_total_minor: i64,
+}
+
+/// One product line found on voided sales.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct VoidedItemRow {
+    /// Product display name (SKU fallback for deleted products).
+    pub name: String,
+    /// Total quantity voided.
+    pub qty: i64,
+}
+
+/// Average basket size for a date range.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct BasketSizeRow {
+    /// Number of completed sales.
+    pub sale_count: i64,
+    /// Mean `line_count` across those sales (0.0 when no sales).
+    pub avg_line_count: f64,
+}
+
+/// New vs returning customers for a date range.
+///
+/// A customer is "returning" when they have a completed sale before the
+/// range start; otherwise the range visit counts them as new.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CustomerSplitRow {
+    /// Distinct customers whose first completed sale falls inside the range.
+    pub new_count: i64,
+    /// Distinct customers with a completed sale inside the range who had
+    /// one before it.
+    pub returning_count: i64,
+}
+
+/// One discount code's redemption count within a date range.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DiscountCodeRow {
+    /// Discount label (empty label → `discount`).
+    pub label: String,
+    /// Completed sales using this discount.
+    pub redeemed_count: i64,
+}
+
+/// Discount usage summary for a date range.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DiscountsSummaryRow {
+    /// Completed sales in the range.
+    pub sale_count: i64,
+    /// Completed sales that applied any discount.
+    pub discounted_sale_count: i64,
+    /// `discounted_sale_count / sale_count` as a percentage (0.0 when none).
+    pub share_percent: f64,
+    /// Top discount codes by redemption count.
+    pub codes: Vec<DiscountCodeRow>,
+}
+
+/// Stock-turnover snapshot for a date range at one location.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct InventoryTurnoverRow {
+    /// Units sold across completed sales in the range.
+    pub units_sold: i64,
+    /// Units on hand at the location (from `stock_summary`).
+    pub stock_on_hand: i64,
+    /// Number of catalog products.
+    pub sku_count: i64,
+    /// Length of the queried range in days (inclusive).
+    pub range_days: i64,
+}
+
+/// Units sold per day for a date range (inventory trend line).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct InventoryTrendRow {
+    /// ISO date `YYYY-MM-DD`.
+    pub date: String,
+    /// Units sold that day.
+    pub units_sold: i64,
+}
+
 impl Store<'_> {
     /// Map the shared revenue/COGS columns of the aggregation rows.
     fn revenue_profit_fields(row: &rusqlite::Row<'_>) -> rusqlite::Result<(i64, i64, i64, f64)> {
@@ -578,6 +673,251 @@ impl Store<'_> {
         }
 
         Ok(rows)
+    }
+
+    /// Revenue split by payment method for a date range.
+    pub fn payment_method_breakdown(
+        &self,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<Vec<PaymentMethodRow>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT COALESCE(payment_method, 'other') AS payment_method,
+                    SUM(total_minor) AS total_minor,
+                    COUNT(*) AS sale_count
+             FROM sales
+             WHERE status = 'completed' AND DATE(created_at) BETWEEN ?1 AND ?2
+             GROUP BY payment_method
+             ORDER BY total_minor DESC",
+        )?;
+        let rows = stmt.query_map(params![start_date, end_date], |row| {
+            Ok(PaymentMethodRow {
+                payment_method: row.get("payment_method")?,
+                total_minor: row.get("total_minor")?,
+                sale_count: row.get("sale_count")?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// Voided-sale totals for a date range.
+    pub fn voided_sales_summary(
+        &self,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<VoidedSummaryRow, CoreError> {
+        let row = self.conn.query_row(
+            "SELECT COUNT(*) AS void_count,
+                    COALESCE(SUM(total_minor), 0) AS void_total_minor
+             FROM sales
+             WHERE status = 'voided' AND DATE(created_at) BETWEEN ?1 AND ?2",
+            params![start_date, end_date],
+            |row| {
+                Ok(VoidedSummaryRow {
+                    void_count: row.get("void_count")?,
+                    void_total_minor: row.get("void_total_minor")?,
+                })
+            },
+        )?;
+        Ok(row)
+    }
+
+    /// Top product lines found on voided sales for a date range.
+    pub fn voided_items(
+        &self,
+        start_date: &str,
+        end_date: &str,
+        limit: i64,
+    ) -> Result<Vec<VoidedItemRow>, CoreError> {
+        let limit = limit.clamp(1, 100);
+        let mut stmt = self.conn.prepare(
+            "SELECT COALESCE(p.name, sl.sku) AS name, SUM(sl.qty) AS qty
+             FROM sale_lines sl
+             JOIN sales s ON sl.sale_id = s.id
+             LEFT JOIN products p ON sl.sku = p.sku
+             WHERE s.status = 'voided' AND DATE(s.created_at) BETWEEN ?1 AND ?2
+             GROUP BY sl.sku
+             ORDER BY qty DESC
+             LIMIT ?3",
+        )?;
+        let rows = stmt.query_map(params![start_date, end_date, limit], |row| {
+            Ok(VoidedItemRow {
+                name: row.get("name")?,
+                qty: row.get("qty")?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// Average basket size (mean line count) for a date range.
+    pub fn avg_basket_size(
+        &self,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<BasketSizeRow, CoreError> {
+        let row = self.conn.query_row(
+            "SELECT COUNT(*) AS sale_count,
+                    COALESCE(AVG(line_count), 0) AS avg_line_count
+             FROM sales
+             WHERE status = 'completed' AND DATE(created_at) BETWEEN ?1 AND ?2",
+            params![start_date, end_date],
+            |row| {
+                Ok(BasketSizeRow {
+                    sale_count: row.get("sale_count")?,
+                    avg_line_count: row.get("avg_line_count")?,
+                })
+            },
+        )?;
+        Ok(row)
+    }
+
+    /// New vs returning customer counts for a date range.
+    pub fn customer_split(
+        &self,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<CustomerSplitRow, CoreError> {
+        let row = self.conn.query_row(
+            "WITH range_customers AS (
+                SELECT DISTINCT customer_id FROM sales
+                WHERE status = 'completed' AND customer_id IS NOT NULL
+                  AND DATE(created_at) BETWEEN ?1 AND ?2
+             )
+             SELECT
+                (SELECT COUNT(*) FROM range_customers rc
+                 WHERE NOT EXISTS (
+                   SELECT 1 FROM sales s
+                   WHERE s.customer_id = rc.customer_id AND s.status = 'completed'
+                     AND DATE(s.created_at) < ?1)) AS new_count,
+                (SELECT COUNT(*) FROM range_customers rc
+                 WHERE EXISTS (
+                   SELECT 1 FROM sales s
+                   WHERE s.customer_id = rc.customer_id AND s.status = 'completed'
+                     AND DATE(s.created_at) < ?1)) AS returning_count",
+            params![start_date, end_date],
+            |row| {
+                Ok(CustomerSplitRow {
+                    new_count: row.get("new_count")?,
+                    returning_count: row.get("returning_count")?,
+                })
+            },
+        )?;
+        Ok(row)
+    }
+
+    /// Discount usage for a date range: share of discounted sales plus the
+    /// most-redeemed discount codes.
+    pub fn discounts_summary(
+        &self,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<DiscountsSummaryRow, CoreError> {
+        let (sale_count, discounted_sale_count): (i64, i64) = self.conn.query_row(
+            "SELECT COUNT(*) AS sale_count,
+                    COALESCE(SUM(CASE WHEN discount_percent > 0 THEN 1 ELSE 0 END), 0)
+                        AS discounted_sale_count
+             FROM sales
+             WHERE status = 'completed' AND DATE(created_at) BETWEEN ?1 AND ?2",
+            params![start_date, end_date],
+            |row| Ok((row.get("sale_count")?, row.get("discounted_sale_count")?)),
+        )?;
+        let mut stmt = self.conn.prepare(
+            "SELECT COALESCE(NULLIF(discount_label, ''), 'discount') AS label,
+                    COUNT(*) AS redeemed_count
+             FROM sales
+             WHERE status = 'completed' AND discount_percent > 0
+               AND DATE(created_at) BETWEEN ?1 AND ?2
+             GROUP BY discount_label
+             ORDER BY redeemed_count DESC
+             LIMIT 5",
+        )?;
+        let codes = stmt
+            .query_map(params![start_date, end_date], |row| {
+                Ok(DiscountCodeRow {
+                    label: row.get("label")?,
+                    redeemed_count: row.get("redeemed_count")?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        let share_percent = if sale_count > 0 {
+            discounted_sale_count as f64 / sale_count as f64 * 100.0
+        } else {
+            0.0
+        };
+        Ok(DiscountsSummaryRow {
+            sale_count,
+            discounted_sale_count,
+            share_percent,
+            codes,
+        })
+    }
+
+    /// Stock-turnover snapshot for a date range at one location: units sold
+    /// over the period vs stock on hand, plus the catalog size.
+    pub fn inventory_turnover(
+        &self,
+        start_date: &str,
+        end_date: &str,
+        location_id: &str,
+    ) -> Result<InventoryTurnoverRow, CoreError> {
+        let row = self.conn.query_row(
+            "SELECT
+                (SELECT COALESCE(SUM(sl.qty), 0) FROM sale_lines sl
+                 JOIN sales s ON sl.sale_id = s.id
+                 WHERE s.status = 'completed' AND DATE(s.created_at) BETWEEN ?1 AND ?2)
+                    AS units_sold,
+                (SELECT COALESCE(SUM(COALESCE(qty, 0)), 0) FROM stock_summary
+                 WHERE location_id = ?3) AS stock_on_hand,
+                (SELECT COUNT(*) FROM products) AS sku_count",
+            params![start_date, end_date, location_id],
+            |row| {
+                Ok(InventoryTurnoverRow {
+                    units_sold: row.get("units_sold")?,
+                    stock_on_hand: row.get("stock_on_hand")?,
+                    sku_count: row.get("sku_count")?,
+                    range_days: 0,
+                })
+            },
+        )?;
+        Ok(InventoryTurnoverRow {
+            range_days: Self::inclusive_range_days(start_date, end_date),
+            ..row
+        })
+    }
+
+    /// Units sold per day for a date range (the inventory trend line).
+    pub fn inventory_trend(
+        &self,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<Vec<InventoryTrendRow>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DATE(s.created_at) AS date,
+                    COALESCE(SUM(sl.qty), 0) AS units_sold
+             FROM sale_lines sl
+             JOIN sales s ON sl.sale_id = s.id
+             WHERE s.status = 'completed' AND DATE(s.created_at) BETWEEN ?1 AND ?2
+             GROUP BY DATE(s.created_at)
+             ORDER BY date ASC",
+        )?;
+        let rows = stmt.query_map(params![start_date, end_date], |row| {
+            Ok(InventoryTrendRow {
+                date: row.get("date")?,
+                units_sold: row.get("units_sold")?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// Inclusive day count of a `YYYY-MM-DD` range (0 when unparseable).
+    fn inclusive_range_days(start_date: &str, end_date: &str) -> i64 {
+        let (Ok(start), Ok(end)) = (
+            chrono::NaiveDate::parse_from_str(start_date, "%Y-%m-%d"),
+            chrono::NaiveDate::parse_from_str(end_date, "%Y-%m-%d"),
+        ) else {
+            return 0;
+        };
+        (end - start).num_days() + 1
     }
 }
 
@@ -1724,5 +2064,260 @@ mod tests {
         assert!(currencies.contains(&"USD".to_string()));
         assert!(currencies.contains(&"GBP".to_string()));
         assert!(rows.iter().all(|r| r.week_start == "2026-07-19"));
+    }
+
+    // ── Payment method breakdown ───────────────────────────────────
+
+    #[test]
+    fn payment_method_breakdown_groups_by_method() {
+        let conn = fresh();
+        conn.execute_batch(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status, payment_method, created_at) VALUES
+                ('p1', 1000, 'USD', 1, 'completed', 'cash', '2026-07-10T09:00:00Z'),
+                ('p2', 2000, 'USD', 1, 'completed', 'card', '2026-07-11T09:00:00Z'),
+                ('p3', 500,  'USD', 1, 'completed', 'cash', '2026-07-12T09:00:00Z');",
+        )
+        .unwrap();
+        let rows = store(&conn)
+            .payment_method_breakdown("2026-07-01", "2026-07-31")
+            .unwrap();
+        let cash = rows.iter().find(|r| r.payment_method == "cash").unwrap();
+        let card = rows.iter().find(|r| r.payment_method == "card").unwrap();
+        assert_eq!(cash.total_minor, 1500);
+        assert_eq!(cash.sale_count, 2);
+        assert_eq!(card.total_minor, 2000);
+        assert_eq!(card.sale_count, 1);
+        // Highest revenue first
+        assert_eq!(rows[0].payment_method, "card");
+    }
+
+    #[test]
+    fn payment_method_breakdown_empty() {
+        let conn = fresh();
+        let rows = store(&conn)
+            .payment_method_breakdown("2000-01-01", "2099-12-31")
+            .unwrap();
+        assert!(rows.is_empty());
+    }
+
+    // ── Voided sales summary ───────────────────────────────────────
+
+    #[test]
+    fn voided_sales_summary_counts_and_totals() {
+        let conn = fresh();
+        conn.execute_batch(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at) VALUES
+                ('v1', 1000, 'USD', 1, 'voided',    '2026-07-10T09:00:00Z'),
+                ('v2', 2500, 'USD', 1, 'voided',    '2026-07-11T09:00:00Z'),
+                ('c1', 900,  'USD', 1, 'completed', '2026-07-12T09:00:00Z');",
+        )
+        .unwrap();
+        let row = store(&conn)
+            .voided_sales_summary("2026-07-01", "2026-07-31")
+            .unwrap();
+        assert_eq!(row.void_count, 2);
+        assert_eq!(row.void_total_minor, 3500);
+    }
+
+    #[test]
+    fn voided_sales_summary_empty() {
+        let conn = fresh();
+        let row = store(&conn)
+            .voided_sales_summary("2000-01-01", "2099-12-31")
+            .unwrap();
+        assert_eq!(row.void_count, 0);
+        assert_eq!(row.void_total_minor, 0);
+    }
+
+    // ── Voided items ───────────────────────────────────────────────
+
+    #[test]
+    fn voided_items_ranks_products_by_qty() {
+        let conn = fresh();
+        let s = store(&conn);
+        let money = Money {
+            minor_units: 100,
+            currency: usd(),
+        };
+        s.create_product("A", "Alpha", money, None, None, 100, None)
+            .unwrap();
+        s.create_product("B", "Beta", money, None, None, 100, None)
+            .unwrap();
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("A"), 3, price(100)))
+            .unwrap();
+        cart.add_line(CartLine::new(Sku::new("B"), 1, price(100)))
+            .unwrap();
+        let mut sale = Sale::from_cart(&cart).unwrap();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        sale.created_at = now.clone();
+        sale.updated_at = now;
+        s.create_sale(&sale).unwrap();
+        s.update_sale_status(&sale.id, SaleStatus::Active).unwrap();
+        s.update_sale_status(&sale.id, SaleStatus::Voided).unwrap();
+
+        let rows = s.voided_items("2000-01-01", "2099-12-31", 5).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].name, "Alpha");
+        assert_eq!(rows[0].qty, 3);
+        assert_eq!(rows[1].name, "Beta");
+    }
+
+    // ── Average basket size ────────────────────────────────────────
+
+    #[test]
+    fn avg_basket_size_computes_mean_line_count() {
+        let conn = fresh();
+        conn.execute_batch(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at) VALUES
+                ('b1', 1000, 'USD', 2, 'completed', '2026-07-10T09:00:00Z'),
+                ('b2', 2000, 'USD', 4, 'completed', '2026-07-11T09:00:00Z'),
+                ('b3', 500,  'USD', 1, 'voided',    '2026-07-12T09:00:00Z');",
+        )
+        .unwrap();
+        let row = store(&conn)
+            .avg_basket_size("2026-07-01", "2026-07-31")
+            .unwrap();
+        assert_eq!(row.sale_count, 2);
+        assert!((row.avg_line_count - 3.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn avg_basket_size_empty() {
+        let conn = fresh();
+        let row = store(&conn)
+            .avg_basket_size("2000-01-01", "2099-12-31")
+            .unwrap();
+        assert_eq!(row.sale_count, 0);
+        assert_eq!(row.avg_line_count, 0.0);
+    }
+
+    // ── Customer split ─────────────────────────────────────────────
+
+    #[test]
+    fn customer_split_new_vs_returning() {
+        let conn = fresh();
+        conn.execute_batch(
+            "INSERT INTO customers (id, name, created_at, updated_at) VALUES
+                ('cust-returning', 'Returning', '2026-06-01T00:00:00.000Z', '2026-06-01T00:00:00.000Z'),
+                ('cust-new',       'New',       '2026-06-01T00:00:00.000Z', '2026-06-01T00:00:00.000Z');
+             INSERT INTO sales (id, total_minor, currency, line_count, status, customer_id, created_at) VALUES
+                ('old1', 100, 'USD', 1, 'completed', 'cust-returning', '2026-06-01T09:00:00Z'),
+                ('r1',   200, 'USD', 1, 'completed', 'cust-returning', '2026-07-10T09:00:00Z'),
+                ('n1',   300, 'USD', 1, 'completed', 'cust-new',       '2026-07-11T09:00:00Z'),
+                ('n2',   400, 'USD', 1, 'completed', 'cust-new',       '2026-07-12T09:00:00Z'),
+                ('anon', 500, 'USD', 1, 'completed', NULL,             '2026-07-13T09:00:00Z');",
+        )
+        .unwrap();
+        let row = store(&conn)
+            .customer_split("2026-07-01", "2026-07-31")
+            .unwrap();
+        // cust-new has no sale before the range -> new; cust-returning does -> returning.
+        assert_eq!(row.new_count, 1);
+        assert_eq!(row.returning_count, 1);
+    }
+
+    #[test]
+    fn customer_split_empty() {
+        let conn = fresh();
+        let row = store(&conn)
+            .customer_split("2000-01-01", "2099-12-31")
+            .unwrap();
+        assert_eq!(row.new_count, 0);
+        assert_eq!(row.returning_count, 0);
+    }
+
+    // ── Discounts summary ──────────────────────────────────────────
+
+    #[test]
+    fn discounts_summary_counts_and_lists_codes() {
+        let conn = fresh();
+        conn.execute_batch(
+            "INSERT INTO sales (id, total_minor, currency, line_count, status, discount_percent, discount_label, created_at) VALUES
+                ('d1', 1000, 'USD', 1, 'completed', 10, 'WELCOME10', '2026-07-10T09:00:00Z'),
+                ('d2', 2000, 'USD', 1, 'completed', 15, 'WELCOME10', '2026-07-11T09:00:00Z'),
+                ('d3', 500,  'USD', 1, 'completed', 5,  'PROMO8.8',  '2026-07-12T09:00:00Z'),
+                ('d4', 300,  'USD', 1, 'completed', 0,  NULL,        '2026-07-13T09:00:00Z');",
+        )
+        .unwrap();
+        let row = store(&conn)
+            .discounts_summary("2026-07-01", "2026-07-31")
+            .unwrap();
+        assert_eq!(row.sale_count, 4);
+        assert_eq!(row.discounted_sale_count, 3);
+        assert!((row.share_percent - 75.0).abs() < 1e-9);
+        assert_eq!(row.codes.len(), 2);
+        assert_eq!(row.codes[0].label, "WELCOME10");
+        assert_eq!(row.codes[0].redeemed_count, 2);
+    }
+
+    // ── Inventory turnover + trend ─────────────────────────────────
+
+    #[test]
+    fn inventory_turnover_uses_stock_summary_and_range() {
+        let conn = fresh();
+        let s = store(&conn);
+        let money = Money {
+            minor_units: 100,
+            currency: usd(),
+        };
+        s.create_product("A", "Alpha", money, None, None, 10, None)
+            .unwrap();
+        s.create_product("B", "Beta", money, None, None, 20, None)
+            .unwrap();
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("A"), 3, price(100)))
+            .unwrap();
+        let mut sale = Sale::from_cart(&cart).unwrap();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        sale.created_at = now.clone();
+        sale.updated_at = now;
+        s.create_sale(&sale).unwrap();
+        s.update_sale_status(&sale.id, SaleStatus::Active).unwrap();
+        s.update_sale_status(&sale.id, SaleStatus::Completed)
+            .unwrap();
+
+        let row = s
+            .inventory_turnover(
+                "2000-01-01",
+                "2099-12-31",
+                crate::inventory::CANONICAL_DEFAULT_LOCATION_UUID,
+            )
+            .unwrap();
+        assert_eq!(row.units_sold, 3);
+        assert_eq!(row.sku_count, 2);
+        assert_eq!(row.range_days, 36525); // 2000-01-01 ..= 2099-12-31 (25 leap years)
+        // stock_on_hand reflects the seeded inventory rows for the two products.
+        assert_eq!(row.stock_on_hand, 30);
+    }
+
+    #[test]
+    fn inventory_trend_returns_daily_units() {
+        let conn = fresh();
+        let s = store(&conn);
+        let money = Money {
+            minor_units: 100,
+            currency: usd(),
+        };
+        s.create_product("A", "Alpha", money, None, None, 100, None)
+            .unwrap();
+        // Two completed sales for product A on the same day (7 units total).
+        for qty in [2, 5] {
+            let mut cart = Cart::new(usd());
+            cart.add_line(CartLine::new(Sku::new("A"), qty, price(100)))
+                .unwrap();
+            let mut sale = Sale::from_cart(&cart).unwrap();
+            let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+            sale.created_at = now.clone();
+            sale.updated_at = now;
+            s.create_sale(&sale).unwrap();
+            s.update_sale_status(&sale.id, SaleStatus::Active).unwrap();
+            s.update_sale_status(&sale.id, SaleStatus::Completed)
+                .unwrap();
+        }
+        let rows = s.inventory_trend("2000-01-01", "2099-12-31").unwrap();
+        // Both sales share the same day -> one row with 7 units.
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].units_sold, 7);
     }
 }

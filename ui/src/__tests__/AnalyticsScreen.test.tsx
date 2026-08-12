@@ -41,6 +41,95 @@ vi.mock('@/contexts/CurrencyContext', () => ({
   useCurrency: () => ({ currency: 'USD', setCurrency: vi.fn(), loading: false }),
 }));
 
+// ── Real-data IPC mocks ─────────────────────────────────────────────
+// The cards now load through the scoped reporting commands. jsdom has no
+// Tauri backend, so mock the API modules with deterministic rows that
+// produce the asserted labels (KPIs, ranked lists, alert rows, charts).
+const mockGetDailyRevenue = vi.fn(() => Promise.resolve([
+  { date: '2026-07-27', total_minor: 1250000, currency: 'USD', sale_count: 12, cogs_minor: 500000, gross_profit_minor: 750000, gross_margin_percent: 60 },
+]));
+const mockGetWeeklyRevenue = vi.fn(() => Promise.resolve([
+  { week_start: '2026-07-21', total_minor: 8500000, currency: 'USD', sale_count: 65, cogs_minor: 3400000, gross_profit_minor: 5100000, gross_margin_percent: 60 },
+]));
+const mockGetMonthlyRevenue = vi.fn(() => Promise.resolve([
+  { month: '2026-07', total_minor: 35000000, currency: 'USD', sale_count: 280, cogs_minor: 14000000, gross_profit_minor: 21000000, gross_margin_percent: 60 },
+]));
+const mockGetTopProducts = vi.fn(() => Promise.resolve([
+  { product_id: 'p1', sku: 'SKU-001', name: 'Espresso', total_qty: 45, total_minor: 90000, cogs_minor: 30000, gross_profit_minor: 60000, gross_margin_percent: 66.7 },
+  { product_id: 'p2', sku: 'SKU-002', name: 'Latte', total_qty: 38, total_minor: 95000, cogs_minor: 30000, gross_profit_minor: 65000, gross_margin_percent: 68.4 },
+]));
+const mockGetHourlyHeatmap = vi.fn(() => Promise.resolve([
+  { day_of_week: 1, hour: 10, total_minor: 350000, sale_count: 3 },
+  { day_of_week: 2, hour: 11, total_minor: 400000, sale_count: 4 },
+]));
+const mockGetLowStockAlerts = vi.fn(() => Promise.resolve([
+  { product_id: 'lo1', sku: 'SKU-LO1', name: 'Milk', current_qty: 3, threshold: 10, currency: 'USD', price_minor: 1500, cost_minor: 900 },
+  { product_id: 'lo2', sku: 'SKU-LO2', name: 'Beans', current_qty: 7, threshold: 12, currency: 'USD', price_minor: 2500, cost_minor: 1400 },
+  { product_id: 'lo3', sku: 'SKU-LO3', name: 'Syrup', current_qty: 2, threshold: 8, currency: 'USD', price_minor: 1800, cost_minor: 1000 },
+  { product_id: 'lo4', sku: 'SKU-LO4', name: 'Cups', current_qty: 20, threshold: 25, currency: 'USD', price_minor: 300, cost_minor: 150 },
+]));
+const mockGetCategoryBreakdown = vi.fn(() => Promise.resolve([
+  { category_id: 'cat1', category_name: 'Beverages', total_minor: 500000, sale_count: 40, percentage: 55 },
+  { category_id: 'cat2', category_name: 'Food', total_minor: 300000, sale_count: 25, percentage: 33 },
+]));
+const mockGetBasketSize = vi.fn(() => Promise.resolve({ sale_count: 100, avg_line_count: 2.5 }));
+const mockGetCustomerSplit = vi.fn(() => Promise.resolve({ new_count: 30, returning_count: 70 }));
+const mockGetPaymentMethodBreakdown = vi.fn(() => Promise.resolve([
+  { payment_method: 'cash', total_minor: 600000, sale_count: 30 },
+  { payment_method: 'card', total_minor: 900000, sale_count: 45 },
+]));
+const mockGetDiscountsSummary = vi.fn(() => Promise.resolve({
+  sale_count: 100, discounted_sale_count: 12, share_percent: 12.5,
+  codes: [{ label: 'WELCOME10', redeemed_count: 8 }, { label: 'HAPPYHOUR', redeemed_count: 4 }],
+}));
+const mockGetVoidedSalesSummary = vi.fn(() => Promise.resolve({ void_count: 3, void_total_minor: 45000 }));
+const mockGetVoidedItems = vi.fn(() => Promise.resolve([
+  { name: 'Cold Brew', qty: 2 },
+  { name: 'Croissant', qty: 1 },
+]));
+const mockGetInventoryTurnover = vi.fn(() => Promise.resolve({ units_sold: 500, stock_on_hand: 120, sku_count: 24, range_days: 30 }));
+const mockGetInventoryTrend = vi.fn(() => Promise.resolve([
+  { date: '2026-07-21', units_sold: 15 },
+  { date: '2026-07-22', units_sold: 18 },
+]));
+const mockGetMenuEngineering = vi.fn(() => Promise.resolve({
+  rows: [{ product_id: 'm1', sku: 'SKU-M1', name: 'Pasta', total_volume: 50, unit_price_minor: 10000, unit_cost_minor: 4000, margin_per_unit: 6000, total_margin_minor: 300000, total_revenue_minor: 500000 }],
+  median_volume: 25,
+  median_margin: 5000,
+}));
+
+vi.mock('@/api/reports', () => ({
+  getDailyRevenue: () => mockGetDailyRevenue(),
+  getWeeklyRevenue: () => mockGetWeeklyRevenue(),
+  getMonthlyRevenue: () => mockGetMonthlyRevenue(),
+  getTopProducts: () => mockGetTopProducts(),
+  getHourlyHeatmap: () => mockGetHourlyHeatmap(),
+  getLowStockAlerts: () => mockGetLowStockAlerts(),
+  getCategoryBreakdown: () => mockGetCategoryBreakdown(),
+  getMenuEngineering: () => mockGetMenuEngineering(),
+  getBasketSize: () => mockGetBasketSize(),
+  getCustomerSplit: () => mockGetCustomerSplit(),
+  getPaymentMethodBreakdown: () => mockGetPaymentMethodBreakdown(),
+  getDiscountsSummary: () => mockGetDiscountsSummary(),
+  getVoidedSalesSummary: () => mockGetVoidedSalesSummary(),
+  getVoidedItems: () => mockGetVoidedItems(),
+  getInventoryTurnover: () => mockGetInventoryTurnover(),
+  getInventoryTrend: () => mockGetInventoryTrend(),
+}));
+
+const mockGetStaffAnalyticsScoped = vi.fn(() => Promise.resolve([
+  { user_id: 'u1', display_name: 'Arya', shift_count: 10, closed_shift_count: 8, shift_sales_minor: 200000, sale_count: 40, sale_total_minor: 600000 },
+  { user_id: 'u2', display_name: 'Budi', shift_count: 9, closed_shift_count: 7, shift_sales_minor: 180000, sale_count: 35, sale_total_minor: 520000 },
+  { user_id: 'u3', display_name: 'Citra', shift_count: 8, closed_shift_count: 7, shift_sales_minor: 150000, sale_count: 30, sale_total_minor: 450000 },
+  { user_id: 'u4', display_name: 'Dewi', shift_count: 7, closed_shift_count: 5, shift_sales_minor: 120000, sale_count: 22, sale_total_minor: 340000 },
+  { user_id: 'u5', display_name: 'Eka', shift_count: 6, closed_shift_count: 4, shift_sales_minor: 90000, sale_count: 18, sale_total_minor: 260000 },
+  { user_id: 'u6', display_name: 'Fajar', shift_count: 5, closed_shift_count: 3, shift_sales_minor: 70000, sale_count: 14, sale_total_minor: 200000 },
+]));
+
+vi.mock('@/api/analytics', () => ({
+  getStaffAnalyticsScoped: () => mockGetStaffAnalyticsScoped(),
+}));
+
 import AnalyticsScreen, { nextExpandedKey, daysInCurrentMonth, monthCalendarGrid, smartScale } from '@/features/analytics/AnalyticsScreen';
 import { clearAnalyticsCache } from '@/features/analytics/analytics-cache';
 import { registerAnalyticsFeature } from '@/features/analytics/register';
@@ -67,12 +156,15 @@ describe('AnalyticsScreen layout shell', () => {
   });
 
   /**
-   * Fire any pending recalculation timer instantly. Only meaningful when
-   * fake timers are enabled (the tests that need it call `vi.useFakeTimers()`).
+   * Fire any pending recalculation timer instantly and let the mock IPC
+   * promises resolve (advanceTimersByTimeAsync flushes microtasks between
+   * timers, so the async card data lands before the next assertion). Only
+   * meaningful when fake timers are enabled (the tests that need it call
+   * `vi.useFakeTimers()`).
    */
-  const flushRecalc = () => {
-    act(() => {
-      vi.advanceTimersByTime(700);
+  const flushRecalc = async () => {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(700);
     });
   };
 
@@ -493,7 +585,7 @@ describe('AnalyticsScreen layout shell', () => {
     expect(screen.queryByRole('button', { name: 'Back to top' })).toBeNull();
   });
 
-  it('renders a smart heatmap that changes buckets with granularity', () => {
+  it('renders a smart heatmap that changes buckets with granularity', async () => {
     vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 
@@ -501,21 +593,21 @@ describe('AnalyticsScreen layout shell', () => {
     const cellCount = () => heatmap()?.querySelectorAll('.analytics-heat-cell').length ?? 0;
 
     // Skip the initial recalculation skeleton instantly
-    flushRecalc();
+    await flushRecalc();
 
     // Default: daily → 7 weekday buckets
     expect(cellCount()).toBe(7);
 
     // Weekly → 7 day rows × 24 hour columns
     fireEvent.click(screen.getByRole('radio', { name: 'Weekly' }));
-    flushRecalc();
+    await flushRecalc();
     expect(cellCount()).toBe(168);
     expect(heatmap()?.querySelectorAll('.analytics-weekly-row').length).toBe(8); // header + 7 days
 
     // Monthly → real calendar: day 1 starts on its actual weekday,
     // empty cells pad the first/last rows to complete weeks
     fireEvent.click(screen.getByRole('radio', { name: 'Monthly' }));
-    flushRecalc();
+    await flushRecalc();
     const filled = heatmap()?.querySelectorAll('.analytics-heat-cell[data-intensity]').length ?? 0;
     const total = cellCount();
     expect(filled).toBe(daysInCurrentMonth());
@@ -525,65 +617,86 @@ describe('AnalyticsScreen layout shell', () => {
 
     // Yearly → 12 month columns × 4 week rows = 48 cells
     fireEvent.click(screen.getByRole('radio', { name: 'Yearly' }));
-    flushRecalc();
+    await flushRecalc();
     expect(cellCount()).toBe(48);
     expect(heatmap()?.querySelectorAll('.analytics-heat-column').length).toBe(12);
   });
 
-  it('renders designed content in the non-heatmap cards', () => {
+  it('renders designed content in the non-heatmap cards', async () => {
     vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
-    flushRecalc();
+    await flushRecalc();
 
-    // Every non-heatmap card shows the demo-data chip (13 retail − heatmap)
-    expect(screen.getAllByText('Demo data').length).toBe(12);
+    // Real-data cards load through the mock — only demo-only cards
+    // (restaurant tables/occupancy) carry the demo chip, so retail shows none
+    expect(screen.queryAllByText('Demo data').length).toBe(0);
 
     // Revenue card: total-revenue KPI + a chart carrying the card title
     expect(screen.getByText('Total revenue')).toBeTruthy();
     expect(screen.getAllByLabelText('Revenue Overview').length).toBeGreaterThan(0);
 
-    // Staff card: ranked list of four, each row with a trend arrow
+    // Staff card: ranked list from the staff-analytics mock rows
     expect(document.querySelectorAll('.analytics-rank-row').length).toBeGreaterThanOrEqual(4);
-    expect(document.querySelectorAll('.analytics-rank-delta').length).toBeGreaterThan(0);
 
-    // Low-stock card: four alert rows with remaining counts,
+    // Low-stock card: four mock alert rows with remaining counts,
     // restock-cost tile, and a suggested reorder chip per row
     expect(document.querySelectorAll('.analytics-alert-row').length).toBe(4);
     expect(screen.getAllByText(/\d+ left/).length).toBe(4);
     expect(screen.getByText('Est. restock cost')).toBeTruthy();
     expect(screen.getAllByText(/Order \d+/).length).toBe(4);
 
-    // Refunds card: refund-rate KPI tile + trend chart
+    // Refunds card: KPI tiles from the voided-sales summary
     expect(document.querySelectorAll('.analytics-kpi-tiles').length).toBeGreaterThan(0);
-    expect(screen.getByText('Refund rate')).toBeTruthy();
-    // Chart aria-label (card container also carries the title label)
-    expect(screen.getAllByLabelText('Refunds & Voids').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('Refund count')).toBeTruthy();
+    expect(screen.getByLabelText('Refunds & Voids')).toBeTruthy();
 
     // Discounts card: share KPI label (derived, not a hardcoded value)
     expect(screen.getByText('of sales from discounts')).toBeTruthy();
 
     // Category card: top-category KPI row above the donut
     expect(screen.getByText('Top category')).toBeTruthy();
+
+    // Headline KPIs on the shared cards
+    expect(screen.getByText('Total customers')).toBeTruthy();
+    expect(screen.getByText('Staff sales total')).toBeTruthy();
+    expect(screen.getByText('Top payment method')).toBeTruthy();
+
+    // Heatmap intensity scale legend (Less → More swatches)
+    expect(screen.getByLabelText('Sales intensity scale')).toBeTruthy();
+    expect(screen.getByText('Less')).toBeTruthy();
+    expect(screen.getByText('More')).toBeTruthy();
+
+    // Peak/low-bucket insight lines on the trend cards (revenue, AOV, basket)
+    expect(screen.getAllByText(/Peak:/).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText(/Low:/).length).toBeGreaterThanOrEqual(2);
+
+    // Top-items rows show units sold alongside the revenue figure
+    expect(screen.getAllByText(/· \d+×/).length).toBeGreaterThan(0);
+
+    // Customers card: new-customer share insight; low-stock: critical tile
+    expect(screen.getByText(/new customers/)).toBeTruthy();
+    expect(screen.getByText('Critical items')).toBeTruthy();
   });
 
-  it('keeps card visuals rendering as granularity changes', () => {
+  it('keeps card visuals rendering as granularity changes', async () => {
     vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
-    flushRecalc();
+    await flushRecalc();
 
     for (const g of ['Weekly', 'Monthly', 'Yearly']) {
       fireEvent.click(screen.getByRole('radio', { name: g }));
-      flushRecalc();
-      expect(screen.getAllByText('Demo data').length).toBe(12);
+      await flushRecalc();
+      // Real-data revenue card keeps rendering for every granularity
+      expect(screen.getByText('Total revenue')).toBeTruthy();
     }
   });
 
-  it('expands a card to fill the main area and restores it', () => {
+  it('expands a card to fill the main area and restores it', async () => {
     vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 
     // Skip the initial recalculation skeleton instantly
-    flushRecalc();
+    await flushRecalc();
 
     // All cards visible before expanding
     expect(screen.getByText('Revenue Overview')).toBeTruthy();
@@ -602,12 +715,12 @@ describe('AnalyticsScreen layout shell', () => {
     expect(screen.getAllByRole('button', { name: 'Expand card' }).length).toBeGreaterThan(0);
   });
 
-  it('expands exactly one card — expanding another while one is open is ignored', () => {
+  it('expands exactly one card — expanding another while one is open is ignored', async () => {
     vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 
     // Skip the initial recalculation skeleton instantly
-    flushRecalc();
+    await flushRecalc();
 
     // Expand the first card
     const expandButtons = screen.getAllByRole('button', { name: 'Expand card' });
@@ -624,12 +737,12 @@ describe('AnalyticsScreen layout shell', () => {
     expect(screen.getAllByRole('button', { name: 'Expand card' }).length).toBeGreaterThan(0);
   });
 
-  it('smart-expands every card — each one fills the grid and restores', () => {
+  it('smart-expands every card — each one fills the grid and restores', async () => {
     vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 
     // Skip the initial recalculation skeleton instantly
-    flushRecalc();
+    await flushRecalc();
 
     const cardCount = screen.getAllByRole('button', { name: 'Expand card' }).length;
     expect(cardCount).toBeGreaterThan(1);
@@ -652,18 +765,41 @@ describe('AnalyticsScreen layout shell', () => {
     expect(document.querySelectorAll('.analytics-card--expanded').length).toBe(0);
   });
 
-  it('serves an identical query from the cache without a recalc skeleton', () => {
+  it('expands a ranked-list card to reveal the full list and taller charts', async () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    await flushRecalc();
+
+    // Staff card: the compact grid list caps at top 5
+    const staffCard = screen.getByText('Staff Performance').closest('.analytics-card') as HTMLElement;
+    expect(staffCard.querySelectorAll('.analytics-rank-row').length).toBe(5);
+
+    // Expanding reveals the full list (6 staff rows from the mock)
+    fireEvent.click(staffCard.querySelector('button[aria-label="Expand card"]') as HTMLButtonElement);
+    const expanded = document.querySelector('.analytics-card--expanded') as HTMLElement;
+    expect(expanded.querySelectorAll('.analytics-rank-row').length).toBe(6);
+
+    // Restore, then check the revenue chart grows when expanded
+    fireEvent.click(screen.getByRole('button', { name: 'Restore card' }));
+    const revenueCard = screen.getByText('Revenue Overview').closest('.analytics-card') as HTMLElement;
+    expect((revenueCard.querySelector('[data-testid="echarts-mock"]') as HTMLElement).style.height).toBe('104px');
+    fireEvent.click(revenueCard.querySelector('button[aria-label="Expand card"]') as HTMLButtonElement);
+    const expandedRevenue = document.querySelector('.analytics-card--expanded') as HTMLElement;
+    expect((expandedRevenue.querySelector('[data-testid="echarts-mock"]') as HTMLElement).style.height).toBe('240px');
+  });
+
+  it('serves an identical query from the cache without a recalc skeleton', async () => {
     vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 
     // First visit: cache miss → recalc skeleton
     expect(document.querySelectorAll('.analytics-card-skeleton').length).toBeGreaterThan(0);
-    flushRecalc();
+    await flushRecalc();
     expect(document.querySelectorAll('.analytics-card-skeleton').length).toBe(0);
 
     // Switch to weekly: different query → skeleton again
     fireEvent.click(screen.getByRole('radio', { name: 'Weekly' }));
-    flushRecalc();
+    await flushRecalc();
 
     // Switch back to daily within the TTL: fresh cache hit → no skeleton,
     // content renders instantly (identical query is not refetched)
@@ -672,10 +808,10 @@ describe('AnalyticsScreen layout shell', () => {
     expect(screen.getByText('Total revenue')).toBeTruthy();
   });
 
-  it('refetches an identical query after the TTL expires', () => {
+  it('refetches an identical query after the TTL expires', async () => {
     vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
-    flushRecalc();
+    await flushRecalc();
 
     // Let the daily query's 5-minute TTL lapse
     act(() => {
@@ -685,23 +821,23 @@ describe('AnalyticsScreen layout shell', () => {
     // Switch away and back — the cached daily query is now stale, so a
     // recalc skeleton appears and the data refetches
     fireEvent.click(screen.getByRole('radio', { name: 'Weekly' }));
-    flushRecalc();
+    await flushRecalc();
     fireEvent.click(screen.getByRole('radio', { name: 'Daily' }));
     expect(document.querySelectorAll('.analytics-card-skeleton').length).toBeGreaterThan(0);
-    flushRecalc();
+    await flushRecalc();
     expect(document.querySelectorAll('.analytics-card-skeleton').length).toBe(0);
   });
 
-  it('refresh always refetches even when the query is cached', () => {
+  it('refresh always refetches even when the query is cached', async () => {
     vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
-    flushRecalc();
+    await flushRecalc();
 
     // The daily query is fresh in the cache, but the refresh button
     // forces a recalc skeleton and wipes the cached payloads
     fireEvent.click(screen.getByRole('button', { name: 'Refresh data' }));
     expect(document.querySelectorAll('.analytics-card-skeleton').length).toBeGreaterThan(0);
-    flushRecalc();
+    await flushRecalc();
     expect(document.querySelectorAll('.analytics-card-skeleton').length).toBe(0);
   });
 
@@ -718,7 +854,7 @@ describe('AnalyticsScreen layout shell', () => {
     expect(screen.getByText('Heat Map')).toBeTruthy();
   });
 
-  it('switches card titles when workspace changes to restaurant', () => {
+  it('switches card titles when workspace changes to restaurant', async () => {
     vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 
@@ -731,7 +867,7 @@ describe('AnalyticsScreen layout shell', () => {
     fireEvent.change(select, { target: { value: 'restaurant' } });
 
     // Flush the recalc skeleton so card content renders
-    flushRecalc();
+    await flushRecalc();
 
     // Restaurant-specific cards replace retail ones
     expect(screen.getByText('Top Menu Items')).toBeTruthy();
@@ -740,9 +876,11 @@ describe('AnalyticsScreen layout shell', () => {
     // Occupancy card renders its hourly occupancy curve
     expect(screen.getByLabelText('Occupancy by hour')).toBeTruthy();
 
-    // Waitstaff card: total-covers KPI; voids card: voided-value KPI
+    // Waitstaff card: total-sales KPI from staff-analytics mock rows
     expect(screen.getByText('Total covers')).toBeTruthy();
-    expect(screen.getByText('Voided value')).toBeTruthy();
+
+    // Voids card: voided-count tile from the voided-items mock rows
+    expect(document.querySelectorAll('.analytics-rank-row').length).toBeGreaterThanOrEqual(3);
   });
 });
 

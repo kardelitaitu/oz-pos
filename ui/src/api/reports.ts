@@ -277,6 +277,157 @@ export const getCategoryBreakdown = (
     endDate,
   });
 
+/** Revenue split by payment method for a date range in the active store. */
+export interface PaymentMethodRow {
+  payment_method: string;
+  total_minor: number;
+  sale_count: number;
+}
+
+export const getPaymentMethodBreakdown = (
+  startDate: string,
+  endDate: string,
+  sessionToken: string,
+): Promise<PaymentMethodRow[]> =>
+  loggedInvoke<PaymentMethodRow[]>('get_payment_method_breakdown_scoped', {
+    sessionToken: sessionToken ?? '',
+    startDate,
+    endDate,
+  });
+
+/** Voided-sale totals for a date range in the active store. */
+export interface VoidedSummaryRow {
+  void_count: number;
+  void_total_minor: number;
+}
+
+export const getVoidedSalesSummary = (
+  startDate: string,
+  endDate: string,
+  sessionToken: string,
+): Promise<VoidedSummaryRow> =>
+  loggedInvoke<VoidedSummaryRow>('get_voided_sales_summary_scoped', {
+    sessionToken: sessionToken ?? '',
+    startDate,
+    endDate,
+  });
+
+/** One product line found on voided sales. */
+export interface VoidedItemRow {
+  name: string;
+  qty: number;
+}
+
+export const getVoidedItems = (
+  startDate: string,
+  endDate: string,
+  sessionToken: string,
+  limit = 5,
+): Promise<VoidedItemRow[]> =>
+  loggedInvoke<VoidedItemRow[]>('get_voided_items_scoped', {
+    sessionToken: sessionToken ?? '',
+    startDate,
+    endDate,
+    limit,
+  });
+
+/** Average basket size for a date range in the active store. */
+export interface BasketSizeRow {
+  sale_count: number;
+  avg_line_count: number;
+}
+
+export const getBasketSize = (
+  startDate: string,
+  endDate: string,
+  sessionToken: string,
+): Promise<BasketSizeRow> =>
+  loggedInvoke<BasketSizeRow>('get_basket_size_scoped', {
+    sessionToken: sessionToken ?? '',
+    startDate,
+    endDate,
+  });
+
+/** New vs returning customer counts for a date range in the active store. */
+export interface CustomerSplitRow {
+  new_count: number;
+  returning_count: number;
+}
+
+export const getCustomerSplit = (
+  startDate: string,
+  endDate: string,
+  sessionToken: string,
+): Promise<CustomerSplitRow> =>
+  loggedInvoke<CustomerSplitRow>('get_customer_split_scoped', {
+    sessionToken: sessionToken ?? '',
+    startDate,
+    endDate,
+  });
+
+/** One discount code's redemption count. */
+export interface DiscountCodeRow {
+  label: string;
+  redeemed_count: number;
+}
+
+/** Discount usage summary for a date range in the active store. */
+export interface DiscountsSummaryRow {
+  sale_count: number;
+  discounted_sale_count: number;
+  share_percent: number;
+  codes: DiscountCodeRow[];
+}
+
+export const getDiscountsSummary = (
+  startDate: string,
+  endDate: string,
+  sessionToken: string,
+): Promise<DiscountsSummaryRow> =>
+  loggedInvoke<DiscountsSummaryRow>('get_discounts_summary_scoped', {
+    sessionToken: sessionToken ?? '',
+    startDate,
+    endDate,
+  });
+
+/** Stock-turnover snapshot for the active store at one location. */
+export interface InventoryTurnoverRow {
+  units_sold: number;
+  stock_on_hand: number;
+  sku_count: number;
+  range_days: number;
+}
+
+export const getInventoryTurnover = (
+  startDate: string,
+  endDate: string,
+  sessionToken: string,
+  locationId: string,
+): Promise<InventoryTurnoverRow> =>
+  loggedInvoke<InventoryTurnoverRow>('get_inventory_turnover_scoped', {
+    sessionToken: sessionToken ?? '',
+    startDate,
+    endDate,
+    locationId,
+  });
+
+/** Units sold per day (inventory trend line) for the active store. */
+export interface InventoryTrendRow {
+  date: string;
+  units_sold: number;
+}
+
+export const getInventoryTrend = (
+  startDate: string,
+  endDate: string,
+  sessionToken: string,
+): Promise<InventoryTrendRow[]> =>
+  loggedInvoke<InventoryTrendRow[]>('get_inventory_trend_scoped', {
+    sessionToken: sessionToken ?? '',
+    startDate,
+    endDate,
+  });
+
 /** A single product row in the menu engineering report. */
 export interface MenuEngineeringRow {
   product_id: string;

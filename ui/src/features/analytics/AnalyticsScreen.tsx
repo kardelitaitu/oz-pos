@@ -7,9 +7,12 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { AnalyticsCardContent } from './AnalyticsCardContent';
-import { analyticsDataCache, analyticsQueryKey, clearAnalyticsCache } from './analytics-cache';
+import { analyticsDataCache, analyticsQueryKey, clearAnalyticsCache, cardQueryKey } from './analytics-cache';
+import { buildHeatmapIntensities, loadHeatmapRows, rangeForGranularity } from './analytics-data';
+import { useAnalyticsQuery } from './useAnalyticsQuery';
 import './AnalyticsScreen.css';
 
 export type WorkspaceView = 'retail' | 'restaurant';
@@ -149,6 +152,8 @@ const ANALYTICS_CARDS: AnalyticsCard[] = [
 export default function AnalyticsScreen() {
   const { l10n } = useLocalization();
   const { goToWorkspacePicker } = useWorkspaceNav();
+  const { sessionToken: rawToken } = useWorkspace();
+  const sessionToken = rawToken || '';
 
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('retail');
   const [granularity, setGranularity] = useState<Granularity>('daily');
@@ -181,6 +186,12 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   const calcTimer = useRef<ReturnType<typeof setTimeout>>();
   const expandedBodyRef = useRef<HTMLDivElement | null>(null);
   const mainRef = useRef<HTMLElement | null>(null);
+
+  // Inclusive [from, to] window for the current granularity/custom range.
+  const dateRange = useMemo(
+    () => rangeForGranularity(granularity, customFrom, customTo),
+    [granularity, customFrom, customTo],
+  );
 
   /**
    * Kick off a recalculation. `force` (refresh button / R key) always
@@ -499,7 +510,25 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   // Smart heatmap — bucket cells change with the selected granularity.
   // Monthly renders one cell per day of the current month (28–31);
   // yearly renders a 12-month × 4-week grid; other granularities are flat.
-  // Intensity is a placeholder until real data is wired.
+  // Intensities come from real revenue rows via the TTL cache.
+  const heatmapQuery = useAnalyticsQuery(
+    cardQueryKey('heatmap', workspaceView, granularity, dateRange.from, dateRange.to),
+    () => loadHeatmapRows({ workspace: workspaceView, granularity, from: dateRange.from, to: dateRange.to, sessionToken }),
+  );
+  const heatmapIntensities = heatmapQuery.data
+    ? buildHeatmapIntensities(granularity, heatmapQuery.data)
+    : new Map<string, number>();
+  const heatCell = (key: string, label: string, reactKey?: string) => (
+    <div
+      key={reactKey ?? key}
+      className="analytics-heat-cell"
+      data-intensity={heatmapIntensities.get(key) ?? 0}
+      title={label}
+    >
+      <div className="analytics-heat-block" />
+    </div>
+  );
+
   const renderHeatmap = () => {
     const aria = l10n.getString('analytics-card-heatmap');
     if (granularity === 'weekly') {
@@ -517,16 +546,9 @@ const [paletteOpen, setPaletteOpen] = useState(false);
         rows.push(
           <div key={day} className="analytics-weekly-row">
             <span className="analytics-heat-label analytics-weekly-day">{day}</span>
-            {Array.from({ length: 24 }, (_, h) => (
-              <div
-                key={`${day}-${h}`}
-                className="analytics-heat-cell"
-                data-intensity={(h * 7 + di * 3 + 5) % 5}
-                title={`${day} ${String(h).padStart(2, '0')}:00`}
-              >
-                <div className="analytics-heat-block" />
-              </div>
-            ))}
+            {Array.from({ length: 24 }, (_, h) =>
+              heatCell(`${di}:${h}`, `${day} ${String(h).padStart(2, '0')}:00`, `${day}-${h}`),
+            )}
           </div>,
         );
       });
@@ -544,12 +566,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
       }
       for (let d = 1; d <= days; d++) {
         cells.push(
-          <div
-            key={d}
-            className="analytics-heat-cell"
-            data-intensity={(d * 37 + 7) % 5}
-            title={`Day ${d}`}
-          >
+          <div key={d} className="analytics-heat-cell" data-intensity={heatmapIntensities.get(String(d)) ?? 0} title={`Day ${d}`}>
             <div className="analytics-heat-block" />
             <span className="analytics-heat-label">{d}</span>
           </div>,
@@ -576,12 +593,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
             <div className="analytics-heat-column" key={month}>
               <span className="analytics-heat-label">{month}</span>
               {[0, 1, 2, 3].map((week) => (
-                <div
-                  key={week}
-                  className="analytics-heat-cell"
-                  data-intensity={(mi * 4 + week * 7) % 5}
-                  title={`${month} W${week + 1}`}
-                >
+                <div key={week} className="analytics-heat-cell" data-intensity={heatmapIntensities.get(`${mi}:${week}`) ?? 0} title={`${month} W${week + 1}`}>
                   <div className="analytics-heat-block" />
                 </div>
               ))}
@@ -593,15 +605,12 @@ const [paletteOpen, setPaletteOpen] = useState(false);
     const labels = heatLabels(granularity);
     return (
       <div className="analytics-heatmap" role="img" aria-label={aria}>
-        {labels.map((label, i) => {
-          const intensity = (i * 37 + 7) % 5;
-          return (
-            <div key={label} className="analytics-heat-cell" data-intensity={intensity} title={label}>
-              <div className="analytics-heat-block" />
-              <span className="analytics-heat-label">{label}</span>
-            </div>
-          );
-        })}
+        {labels.map((label, i) => (
+          <div key={label} className="analytics-heat-cell" data-intensity={heatmapIntensities.get(String(i)) ?? 0} title={label}>
+            <div className="analytics-heat-block" />
+            <span className="analytics-heat-label">{label}</span>
+          </div>
+        ))}
       </div>
     );
   };
@@ -1093,13 +1102,32 @@ const [paletteOpen, setPaletteOpen] = useState(false);
                       <div className="skeleton-bar skeleton-bar--sm" />
                     </div>
                   ) : card.key === 'heatmap' ? (
-                    renderHeatmap()
+                    <>
+                      {renderHeatmap()}
+                      <div
+                        className="analytics-heat-scale"
+                        role="group"
+                        aria-label={l10n.getString('analytics-heat-scale-aria')}
+                      >
+                        <span className="analytics-heat-scale-label">{l10n.getString('analytics-heat-scale-low')}</span>
+                        {[0, 1, 2, 3, 4].map((i) => (
+                          <span key={i} className="analytics-heat-cell analytics-heat-scale-swatch" data-intensity={i} aria-hidden="true">
+                            <div className="analytics-heat-block" />
+                          </span>
+                        ))}
+                        <span className="analytics-heat-scale-label">{l10n.getString('analytics-heat-scale-high')}</span>
+                      </div>
+                    </>
                   ) : (
                     <AnalyticsCardContent
                       cardKey={card.key}
                       granularity={granularity}
                       workspaceView={workspaceView}
+                      from={dateRange.from}
+                      to={dateRange.to}
+                      sessionToken={sessionToken}
                       title={l10n.getString(card.titleKey)}
+                      expanded={isExpanded}
                     />
                   )}
                 </div>

@@ -68,7 +68,9 @@ describe('analytics query keys', () => {
   it('builds canonical, stable keys', () => {
     expect(analyticsQueryKey('retail', 'daily', '2026-08-01', '2026-08-12'))
       .toBe('query:retail:daily:2026-08-01:2026-08-12');
-    expect(cardQueryKey('revenue', 'retail', 'daily')).toBe('card:revenue:retail:daily');
+    expect(cardQueryKey('revenue', 'retail', 'daily')).toBe('card:revenue:retail:daily::');
+    expect(cardQueryKey('revenue', 'retail', 'daily', '2026-08-01', '2026-08-12'))
+      .toBe('card:revenue:retail:daily:2026-08-01:2026-08-12');
   });
 
   it('distinguishes queries that differ in any dimension', () => {
@@ -78,6 +80,8 @@ describe('analytics query keys', () => {
     expect(analyticsQueryKey('retail', 'daily', '2026-08-02', '2026-08-12')).not.toBe(base);
     expect(analyticsQueryKey('retail', 'daily', '2026-08-01', '2026-08-13')).not.toBe(base);
     expect(cardQueryKey('revenue', 'retail', 'daily')).not.toBe(cardQueryKey('revenue', 'retail', 'weekly'));
+    expect(cardQueryKey('revenue', 'retail', 'daily', '2026-08-01', '2026-08-12'))
+      .not.toBe(cardQueryKey('revenue', 'retail', 'daily', '2026-08-02', '2026-08-12'));
   });
 });
 

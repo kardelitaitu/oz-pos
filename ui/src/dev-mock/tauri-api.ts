@@ -2353,6 +2353,51 @@ handlers['print_kds_chit_scoped'] = () => true;
 // HPP exposure: no historical sale lines exist in the mock, so the margin
 // report is empty (the UI hides the Cost/Margin columns when it is).
 handlers['get_sale_line_margins_scoped'] = () => [];
+// Analytics dashboard cards — scoped commands with no unscoped twin.
+// Plausible fixed shapes so the analytics grid renders in browser mode
+// instead of resolving null and crashing card layouts.
+handlers['get_staff_analytics_scoped'] = () => [
+  { user_id: 'u1', display_name: 'Rina W.', shift_count: 12, closed_shift_count: 11, shift_sales_minor: 48000000, sale_count: 96, sale_total_minor: 92000000 },
+  { user_id: 'u2', display_name: 'Budi S.', shift_count: 11, closed_shift_count: 10, shift_sales_minor: 43000000, sale_count: 88, sale_total_minor: 86000000 },
+  { user_id: 'u3', display_name: 'Sari A.', shift_count: 9, closed_shift_count: 9, shift_sales_minor: 38000000, sale_count: 74, sale_total_minor: 74000000 },
+  { user_id: 'u4', display_name: 'Andi P.', shift_count: 8, closed_shift_count: 7, shift_sales_minor: 31000000, sale_count: 63, sale_total_minor: 63000000 },
+];
+handlers['get_customer_split_scoped'] = () => ({ new_count: 84, returning_count: 47 });
+handlers['get_payment_method_breakdown_scoped'] = () => [
+  { payment_method: 'qris', total_minor: 98000000, sale_count: 142 },
+  { payment_method: 'cash', total_minor: 74000000, sale_count: 118 },
+  { payment_method: 'card', total_minor: 61000000, sale_count: 89 },
+  { payment_method: 'ewallet', total_minor: 39000000, sale_count: 57 },
+];
+handlers['get_discounts_summary_scoped'] = () => ({
+  sale_count: 406,
+  discounted_sale_count: 96,
+  share_percent: 6.4,
+  codes: [
+    { label: 'WELCOME10', redeemed_count: 41 },
+    { label: 'PROMO8.8', redeemed_count: 28 },
+    { label: 'LOYALTY15', redeemed_count: 17 },
+    { label: 'FREESHIP', redeemed_count: 10 },
+  ],
+});
+handlers['get_voided_sales_summary_scoped'] = () => ({ void_count: 23, void_total_minor: 5400000 });
+handlers['get_basket_size_scoped'] = () => ({ sale_count: 406, avg_line_count: 3.2 });
+handlers['get_inventory_turnover_scoped'] = () => ({ units_sold: 1280, stock_on_hand: 340, sku_count: 486, range_days: 30 });
+handlers['get_inventory_trend_scoped'] = () => {
+  const days: string[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    days.push(d.toISOString().slice(0, 10));
+  }
+  return days.map((date, i) => ({ date, units_sold: 30 + ((i * 17) % 40) }));
+};
+handlers['get_voided_items_scoped'] = () => [
+  { name: 'Caffè Latte', qty: 6 },
+  { name: 'Iced Coffee', qty: 5 },
+  { name: 'Avocado Toast', qty: 4 },
+  { name: 'Smoothie', qty: 3 },
+];
 handlers['update_kds_order_items_scoped'] = (args) => {
   const raw = (args ?? {}) as { id?: string; args?: { id?: string } };
   const id = raw.id ?? raw.args?.id ?? '';

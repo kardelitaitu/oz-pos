@@ -8,8 +8,9 @@ use tauri::State;
 use oz_core::db::Store;
 use oz_core::db::popularity::{CategoryForecastRow, CategoryPopularityRow, CategoryTrendPoint};
 use oz_core::db::reports::{
-    CategoryBreakdownRow, DailyRevenueRow, HourlyHeatmapRow, LowStockAlert, MonthlyRevenueRow,
-    TopProductRow, WeeklyRevenueRow,
+    BasketSizeRow, CategoryBreakdownRow, CustomerSplitRow, DailyRevenueRow, DiscountsSummaryRow,
+    HourlyHeatmapRow, InventoryTrendRow, InventoryTurnoverRow, LowStockAlert, MonthlyRevenueRow,
+    PaymentMethodRow, TopProductRow, VoidedItemRow, VoidedSummaryRow, WeeklyRevenueRow,
 };
 use oz_core::export::{CustomReportRequest, CustomReportResponse};
 use oz_core::permissions;
@@ -416,6 +417,128 @@ pub async fn get_category_breakdown_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     Ok(Store::new(&db).category_breakdown(&start_date, &end_date)?)
+}
+
+#[tauri::command]
+/// Get revenue split by payment method for the session's store.
+pub async fn get_payment_method_breakdown_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<PaymentMethodRow>, AppError> {
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).payment_method_breakdown(&start_date, &end_date)?)
+}
+
+#[tauri::command]
+/// Get voided-sale totals for the session's store.
+pub async fn get_voided_sales_summary_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    state: State<'_, AppState>,
+) -> Result<VoidedSummaryRow, AppError> {
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).voided_sales_summary(&start_date, &end_date)?)
+}
+
+#[tauri::command]
+/// Get the top voided product lines for the session's store.
+pub async fn get_voided_items_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    limit: i64,
+    state: State<'_, AppState>,
+) -> Result<Vec<VoidedItemRow>, AppError> {
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).voided_items(&start_date, &end_date, limit)?)
+}
+
+#[tauri::command]
+/// Get average basket size for the session's store.
+pub async fn get_basket_size_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    state: State<'_, AppState>,
+) -> Result<BasketSizeRow, AppError> {
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).avg_basket_size(&start_date, &end_date)?)
+}
+
+#[tauri::command]
+/// Get new vs returning customer counts for the session's store.
+pub async fn get_customer_split_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    state: State<'_, AppState>,
+) -> Result<CustomerSplitRow, AppError> {
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).customer_split(&start_date, &end_date)?)
+}
+
+#[tauri::command]
+/// Get discount usage summary for the session's store.
+pub async fn get_discounts_summary_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    state: State<'_, AppState>,
+) -> Result<DiscountsSummaryRow, AppError> {
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).discounts_summary(&start_date, &end_date)?)
+}
+
+#[tauri::command]
+/// Get a stock-turnover snapshot for the session's store at one location.
+pub async fn get_inventory_turnover_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    location_id: String,
+    state: State<'_, AppState>,
+) -> Result<InventoryTurnoverRow, AppError> {
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).inventory_turnover(&start_date, &end_date, &location_id)?)
+}
+
+#[tauri::command]
+/// Get daily units sold (the inventory trend line) for the session's store.
+pub async fn get_inventory_trend_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<InventoryTrendRow>, AppError> {
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).inventory_trend(&start_date, &end_date)?)
 }
 
 /// Build a custom report from user-selected columns and filters.
