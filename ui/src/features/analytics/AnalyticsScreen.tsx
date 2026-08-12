@@ -145,29 +145,31 @@ export default function AnalyticsScreen() {
     if (granularity === 'weekly') {
       const rows: JSX.Element[] = [
         <div key="header" className="analytics-weekly-row">
-          <span className="analytics-heat-label analytics-weekly-hour" />
-          {HEAT_BUCKETS.daily.map((d) => (
-            <span key={d} className="analytics-heat-label">{d}</span>
+          <span className="analytics-heat-label analytics-weekly-day" />
+          {Array.from({ length: 24 }, (_, h) => (
+            <span key={h} className="analytics-heat-label analytics-weekly-hour">
+              {String(h).padStart(2, '0')}
+            </span>
           ))}
         </div>,
       ];
-      for (let h = 0; h < 24; h++) {
+      HEAT_BUCKETS.daily.forEach((day, di) => {
         rows.push(
-          <div key={h} className="analytics-weekly-row">
-            <span className="analytics-heat-label analytics-weekly-hour">{String(h).padStart(2, '0')}</span>
-            {HEAT_BUCKETS.daily.map((d, di) => (
+          <div key={day} className="analytics-weekly-row">
+            <span className="analytics-heat-label analytics-weekly-day">{day}</span>
+            {Array.from({ length: 24 }, (_, h) => (
               <div
-                key={`${d}-${h}`}
+                key={`${day}-${h}`}
                 className="analytics-heat-cell"
                 data-intensity={(h * 7 + di * 3 + 5) % 5}
-                title={`${d} ${String(h).padStart(2, '0')}:00`}
+                title={`${day} ${String(h).padStart(2, '0')}:00`}
               >
                 <div className="analytics-heat-block" />
               </div>
             ))}
           </div>,
         );
-      }
+      });
       return (
         <div className="analytics-heatmap analytics-heatmap--weekly" role="img" aria-label={aria}>
           {rows}

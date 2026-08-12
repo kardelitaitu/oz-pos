@@ -183,11 +183,11 @@ describe('AnalyticsScreen layout shell', () => {
     // Default: daily → 7 weekday buckets
     expect(cellCount()).toBe(7);
 
-    // Weekly → 24 hours × 7 days
+    // Weekly → 7 day rows × 24 hour columns
     fireEvent.click(screen.getByRole('radio', { name: 'Weekly' }));
     flushRecalc();
     expect(cellCount()).toBe(168);
-    expect(heatmap()?.querySelectorAll('.analytics-weekly-row').length).toBe(25); // header + 24 hours
+    expect(heatmap()?.querySelectorAll('.analytics-weekly-row').length).toBe(8); // header + 7 days
 
     // Monthly → one cell per day of the current month (28–31)
     fireEvent.click(screen.getByRole('radio', { name: 'Monthly' }));
