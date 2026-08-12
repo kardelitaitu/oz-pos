@@ -273,6 +273,7 @@ topology-validation-warehouse-at-capacity = Gudang sudah mencapai atau melebihi 
 topology-validation-warehouse-missing-stock-routing = Gudang ini masih memiliki ruang tetapi tidak ada stok yang dialihkan ke sini — hubungkan workspace dengan routing stok.
 topology-validation-missing-warehouse-input = Gudang harus terhubung ke tepat satu input Lokasi atau Operasi POS Ritel.
 topology-validation-multiple-warehouse-inputs = Gudang hanya dapat memiliki satu koneksi utama: Lokasi atau Operasi POS Ritel.
+topology-validation-multiple-ticket-inputs = Perangkat tiket hanya dapat menerima tiket dari satu sumber.
 topology-validation-invalid-warehouse-operation-source = Operasi Masuk Gudang harus menerima feed Operasi dari POS Ritel.
 topology-workspace-purpose-label = Tujuan
 topology-workspace-technical-type-label = Tipe teknis

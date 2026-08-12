@@ -4662,6 +4662,20 @@ export default function NodeTopologyEditor({
       cancelRelationshipPicker();
       return;
     }
+
+    // ADR #34 ticket-routing cardinality: a ticket device accepts exactly
+    // ONE ticket source. The duplicate check above only rejects the same
+    // (KDS, printer) pair — this catches a DIFFERENT KDS dropping onto an
+    // already-sourced printer. Explicit refusal, never silent replacement:
+    // no existing wire is touched and nothing is drawn.
+    if (
+      option.relationshipType === 'ticket-routing'
+      && currentWires.some((w) => w.toNodeId === target.id && w.toPortId === 'ticket-in')
+    ) {
+      addToast({ message: l10n.getString('topology-validation-multiple-ticket-inputs'), type: 'warning' });
+      cancelRelationshipPicker();
+      return;
+    }
     if (option.relationshipType === 'stock-routing' && existingStockWires.length >= 1 && !isProAllowed) {
       addToast({ message: l10n.getString('topology-toast-fallback-warehouse'), type: 'warning' });
       cancelRelationshipPicker();

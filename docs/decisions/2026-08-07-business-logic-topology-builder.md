@@ -448,7 +448,12 @@ ADR/specification:
 6. For each non-ownership relationship, what are the exact cardinality and cycle
    rules, and should replacing a single-input connection be an explicit action
    or always prohibited? The first default is explicit replacement, never silent
-   replacement.
+   replacement. **Resolved for `ticket-routing` (2026-08-12):** output fans out
+   to many targets; input accepts exactly one source; over-capacity drops are
+   refused at drag time (explicit, never silent); no cycle rule needed (KDS →
+   hardware only, hardware has no ticket-out). See the implementation ADR's
+   [Ticket-routing cardinality](2026-08-08-adr34-typed-connection-gating.md#decision--ticket-routing-cardinality-2026-08-12)
+   section. The other non-ownership relationships remain open.
 7. What is the exact `schema_version` migration from geometric ports, including
    the UI for unresolved relationships? Legacy relationships whose meaning is
    uncertain must block Apply.

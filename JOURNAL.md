@@ -1,4 +1,17 @@
 
+## 2026-08-12 — ADR #34 decision + TDD cycle: ticket-routing cardinality — one ticket source per printer, fan-out allowed from a KDS
+
+### The long-open product gate (parent ADR item 6) is now decided and enforced on both surfaces
+**Problem:** The parent ADR explicitly deferred the exact cardinality rules of every non-ownership relationship. Ticket-routing was fully authorable (KDS Ticket Out → hardware Ticket In) but had NO input cap: `commitWire`'s duplicate gate only rejected the SAME (KDS, printer) pair, so any number of KDS could feed one printer, and the contract validated such a graph clean — tickets from multiple stations would interleave on one physical device with no source identity.
+
+**Decision (documented in the implementation ADR):** (1) KDS `ticket-out` fans out to MANY printers — a kitchen display drives main + expo stations, mirroring location-out fan-out; (2) hardware `ticket-in` accepts exactly ONE source — the same exactly-one input rule as `location-in`/`operation-in`; (3) replacement is explicit-only — an over-capacity drop is refused at drag time with a toast, never silent; (4) no cycle rule needed — ticket-routing is KDS→hardware only and hardware has no ticket-out, so it cannot participate in a directed cycle.
+
+**Solution:** Red→Green, both surfaces mirrored. (1) Red — three contract tests: one KDS → one printer clean, one KDS → TWO printers clean (pins the fan-out), and two KDS → one printer failing `multiple-ticket-inputs` scoped to the printer; two editor tests: a second KDS drop onto an already-sourced printer refused with a toast (wire count stays 1), and a loaded two-source graph renders the badge on the printer card. (2) Green — `validateTopologyGraph` adds the `multiple-ticket-inputs` check (one error per device, deterministic on the second wire); `commitWire` refuses the drop before mutation with the same FTL key the badge uses; new `topology-validation-multiple-ticket-inputs` key in en + id bundles. The generic nodeId-badge path surfaces it on the card and the shared `validateEditorGraph` gate blocks Apply with the identical error — live surface and Apply can never drift.
+
+**Validation:** contract suite 59/59 + editor suite 521/521 (3 new tests, true-Red confirmed via stash) · full UI suite 286 files / 4,936 tests · typecheck · eslint 0 errors (8 pre-existing warnings) · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** the other non-ownership relationships (`stock-routing`/`inventory-transfer`/`hardware-connection`) keep their existing warehouse-specific rules; their cardinality closes remain future slices per item 6. The parent ADR item 6 is marked resolved for ticket-routing with a cross-reference.
+
 ## 2026-08-12 — TDD cycle: zoom-to-fit panned at the raw fitZoom while zooming at the clamped value — fits landed off-center on large diagrams
 
 ### A diagram spanning >~2.5 viewports hit the 40% zoom floor, but the pan was still computed at the un-clamped fitZoom

@@ -121,6 +121,7 @@ export interface TopologyValidationError {
     | 'missing-warehouse-input'
     | 'multiple-warehouse-inputs'
     | 'invalid-warehouse-operation-source'
+    | 'multiple-ticket-inputs'
     | 'invalid-semantic-connection'
     | 'ambiguous-legacy-wire'
     | 'cycle-detected'
@@ -894,6 +895,40 @@ export function validateTopologyGraph(
           portId: 'operation-in',
         });
       }
+    }
+  }
+
+  // Ticket-routing input cardinality (ADR #34 decision): a ticket device
+  // (hardware) accepts tickets from exactly ONE source — the same
+  // exactly-one input rule the ownership ports enforce. Two KDS feeding one
+  // printer interleave tickets with no source identity, the ambiguity class
+  // this gate exists to eliminate. The KDS OUTPUT side stays 'many' (one
+  // KDS may drive main + expo printers), so only the input side is capped.
+  // Scope mirrors the multiple-* ownership errors: one error per offending
+  // device, keyed to its node, deterministic on the second wire. The
+  // pairing matrix already quarantines non-KDS sources, and ticket-routing
+  // cannot participate in a cycle (hardware has no ticket-out), so no
+  // further rules apply.
+  const flaggedTicketTargets = new Set<string>();
+  for (const wire of graph.wires) {
+    if (wire.relationshipType !== 'ticket-routing' || wire.toPortId !== 'ticket-in') continue;
+    const target = graph.nodes.find((node) => node.id === wire.toNodeId);
+    if (!target || target.kind !== 'hardware') continue;
+    if (flaggedTicketTargets.has(target.id)) continue;
+    const otherSource = graph.wires.some(
+      (w) => w.id !== wire.id
+        && w.relationshipType === 'ticket-routing'
+        && w.toPortId === 'ticket-in'
+        && w.toNodeId === target.id,
+    );
+    if (otherSource) {
+      flaggedTicketTargets.add(target.id);
+      errors.push({
+        code: 'multiple-ticket-inputs',
+        messageId: 'topology-validation-multiple-ticket-inputs',
+        nodeId: target.id,
+        portId: 'ticket-in',
+      });
     }
   }
 

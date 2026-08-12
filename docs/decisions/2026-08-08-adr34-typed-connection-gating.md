@@ -240,6 +240,42 @@ without changing the pairing table.
 
 ---
 
+## Decision — Ticket-routing cardinality (2026-08-12)
+
+Parent ADR open item 6 asks for the exact cardinality and cycle rules of each
+non-ownership relationship, with the first default of explicit replacement
+(never silent). This closes it for `ticket-routing`:
+
+1. **KDS `ticket-out` fans out to many targets (`many`).** One KDS may route
+tickets to any number of printer/ticket hardware nodes — a kitchen display
+commonly drives a main printer plus remote/expo stations. This mirrors the
+Branch Location `location-out` fan-out rule and required no gate change; it
+is pinned by a contract test (one KDS → two printers validates clean).
+2. **Hardware `ticket-in` accepts exactly one source (`one`).** A ticket
+device receives tickets from a single KDS. Two KDS feeding one printer
+interleave tickets with no source identity — the exact ambiguity class the
+ownership exactly-one rules (`location-in`, `operation-in`) already
+eliminate. A graph with a second ticket-routing source onto an already-
+sourced printer fails `multiple-ticket-inputs`, scoped to the printer node
+(one error per device, deterministic on the second wire), rendered as a
+card note by the live badge mirror and refused by the same contract at
+Apply.
+3. **Replacement is explicit, never silent.** A drop that would exceed the
+input cap is refused at drag time in `commitWire` with the
+`topology-validation-multiple-ticket-inputs` toast — no wire is drawn and
+no existing wire is removed. Same-source pairs were already refused as
+duplicates; this closes the different-source case.
+4. **No cycle rule is needed.** `semanticNodesMatchWire` restricts
+ticket-routing to KDS → hardware, and hardware exposes no ticket-out, so
+the relationship cannot participate in a directed cycle; the whole-graph
+`cycle-detected` check covers any cross-relationship cycle.
+
+The warehouse `stock-routing`/`inventory-transfer` rules (capacity,
+servicing, hub-and-spoke, cycle) and the hardware-connection pairing remain
+unchanged; their cardinality closes are future slices per item 6.
+
+---
+
 ## Consequences
 
 ### Positive

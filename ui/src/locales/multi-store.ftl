@@ -275,6 +275,7 @@ topology-validation-warehouse-at-capacity = Warehouse is at or over capacity —
 topology-validation-warehouse-missing-stock-routing = This Warehouse has room but no stock is routed to it — connect a workspace with Stock routing.
 topology-validation-missing-warehouse-input = This Warehouse must connect to exactly one Location or Retail POS Operation input.
 topology-validation-multiple-warehouse-inputs = This Warehouse can have only one primary connection: Location or Retail POS Operation.
+topology-validation-multiple-ticket-inputs = A ticket device can receive tickets from only one source.
 topology-validation-invalid-warehouse-operation-source = Warehouse Operation In must receive an Operation feed from Retail POS.
 topology-workspace-purpose-label = Purpose
 topology-workspace-technical-type-label = Technical type

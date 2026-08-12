@@ -115,6 +115,7 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-validation-multiple-location': 'A workspace can have only one Location In wire.',
   'topology-validation-missing-warehouse-input': 'This Warehouse must connect to exactly one Location or Retail POS Operation input.',
   'topology-validation-multiple-warehouse-inputs': 'This Warehouse can have only one primary connection: Location or Retail POS Operation.',
+  'topology-validation-multiple-ticket-inputs': 'A ticket device can receive tickets from only one source.',
   'topology-validation-invalid-warehouse-operation-source': 'Warehouse Operation In must receive an Operation feed from Retail POS.',
   'topology-validation-missing-branch': 'Add exactly one Branch Location node.',
   'topology-validation-multiple-branches': 'Keep exactly one Branch Location node in this graph.',
@@ -1082,6 +1083,69 @@ describe('NodeTopologyEditor Component', () => {
     fireEvent.click(portOf(printer as HTMLElement, 'left'));
     expect(getWireCount()).toBe(4);
     expect(screen.getByText('A wire already connects these ports.')).toBeInTheDocument();
+  });
+
+  it('refuses a ticket wire into a printer that already has a ticket source', async () => {
+    // ADR #34 ticket-routing cardinality: a ticket device accepts exactly
+    // one source. The drop is refused with a toast — explicit, never
+    // silent replacement — and no wire is drawn.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        { id: 'ws-kds-1', type: 'workspace', name: 'Kitchen A', x: 380, y: 140, metadata: { typeKey: 'kds' } },
+        { id: 'ws-kds-2', type: 'workspace', name: 'Kitchen B', x: 380, y: 420, metadata: { typeKey: 'kds' } },
+        { id: 'hw-prn', type: 'hardware', name: 'Thermal Printer', x: 680, y: 280 },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(4));
+
+    // Author the first KDS → printer ticket wire.
+    fireEvent.click(portOf(nodeAt(1), 'right'));
+    fireEvent.click(portOf(nodeAt(3), 'left'));
+    expect(getWireCount()).toBe(1);
+
+    // A SECOND KDS dropping onto the same printer must be refused — the
+    // pair differs, so this is a cardinality refusal, not a duplicate.
+    fireEvent.click(portOf(nodeAt(2), 'right'));
+    fireEvent.click(portOf(nodeAt(3), 'left'));
+    expect(getWireCount()).toBe(1);
+    expect(screen.getByText('A ticket device can receive tickets from only one source.')).toBeInTheDocument();
+  });
+
+  it('flags a printer fed by two ticket sources in the live validation badge', async () => {
+    // The badge mirror must surface the same cardinality error Apply
+    // throws — pinned to the printer card like the other multiple-inputs
+    // errors, so the live surface and the Apply gate can never drift.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', store_profile_id: 'store-1', x: 80, y: 140 },
+        { id: 'ws-resto-a', type: 'workspace', name: 'Resto A', x: 260, y: 140, metadata: { typeKey: 'restaurant-pos' } },
+        { id: 'ws-resto-b', type: 'workspace', name: 'Resto B', x: 260, y: 420, metadata: { typeKey: 'restaurant-pos' } },
+        { id: 'ws-kds-a', type: 'workspace', name: 'Kitchen A', x: 440, y: 140, metadata: { typeKey: 'kds' } },
+        { id: 'ws-kds-b', type: 'workspace', name: 'Kitchen B', x: 440, y: 420, metadata: { typeKey: 'kds' } },
+        { id: 'hw-prn', type: 'hardware', name: 'Thermal Printer', x: 680, y: 280 },
+      ],
+      wires: [
+        { id: 'w-la', from_node_id: 'store-1', to_node_id: 'ws-resto-a', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+        { id: 'w-lb', from_node_id: 'store-1', to_node_id: 'ws-resto-b', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+        { id: 'w-oa', from_node_id: 'ws-resto-a', to_node_id: 'ws-kds-a', from_port_id: 'operation-out', to_port_id: 'operation-in', relationship_type: 'generic', direction: 'one-way' },
+        { id: 'w-ob', from_node_id: 'ws-resto-b', to_node_id: 'ws-kds-b', from_port_id: 'operation-out', to_port_id: 'operation-in', relationship_type: 'generic', direction: 'one-way' },
+        { id: 'w-ta', from_node_id: 'ws-kds-a', to_node_id: 'hw-prn', from_port_id: 'ticket-out', to_port_id: 'ticket-in', relationship_type: 'ticket-routing', direction: 'one-way' },
+        { id: 'w-tb', from_node_id: 'ws-kds-b', to_node_id: 'hw-prn', from_port_id: 'ticket-out', to_port_id: 'ticket-in', relationship_type: 'ticket-routing', direction: 'one-way' },
+      ],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(6));
+
+    const printer = [...document.querySelectorAll('.topology-node')].find(
+      (n) => n.querySelector('.node-title')?.textContent === 'Thermal Printer',
+    );
+    expect(printer).not.toBeUndefined();
+    expect(
+      within(printer as HTMLElement).getByText('A ticket device can receive tickets from only one source.'),
+    ).toBeInTheDocument();
   });
 
   it('clicking the canvas outside the picker dismisses it without creating a wire', async () => {

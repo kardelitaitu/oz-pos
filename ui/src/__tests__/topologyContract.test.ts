@@ -422,6 +422,147 @@ describe('semantic topology contract', () => {
     ]));
   });
 
+  it('accepts a single KDS → printer ticket-routing wire', () => {
+    const resto = { ...workspace('resto-pos'), metadata: { typeKey: 'restaurant-pos' } };
+    const kds = { ...workspace('kds'), metadata: { typeKey: 'kds' } };
+    const printer = { id: 'printer-1', type: 'hardware' as const, name: 'Printer', x: 300, y: 300 };
+    const errors = validateTopologyGraph(graph(
+      [branch(), resto, kds, printer],
+      [
+        ownershipWire('wire-resto-location', 'resto-pos'),
+        {
+          id: 'wire-resto-kds',
+          fromNodeId: 'resto-pos',
+          fromPortId: 'operation-out',
+          toNodeId: 'kds',
+          toPortId: 'operation-in',
+          relationshipType: 'generic',
+          direction: 'one-way',
+        },
+        {
+          id: 'wire-ticket',
+          fromNodeId: 'kds',
+          fromPortId: 'ticket-out',
+          toNodeId: 'printer-1',
+          toPortId: 'ticket-in',
+          relationshipType: 'ticket-routing',
+          direction: 'one-way',
+        },
+      ],
+    ));
+
+    expect(errors).toEqual([]);
+  });
+
+  it('allows a KDS to fan out tickets to multiple printers', () => {
+    // Ticket-routing cardinality decision (ADR #34): the OUTPUT side is
+    // many — one KDS may drive a main printer plus remote/expo stations,
+    // mirroring location-out fan-out. Only the input side is capped.
+    const resto = { ...workspace('resto-pos'), metadata: { typeKey: 'restaurant-pos' } };
+    const kds = { ...workspace('kds'), metadata: { typeKey: 'kds' } };
+    const printerA = { id: 'printer-a', type: 'hardware' as const, name: 'Main Printer', x: 300, y: 300 };
+    const printerB = { id: 'printer-b', type: 'hardware' as const, name: 'Expo Printer', x: 300, y: 500 };
+    const errors = validateTopologyGraph(graph(
+      [branch(), resto, kds, printerA, printerB],
+      [
+        ownershipWire('wire-resto-location', 'resto-pos'),
+        {
+          id: 'wire-resto-kds',
+          fromNodeId: 'resto-pos',
+          fromPortId: 'operation-out',
+          toNodeId: 'kds',
+          toPortId: 'operation-in',
+          relationshipType: 'generic',
+          direction: 'one-way',
+        },
+        {
+          id: 'wire-ticket-a',
+          fromNodeId: 'kds',
+          fromPortId: 'ticket-out',
+          toNodeId: 'printer-a',
+          toPortId: 'ticket-in',
+          relationshipType: 'ticket-routing',
+          direction: 'one-way',
+        },
+        {
+          id: 'wire-ticket-b',
+          fromNodeId: 'kds',
+          fromPortId: 'ticket-out',
+          toNodeId: 'printer-b',
+          toPortId: 'ticket-in',
+          relationshipType: 'ticket-routing',
+          direction: 'one-way',
+        },
+      ],
+    ));
+
+    expect(errors).toEqual([]);
+  });
+
+  it('rejects a second ticket-routing source feeding the same printer', () => {
+    // Ticket-routing cardinality decision (ADR #34): the INPUT side is
+    // exactly one — a ticket device accepts tickets from a single source.
+    // Two KDS feeding one printer interleave tickets with no source
+    // identity, the same ambiguity class the exactly-one ownership rules
+    // already eliminate. Scoped to the offending device, one error.
+    const restoA = { ...workspace('resto-a'), metadata: { typeKey: 'restaurant-pos' } };
+    const restoB = { ...workspace('resto-b'), metadata: { typeKey: 'restaurant-pos' } };
+    const kdsA = { ...workspace('kds-a'), metadata: { typeKey: 'kds' } };
+    const kdsB = { ...workspace('kds-b'), metadata: { typeKey: 'kds' } };
+    const printer = { id: 'printer-1', type: 'hardware' as const, name: 'Printer', x: 300, y: 300 };
+    const errors = validateTopologyGraph(graph(
+      [branch(), restoA, restoB, kdsA, kdsB, printer],
+      [
+        ownershipWire('wire-a-location', 'resto-a'),
+        ownershipWire('wire-b-location', 'resto-b'),
+        {
+          id: 'wire-a-kds',
+          fromNodeId: 'resto-a',
+          fromPortId: 'operation-out',
+          toNodeId: 'kds-a',
+          toPortId: 'operation-in',
+          relationshipType: 'generic',
+          direction: 'one-way',
+        },
+        {
+          id: 'wire-b-kds',
+          fromNodeId: 'resto-b',
+          fromPortId: 'operation-out',
+          toNodeId: 'kds-b',
+          toPortId: 'operation-in',
+          relationshipType: 'generic',
+          direction: 'one-way',
+        },
+        {
+          id: 'wire-ticket-a',
+          fromNodeId: 'kds-a',
+          fromPortId: 'ticket-out',
+          toNodeId: 'printer-1',
+          toPortId: 'ticket-in',
+          relationshipType: 'ticket-routing',
+          direction: 'one-way',
+        },
+        {
+          id: 'wire-ticket-b',
+          fromNodeId: 'kds-b',
+          fromPortId: 'ticket-out',
+          toNodeId: 'printer-1',
+          toPortId: 'ticket-in',
+          relationshipType: 'ticket-routing',
+          direction: 'one-way',
+        },
+      ],
+    ));
+
+    expect(errors).toEqual([
+      expect.objectContaining({
+        code: 'multiple-ticket-inputs',
+        nodeId: 'printer-1',
+        portId: 'ticket-in',
+      }),
+    ]);
+  });
+
   it('accepts a KDS operationally connected to Restaurant POS', () => {
     const resto = { ...workspace('resto-pos'), metadata: { typeKey: 'restaurant-pos' } };
     const kds = { ...workspace('kds'), metadata: { typeKey: 'kds' } };
