@@ -34,6 +34,7 @@ retail-edit-field-high-stock = High Stock Threshold
 retail-edit-save = Save Changes
 retail-edit-cancel = Cancel
 retail-edit-btn-aria = Edit product { $name }
+close-aria = Close
 `;
 
 function wrapper({ children }: { children: React.ReactNode }) {
