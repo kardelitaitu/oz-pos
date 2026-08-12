@@ -1,5 +1,17 @@
 
-## 2026-08-12 — TDD cycle: an existing bend dragged back to its start left a no-op undo entry
+## 2026-08-12 — Audit: the armed-connection × wire-click "stray edit" is intentional, pinned design — no change
+
+### The pass-10 residual (wire click mid-connection cycles the wire) resolves to a no-finding; closing it with the evidence trail so it is not re-litigated
+**Problem:** Eleventh review pass, chasing the pass-10 journal note: "a wire click during an ARMED connection cycles that wire's direction (a stray edit mid-gesture)". A first Red attempt (cancel the gesture + skip the cycle) broke SIX existing tests, which forced reading the pinned intent instead of the assumption.
+
+**Finding — the behavior is deliberately designed and heavily pinned:**
+- `wire click keeps an in-flight connection` (3 tests): a mid-connection click cycles the direction, the connection SURVIVES the cycle and its own undo ("history push is orthogonal"), and the cycle click must never bubble a cancel to the canvas (the `stopPropagation` contract test guards against a future background-click-cancels-connection listener).
+- `wire deletion keeps an in-flight connection` (3 tests): a mid-connection click SELECTS the wire so an unrelated wire can be deleted mid-gesture, the connection stays in flight, and deleting the pending-duplicate pair cancels the connection.
+The uniform whole-wire affordance (click = select + cycle) applies even mid-gesture; the in-flight connection is independent state. My initial fix (cancel on wire click) would have destroyed the documented mid-gesture deletion flow — the correct outcome is no code change.
+
+**Also audited this pass:** `commitWire`'s completion guards are comprehensive — bidirectional exact-duplicate detection, warehouse input-cardinality (one location/operation input), tier fallback limits, and picker/duplicate cancel paths all read correct and are covered by the `wire deletion keeps an in-flight connection` + duplicate-detector describes.
+
+**Deliberately NOT done:** no behavior change. My candidate fix and its Red test were reverted (`git checkout` of the two files); the suite is green at HEAD. A product decision to make wire clicks mid-connection cycle-free (selection-only) would require deliberately changing the three pinned "keeps the connection in flight" tests — recorded here as the cost of that choice.
 
 ### The pass-9 journal noted this as a future slice — the pass-7 node-drag fix's bend analogue
 **Problem:** Tenth review pass, closing the last bend-gesture gap. The bend drag pushes its entry on first movement, and the CANCEL path pops it — but a COMPLETED drag of an EXISTING bend that landed exactly at its start position kept the entry (Undo appeared but restored identical geometry). The pass-9 fix deferred ghost-bend insertion, so a CREATED bend ending at the ghost midpoint is a real edit (the bend's existence is the change) — only the existing-bend return-to-start case is a no-op. The wire-click direction cycle was also audited: every click is a real direction change (the 3-state cycle never wraps to the same value), so no no-op there; the click-to-select-cycles-direction UX remains a documented design decision.
