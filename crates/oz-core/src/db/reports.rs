@@ -205,6 +205,18 @@ pub struct BasketSizeRow {
     pub avg_line_count: f64,
 }
 
+/// Basket size (mean line count) per day within a date range — the raw
+/// per-bucket shape behind the analytics basket-size trend card.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct BasketTrendRow {
+    /// ISO date `YYYY-MM-DD`.
+    pub date: String,
+    /// Completed sales that day.
+    pub sale_count: i64,
+    /// Mean `line_count` across that day's completed sales.
+    pub avg_line_count: f64,
+}
+
 /// New vs returning customers for a date range.
 ///
 /// A customer is "returning" when they have a completed sale before the
@@ -260,6 +272,25 @@ pub struct InventoryTrendRow {
     pub date: String,
     /// Units sold that day.
     pub units_sold: i64,
+}
+
+/// Completed table-bound orders per day (restaurant table-turnover source).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct TableTurnoverRow {
+    /// ISO date `YYYY-MM-DD`.
+    pub date: String,
+    /// Completed sales linked to a KDS order carrying a table number.
+    pub table_orders: i64,
+}
+
+/// Completed table-bound orders per hour of day (0–23) — the real shape
+/// behind the restaurant occupancy curve.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct HourlyOccupancyRow {
+    /// Hour of day (0–23, local store time as stored in `created_at`).
+    pub hour: i64,
+    /// Completed sales linked to a KDS order carrying a table number.
+    pub table_orders: i64,
 }
 
 impl Store<'_> {
@@ -771,6 +802,31 @@ impl Store<'_> {
         Ok(row)
     }
 
+    /// Per-day basket size (mean line count) for a date range.
+    pub fn basket_size_trend(
+        &self,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<Vec<BasketTrendRow>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DATE(created_at) AS date,
+                    COUNT(*) AS sale_count,
+                    COALESCE(AVG(line_count), 0) AS avg_line_count
+             FROM sales
+             WHERE status = 'completed' AND DATE(created_at) BETWEEN ?1 AND ?2
+             GROUP BY DATE(created_at)
+             ORDER BY date ASC",
+        )?;
+        let rows = stmt.query_map(params![start_date, end_date], |row| {
+            Ok(BasketTrendRow {
+                date: row.get("date")?,
+                sale_count: row.get("sale_count")?,
+                avg_line_count: row.get("avg_line_count")?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
     /// New vs returning customer counts for a date range.
     pub fn customer_split(
         &self,
@@ -909,6 +965,62 @@ impl Store<'_> {
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
+    /// Completed table-bound orders per day for a date range. Table service
+    /// is tracked through KDS orders carrying a table number; each completed
+    /// sale with one represents a single table turn (takeaway orders without
+    /// a table number are excluded).
+    pub fn table_turnover(
+        &self,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<Vec<TableTurnoverRow>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DATE(s.created_at) AS date,
+                    COUNT(*) AS table_orders
+             FROM kds_orders k
+             JOIN sales s ON k.sale_id = s.id
+             WHERE s.status = 'completed'
+               AND k.table_number IS NOT NULL AND k.table_number != ''
+               AND DATE(s.created_at) BETWEEN ?1 AND ?2
+             GROUP BY DATE(s.created_at)
+             ORDER BY date ASC",
+        )?;
+        let rows = stmt.query_map(params![start_date, end_date], |row| {
+            Ok(TableTurnoverRow {
+                date: row.get("date")?,
+                table_orders: row.get("table_orders")?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// Completed table-bound orders grouped by hour of day (0–23) within a
+    /// date range — the real signal behind the occupancy-by-hour curve.
+    pub fn hourly_table_activity(
+        &self,
+        start_date: &str,
+        end_date: &str,
+    ) -> Result<Vec<HourlyOccupancyRow>, CoreError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT CAST(strftime('%H', s.created_at) AS INTEGER) AS hour,
+                    COUNT(*) AS table_orders
+             FROM kds_orders k
+             JOIN sales s ON k.sale_id = s.id
+             WHERE s.status = 'completed'
+               AND k.table_number IS NOT NULL AND k.table_number != ''
+               AND DATE(s.created_at) BETWEEN ?1 AND ?2
+             GROUP BY hour
+             ORDER BY hour ASC",
+        )?;
+        let rows = stmt.query_map(params![start_date, end_date], |row| {
+            Ok(HourlyOccupancyRow {
+                hour: row.get("hour")?,
+                table_orders: row.get("table_orders")?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
     /// Inclusive day count of a `YYYY-MM-DD` range (0 when unparseable).
     fn inclusive_range_days(start_date: &str, end_date: &str) -> i64 {
         let (Ok(start), Ok(end)) = (
@@ -925,9 +1037,10 @@ impl Store<'_> {
 mod tests {
     use crate::db::Store;
     use crate::db::products::{CreateProductAttributes, UpdateProductAttributes};
+    use crate::kds::CreateKdsOrderInput;
     use crate::money::Currency;
     use crate::{Cart, CartLine, Money, Sale, SaleStatus, Sku, migrations};
-    use rusqlite::Connection;
+    use rusqlite::{Connection, params};
 
     fn fresh() -> Connection {
         migrations::fresh_db()
@@ -2319,5 +2432,145 @@ mod tests {
         // Both sales share the same day -> one row with 7 units.
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].units_sold, 7);
+    }
+
+    // ── Table turnover ────────────────────────────────────────────
+
+    #[test]
+    fn table_turnover_counts_completed_table_orders() {
+        let conn = fresh();
+        let s = store(&conn);
+        let t1 = seed_completed_sale(&conn, "STEAK", 1, 12000);
+        let t2 = seed_completed_sale(&conn, "PASTA", 2, 9000);
+        let takeaway = seed_completed_sale(&conn, "SANDWICH", 1, 5000);
+        // Two table-service orders with a table number, one takeaway without.
+        for sale_id in [&t1, &t2] {
+            s.create_kds_order(CreateKdsOrderInput {
+                sale_id: sale_id.clone(),
+                store_id: None,
+                items_summary: "x".into(),
+                item_count: 1,
+                kitchen_zone: None,
+                notes: String::new(),
+                table_number: Some("T5".into()),
+                priority: false,
+            })
+            .unwrap();
+        }
+        s.create_kds_order(CreateKdsOrderInput {
+            sale_id: takeaway.clone(),
+            store_id: None,
+            items_summary: "x".into(),
+            item_count: 1,
+            kitchen_zone: None,
+            notes: String::new(),
+            table_number: None,
+            priority: false,
+        })
+        .unwrap();
+
+        let rows = s.table_turnover("2000-01-01", "2099-12-31").unwrap();
+        // Both table orders share today's date -> one row counting 2 turns;
+        // the takeaway order is excluded.
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].table_orders, 2);
+    }
+
+    #[test]
+    fn hourly_table_activity_groups_completed_table_orders_by_hour() {
+        let conn = fresh();
+        let s = store(&conn);
+        let t1 = seed_completed_sale(&conn, "STEAK", 1, 12000);
+        let t2 = seed_completed_sale(&conn, "PASTA", 2, 9000);
+        let t3 = seed_completed_sale(&conn, "SANDWICH", 1, 5000);
+        // Two table-service orders at distinct hours, one takeaway without a
+        // table number that must be excluded.
+        for (sale_id, at) in [
+            (&t1, "2026-01-01T08:30:00.000Z"),
+            (&t2, "2026-01-01T12:45:00.000Z"),
+        ] {
+            s.create_kds_order(CreateKdsOrderInput {
+                sale_id: sale_id.clone(),
+                store_id: None,
+                items_summary: "x".into(),
+                item_count: 1,
+                kitchen_zone: None,
+                notes: String::new(),
+                table_number: Some("T5".into()),
+                priority: false,
+            })
+            .unwrap();
+            // Pin the completion hour so the grouping is deterministic.
+            conn.execute(
+                "UPDATE sales SET created_at = ?1 WHERE id = ?2",
+                params![at, sale_id],
+            )
+            .unwrap();
+        }
+        s.create_kds_order(CreateKdsOrderInput {
+            sale_id: t3.clone(),
+            store_id: None,
+            items_summary: "x".into(),
+            item_count: 1,
+            kitchen_zone: None,
+            notes: String::new(),
+            table_number: None,
+            priority: false,
+        })
+        .unwrap();
+
+        let rows = s.hourly_table_activity("2000-01-01", "2099-12-31").unwrap();
+        // Two table orders at hours 8 and 12 -> two rows; the takeaway is
+        // excluded entirely.
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].hour, 8);
+        assert_eq!(rows[0].table_orders, 1);
+        assert_eq!(rows[1].hour, 12);
+        assert_eq!(rows[1].table_orders, 1);
+    }
+
+    #[test]
+    fn basket_size_trend_groups_daily_averages() {
+        let conn = fresh();
+        let s = store(&conn);
+        let t1 = seed_completed_sale(&conn, "STEAK", 1, 12000);
+        let t2 = seed_completed_sale(&conn, "PASTA", 1, 9000);
+        // A two-line sale so the average can exceed 1.
+        s.create_product("SIDE", "SIDE", price(4000), None, None, 100, None)
+            .unwrap();
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("STEAK"), 1, price(12000)))
+            .unwrap();
+        cart.add_line(CartLine::new(Sku::new("SIDE"), 1, price(4000)))
+            .unwrap();
+        let mut sale = Sale::from_cart(&cart).unwrap();
+        sale.created_at = "2026-01-02T12:00:00.000Z".into();
+        sale.updated_at = sale.created_at.clone();
+        s.create_sale(&sale).unwrap();
+        s.update_sale_status(&sale.id, SaleStatus::Active).unwrap();
+        s.update_sale_status(&sale.id, SaleStatus::Completed)
+            .unwrap();
+        let t3 = sale.id;
+        // Pin the first two single-line sales to the day before.
+        for (id, at) in [
+            (&t1, "2026-01-01T08:00:00.000Z"),
+            (&t2, "2026-01-01T10:00:00.000Z"),
+        ] {
+            conn.execute(
+                "UPDATE sales SET created_at = ?1 WHERE id = ?2",
+                params![at, id],
+            )
+            .unwrap();
+        }
+
+        let rows = s.basket_size_trend("2000-01-01", "2099-12-31").unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].date, "2026-01-01");
+        assert_eq!(rows[0].sale_count, 2);
+        assert_eq!(rows[0].avg_line_count, 1.0);
+        assert_eq!(rows[1].date, "2026-01-02");
+        assert_eq!(rows[1].sale_count, 1);
+        assert_eq!(rows[1].avg_line_count, 2.0);
+        let _ = t3;
     }
 }

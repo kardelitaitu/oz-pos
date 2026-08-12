@@ -2090,6 +2090,10 @@ const handlers: Record<string, (args: unknown) => unknown> = {
   'get_low_stock_alerts': () => [
     { product_id: 'RAM-D4-16GB-KF', sku: 'RAM-D4-16GB-KF', name: 'Kingston Fury Beast 16GB DDR4 3200', current_qty: 3, threshold: 10, currency: 'IDR', price_minor: 450000, cost_minor: 390000 },
     { product_id: 'MB-B650-ROG', sku: 'MB-B650-ROG', name: 'ASUS ROG Strix B650-A Gaming WiFi', current_qty: 5, threshold: 10, currency: 'IDR', price_minor: 2850000, cost_minor: 2500000 },
+    { product_id: 'SSD-NV2-1TB', sku: 'SSD-NV2-1TB', name: 'Kingston NV2 1TB NVMe SSD', current_qty: 4, threshold: 8, currency: 'IDR', price_minor: 950000, cost_minor: 820000 },
+    { product_id: 'PSU-RM750', sku: 'PSU-RM750', name: 'Corsair RM750e 80+ Gold PSU', current_qty: 6, threshold: 6, currency: 'IDR', price_minor: 1850000, cost_minor: 1650000 },
+    { product_id: 'GPU-RTX4070', sku: 'GPU-RTX4070', name: 'MSI RTX 4070 Ventus 2X', current_qty: 2, threshold: 5, currency: 'IDR', price_minor: 8900000, cost_minor: 8100000 },
+    { product_id: 'CPU-7800X3D', sku: 'CPU-7800X3D', name: 'AMD Ryzen 7 7800X3D', current_qty: 8, threshold: 10, currency: 'IDR', price_minor: 5400000, cost_minor: 4900000 },
   ],
   'get_category_breakdown': () => {
     const byCat = new Map<string, { category_id: string | null; category_name: string; total_minor: number; sale_count: number }>();
@@ -2414,6 +2418,21 @@ handlers['get_discounts_summary_scoped'] = () => ({
 });
 handlers['get_voided_sales_summary_scoped'] = () => ({ void_count: 23, void_total_minor: 5400000 });
 handlers['get_basket_size_scoped'] = () => ({ sale_count: 406, avg_line_count: 3.2 });
+// Per-day basket size for the trend card — a week of plausible averages.
+handlers['get_basket_size_trend_scoped'] = () => {
+  const days: { date: string; sale_count: number; avg_line_count: number }[] = [];
+  const avgs = [3.1, 3.4, 2.9, 3.6, 3.2, 3.8, 3.3];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    days.push({
+      date: d.toISOString().slice(0, 10),
+      sale_count: 55 + ((i * 13) % 20),
+      avg_line_count: avgs[i]!,
+    });
+  }
+  return days;
+};
 handlers['get_inventory_turnover_scoped'] = () => ({ units_sold: 1280, stock_on_hand: 340, sku_count: 486, range_days: 30 });
 handlers['get_inventory_trend_scoped'] = () => {
   const days: string[] = [];
@@ -2423,6 +2442,23 @@ handlers['get_inventory_trend_scoped'] = () => {
     days.push(d.toISOString().slice(0, 10));
   }
   return days.map((date, i) => ({ date, units_sold: 30 + ((i * 17) % 40) }));
+};
+// Restaurant table turnover: 7 days of completed table-bound orders.
+// ~18–31 turns/day → average turn 46–80 minutes (plausible service pace).
+handlers['get_table_turnover_scoped'] = () => {
+  const days: { date: string; table_orders: number }[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    days.push({ date: d.toISOString().slice(0, 10), table_orders: 18 + ((i * 7) % 14) });
+  }
+  return days;
+};
+// Restaurant hourly table activity: twin-peak service shape (lunch ≈ 12:00,
+// dinner ≈ 19:00) across the service day — feeds the occupancy curve.
+handlers['get_hourly_occupancy_scoped'] = () => {
+  const shape = [0, 0, 0, 0, 0, 0, 4, 9, 18, 30, 42, 55, 62, 48, 34, 30, 38, 52, 64, 70, 58, 36, 18, 6];
+  return shape.map((count, hour) => ({ hour, table_orders: count }));
 };
 handlers['get_voided_items_scoped'] = () => [
   { name: 'Caffè Latte', qty: 6 },

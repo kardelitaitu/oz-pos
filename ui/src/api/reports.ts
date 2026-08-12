@@ -348,6 +348,24 @@ export const getBasketSize = (
     endDate,
   });
 
+/** Basket size (mean line count) for one completed-sales day. */
+export interface BasketTrendRow {
+  date: string;
+  sale_count: number;
+  avg_line_count: number;
+}
+
+export const getBasketSizeTrend = (
+  startDate: string,
+  endDate: string,
+  sessionToken: string,
+): Promise<BasketTrendRow[]> =>
+  loggedInvoke<BasketTrendRow[]>('get_basket_size_trend_scoped', {
+    sessionToken: sessionToken ?? '',
+    startDate,
+    endDate,
+  });
+
 /** New vs returning customer counts for a date range in the active store. */
 export interface CustomerSplitRow {
   new_count: number;

@@ -9,9 +9,10 @@ use tauri::{State, command};
 use oz_core::db::Store;
 use oz_core::db::popularity::{CategoryForecastRow, CategoryPopularityRow, CategoryTrendPoint};
 use oz_core::db::reports::{
-    BasketSizeRow, CategoryBreakdownRow, CustomerSplitRow, DailyRevenueRow, DiscountsSummaryRow,
-    HourlyHeatmapRow, InventoryTrendRow, InventoryTurnoverRow, LowStockAlert, MonthlyRevenueRow,
-    PaymentMethodRow, TopProductRow, VoidedItemRow, VoidedSummaryRow, WeeklyRevenueRow,
+    BasketSizeRow, BasketTrendRow, CategoryBreakdownRow, CustomerSplitRow, DailyRevenueRow,
+    DiscountsSummaryRow, HourlyHeatmapRow, HourlyOccupancyRow, InventoryTrendRow,
+    InventoryTurnoverRow, LowStockAlert, MonthlyRevenueRow, PaymentMethodRow, TableTurnoverRow,
+    TopProductRow, VoidedItemRow, VoidedSummaryRow, WeeklyRevenueRow,
 };
 use oz_core::export::{CustomReportRequest, CustomReportResponse};
 use oz_core::permissions;
@@ -364,6 +365,21 @@ pub async fn get_basket_size_scoped(
 }
 
 #[command]
+/// Get per-day basket size (mean line count) for the session's store.
+pub async fn get_basket_size_trend_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<BasketTrendRow>, AppError> {
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).basket_size_trend(&start_date, &end_date)?)
+}
+
+#[command]
 /// Get new vs returning customer counts for the session's store.
 pub async fn get_customer_split_scoped(
     session_token: String,
@@ -422,6 +438,36 @@ pub async fn get_inventory_trend_scoped(
         .lock()
         .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
     Ok(Store::new(&db).inventory_trend(&start_date, &end_date)?)
+}
+
+#[command]
+/// Completed table-bound orders per day for the session's store.
+pub async fn get_table_turnover_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<TableTurnoverRow>, AppError> {
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).table_turnover(&start_date, &end_date)?)
+}
+
+#[command]
+/// Completed table-bound orders per hour of day for the session's store.
+pub async fn get_hourly_occupancy_scoped(
+    session_token: String,
+    start_date: String,
+    end_date: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<HourlyOccupancyRow>, AppError> {
+    let conn = resolve_report_scope(&state, &session_token, permissions::REPORTS_VIEW).await?;
+    let db = conn
+        .lock()
+        .map_err(|e| AppError::Internal(format!("store db lock: {e}")))?;
+    Ok(Store::new(&db).hourly_table_activity(&start_date, &end_date)?)
 }
 
 #[command]
