@@ -1,7 +1,7 @@
 # ui/src/locales/analytics.ftl — Staff analytics (analytics:view — owner/admin/manager)
 
-analytics-title = Staff Analytics
-analytics-subtitle = Per-staff shifts and sales over time
+analytics-title = Analytics
+analytics-subtitle = Sales, products, and staff performance
 analytics-region-aria = Staff analytics
 analytics-summary-title = Staff Summary
 analytics-daily-title = Daily Activity
@@ -52,3 +52,6 @@ analytics-export-csv = CSV
 analytics-export-csv-aria = .aria-label = Export staff data as CSV
 analytics-back = Back
 analytics-back-aria = .aria-label = Back to home
+analytics-workspace-select-aria = .aria-label = Select workspace type
+analytics-workspace-retail = Retail
+analytics-workspace-restaurant = Restaurant

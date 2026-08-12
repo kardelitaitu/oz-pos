@@ -1,7 +1,7 @@
-//! Staff Analytics Screen — KPIs, multi-staff stacked bar, drill-down.
+//! Analytics Screen — general analytics with workspace type selector.
 //!
-//! Loads daily data for all staff in parallel to populate the stacked bar
-//! chart. Click a table row to see individual deep-dive combo chart.
+//! Retail: staff performance, sales trends, product rankings.
+//! Restaurant: staff performance, menu performance, table stats.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
@@ -11,7 +11,6 @@ import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { requiredLocalized } from '@/frontend/shared';
 import { l10nErrorMessage } from '@/utils/app-error';
 import { Card } from '@/components/Card';
-import { Spinner } from '@/components/Spinner';
 import { formatMoney } from '@/types/domain';
 import { downloadCsv } from '@/utils/export-csv';
 import ReactEChartsCore from 'echarts-for-react/lib/core';
@@ -31,6 +30,8 @@ function isoDay(d: Date): string { return d.toISOString().slice(0, 10); }
 function today(): string { return isoDay(new Date()); }
 function daysAgo(n: number): string { const d = new Date(); d.setDate(d.getDate() - n); return isoDay(d); }
 
+type WorkspaceView = 'retail' | 'restaurant';
+
 interface KpiData {
   totalShifts: number; closedShifts: number;
   totalSales: number; totalSalesMinor: number; staffCount: number;
@@ -45,13 +46,13 @@ export default function AnalyticsScreen() {
   const sessionToken = rawToken || '';
   const { currency } = useCurrency();
 
+  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('retail');
   const [fromDraft, setFromDraft] = useState(daysAgo(29));
   const [toDraft, setToDraft] = useState(today());
   const [from, setFrom] = useState(daysAgo(29));
   const [to, setTo] = useState(today());
   const [rows, setRows] = useState<StaffAnalyticsRow[]>([]);
   const [selectedUserId, setSelectedUserId] = useState('');
-  // All staff daily data: userId → daily rows
   const [allDailyMap, setAllDailyMap] = useState<Map<string, StaffAnalyticsDailyRow[]>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,8 +66,6 @@ export default function AnalyticsScreen() {
       setSelectedUserId((current) =>
         current && result.some((r) => r.user_id === current) ? current : '',
       );
-
-      // Load daily data for all staff in parallel
       const dailyResults = await Promise.all(
         result.map((r) =>
           getStaffAnalyticsDailyScoped(sessionToken, r.user_id, from, to)
@@ -82,21 +81,12 @@ export default function AnalyticsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [sessionToken, from, to]);
+  }, [sessionToken, from, to, workspaceView]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const selectedRow = useMemo(
-    () => rows.find((r) => r.user_id === selectedUserId) ?? null,
-    [rows, selectedUserId],
-  );
-
-  const daily = useMemo(
-    () => allDailyMap.get(selectedUserId) ?? [],
-    [allDailyMap, selectedUserId],
-  );
-
-  // ── KPIs ──────────────────────────────────────────────────────────
+  const selectedRow = useMemo(() => rows.find((r) => r.user_id === selectedUserId) ?? null, [rows, selectedUserId]);
+  const daily = useMemo(() => allDailyMap.get(selectedUserId) ?? [], [allDailyMap, selectedUserId]);
 
   const kpis = useMemo<KpiData>(() => {
     const totalShifts = rows.reduce((s, r) => s + r.shift_count, 0);
@@ -106,18 +96,14 @@ export default function AnalyticsScreen() {
     return { totalShifts, closedShifts, totalSales, totalSalesMinor, staffCount: rows.length };
   }, [rows]);
 
-  // ── ECharts: stacked bar — daily sales by staff ──────────────────
+  // ── ECharts: stacked bar ─────────────────────────────────────────
 
   const stackedBarOption = useMemo(() => {
     if (rows.length === 0) return null;
     const staffNames = rows.map((r) => r.display_name);
     const colors = ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#3ba272', '#fc8452', '#9a60b4'];
-
-    // Collect all unique dates across all staff
     const allDates = new Set<string>();
-    for (const [, data] of allDailyMap) {
-      for (const d of data) allDates.add(d.day);
-    }
+    for (const [, data] of allDailyMap) for (const d of data) allDates.add(d.day);
     const dates = [...allDates].sort();
 
     if (dates.length > 0) {
@@ -125,14 +111,9 @@ export default function AnalyticsScreen() {
         const userId = rows[i]?.user_id ?? '';
         const staffDaily = allDailyMap.get(userId) ?? [];
         const dateMap = new Map(staffDaily.map((d) => [d.day, d.sale_total_minor]));
-        return {
-          name, type: 'bar' as const, stack: 'total',
-          emphasis: { focus: 'series' as const },
-          itemStyle: { color: colors[i % colors.length] },
-          data: dates.map((date) => dateMap.get(date) ?? 0),
-        };
+        return { name, type: 'bar' as const, stack: 'total', emphasis: { focus: 'series' as const },
+          itemStyle: { color: colors[i % colors.length] }, data: dates.map((date) => dateMap.get(date) ?? 0) };
       });
-
       return {
         tooltip: { trigger: 'axis' as const, axisPointer: { type: 'shadow' as const },
           valueFormatter: (val: unknown) => formatMoney({ minor_units: Number(val), currency }) },
@@ -143,23 +124,15 @@ export default function AnalyticsScreen() {
         series,
       };
     }
-
-    // Fallback: grouped bar of per-staff totals
     return {
       tooltip: { trigger: 'axis' as const, valueFormatter: (val: unknown) => formatMoney({ minor_units: Number(val), currency }) },
       legend: { top: 0, type: 'scroll' as const },
       grid: { left: '3%', right: '4%', bottom: '3%', top: 40, containLabel: true },
       xAxis: { type: 'category' as const, data: staffNames },
       yAxis: { type: 'value' as const, axisLabel: { formatter: (v: number) => `${(v / 1_000_000).toFixed(1)}M` } },
-      series: [{
-        name: l10n.getString('analytics-kpi-total-sales'), type: 'bar' as const,
-        data: rows.map((r) => r.sale_total_minor),
-        itemStyle: { color: colors[0] }, emphasis: { focus: 'series' as const },
-      }],
+      series: [{ name: l10n.getString('analytics-kpi-total-sales'), type: 'bar' as const, data: rows.map((r) => r.sale_total_minor), itemStyle: { color: colors[0] }, emphasis: { focus: 'series' as const } }],
     };
   }, [rows, allDailyMap, currency, l10n]);
-
-  // ── Deep-dive combo chart ────────────────────────────────────────
 
   const deepDiveOption = useMemo(() => {
     if (daily.length === 0 || !selectedRow) return null;
@@ -169,10 +142,7 @@ export default function AnalyticsScreen() {
       legend: { data: [l10n.getString('analytics-chart-sales'), l10n.getString('analytics-chart-shifts')] },
       grid: { left: '3%', right: '4%', bottom: '3%', top: 40, containLabel: true },
       xAxis: { type: 'category' as const, data: dates, axisLabel: { rotate: 45 } },
-      yAxis: [
-        { type: 'value' as const, name: l10n.getString('analytics-chart-sales'), axisLabel: { formatter: (v: number) => `${(v / 1_000_000).toFixed(1)}M` } },
-        { type: 'value' as const, name: l10n.getString('analytics-chart-shifts') },
-      ],
+      yAxis: [{ type: 'value' as const, name: l10n.getString('analytics-chart-sales'), axisLabel: { formatter: (v: number) => `${(v / 1_000_000).toFixed(1)}M` } }, { type: 'value' as const, name: l10n.getString('analytics-chart-shifts') }],
       series: [
         { name: l10n.getString('analytics-chart-sales'), type: 'bar' as const, data: daily.map((d) => d.sale_total_minor), itemStyle: { color: '#5470c6' } },
         { name: l10n.getString('analytics-chart-shifts'), type: 'line' as const, yAxisIndex: 1, data: daily.map((d) => d.shift_count), itemStyle: { color: '#ee6666' }, symbol: 'circle', symbolSize: 6 },
@@ -182,21 +152,23 @@ export default function AnalyticsScreen() {
 
   const applyFilters = () => { setFrom(fromDraft); setTo(toDraft); };
 
-  // ── Render ───────────────────────────────────────────────────────
+  // ── Loading state ────────────────────────────────────────────────
 
   if (loading) {
     return (
       <div className="analytics analytics--fullscreen" role="region" aria-label={requiredLocalized(l10n, 'analytics-region-aria')}>
-        <button type="button" className="analytics-back-btn" onClick={goToWorkspacePicker} aria-label={l10n.getString('analytics-back-aria')}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg>
-          <Localized id="analytics-back"><span>Back</span></Localized>
-        </button>
-        <Localized id="analytics-title"><h1 className="analytics-title">Staff Analytics</h1></Localized>
+        <div className="analytics-topbar">
+          <button type="button" className="analytics-back-btn" onClick={goToWorkspacePicker} aria-label={l10n.getString('analytics-back-aria')}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg>
+          </button>
+          <div className="analytics-title-group">
+            <Localized id="analytics-title"><h1 className="analytics-title">Analytics</h1></Localized>
+          </div>
+        </div>
         <div className="analytics-kpi-row">
           {[1,2,3,4].map((i) => (
             <div key={i} className="card analytics-kpi analytics-kpi--skeleton"><div className="card-body">
-              <span className="analytics-kpi-label-skeleton" />
-              <span className="analytics-kpi-value-skeleton" />
+              <span className="analytics-kpi-label-skeleton" /><span className="analytics-kpi-value-skeleton" />
             </div></div>
           ))}
         </div>
@@ -210,38 +182,32 @@ export default function AnalyticsScreen() {
 
   return (
     <div className="analytics analytics--fullscreen" role="region" aria-label={requiredLocalized(l10n, 'analytics-region-aria')}>
-      {/* Back button */}
-      <button type="button" className="analytics-back-btn" onClick={goToWorkspacePicker}
-        aria-label={l10n.getString('analytics-back-aria')}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
-          <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
-        </svg>
-        <Localized id="analytics-back"><span>Back</span></Localized>
-      </button>
-      <div className="analytics-header">
-        <div className="analytics-header-row">
-          <div>
-            <Localized id="analytics-title"><h1 className="analytics-title">Staff Analytics</h1></Localized>
-            <Localized id="analytics-subtitle"><p className="analytics-subtitle">Per-staff shifts and sales over time</p></Localized>
-          </div>
-          {rows.length > 0 && (
-            <button type="button" className="analytics-export-btn"
-              onClick={() => downloadCsv(`staff-analytics-${from}-to-${to}.csv`,
-                [{ key: 'display_name', label: 'Staff' }, { key: 'shift_count', label: 'Shifts' },
-                 { key: 'closed_shift_count', label: 'Closed' }, { key: 'sale_count', label: 'Sales' },
-                 { key: 'sale_total_minor', label: 'Sales Total' }],
-                rows.map((r) => ({ ...r, sale_total_minor: String(r.sale_total_minor) })),
-              )}
-              aria-label={l10n.getString('analytics-export-csv-aria')}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-              <Localized id="analytics-export-csv"><span>CSV</span></Localized>
-            </button>
-          )}
+      {/* ── Top bar: back button | title + subtitle | workspace selector ── */}
+      <div className="analytics-topbar">
+        <button type="button" className="analytics-back-btn" onClick={goToWorkspacePicker}
+          aria-label={l10n.getString('analytics-back-aria')}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
+            <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
+          </svg>
+        </button>
+        <div className="analytics-title-group">
+          <Localized id="analytics-title"><h1 className="analytics-title">Analytics</h1></Localized>
+          <Localized id="analytics-subtitle"><p className="analytics-subtitle">Sales, products, and staff performance</p></Localized>
+        </div>
+        <div className="analytics-workspace-select">
+          <select
+            className="analytics-workspace-select-input"
+            value={workspaceView}
+            onChange={(e) => setWorkspaceView(e.target.value as WorkspaceView)}
+            aria-label={l10n.getString('analytics-workspace-select-aria')}
+          >
+            <option value="retail">{l10n.getString('analytics-workspace-retail')}</option>
+            <option value="restaurant">{l10n.getString('analytics-workspace-restaurant')}</option>
+          </select>
         </div>
       </div>
 
+      {/* ── Filters ──────────────────────────────────────── */}
       <Card shadow="sm" className="analytics-filters">
         <div className="analytics-filter-field">
           <label htmlFor="analytics-from" className="analytics-filter-label"><Localized id="analytics-filter-from"><span>From</span></Localized></label>
@@ -256,14 +222,25 @@ export default function AnalyticsScreen() {
         <Localized id="analytics-btn-apply">
           <button type="button" className="analytics-apply-btn" onClick={applyFilters} aria-label={l10n.getString('analytics-btn-apply')}>Apply</button>
         </Localized>
+        {rows.length > 0 && (
+          <button type="button" className="analytics-export-btn"
+            onClick={() => downloadCsv(`analytics-${from}-to-${to}.csv`,
+              [{ key: 'display_name', label: 'Staff' }, { key: 'shift_count', label: 'Shifts' },
+               { key: 'closed_shift_count', label: 'Closed' }, { key: 'sale_count', label: 'Sales' },
+               { key: 'sale_total_minor', label: 'Sales Total' }],
+              rows.map((r) => ({ ...r, sale_total_minor: String(r.sale_total_minor) })),
+            )}
+            aria-label={l10n.getString('analytics-export-csv-aria')}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+            <Localized id="analytics-export-csv"><span>CSV</span></Localized>
+          </button>
+        )}
       </Card>
 
       {error && <div className="analytics-error" role="alert">{error}</div>}
 
-      {loading ? (
-        <div className="analytics-loading"><Spinner aria-label={l10n.getString('analytics-loading')} /></div>
-      ) : rows.length === 0 ? (
-        <Localized id="analytics-empty"><p className="analytics-empty">No staff activity in this period.</p></Localized>
+      {rows.length === 0 ? (
+        <Localized id="analytics-empty"><p className="analytics-empty">No activity in this period.</p></Localized>
       ) : (
         <>
           <div className="analytics-kpi-row">
@@ -297,12 +274,9 @@ export default function AnalyticsScreen() {
             <Card shadow="sm" className="analytics-chart-card">
               <Localized id="analytics-chart-daily-sales"><h2 className="analytics-card-title">Daily Sales by Staff</h2></Localized>
               {stackedBarOption ? (
-                <ReactEChartsCore echarts={echarts} option={stackedBarOption} style={{ height: 320 }} notMerge
-                  aria-label={l10n.getString('analytics-chart-daily-sales-aria')} />
+                <ReactEChartsCore echarts={echarts} option={stackedBarOption} style={{ height: 320 }} notMerge aria-label={l10n.getString('analytics-chart-daily-sales-aria')} />
               ) : (
-                <div className="analytics-chart-placeholder">
-                  <Localized id="analytics-chart-select-hint"><p className="analytics-empty">No daily breakdown available.</p></Localized>
-                </div>
+                <div className="analytics-chart-placeholder"><Localized id="analytics-chart-select-hint"><p className="analytics-empty">No daily breakdown available.</p></Localized></div>
               )}
             </Card>
             <Card shadow="sm" className="analytics-table-card">
@@ -337,8 +311,7 @@ export default function AnalyticsScreen() {
                 <h2 className="analytics-card-title">{selectedRow.display_name} — Daily Detail</h2>
               </Localized>
               {deepDiveOption ? (
-                <ReactEChartsCore echarts={echarts} option={deepDiveOption} style={{ height: 280 }} notMerge
-                  aria-label={l10n.getString('analytics-deepdive-aria', { name: selectedRow.display_name })} />
+                <ReactEChartsCore echarts={echarts} option={deepDiveOption} style={{ height: 280 }} notMerge aria-label={l10n.getString('analytics-deepdive-aria', { name: selectedRow.display_name })} />
               ) : (
                 <Localized id="analytics-deepdive-empty"><p className="analytics-empty">No daily data available.</p></Localized>
               )}

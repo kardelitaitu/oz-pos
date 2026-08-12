@@ -1,7 +1,7 @@
 # ui/src/locales/analytics.id.ftl — Analitik staf (analytics:view — pemilik/admin/manajer)
 
-analytics-title = Analitik Staf
-analytics-subtitle = Shift dan penjualan per staf dari waktu ke waktu
+analytics-title = Analitik
+analytics-subtitle = Penjualan, produk, dan performa staf
 analytics-region-aria = Analitik staf
 analytics-summary-title = Ringkasan Staf
 analytics-daily-title = Aktivitas Harian
@@ -52,3 +52,6 @@ analytics-export-csv = CSV
 analytics-export-csv-aria = .aria-label = Ekspor data staf sebagai CSV
 analytics-back = Kembali
 analytics-back-aria = .aria-label = Kembali ke beranda
+analytics-workspace-select-aria = .aria-label = Pilih tipe workspace
+analytics-workspace-retail = Retail
+analytics-workspace-restaurant = Restoran
