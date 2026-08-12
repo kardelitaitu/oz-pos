@@ -91,6 +91,7 @@ export default function DashboardScreen() {
   const [lowStock, setLowStock] = useState<LowStockAlert[]>([]);
   const [categoryBreakdown, setCategoryBreakdown] = useState<CategoryBreakdownRow[]>([]);
   const [heatmap, setHeatmap] = useState<HourlyHeatmapRow[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   // Previous period for deltas
   const [prevDaily, setPrevDaily] = useState<DailyRevenueRow[]>([]);
@@ -319,7 +320,25 @@ export default function DashboardScreen() {
         <Card shadow="sm" className="dashboard-chart-card">
           <Localized id="dashboard-chart-category-breakdown"><h2 className="dashboard-section-title">Category Breakdown</h2></Localized>
           {categoryDonutOption ? (
-            <ReactEChartsCore echarts={echarts} option={categoryDonutOption} style={{ height: 320 }} notMerge aria-label={l10n.getString('dashboard-chart-category-aria')} />
+            <>
+              <ReactEChartsCore echarts={echarts} option={categoryDonutOption} style={{ height: 280 }} notMerge
+                onEvents={{ click: (params: { name?: string }) => setSelectedCategory(params.name ?? null) }}
+                aria-label={l10n.getString('dashboard-chart-category-aria')} />
+              {selectedCategory && (
+                <div className="dashboard-category-detail">
+                  <span className="dashboard-category-detail-name">{selectedCategory}</span>
+                  <span className="dashboard-category-detail-pct">
+                    {(() => {
+                      const cat = categoryBreakdown.find((c) => c.category_name === selectedCategory);
+                      const total = categoryBreakdown.reduce((s, c) => s + c.total_minor, 0);
+                      return cat && total > 0 ? `${((cat.total_minor / total) * 100).toFixed(1)}%` : '';
+                    })()}
+                  </span>
+                  <button type="button" className="dashboard-category-detail-clear" onClick={() => setSelectedCategory(null)}
+                    aria-label={l10n.getString('dashboard-category-clear-aria')}>×</button>
+                </div>
+              )}
+            </>
           ) : <p className="dashboard-no-data"><Localized id="dashboard-no-data"><span>No data yet</span></Localized></p>}
         </Card>
       </div>

@@ -171,3 +171,4 @@ custom-report-columns-selected = { $selected } / { $total } selected
 # Export
 dashboard-export-csv = CSV
 dashboard-export-csv-aria = .aria-label = Export dashboard data as CSV
+dashboard-category-clear-aria = .aria-label = Clear category selection

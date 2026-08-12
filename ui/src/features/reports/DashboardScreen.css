@@ -10,3 +10,10 @@
 
 /* Print */
 @media print { .dashboard { padding: 1rem; } .dashboard-header, .dashboard-controls, .dashboard-granularity, .dashboard-export-btn { display: none; } .dashboard-kpi-row { grid-template-columns: repeat(4, 1fr); } .dashboard-chart-row { grid-template-columns: 1fr 1fr; page-break-inside: avoid; } .dashboard-section { page-break-inside: avoid; } .card { box-shadow: none; border: 1px solid #ccc; } }
+
+/* Category detail on donut click */
+.dashboard-category-detail { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); margin-top: var(--space-2); background: var(--color-bg-hover); border-radius: var(--radius-sm); font-size: var(--text-sm); }
+.dashboard-category-detail-name { font-weight: 600; }
+.dashboard-category-detail-pct { font-family: var(--font-mono); color: var(--color-fg-secondary); }
+.dashboard-category-detail-clear { margin-left: auto; border: none; background: none; color: var(--color-fg-tertiary); font-size: var(--text-lg); cursor: pointer; line-height: 1; }
+.dashboard-category-detail-clear:hover { color: var(--color-fg); }
