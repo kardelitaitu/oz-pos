@@ -1248,8 +1248,16 @@ mod tests {
         //    135 (the snapshot column does not exist yet), then seed a
         //    catalog with one costed product, one without a cost, and a
         //    completed sale referencing both.
+        //
+        // 135 is not the last migration in ALL (136_processed_webhooks was
+        // appended later), so slice at its actual position rather than
+        // ALL.len() - 1 — a naive tail cut would run 135 before the seed
+        // data exists and the backfill would find no rows.
         let mut conn = fresh();
-        let split = ALL.len() - 1;
+        let split = ALL
+            .iter()
+            .position(|m| m.id == "135_sale_line_cost_snapshot.sql")
+            .expect("migration 135 must be registered in ALL");
         platform_core::database::run(&mut conn, &ALL[..split]).unwrap();
         conn.execute_batch(
             "INSERT INTO products (id, sku, name, price_minor, currency, cost_minor, created_at, updated_at) VALUES

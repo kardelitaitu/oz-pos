@@ -4824,3 +4824,12 @@ Two regression pins:
 **Tests:** oz-core topology 9/9 (+9) · desktop lib 915/915 · integration 32/32 (gate 3, wiring 6, kernel 7, window 11+2, parity 3) · clippy -D warnings clean on both crates · fmt clean.
 
 **Risks / follow-ups:** (1) `migrations::tests::migration_135_backfills_cost_snapshot_from_product_cost` FAILS on the committed baseline (verified by temporarily reverting my files) — a pre-existing breakage from the retail-attribute schema work, unrelated to this change; needs its own fix. (2) The core exposes only the fns desktop consumes as pub; the full pairing matrix helpers remain private — a tablet consumer can widen them deliberately. (3) Desktop lib tests could only run via `--lib` (plus a fresh target dir for integration tests) because a running dev instance of `oz-pos-app` holds the bin exe lock; the app was not killed per the shared-tree rule.
+
+## 2026-08-12 — Fixed broken migration-135 backfill test (baseline red since 136 landed)
+
+**Problem:** `migration_135_backfills_cost_snapshot_from_product_cost` failed on the committed baseline (asserted `cost_minor == Some(800)`, got `None`). Root cause: the test simulated a "pre-135" release with `split = ALL.len() - 1`, but `136_processed_webhooks.sql` (f40b64ee) had since been appended — the tail cut excluded 136 instead of 135, so 135 ran BEFORE the seeded products/sales existed and its backfill found no rows. First failure in the suite hid 669 un-run tests behind it.
+
+**Solution:** slice at 135's actual position — `ALL.iter().position(|m| m.id == "135_sale_line_cost_snapshot.sql")` with an `expect` that fails loudly if 135 is ever removed or renamed. Robust to future migrations being appended; the comment documents why the naive `len()-1` was wrong. The sibling fresh-vs-upgrade fingerprint test (split = 80) was checked and is correct — its split point is deliberately arbitrary.
+
+**Commits:** `(pending)`
+**Tests:** oz-core full suite 2295/2295 (was 1595+669 un-run) · clippy -D warnings clean · fmt clean.
