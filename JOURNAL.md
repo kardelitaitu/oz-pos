@@ -4833,3 +4833,14 @@ Two regression pins:
 
 **Commits:** `7af6a6b9` (fix: slice migration-135 test at its position)
 **Tests:** oz-core full suite 2295/2295 (was 1595+669 un-run) · clippy -D warnings clean · fmt clean.
+
+## 2026-08-12 — Migration-slice fragility audit + regression guard
+
+**Problem:** after fixing the migration-135 test (7af6a6b9), the same class of bug could silently return: a future test simulating a "pre-N" release with `ALL.len() - 1` would break the moment a migration is appended. The fix fixed one instance; nothing prevented the pattern from being reintroduced or new instances from being written.
+
+**Audit:** every `ALL[...]` slice in the migrations test module was enumerated: ~13 position-based slices (`ALL.iter().position(...)`, all safe), the fresh-vs-upgrade fingerprint test (`split = 80.min(ALL.len())`, safe by design — the split point is deliberately arbitrary and the sum is identical), the idempotence assertion `applied.len() == ALL.len()` (no slicing), and the one tail-arithmetic site (fixed in 7af6a6b9). No hard-coded numeric indexing into ALL exists anywhere in the repo; the `idx: i64` sites are SQLite index-existence queries, not slices.
+
+**Solution:** `no_migration_test_slices_all_by_array_tail` — a source-scanning regression guard (include_str on migrations.rs, comment-aware via split("//")) that forbids the `ALL.len() -` operator pattern, built at runtime with format! so the guard's own source can't self-match (discovered when the naive literal matched its own condition line). Mutation-verified: reintroducing `ALL.len() - 1` into the 135 test fails the guard with the offending line; restored, both tests green.
+
+**Commits:** `(pending)`
+**Tests:** oz-core full suite 2296/2296 (+1 guard) · migration tests 48/48 · clippy -D warnings clean · fmt clean.

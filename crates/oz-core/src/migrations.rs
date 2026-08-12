@@ -3637,4 +3637,30 @@ mod tests {
         // Re-running migrations stays idempotent (module convention).
         run(&mut conn).unwrap();
     }
+
+    // ── Regression guard: migration tests must not slice ALL by its tail ──
+    //
+    // 7af6a6b9 fixed migration_135_backfills_cost_snapshot_from_product_cost,
+    // which simulated a "pre-135" release with `ALL.len() - 1`. When
+    // 136_processed_webhooks was appended, the tail cut silently excluded
+    // 136 instead of 135, so the backfill ran before the seed data existed.
+    // Tests that apply "every migration except N" must slice at the
+    // migration's REGISTERED position (ALL.iter().position(...)), which is
+    // robust to migrations being appended or removed.
+    #[test]
+    fn no_migration_test_slices_all_by_array_tail() {
+        let src = include_str!("migrations.rs");
+        for line in src.lines() {
+            // Built at runtime so this guard's own source never contains the
+            // literal needle (which would make it self-match).
+            let needle = format!("ALL.len(){}", " -");
+            let stripped = line.split("//").next().unwrap_or("");
+            if stripped.contains(&needle) {
+                panic!(
+                    "migration test slices ALL by tail arithmetic — use ALL.iter().position(...) instead:
+{line}"
+                );
+            }
+        }
+    }
 }
