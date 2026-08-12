@@ -92,6 +92,13 @@ const mockGetInventoryTrend = vi.fn(() => Promise.resolve([
   { date: '2026-07-21', units_sold: 15 },
   { date: '2026-07-22', units_sold: 18 },
 ]));
+// Restaurant table turnover: 3 days of completed table orders.
+// Turns of 20/30/25 → average turn minutes of 72/48/58 (1440 ÷ turns).
+const mockGetTableTurnover = vi.fn(() => Promise.resolve([
+  { date: '2026-08-10', table_orders: 20 },
+  { date: '2026-08-11', table_orders: 30 },
+  { date: '2026-08-12', table_orders: 25 },
+]));
 const mockGetMenuEngineering = vi.fn(() => Promise.resolve({
   rows: [{ product_id: 'm1', sku: 'SKU-M1', name: 'Pasta', total_volume: 50, unit_price_minor: 10000, unit_cost_minor: 4000, margin_per_unit: 6000, total_margin_minor: 300000, total_revenue_minor: 500000 }],
   median_volume: 25,
@@ -115,6 +122,7 @@ vi.mock('@/api/reports', () => ({
   getVoidedItems: () => mockGetVoidedItems(),
   getInventoryTurnover: () => mockGetInventoryTurnover(),
   getInventoryTrend: () => mockGetInventoryTrend(),
+  getTableTurnover: () => mockGetTableTurnover(),
 }));
 
 const mockGetStaffAnalyticsScoped = vi.fn(() => Promise.resolve([
@@ -339,6 +347,30 @@ describe('AnalyticsScreen layout shell', () => {
     const status = document.querySelector('.analytics-status');
     expect(status?.textContent).toContain('Retail');
     expect(status?.textContent).toContain('Daily');
+  });
+
+  it('toggles the TTL cache metrics readout in the status bar', async () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    // The chip is present and shows a hit rate (or dash before reads).
+    const chip = screen.getByRole('button', { name: 'TTL cache metrics' });
+    expect(chip).toBeTruthy();
+
+    // No popover until opened.
+    expect(screen.queryByRole('dialog', { name: 'TTL cache metrics' })).toBeNull();
+
+    fireEvent.click(chip);
+    const popover = screen.getByRole('dialog', { name: 'TTL cache metrics' });
+    expect(popover).toBeTruthy();
+
+    // The summary line renders the totals placeholder.
+    expect(popover.textContent).toContain('Cache metrics');
+    expect(popover.textContent).toContain('key');
+    expect(popover.textContent).toContain('hits');
+
+    // Toggle closes it again.
+    fireEvent.click(screen.getByRole('button', { name: 'TTL cache metrics' }));
+    expect(screen.queryByRole('dialog', { name: 'TTL cache metrics' })).toBeNull();
   });
 
   it('opens the command palette with Ctrl+K and runs a filtered action', () => {
@@ -885,6 +917,10 @@ describe('AnalyticsScreen layout shell', () => {
     // Restaurant-specific cards replace retail ones
     expect(screen.getByText('Top Menu Items')).toBeTruthy();
     expect(screen.getByText('Table Turnover')).toBeTruthy();
+
+    // Tables card: average turn time derived from the table-turnover mock
+    // rows (20/30/25 turns → 72/48/58 min per day, avg 59m)
+    expect(screen.getByText('59m')).toBeTruthy();
 
     // Occupancy card renders its hourly occupancy curve and shows the real
     // live rate from the tables snapshot (2 of 4 occupied → 50%)

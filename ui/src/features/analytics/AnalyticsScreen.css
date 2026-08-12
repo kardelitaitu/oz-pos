@@ -689,6 +689,120 @@
   color: var(--analytics-fg-faint);
 }
 
+/* ── Debug: TTL cache metrics readout ─────────────────────────── */
+.analytics-cache-metrics {
+  position: relative;
+  margin-left: auto;
+}
+
+.analytics-cache-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--analytics-border);
+  border-radius: var(--radius-full);
+  background: var(--analytics-bg-surface);
+  color: var(--analytics-fg-secondary);
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  cursor: pointer;
+}
+
+.analytics-cache-chip:hover,
+.analytics-cache-chip--open {
+  background: var(--analytics-bg-hover);
+  color: var(--analytics-fg-muted);
+}
+
+.analytics-cache-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--analytics-success);
+}
+
+.analytics-cache-chip-rate {
+  font-weight: var(--font-weight-semibold);
+  color: var(--analytics-fg-muted);
+}
+
+.analytics-cache-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  width: 340px;
+  padding: var(--space-3);
+  background: var(--analytics-bg);
+  border: 1px solid var(--analytics-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--analytics-shadow-popover);
+}
+
+.analytics-cache-popover-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.analytics-cache-popover-title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--analytics-fg);
+}
+
+.analytics-cache-popover-summary {
+  font-size: var(--text-xs);
+  color: var(--analytics-fg-tertiary);
+}
+
+.analytics-cache-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-xs);
+}
+
+.analytics-cache-table th,
+.analytics-cache-table td {
+  padding: 4px 6px;
+  text-align: right;
+  color: var(--analytics-fg-muted);
+  border-bottom: 1px solid var(--analytics-bg-hover);
+}
+
+.analytics-cache-table th {
+  font-weight: var(--font-weight-semibold);
+  color: var(--analytics-fg-tertiary);
+}
+
+.analytics-cache-table th:first-child,
+.analytics-cache-table td:first-child {
+  text-align: left;
+}
+
+.analytics-cache-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.analytics-cache-key {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+.analytics-cache-empty {
+  padding: 10px;
+  text-align: center;
+  color: var(--analytics-fg-faint);
+}
+
 /* Scroll progress bar — top of the scrollable main area */
 .analytics-scroll-progress {
   position: sticky;

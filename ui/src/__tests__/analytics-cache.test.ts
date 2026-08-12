@@ -64,6 +64,82 @@ describe('TtlCache', () => {
   });
 });
 
+describe('TtlCache metrics', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('counts hits, misses, and expired reads per key', () => {
+    const cache = new TtlCache<string>(1000);
+    cache.set('a', 'hello');
+
+    cache.get('a'); // hit
+    cache.get('missing'); // miss
+
+    vi.advanceTimersByTime(1001);
+    cache.get('a'); // expired read
+
+    const { perKey, totals } = cache.metrics();
+    expect(perKey.get('a')).toEqual({ hits: 1, misses: 0, expiries: 1, sets: 1, evictions: 0 });
+    expect(perKey.get('missing')).toEqual({ hits: 0, misses: 1, expiries: 0, sets: 0, evictions: 0 });
+    expect(totals).toMatchObject({ hits: 1, misses: 1, expiries: 1, sets: 1, evictions: 0, reads: 3 });
+    expect(totals.hitRate).toBeCloseTo(1 / 3);
+  });
+
+  it('reports hitRate null before any read and 100% on all hits', () => {
+    const cache = new TtlCache<string>(1000);
+    expect(cache.metrics().totals.hitRate).toBeNull();
+    cache.set('a', 'x');
+    cache.get('a');
+    cache.get('a');
+    expect(cache.metrics().totals.hitRate).toBe(1);
+  });
+
+  it('counts capacity evictions for the dropped key', () => {
+    const cache = new TtlCache<string>(1000, 2);
+    cache.set('a', '1');
+    cache.set('b', '2');
+    cache.set('c', '3'); // evicts 'a'
+    const { perKey } = cache.metrics();
+    expect(perKey.get('a')?.evictions).toBe(1);
+    expect(perKey.get('c')?.evictions).toBe(0);
+  });
+
+  it('hasFresh peeks without double-counting reads', () => {
+    const cache = new TtlCache<string>(1000);
+    cache.set('a', 'x');
+    cache.hasFresh('a');
+    cache.hasFresh('a');
+    const { totals } = cache.metrics();
+    expect(totals.reads).toBe(0);
+    expect(totals.hitRate).toBeNull();
+  });
+
+  it('clear resets metrics history', () => {
+    const cache = new TtlCache<string>(1000);
+    cache.set('a', 'x');
+    cache.get('a');
+    cache.clear();
+    const { perKey, totals } = cache.metrics();
+    expect(perKey.size).toBe(0);
+    expect(totals.reads).toBe(0);
+  });
+
+  it('invalidate drops the entry but keeps metrics history', () => {
+    const cache = new TtlCache<string>(1000);
+    cache.set('a', 'x');
+    cache.get('a');
+    cache.invalidate('a');
+    expect(cache.get('a')).toBeUndefined(); // miss
+    expect(cache.metrics().perKey.get('a')?.hits).toBe(1);
+    expect(cache.metrics().perKey.get('a')?.misses).toBe(1);
+  });
+});
+
 describe('analytics query keys', () => {
   it('builds canonical, stable keys', () => {
     expect(analyticsQueryKey('retail', 'daily', '2026-08-01', '2026-08-12'))
