@@ -80,7 +80,7 @@ export default function AnalyticsScreen() {
           </select>
         </div>
 
-        {/* Row 2 — granularity pill buttons */}
+        {/* Row 2 — granularity pill buttons + custom date range inline */}
         <div className="analytics-menu-row">
           <div
             className="analytics-granularity"
@@ -102,11 +102,8 @@ export default function AnalyticsScreen() {
               </button>
             ))}
           </div>
-        </div>
 
-        {/* Row 3 — custom date range popup (visible only when Custom is active) */}
-        {granularity === 'custom' && (
-          <div className="analytics-menu-row">
+          {granularity === 'custom' && (
             <div className="analytics-custom-range">
               <label className="analytics-custom-field">
                 <Localized id="analytics-custom-from">
@@ -136,8 +133,8 @@ export default function AnalyticsScreen() {
                 />
               </label>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </nav>
 
       {/* ══════════════════════════════════════════════════════════
