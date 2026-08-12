@@ -64,7 +64,7 @@ describe('AnalyticsScreen layout shell', () => {
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 
     // Area 1 — header with back button and title
-    expect(screen.getByRole('button', { name: '.aria-label = Back to home' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Back to home' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Analytics' })).toBeTruthy();
     expect(screen.getByText('Sales, products, and staff performance')).toBeTruthy();
   });
@@ -72,7 +72,7 @@ describe('AnalyticsScreen layout shell', () => {
   it('renders the workspace selector defaulting to Retail', () => {
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 
-    const select = screen.getByRole('combobox', { name: '.aria-label = Select workspace type' });
+    const select = screen.getByRole('combobox', { name: 'Select workspace type' });
     expect(select).toBeTruthy();
     expect((select as HTMLSelectElement).value).toBe('retail');
   });
@@ -115,7 +115,7 @@ describe('AnalyticsScreen layout shell', () => {
     expect(weekly.getAttribute('aria-checked')).toBe('true');
 
     // Switch to restaurant — should reset to daily
-    const select = screen.getByRole('combobox', { name: '.aria-label = Select workspace type' });
+    const select = screen.getByRole('combobox', { name: 'Select workspace type' });
     await userEvent.selectOptions(select, 'restaurant');
     expect((select as HTMLSelectElement).value).toBe('restaurant');
 
@@ -126,7 +126,7 @@ describe('AnalyticsScreen layout shell', () => {
   it('back button calls goToWorkspacePicker', async () => {
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 
-    const backBtn = screen.getByRole('button', { name: '.aria-label = Back to home' });
+    const backBtn = screen.getByRole('button', { name: 'Back to home' });
     await userEvent.click(backBtn);
     expect(mockGoToPicker).toHaveBeenCalledTimes(1);
   });
@@ -214,6 +214,47 @@ describe('AnalyticsScreen layout shell', () => {
     const status = document.querySelector('.analytics-status');
     expect(status?.textContent).toContain('Retail');
     expect(status?.textContent).toContain('Daily');
+  });
+
+  it('opens the command palette with Ctrl+K and runs a filtered action', () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    expect(screen.getByRole('dialog', { name: 'Quick actions' })).toBeTruthy();
+
+    // Filter to granularity items
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search actions…' }), { target: { value: 'month' } });
+    fireEvent.keyDown(window, { key: 'Enter' });
+
+    // Monthly became active and the palette closed
+    expect(screen.getByRole('radio', { name: 'Monthly' }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.queryByRole('dialog', { name: 'Quick actions' })).toBeNull();
+  });
+
+  it('switches workspace from the command palette', () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search actions…' }), { target: { value: 'restaurant' } });
+    fireEvent.keyDown(window, { key: 'Enter' });
+
+    const select = screen.getByRole('combobox', { name: 'Select workspace type' }) as HTMLSelectElement;
+    expect(select.value).toBe('restaurant');
+    expect(screen.queryByRole('dialog', { name: 'Quick actions' })).toBeNull();
+  });
+
+  it('closes the palette with Escape and keeps shortcuts dormant while open', () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    expect(screen.getByRole('dialog', { name: 'Quick actions' })).toBeTruthy();
+
+    // Shortcuts are ignored while the palette is open
+    fireEvent.keyDown(window, { key: '3' });
+    expect(screen.getByRole('radio', { name: 'Monthly' }).getAttribute('aria-checked')).toBe('false');
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Quick actions' })).toBeNull();
   });
 
   it('handles keyboard shortcuts for granularity and escape', () => {
@@ -484,7 +525,7 @@ describe('AnalyticsScreen layout shell', () => {
     expect(screen.getByText('Sales by Category')).toBeTruthy();
 
     // Switch to restaurant
-    const select = screen.getByRole('combobox', { name: '.aria-label = Select workspace type' });
+    const select = screen.getByRole('combobox', { name: 'Select workspace type' });
     await userEvent.selectOptions(select, 'restaurant');
 
     // Restaurant-specific cards replace retail ones

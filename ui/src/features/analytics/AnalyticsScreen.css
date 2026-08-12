@@ -80,6 +80,8 @@
 .analytics-menu-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  row-gap: 8px;
 }
 
 /* Workspace selector (row 1) */
@@ -337,7 +339,9 @@
 .analytics-main {
   flex: 1;
   padding: 24px;
-  overflow-y: auto;
+  /* `auto` on both axes so a zoomed grid (CSS `zoom` reflows layout) scrolls
+     horizontally instead of clipping its cards past the viewport edge. */
+  overflow: auto;
 }
 
 /* Responsive grid — max 4 columns, collapses gracefully */
@@ -386,6 +390,11 @@
 .analytics-card--expanded {
   grid-column: 1 / -1;
   min-height: 70vh;
+}
+
+/* Collapsed (compact) cards shrink to just their header row */
+.analytics-card--collapsed {
+  min-height: 0;
 }
 
 .analytics-card-header {
@@ -578,23 +587,23 @@
 }
 
 .analytics-weekly-row .analytics-heat-block {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border-radius: 3px;
 }
 
 .analytics-weekly-row .analytics-heat-label {
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .analytics-weekly-day {
-  width: 24px;
+  width: 28px;
   text-align: right;
   font-weight: 500;
 }
 
 .analytics-weekly-hour {
-  width: 14px;
+  width: 16px;
   text-align: center;
   color: #cbd5e1;
 }
@@ -698,6 +707,106 @@
 @keyframes skeleton-shimmer {
   0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }
+}
+
+/* Command palette (Ctrl/Cmd+K) */
+.analytics-palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.analytics-palette {
+  width: min(480px, 90vw);
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(15, 23, 42, 0.18);
+  overflow: hidden;
+}
+
+.analytics-palette-input {
+  width: 100%;
+  height: 48px;
+  padding: 0 16px;
+  border: none;
+  border-bottom: 1px solid #e2e8f0;
+  background: transparent;
+  color: #0f172a;
+  font-size: 15px;
+  font-family: inherit;
+  outline: none;
+}
+
+.analytics-palette-input::placeholder {
+  color: #94a3b8;
+}
+
+.analytics-palette-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.analytics-palette-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #334155;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.analytics-palette-item--active {
+  background: #eef2ff;
+  color: var(--color-primary, #4f46e5);
+}
+
+.analytics-palette-hint {
+  padding: 1px 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 5px;
+  background: #f8fafc;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: #64748b;
+}
+
+.analytics-palette-empty {
+  padding: 14px 12px;
+  font-size: 13px;
+  color: #94a3b8;
+  text-align: center;
+}
+
+/* ── Accessibility polish ──────────────────────────────────────── */
+
+:where(.analytics) :focus-visible {
+  outline: 2px solid var(--color-primary, #4f46e5);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .analytics *,
+  .analytics *::before,
+  .analytics *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 /* ── Print ─────────────────────────────────────────────────────── */

@@ -5,7 +5,7 @@
 //!         + inline custom date range
 //! Main:   smart card grid — cards adapt to retail vs restaurant
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import './AnalyticsScreen.css';
@@ -160,6 +160,10 @@ export default function AnalyticsScreen() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [allCollapsed, setAllCollapsed] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [paletteQuery, setPaletteQuery] = useState('');
+  const [paletteIndex, setPaletteIndex] = useState(0);
+  const paletteInputRef = useRef<HTMLInputElement | null>(null);
   const [cardOrder, setCardOrder] = useState<string[]>([]);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
@@ -198,6 +202,7 @@ export default function AnalyticsScreen() {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;
+      if (paletteOpen) return;
       const k = e.key;
       if (k >= '1' && k <= '5') {
         setGranularity(GRANULARITIES[Number(k) - 1]!);
@@ -218,7 +223,7 @@ export default function AnalyticsScreen() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [zoomIn, zoomOut, zoomReset]);
+  }, [zoomIn, zoomOut, zoomReset, paletteOpen]);
 
   // Smart scaling: when a card is expanded, scale its content to fill the
   // available body area (works for any card — heatmap, table, or chart).
@@ -293,6 +298,106 @@ export default function AnalyticsScreen() {
     }
     setCardOrder(defaultOrder);
   };
+
+  // ── Command palette (Ctrl/Cmd+K) ──────────────────────────────
+
+  type PaletteItem =
+    | { kind: 'workspace'; value: WorkspaceView; label: string; hint: string }
+    | { kind: 'granularity'; value: Granularity; label: string; hint: string }
+    | { kind: 'action'; value: 'collapse' | 'expand' | 'reset-zoom' | 'reset-layout' | 'home' | 'shortcuts'; label: string; hint: string };
+
+  const paletteItems = useMemo<PaletteItem[]>(() => {
+    const items: PaletteItem[] = [
+      { kind: 'workspace', value: 'retail', label: l10n.getString('analytics-workspace-retail'), hint: '' },
+      { kind: 'workspace', value: 'restaurant', label: l10n.getString('analytics-workspace-restaurant'), hint: '' },
+    ];
+    GRANULARITIES.forEach((g, i) => {
+      items.push({ kind: 'granularity', value: g, label: l10n.getString(`analytics-granularity-${g}`), hint: String(i + 1) });
+    });
+    items.push(
+      { kind: 'action', value: 'collapse', label: l10n.getString('analytics-action-collapse-all-aria'), hint: 'C' },
+      { kind: 'action', value: 'expand', label: l10n.getString('analytics-action-expand-all-aria'), hint: 'C' },
+      { kind: 'action', value: 'reset-zoom', label: l10n.getString('analytics-action-zoom-reset-aria'), hint: '0' },
+      { kind: 'action', value: 'reset-layout', label: l10n.getString('analytics-reset-layout'), hint: '' },
+      { kind: 'action', value: 'shortcuts', label: l10n.getString('analytics-shortcuts-title'), hint: '?' },
+      { kind: 'action', value: 'home', label: l10n.getString('analytics-palette-home'), hint: '' },
+    );
+    return items;
+  }, [l10n]);
+
+  const q = paletteQuery.trim().toLowerCase();
+  const filteredItems = q ? paletteItems.filter((it) => it.label.toLowerCase().includes(q)) : paletteItems;
+
+  const runPaletteItem = (item: PaletteItem) => {
+    if (item.kind === 'workspace') {
+      setWorkspaceView(item.value);
+      setGranularity('daily');
+      setExpandedKey(null);
+    } else if (item.kind === 'granularity') {
+      setGranularity(item.value);
+    } else {
+      switch (item.value) {
+        case 'collapse': setAllCollapsed(true); break;
+        case 'expand': setAllCollapsed(false); break;
+        case 'reset-zoom': zoomReset(); break;
+        case 'reset-layout': resetLayout(); break;
+        case 'home': goToWorkspacePicker(); break;
+        case 'shortcuts': setShowShortcuts(true); break;
+      }
+    }
+    setPaletteOpen(false);
+    setPaletteQuery('');
+  };
+
+  const runPaletteRef = useRef(runPaletteItem);
+  runPaletteRef.current = runPaletteItem;
+
+  // Ctrl/Cmd+K toggles the palette
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setPaletteQuery('');
+        setPaletteIndex(0);
+        setPaletteOpen((o) => !o);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Keyboard navigation inside the open palette
+  useEffect(() => {
+    if (!paletteOpen) return;
+    const onPaletteKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setPaletteIndex((i) => Math.min(i + 1, filteredItems.length - 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setPaletteIndex((i) => Math.max(i - 1, 0));
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const item = filteredItems[paletteIndex];
+        if (item) runPaletteRef.current(item);
+      } else if (e.key === 'Escape') {
+        setPaletteOpen(false);
+        setPaletteQuery('');
+      }
+    };
+    window.addEventListener('keydown', onPaletteKey);
+    return () => window.removeEventListener('keydown', onPaletteKey);
+  }, [paletteOpen, filteredItems, paletteIndex]);
+
+  // Focus the search input when the palette opens
+  useEffect(() => {
+    if (paletteOpen) paletteInputRef.current?.focus();
+  }, [paletteOpen]);
+
+  // Keep the selection at the top when the query or palette changes
+  useEffect(() => {
+    setPaletteIndex(0);
+  }, [paletteQuery, paletteOpen]);
 
   const applyRangePreset = (days: number) => {
     const to = new Date();
@@ -629,6 +734,7 @@ export default function AnalyticsScreen() {
                 onClick={() => setGranularity(g)}
                 role="radio"
                 aria-checked={granularity === g}
+                title={`${l10n.getString(`analytics-granularity-${g}`)} (${GRANULARITIES.indexOf(g) + 1})`}
               >
                 <Localized id={`analytics-granularity-${g}`}>
                   <span>{g}</span>
@@ -951,6 +1057,51 @@ export default function AnalyticsScreen() {
           </button>
         )}
       </main>
+
+      {/* Command palette overlay (Ctrl/Cmd+K) */}
+      {paletteOpen && (
+        <div
+          className="analytics-palette-backdrop"
+          role="presentation"
+          tabIndex={-1}
+          onClick={(e) => { if (e.target === e.currentTarget) { setPaletteOpen(false); setPaletteQuery(''); } }}
+        >
+          <div
+            className="analytics-palette"
+            role="dialog"
+            aria-label={l10n.getString('analytics-palette-aria')}
+          >
+            <input
+              ref={paletteInputRef}
+              type="text"
+              className="analytics-palette-input"
+              value={paletteQuery}
+              onChange={(e) => setPaletteQuery(e.target.value)}
+              placeholder={l10n.getString('analytics-palette-placeholder')}
+              aria-label={l10n.getString('analytics-palette-placeholder')}
+            />
+            <ul className="analytics-palette-list" role="listbox" aria-label={l10n.getString('analytics-palette-aria')}>
+              {filteredItems.length === 0 ? (
+                <li className="analytics-palette-empty">{l10n.getString('analytics-palette-empty')}</li>
+              ) : (
+                filteredItems.map((item, i) => (
+                  <li key={`${item.kind}-${item.value}`}>
+                    <button
+                      type="button"
+                      className={`analytics-palette-item${i === paletteIndex ? ' analytics-palette-item--active' : ''}`}
+                      onMouseEnter={() => setPaletteIndex(i)}
+                      onClick={() => runPaletteItem(item)}
+                    >
+                      <span>{item.label}</span>
+                      {item.hint && <kbd className="analytics-palette-hint">{item.hint}</kbd>}
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+          </div>
+        </div>
+      )}
 
     </div>
   );

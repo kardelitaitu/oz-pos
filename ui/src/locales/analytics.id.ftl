@@ -108,3 +108,7 @@ analytics-shortcuts-zoom-reset = Atur ulang zoom: 0
 analytics-shortcuts-collapse = Ciutkan semua: C
 analytics-shortcuts-close = Tutup / pulihkan: Esc
 analytics-reset-layout = Atur ulang tata letak
+analytics-palette-aria = Aksi cepat
+analytics-palette-placeholder = Cari aksi…
+analytics-palette-empty = Tidak ada hasil
+analytics-palette-home = Kembali ke beranda

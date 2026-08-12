@@ -108,3 +108,7 @@ analytics-shortcuts-zoom-reset = Reset zoom: 0
 analytics-shortcuts-collapse = Collapse all: C
 analytics-shortcuts-close = Close / restore: Esc
 analytics-reset-layout = Reset layout
+analytics-palette-aria = Quick actions
+analytics-palette-placeholder = Search actions…
+analytics-palette-empty = No matches
+analytics-palette-home = Back to home
