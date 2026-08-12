@@ -4677,3 +4677,18 @@ Also: 7 new en/id FTL keys (bundle parity clean), dither + token-compliance wiri
 **Test counts:** topologyCard 34/34 (+7, true Red), editor 537/537 (+5, true Red), full UI suite 4,960/4,960, typecheck clean, eslint 0 errors (8 pre-existing warnings), i18n lint + FTL dedupe + bundle parity clean.
 
 **Remaining risks / follow-ups:** (1) the migration upgrades in-memory editor state only — the saved diagram's `schema_version` field isn't bumped on resolve; a future slice could persist the migration choice. (2) The dialog doesn't trap focus (best-effort a11y, matching the relationship picker). (3) stock-routing/inventory-transfer/hardware-connection cardinality closes remain open under item 6.
+## 2026-08-12 — Undo-stack hardening: restore-boundary guard prevents resurrecting wires whose endpoints were deleted
+
+**Problem:** Undo/Redo apply history entries verbatim (`setWires(entry.wires)`), so the "every wire's endpoints exist" invariant holds at the restore boundary only by construction — every entry today is a full pre-mutation snapshot, plus the one filtered entry in `commitDuplicateDrag` (current-state-minus-copies), and the creation paths guarantee state never dangles. But nothing at the RESTORE point enforced it: a single future creation-path regression (a dangling wire slipped into state, then into an entry — exactly the class the Ctrl+C/V and Alt+drag pins protect) would make Undo resurrect a wire whose endpoints were since deleted, surfacing the unknown-wire-endpoint banner from a state the user never made.
+
+**Solution:** A restore-boundary guard — `validWiresForNodes(nodes, wires)` filters a restored entry's wires against its OWN node set, applied in BOTH `popUndo` and `popRedo`. Defense-in-depth, single-point: the canvas invariant is enforced where state lands, not at each entry creator. For every legitimate entry the filter is an identity (verified by the full suite), so no behavior change; a dangling wire cannot render (geometry-gated) and would immediately trip the gate, so dropping it is the only sane resolution.
+
+Two regression pins:
+1. **End-to-end (Pin A):** copy a wired pair, paste, delete the pasted endpoint, then undo past the delete and past the paste — no unknown-wire-endpoint banner at any step, wire count stays honest (2 → 1 → 2 → 1).
+2. **Guard-specific (Pin B, mutation-verified):** Alt+drag a wired pair, then ONE undo removes the whole duplicate with no dangling wire. Proven true-Red: forcing `commitDuplicateDrag`'s entry wire-filter to keep copy wires creates a dangling entry; with the guard disabled the undo resurrects the wire and the banner fires; with the guard the wire is dropped and the canvas stays clean.
+
+**Commits:** (pending) — `fix(topology): guard undo/redo restores against dangling wire entries`.
+
+**Test counts:** editor 539/539 (+2, Pin B true-Red via mutation), full UI suite 4,962/4,962, typecheck clean, eslint 0 errors (8 pre-existing warnings), i18n lint + FTL dedupe clean (no FTL change).
+
+**Remaining risks / follow-ups:** the guard silently drops a dangling wire rather than surfacing it — deliberate (a dangling wire cannot render and would only trip the gate), documented in the helper. A future slice could log/flag a dropped wire as a signal that a creation path regressed.

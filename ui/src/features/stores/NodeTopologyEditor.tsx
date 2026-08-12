@@ -107,6 +107,25 @@ function normalizeVisualPort(port: string | null | undefined, fallback: PortName
   if (port === 'left' || port === 'right') return port;
   return fallback;
 }
+
+/** Restore-boundary integrity guard for Undo/Redo: drop any wire whose
+ *  endpoint nodes are missing from the SAME entry before it lands on the
+ *  canvas. Every history entry today is a full pre-mutation snapshot (or
+ *  the filtered duplicate-commit entry), so no legitimate entry ever
+ *  dangles — this is defense-in-depth so a future creation-path
+ *  regression (a dangling wire slipped into state, then into an entry)
+ *  can never make Undo/Redo resurrect a wire whose endpoints were since
+ *  deleted. A dangling wire cannot render (geometry-gated) and would
+ *  immediately surface the unknown-wire-endpoint gate, so dropping it is
+ *  the only sane resolution; the canvas invariant stays "every wire's
+ *  endpoints exist". */
+function validWiresForNodes(
+  nodes: TopologyNodeData[],
+  wires: TopologyWireData[],
+): TopologyWireData[] {
+  const ids = new Set(nodes.map((n) => n.id));
+  return wires.filter((w) => ids.has(w.fromNodeId) && ids.has(w.toNodeId));
+}
 /** Keyboard shortcuts listed in the header's help popover. `key` is the
  *  literal kbd text; `id` is the FTL description key (reuses existing
  *  topology strings where they already name the action). */
@@ -2433,7 +2452,7 @@ export default function NodeTopologyEditor({
           const entry: HistoryEntry = {
             nodes: nodesRef.current.filter((n) => !copySet.has(n.id)).map((n) => ({ ...n })),
             wires: wiresRef.current
-              .filter((w) => !copySet.has(w.fromNodeId) && !copySet.has(w.toNodeId))
+          .filter((w) => !copySet.has(w.fromNodeId) && !copySet.has(w.toNodeId))
               .map((w) => ({ ...w })),
           };
           const next = [...prev, entry];
@@ -2793,7 +2812,9 @@ export default function NodeTopologyEditor({
     setRedo((prev) => [...prev, { nodes: nodes.map((n) => ({ ...n })), wires: wires.map((w) => ({ ...w })) }]);
     // Sibling setState calls (not nested in updater — fixes ADR audit #6)
     setNodes(entry.nodes);
-    setWires(entry.wires);
+    // Restore-boundary integrity: never land a wire whose endpoint nodes
+    // are missing from the SAME entry (see validWiresForNodes).
+    setWires(validWiresForNodes(entry.nodes, entry.wires));
     setHistory((prev) => prev.slice(0, -1));
     // Dirty is derived: if the undone-to canvas matches the last applied
     // snapshot (e.g. undoing a same-preset load), no confirm fires; if it
@@ -2821,7 +2842,9 @@ export default function NodeTopologyEditor({
     // Push current state to history before restoring
     setHistory((prev) => [...prev, { nodes: nodes.map((n) => ({ ...n })), wires: wires.map((w) => ({ ...w })) }]);
     setNodes(entry.nodes);
-    setWires(entry.wires);
+    // Restore-boundary integrity: never land a wire whose endpoint nodes
+    // are missing from the SAME entry (see validWiresForNodes).
+    setWires(validWiresForNodes(entry.nodes, entry.wires));
     setRedo((prev) => prev.slice(0, -1));
     // Same derived dirty rule as undo: redo to exactly the applied canvas
     // is clean; redo to anything else confirms on the next preset click.

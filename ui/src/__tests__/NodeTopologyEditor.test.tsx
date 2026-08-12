@@ -8369,6 +8369,58 @@ describe('NodeTopologyEditor — clipboard & bulk duplication', () => {
     await waitFor(() => expect(nodeCount()).toBe(3));
   });
 
+  it('undo-past a paste never resurrects a wire whose endpoint was since deleted', async () => {
+    // The restore-boundary invariant: at no point — paste, delete of a
+    // pasted endpoint, or either undo — may a wire reference a node that
+    // is gone from the canvas (the unknown-wire-endpoint banner is the
+    // state-level signal that survives the geometry-gated wire render).
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-1', type: 'workspace', name: 'POS', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [
+        { id: 'w-1', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+      ],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+
+    // Copy the wired pair, then paste — copies + a remapped wire.
+    fireEvent.keyDown(document, { key: 'a', ctrlKey: true });
+    fireEvent.keyDown(document, { key: 'c', ctrlKey: true });
+    fireEvent.keyDown(document, { key: 'v', ctrlKey: true });
+    await waitFor(() => expect(getNodeCount()).toBe(4));
+    expect(getWireCount()).toBe(2);
+    expect(screen.queryByText('This wire references a node that is not in the graph.')).toBeNull();
+
+    // Delete the PASTED workspace copy — the pasted wire's new endpoint.
+    // (The paste leaves BOTH copies selected; clear first so the delete
+    // targets just the pasted workspace, not the group.)
+    fireEvent.keyDown(document, { key: 'Escape' });
+    const pastedWs = document.querySelector('.topology-node[data-node-id^="workspace-"]') as HTMLElement;
+    expect(pastedWs).not.toBeNull();
+    fireEvent.mouseDown(pastedWs, { button: 0 });
+    fireEvent.keyDown(document, { key: 'Delete' });
+    fireEvent.click(screen.getByText('Delete')); // confirm the wired-node dialog
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+    expect(getWireCount()).toBe(1);
+    expect(screen.queryByText('This wire references a node that is not in the graph.')).toBeNull();
+
+    // Undo the delete — the pasted copy and its wire come back TOGETHER.
+    fireEvent.keyDown(document, { key: 'z', ctrlKey: true });
+    await waitFor(() => expect(getNodeCount()).toBe(4));
+    expect(getWireCount()).toBe(2);
+    expect(screen.queryByText('This wire references a node that is not in the graph.')).toBeNull();
+
+    // Undo the paste — back to the pre-paste canvas; no wire may survive
+    // without its endpoints.
+    fireEvent.keyDown(document, { key: 'z', ctrlKey: true });
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    expect(getWireCount()).toBe(1);
+    expect(screen.queryByText('This wire references a node that is not in the graph.')).toBeNull();
+  });
+
   // ── Warehouse Pro-tier cap on duplicate paths ────────────────────
   // The palette spawn path already blocks a second warehouse on standard
   // tier (test above); these pin that Ctrl+D / Ctrl+V / Alt+drag cannot
@@ -10123,6 +10175,46 @@ describe('NodeTopologyEditor — Alt+drag to duplicate', () => {
     expect(getNodeCount()).toBe(3);
     expect(getWireCount()).toBe(1);
     expect(document.querySelector('.topology-validation-banner')).toBeNull();
+  });
+
+  it('an undo entry whose wire references a node missing from the entry cannot resurrect it', async () => {
+    // Restore-boundary hardening: Undo/Redo apply entries verbatim, so a
+    // future creation-path regression that let a dangling wire into a
+    // history entry would resurrect it on undo. The restore guard drops
+    // wires whose endpoints are absent from the SAME entry — the
+    // never-dangling invariant holds at the one place state lands.
+    // Mutation-verified: forcing commitDuplicateDrag's entry wire-filter
+    // to keep copy wires makes this undo restore a dangling wire (the
+    // unknown-wire-endpoint banner fires) until the guard exists.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-1', type: 'workspace', name: 'POS #1', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [{ id: 'w1', from_node_id: 'store-1', to_node_id: 'ws-1', direction: 'one-way' }],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    mockCanvasSize(1200, 800);
+
+    // Backward marquee selects both, then Alt+drag duplicates them
+    // (copies + a copy wire).
+    fireEvent.mouseDown(canvas(), { button: 0, clientX: 800, clientY: 500 });
+    fireEvent.mouseMove(canvas(), { clientX: 100, clientY: 100 });
+    fireEvent.mouseUp(canvas(), { button: 0 });
+    expect(document.querySelectorAll('.topology-node.node-selected')).toHaveLength(2);
+    fireEvent.mouseDown(nodeBy('store-1'), { button: 0, altKey: true, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 60, clientY: 0 });
+    fireEvent.mouseUp(canvas(), { button: 0 });
+    expect(getNodeCount()).toBe(4);
+    expect(getWireCount()).toBe(2);
+
+    // ONE undo removes the whole duplicate — and whatever entry it
+    // restores, no wire may reference a node that is not also restored.
+    fireEvent.keyDown(document, { key: 'z', ctrlKey: true });
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    expect(getWireCount()).toBe(1);
+    expect(screen.queryByText('This wire references a node that is not in the graph.')).toBeNull();
   });
 
   it('an Alt+dragged Branch Location copy is identity-less — never a second branch impersonation', async () => {
