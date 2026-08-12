@@ -4844,3 +4844,14 @@ Two regression pins:
 
 **Commits:** `3a03a9a3` (test: migration tail-slice guard)
 **Tests:** oz-core full suite 2296/2296 (+1 guard) · migration tests 48/48 · clippy -D warnings clean · fmt clean.
+
+## 2026-08-13 — Occupancy compare overlay misaligned when hourly sets differ (TDD)
+
+**Problem:** the compare-mode dashed overlay on the Table Occupancy card plotted the previous period's curve by array index against the current period's hours. The backend `hourly_table_activity` returns only hours *with* completed table orders (`GROUP BY hour`, no zero-fill), so the two periods frequently have different active-hour sets — the previous curve landed on the wrong hours.
+
+**Solution (TDD, Red→Green):** wrote `alignPrevHourly(current, previous)` — a pure helper that maps previous pct by hour onto the current hour set, filling absent hours with 0 — with two unit tests written first (index misalignment + order-independent matching), watched them fail on the missing export, then implemented and wired it into OccupancyCard's option builder.
+
+**Commits:** (folded into the analytics UI commit)
+**Tests:** analytics-data 32/32 (+2 alignPrevHourly) · AnalyticsScreen 66/66 · full UI suite 292/292, 5098.
+
+**Risks / follow-ups:** (1) the same index-alignment assumption could affect the other compare overlays (revenue/AOV/tables/inventory/basket) if any loader ever returns differing bucket sets for equal-length windows — bucketing is deterministic per granularity so it is safe today, but a future date-gap policy change should reuse the map-by-key approach. (2) `revenueLabel` still has a redundant identical-branch ternary (`g === 'monthly' ? slice(5) : slice(5)`) — a trivial cleanup candidate for a future slice.
