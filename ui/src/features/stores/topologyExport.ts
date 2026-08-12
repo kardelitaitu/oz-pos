@@ -24,6 +24,10 @@ export interface TopologyExportPayload {
 
 const NODE_TYPES = new Set(['store', 'workspace', 'warehouse', 'hardware']);
 const WIRE_DIRECTIONS = new Set(['one-way', 'reverse', 'two-way']);
+/** Canonical wire ports. The geometry reads them RAW (PORT_OFFSET[port]),
+ *  so a hand-edited value outside this set would crash the canvas with an
+ *  undefined offset dereference — the strict contract rejects it here. */
+const PORT_NAMES = new Set(['top', 'right', 'bottom', 'left']);
 
 const isFiniteNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
@@ -62,6 +66,8 @@ function isValidWire(w: unknown): w is TopologyWireData {
     && typeof wire['fromNodeId'] === 'string'
     && typeof wire['toNodeId'] === 'string'
     && typeof wire['direction'] === 'string' && WIRE_DIRECTIONS.has(wire['direction'])
+    && (wire['fromPort'] === undefined || (typeof wire['fromPort'] === 'string' && PORT_NAMES.has(wire['fromPort'])))
+    && (wire['toPort'] === undefined || (typeof wire['toPort'] === 'string' && PORT_NAMES.has(wire['toPort'])))
   );
 }
 
@@ -100,6 +106,15 @@ export function deserializeTopology(json: string): TopologyExportPayload | null 
   for (const n of payload['nodes'] as TopologyNodeData[]) {
     if (ids.has(n.id)) return null;
     ids.add(n.id);
+  }
+  // Wire ids live in their own namespace (node ops never touch wires by
+  // node id), but two wires under one id behave as a single wire — every
+  // id-addressed operation (select, delete, cycle, bend) hits both. Same
+  // rejection as duplicate node ids.
+  const wireIds = new Set<string>();
+  for (const w of payload['wires'] as TopologyWireData[]) {
+    if (wireIds.has(w.id)) return null;
+    wireIds.add(w.id);
   }
   return {
     format: TOPOLOGY_EXPORT_FORMAT,

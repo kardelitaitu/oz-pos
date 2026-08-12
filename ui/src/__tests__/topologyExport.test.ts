@@ -101,6 +101,41 @@ describe('serializeTopology / deserializeTopology (versioned export envelope)', 
     );
     expect(deserializeTopology(dup)).toBeNull();
   });
+
+  it('rejects a wire whose fromPort/toPort is not a canonical port name', () => {
+    // The geometry reads ports raw (PORT_OFFSET[port]); a hand-edited value
+    // like 123 or 'diagonal' would pass the old shape check and crash the
+    // canvas with an undefined offset dereference. The strict contract must
+    // reject it at parse time.
+    const badFromPort = serializeTopology(
+      nodes,
+      [{ ...wires[0]!, fromPort: 123 as unknown as 'right' }],
+    );
+    expect(deserializeTopology(badFromPort)).toBeNull();
+
+    const badToPort = serializeTopology(
+      nodes,
+      [{ ...wires[0]!, toPort: 'diagonal' as unknown as 'left' }],
+    );
+    expect(deserializeTopology(badToPort)).toBeNull();
+  });
+
+  it('rejects duplicate wire ids (two wires sharing one id behave as one)', () => {
+    // Duplicate NODE ids already reject; wire ids were unchecked — a pasted
+    // diagram with two wires under one id would make delete/cycle operations
+    // hit BOTH wires, so the parser must refuse it like node ids.
+    const dup = serializeTopology(nodes, [wires[0]!, { ...wires[0]!, id: 'w1' }]);
+    expect(deserializeTopology(dup)).toBeNull();
+  });
+
+  it('still round-trips canonical ports and wires after the stricter validation', () => {
+    const wired = [
+      { id: 'w3', fromNodeId: 'store-1', fromPort: 'right' as const, toNodeId: 'ws-1', toPort: 'left' as const, direction: 'reverse' as const },
+    ];
+    const out = deserializeTopology(serializeTopology(nodes, wired));
+    expect(out).not.toBeNull();
+    expect(out!.wires).toEqual(wired);
+  });
 });
 
 describe('diagram templates (localStorage)', () => {

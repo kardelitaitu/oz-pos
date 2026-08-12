@@ -1,4 +1,15 @@
 
+## 2026-08-12 — TDD cycle: import strictness gaps — a hand-edited wire port could crash the canvas on paste
+
+### deserializeTopology accepted non-PortName wire ports (crash) and duplicate wire ids (two wires behave as one)
+**Problem:** Thirteenth review pass, auditing the import/export clipboard round-trip (topologyExport.ts). The parser's doc contract is "STRICT — a malformed entry rejects the whole payload", and it already rejects bad nodes, bad metadata, bad directions, and duplicate NODE ids — but two wire gaps slipped through: (1) `isValidWire` never checks `fromPort`/`toPort`, and the geometry reads them RAW (`PORT_OFFSET[wire.fromPort ?? 'right']`) — so a hand-edited payload with `"fromPort": 123` PASSED validation and then crashed the canvas with an undefined-offset dereference on the very first render (the exact class of drifted document the strict contract exists to refuse). (2) Duplicate WIRE ids were unchecked: two wires under one id behave as a single wire — every id-addressed operation (select, delete, direction cycle, bend drag) hits BOTH, and React keys collide.
+
+**Solution:** Red→Green (pure unit tests in topologyExport.test.ts). (1) Red — three tests: a `fromPort: 123` wire and a `toPort: 'diagonal'` wire both must reject; two wires sharing id 'w1' must reject; a canonical-port wire must still round-trip losslessly. Two failed on unfixed code, the round-trip passed (pinning no over-rejection). (2) Green — `isValidWire` now requires `fromPort`/`toPort`, when present, to be strings in the canonical PortName set (`top|right|bottom|left`); `deserializeTopology` adds a wire-id uniqueness pass in the wire's own namespace (node ops never touch wires by node id, so a node/wire id collision stays legal). In-memory wires are always canonical (load normalizes legacy vertical ports via normalizeVisualPort; the editor creates canonical ones), so no legit export is affected.
+
+**Validation:** export suite 13/13 (3 new, both Red-confirmed via stash) · editor suite 520/520 (import path) · full UI suite 286 files / 4,930 tests · typecheck · eslint 0 errors · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** wire `bends` shape and dangling endpoints (`fromNodeId` pointing at a missing node) still pass validation — the geometry SKIPS missing endpoints (`if (!fromNode || !toNode) continue`) and NaN bend coords render nothing, so both degrade cosmetically without crashing; noted as future slices if they surface.
+
 ## 2026-08-12 — TDD cycle: the relationship picker could render fully off-canvas when the target sat at the viewport edge
 
 ### A multi-option drop near the canvas edge produced an unreachable popover — clipped by the container's overflow:hidden
