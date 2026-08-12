@@ -122,12 +122,16 @@ export function revenueLabel(g: Granularity, raw: string): string {
   return g === 'monthly' ? raw.slice(5) : raw.slice(5);
 }
 
-/** % change from the first bucket to the last (null when < 2 buckets). */
+/**
+ * % change from the first bucket to the last (null when < 2 buckets or the
+ * first bucket is zero — a zero baseline makes the percentage undefined, so
+ * callers omit the chip instead of showing a misleading 0% / ±∞).
+ */
 export function seriesDelta(buckets: Bucket[]): number | null {
   if (buckets.length < 2) return null;
   const first = buckets[0]!.value;
   const last = buckets[buckets.length - 1]!.value;
-  if (first === 0) return 0;
+  if (first === 0) return null;
   return Math.round(((last - first) / first) * 1000) / 10;
 }
 

@@ -69,6 +69,7 @@ import {
   previousRange,
   rangeForGranularity,
   seriesDelta,
+  turnDelta,
   type AnalyticsQuery,
   weekdayIntensities,
   weeklyHourlyIntensities,
@@ -124,11 +125,24 @@ describe('seriesDelta — % change first→last bucket', () => {
     expect(delta).toBe(50);
   });
 
-  it('returns 0 when the first bucket is zero', () => {
+  it('returns null when the first bucket is zero (undefined baseline)', () => {
+    // A zero first bucket makes the % undefined: 0 → 150 is not "0% change".
     expect(seriesDelta([
       { label: 'A', value: 0 },
       { label: 'B', value: 150 },
-    ])).toBe(0);
+    ])).toBeNull();
+    // Zero → zero is equally undefined; never fabricate a 0% chip.
+    expect(seriesDelta([
+      { label: 'A', value: 0 },
+      { label: 'B', value: 0 },
+    ])).toBeNull();
+  });
+
+  it('turnDelta inherits the null baseline from seriesDelta', () => {
+    expect(turnDelta([
+      { label: 'A', value: 0 },
+      { label: 'B', value: 60 },
+    ])).toBeNull();
   });
 });
 
