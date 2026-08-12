@@ -2,6 +2,7 @@
 //!
 //! Top:    back button + title
 //! Menu:   workspace selector (row 1) + time granularity buttons (row 2)
+//!         + optional date range popup when "Custom" is selected
 //! Main:   placeholder for charts, KPIs, and data tables
 
 import { useState } from 'react';
@@ -10,7 +11,13 @@ import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import './AnalyticsScreen.css';
 
 type WorkspaceView = 'retail' | 'restaurant';
-type Granularity = 'daily' | 'weekly' | 'monthly' | 'yearly';
+type Granularity = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom';
+
+const GRANULARITIES: Granularity[] = ['daily', 'weekly', 'monthly', 'yearly', 'custom'];
+
+function isoToday(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 export default function AnalyticsScreen() {
   const { l10n } = useLocalization();
@@ -18,6 +25,8 @@ export default function AnalyticsScreen() {
 
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('retail');
   const [granularity, setGranularity] = useState<Granularity>('daily');
+  const [customFrom, setCustomFrom] = useState(isoToday());
+  const [customTo, setCustomTo] = useState(isoToday());
 
   return (
     <div className="analytics" role="region" aria-label={l10n.getString('analytics-region-aria')}>
@@ -78,7 +87,7 @@ export default function AnalyticsScreen() {
             role="radiogroup"
             aria-label={l10n.getString('analytics-granularity-aria')}
           >
-            {(['daily', 'weekly', 'monthly', 'yearly'] as Granularity[]).map((g) => (
+            {GRANULARITIES.map((g) => (
               <button
                 key={g}
                 type="button"
@@ -94,6 +103,41 @@ export default function AnalyticsScreen() {
             ))}
           </div>
         </div>
+
+        {/* Row 3 — custom date range popup (visible only when Custom is active) */}
+        {granularity === 'custom' && (
+          <div className="analytics-menu-row">
+            <div className="analytics-custom-range">
+              <label className="analytics-custom-field">
+                <Localized id="analytics-custom-from">
+                  <span className="analytics-custom-label">From</span>
+                </Localized>
+                <input
+                  type="date"
+                  className="analytics-custom-input"
+                  value={customFrom}
+                  max={customTo}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  aria-label={l10n.getString('analytics-custom-from')}
+                />
+              </label>
+              <span className="analytics-custom-sep">—</span>
+              <label className="analytics-custom-field">
+                <Localized id="analytics-custom-to">
+                  <span className="analytics-custom-label">To</span>
+                </Localized>
+                <input
+                  type="date"
+                  className="analytics-custom-input"
+                  value={customTo}
+                  min={customFrom}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  aria-label={l10n.getString('analytics-custom-to')}
+                />
+              </label>
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* ══════════════════════════════════════════════════════════

@@ -60,3 +60,6 @@ analytics-granularity-daily = Harian
 analytics-granularity-weekly = Mingguan
 analytics-granularity-monthly = Bulanan
 analytics-granularity-yearly = Tahunan
+analytics-granularity-custom = Kustom
+analytics-custom-from = Dari
+analytics-custom-to = Hingga

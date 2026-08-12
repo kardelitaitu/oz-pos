@@ -62,18 +62,20 @@ describe('AnalyticsScreen layout shell', () => {
     expect((select as HTMLSelectElement).value).toBe('retail');
   });
 
-  it('renders all four granularity buttons with daily active by default', () => {
+  it('renders all five granularity buttons with daily active by default', () => {
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 
     const daily = screen.getByRole('radio', { name: 'Daily' });
     const weekly = screen.getByRole('radio', { name: 'Weekly' });
     const monthly = screen.getByRole('radio', { name: 'Monthly' });
     const yearly = screen.getByRole('radio', { name: 'Yearly' });
+    const custom = screen.getByRole('radio', { name: 'Custom' });
 
     expect(daily).toBeTruthy();
     expect(weekly).toBeTruthy();
     expect(monthly).toBeTruthy();
     expect(yearly).toBeTruthy();
+    expect(custom).toBeTruthy();
     expect(daily.getAttribute('aria-checked')).toBe('true');
   });
 
@@ -112,6 +114,22 @@ describe('AnalyticsScreen layout shell', () => {
     const backBtn = screen.getByRole('button', { name: '.aria-label = Back to home' });
     await userEvent.click(backBtn);
     expect(mockGoToPicker).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the custom date range popup when Custom granularity is selected', async () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    // Before clicking Custom, the date pickers should not be visible
+    expect(screen.queryByLabelText('From')).toBeNull();
+    expect(screen.queryByLabelText('To')).toBeNull();
+
+    // Click Custom
+    const custom = screen.getByRole('radio', { name: 'Custom' });
+    await userEvent.click(custom);
+
+    // Now the date pickers appear
+    expect(screen.getByLabelText('From')).toBeTruthy();
+    expect(screen.getByLabelText('To')).toBeTruthy();
   });
 
   it('renders the placeholder content in the main area', () => {

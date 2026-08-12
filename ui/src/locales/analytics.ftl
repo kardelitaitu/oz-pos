@@ -60,3 +60,6 @@ analytics-granularity-daily = Daily
 analytics-granularity-weekly = Weekly
 analytics-granularity-monthly = Monthly
 analytics-granularity-yearly = Yearly
+analytics-granularity-custom = Custom
+analytics-custom-from = From
+analytics-custom-to = To
