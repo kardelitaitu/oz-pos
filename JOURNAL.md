@@ -4930,3 +4930,13 @@ Two regression pins:
 **Tests:** AnalyticsScreen 66/66 (restaurant test gained the two assertions) · full UI suite 292/292, 5111.
 
 **Risks / follow-ups:** the AOV low could still be asserted card-specifically (its "· $0.00" sibling on RevenueCard is real), left for a future slice. Year-aware month labels (multi-year "01" collisions) and the heatmap band unification remain open follow-ups. The collaborator's `dev-mock/tauri-api.ts` change remains uncommitted.
+## 2026-08-13 — Month labels collided across years on multi-year ranges (TDD)
+
+**Problem:** monthly/yearly buckets were labeled bare "MM" on every trend card, so a multi-year custom range rendered two "01".."12" sequences on one axis — ambiguous points, and `alignPrevBuckets` (which matches the compare overlay by label) could not tell Jan-2025 from Jan-2026.
+
+**Solution (TDD, Red→Green):** two failing unit tests first (revenue monthly Nov-2025→Feb-2026 → labels "11/25","12/25","01/26","02/26"; tables monthly Dec-2025→Jan-2026 → "12/25" with per-month turn minutes), then `revenueLabel(g, raw, multiYear)` gained the range-aware branch — "MM/YY" when the query window spans calendar years, "MM" otherwise — and the redundant identical-branch ternary (the long-journaled cleanup) finally collapsed. A new `rangeSpansYears(q)` helper drives it; all four label sites (loadRevenue, loadAov, loadTables, loadBasketSize) now call `revenueLabel(q.granularity, key, rangeSpansYears(q))`, so tables/basket labels unify onto the same helper as revenue. Single-year ranges are untouched (existing "MM"/"MM-DD" tests stay green).
+
+**Commits:** (see below — fix + journal)
+**Tests:** analytics-data 45/45 (+2) · AnalyticsScreen 66/66 · full UI suite 292/292, 5113.
+
+**Risks / follow-ups:** WEEKLY granularity has the same latent collision (a week-start "MM-DD" like "01-05" can repeat across years on multi-year ranges) — the journal's last open analytics item, scoped out of this slice because a year-aware weekly label needs a different format. The heatmap band unification also remains open. The collaborator's `dev-mock/tauri-api.ts` change remains uncommitted.
