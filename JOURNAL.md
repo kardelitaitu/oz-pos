@@ -4741,3 +4741,19 @@ Two regression pins:
 **Commits:** (pending)
 **Tests:** devLog 4/4 (+4) · integrity 3/3 · editor 541/541 · full UI suite 4,971/4,971 · typecheck clean (one transient error from another agent's in-flight FeatureToggleScreen edit, resolved before commit) · eslint 0 errors (10 pre-existing warnings, none new) · i18n lint clean.
 **Risks / follow-ups:** the ~15 existing bare `console.warn` call sites remain unmigrated — a future slice could route them through the bus (out of scope here; the bus is documented in its module header as the pattern). The recorder is always-on in production but capped at 100 entries, so no unbounded growth.
+
+## 2026-08-12 — History-entry producer audit: new setHistory/setRedo entry sites must use historyEntry
+
+**Problem:** The push-time sanitization (9269e295) and its diagnostic (0570553a → devLog bus 1cf0e409) only protect the FOUR known entry-creation sites. Nothing stopped a future developer from adding a fifth `setHistory((prev) => [...prev, { nodes, wires }])` raw push — the corruption hole the whole chain exists to close — because the sanitize contract lived in code comments, not in a gate.
+
+**Solution:** `ui/src/__tests__/topologyHistoryEntryAudit.test.ts` — a coverage-style static source audit (same approach as noiseDitherCompliance/themeTokenCompliance): scans `NodeTopologyEditor.tsx` for every `setHistory((prev) =>` / `setRedo((prev) =>` updater, classifies the ones that push (`[...prev, …]`), and asserts (1) each pushes via `historyEntry()` and (2) the count matches the documented 4-site baseline (pushHistory, commitDuplicateDrag, popUndo's redo-push, popRedo's history-push). The scanner strips comments and string literals first so prose parens in comments can never unbalance the extraction.
+
+**TDD rigor (mutation-verified):**
+- Green on baseline: 2/2 (all 4 sites already use historyEntry).
+- Mutation A (pushHistory's entry reverted to a raw object): per-site check fails, naming the exact line and the rule.
+- Mutation B (a fake fifth raw producer added): baseline count fails (`found 5`) AND the per-site check flags the new site — both failure modes covered, each with an actionable message pointing at historyEntry and the baseline comment.
+- Restored via precise reverse replacements; `git diff` confirms the editor file is byte-identical to HEAD after restore.
+
+**Commits:** (pending)
+**Tests:** audit 2/2 (+2) · editor 541/541 · full UI suite 4,973/4,973 · typecheck clean · eslint 0 errors (10 pre-existing warnings, none new) · i18n lint clean.
+**Risks / follow-ups:** the audit scans the editor source text, so a refactor that moves entry creation into a new helper changes the count — the drift-guard baseline comment tells the dev to update EXPECTED_ENTRY_CREATORS and re-verify (same contract as KNOWN_NOISE_SELECTORS). If entry creation ever moves OUT of NodeTopologyEditor.tsx entirely, the audit's path must point at the new home.
