@@ -26,18 +26,19 @@ interface AnalyticsCard {
   /** `null` = appears in both workspaces */
   workspace: WorkspaceView | null;
   title: string;
-  width: 'half' | 'full';
+  /** `true` = spans all grid columns; default = single cell */
+  full?: boolean;
 }
 
 const ANALYTICS_CARDS: AnalyticsCard[] = [
-  { key: 'heatmap',  workspace: null,          title: 'Peak Hours',             width: 'full' },
-  { key: 'revenue',  workspace: null,          title: 'Revenue Overview',       width: 'half' },
-  { key: 'staff',    workspace: null,          title: 'Staff Performance',      width: 'half' },
-  { key: 'top-items',workspace: 'retail',      title: 'Top Products',           width: 'half' },
-  { key: 'top-items',workspace: 'restaurant',  title: 'Top Menu Items',         width: 'half' },
-  { key: 'category', workspace: 'retail',      title: 'Sales by Category',      width: 'half' },
-  { key: 'tables',   workspace: 'restaurant',  title: 'Table Turnover',         width: 'half' },
-  { key: 'payments', workspace: null,          title: 'Payment Methods',        width: 'half' },
+  { key: 'heatmap',  workspace: null,         title: 'Peak Hours',             full: true },
+  { key: 'revenue',  workspace: null,         title: 'Revenue Overview' },
+  { key: 'staff',    workspace: null,         title: 'Staff Performance' },
+  { key: 'top-items',workspace: 'retail',     title: 'Top Products' },
+  { key: 'top-items',workspace: 'restaurant', title: 'Top Menu Items' },
+  { key: 'category', workspace: 'retail',     title: 'Sales by Category' },
+  { key: 'tables',   workspace: 'restaurant', title: 'Table Turnover' },
+  { key: 'payments', workspace: null,         title: 'Payment Methods' },
 ];
 
 // ── Component ─────────────────────────────────────────────────────────
@@ -304,7 +305,7 @@ export default function AnalyticsScreen() {
           {visibleCards.map((card) => (
             <div
               key={`${card.key}-${card.workspace ?? 'shared'}`}
-              className={`analytics-card analytics-card--${card.width}`}
+              className={`analytics-card${card.full ? ' analytics-card--full' : ''}`}
             >
               <div className="analytics-card-header">
                 <h2 className="analytics-card-title">{card.title}</h2>
