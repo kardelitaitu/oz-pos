@@ -4757,3 +4757,21 @@ Two regression pins:
 **Commits:** (pending)
 **Tests:** audit 2/2 (+2) · editor 541/541 · full UI suite 4,973/4,973 · typecheck clean · eslint 0 errors (10 pre-existing warnings, none new) · i18n lint clean.
 **Risks / follow-ups:** the audit scans the editor source text, so a refactor that moves entry creation into a new helper changes the count — the drift-guard baseline comment tells the dev to update EXPECTED_ENTRY_CREATORS and re-verify (same contract as KNOWN_NOISE_SELECTORS). If entry creation ever moves OUT of NodeTopologyEditor.tsx entirely, the audit's path must point at the new home.
+
+## 2026-08-12 — History-entry audit extended to the whole ui/src tree
+
+**Problem:** The producer audit (f7d6fe84) scanned only `NodeTopologyEditor.tsx`. The topology editor is today the only graph editor in the app, but nothing guarded the REST of the tree: a future editor's own undo stack — or any History/Redo/Undo-named setter pushing raw entries — would appear with zero coverage, exactly where the sanitize contract is easiest to miss.
+
+**Solution:** The audit now walks every production `.ts`/`.tsx` under `ui/src` and classifies undo/redo-stack entry creators generically: any `set<…>((prev) => …)` updater whose setter name matches /History|Redo|Undo/i and whose body spreads `prev` into a new array (append `[...prev, …]` OR prepend `[…, ...prev]` — the retail cart stack prepends). Two new whole-tree rules: (1) every creator must use `historyEntry` or be declared in `DOCUMENTED_EXCEPTIONS`; (2) the only non-exempt creators are the topology editor's four sanitized sites. The one exception is declared with a reason: `RetailPosScreen`'s `setUndoStack` — a flat removed-line LIFO with no cross-references, so the graph wire/node invariant has no analogue.
+
+**Also fixed:** the audit's line numbers were computed on the comment/string-stripped source, so messages pointed at drifted lines (reported RetailPosScreen:208 for the real 351). `stripCommentsAndStrings` now returns an original-index map and sites report true line numbers.
+
+**TDD rigor (mutation-verified):**
+- Baseline green: 4/4 (4 topology + 1 retail exception detected; both whole-tree rules pass).
+- Mutation 1 (exception list emptied): the retail stack is flagged with the precise file:line + "declare it in DOCUMENTED_EXCEPTIONS" message — the exception is load-bearing, not dead baseline.
+- Mutation 2 (raw `setRedo((prev) => [...prev, …])` added to RetailPosScreen): flagged at RetailPosScreen:352 — a new raw creator anywhere in ui/src fails, and the setter-scoped exception correctly does NOT exempt a different setter in the same file.
+- Restored both via precise reverse replacements; `git diff` confirms no production file changed.
+
+**Commits:** (pending)
+**Tests:** audit 4/4 (+2) · editor 541/541 · full UI suite 4,975/4,975 · typecheck clean · eslint 0 errors (10 pre-existing warnings, none new) · i18n lint clean.
+**Risks / follow-ups:** the setter-name filter (/History|Redo|Undo/i) is the declared coverage boundary — a stack named entirely differently (e.g. `setSnapshots`) would not match; that's the documented limitation of a name-based drift guard, and the topology's `setHistory`/`setRedo` are the canonical names to copy. CustomerManagementScreen's `setHistory(null)/setHistory(h)` is correctly NOT flagged (direct-value state, no updater push).
