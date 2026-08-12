@@ -22,6 +22,8 @@ next: none | perf: N/A
 use std::str::FromStr;
 use std::sync::Arc;
 
+use crate::config::CloudServerConfig;
+
 use tokio::sync::Mutex;
 use tracing::info;
 
@@ -43,16 +45,23 @@ impl DbPool {
     /// 1. If `DATABASE_URL` starts with `postgres://` or `postgresql://`,
     ///    connect to PostgreSQL.
     /// 2. Otherwise, open SQLite from `OZ_DB_PATH` (default `oz-pos.db`).
-    pub async fn from_env() -> Result<Self, DbError> {
-        match std::env::var("DATABASE_URL") {
-            Ok(url) if url.starts_with("postgres://") || url.starts_with("postgresql://") => {
-                Self::connect_postgres(&url).await
-            }
-            _ => {
-                let path = std::env::var("OZ_DB_PATH").unwrap_or_else(|_| "oz-pos.db".into());
-                Self::connect_sqlite(&path)
+    /// Create a new `DbPool` from a [`CloudServerConfig`].
+    pub async fn from_config(config: &CloudServerConfig) -> Result<Self, DbError> {
+        if let Some(ref url) = config.database_url {
+            if url.starts_with("postgres://") || url.starts_with("postgresql://") {
+                return Self::connect_postgres(url).await;
             }
         }
+        Self::connect_sqlite(&config.db_path)
+    }
+
+    /// Create a pool from the environment (used by tests that set env vars).
+    /// Production code should go through [`CloudServerConfig`].
+    #[cfg(test)]
+    pub async fn from_env() -> Result<Self, DbError> {
+        let config =
+            CloudServerConfig::from_env().expect("CloudServerConfig::from_env failed in test");
+        Self::from_config(&config).await
     }
 
     /// Detect paths that are obviously non-Linux: a Windows drive-letter

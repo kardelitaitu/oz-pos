@@ -21,6 +21,7 @@
 //! | `OZ_SYNC_REDIRECT_URL` | — | New server URL for migration redirect. When set, all `/api/sync/*` requests return `{"error":"server_migrated","new_url":"<url>"}` with HTTP 421. |
 //! | `RUST_LOG` | `info` | Log level filter (e.g. `debug`, `oz_cloud_server=debug`) |
 
+mod config;
 mod db;
 mod email;
 mod metrics;
@@ -79,13 +80,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         );
     }
 
+    // ── Configuration ────────────────────────────────────────────────
+    let config =
+        config::CloudServerConfig::from_env().map_err(|e| format!("invalid configuration: {e}"))?;
+
     // ── Logging ──────────────────────────────────────────────────────
-    // RUST-07: startup failures surface as structured errors instead of
-    // panicking the process (the runtime Debug-prints the returned error).
-    if std::env::var("OZ_LOG_FORMAT").as_deref() == Ok("json") {
-        oz_logging::try_init_json().map_err(|e| format!("logging init_json failed: {e}"))?;
-    } else {
-        oz_logging::try_init().map_err(|e| format!("logging init failed: {e}"))?;
+    match config.log_format {
+        config::LogFormat::Json => {
+            oz_logging::try_init_json().map_err(|e| format!("logging init_json failed: {e}"))?;
+        }
+        config::LogFormat::Plain => {
+            oz_logging::try_init().map_err(|e| format!("logging init failed: {e}"))?;
+        }
     }
 
     // ── Config validation (--validate-config skips the server) ───────
@@ -128,23 +134,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // metrics, API) and run a minimal server that only returns the
     // migration redirect. This keeps the old VPS cheap during the
     // 15-30 day migration window.
-    if std::env::var("OZ_REDIRECT_ONLY").as_deref() == Ok("true") {
-        if std::env::var("OZ_SYNC_REDIRECT_URL").is_err() {
-            tracing::error!("OZ_REDIRECT_ONLY=true requires OZ_SYNC_REDIRECT_URL to be set");
-            std::process::exit(1);
-        }
+    if config.redirect_only {
         info!("running in redirect-only mode (ADR #11)");
+        let redirect_url = config
+            .sync_redirect_url
+            .clone()
+            .expect("validated at construction");
         let redirect_router = Router::new()
             .fallback(|| async { axum::http::StatusCode::MISDIRECTED_REQUEST })
-            .layer(axum::middleware::from_fn(redirect::redirect_middleware));
-        serve(redirect_router).await?;
+            .layer(axum::middleware::from_fn_with_state(
+                redirect_url,
+                redirect::redirect_middleware,
+            ));
+        serve(redirect_router, config).await?;
         return Ok(());
     }
 
     // ── Database ─────────────────────────────────────────────────────
     // Supports both SQLite (OZ_DB_PATH) and PostgreSQL (DATABASE_URL).
     // SQLite is the default backend.
-    let pool = db::DbPool::from_env()
+    let pool = db::DbPool::from_config(&config)
         .await
         .map_err(|e| format!("failed to initialise database: {e}"))?;
 
@@ -154,9 +163,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             let state = CloudServerState {
                 db: conn.clone(),
                 started_at: Instant::now(),
-                stripe_webhook_secret: std::env::var("STRIPE_WEBHOOK_SECRET").ok(),
-                square_webhook_signature_key: std::env::var("SQUARE_WEBHOOK_SIGNATURE_KEY").ok(),
-                square_webhook_url: std::env::var("SQUARE_WEBHOOK_URL").ok(),
+                stripe_webhook_secret: config.stripe_webhook_secret.clone(),
+                square_webhook_signature_key: config.square_webhook_signature_key.clone(),
+                square_webhook_url: config.square_webhook_url.clone(),
             };
             // Start the background prune loop (ADR #6 Q4 / P-1 Ledger Retention).
             prune::start_prune_loop(conn.clone());
@@ -168,8 +177,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             let rate_limiter = RateLimiterState::new();
             start_rate_limit_cleanup(rate_limiter.clone());
 
-            let app = build_router(state, rate_limiter);
-            serve(app).await?;
+            let app = build_router(state, rate_limiter, &config);
+            serve(app, config).await?;
         }
         db::DbPool::Postgres(_pg_pool) => {
             info!("running with PostgreSQL backend");
@@ -182,17 +191,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             let state = CloudServerState {
                 db: conn.sqlite_conn(),
                 started_at: Instant::now(),
-                stripe_webhook_secret: std::env::var("STRIPE_WEBHOOK_SECRET").ok(),
-                square_webhook_signature_key: std::env::var("SQUARE_WEBHOOK_SIGNATURE_KEY").ok(),
-                square_webhook_url: std::env::var("SQUARE_WEBHOOK_URL").ok(),
+                stripe_webhook_secret: config.stripe_webhook_secret.clone(),
+                square_webhook_signature_key: config.square_webhook_signature_key.clone(),
+                square_webhook_url: config.square_webhook_url.clone(),
             };
 
             // P8-1: Per-tenant rate limiter state + background cleanup.
             let rate_limiter = RateLimiterState::new();
             start_rate_limit_cleanup(rate_limiter.clone());
 
-            let app = build_router(state, rate_limiter);
-            serve(app).await?;
+            let app = build_router(state, rate_limiter, &config);
+            serve(app, config).await?;
         }
     }
     Ok(())
@@ -204,11 +213,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 /// 1. Stops accepting new connections
 /// 2. Drains in-flight connections with a 30-second timeout
 /// 3. Logs the shutdown and exits cleanly
-async fn serve(app: Router) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let port: u16 = std::env::var("OZ_API_PORT")
-        .ok()
-        .and_then(|p| p.parse().ok())
-        .unwrap_or(3099);
+async fn serve(
+    app: Router,
+    config: config::CloudServerConfig,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let port = config.port;
 
     // RUST-07: a port bind failure (e.g. port already in use) is a recoverable
     // operational error and now propagates to main instead of panicking.
@@ -321,24 +330,12 @@ async fn health_handler(
     })
 }
 
-/// Read the admin key from the environment, treating an unset or *empty*
-/// value as "not configured" so dev mode stays open.
-///
-/// An empty string must not enable key gating: `docker compose` passes
-/// `OZ_ADMIN_KEY` through as `""` when the host variable is absent, and
-/// `Some("")` would lock token minting behind an impossible empty header.
-fn admin_key_from_env() -> Option<String> {
-    configured_admin_key(std::env::var("OZ_ADMIN_KEY"))
-}
-
-/// Pure core of [`admin_key_from_env`] — `Some(key)` for a non-empty value,
-/// `None` for missing or empty (testable without mutating the environment).
-fn configured_admin_key(raw: Result<String, std::env::VarError>) -> Option<String> {
-    raw.ok().filter(|key| !key.is_empty())
-}
-
 /// Build the combined router: REST API + sync endpoints + rate limiting.
-pub fn build_router(state: CloudServerState, rate_limiter: RateLimiterState) -> Router {
+pub fn build_router(
+    state: CloudServerState,
+    rate_limiter: RateLimiterState,
+    config: &config::CloudServerConfig,
+) -> Router {
     let cors = CorsLayer::new()
         .allow_methods(Any)
         .allow_headers(Any)
@@ -348,9 +345,8 @@ pub fn build_router(state: CloudServerState, rate_limiter: RateLimiterState) -> 
     let api_state = oz_api::AppState {
         db: state.db.clone(),
         // ADR sync-auth-hardening P2: gate token minting with the admin key
-        // when configured; open in dev mode when unset. Read here so the
-        // running server honours OZ_ADMIN_KEY (main.rs owns the env).
-        admin_key: admin_key_from_env(),
+        // when configured; open in dev mode when unset.
+        admin_key: config.admin_key.clone(),
     };
     let api_router = oz_api::router(api_state);
 
@@ -408,6 +404,9 @@ mod tests {
     use tower::ServiceExt;
 
     // ── Admin key env semantics ───────────────────────────────────
+    fn configured_admin_key(raw: Result<String, std::env::VarError>) -> Option<String> {
+        raw.ok().filter(|key| !key.is_empty())
+    }
 
     #[test]
     fn configured_admin_key_missing_is_none() {
@@ -419,8 +418,6 @@ mod tests {
 
     #[test]
     fn configured_admin_key_empty_is_none() {
-        // docker compose passes an empty string when the host var is absent;
-        // it must behave like unset (dev mode stays open), not Some("").
         assert_eq!(configured_admin_key(Ok(String::new())), None);
     }
 
@@ -430,6 +427,24 @@ mod tests {
             configured_admin_key(Ok("super-secret".to_string())),
             Some("super-secret".to_string())
         );
+    }
+
+    /// Helper: create a default config for tests.
+    fn test_config() -> config::CloudServerConfig {
+        config::CloudServerConfig {
+            db_path: ":memory:".into(),
+            database_url: None,
+            port: 3099,
+            admin_key: None,
+            enforce_plans: false,
+            log_format: config::LogFormat::Plain,
+            redirect_only: false,
+            sync_redirect_url: None,
+            stripe_webhook_secret: None,
+            square_webhook_signature_key: None,
+            square_webhook_url: None,
+            api_secret: None,
+        }
     }
 
     /// Helper: build an in-memory database with migrations applied.
@@ -446,7 +461,8 @@ mod tests {
             square_webhook_signature_key: None,
             square_webhook_url: None,
         };
-        build_router(state, crate::rate_limit::RateLimiterState::new())
+        let config = test_config();
+        build_router(state, crate::rate_limit::RateLimiterState::new(), &config)
     }
 
     /// Create a test JWT token.
@@ -553,7 +569,11 @@ mod tests {
             square_webhook_signature_key: None,
             square_webhook_url: None,
         };
-        let app = build_router(state.clone(), crate::rate_limit::RateLimiterState::new());
+        let app = build_router(
+            state.clone(),
+            crate::rate_limit::RateLimiterState::new(),
+            &test_config(),
+        );
 
         // Seed some pending queue items
         {
@@ -589,7 +609,11 @@ mod tests {
             square_webhook_signature_key: None,
             square_webhook_url: None,
         };
-        let app = build_router(state.clone(), crate::rate_limit::RateLimiterState::new());
+        let app = build_router(
+            state.clone(),
+            crate::rate_limit::RateLimiterState::new(),
+            &test_config(),
+        );
 
         // Seed some items with various synced_at times
         {
@@ -646,7 +670,7 @@ mod tests {
             square_webhook_url: None,
         };
         let rate_limiter = crate::rate_limit::RateLimiterState::new();
-        let app = build_router(state.clone(), rate_limiter);
+        let app = build_router(state.clone(), rate_limiter, &test_config());
 
         // Seed an item directly with tenant_id
         {
@@ -718,7 +742,7 @@ mod tests {
             square_webhook_url: None,
         };
         let rate_limiter = crate::rate_limit::RateLimiterState::new();
-        let app = build_router(state.clone(), rate_limiter);
+        let app = build_router(state.clone(), rate_limiter, &test_config());
 
         // Tenant A pushes two items (real UUID ids — push_handler rejects
         // non-UUID ids; see round 121)
@@ -766,7 +790,7 @@ mod tests {
             square_webhook_url: None,
         };
         let rate_limiter = crate::rate_limit::RateLimiterState::new();
-        let app = build_router(state.clone(), rate_limiter);
+        let app = build_router(state.clone(), rate_limiter, &test_config());
 
         // Tenant A pushes one item (real UUID id)
         let id_a = uuid::Uuid::now_v7().to_string();
@@ -821,7 +845,7 @@ mod tests {
             square_webhook_url: None,
         };
         let rate_limiter = crate::rate_limit::RateLimiterState::new();
-        let app = build_router(state.clone(), rate_limiter);
+        let app = build_router(state.clone(), rate_limiter, &test_config());
 
         // Tenant A pushes 3 items (real UUID ids)
         let a_ids: Vec<String> = (0..3).map(|_| uuid::Uuid::now_v7().to_string()).collect();
@@ -874,7 +898,7 @@ mod tests {
             square_webhook_url: None,
         };
         let rate_limiter = crate::rate_limit::RateLimiterState::new();
-        let app = build_router(state.clone(), rate_limiter);
+        let app = build_router(state.clone(), rate_limiter, &test_config());
 
         // Push items as default tenant (real UUID id)
         let def_id = uuid::Uuid::now_v7().to_string();
