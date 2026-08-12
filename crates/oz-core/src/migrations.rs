@@ -803,6 +803,10 @@ pub const ALL: &[Migration] = &[
         id: "135_sale_line_cost_snapshot.sql",
         sql: include_str!("../migrations/135_sale_line_cost_snapshot.sql"),
     },
+    Migration {
+        id: "136_processed_webhooks.sql",
+        sql: include_str!("../migrations/136_processed_webhooks.sql"),
+    },
 ];
 
 /// Apply every unapplied migration and configure runtime PRAGMAs.

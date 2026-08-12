@@ -55,6 +55,8 @@ pub fn webhooks_router(state: CloudServerState) -> Router {
 /// Stripe webhook event payload (minimal — we only need `type` and `id`).
 #[derive(serde::Deserialize, Debug)]
 struct StripeEvent {
+    /// Unique event identifier for idempotency (Stripe redelivers webhooks).
+    id: String,
     /// Event type (e.g. `payment_intent.succeeded`, `charge.captured`).
     r#type: String,
     /// Event data payload.
@@ -206,6 +208,7 @@ async fn handle_subscription_event(
         Some(t) => t,
         None => {
             tracing::warn!(event_type = %event.r#type, "subscription event with unresolvable tenant — ignoring");
+            record_event_processed(state, &event.id, "stripe", Some(&event.r#type)).await;
             return Ok(axum::Json(serde_json::json!({
                 "status": "ignored",
                 "event_type": event.r#type,
@@ -223,6 +226,7 @@ async fn handle_subscription_event(
 
     let Some(plan) = plan else {
         tracing::debug!(event_type = %event.r#type, tenant_id, "subscription status leaves plan unchanged");
+        record_event_processed(state, &event.id, "stripe", Some(&event.r#type)).await;
         return Ok(axum::Json(serde_json::json!({
             "status": "accepted",
             "tenant_id": tenant_id,
@@ -243,6 +247,7 @@ async fn handle_subscription_event(
     drop(conn);
 
     tracing::info!(tenant_id, plan = plan.as_db_str(), event_type = %event.r#type, "stripe subscription updated tenant plan");
+    record_event_processed(state, &event.id, "stripe", Some(&event.r#type)).await;
 
     Ok(axum::Json(serde_json::json!({
         "status": "accepted",
@@ -355,6 +360,18 @@ async fn stripe_webhook_handler(
     let event: StripeEvent = serde_json::from_slice(&body_bytes)
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("invalid event body: {e}")))?;
 
+    // 4b. Idempotency: skip already-processed events.
+    //     Stripe guarantees at-least-once delivery; redelivered events
+    //     must not double-count a subscription upgrade or payment capture.
+    if event_already_processed(&state, &event.id).await {
+        tracing::debug!(event_id = %event.id, event_type = %event.r#type, "webhook already processed — skipping");
+        return Ok(axum::Json(serde_json::json!({
+            "status": "already_processed",
+            "event_id": event.id,
+            "event_type": event.r#type,
+        })));
+    }
+
     // 5. Subscription lifecycle events update the tenant's sync plan
     //    (ADR sync-plan-gating) instead of finalising a sale.
     if is_subscription_event(&event.r#type) {
@@ -376,6 +393,7 @@ async fn stripe_webhook_handler(
     enqueue_finalize_sale(&state, &sale_id).await?;
 
     tracing::info!(payment_id, sale_id, event_type = %event.r#type, "stripe webhook processed");
+    record_event_processed(&state, &event.id, "stripe", Some(&event.r#type)).await;
 
     Ok(axum::Json(serde_json::json!({
         "status": "accepted",
@@ -446,6 +464,16 @@ async fn square_webhook_handler(
     let event: SquareEvent = serde_json::from_slice(&body_bytes)
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("invalid event body: {e}")))?;
 
+    // 6b. Idempotency: skip already-processed events
+    if square_event_already_processed(&state, &event.event_id).await {
+        tracing::debug!(event_id = %event.event_id, event_type = %event.r#type, "square webhook already processed — skipping");
+        return Ok(axum::Json(serde_json::json!({
+            "status": "already_processed",
+            "event_id": event.event_id,
+            "event_type": event.r#type,
+        })));
+    }
+
     // Square uses payment IDs (not pi_xxx prefix). Use the data.id directly.
     let payment_id = event.data.id.clone();
 
@@ -456,12 +484,61 @@ async fn square_webhook_handler(
     enqueue_finalize_sale(&state, &sale_id).await?;
 
     tracing::info!(payment_id, sale_id, event_type = %event.r#type, "square webhook processed");
+    record_event_processed(&state, &event.event_id, "square", Some(&event.r#type)).await;
 
     Ok(axum::Json(serde_json::json!({
         "status": "accepted",
         "sale_id": sale_id,
         "event_type": event.r#type,
     })))
+}
+
+// ── Webhook idempotency helpers ─────────────────────────────────────
+/// Check whether a webhook event has already been processed.
+///
+/// Pure check -- does not insert. The recording happens in
+/// [`record_event_processed`] after all side effects succeed.
+async fn event_already_processed(state: &CloudServerState, event_id: &str) -> bool {
+    let conn = state.db.lock().await;
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM processed_webhooks WHERE event_id = ?1",
+            rusqlite::params![event_id],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    count > 0
+}
+
+/// Like [`event_already_processed`] but for Square events.
+async fn square_event_already_processed(state: &CloudServerState, event_id: &str) -> bool {
+    let conn = state.db.lock().await;
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM processed_webhooks WHERE event_id = ?1",
+            rusqlite::params![event_id],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    count > 0
+}
+
+/// Record a webhook event as successfully processed.
+///
+/// Called after all side effects (plan update, sale finalization) have
+/// succeeded. If the row was already inserted by [`event_already_processed`]
+/// this is a no-op.
+async fn record_event_processed(
+    state: &CloudServerState,
+    event_id: &str,
+    provider: &str,
+    event_type: Option<&str>,
+) {
+    let conn = state.db.lock().await;
+    let _ = conn.execute(
+        "INSERT OR IGNORE INTO processed_webhooks (event_id, provider, event_type) VALUES (?1, ?2, ?3)",
+        rusqlite::params![event_id, provider, event_type],
+    );
 }
 
 /// Look up a sale by its `gateway_reference` in the payments table.
@@ -784,7 +861,7 @@ mod tests {
 
         let app = webhooks_router(state.clone());
 
-        let payload = br#"{"type":"payment_intent.succeeded","data":{"object":{"id":"pi_3NcdefghIJklmnOPQRSTUvwx","amount":1000,"status":"succeeded"}}}"#;
+        let payload = br#"{"id":"evt_test_happy","type":"payment_intent.succeeded","data":{"object":{"id":"pi_3NcdefghIJklmnOPQRSTUvwx","amount":1000,"status":"succeeded"}}}"#;
         let signature = stripe_signature(payload, secret);
 
         let req = Request::builder()
@@ -827,6 +904,7 @@ mod tests {
         let app = webhooks_router(state.clone());
         let secret = state.stripe_webhook_secret.clone().unwrap();
         let payload = serde_json::json!({
+            "id": format!("evt_test_{}", uuid::Uuid::now_v7()),
             "type": event_type,
             "data": { "object": object },
         });
@@ -1032,7 +1110,7 @@ mod tests {
         let state = test_state_with_stripe(secret);
         let app = webhooks_router(state);
 
-        let payload = br#"{"type":"payment_intent.succeeded","data":{"object":{"id":"pi_unknown","amount":1000}}}"#;
+        let payload = br#"{"id":"evt_test_404","type":"payment_intent.succeeded","data":{"object":{"id":"pi_unknown","amount":1000}}}"#;
         let signature = stripe_signature(payload, secret);
 
         let req = Request::builder()

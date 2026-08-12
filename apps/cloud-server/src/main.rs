@@ -976,6 +976,7 @@ mod tests {
 
         // Step 2: Fire Stripe webhook to upgrade tenant to pro
         let webhook_payload = serde_json::json!({
+            "id": "evt_lifecycle_test",
             "type": "customer.subscription.created",
             "data": { "object": {
                 "id": "sub_lifecycle",

@@ -157,6 +157,12 @@ impl DbPool {
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     synced_at TIMESTAMPTZ,
                     priority INTEGER NOT NULL DEFAULT 1
+                );
+                CREATE TABLE IF NOT EXISTS processed_webhooks (
+                    event_id TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL,
+                    received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    event_type TEXT
                 );",
             )
             .await
