@@ -189,6 +189,45 @@
   gap: 16px;
   max-width: 1100px;
   margin: 0 auto;
+  position: relative;
+  transition: opacity 0.2s;
+}
+
+/* Recalculating overlay */
+.analytics-grid--calculating {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.analytics-grid--calculating::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+/* Recalculating badge */
+.analytics-recalc-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+  padding: 6px 0 2px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.analytics-recalc-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #e2e8f0;
+  border-top-color: var(--color-primary, #4f46e5);
+  border-radius: 50%;
+  animation: analytics-spin 0.6s linear infinite;
+}
+
+@keyframes analytics-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* Individual card */

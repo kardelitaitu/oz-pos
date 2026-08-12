@@ -5,7 +5,7 @@
 //!         + inline custom date range
 //! Main:   smart card grid — cards adapt to retail vs restaurant
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import './AnalyticsScreen.css';
@@ -50,6 +50,16 @@ export default function AnalyticsScreen() {
   const [granularity, setGranularity] = useState<Granularity>('daily');
   const [customFrom, setCustomFrom] = useState(isoToday());
   const [customTo, setCustomTo] = useState(isoToday());
+  const [calculating, setCalculating] = useState(false);
+  const calcTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  // Recalculate when filters change
+  useEffect(() => {
+    setCalculating(true);
+    clearTimeout(calcTimer.current);
+    calcTimer.current = setTimeout(() => setCalculating(false), 600);
+    return () => clearTimeout(calcTimer.current);
+  }, [workspaceView, granularity, customFrom, customTo]);
 
   // Filter cards visible for the current workspace
   const visibleCards = ANALYTICS_CARDS.filter(
@@ -230,7 +240,13 @@ export default function AnalyticsScreen() {
           AREA 3 — Main content: smart analytics card grid
           ══════════════════════════════════════════════════════════ */}
       <main className="analytics-main">
-        <div className="analytics-grid">
+        {calculating && (
+          <div className="analytics-recalc-badge">
+            <div className="analytics-recalc-spinner" />
+            <span>Recalculating…</span>
+          </div>
+        )}
+        <div className={`analytics-grid${calculating ? ' analytics-grid--calculating' : ''}`}>
           {visibleCards.map((card) => (
             <div
               key={`${card.key}-${card.workspace ?? 'shared'}`}
