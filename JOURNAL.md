@@ -4655,7 +4655,7 @@ fmt/clippy/drift/i18n-parity clean.
 
 All three failed under a temporary mutation removing the two both-endpoints filters and the two sanitize calls (true Red), while the pre-existing Ctrl+V identity-less pin stayed green (pasteClipboard untouched — pins are route-specific). The three stale comments were corrected to describe the sanitize behavior.
 
-**Commits:** (pending) — `test(topology)` pins + comment fix.
+**Commits:** `a0d79804` (refactor: the semantic-core move into oz-core) — `test(topology)` pins + comment fix.
 
 **Test counts:** editor 532/532 (+3, all mutation-verified Red), full UI suite 4,948/4,948, typecheck clean, eslint 0 errors (8 pre-existing warnings), i18n lint + FTL dedupe clean.
 
@@ -4672,7 +4672,7 @@ All three failed under a temporary mutation removing the two both-endpoints filt
 
 Also: 7 new en/id FTL keys (bundle parity clean), dither + token-compliance wiring for the new elevated surface, and the parent ADR item 7's UI half marked resolved with a cross-reference.
 
-**Commits:** (pending) — `feat(topology): legacy-schema migration dialog for ambiguous wires`.
+**Commits:** `a0d79804` (refactor: the semantic-core move into oz-core) — `feat(topology): legacy-schema migration dialog for ambiguous wires`.
 
 **Test counts:** topologyCard 34/34 (+7, true Red), editor 537/537 (+5, true Red), full UI suite 4,960/4,960, typecheck clean, eslint 0 errors (8 pre-existing warnings), i18n lint + FTL dedupe + bundle parity clean.
 
@@ -4687,7 +4687,7 @@ Two regression pins:
 1. **End-to-end (Pin A):** copy a wired pair, paste, delete the pasted endpoint, then undo past the delete and past the paste — no unknown-wire-endpoint banner at any step, wire count stays honest (2 → 1 → 2 → 1).
 2. **Guard-specific (Pin B, mutation-verified):** Alt+drag a wired pair, then ONE undo removes the whole duplicate with no dangling wire. Proven true-Red: forcing `commitDuplicateDrag`'s entry wire-filter to keep copy wires creates a dangling entry; with the guard disabled the undo resurrects the wire and the banner fires; with the guard the wire is dropped and the canvas stays clean.
 
-**Commits:** (pending) — `fix(topology): guard undo/redo restores against dangling wire entries`.
+**Commits:** `a0d79804` (refactor: the semantic-core move into oz-core) — `fix(topology): guard undo/redo restores against dangling wire entries`.
 
 **Test counts:** editor 539/539 (+2, Pin B true-Red via mutation), full UI suite 4,962/4,962, typecheck clean, eslint 0 errors (8 pre-existing warnings), i18n lint + FTL dedupe clean (no FTL change).
 
@@ -4706,7 +4706,7 @@ Two regression pins:
 - The paste pin stayed green through both mutations (its `pushHistory` path was never the mutated site).
 - `git checkout` restore of the mutated file wiped the uncommitted Green changes — re-applied (1 definition + 4 call sites, verified by grep).
 
-**Commits:** (pending)
+**Commits:** `a0d79804` (refactor: the semantic-core move into oz-core)
 **Tests:** editor 541/541 (+2) · full UI suite 4,964/4,964 · typecheck clean · eslint 0 errors (pre-existing warnings only — the `selectMany` dep warning at commitDuplicateDrag predates this change) · i18n lint clean.
 **Risks / follow-ups:** none new. The `cancelDuplicateDrag` wire filter remains the journaled low-severity follow-up from 46af16e7.
 
@@ -4722,7 +4722,7 @@ Two regression pins:
 - Editor pin: the Alt+drag undo→redo round-trip pin now also asserts zero `[topology]` warnings on a clean round-trip (pass-through spy, prefix-filtered).
 - Mutation: with `commitDuplicateDrag` pushed to dangle (real-code restore guard intact), the pin failed on the zero-diagnostic assertion AND the `[topology] restore-time guard dropped 1 dangling wire(s)...` warning visibly fired from the real restore path — end-to-end proof the diagnostic is wired through popUndo, not just the unit tests. Paste pin stayed green (unmutated path). Restored via precise reverse replacement (learned from the 9269e295 `git checkout` wipe — no checkout this time).
 
-**Commits:** (pending)
+**Commits:** `a0d79804` (refactor: the semantic-core move into oz-core)
 **Tests:** topologyHistoryIntegrity 3/3 (+3) · editor 541/541 · full UI suite 4,967/4,967 · typecheck clean · eslint 0 errors (10 pre-existing warnings, none new — new module lint-clean) · i18n lint clean.
 **Risks / follow-ups:** none new. The diagnostic is console-only by design (an internal corruption signal, not user-facing — a user-facing surface would need FTL keys and would fire in the same impossible-to-reach corruption path).
 
@@ -4738,7 +4738,7 @@ Two regression pins:
 - Migration: the integrity unit tests and the Alt+drag editor pin switched from `vi.spyOn(console, 'warn')` to the recorder seam (`getDevLog().filter(e => e.source === 'topology')`); the editor file's top-level `beforeEach` now clears the recorder so no diagnostic leaks across tests.
 - Mutation (same dangling-entry experiment as 0570553a): the `[topology] restore-time guard dropped 1 dangling wire(s)…` line still fired visibly from the real restore path AND the pin failed on the recorder assertion (`expected [ { level: 'warn', … } ] to have a length of +0 but got 1`) — end-to-end proof the bus routes console + recorder identically. Restored via precise reverse replacement.
 
-**Commits:** (pending)
+**Commits:** `a0d79804` (refactor: the semantic-core move into oz-core)
 **Tests:** devLog 4/4 (+4) · integrity 3/3 · editor 541/541 · full UI suite 4,971/4,971 · typecheck clean (one transient error from another agent's in-flight FeatureToggleScreen edit, resolved before commit) · eslint 0 errors (10 pre-existing warnings, none new) · i18n lint clean.
 **Risks / follow-ups:** the ~15 existing bare `console.warn` call sites remain unmigrated — a future slice could route them through the bus (out of scope here; the bus is documented in its module header as the pattern). The recorder is always-on in production but capped at 100 entries, so no unbounded growth.
 
@@ -4754,7 +4754,7 @@ Two regression pins:
 - Mutation B (a fake fifth raw producer added): baseline count fails (`found 5`) AND the per-site check flags the new site — both failure modes covered, each with an actionable message pointing at historyEntry and the baseline comment.
 - Restored via precise reverse replacements; `git diff` confirms the editor file is byte-identical to HEAD after restore.
 
-**Commits:** (pending)
+**Commits:** `a0d79804` (refactor: the semantic-core move into oz-core)
 **Tests:** audit 2/2 (+2) · editor 541/541 · full UI suite 4,973/4,973 · typecheck clean · eslint 0 errors (10 pre-existing warnings, none new) · i18n lint clean.
 **Risks / follow-ups:** the audit scans the editor source text, so a refactor that moves entry creation into a new helper changes the count — the drift-guard baseline comment tells the dev to update EXPECTED_ENTRY_CREATORS and re-verify (same contract as KNOWN_NOISE_SELECTORS). If entry creation ever moves OUT of NodeTopologyEditor.tsx entirely, the audit's path must point at the new home.
 
@@ -4772,7 +4772,7 @@ Two regression pins:
 - Mutation 2 (raw `setRedo((prev) => [...prev, …])` added to RetailPosScreen): flagged at RetailPosScreen:352 — a new raw creator anywhere in ui/src fails, and the setter-scoped exception correctly does NOT exempt a different setter in the same file.
 - Restored both via precise reverse replacements; `git diff` confirms no production file changed.
 
-**Commits:** (pending)
+**Commits:** `a0d79804` (refactor: the semantic-core move into oz-core)
 **Tests:** audit 4/4 (+2) · editor 541/541 · full UI suite 4,975/4,975 · typecheck clean · eslint 0 errors (10 pre-existing warnings, none new) · i18n lint clean.
 **Risks / follow-ups:** the setter-name filter (/History|Redo|Undo/i) is the declared coverage boundary — a stack named entirely differently (e.g. `setSnapshots`) would not match; that's the documented limitation of a name-based drift guard, and the topology's `setHistory`/`setRedo` are the canonical names to copy. CustomerManagementScreen's `setHistory(null)/setHistory(h)` is correctly NOT flagged (direct-value state, no updater push).
 
@@ -4787,7 +4787,7 @@ Two regression pins:
 - Green: helper module + audit refactor. One refactor regression caught by the safety net: I switched the tree scan from `relative(UI_SRC, file)` to absolute paths, breaking the retail exception match — the two whole-tree tests failed, fixed by restoring the relative conversion.
 - Mutation re-verified: re-running the raw-`setRedo`-in-RetailPosScreen experiment against the REFACTORED audit still fails with the identical `RetailPosScreen.tsx:352` message — the extraction is behavior-identical through the shared helper.
 
-**Commits:** (pending)
+**Commits:** `a0d79804` (refactor: the semantic-core move into oz-core)
 **Tests:** sourceAudit 8/8 (+8) · audit 4/4 · full UI suite 4,983/4,983 · typecheck clean · eslint 0 errors (10 pre-existing warnings, none new) · i18n lint clean.
 **Risks / follow-ups:** none. Future drift-guard audits over source text should import from test-utils/sourceAudit instead of re-implementing the scanner.
 
@@ -4820,7 +4820,7 @@ Two regression pins:
 - Green: module + error variant. Then the desktop rewiring — 915 lib + 32 integration tests stayed green with zero code changes in tests.
 - Docs: the extraction ranges off-by-included two doc comments (legacy-topology + validate_topology_envelope) that belong to desktop fns — both restored to the desktop file, orphaned copies removed from oz-core; diff-verified that every removed doc line corresponds to a moved fn.
 
-**Commits:** (pending)
+**Commits:** `a0d79804` (refactor: the semantic-core move into oz-core)
 **Tests:** oz-core topology 9/9 (+9) · desktop lib 915/915 · integration 32/32 (gate 3, wiring 6, kernel 7, window 11+2, parity 3) · clippy -D warnings clean on both crates · fmt clean.
 
 **Risks / follow-ups:** (1) `migrations::tests::migration_135_backfills_cost_snapshot_from_product_cost` FAILS on the committed baseline (verified by temporarily reverting my files) — a pre-existing breakage from the retail-attribute schema work, unrelated to this change; needs its own fix. (2) The core exposes only the fns desktop consumes as pub; the full pairing matrix helpers remain private — a tablet consumer can widen them deliberately. (3) Desktop lib tests could only run via `--lib` (plus a fresh target dir for integration tests) because a running dev instance of `oz-pos-app` holds the bin exe lock; the app was not killed per the shared-tree rule.
