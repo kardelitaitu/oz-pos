@@ -9,8 +9,13 @@ import sharedFtl from '@/locales/shared.ftl?raw';
 // --- mocks ---
 
 vi.mock('echarts-for-react/lib/core', () => ({
-  default: (props: Record<string, unknown>) =>
-    React.createElement('div', { ...props, 'data-testid': 'echarts-mock' }),
+  default: (props: Record<string, unknown>) => {
+    // Drop the chart-only props so React doesn't warn about unknown DOM
+    // attributes (notMerge, option, …) on the placeholder div.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { option, notMerge, lazyUpdate, onEvents, onChartReady, theme, ...rest } = props;
+    return React.createElement('div', { ...rest, 'data-testid': 'echarts-mock' });
+  },
 }));
 
 vi.mock('echarts/core', () => ({
@@ -37,6 +42,7 @@ vi.mock('@/contexts/CurrencyContext', () => ({
 }));
 
 import AnalyticsScreen, { nextExpandedKey, daysInCurrentMonth, monthCalendarGrid, smartScale } from '@/features/analytics/AnalyticsScreen';
+import { clearAnalyticsCache } from '@/features/analytics/analytics-cache';
 import { registerAnalyticsFeature } from '@/features/analytics/register';
 import { registerStaffFeature } from '@/features/staff/register';
 import { getEnabledPages, clearPages, hasGrantedPermission } from '@/platform/ui/page-registry';
@@ -50,6 +56,10 @@ describe('AnalyticsScreen layout shell', () => {
   beforeEach(() => {
     mockGoToPicker.mockReset();
     localStorage.clear();
+    // The analytics cache is a module-level singleton — wipe it so each
+    // test starts from a cold cache (otherwise the daily/retail query
+    // from a previous test would be served as a fresh hit).
+    clearAnalyticsCache();
   });
 
   afterEach(() => {
@@ -532,15 +542,28 @@ describe('AnalyticsScreen layout shell', () => {
     expect(screen.getByText('Total revenue')).toBeTruthy();
     expect(screen.getAllByLabelText('Revenue Overview').length).toBeGreaterThan(0);
 
-    // Staff card: ranked list of four
+    // Staff card: ranked list of four, each row with a trend arrow
     expect(document.querySelectorAll('.analytics-rank-row').length).toBeGreaterThanOrEqual(4);
+    expect(document.querySelectorAll('.analytics-rank-delta').length).toBeGreaterThan(0);
 
-    // Low-stock card: four alert rows with remaining counts
+    // Low-stock card: four alert rows with remaining counts,
+    // restock-cost tile, and a suggested reorder chip per row
     expect(document.querySelectorAll('.analytics-alert-row').length).toBe(4);
     expect(screen.getAllByText(/\d+ left/).length).toBe(4);
+    expect(screen.getByText('Est. restock cost')).toBeTruthy();
+    expect(screen.getAllByText(/Order \d+/).length).toBe(4);
 
-    // Refunds card: KPI tiles
+    // Refunds card: refund-rate KPI tile + trend chart
     expect(document.querySelectorAll('.analytics-kpi-tiles').length).toBeGreaterThan(0);
+    expect(screen.getByText('Refund rate')).toBeTruthy();
+    // Chart aria-label (card container also carries the title label)
+    expect(screen.getAllByLabelText('Refunds & Voids').length).toBeGreaterThanOrEqual(2);
+
+    // Discounts card: share KPI label (derived, not a hardcoded value)
+    expect(screen.getByText('of sales from discounts')).toBeTruthy();
+
+    // Category card: top-category KPI row above the donut
+    expect(screen.getByText('Top category')).toBeTruthy();
   });
 
   it('keeps card visuals rendering as granularity changes', () => {
@@ -629,6 +652,59 @@ describe('AnalyticsScreen layout shell', () => {
     expect(document.querySelectorAll('.analytics-card--expanded').length).toBe(0);
   });
 
+  it('serves an identical query from the cache without a recalc skeleton', () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    // First visit: cache miss → recalc skeleton
+    expect(document.querySelectorAll('.analytics-card-skeleton').length).toBeGreaterThan(0);
+    flushRecalc();
+    expect(document.querySelectorAll('.analytics-card-skeleton').length).toBe(0);
+
+    // Switch to weekly: different query → skeleton again
+    fireEvent.click(screen.getByRole('radio', { name: 'Weekly' }));
+    flushRecalc();
+
+    // Switch back to daily within the TTL: fresh cache hit → no skeleton,
+    // content renders instantly (identical query is not refetched)
+    fireEvent.click(screen.getByRole('radio', { name: 'Daily' }));
+    expect(document.querySelectorAll('.analytics-card-skeleton').length).toBe(0);
+    expect(screen.getByText('Total revenue')).toBeTruthy();
+  });
+
+  it('refetches an identical query after the TTL expires', () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    flushRecalc();
+
+    // Let the daily query's 5-minute TTL lapse
+    act(() => {
+      vi.advanceTimersByTime(5 * 60 * 1000 + 1000);
+    });
+
+    // Switch away and back — the cached daily query is now stale, so a
+    // recalc skeleton appears and the data refetches
+    fireEvent.click(screen.getByRole('radio', { name: 'Weekly' }));
+    flushRecalc();
+    fireEvent.click(screen.getByRole('radio', { name: 'Daily' }));
+    expect(document.querySelectorAll('.analytics-card-skeleton').length).toBeGreaterThan(0);
+    flushRecalc();
+    expect(document.querySelectorAll('.analytics-card-skeleton').length).toBe(0);
+  });
+
+  it('refresh always refetches even when the query is cached', () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    flushRecalc();
+
+    // The daily query is fresh in the cache, but the refresh button
+    // forces a recalc skeleton and wipes the cached payloads
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh data' }));
+    expect(document.querySelectorAll('.analytics-card-skeleton').length).toBeGreaterThan(0);
+    flushRecalc();
+    expect(document.querySelectorAll('.analytics-card-skeleton').length).toBe(0);
+  });
+
   it('renders the analytics card grid with workspace-appropriate titles', () => {
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 
@@ -642,7 +718,8 @@ describe('AnalyticsScreen layout shell', () => {
     expect(screen.getByText('Heat Map')).toBeTruthy();
   });
 
-  it('switches card titles when workspace changes to restaurant', async () => {
+  it('switches card titles when workspace changes to restaurant', () => {
+    vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 
     // Retail defaults
@@ -651,11 +728,21 @@ describe('AnalyticsScreen layout shell', () => {
 
     // Switch to restaurant
     const select = screen.getByRole('combobox', { name: 'Select workspace type' });
-    await userEvent.selectOptions(select, 'restaurant');
+    fireEvent.change(select, { target: { value: 'restaurant' } });
+
+    // Flush the recalc skeleton so card content renders
+    flushRecalc();
 
     // Restaurant-specific cards replace retail ones
     expect(screen.getByText('Top Menu Items')).toBeTruthy();
     expect(screen.getByText('Table Turnover')).toBeTruthy();
+
+    // Occupancy card renders its hourly occupancy curve
+    expect(screen.getByLabelText('Occupancy by hour')).toBeTruthy();
+
+    // Waitstaff card: total-covers KPI; voids card: voided-value KPI
+    expect(screen.getByText('Total covers')).toBeTruthy();
+    expect(screen.getByText('Voided value')).toBeTruthy();
   });
 });
 

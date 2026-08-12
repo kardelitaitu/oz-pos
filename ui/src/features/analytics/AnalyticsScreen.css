@@ -871,6 +871,17 @@
   flex-shrink: 0;
 }
 
+/* Per-row trend arrow in ranked lists */
+.analytics-rank-delta {
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.analytics-rank-delta--up   { color: #16a34a; }
+.analytics-rank-delta--down { color: #dc2626; }
+
 /* Legend (donuts + stacked bars) */
 .analytics-legend {
   list-style: none;
@@ -943,6 +954,18 @@
   font-weight: 600;
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+/* Suggested reorder chip on low-stock rows */
+.analytics-alert-reorder {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: #ea580c;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 /* Occupancy gauge */

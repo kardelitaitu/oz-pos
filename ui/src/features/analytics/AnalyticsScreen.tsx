@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { AnalyticsCardContent } from './AnalyticsCardContent';
+import { analyticsDataCache, analyticsQueryKey, clearAnalyticsCache } from './analytics-cache';
 import './AnalyticsScreen.css';
 
 export type WorkspaceView = 'retail' | 'restaurant';
@@ -181,11 +182,33 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   const expandedBodyRef = useRef<HTMLDivElement | null>(null);
   const mainRef = useRef<HTMLElement | null>(null);
 
-  const startRecalculating = useRef<() => void>();
-  startRecalculating.current = () => {
+  /**
+   * Kick off a recalculation. `force` (refresh button / R key) always
+   * refetches; otherwise an identical query still fresh in the TTL cache
+   * renders instantly with no skeleton — switching granularity or
+   * workspace back and forth does not refetch identical queries.
+   */
+  const startRecalculating = useRef<(force?: boolean) => void>();
+  startRecalculating.current = (force = false) => {
+    const key = analyticsQueryKey(workspaceView, granularity, customFrom, customTo);
+    if (!force && analyticsDataCache.hasFresh(key)) {
+      setCalculating(false);
+      return;
+    }
     setCalculating(true);
     clearTimeout(calcTimer.current);
-    calcTimer.current = setTimeout(() => setCalculating(false), 600);
+    calcTimer.current = setTimeout(() => {
+      setCalculating(false);
+      if (force) {
+        // Refresh wipes the cached payloads so the data actually
+        // recomputes; the TTL-bounded cache refills on the next render.
+        clearAnalyticsCache();
+        return;
+      }
+      // Mark the query computed — revisits within the TTL skip the
+      // recalc skeleton (card payloads were cached when they rendered).
+      analyticsDataCache.set(key, { computedAt: Date.now() });
+    }, 600);
   };
 
   // Recalculate when filters change
@@ -227,7 +250,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
       if (k >= '1' && k <= '5') {
         setGranularity(GRANULARITIES[Number(k) - 1]!);
       } else if (k === 'r' || k === 'R') {
-        startRecalculating.current?.();
+        startRecalculating.current?.(true);
       } else if (k === '+') {
         zoomIn();
       } else if (k === '-' || k === '_') {
@@ -745,7 +768,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
               type="button"
               className="analytics-action-btn"
               onClick={() => {
-                startRecalculating.current?.();
+                startRecalculating.current?.(true);
                 showToast(l10n.getString('analytics-toast-refreshing'));
               }}
               aria-label={l10n.getString('analytics-action-refresh-aria')}
@@ -915,6 +938,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
             <div
               key={cid}
               ref={(el) => { if (el) cardRefs.current.set(cid, el); else cardRefs.current.delete(cid); }}
+              role="button"
               tabIndex={0}
               draggable={!isExpanded}
               aria-label={card.title}
@@ -1104,7 +1128,12 @@ const [paletteOpen, setPaletteOpen] = useState(false);
 
       {/* Outside-click backdrop for the per-card options menu */}
       {menuCardId && (
-        <div className="analytics-menu-backdrop" onClick={() => setMenuCardId(null)} />
+        <div
+          className="analytics-menu-backdrop"
+          role="presentation"
+          tabIndex={-1}
+          onClick={(e) => { if (e.target === e.currentTarget) setMenuCardId(null); }}
+        />
       )}
 
       {/* Transient action feedback toasts */}
