@@ -210,6 +210,43 @@ describe('TtlCache sessionStorage persistence', () => {
     expect(store.has('oz-part-restaurant')).toBe(false);
   });
 
+  it('does not re-enumerate storage on every write — partitions are tracked in memory', () => {
+    const { store, api } = memStorage();
+    let enumerations = 0;
+    const spyApi: CachePersistence = {
+      getItem: api.getItem,
+      setItem: api.setItem,
+      removeItem: api.removeItem,
+      keys: () => {
+        enumerations += 1;
+        return [...store.keys()];
+      },
+    };
+    const partition = (entryKey: string) => `oz-spy-${entryKey.split(':')[2]!}`;
+
+    // Construction enumerates once (hydration discovers existing snapshots).
+    const cache = new TtlCache<string>(1000, 200, spyApi, 'oz-spy', 1, partition);
+    expect(enumerations).toBe(1);
+
+    // Every subsequent write must prune against the in-memory set — no
+    // more enumeration calls.
+    cache.set('card:revenue:retail:daily', 'r1');
+    cache.set('card:revenue:restaurant:daily', 'd1');
+    cache.invalidate('card:revenue:retail:daily');
+    expect(enumerations).toBe(1);
+
+    // Pruning still works without enumeration — the empty retail
+    // partition was dropped and the restaurant snapshot remains.
+    expect(store.has('oz-spy-retail')).toBe(false);
+    expect(store.has('oz-spy-restaurant')).toBe(true);
+
+    // A later write to the pruned partition recreates it — still with no
+    // extra enumeration.
+    cache.set('card:revenue:retail:weekly', 'r2');
+    expect(store.has('oz-spy-retail')).toBe(true);
+    expect(enumerations).toBe(1);
+  });
+
   it('reports how many entries were restored and from how many partitions', () => {
     const { api } = memStorage();
     const partition = (entryKey: string) => `oz-part-${entryKey.split(':')[2]!}`;

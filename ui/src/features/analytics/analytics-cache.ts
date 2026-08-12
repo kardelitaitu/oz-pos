@@ -133,6 +133,14 @@ export class TtlCache<T> {
   /** Elapsed ms of the construction-time hydration; `null` when none ran. */
   private hydrationMs: number | null = null;
 
+  /**
+   * Partition keys this cache wrote or hydrated. Persist/clear prune
+   * against this set instead of re-enumerating all of sessionStorage on
+   * every write — enumeration happens once at hydration, then writes
+   * keep the set current.
+   */
+  private readonly knownPartitions = new Set<string>();
+
   constructor(
     private readonly ttlMs: number = ANALYTICS_CACHE_TTL_MS,
     private readonly maxEntries: number = ANALYTICS_CACHE_MAX_ENTRIES,
@@ -175,6 +183,7 @@ export class TtlCache<T> {
   private hydrate(): void {
     const started = performance.now();
     for (const key of this.snapshotKeys()) {
+      this.knownPartitions.add(key);
       this.hydrateFrom(key);
     }
     this.hydrationMs = Math.round((performance.now() - started) * 10) / 10;
@@ -253,12 +262,18 @@ export class TtlCache<T> {
         // unaffected; persistence simply lapses for this write.
       }
     }
+    // Track every partition just written so future prunes don't need to
+    // enumerate all of sessionStorage.
+    for (const target of written) {
+      this.knownPartitions.add(target);
+    }
     // Drop partitions that no longer hold entries so a workspace whose
     // last query was invalidated doesn't leave an orphaned snapshot.
-    for (const key of this.snapshotKeys()) {
+    for (const key of [...this.knownPartitions]) {
       if (written.has(key)) continue;
       try {
         this.persistence.removeItem(key);
+        this.knownPartitions.delete(key);
       } catch {
         // storage unavailable — stale snapshot remains, harmless
       }
@@ -315,13 +330,14 @@ export class TtlCache<T> {
     this.entries.clear();
     this.counters.clear();
     if (!this.persistence) return;
-    for (const key of this.snapshotKeys()) {
+    for (const key of [...this.knownPartitions]) {
       try {
         this.persistence.removeItem(key);
       } catch {
         // storage unavailable — in-memory state is already cleared
       }
     }
+    this.knownPartitions.clear();
   }
 
   /** Number of stored entries (fresh or expired). */
