@@ -451,6 +451,17 @@ fn build_paths() -> Value {
                 }
             }
         },
+        "/api/v1/health": {
+            "get": {
+                "tags": ["Health"],
+                "summary": "API health check",
+                "description": "Lightweight health check returning status and version. Public — no authentication required. Simpler than /health (no DB ping).",
+                "operationId": "apiHealthCheck",
+                "responses": {
+                    "200": { "description": "Server is healthy", "content": { "application/json": { "schema": { "type": "object", "required": ["status", "version"], "properties": { "status": { "type": "string", "example": "ok" }, "version": { "type": "string", "example": "0.0.25" } } } } } }
+                }
+            }
+        },
 
         // ── Auth (Tokens) ───────────────────────────────────────────
         "/api/v1/tokens": {
@@ -919,6 +930,10 @@ mod tests {
         let paths = json["paths"].as_object().unwrap();
         assert!(paths.contains_key("/health"), "missing /health");
         assert!(paths.contains_key("/api/health"), "missing /api/health");
+        assert!(
+            paths.contains_key("/api/v1/health"),
+            "missing /api/v1/health"
+        );
         assert!(paths.contains_key("/metrics"), "missing /metrics");
         assert!(paths.contains_key("/api/v1/tokens"), "missing tokens");
         assert!(paths.contains_key("/api/v1/products"), "missing products");
@@ -1064,7 +1079,7 @@ mod tests {
         let spec = openapi_spec();
         let paths = spec["paths"].as_object().unwrap();
 
-        for path in &["/health", "/api/health", "/metrics"] {
+        for path in &["/health", "/api/health", "/api/v1/health", "/metrics"] {
             let operation = &paths[*path]["get"];
             assert!(
                 operation.get("security").is_none()
