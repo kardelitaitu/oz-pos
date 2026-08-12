@@ -4885,3 +4885,16 @@ Two regression pins:
 **Tests:** oz-core lib 1803/1803 (56 reports; +1 new weekly test) · fmt clean · clippy -D warnings clean · UI suite 292/292, 5102 (no UI changes needed — UI bucketing was already Monday).
 
 **Risks / follow-ups:** `yearlyWeekIntensities` derives the year heatmap's week-of-month band from `week_start`'s day — the Monday shift moves a handful of boundary weeks one heatmap band (same month), acceptable. The zero-fill of current-period trend buckets (days with no sales render as gaps, not 0) remains the outstanding analytics follow-up.
+## 2026-08-13 — Zero-filled trend buckets + the DeltaChip "vs previous period" lie (TDD)
+
+**Problem:** the backend GROUP BYs completed sales with no zero-fill, so a day/week/month without sales drops its row — the revenue/AOV charts rendered a GAP for zero-sales days instead of a 0 point, and the axis didn't cover the whole range. (The compare-overlay alignment fix made the dashed line land correctly, but the current line still skipped silent days.)
+
+**Solution (TDD, Red→Green):** wrote four failing unit tests first — `loadRevenue` zero-fills daily/weekly/monthly gaps and `loadAov` shares the same axis — then implemented `bucketKeys(g, from, to)` (enumerates every date / Monday week-start / YYYY-MM in the range) and rewrote both loaders to aggregate rows by raw key (summing multi-currency days) and map the enumeration, emitting 0 for missing buckets. Two real defects surfaced by the change, fixed in the same slice:
+
+1. **`DeltaChip` labeled in-period trends as "vs previous period".** Off-mode chips are `seriesDelta`/`turnDelta` (first→last bucket within the period) but always rendered the `analytics-card-vs-prev` suffix — a lie exposed the moment zero-fill gave trend cards ≥2 buckets. The chip now takes a `compare` flag and renders the suffix only in compare mode; all 16 call sites pass it. The compare screen test's off-mode assertion (`queryByText(/vs previous period/).toBeNull()`) pins it.
+2. **Test-isolation leak.** The `vi.mock('@/api/reports')` wrappers called `mockGetDailyRevenue()` with NO args (invisible while the loader ignored row dates), and the error-surface describe leaked a fixed-date `mockResolvedValue` into later describes. Wrappers now forward args; the currency-locale describe restores the range-anchored mock in `beforeEach`; the error-surface describe anchors `ORIGINAL_DAILY` to the queried range. (The screen-test revenue mocks are anchored to the query's `from` so the value path stays exercised instead of rendering an all-zero card.)
+
+**Commits:** (see below — fix + journal)
+**Tests:** analytics-data 38/38 (+4 zero-fill) · AnalyticsScreen 66/66 · full UI suite 292/292, 5106.
+
+**Risks / follow-ups:** zero-fill now gives trend cards an in-period trend chip whenever the series has ≥2 buckets — honest, but a chart that starts at 0 (e.g. a store's first day in the window) now omits the chip entirely (seriesDelta returns null on a zero first bucket). The `loadTables` grouping still carries a dead `days` accumulator. `dev-mock/tauri-api.ts` has an uncommitted collaborator change (retail category filter) unrelated to this slice — left in the tree.
