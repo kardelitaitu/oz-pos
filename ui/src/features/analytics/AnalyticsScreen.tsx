@@ -240,13 +240,7 @@ export default function AnalyticsScreen() {
           AREA 3 — Main content: smart analytics card grid
           ══════════════════════════════════════════════════════════ */}
       <main className="analytics-main">
-        {calculating && (
-          <div className="analytics-recalc-badge">
-            <div className="analytics-recalc-spinner" />
-            <span>Recalculating…</span>
-          </div>
-        )}
-        <div className={`analytics-grid${calculating ? ' analytics-grid--calculating' : ''}`}>
+        <div className="analytics-grid">
           {visibleCards.map((card) => (
             <div
               key={`${card.key}-${card.workspace ?? 'shared'}`}
@@ -256,10 +250,20 @@ export default function AnalyticsScreen() {
                 <h2 className="analytics-card-title">{card.title}</h2>
               </div>
               <div className="analytics-card-body">
-                <div className="analytics-card-placeholder">
-                  {cardPlaceholder(card.key)}
-                  <span className="analytics-card-hint">No data yet</span>
-                </div>
+                {calculating ? (
+                  <div className="analytics-card-skeleton">
+                    <div className="skeleton-bar skeleton-bar--sm" />
+                    <div className="skeleton-bar skeleton-bar--lg" />
+                    <div className="skeleton-bar skeleton-bar--md" />
+                    <div className="skeleton-bar skeleton-bar--lg" />
+                    <div className="skeleton-bar skeleton-bar--sm" />
+                  </div>
+                ) : (
+                  <div className="analytics-card-placeholder">
+                    {cardPlaceholder(card.key)}
+                    <span className="analytics-card-hint">No data yet</span>
+                  </div>
+                )}
               </div>
             </div>
           ))}

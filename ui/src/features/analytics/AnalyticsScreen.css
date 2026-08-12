@@ -189,45 +189,6 @@
   gap: 16px;
   max-width: 1100px;
   margin: 0 auto;
-  position: relative;
-  transition: opacity 0.2s;
-}
-
-/* Recalculating overlay */
-.analytics-grid--calculating {
-  opacity: 0.55;
-  pointer-events: none;
-}
-
-.analytics-grid--calculating::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-}
-
-/* Recalculating badge */
-.analytics-recalc-badge {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  justify-content: center;
-  padding: 6px 0 2px;
-  font-size: 12px;
-  color: #94a3b8;
-}
-
-.analytics-recalc-spinner {
-  width: 12px;
-  height: 12px;
-  border: 2px solid #e2e8f0;
-  border-top-color: var(--color-primary, #4f46e5);
-  border-radius: 50%;
-  animation: analytics-spin 0.6s linear infinite;
-}
-
-@keyframes analytics-spin {
-  to { transform: rotate(360deg); }
 }
 
 /* Individual card */
@@ -276,6 +237,32 @@
 .analytics-card-hint {
   font-size: 12px;
   color: #94a3b8;
+}
+
+/* Skeleton shimmer — one per card during recalculation */
+.analytics-card-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 0 4px;
+}
+
+.skeleton-bar {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton-bar--sm  { width: 45%; }
+.skeleton-bar--md  { width: 70%; }
+.skeleton-bar--lg  { width: 90%; }
+
+@keyframes skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 /* ── Print ─────────────────────────────────────────────────────── */
