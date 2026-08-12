@@ -45,6 +45,10 @@ function isoToday(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function isoDay(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
 /** Number of days in the current month (28–31). */
 export function daysInCurrentMonth(): number {
   const now = new Date();
@@ -134,6 +138,10 @@ export default function AnalyticsScreen() {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [expandScale, setExpandScale] = useState(1);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [allCollapsed, setAllCollapsed] = useState(false);
+  const [cardOrder, setCardOrder] = useState<string[]>([]);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
   const calcTimer = useRef<ReturnType<typeof setTimeout>>();
   const expandedBodyRef = useRef<HTMLDivElement | null>(null);
   const mainRef = useRef<HTMLElement | null>(null);
@@ -182,10 +190,63 @@ export default function AnalyticsScreen() {
 
   const cardId = (c: AnalyticsCard) => `${c.key}-${c.workspace ?? 'shared'}`;
 
+  const orderStorageKey = `oz-analytics-card-order-${workspaceView}`;
+  const defaultOrder = ANALYTICS_CARDS.map(cardId);
+
+  // Load the saved card order per workspace; merge any new cards at the end
+  useEffect(() => {
+    let order = defaultOrder;
+    try {
+      const saved = localStorage.getItem(orderStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved) as string[];
+        const known = new Set(defaultOrder);
+        const filtered = parsed.filter((id) => known.has(id));
+        order = [...filtered, ...defaultOrder.filter((id) => !filtered.includes(id))];
+      }
+    } catch {
+      /* corrupt storage — fall back to default order */
+    }
+    setCardOrder(order);
+  }, [workspaceView]);
+
+  const persistOrder = (order: string[]) => {
+    setCardOrder(order);
+    try {
+      localStorage.setItem(orderStorageKey, JSON.stringify(order));
+    } catch {
+      /* storage unavailable — keep in-memory order */
+    }
+  };
+
+  const reorderCard = (from: string, to: string) => {
+    if (from === to) return;
+    const order = [...cardOrder];
+    const i = order.indexOf(from);
+    const j = order.indexOf(to);
+    if (i < 0 || j < 0) return;
+    order.splice(i, 1);
+    order.splice(j, 0, from);
+    persistOrder(order);
+  };
+
+  const applyRangePreset = (days: number) => {
+    const to = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - (days - 1));
+    setCustomTo(isoDay(to));
+    setCustomFrom(isoDay(from));
+  };
+
   // When a card is expanded, only it is shown; otherwise all visible cards
   const displayedCards = expandedKey && visibleCards.some((c) => cardId(c) === expandedKey)
     ? visibleCards.filter((c) => cardId(c) === expandedKey)
     : visibleCards;
+
+  // Apply the user's saved order (falling back to the default when empty)
+  const orderedCards = [...displayedCards].sort(
+    (a, b) => cardOrder.indexOf(cardId(a)) - cardOrder.indexOf(cardId(b)),
+  );
 
   // Smart heatmap — bucket cells change with the selected granularity.
   // Monthly renders one cell per day of the current month (28–31);
@@ -513,39 +574,78 @@ export default function AnalyticsScreen() {
           </div>
 
           {granularity === 'custom' && (
-            <div className="analytics-custom-range">
-              <label className="analytics-custom-field">
-                <Localized id="analytics-custom-from">
-                  <span className="analytics-custom-label">From</span>
-                </Localized>
-                <input
-                  type="date"
-                  className="analytics-custom-input"
-                  value={customFrom}
-                  max={customTo}
-                  onChange={(e) => setCustomFrom(e.target.value)}
-                  aria-label={l10n.getString('analytics-custom-from')}
-                />
-              </label>
-              <span className="analytics-custom-sep">—</span>
-              <label className="analytics-custom-field">
-                <Localized id="analytics-custom-to">
-                  <span className="analytics-custom-label">To</span>
-                </Localized>
-                <input
-                  type="date"
-                  className="analytics-custom-input"
-                  value={customTo}
-                  min={customFrom}
-                  onChange={(e) => setCustomTo(e.target.value)}
-                  aria-label={l10n.getString('analytics-custom-to')}
-                />
-              </label>
-            </div>
+            <>
+              <div className="analytics-custom-range">
+                <label className="analytics-custom-field">
+                  <Localized id="analytics-custom-from">
+                    <span className="analytics-custom-label">From</span>
+                  </Localized>
+                  <input
+                    type="date"
+                    className="analytics-custom-input"
+                    value={customFrom}
+                    max={customTo}
+                    onChange={(e) => setCustomFrom(e.target.value)}
+                    aria-label={l10n.getString('analytics-custom-from')}
+                  />
+                </label>
+                <span className="analytics-custom-sep">—</span>
+                <label className="analytics-custom-field">
+                  <Localized id="analytics-custom-to">
+                    <span className="analytics-custom-label">To</span>
+                  </Localized>
+                  <input
+                    type="date"
+                    className="analytics-custom-input"
+                    value={customTo}
+                    min={customFrom}
+                    onChange={(e) => setCustomTo(e.target.value)}
+                    aria-label={l10n.getString('analytics-custom-to')}
+                  />
+                </label>
+              </div>
+              <div className="analytics-custom-presets" role="group" aria-label={l10n.getString('analytics-range-presets-aria')}>
+                {[7, 30, 90, 365].map((days) => (
+                  <button
+                    key={days}
+                    type="button"
+                    className="analytics-preset-chip"
+                    onClick={() => applyRangePreset(days)}
+                    aria-label={l10n.getString(`analytics-range-preset-${days}d`)}
+                  >
+                    {l10n.getString(`analytics-range-preset-${days}d`)}
+                  </button>
+                ))}
+              </div>
+            </>
           )}
 
-          {/* Action buttons — refresh, zoom out, zoom in */}
+          {/* Action buttons — collapse, refresh, zoom out, zoom in */}
           <div className="analytics-actions">
+            <button
+              type="button"
+              className={`analytics-action-btn${allCollapsed ? ' analytics-action-btn--active' : ''}`}
+              onClick={() => setAllCollapsed((c) => !c)}
+              aria-label={l10n.getString(allCollapsed ? 'analytics-action-expand-all-aria' : 'analytics-action-collapse-all-aria')}
+              title={l10n.getString(allCollapsed ? 'analytics-action-expand-all-aria' : 'analytics-action-collapse-all-aria')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
+                {allCollapsed ? (
+                  <>
+                    <path d="M4 14h16" />
+                    <path d="M4 18h16" />
+                    <path d="M4 6l4 4 4-4" />
+                  </>
+                ) : (
+                  <>
+                    <path d="M4 6h16" />
+                    <path d="M4 10h16" />
+                    <path d="M4 14l4 4 4-4" />
+                  </>
+                )}
+              </svg>
+            </button>
             <button
               type="button"
               className="analytics-action-btn"
@@ -638,15 +738,30 @@ export default function AnalyticsScreen() {
         </div>
 
         <div className="analytics-grid" style={{ zoom: zoomLevel }}>
-          {displayedCards.map((card) => {
+          {orderedCards.map((card) => {
             const cid = cardId(card);
             const isExpanded = expandedKey === cid;
+            const isDragging = dragId === cid;
+            const isDropTarget = overId === cid;
             return (
             <div
               key={cid}
-              className={`analytics-card${card.size ? ` analytics-card--${card.size}` : ''}${isExpanded ? ' analytics-card--expanded' : ''}`}
+              draggable={!isExpanded}
+              onDragStart={(e) => { setDragId(cid); if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'; }}
+              onDragOver={(e) => { e.preventDefault(); if (overId !== cid) setOverId(cid); }}
+              onDragLeave={() => setOverId((o) => (o === cid ? null : o))}
+              onDrop={(e) => { e.preventDefault(); reorderCard(dragId ?? '', cid); setDragId(null); setOverId(null); }}
+              onDragEnd={() => { setDragId(null); setOverId(null); }}
+              className={`analytics-card${card.size ? ` analytics-card--${card.size}` : ''}${isExpanded ? ' analytics-card--expanded' : ''}${allCollapsed ? ' analytics-card--collapsed' : ''}${isDragging ? ' analytics-card--dragging' : ''}${isDropTarget ? ' analytics-card--drop-target' : ''}`}
             >
               <div className="analytics-card-header">
+                <span className="analytics-card-grip" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12">
+                    <circle cx="9" cy="5" r="1.4" /><circle cx="15" cy="5" r="1.4" />
+                    <circle cx="9" cy="12" r="1.4" /><circle cx="15" cy="12" r="1.4" />
+                    <circle cx="9" cy="19" r="1.4" /><circle cx="15" cy="19" r="1.4" />
+                  </svg>
+                </span>
                 <Localized id={card.titleKey}>
                   <h2 className="analytics-card-title">{card.title}</h2>
                 </Localized>

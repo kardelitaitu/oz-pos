@@ -43,6 +43,7 @@ import { getNavItems, clearNavItems } from '@/platform/ui/menu-registry';
 describe('AnalyticsScreen layout shell', () => {
   beforeEach(() => {
     mockGoToPicker.mockReset();
+    localStorage.clear();
   });
 
   afterEach(() => {
@@ -213,6 +214,57 @@ describe('AnalyticsScreen layout shell', () => {
     const status = document.querySelector('.analytics-status');
     expect(status?.textContent).toContain('Retail');
     expect(status?.textContent).toContain('Daily');
+  });
+
+  it('reorders cards by drag and persists the layout', () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    // First card is the wide Heat Map (spans 2 columns)
+    const cards = () => [...document.querySelectorAll('.analytics-card')];
+    const titles = () => cards().map((c) => c.querySelector('.analytics-card-title')?.textContent);
+    expect(titles()[0]).toBe('Heat Map');
+
+    // Drag Revenue Overview onto Staff Performance's slot
+    const heat = cards()[0]!;
+    const staff = cards().find((c) => c.querySelector('.analytics-card-title')?.textContent === 'Staff Performance')!;
+    fireEvent.dragStart(heat);
+    fireEvent.dragOver(staff);
+    fireEvent.drop(staff);
+    fireEvent.dragEnd(heat);
+
+    // Order changed: Staff Performance moved before Heat Map
+    expect(titles().indexOf('Staff Performance')).toBeLessThan(titles().indexOf('Heat Map'));
+
+    // Layout persisted to localStorage
+    const saved = JSON.parse(localStorage.getItem('oz-analytics-card-order-retail')!);
+    expect(saved.indexOf('staff-shared')).toBeLessThan(saved.indexOf('heatmap-shared'));
+  });
+
+  it('applies quick range presets to the custom date pickers', () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Custom' }));
+    const from = screen.getByLabelText('From') as HTMLInputElement;
+    const to = screen.getByLabelText('To') as HTMLInputElement;
+
+    fireEvent.click(screen.getByRole('button', { name: 'Last 7 days' }));
+
+    const expectedFrom = new Date();
+    expectedFrom.setDate(expectedFrom.getDate() - 6);
+    expect(from.value).toBe(expectedFrom.toISOString().slice(0, 10));
+    expect(to.value).toBe(new Date().toISOString().slice(0, 10));
+  });
+
+  it('collapses all card bodies with the toggle and restores them', () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    expect(document.querySelectorAll('.analytics-card--collapsed').length).toBe(0);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse all cards' }));
+    expect(document.querySelectorAll('.analytics-card--collapsed').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand all cards' }));
+    expect(document.querySelectorAll('.analytics-card--collapsed').length).toBe(0);
   });
 
   it('shows the custom range in the status bar', () => {
