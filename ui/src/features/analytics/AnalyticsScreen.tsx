@@ -15,6 +15,20 @@ type Granularity = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom';
 
 const GRANULARITIES: Granularity[] = ['daily', 'weekly', 'monthly', 'yearly', 'custom'];
 
+const ZOOM_MIN = 0.6;
+const ZOOM_MAX = 1.6;
+const ZOOM_STEP = 0.2;
+
+/** Keyboard shortcut metadata — drives both the handler and the help popover. */
+const SHORTCUTS: { keys: string; labelKey: string }[] = [
+  { keys: '1–5',    labelKey: 'analytics-shortcuts-granularity' },
+  { keys: 'R',      labelKey: 'analytics-shortcuts-refresh' },
+  { keys: '+ / −',  labelKey: 'analytics-shortcuts-zoom' },
+  { keys: '0',      labelKey: 'analytics-shortcuts-zoom-reset' },
+  { keys: 'C',      labelKey: 'analytics-shortcuts-collapse' },
+  { keys: 'Esc',    labelKey: 'analytics-shortcuts-close' },
+];
+
 /**
  * Only one card may be expanded at a time.
  * - clicking the expanded card restores it (`current` → `null`)
@@ -42,11 +56,14 @@ export function smartScale(
 }
 
 function isoToday(): string {
-  return new Date().toISOString().slice(0, 10);
+  return isoDay(new Date());
 }
 
 function isoDay(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  // Local calendar date — `toISOString()` is UTC and can return the
+  // previous day for late-evening/early-morning local times, which would
+  // make the custom-range default land on the wrong date.
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 /** Number of days in the current month (28–31). */
@@ -134,10 +151,14 @@ export default function AnalyticsScreen() {
   const [customFrom, setCustomFrom] = useState(isoToday());
   const [customTo, setCustomTo] = useState(isoToday());
   const [calculating, setCalculating] = useState(false);
-  const [zoomLevel, setZoomLevel] = useState(1);
+  const [zoomLevel, setZoomLevel] = useState<number>(() => {
+    const saved = Number(localStorage.getItem('oz-analytics-zoom'));
+    return saved >= ZOOM_MIN && saved <= ZOOM_MAX ? saved : 1;
+  });
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [expandScale, setExpandScale] = useState(1);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [allCollapsed, setAllCollapsed] = useState(false);
   const [cardOrder, setCardOrder] = useState<string[]>([]);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -145,10 +166,6 @@ export default function AnalyticsScreen() {
   const calcTimer = useRef<ReturnType<typeof setTimeout>>();
   const expandedBodyRef = useRef<HTMLDivElement | null>(null);
   const mainRef = useRef<HTMLElement | null>(null);
-
-  const MIN_ZOOM = 0.6;
-  const MAX_ZOOM = 1.6;
-  const ZOOM_STEP = 0.2;
 
   const startRecalculating = useRef<() => void>();
   startRecalculating.current = () => {
@@ -163,9 +180,45 @@ export default function AnalyticsScreen() {
     return () => clearTimeout(calcTimer.current);
   }, [workspaceView, granularity, customFrom, customTo]);
 
-  const zoomIn = () => setZoomLevel((z) => Math.min(MAX_ZOOM, +(z + ZOOM_STEP).toFixed(2)));
-  const zoomOut = () => setZoomLevel((z) => Math.max(MIN_ZOOM, +(z - ZOOM_STEP).toFixed(2)));
+  const zoomIn = () => setZoomLevel((z) => Math.min(ZOOM_MAX, +(z + ZOOM_STEP).toFixed(2)));
+  const zoomOut = () => setZoomLevel((z) => Math.max(ZOOM_MIN, +(z - ZOOM_STEP).toFixed(2)));
   const zoomReset = () => setZoomLevel(1);
+
+  // Persist zoom across sessions
+  useEffect(() => {
+    try {
+      localStorage.setItem('oz-analytics-zoom', String(zoomLevel));
+    } catch {
+      /* storage unavailable */
+    }
+  }, [zoomLevel]);
+
+  // Keyboard shortcuts (ignored while typing in form fields)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;
+      const k = e.key;
+      if (k >= '1' && k <= '5') {
+        setGranularity(GRANULARITIES[Number(k) - 1]!);
+      } else if (k === 'r' || k === 'R') {
+        startRecalculating.current?.();
+      } else if (k === '+') {
+        zoomIn();
+      } else if (k === '-' || k === '_') {
+        zoomOut();
+      } else if (k === '0') {
+        zoomReset();
+      } else if (k === 'c' || k === 'C') {
+        setAllCollapsed((c) => !c);
+      } else if (k === 'Escape') {
+        setExpandedKey(null);
+        setShowShortcuts(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [zoomIn, zoomOut, zoomReset]);
 
   // Smart scaling: when a card is expanded, scale its content to fill the
   // available body area (works for any card — heatmap, table, or chart).
@@ -228,6 +281,17 @@ export default function AnalyticsScreen() {
     order.splice(i, 1);
     order.splice(j, 0, from);
     persistOrder(order);
+  };
+
+  const isDefaultOrder = JSON.stringify(cardOrder) === JSON.stringify(defaultOrder);
+
+  const resetLayout = () => {
+    try {
+      localStorage.removeItem(orderStorageKey);
+    } catch {
+      /* storage unavailable */
+    }
+    setCardOrder(defaultOrder);
   };
 
   const applyRangePreset = (days: number) => {
@@ -625,7 +689,14 @@ export default function AnalyticsScreen() {
             <button
               type="button"
               className={`analytics-action-btn${allCollapsed ? ' analytics-action-btn--active' : ''}`}
-              onClick={() => setAllCollapsed((c) => !c)}
+              onClick={() => {
+                const next = !allCollapsed;
+                setAllCollapsed(next);
+                // Collapsing all while a card is expanded would otherwise
+                // leave the grid showing only that card — restore the grid
+                // so the toggle visibly does what its label promises.
+                if (next) setExpandedKey(null);
+              }}
               aria-label={l10n.getString(allCollapsed ? 'analytics-action-expand-all-aria' : 'analytics-action-collapse-all-aria')}
               title={l10n.getString(allCollapsed ? 'analytics-action-expand-all-aria' : 'analytics-action-collapse-all-aria')}
             >
@@ -664,7 +735,7 @@ export default function AnalyticsScreen() {
               type="button"
               className="analytics-action-btn"
               onClick={zoomOut}
-              disabled={zoomLevel <= MIN_ZOOM}
+              disabled={zoomLevel <= ZOOM_MIN}
               aria-label={l10n.getString('analytics-action-zoom-out-aria')}
               title={l10n.getString('analytics-action-zoom-out-aria')}
             >
@@ -688,7 +759,7 @@ export default function AnalyticsScreen() {
               type="button"
               className="analytics-action-btn"
               onClick={zoomIn}
-              disabled={zoomLevel >= MAX_ZOOM}
+              disabled={zoomLevel >= ZOOM_MAX}
               aria-label={l10n.getString('analytics-action-zoom-in-aria')}
               title={l10n.getString('analytics-action-zoom-in-aria')}
             >
@@ -700,6 +771,34 @@ export default function AnalyticsScreen() {
                 <line x1="8" y1="11" x2="14" y2="11" />
               </svg>
             </button>
+            <button
+              type="button"
+              className="analytics-action-btn"
+              onClick={() => setShowShortcuts((s) => !s)}
+              aria-label={l10n.getString('analytics-shortcuts-aria')}
+              title={l10n.getString('analytics-shortcuts-aria')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+            </button>
+
+            {showShortcuts && (
+              <div className="analytics-shortcuts-popover" role="dialog" aria-label={l10n.getString('analytics-shortcuts-title')}>
+                <h3 className="analytics-shortcuts-title">{l10n.getString('analytics-shortcuts-title')}</h3>
+                <ul className="analytics-shortcuts-list">
+                  {SHORTCUTS.map((s) => (
+                    <li key={s.labelKey} className="analytics-shortcuts-item">
+                      <kbd className="analytics-shortcuts-keys">{s.keys}</kbd>
+                      <span>{l10n.getString(s.labelKey)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
       </nav>
@@ -735,6 +834,15 @@ export default function AnalyticsScreen() {
               </span>
             </>
           )}
+          {!isDefaultOrder && (
+            <button
+              type="button"
+              className="analytics-reset-layout"
+              onClick={resetLayout}
+            >
+              <Localized id="analytics-reset-layout"><span>Reset layout</span></Localized>
+            </button>
+          )}
         </div>
 
         <div className="analytics-grid" style={{ zoom: zoomLevel }}>
@@ -769,7 +877,13 @@ export default function AnalyticsScreen() {
                   <button
                     type="button"
                     className="analytics-card-action"
-                    onClick={() => setExpandedKey((current) => nextExpandedKey(current, cid))}
+                    onClick={() => setExpandedKey((current) => {
+                      const next = nextExpandedKey(current, cid);
+                      // Expanding a card while in compact mode shows the card
+                      // in full; collapse-all and expand are mutually exclusive.
+                      if (next) setAllCollapsed(false);
+                      return next;
+                    })}
                     aria-label={l10n.getString(isExpanded ? 'analytics-card-restore-aria' : 'analytics-card-expand-aria')}
                     title={l10n.getString(isExpanded ? 'analytics-card-restore-aria' : 'analytics-card-expand-aria')}
                   >

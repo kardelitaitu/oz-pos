@@ -37,25 +37,25 @@ analytics-kpi-total-sales = Total Sales
 
 # ── Charts ────────────────────────────────────────────────
 analytics-chart-daily-sales = Daily Sales by Staff
-analytics-chart-daily-sales-aria = .aria-label = Daily sales per staff member, select a staff member from the table to see details
+analytics-chart-daily-sales-aria = Daily sales per staff member, select a staff member from the table to see details
 analytics-chart-sales = Sales
 analytics-chart-shifts = Shifts
 analytics-chart-select-hint = Select a staff member from the table to see daily sales breakdown.
 
 # ── Deep-dive ──────────────────────────────────────────────
 analytics-deepdive-title = { $name } — Daily Detail
-analytics-deepdive-aria = .aria-label = Daily sales and shifts for { $name }
+analytics-deepdive-aria = Daily sales and shifts for { $name }
 analytics-deepdive-empty = No daily data available.
 
 # Export
 analytics-export-csv = CSV
-analytics-export-csv-aria = .aria-label = Export staff data as CSV
+analytics-export-csv-aria = Export staff data as CSV
 analytics-back = Back
-analytics-back-aria = .aria-label = Back to home
-analytics-workspace-select-aria = .aria-label = Select workspace type
+analytics-back-aria = Back to home
+analytics-workspace-select-aria = Select workspace type
 analytics-workspace-retail = Retail
 analytics-workspace-restaurant = Restaurant
-analytics-granularity-aria = .aria-label = Time granularity
+analytics-granularity-aria = Time granularity
 analytics-granularity-daily = Daily
 analytics-granularity-weekly = Weekly
 analytics-granularity-monthly = Monthly
@@ -99,3 +99,12 @@ analytics-range-preset-7d = Last 7 days
 analytics-range-preset-30d = Last 30 days
 analytics-range-preset-90d = Last 90 days
 analytics-range-preset-365d = Last year
+analytics-shortcuts-aria = Keyboard shortcuts
+analytics-shortcuts-title = Shortcuts
+analytics-shortcuts-granularity = Time range: 1–5
+analytics-shortcuts-refresh = Refresh: R
+analytics-shortcuts-zoom = Zoom in / out: + / −
+analytics-shortcuts-zoom-reset = Reset zoom: 0
+analytics-shortcuts-collapse = Collapse all: C
+analytics-shortcuts-close = Close / restore: Esc
+analytics-reset-layout = Reset layout

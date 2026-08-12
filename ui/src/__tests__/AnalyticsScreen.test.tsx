@@ -216,6 +216,63 @@ describe('AnalyticsScreen layout shell', () => {
     expect(status?.textContent).toContain('Daily');
   });
 
+  it('handles keyboard shortcuts for granularity and escape', () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    // '3' selects Monthly
+    fireEvent.keyDown(window, { key: '3' });
+    expect(screen.getByRole('radio', { name: 'Monthly' }).getAttribute('aria-checked')).toBe('true');
+
+    // Escape closes the shortcuts popover if open
+    fireEvent.click(screen.getByRole('button', { name: 'Keyboard shortcuts' }));
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('ignores keyboard shortcuts while typing in an input', () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Custom' }));
+    const from = screen.getByLabelText('From') as HTMLInputElement;
+
+    // Typing digits inside the date input must not switch granularity
+    fireEvent.keyDown(from, { key: '2' });
+    expect(screen.getByRole('radio', { name: 'Weekly' }).getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('opens the shortcuts help popover and closes it', () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Keyboard shortcuts' }));
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(screen.getByText(/Time range/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Keyboard shortcuts' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('shows a reset-layout button after reordering and restores defaults', () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    expect(screen.queryByRole('button', { name: 'Reset layout' })).toBeNull();
+
+    // Reorder: drag Heat Map onto Staff Performance
+    const cards = () => [...document.querySelectorAll('.analytics-card')];
+    const heat = cards()[0]!;
+    const staff = cards().find((c) => c.querySelector('.analytics-card-title')?.textContent === 'Staff Performance')!;
+    fireEvent.dragStart(heat);
+    fireEvent.dragOver(staff);
+    fireEvent.drop(staff);
+    fireEvent.dragEnd(heat);
+
+    expect(screen.getByRole('button', { name: 'Reset layout' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset layout' }));
+    expect(screen.queryByRole('button', { name: 'Reset layout' })).toBeNull();
+    expect(cards()[0]!.querySelector('.analytics-card-title')?.textContent).toBe('Heat Map');
+  });
+
   it('reorders cards by drag and persists the layout', () => {
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 

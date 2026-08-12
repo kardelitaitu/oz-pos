@@ -234,6 +234,79 @@
   color: var(--color-primary, #4f46e5);
 }
 
+/* Keyboard shortcuts help popover */
+.analytics-actions {
+  position: relative;
+}
+
+.analytics-shortcuts-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  width: 240px;
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+.analytics-shortcuts-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.analytics-shortcuts-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.analytics-shortcuts-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.analytics-shortcuts-keys {
+  padding: 2px 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 5px;
+  background: #f8fafc;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: #334155;
+}
+
+/* Reset layout — appears in the status bar when order is customized */
+.analytics-reset-layout {
+  margin-left: auto;
+  padding: 4px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #fff;
+  color: #64748b;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.analytics-reset-layout:hover {
+  background: #f1f5f9;
+  color: #334155;
+}
+
 /* Custom range quick presets */
 .analytics-custom-presets {
   display: flex;

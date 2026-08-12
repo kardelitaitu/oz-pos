@@ -37,25 +37,25 @@ analytics-kpi-total-sales = Total Penjualan
 
 # ── Charts ────────────────────────────────────────────────
 analytics-chart-daily-sales = Penjualan Harian per Staf
-analytics-chart-daily-sales-aria = .aria-label = Penjualan harian per anggota staf, pilih staf dari tabel untuk detail
+analytics-chart-daily-sales-aria = Penjualan harian per anggota staf, pilih staf dari tabel untuk detail
 analytics-chart-sales = Penjualan
 analytics-chart-shifts = Shift
 analytics-chart-select-hint = Pilih anggota staf dari tabel untuk melihat rincian penjualan harian.
 
 # ── Deep-dive ──────────────────────────────────────────────
 analytics-deepdive-title = { $name } — Detail Harian
-analytics-deepdive-aria = .aria-label = Penjualan dan shift harian untuk { $name }
+analytics-deepdive-aria = Penjualan dan shift harian untuk { $name }
 analytics-deepdive-empty = Tidak ada data harian.
 
 # Export
 analytics-export-csv = CSV
-analytics-export-csv-aria = .aria-label = Ekspor data staf sebagai CSV
+analytics-export-csv-aria = Ekspor data staf sebagai CSV
 analytics-back = Kembali
-analytics-back-aria = .aria-label = Kembali ke beranda
-analytics-workspace-select-aria = .aria-label = Pilih tipe workspace
+analytics-back-aria = Kembali ke beranda
+analytics-workspace-select-aria = Pilih tipe workspace
 analytics-workspace-retail = Retail
 analytics-workspace-restaurant = Restoran
-analytics-granularity-aria = .aria-label = Granularitas waktu
+analytics-granularity-aria = Granularitas waktu
 analytics-granularity-daily = Harian
 analytics-granularity-weekly = Mingguan
 analytics-granularity-monthly = Bulanan
@@ -99,3 +99,12 @@ analytics-range-preset-7d = 7 hari terakhir
 analytics-range-preset-30d = 30 hari terakhir
 analytics-range-preset-90d = 90 hari terakhir
 analytics-range-preset-365d = Setahun terakhir
+analytics-shortcuts-aria = Pintasan keyboard
+analytics-shortcuts-title = Pintasan
+analytics-shortcuts-granularity = Rentang waktu: 1–5
+analytics-shortcuts-refresh = Muat ulang: R
+analytics-shortcuts-zoom = Perbesar / perkecil: + / −
+analytics-shortcuts-zoom-reset = Atur ulang zoom: 0
+analytics-shortcuts-collapse = Ciutkan semua: C
+analytics-shortcuts-close = Tutup / pulihkan: Esc
+analytics-reset-layout = Atur ulang tata letak
