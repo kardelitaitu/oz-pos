@@ -359,8 +359,10 @@ function AovCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: st
   const prevActive = activeBuckets(prevData);
   const avg = active.length ? Math.round(active.reduce((s, d) => s + d.value, 0) / active.length) : 0;
   const prevAvg = prevActive.length ? Math.round(prevActive.reduce((s, d) => s + d.value, 0) / prevActive.length) : 0;
-  const peak = data && data.length ? data.reduce((a, b) => (b.value > a.value ? b : a)) : null;
-  const low = data && data.length ? data.reduce((a, b) => (b.value < a.value ? b : a)) : null;
+  // Peak/Low come from the active buckets — a zero-filled no-sales day is
+  // not a $0 AOV reading.
+  const peak = active.length ? active.reduce((a, b) => (b.value > a.value ? b : a)) : null;
+  const low = active.length ? active.reduce((a, b) => (b.value < a.value ? b : a)) : null;
   const delta = compare ? periodDelta(avg, prevAvg) : active.length ? seriesDelta(active) : null;
   const option = useMemo(() => (data ? ({
     grid: { left: 8, right: 8, top: 12, bottom: 0, containLabel: true },
@@ -641,8 +643,11 @@ function BasketCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title:
   const avg = basket ? basket.avg_line_count : 0;
   const orders = basket ? basket.sale_count : 0;
   const prevAvg = prevBasket ? prevBasket.avg_line_count : 0;
-  const peak = data.length ? data.reduce((a, b) => (b.value > a.value ? b : a)) : null;
-  const low = data.length ? data.reduce((a, b) => (b.value < a.value ? b : a)) : null;
+  const active = activeBuckets(data);
+  // Peak/Low come from the active buckets — a zero-filled no-sales day is
+  // not a 0.0 items/order reading.
+  const peak = active.length ? active.reduce((a, b) => (b.value > a.value ? b : a)) : null;
+  const low = active.length ? active.reduce((a, b) => (b.value < a.value ? b : a)) : null;
   const delta = compare ? periodDelta(avg, prevAvg) : null;
   const option = useMemo(() => (data.length ? ({
     grid: { left: 8, right: 8, top: 12, bottom: 0, containLabel: true },
@@ -789,8 +794,10 @@ function TablesCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title:
   const prevActive = activeBuckets(prevData);
   const avgTurn = active.length ? Math.round(active.reduce((s, d) => s + d.value, 0) / active.length) : 0;
   const prevAvgTurn = prevActive.length ? Math.round(prevActive.reduce((s, d) => s + d.value, 0) / prevActive.length) : 0;
-  const peak = data.length ? data.reduce((a, b) => (b.value > a.value ? b : a)) : null;
-  const low = data.length ? data.reduce((a, b) => (b.value < a.value ? b : a)) : null;
+  // Peak/Low come from the active buckets — a zero-filled no-order day is
+  // not a 0-minute turn.
+  const peak = active.length ? active.reduce((a, b) => (b.value > a.value ? b : a)) : null;
+  const low = active.length ? active.reduce((a, b) => (b.value < a.value ? b : a)) : null;
   // Compare mode shows the period-over-period change; off-mode keeps the
   // in-series turn-time delta over the active buckets (faster turns =
   // shorter minutes; zero-filled no-order days are not "0-minute turns").

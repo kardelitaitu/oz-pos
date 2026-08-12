@@ -1063,6 +1063,12 @@ describe('AnalyticsScreen layout shell', () => {
     // rows (20/30/25 turns → 72/48/58 min per day, avg 59m)
     expect(screen.getByText('59m')).toBeTruthy();
 
+    // Zero-filled no-orders days must not read as the "lowest turn time" —
+    // a closed day is not a 0-minute day. The low comes from the active
+    // buckets (48m on 08-11), never the zero-filled 08-13.
+    expect(screen.queryByText('Low: 08-13 · 0m')).toBeNull();
+    expect(screen.getByText('Low: 08-11 · 48m')).toBeTruthy();
+
     // Occupancy card renders its real hourly curve (peak derived from the
     // hourly-activity mock → 19:00) and the live rate from the tables
     // snapshot (2 of 4 occupied → 50%)
