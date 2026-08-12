@@ -55,6 +55,8 @@ pub mod product_variants;
 pub mod products;
 /// Promotion commands.
 pub mod promotions;
+/// Purchasing / supplier / purchase-order commands.
+pub mod purchasing;
 /// Refund commands.
 pub mod refunds;
 /// Reporting commands.
