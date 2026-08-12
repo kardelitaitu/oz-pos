@@ -129,8 +129,7 @@ analytics-palette-placeholder = Cari aksi…
 analytics-palette-empty = Tidak ada hasil
 analytics-palette-home = Kembali ke beranda
 
-# ── Visual kartu (data demo sampai IPC analytics terhubung) ────
-analytics-card-demo = Data demo
+# ── Visual kartu ──────────────────────────────────────────────
 analytics-card-vs-prev = dibanding periode lalu
 analytics-rank-up = naik
 analytics-rank-down = turun

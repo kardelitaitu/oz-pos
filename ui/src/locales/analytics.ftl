@@ -129,8 +129,7 @@ analytics-palette-placeholder = Search actions…
 analytics-palette-empty = No matches
 analytics-palette-home = Back to home
 
-# ── Card visuals (demo data until analytics IPC is wired) ───────
-analytics-card-demo = Demo data
+# ── Card visuals ─────────────────────────────────────────────────
 analytics-card-vs-prev = vs previous period
 analytics-rank-up = up
 analytics-rank-down = down

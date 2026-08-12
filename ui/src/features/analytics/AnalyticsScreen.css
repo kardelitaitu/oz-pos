@@ -899,22 +899,6 @@
   gap: 8px;
 }
 
-/* Demo-data honesty chip — top-right corner of each card body */
-.analytics-card-demo-chip {
-  position: absolute;
-  top: -4px;
-  right: 0;
-  padding: 2px 7px;
-  border: 1px solid var(--analytics-border);
-  border-radius: var(--radius-full);
-  background: var(--analytics-bg-surface);
-  color: var(--analytics-fg-tertiary);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-}
-
 /* KPI headline + delta */
 .analytics-kpi-row {
   display: flex;

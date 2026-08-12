@@ -49,11 +49,6 @@ import type { Granularity, WorkspaceView } from './AnalyticsScreen';
 
 echarts.use([EBar, ELine, EPie, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
 
-// ── Deterministic demo data ─────────────────────────────────────────
-// The same (card, granularity) always yields the same numbers so tests,
-// screenshots, and re-renders are stable, while values still vary
-// plausibly per bucket.
-
 // ── Money formatting (mirrors reports DashboardScreen) ───────────────
 
 function useMoney() {

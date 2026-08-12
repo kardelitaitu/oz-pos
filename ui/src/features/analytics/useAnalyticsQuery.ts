@@ -6,9 +6,9 @@
 //! served instantly — switching granularity or workspace back and forth
 //! does not recompute or refetch.
 //!
-//! `fetcher` may be synchronous (deterministic helpers) or return a
-//! Promise (the real IPC commands); async fetchers surface a `loading`
-//! status until they resolve.
+//! `fetcher` may be synchronous (pure helpers) or return a Promise (the
+//! real IPC commands); async fetchers surface a `loading` status until
+//! they resolve.
 //!
 //! Failed fetches do NOT retry on every render. A rejection is recorded
 //! in a module-level error map (keyed by query key) and rendered as a
