@@ -4910,3 +4910,13 @@ Two regression pins:
 **Tests:** analytics-data 41/41 (+3) · AnalyticsScreen 66/66 · full UI suite 292/292, 5109.
 
 **Risks / follow-ups:** the tables/basket yearly axis (single year bucket) still diverges from revenue's yearly axis (12 monthly buckets) — a design decision, documented in `trendKey`. Peak/Low insight lines still include zero-filled buckets (a "Low: 08-13 · 0" line for tables), cosmetic. The collaborator's `dev-mock/tauri-api.ts` change remains uncommitted in the tree.
+## 2026-08-13 — Yearly granularity showed one year bucket on tables/basket, twelve months on revenue (TDD)
+
+**Problem:** at `granularity: 'yearly'` the revenue card rendered 12 monthly buckets (labels "01".."12" — matching the 12-column yearly heatmap), but `trendKey` bucketed tables/basket by the YEAR (`date.slice(0, 4)`), so those cards rendered a single degenerate "2026" point with a whole year's turn minutes. Two cards, two axis shapes for the same selection.
+
+**Solution (TDD, Red→Green):** two failing unit tests first (tables: Jan+Mar orders over a full year → 12 MM-labeled buckets with per-month turn minutes and zero-filled gaps; basket: Feb row → 01=0, 02=value, 12 buckets total). Green: `trendKey` now returns `YYYY-MM` for yearly (same as monthly), `trendBucketKeys('yearly')` reuses the monthly enumeration, `loadTables` computes per-month minutes (`monthDays × 1440`, the old `365 × 1440` year branch is gone), and both loaders drop the year-label branch (`key.slice(5)` always). The doc comment now states the unified contract.
+
+**Commits:** (see below — fix + journal)
+**Tests:** analytics-data 43/43 (+2 yearly) · AnalyticsScreen 66/66 · full UI suite 292/292, 5111.
+
+**Risks / follow-ups:** MM labels collide across years for multi-year custom ranges (Jan-2025 and Jan-2026 both "01") — pre-existing on revenue, now shared by tables/basket; a year-aware label (e.g. "Jan '25") is a future slice. Peak/Low insight lines still include zero-filled no-data buckets (cosmetic). The collaborator's `dev-mock/tauri-api.ts` change remains uncommitted.
