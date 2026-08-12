@@ -428,4 +428,41 @@ mod tests {
         let db_err: DbError = core_err.into();
         assert!(db_err.to_string().contains("not found"));
     }
+
+    /// Integration test: connect to a real PostgreSQL instance.
+    ///
+    /// Requires the  Docker container (port 15432).
+    /// Skipped when the container is not reachable.
+    #[tokio::test]
+    async fn pg_integration_connect_and_create_tables() {
+        let url = "postgres://postgres:postgres@localhost:15432/postgres";
+        let pool = match DbPool::connect_postgres(url).await {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("PG integration test skipped: {e}");
+                return;
+            }
+        };
+        assert!(pool.is_postgres());
+
+        // Verify we can get a client and query
+        let client = pool.pg_client().await.expect("pg_client should succeed");
+        let row = client
+            .query_one("SELECT COUNT(*) FROM processed_webhooks", &[])
+            .await
+            .expect("query should succeed");
+        let count: i64 = row.get(0);
+        assert!(
+            count >= 0,
+            "processed_webhooks table should exist and be queryable"
+        );
+
+        // Verify offline_queue table exists too
+        let row = client
+            .query_one("SELECT COUNT(*) FROM offline_queue", &[])
+            .await
+            .expect("offline_queue query should succeed");
+        let count: i64 = row.get(0);
+        assert!(count >= 0, "offline_queue table should exist");
+    }
 }
