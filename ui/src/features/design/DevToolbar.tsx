@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { useTheme, type Theme } from '@/frontend/shell/ThemeProvider';
+import { useLocalization } from '@fluent/react';
 import './DevToolbar.css';
 
 // ── SVG icons ──────────────────────────────────────────────────────
@@ -133,6 +134,7 @@ function useDragToolbar() {
  * theme switching. Always visible. Remove when no longer needed.
  */
 export function DevToolbar() {
+  const { l10n } = useLocalization();
   const { theme, setTheme } = useTheme();
   const { pos, onMouseDown } = useDragToolbar();
   const currentTheme = THEMES.find((t) => t.key === theme);

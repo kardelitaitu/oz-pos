@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Localized } from '@/components/Localized';
+import { useLocalization } from '@fluent/react';
 import { formatMoney, type CartLine, type Money } from '@/types/domain';
 
 interface CartScreenProps {
@@ -18,6 +19,7 @@ export default function CartScreen({
   total = null,
   onAddSample,
 }: CartScreenProps) {
+  const { l10n } = useLocalization();
   const [busy, setBusy] = useState(false);
 
   const handleAddSample = () => {

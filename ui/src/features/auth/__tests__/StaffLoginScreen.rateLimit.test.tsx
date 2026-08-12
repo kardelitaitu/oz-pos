@@ -71,6 +71,9 @@ vi.mock('@fluent/react', () => ({
           'staff-login-error-connection': 'Connection error',
           'staff-login-attempts-remaining': `Attempts remaining: ${args?.['count']}`,
           'staff-login-lockout': `Locked for ${args?.['seconds']}s`,
+          'clear-aria': 'Clear',
+          'backspace-aria': 'Backspace',
+          'username-aria': 'Username',
         };
         return (map as Record<string, string>)[id] || id;
       },

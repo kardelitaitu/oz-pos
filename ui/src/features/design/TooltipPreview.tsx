@@ -1,5 +1,6 @@
 import Tooltip from '@/frontend/shell/Tooltip';
 import ThemeToggle from '@/frontend/shell/ThemeToggle';
+import { useLocalization } from '@fluent/react';
 import './TooltipPreview.css';
 
 /**
@@ -15,6 +16,7 @@ import './TooltipPreview.css';
  *   7. Production usage — sidebar simulation
  */
 export default function TooltipPreview() {
+  const { l10n } = useLocalization();
   return (
     <div className="tp-page">
       <header className="tp-header">
