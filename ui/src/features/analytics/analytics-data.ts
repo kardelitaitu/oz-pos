@@ -177,6 +177,19 @@ export function alignPrevHourly(
   return current.map((h) => byHour.get(h.hour) ?? 0);
 }
 
+/**
+ * Map the previous period's bucket values onto the current period's bucket
+ * labels for a compare overlay. The backend groups by date/week/month and
+ * returns only buckets with sales, so equal-length windows can have
+ * different bucket sets — alignment must be by label, never by array
+ * position. Current labels absent from the previous period read as 0 (no
+ * activity there last period); previous-only labels are not plotted.
+ */
+export function alignPrevBuckets(current: Bucket[], previous: Bucket[]): number[] {
+  const byLabel = new Map(previous.map((b) => [b.label, b.value]));
+  return current.map((b) => byLabel.get(b.label) ?? 0);
+}
+
 // ── Heatmap intensity builders ──────────────────────────────────────
 //
 // Cell keys identify the heatmap's fixed grid per granularity:

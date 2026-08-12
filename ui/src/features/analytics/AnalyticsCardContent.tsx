@@ -23,6 +23,7 @@ import { cardQueryKey } from './analytics-cache';
 import type { MenuEngineeringRow } from '@/api/reports';
 import {
   CARD_LOADERS,
+  alignPrevBuckets,
   alignPrevHourly,
   periodDelta,
   previousRange,
@@ -312,7 +313,7 @@ function RevenueCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title
       },
       ...(compare && prevData.length ? [{
         name: l10n.getString('analytics-card-prev'),
-        type: 'line' as const, data: prevData.map((d) => d.value),
+        type: 'line' as const, data: alignPrevBuckets(data, prevData),
         smooth: true, symbol: 'none',
         itemStyle: { color: '#94a3b8' }, lineStyle: { width: 1.5, color: '#94a3b8', type: 'dashed' as const },
       }] : []),
@@ -361,7 +362,7 @@ function AovCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: st
       },
       ...(compare && prevData.length ? [{
         name: l10n.getString('analytics-card-prev'),
-        type: 'line' as const, data: prevData.map((d) => d.value),
+        type: 'line' as const, data: alignPrevBuckets(data, prevData),
         smooth: true, symbol: 'none',
         itemStyle: { color: '#94a3b8' }, lineStyle: { width: 1.5, color: '#94a3b8', type: 'dashed' as const },
       }] : []),
@@ -642,7 +643,7 @@ function BasketCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title:
       },
       ...(compare && prevData.length ? [{
         name: l10n.getString('analytics-card-prev'),
-        type: 'line' as const, data: prevData.map((d) => d.value),
+        type: 'line' as const, data: alignPrevBuckets(data, prevData),
         smooth: true, symbol: 'none',
         itemStyle: { color: '#94a3b8' }, lineStyle: { width: 1.5, color: '#94a3b8', type: 'dashed' as const },
       }] : []),
@@ -696,7 +697,7 @@ function InventoryCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
       },
       ...(compare && prevData.length ? [{
         name: l10n.getString('analytics-card-prev'),
-        type: 'line' as const, data: prevData.map((d) => d.value),
+        type: 'line' as const, data: alignPrevBuckets(data, prevData),
         smooth: true, symbol: 'none',
         itemStyle: { color: '#94a3b8' }, lineStyle: { width: 1.5, color: '#94a3b8', type: 'dashed' as const },
       }] : []),
@@ -790,7 +791,7 @@ function TablesCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title:
       },
       ...(compare && prevData.length ? [{
         name: l10n.getString('analytics-card-prev'),
-        type: 'line' as const, data: prevData.map((d) => d.value),
+        type: 'line' as const, data: alignPrevBuckets(data, prevData),
         smooth: true, symbol: 'none',
         itemStyle: { color: '#94a3b8' }, lineStyle: { width: 1.5, color: '#94a3b8', type: 'dashed' as const },
       }] : []),

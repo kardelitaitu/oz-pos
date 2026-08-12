@@ -56,6 +56,7 @@ vi.mock('@/api/tables', () => ({
 
 import {
   buildHeatmapIntensities,
+  alignPrevBuckets,
   alignPrevHourly,
   intensityFromPct,
   loadAov,
@@ -200,6 +201,48 @@ describe('alignPrevHourly — hour-aligned compare overlay', () => {
       { hour: 9, pct: 50 },
     ];
     expect(alignPrevHourly(current, previous)).toEqual([50, 100]);
+  });
+});
+
+describe('alignPrevBuckets — label-aligned compare overlay for trend cards', () => {
+  it('maps previous values onto current labels, filling missing buckets with 0', () => {
+    // The backend GROUP BY date/week/month returns only buckets with sales,
+    // so the two periods can have different bucket sets — index alignment
+    // would misplot the previous line. Alignment must be by label.
+    const current = [
+      { label: 'Mon', value: 100 },
+      { label: 'Tue', value: 200 },
+      { label: 'Wed', value: 300 },
+    ];
+    const previous = [
+      { label: 'Mon', value: 50 }, // present → mapped by label
+      { label: 'Wed', value: 150 }, // present → mapped by label
+      // Tue absent → 0 (no sales that day last period)
+    ];
+    expect(alignPrevBuckets(current, previous)).toEqual([50, 0, 150]);
+  });
+
+  it('keeps the exact match for identical label sets regardless of previous order', () => {
+    const current = [
+      { label: 'Mon', value: 100 },
+      { label: 'Tue', value: 200 },
+    ];
+    const previous = [
+      { label: 'Tue', value: 400 },
+      { label: 'Mon', value: 100 },
+    ];
+    expect(alignPrevBuckets(current, previous)).toEqual([100, 400]);
+  });
+
+  it('ignores previous labels absent from the current period', () => {
+    // Current labels drive the x-axis; an extra previous-only bucket (e.g. a
+    // day with sales last period but none now) is not plotted.
+    const current = [{ label: 'Mon', value: 100 }];
+    const previous = [
+      { label: 'Sun', value: 999 },
+      { label: 'Mon', value: 50 },
+    ];
+    expect(alignPrevBuckets(current, previous)).toEqual([50]);
   });
 });
 
