@@ -4725,3 +4725,19 @@ Two regression pins:
 **Commits:** (pending)
 **Tests:** topologyHistoryIntegrity 3/3 (+3) · editor 541/541 · full UI suite 4,967/4,967 · typecheck clean · eslint 0 errors (10 pre-existing warnings, none new — new module lint-clean) · i18n lint clean.
 **Risks / follow-ups:** none new. The diagnostic is console-only by design (an internal corruption signal, not user-facing — a user-facing surface would need FTL keys and would fire in the same impossible-to-reach corruption path).
+
+## 2026-08-12 — Shared dev-log bus: the [topology] drop diagnostic goes through ONE pattern
+
+**Problem:** The drop diagnostic (0570553a) called `console.warn` directly. Fine for one call site, but it established no reusable pattern — the codebase has ~15 bare `console.warn` call sites with ad-hoc prefixes (`[i18n]`, `[global-error]`, `[ShortfallDialog]`, …), none testable without spying on console internals. Future diagnostics would each reinvent the same two problems: a prefix convention and a test seam.
+
+**Solution:** New `ui/src/utils/devLog.ts` — the shared bus. `devLog.warn('topology', message)` emits `[topology] message` to the devtools console (byte-identical to the previous bare call) AND records `{ level, source, message }` into a bounded buffer (cap 100, oldest evicted) exposed as `getDevLog()`/`clearDevLog()`. `topologyHistoryIntegrity.ts` now routes through it. Levels map to console methods (info/warn/error). The recorder makes diagnostics assertable without console spies — the seam future diagnostics use, which is what makes "one pattern" stick.
+
+**TDD rigor:**
+- Red: 4 devLog unit tests (module-missing Red): per-level prefixed console emission, recorder entries, 120→100 cap eviction, clear.
+- Green: the bus module; the integrity diagnostic's single `console.warn` replaced by `devLog.warn('topology', …)` — console line preserved verbatim.
+- Migration: the integrity unit tests and the Alt+drag editor pin switched from `vi.spyOn(console, 'warn')` to the recorder seam (`getDevLog().filter(e => e.source === 'topology')`); the editor file's top-level `beforeEach` now clears the recorder so no diagnostic leaks across tests.
+- Mutation (same dangling-entry experiment as 0570553a): the `[topology] restore-time guard dropped 1 dangling wire(s)…` line still fired visibly from the real restore path AND the pin failed on the recorder assertion (`expected [ { level: 'warn', … } ] to have a length of +0 but got 1`) — end-to-end proof the bus routes console + recorder identically. Restored via precise reverse replacement.
+
+**Commits:** (pending)
+**Tests:** devLog 4/4 (+4) · integrity 3/3 · editor 541/541 · full UI suite 4,971/4,971 · typecheck clean (one transient error from another agent's in-flight FeatureToggleScreen edit, resolved before commit) · eslint 0 errors (10 pre-existing warnings, none new) · i18n lint clean.
+**Risks / follow-ups:** the ~15 existing bare `console.warn` call sites remain unmigrated — a future slice could route them through the bus (out of scope here; the bus is documented in its module header as the pattern). The recorder is always-on in production but capped at 100 entries, so no unbounded growth.

@@ -14,6 +14,7 @@ import {
   NODE_WIDTH,
   resolveDropOverlaps,
 } from '../features/stores/nodeTopologyClamp';
+import { clearDevLog, getDevLog } from '@/utils/devLog';
 import { loadTopology, type TopologyData } from '@/api/topology';
 import multiStoreFtl from '@/locales/multi-store.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
@@ -410,6 +411,7 @@ const mockCanvasSize = (width: number, height: number) => {
 describe('NodeTopologyEditor Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearDevLog(); // no dev-log diagnostics may leak across tests
     mockLoadTopology.mockResolvedValue(null);
   });
 
@@ -10262,7 +10264,6 @@ describe('NodeTopologyEditor — Alt+drag to duplicate', () => {
     // together, never a wire whose endpoints are missing from the entry.
     // A clean round-trip must also stay silent: the guard's [topology]
     // diagnostic fires only when a wire is actually dropped (corruption).
-    const warn = vi.spyOn(console, 'warn');
     mockLoadTopology.mockResolvedValueOnce({
       nodes: [
         { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
@@ -10301,11 +10302,8 @@ describe('NodeTopologyEditor — Alt+drag to duplicate', () => {
     expect(getWireCount()).toBe(2);
     expect(screen.queryByText('This wire references a node that is not in the graph.')).toBeNull();
     // No corruption diagnostic on a clean round-trip — the guards only
-    // warn when they actually drop a dangling wire.
-    expect(
-      warn.mock.calls.filter((c) => typeof c[0] === 'string' && c[0].startsWith('[topology]')),
-    ).toHaveLength(0);
-    warn.mockRestore();
+    // record a dev-log warn when they actually drop a dangling wire.
+    expect(getDevLog().filter((e) => e.source === 'topology')).toHaveLength(0);
   });
 
   it('an Alt+dragged Branch Location copy is identity-less — never a second branch impersonation', async () => {
