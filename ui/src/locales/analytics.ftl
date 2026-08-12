@@ -88,3 +88,7 @@ analytics-card-waitstaff = Top Waitstaff
 analytics-card-voids = Voided Items
 analytics-card-expand-aria = Expand card
 analytics-card-restore-aria = Restore card
+analytics-status-cards = { $count } cards
+analytics-status-range = { $from } – { $to }
+analytics-action-zoom-reset-aria = Reset zoom to 100%
+analytics-scroll-top-aria = Back to top

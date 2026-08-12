@@ -88,3 +88,7 @@ analytics-card-waitstaff = Pelayan Terbaik
 analytics-card-voids = Item yang Di-void
 analytics-card-expand-aria = Perluas kartu
 analytics-card-restore-aria = Pulihkan ukuran kartu
+analytics-status-cards = { $count } kartu
+analytics-status-range = { $from } – { $to }
+analytics-action-zoom-reset-aria = Atur ulang zoom ke 100%
+analytics-scroll-top-aria = Kembali ke atas

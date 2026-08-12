@@ -170,6 +170,79 @@ describe('AnalyticsScreen layout shell', () => {
     expect(grid.style.zoom).toBe('0.8');
   });
 
+  it('shows a zoom badge that resets zoom on click', () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    const grid = document.querySelector('.analytics-grid') as HTMLElement;
+    const badge = screen.getByRole('button', { name: 'Reset zoom to 100%' });
+    expect(badge.textContent).toBe('100%');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    expect(badge.textContent).toBe('120%');
+    expect(grid.style.zoom).toBe('1.2');
+
+    fireEvent.click(badge);
+    expect(badge.textContent).toBe('100%');
+    expect(grid.style.zoom).toBe('1');
+  });
+
+  it('disables zoom buttons at their limits', () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    const zoomOut = screen.getByRole('button', { name: 'Zoom out' }) as HTMLButtonElement;
+    const zoomIn = screen.getByRole('button', { name: 'Zoom in' }) as HTMLButtonElement;
+
+    // At 100%, zoom out is enabled, zoom in is not yet at the max
+    expect(zoomOut.disabled).toBe(false);
+    expect(zoomIn.disabled).toBe(false);
+
+    // Zoom out to the floor (0.6) — button becomes disabled
+    for (let i = 0; i < 10; i++) fireEvent.click(zoomOut);
+    expect(zoomOut.disabled).toBe(true);
+
+    // Zoom in back to the ceiling (1.6) — button becomes disabled
+    for (let i = 0; i < 10; i++) fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    expect(zoomIn.disabled).toBe(true);
+  });
+
+  it('shows the view status bar with card count and workspace', () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    expect(screen.getByText('13 cards')).toBeTruthy();
+    // Status shows workspace · granularity (scoped to the status bar)
+    const status = document.querySelector('.analytics-status');
+    expect(status?.textContent).toContain('Retail');
+    expect(status?.textContent).toContain('Daily');
+  });
+
+  it('shows the custom range in the status bar', () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Custom' }));
+
+    const from = screen.getByLabelText('From') as HTMLInputElement;
+    const to = screen.getByLabelText('To') as HTMLInputElement;
+    expect(from.value).toBeTruthy();
+    expect(screen.getByText(`${from.value} – ${to.value}`)).toBeTruthy();
+  });
+
+  it('shows the scroll-to-top button after scrolling the main area', () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    const main = document.querySelector('.analytics-main') as HTMLElement;
+    expect(screen.queryByRole('button', { name: 'Back to top' })).toBeNull();
+
+    // Scroll the main area down past the threshold
+    Object.defineProperty(main, 'scrollTop', { value: 400, configurable: true });
+    fireEvent.scroll(main);
+    expect(screen.getByRole('button', { name: 'Back to top' })).toBeTruthy();
+
+    // Scroll back up — button hides
+    Object.defineProperty(main, 'scrollTop', { value: 0, configurable: true });
+    fireEvent.scroll(main);
+    expect(screen.queryByRole('button', { name: 'Back to top' })).toBeNull();
+  });
+
   it('renders a smart heatmap that changes buckets with granularity', () => {
     vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);

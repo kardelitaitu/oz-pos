@@ -133,8 +133,10 @@ export default function AnalyticsScreen() {
   const [zoomLevel, setZoomLevel] = useState(1);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [expandScale, setExpandScale] = useState(1);
+  const [showScrollTop, setShowScrollTop] = useState(false);
   const calcTimer = useRef<ReturnType<typeof setTimeout>>();
   const expandedBodyRef = useRef<HTMLDivElement | null>(null);
+  const mainRef = useRef<HTMLElement | null>(null);
 
   const MIN_ZOOM = 0.6;
   const MAX_ZOOM = 1.6;
@@ -155,6 +157,7 @@ export default function AnalyticsScreen() {
 
   const zoomIn = () => setZoomLevel((z) => Math.min(MAX_ZOOM, +(z + ZOOM_STEP).toFixed(2)));
   const zoomOut = () => setZoomLevel((z) => Math.max(MIN_ZOOM, +(z - ZOOM_STEP).toFixed(2)));
+  const zoomReset = () => setZoomLevel(1);
 
   // Smart scaling: when a card is expanded, scale its content to fill the
   // available body area (works for any card — heatmap, table, or chart).
@@ -561,6 +564,7 @@ export default function AnalyticsScreen() {
               type="button"
               className="analytics-action-btn"
               onClick={zoomOut}
+              disabled={zoomLevel <= MIN_ZOOM}
               aria-label={l10n.getString('analytics-action-zoom-out-aria')}
               title={l10n.getString('analytics-action-zoom-out-aria')}
             >
@@ -573,8 +577,18 @@ export default function AnalyticsScreen() {
             </button>
             <button
               type="button"
+              className="analytics-zoom-badge"
+              onClick={zoomReset}
+              aria-label={l10n.getString('analytics-action-zoom-reset-aria')}
+              title={l10n.getString('analytics-action-zoom-reset-aria')}
+            >
+              {Math.round(zoomLevel * 100)}%
+            </button>
+            <button
+              type="button"
               className="analytics-action-btn"
               onClick={zoomIn}
+              disabled={zoomLevel >= MAX_ZOOM}
               aria-label={l10n.getString('analytics-action-zoom-in-aria')}
               title={l10n.getString('analytics-action-zoom-in-aria')}
             >
@@ -593,7 +607,36 @@ export default function AnalyticsScreen() {
       {/* ══════════════════════════════════════════════════════════
           AREA 3 — Main content: smart analytics card grid
           ══════════════════════════════════════════════════════════ */}
-      <main className="analytics-main">
+      <main
+        className="analytics-main"
+        ref={mainRef}
+        onScroll={(e) => setShowScrollTop(e.currentTarget.scrollTop > 240)}
+      >
+        {/* View status — card count + workspace + time view */}
+        <div className="analytics-status">
+          <span className="analytics-status-item">
+            <Localized id="analytics-status-cards" vars={{ count: String(displayedCards.length) }}>
+              <span>{displayedCards.length} cards</span>
+            </Localized>
+          </span>
+          <span className="analytics-status-sep" aria-hidden="true">·</span>
+          <span className="analytics-status-item">
+            {l10n.getString(workspaceView === 'retail' ? 'analytics-workspace-retail' : 'analytics-workspace-restaurant')}
+            <span className="analytics-status-sep" aria-hidden="true">·</span>
+            {l10n.getString(`analytics-granularity-${granularity}`)}
+          </span>
+          {granularity === 'custom' && (
+            <>
+              <span className="analytics-status-sep" aria-hidden="true">·</span>
+              <span className="analytics-status-item">
+                <Localized id="analytics-status-range" vars={{ from: customFrom, to: customTo }}>
+                  <span>{customFrom} – {customTo}</span>
+                </Localized>
+              </span>
+            </>
+          )}
+        </div>
+
         <div className="analytics-grid" style={{ zoom: zoomLevel }}>
           {displayedCards.map((card) => {
             const cid = cardId(card);
@@ -662,6 +705,22 @@ export default function AnalyticsScreen() {
             );
           })}
         </div>
+
+        {/* Scroll-to-top — appears after scrolling the grid */}
+        {showScrollTop && (
+          <button
+            type="button"
+            className="analytics-scroll-top"
+            onClick={() => mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}
+            aria-label={l10n.getString('analytics-scroll-top-aria')}
+            title={l10n.getString('analytics-scroll-top-aria')}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
+              <polyline points="18 15 12 9 6 15" />
+            </svg>
+          </button>
+        )}
       </main>
 
     </div>
