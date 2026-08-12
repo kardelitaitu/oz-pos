@@ -81,15 +81,20 @@ const mockGetCategoryBreakdown = vi.fn(() => Promise.resolve([
 ]));
 // Per-day basket-size rows: 100 total sales, weighted avg 2.5 items/order
 // — a real trend for the basket chart, not a flat range average.
-const mockGetBasketSizeTrend = vi.fn(() => Promise.resolve([
-  { date: '2026-08-03', sale_count: 15, avg_line_count: 2.4 },
-  { date: '2026-08-04', sale_count: 18, avg_line_count: 2.8 },
-  { date: '2026-08-05', sale_count: 12, avg_line_count: 2.2 },
-  { date: '2026-08-06', sale_count: 14, avg_line_count: 2.5 },
-  { date: '2026-08-07', sale_count: 16, avg_line_count: 2.6 },
-  { date: '2026-08-08', sale_count: 13, avg_line_count: 2.3 },
-  { date: '2026-08-09', sale_count: 12, avg_line_count: 2.5 },
-]));
+// Range-anchored to the queried week (see the daysAfter helper above).
+const mockGetBasketSizeTrend = vi.fn((startDate?: string) => {
+  const base = startDate ?? '2026-08-03';
+  const d = (n: number) => daysAfter(base, n);
+  return Promise.resolve([
+    { date: d(0), sale_count: 15, avg_line_count: 2.4 },
+    { date: d(1), sale_count: 18, avg_line_count: 2.8 },
+    { date: d(2), sale_count: 12, avg_line_count: 2.2 },
+    { date: d(3), sale_count: 14, avg_line_count: 2.5 },
+    { date: d(4), sale_count: 16, avg_line_count: 2.6 },
+    { date: d(5), sale_count: 13, avg_line_count: 2.3 },
+    { date: d(6), sale_count: 12, avg_line_count: 2.5 },
+  ]);
+});
 const mockGetCustomerSplit = vi.fn(() => Promise.resolve({ new_count: 30, returning_count: 70 }));
 const mockGetPaymentMethodBreakdown = vi.fn(() => Promise.resolve([
   { payment_method: 'cash', total_minor: 600000, sale_count: 30 },
@@ -105,9 +110,13 @@ const mockGetVoidedItems = vi.fn(() => Promise.resolve([
   { name: 'Croissant', qty: 1 },
 ]));
 const mockGetInventoryTurnover = vi.fn(() => Promise.resolve({ units_sold: 500, stock_on_hand: 120, sku_count: 24, range_days: 30 }));
-const mockGetInventoryTrend = vi.fn(() => Promise.resolve([
-  { date: '2026-07-21', units_sold: 15 },
-  { date: '2026-07-22', units_sold: 18 },
+// Range-anchored: the loaders zero-fill against the queried window, so an
+// off-range fixed date would be dropped (rendering an all-zero chart).
+const daysAfter = (iso: string, n: number) =>
+  new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+const mockGetInventoryTrend = vi.fn((startDate?: string) => Promise.resolve([
+  { date: startDate ?? '2026-07-21', units_sold: 15 },
+  { date: daysAfter(startDate ?? '2026-07-21', 1), units_sold: 18 },
 ]));
 // Restaurant table turnover: 3 days of completed table orders.
 // Turns of 20/30/25 → average turn minutes of 72/48/58 (1440 ÷ turns).

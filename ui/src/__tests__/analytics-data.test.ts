@@ -62,8 +62,10 @@ import {
   loadAov,
   loadBasketSize,
   loadHeatmapRows,
+  loadInventory,
   loadRevenue,
   loadTableOccupancy,
+  loadTables,
   normalizeIntensities,
   pctOfPeak,
   periodDelta,
@@ -455,6 +457,61 @@ describe('loaders — raw rows mapped to card shapes', () => {
     expect(trend.sale_count).toBe(30);
     // Weighted mean: (10×2 + 20×3) / 30 = 2.666…
     expect(trend.avg_line_count).toBeCloseTo(2.667, 2);
+  });
+
+  it('loadTables zero-fills days without table orders', async () => {
+    const { getTableTurnover } = await import('@/api/reports');
+    (getTableTurnover as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { date: '2026-08-10', table_orders: 20 }, // 1440/20 = 72 min
+      { date: '2026-08-12', table_orders: 30 }, // 1440/30 = 48 min
+      { date: '2026-08-14', table_orders: 25 }, // 1440/25 = 57.6 → 58 min
+    ]);
+    const buckets = await loadTables({
+      workspace: 'restaurant', granularity: 'daily', from: '2026-08-10', to: '2026-08-14', sessionToken: 's',
+    });
+    // Days without completed table orders read 0 — not a gap in the axis.
+    expect(buckets).toEqual([
+      { label: '08-10', value: 72 },
+      { label: '08-11', value: 0 },
+      { label: '08-12', value: 48 },
+      { label: '08-13', value: 0 },
+      { label: '08-14', value: 58 },
+    ]);
+  });
+
+  it('loadBasketSize zero-fills days without sales rows', async () => {
+    const { getBasketSizeTrend } = await import('@/api/reports');
+    (getBasketSizeTrend as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { date: '2026-08-03', sale_count: 10, avg_line_count: 2 },
+      { date: '2026-08-05', sale_count: 20, avg_line_count: 3 },
+    ]);
+    const trend = await loadBasketSize({
+      workspace: 'retail', granularity: 'daily', from: '2026-08-03', to: '2026-08-05', sessionToken: 's',
+    });
+    expect(trend.buckets).toEqual([
+      { label: '08-03', value: 2 },
+      { label: '08-04', value: 0 },
+      { label: '08-05', value: 3 },
+    ]);
+    // Range totals only count the rows the backend actually returned.
+    expect(trend.sale_count).toBe(30);
+  });
+
+  it('loadInventory zero-fills days without sales rows on the trend line', async () => {
+    const { getInventoryTrend } = await import('@/api/reports');
+    (getInventoryTrend as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { date: '2026-07-27', units_sold: 15 },
+      { date: '2026-07-29', units_sold: 18 },
+    ]);
+    const [turnover, trend] = await loadInventory({
+      workspace: 'retail', granularity: 'daily', from: '2026-07-27', to: '2026-07-29', sessionToken: 's',
+    });
+    expect(trend).toEqual([
+      { date: '2026-07-27', units_sold: 15 },
+      { date: '2026-07-28', units_sold: 0 },
+      { date: '2026-07-29', units_sold: 18 },
+    ]);
+    expect(turnover.units_sold).toBe(0); // untouched turnover row
   });
 
   it('loadHeatmapRows fetches the granularity-relevant sets', async () => {

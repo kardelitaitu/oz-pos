@@ -172,6 +172,16 @@ function DeltaChip({ value, tone, compare }: { value: number; tone?: 'good' | 'b
   );
 }
 
+/**
+ * Buckets with real activity. Zero-filled gaps mean "no data that
+ * day" (no sales / no table orders), not a 0-value reading — rate
+ * metrics (AOV, turn minutes) must average and trend over the active
+ * buckets only. Sum metrics (revenue) keep the zeros: $0 is a real day.
+ */
+function activeBuckets(buckets: Bucket[]): Bucket[] {
+  return buckets.filter((b) => b.value > 0);
+}
+
 /** Compact ranked list with proportional bars — no chart lib needed. */
 function RankedList({ rows, ariaLabel, limit }: { rows: RankRow[]; ariaLabel: string; limit?: number | undefined }) {
   const { l10n } = useLocalization();
@@ -345,11 +355,13 @@ function AovCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: st
   const { fmt } = useMoney();
   const { data, prev, error } = useCardDataCompare<Bucket[]>('aov', q, compare ?? false);
   const prevData = prev ?? [];
-  const avg = data && data.length ? Math.round(data.reduce((s, d) => s + d.value, 0) / data.length) : 0;
-  const prevAvg = prevData.length ? Math.round(prevData.reduce((s, d) => s + d.value, 0) / prevData.length) : 0;
+  const active = activeBuckets(data ?? []);
+  const prevActive = activeBuckets(prevData);
+  const avg = active.length ? Math.round(active.reduce((s, d) => s + d.value, 0) / active.length) : 0;
+  const prevAvg = prevActive.length ? Math.round(prevActive.reduce((s, d) => s + d.value, 0) / prevActive.length) : 0;
   const peak = data && data.length ? data.reduce((a, b) => (b.value > a.value ? b : a)) : null;
   const low = data && data.length ? data.reduce((a, b) => (b.value < a.value ? b : a)) : null;
-  const delta = compare ? periodDelta(avg, prevAvg) : data ? seriesDelta(data) : null;
+  const delta = compare ? periodDelta(avg, prevAvg) : active.length ? seriesDelta(active) : null;
   const option = useMemo(() => (data ? ({
     grid: { left: 8, right: 8, top: 12, bottom: 0, containLabel: true },
     tooltip: { trigger: 'axis' as const, valueFormatter: (v: unknown) => fmt(Number(v)) },
@@ -773,13 +785,16 @@ function TablesCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title:
   const { data: raw, prev: prevRaw, error } = useCardDataCompare<Bucket[]>('tables', q, compare ?? false);
   const data = raw ?? [];
   const prevData = prevRaw ?? [];
-  const avgTurn = data.length ? Math.round(data.reduce((s, d) => s + d.value, 0) / data.length) : 0;
-  const prevAvgTurn = prevData.length ? Math.round(prevData.reduce((s, d) => s + d.value, 0) / prevData.length) : 0;
+  const active = activeBuckets(data);
+  const prevActive = activeBuckets(prevData);
+  const avgTurn = active.length ? Math.round(active.reduce((s, d) => s + d.value, 0) / active.length) : 0;
+  const prevAvgTurn = prevActive.length ? Math.round(prevActive.reduce((s, d) => s + d.value, 0) / prevActive.length) : 0;
   const peak = data.length ? data.reduce((a, b) => (b.value > a.value ? b : a)) : null;
   const low = data.length ? data.reduce((a, b) => (b.value < a.value ? b : a)) : null;
   // Compare mode shows the period-over-period change; off-mode keeps the
-  // in-series turn-time delta (faster turns = shorter minutes).
-  const delta = compare ? periodDelta(avgTurn, prevAvgTurn) : turnDelta(data);
+  // in-series turn-time delta over the active buckets (faster turns =
+  // shorter minutes; zero-filled no-order days are not "0-minute turns").
+  const delta = compare ? periodDelta(avgTurn, prevAvgTurn) : turnDelta(active);
   const option = useMemo(() => (data.length ? ({
     grid: { left: 8, right: 8, top: 12, bottom: 0, containLabel: true },
     tooltip: { trigger: 'axis' as const, valueFormatter: (v: unknown) => `${v}m` },

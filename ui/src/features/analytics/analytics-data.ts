@@ -441,45 +441,56 @@ function monthDays(ym: string): number {
 }
 
 /**
+ * Granularity bucket key for a date in the tables/basket trend loaders:
+ * Monday week-start for weekly, YYYY-MM for monthly, the year for yearly.
+ * (Differs from the revenue axis, which keeps monthly buckets at yearly.)
+ */
+function trendKey(g: Granularity, date: string): string {
+  if (g === 'weekly') return weekStartKey(date);
+  if (g === 'monthly') return date.slice(0, 7);
+  if (g === 'yearly') return date.slice(0, 4);
+  return date;
+}
+
+/** Every trend bucket key the axis must cover within [from, to]. */
+function trendBucketKeys(g: Granularity, from: string, to: string): string[] {
+  if (g === 'yearly') {
+    const keys: string[] = [];
+    for (let y = Number(from.slice(0, 4)); y <= Number(to.slice(0, 4)); y += 1) keys.push(String(y));
+    return keys;
+  }
+  if (g === 'monthly') return bucketKeys('monthly', from, to);
+  if (g === 'weekly') return bucketKeys('weekly', from, to);
+  return bucketKeys('daily', from, to);
+}
+
+/**
  * Average table-turn minutes per granularity bucket. Table service is
  * recorded as completed KDS orders carrying a table number; each bucket
  * sums its turns and divides the bucket's service minutes by them
- * (fewer turns per hour ⇒ longer average turn).
+ * (fewer turns per hour ⇒ longer average turn). Buckets without any
+ * turns in the range read 0, and the axis covers the whole range.
  */
 export async function loadTables(q: AnalyticsQuery): Promise<Bucket[]> {
   const rows = await getTableTurnover(q.from, q.to, q.sessionToken);
-  if (rows.length === 0) return [];
-  // Group consecutive days into the granularity's buckets.
-  const groups: { key: string; orders: number; days: number }[] = [];
+  const ordersByKey = new Map<string, number>();
   for (const r of rows) {
-    const key =
-      q.granularity === 'weekly'
-        ? weekStartKey(r.date)
-        : q.granularity === 'monthly'
-          ? r.date.slice(0, 7)
-          : q.granularity === 'yearly'
-            ? r.date.slice(0, 4)
-            : r.date;
-    const last = groups[groups.length - 1];
-    if (last && last.key === key) {
-      last.orders += r.table_orders;
-      last.days += 1;
-    } else {
-      groups.push({ key, orders: r.table_orders, days: 1 });
-    }
+    const key = trendKey(q.granularity, r.date);
+    ordersByKey.set(key, (ordersByKey.get(key) ?? 0) + r.table_orders);
   }
-  return groups.map((grp) => {
+  return trendBucketKeys(q.granularity, q.from, q.to).map((key) => {
+    const orders = ordersByKey.get(key) ?? 0;
     const bucketMinutes =
       q.granularity === 'yearly'
         ? 365 * 1440
         : q.granularity === 'monthly'
-          ? monthDays(grp.key) * 1440
+          ? monthDays(key) * 1440
           : q.granularity === 'weekly'
             ? 7 * 1440
             : 1440;
     return {
-      label: q.granularity === 'yearly' ? grp.key : grp.key.slice(5),
-      value: grp.orders > 0 ? Math.round(bucketMinutes / grp.orders) : 0,
+      label: q.granularity === 'yearly' ? key : key.slice(5),
+      value: orders > 0 ? Math.round(bucketMinutes / orders) : 0,
     };
   });
 }
@@ -508,31 +519,22 @@ export interface BasketTrend {
  */
 export async function loadBasketSize(q: AnalyticsQuery): Promise<BasketTrend> {
   const rows = await getBasketSizeTrend(q.from, q.to, q.sessionToken);
-  if (rows.length === 0) return { buckets: [], sale_count: 0, avg_line_count: 0 };
-  // Group consecutive days into the granularity's buckets.
-  const groups: { key: string; sales: number; lines: number }[] = [];
+  // Buckets without sales in the range read 0; the axis covers the range.
+  const salesByKey = new Map<string, number>();
+  const linesByKey = new Map<string, number>();
   for (const r of rows) {
-    const key =
-      q.granularity === 'weekly'
-        ? weekStartKey(r.date)
-        : q.granularity === 'monthly'
-          ? r.date.slice(0, 7)
-          : q.granularity === 'yearly'
-            ? r.date.slice(0, 4)
-            : r.date;
-    const last = groups[groups.length - 1];
-    const lines = r.sale_count * r.avg_line_count;
-    if (last && last.key === key) {
-      last.sales += r.sale_count;
-      last.lines += lines;
-    } else {
-      groups.push({ key, sales: r.sale_count, lines });
-    }
+    const key = trendKey(q.granularity, r.date);
+    salesByKey.set(key, (salesByKey.get(key) ?? 0) + r.sale_count);
+    linesByKey.set(key, (linesByKey.get(key) ?? 0) + r.sale_count * r.avg_line_count);
   }
-  const buckets: Bucket[] = groups.map((g) => ({
-    label: q.granularity === 'yearly' ? g.key : g.key.slice(5),
-    value: g.sales > 0 ? Math.round((g.lines / g.sales) * 10) / 10 : 0,
-  }));
+  const buckets: Bucket[] = trendBucketKeys(q.granularity, q.from, q.to).map((key) => {
+    const sales = salesByKey.get(key) ?? 0;
+    const lines = linesByKey.get(key) ?? 0;
+    return {
+      label: q.granularity === 'yearly' ? key : key.slice(5),
+      value: sales > 0 ? Math.round((lines / sales) * 10) / 10 : 0,
+    };
+  });
   const saleCount = rows.reduce((s, r) => s + r.sale_count, 0);
   const lineTotal = rows.reduce((s, r) => s + r.sale_count * r.avg_line_count, 0);
   return {
@@ -540,6 +542,26 @@ export async function loadBasketSize(q: AnalyticsQuery): Promise<BasketTrend> {
     sale_count: saleCount,
     avg_line_count: saleCount > 0 ? lineTotal / saleCount : 0,
   };
+}
+
+/**
+ * Inventory turnover summary plus the units-sold trend line, zero-filled
+ * across the queried dates so the chart axis covers the whole range (the
+ * trend is a raw per-day line at every granularity).
+ */
+export async function loadInventory(
+  q: AnalyticsQuery,
+): Promise<[InventoryTurnoverRow, InventoryTrendRow[]]> {
+  const [turnover, trend] = await Promise.all([
+    getInventoryTurnover(q.from, q.to, q.sessionToken, 'default'),
+    getInventoryTrend(q.from, q.to, q.sessionToken),
+  ]);
+  const unitsByDate = new Map(trend.map((t) => [t.date, t.units_sold]));
+  const filled = bucketKeys('daily', q.from, q.to).map((date) => ({
+    date,
+    units_sold: unitsByDate.get(date) ?? 0,
+  }));
+  return [turnover, filled];
 }
 
 /** Live floor-plan occupancy derived from the `tables` snapshot. */
@@ -630,11 +652,7 @@ export const CARD_LOADERS: Record<string, (q: AnalyticsQuery) => Promise<CardLoa
   'top-items': loadTopItems,
   category: (q) => getCategoryBreakdown(q.from, q.to, q.sessionToken),
   basket: loadBasketSize,
-  inventory: (q) =>
-    Promise.all([
-      getInventoryTurnover(q.from, q.to, q.sessionToken, 'default'),
-      getInventoryTrend(q.from, q.to, q.sessionToken),
-    ]),
+  inventory: loadInventory,
   'low-stock': (q) => getLowStockAlerts(10, q.sessionToken),
   waitstaff: loadStaff,
   tables: loadTables,
