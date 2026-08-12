@@ -156,6 +156,34 @@ describe('AnalyticsScreen layout shell', () => {
     expect(grid.style.zoom).toBe('0.8');
   });
 
+  it('renders a smart heatmap that changes buckets with granularity', async () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    const heatmap = () => document.querySelector('.analytics-heatmap');
+    const cellCount = () => heatmap()?.querySelectorAll('.analytics-heat-cell').length ?? 0;
+
+    // Wait for the initial recalculation skeleton to clear
+    await new Promise((r) => setTimeout(r, 650));
+
+    // Default: daily → 7 weekday buckets
+    expect(cellCount()).toBe(7);
+
+    // Weekly → 4 week buckets
+    await userEvent.click(screen.getByRole('radio', { name: 'Weekly' }));
+    await new Promise((r) => setTimeout(r, 650));
+    expect(cellCount()).toBe(4);
+
+    // Monthly → 12 month buckets
+    await userEvent.click(screen.getByRole('radio', { name: 'Monthly' }));
+    await new Promise((r) => setTimeout(r, 650));
+    expect(cellCount()).toBe(12);
+
+    // Yearly → 4 quarter buckets
+    await userEvent.click(screen.getByRole('radio', { name: 'Yearly' }));
+    await new Promise((r) => setTimeout(r, 650));
+    expect(cellCount()).toBe(4);
+  });
+
   it('renders the analytics card grid with workspace-appropriate titles', () => {
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 

@@ -19,6 +19,19 @@ function isoToday(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+// Heatmap time buckets per granularity. Custom falls back to the daily
+// week view until a real range is selected.
+const HEAT_BUCKETS: Record<Exclude<Granularity, 'custom'>, string[]> = {
+  daily: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+  weekly: ['W1', 'W2', 'W3', 'W4'],
+  monthly: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+  yearly: ['Q1', 'Q2', 'Q3', 'Q4'],
+};
+
+function heatLabels(g: Granularity): string[] {
+  return g === 'custom' ? HEAT_BUCKETS.daily : HEAT_BUCKETS[g];
+}
+
 // ── Card definitions ─────────────────────────────────────────────────
 
 interface AnalyticsCard {
@@ -29,13 +42,13 @@ interface AnalyticsCard {
   titleKey: string;
   /** English fallback shown when the Fluent key is missing */
   title: string;
-  /** `true` = spans all grid columns; default = single cell */
-  full?: boolean;
+  /** `wide` = span 2 columns; `full` = span all columns; default = single */
+  size?: 'wide' | 'full';
 }
 
 const ANALYTICS_CARDS: AnalyticsCard[] = [
-  // Full-width
-  { key: 'heatmap',   workspace: null,         titleKey: 'analytics-card-peak-hours', title: 'Peak Hours',                full: true },
+  // 2×1 wide heatmap
+  { key: 'heatmap',   workspace: null,         titleKey: 'analytics-card-peak-hours', title: 'Peak Hours',                size: 'wide' },
   // Shared (both retail and restaurant)
   { key: 'revenue',   workspace: null,         titleKey: 'analytics-card-revenue',    title: 'Revenue Overview' },
   { key: 'aov',       workspace: null,         titleKey: 'analytics-card-aov',        title: 'Average Order Value' },
@@ -96,6 +109,25 @@ export default function AnalyticsScreen() {
   const visibleCards = ANALYTICS_CARDS.filter(
     (c) => c.workspace === null || c.workspace === workspaceView,
   );
+
+  // Smart heatmap — bucket cells change with the selected granularity.
+  // Intensity is a placeholder until real data is wired.
+  const renderHeatmap = () => {
+    const labels = heatLabels(granularity);
+    return (
+      <div className="analytics-heatmap" role="img" aria-label={l10n.getString('analytics-card-peak-hours')}>
+        {labels.map((label, i) => {
+          const intensity = (i * 37 + 7) % 5;
+          return (
+            <div key={label} className="analytics-heat-cell" data-intensity={intensity} title={label}>
+              <div className="analytics-heat-block" />
+              <span className="analytics-heat-label">{label}</span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   // Render a placeholder chart icon based on card key
   const cardPlaceholder = (key: string) => {
@@ -400,7 +432,7 @@ export default function AnalyticsScreen() {
           {visibleCards.map((card) => (
             <div
               key={`${card.key}-${card.workspace ?? 'shared'}`}
-              className={`analytics-card${card.full ? ' analytics-card--full' : ''}`}
+              className={`analytics-card${card.size ? ` analytics-card--${card.size}` : ''}`}
             >
               <div className="analytics-card-header">
                 <Localized id={card.titleKey}>
@@ -416,6 +448,8 @@ export default function AnalyticsScreen() {
                     <div className="skeleton-bar skeleton-bar--lg" />
                     <div className="skeleton-bar skeleton-bar--sm" />
                   </div>
+                ) : card.key === 'heatmap' ? (
+                  renderHeatmap()
                 ) : (
                   <div className="analytics-card-placeholder">
                     {cardPlaceholder(card.key)}

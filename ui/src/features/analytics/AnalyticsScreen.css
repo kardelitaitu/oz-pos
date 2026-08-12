@@ -235,6 +235,8 @@
 
 @media (max-width: 560px) {
   .analytics-grid { grid-template-columns: 1fr; }
+  .analytics-card--wide,
+  .analytics-card--full { grid-column: 1 / -1; }
 }
 
 /* Individual card */
@@ -246,6 +248,10 @@
   display: flex;
   flex-direction: column;
   min-height: 220px;
+}
+
+.analytics-card--wide {
+  grid-column: span 2;
 }
 
 .analytics-card--full {
@@ -282,6 +288,42 @@
 
 .analytics-card-hint {
   font-size: 12px;
+  color: #94a3b8;
+}
+
+/* Smart heatmap — calendar-style cells */
+.analytics-heatmap {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.analytics-heat-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.analytics-heat-block {
+  width: 28px;
+  height: 28px;
+  border-radius: 5px;
+  background: #eef2f7;
+  transition: background 0.2s;
+}
+
+.analytics-heat-cell[data-intensity="1"] .analytics-heat-block { background: #dbeafe; }
+.analytics-heat-cell[data-intensity="2"] .analytics-heat-block { background: #93c5fd; }
+.analytics-heat-cell[data-intensity="3"] .analytics-heat-block { background: #3b82f6; }
+.analytics-heat-cell[data-intensity="4"] .analytics-heat-block { background: #1d4ed8; }
+
+.analytics-heat-label {
+  font-size: 10px;
+  font-weight: 500;
   color: #94a3b8;
 }
 
