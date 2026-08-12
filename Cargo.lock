@@ -4219,12 +4219,14 @@ dependencies = [
  "oz-payment",
  "oz-reporting",
  "oz-security",
+ "rand 0.8.6",
  "rusqlite",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
