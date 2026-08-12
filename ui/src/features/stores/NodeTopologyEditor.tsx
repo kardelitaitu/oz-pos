@@ -6354,10 +6354,23 @@ export default function NodeTopologyEditor({
                       setFinderOpen(false);
                     } else if (e.key === 'ArrowDown') {
                       e.preventDefault();
-                      setFinderIndex((i) => (finderMatches.length === 0 ? 0 : (i + 1) % finderMatches.length));
+                      setFinderIndex((i) => {
+                        if (finderMatches.length === 0) return 0;
+                        // Navigate from the VISIBLY-active row: the stored
+                        // index can sit past the end after the match list
+                        // shrinks (a node deleted while the finder is open),
+                        // and an un-clamped modulo would swallow exactly one
+                        // arrow press (the highlight would not move).
+                        const active = Math.min(i, finderMatches.length - 1);
+                        return (active + 1) % finderMatches.length;
+                      });
                     } else if (e.key === 'ArrowUp') {
                       e.preventDefault();
-                      setFinderIndex((i) => (finderMatches.length === 0 ? 0 : (i - 1 + finderMatches.length) % finderMatches.length));
+                      setFinderIndex((i) => {
+                        if (finderMatches.length === 0) return 0;
+                        const active = Math.min(i, finderMatches.length - 1);
+                        return (active - 1 + finderMatches.length) % finderMatches.length;
+                      });
                     } else if (e.key === 'Enter') {
                       e.preventDefault();
                       const match = finderMatches[Math.min(finderIndex, Math.max(0, finderMatches.length - 1))];

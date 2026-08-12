@@ -8432,6 +8432,98 @@ describe('NodeTopologyEditor — node finder', () => {
     expect((document.querySelector('.node-canvas-viewport') as HTMLElement).style.transform).toBe(before);
   });
 
+  it('navigates from the visibly-active row after the match list shrinks (node deleted while open)', async () => {
+    // Deleted-node edge: the finder stays open while a node is deleted, the
+    // list shrinks, and the STORED index (2) now points past the end. The
+    // render clamps the highlight to the last row, so the next arrow press
+    // must move from THAT row — not compute against the stale index (which
+    // swallows exactly one press). Enter must then jump to a live node.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'ws-b', type: 'workspace', name: 'POS B', x: 680, y: 140, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+    openFinder();
+    const input = finderInput()!;
+    const options = () => [...document.querySelectorAll('.topology-finder-item')];
+    expect(options()).toHaveLength(3);
+
+    // Move the highlight to the LAST row (index 2).
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(input.getAttribute('aria-activedescendant')).toBe(options()[2]!.id);
+
+    // Delete the FIRST match (POS A) while the finder stays open — no
+    // wires, so the delete is immediate.
+    fireEvent.mouseDown(nodeAt(1), { button: 0 });
+    fireEvent.keyDown(document, { key: 'Delete' });
+    await waitFor(() => expect(options()).toHaveLength(2));
+    // The render clamps the highlight to the last remaining row (POS B).
+    expect(input.getAttribute('aria-activedescendant')).toBe(options()[1]!.id);
+
+    // ArrowDown must wrap to the FIRST row — one press, not swallowed by
+    // the stale stored index.
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    expect(input.getAttribute('aria-activedescendant')).toBe(options()[0]!.id);
+
+    // Enter after the delete jumps to a LIVE node (never a ghost id).
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(document.querySelector('.topology-finder')).toBeNull();
+    const selected = [...document.querySelectorAll('.topology-node.node-selected')] as HTMLElement[];
+    expect(selected).toHaveLength(1);
+    expect(selected[0]!.textContent).toContain('Branch');
+  });
+
+  it('reflects a rename in the open finder and Enter jumps to the renamed node', async () => {
+    // Renamed-node edge: the finder stays open while a node is renamed from
+    // its card. The match list must react (the old name stops matching, the
+    // new name matches), and Enter must still jump to the node by its
+    // STABLE id — a rename is a name change, not a different instance.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        { id: 'ws-a', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [],
+    } as never);
+    const onRenameWorkspace = vi.fn().mockResolvedValue(true);
+    renderEditor({ onRenameWorkspace });
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    openFinder();
+    const input = finderInput()!;
+
+    fireEvent.change(input, { target: { value: 'pos' } });
+    let row = document.querySelector('.topology-finder-item') as HTMLElement;
+    expect(row.textContent).toContain('POS A');
+
+    // Rename the node from its card while the finder stays open.
+    const wsCard = nodeAt(1);
+    fireEvent.click(within(wsCard).getByRole('button', { name: 'topology-workspace-rename-label' }));
+    const renameInput = within(wsCard).getByLabelText('topology-workspace-rename-placeholder');
+    fireEvent.change(renameInput, { target: { value: 'Front Register' } });
+    fireEvent.keyDown(renameInput, { key: 'Enter' });
+    await waitFor(() => expect(onRenameWorkspace).toHaveBeenCalledWith('ws-a', 'Front Register'));
+
+    // The open finder reacted: the old-name query no longer matches (empty
+    // state, not a stale row).
+    await waitFor(() => expect(document.querySelector('.topology-finder-empty')).not.toBeNull());
+
+    // The new name matches and Enter jumps to the renamed node by its id.
+    fireEvent.change(input, { target: { value: 'front' } });
+    row = document.querySelector('.topology-finder-item') as HTMLElement;
+    expect(row.textContent).toContain('Front Register');
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(document.querySelector('.topology-finder')).toBeNull();
+    const selected = [...document.querySelectorAll('.topology-node.node-selected')] as HTMLElement[];
+    expect(selected).toHaveLength(1);
+    expect(selected[0]!.textContent).toContain('Front Register');
+  });
+
   it('wires the combobox ARIA contract so the active match is announced', () => {
     // The finder is a combobox pattern (filter input + option list), so the
     // input must expose aria-expanded / aria-controls / aria-activedescendant
