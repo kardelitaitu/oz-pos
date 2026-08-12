@@ -1,4 +1,15 @@
 
+## 2026-08-12 — TDD cycle: arrow-key nudges now coalesce into one undo entry per burst
+
+### Discrete arrow presses pushed one undo entry each — undo reverted a single pixel step at a time
+**Problem:** Sixth review pass over the topology editor, focused on undo/redo semantics. The journal's round-165 entry (inspector undoability) explicitly listed as a follow-up: "Arrow-key nudges also push one entry per keypress rather than one per nudge gesture; a session-based entry would compress them." The `!e.repeat` guard fixed only OS-level auto-repeat (a HELD key = one entry); DISCRETE taps each called `pushHistory()` — a user tapping an arrow key 3 times got 3 undo entries, so Ctrl+Z reverted the last 24px step instead of the burst. The editor already had the right pattern: the inspector coalesces a typing burst into one entry via `inspectorHistoryPushedForRef` (one entry per selection session).
+
+**Solution:** Red→Green. (1) Red — a two-tap burst test failed on unfixed code: one undo returned 96px, not the 80px origin (two entries existed). A second test pinned the undo-boundary: after undoing a burst, the next nudge must start a FRESH entry (a stale session would swallow it — undo then could not revert it). (2) Green — a time-windowed nudge session (`NUDGE_COALESCE_MS = 1500`): the burst's FIRST press pushes the entry (snapshotting the origin); continuation presses within the window on the SAME selection move without pushing. The burst ends on a gap, a selection change (same-selection check), any other history-pushing edit (pushHistory clears it), an undo/redo (popUndo/popRedo clear it), or a fresh canvas (resetTransientCanvasState clears it — the single helper all load paths already use). (3) A pause-boundary guard test (real 1.6s wait, no fake timers — the plain-nudge path arms no timers) pins that a gap splits the burst into two entries.
+
+**Validation:** editor suite 513/513 (3 new; both behavior tests Red-confirmed via stash) · full UI suite 286 files / 4,920 tests · eslint 0 errors (8 pre-existing warnings) · typecheck · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** the coalesce window is fixed at 1.5s — a preference for "always coalesce same-selection nudges regardless of pause" (Figma-style per-gesture) vs "never coalesce" is a product call, and 1.5s is the safe middle. Direction is NOT a boundary (any-direction nudges in a burst share the entry — the whole movement is one edit). The window constant is the single knob if the product wants a different feel.
+
 ## 2026-08-12 — TDD cycle: branch-compare panel could compare a branch with itself
 
 ### The compare target was never re-derived when the selected branch moved — a switch or delete stranded it on the branch now on canvas

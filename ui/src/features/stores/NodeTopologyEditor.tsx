@@ -575,6 +575,12 @@ function leftPortDy(_node: TopologyNodeData, _variantIndex: number): number {
 
 /** Evaluate a cubic bezier at parameter t (0-1). */
 const GRID_SIZE = 24;
+
+/** Nudge-burst coalescing window: discrete arrow presses closer together
+ *  than this (on the same selection) share ONE undo entry; a longer gap
+ *  starts a fresh entry. Chosen to cover a fast typing burst without
+ *  folding deliberately-separated nudges into one undo step. */
+const NUDGE_COALESCE_MS = 1500;
 const snap = (v: number) => Math.round(v / GRID_SIZE) * GRID_SIZE;
 /** Stable keys identifying a validation issue for mark-issue-resolved
  *  persistence: a node issue is scoped by its card + message, a graph-level
@@ -1426,6 +1432,16 @@ export default function NodeTopologyEditor({
    * entry per keystroke. Reset on selection change and undo/redo. */
   const inspectorHistoryPushedForRef = useRef<string | null>(null);
 
+  /** Nudge-burst session: the node set and last-press time of the current
+   *  arrow-key burst. Discrete presses within NUDGE_COALESCE_MS on the SAME
+   *  selection share ONE undo entry — undo reverts the whole burst, not the
+   *  last pixel step (the journal's round-165 follow-up). The burst ends on
+   *  a time gap, a selection change (same-selection check in the nudge
+   *  handler), any other history-pushing edit (pushHistory clears it), an
+   *  undo/redo (popUndo/popRedo clear it), or a fresh canvas
+   *  (resetTransientCanvasState clears it). */
+  const nudgeSessionRef = useRef<{ nodeIds: Set<string>; lastNudgeAt: number } | null>(null);
+
   // Premium is Pro-equivalent (backend max_warehouses / capacity both
   // include it) — the spawn gate and the live validation must agree with
   // the Apply boundary or a Premium install blocks its second Stock Room.
@@ -2219,6 +2235,9 @@ export default function NodeTopologyEditor({
     // Dirty is derived (isCanvasDirty compares against appliedSnapshotRef),
     // so no flag needs arming here — the mutation itself is the dirty signal.
     setRedo([]); // new edit invalidates the redo branch
+    // Any other history-pushing edit ends an open nudge burst — the next
+    // nudge starts a fresh entry instead of folding into this edit's.
+    nudgeSessionRef.current = null;
     setHistory((prev) => {
       // An explicit snapshot wins (bend drags capture the pre-gesture wires
       // at mousedown so a ghost-created bend undoes away completely); the
@@ -2553,6 +2572,7 @@ export default function NodeTopologyEditor({
     cancelBendDrag();
     setContextMenu(null);
     inspectorHistoryPushedForRef.current = null;
+    nudgeSessionRef.current = null;
   }, [
     cancelConnection,
     setHoveredTarget,
@@ -2725,6 +2745,7 @@ export default function NodeTopologyEditor({
     // the exact-equality case.
     // A post-undo edit is a fresh session — it must push a new entry.
     inspectorHistoryPushedForRef.current = null;
+    nudgeSessionRef.current = null;
     // Undoing a deletion restores the removed node — re-select it so the
     // inspector reopens on the restored element (the delete flow cleared
     // the selection). Exactly one node restored from the entry is the
@@ -2749,6 +2770,7 @@ export default function NodeTopologyEditor({
     // is clean; redo to anything else confirms on the next preset click.
     // A post-redo edit is a fresh session — it must push a new entry.
     inspectorHistoryPushedForRef.current = null;
+    nudgeSessionRef.current = null;
   }, [redo, nodes, wires, setHistory, setNodes, setRedo, setWires]);
 
   // Clean up pan/drag/marquee/bend/touch listeners and fresh-node timers on
@@ -3258,7 +3280,25 @@ export default function NodeTopologyEditor({
           if (blocked) break;
         }
         if (blocked) return;
-        pushHistory();
+        // Nudge-burst coalescing: discrete arrow presses within
+        // NUDGE_COALESCE_MS on the same selection share ONE undo entry
+        // (undo reverts the whole burst). The burst's FIRST press pushed
+        // the entry (snapshotting the origin); continuation presses move
+        // the nodes without pushing. A gap, selection change, other edit,
+        // undo/redo, or fresh canvas ends the burst.
+        const now = Date.now();
+        const nudgeSession = nudgeSessionRef.current;
+        const sameBurst =
+          nudgeSession !== null &&
+          now - nudgeSession.lastNudgeAt < NUDGE_COALESCE_MS &&
+          nudgeSession.nodeIds.size === selectedNodeIds.size &&
+          [...selectedNodeIds].every((id) => nudgeSession.nodeIds.has(id));
+        if (sameBurst) {
+          nudgeSession.lastNudgeAt = now;
+        } else {
+          pushHistory();
+          nudgeSessionRef.current = { nodeIds: new Set(selectedNodeIds), lastNudgeAt: now };
+        }
         // Figma-style alignment on FINE nudges only: the round-22 guide
         // engine runs on the nudged selection, so a Shift+arrow landing
         // flush against a neighbour shows the live guide. ENTRY-ONLY snap:

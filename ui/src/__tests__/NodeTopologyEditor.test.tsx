@@ -2575,6 +2575,77 @@ function BranchDeleteHarness() {
     expect(firstNode.style.left).toBe('80px');
   });
 
+  it('coalesces rapid discrete arrow nudges into ONE undo entry (undo reverts the whole burst)', () => {
+    renderEditor();
+    const firstNode = document.querySelector('.topology-node') as HTMLElement;
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    expect(firstNode.style.left).toBe('80px');
+
+    selectFirstNode();
+
+    // Two discrete taps (NOT OS auto-repeat — each is a fresh keydown
+    // without repeat: true) within the coalesce window: 80 → 96 → 120.
+    // (A third tap would step the card into the preset's neighbour — the
+    // round-141 no-overlap block, not a nudge failure.)
+    fireEvent.keyDown(canvas, { key: 'ArrowRight' });
+    fireEvent.keyDown(canvas, { key: 'ArrowRight' });
+    expect(firstNode.style.left).toBe('120px');
+
+    // ONE undo reverts the WHOLE burst back to the origin — not just the
+    // last grid step — and the burst consumed exactly one entry.
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    expect(firstNode.style.left).toBe('80px');
+    expect(screen.queryByText('Undo (Ctrl+Z)')).not.toBeInTheDocument();
+  });
+
+  it('a pause between nudges ends the burst and starts a fresh undo entry', async () => {
+    renderEditor();
+    const firstNode = document.querySelector('.topology-node') as HTMLElement;
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    expect(firstNode.style.left).toBe('80px');
+
+    selectFirstNode();
+
+    fireEvent.keyDown(canvas, { key: 'ArrowRight' }); // 80 → 96 (burst entry)
+    // Pause past the coalesce window: the next press is a NEW burst.
+    await new Promise((resolve) => setTimeout(resolve, 1600));
+    fireEvent.keyDown(canvas, { key: 'ArrowRight' }); // 96 → 120 (fresh entry)
+
+    // The first undo reverts only the LATEST nudge; the second reverts the
+    // first. Two entries exist — the pause split the burst.
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    expect(firstNode.style.left).toBe('96px');
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    expect(firstNode.style.left).toBe('80px');
+  });
+
+  it('an undo closes the nudge burst — the next nudge starts a fresh entry', () => {
+    renderEditor();
+    const firstNode = document.querySelector('.topology-node') as HTMLElement;
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    expect(firstNode.style.left).toBe('80px');
+
+    selectFirstNode();
+
+    // Two-tap burst: 80 → 96 → 120 (one entry, snapshotting the origin).
+    fireEvent.keyDown(canvas, { key: 'ArrowRight' });
+    fireEvent.keyDown(canvas, { key: 'ArrowRight' });
+    expect(firstNode.style.left).toBe('120px');
+
+    // Undo reverts the WHOLE burst to its origin; the burst session must
+    // NOT survive the undo.
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    expect(firstNode.style.left).toBe('80px');
+
+    // A fresh nudge immediately after the undo must be its OWN entry: if
+    // the stale burst session had survived, it would push nothing and the
+    // following undo could not revert the nudge.
+    fireEvent.keyDown(canvas, { key: 'ArrowRight' });
+    expect(firstNode.style.left).toBe('96px');
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    expect(firstNode.style.left).toBe('80px');
+  });
+
   it('Shift+arrow nudges exactly 1px and bypasses the grid entirely', () => {
     renderEditor();
     const firstNode = document.querySelector('.topology-node') as HTMLElement;
