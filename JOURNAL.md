@@ -4692,3 +4692,20 @@ Two regression pins:
 **Test counts:** editor 539/539 (+2, Pin B true-Red via mutation), full UI suite 4,962/4,962, typecheck clean, eslint 0 errors (8 pre-existing warnings), i18n lint + FTL dedupe clean (no FTL change).
 
 **Remaining risks / follow-ups:** the guard silently drops a dangling wire rather than surfacing it — deliberate (a dangling wire cannot render and would only trip the gate), documented in the helper. A future slice could log/flag a dropped wire as a signal that a creation path regressed.
+
+## 2026-08-12 — History entries sanitized at push time (endpoint-consistency moved to entry creation)
+
+**Problem:** The restore-boundary hardening (baaee2c6) guaranteed *restore* integrity — `popUndo`/`popRedo` drop wires whose endpoints are missing from the same entry — but the stacks themselves were never validated where entries are CREATED. The invariant held only at the exit boundary, and by construction (all legitimate entries are full snapshots except `commitDuplicateDrag`'s filtered one). A future creation-path regression could store a corrupt entry and depend entirely on the restore guard to neutralize it. Also: undo→redo round-trips were unpinned (only undo was covered), and the one filtered entry (`commitDuplicateDrag`) had no dedicated pin.
+
+**Solution:** New module-level `historyEntry(nodes, wires)` builder — shallow-copies nodes and runs wires through `validWiresForNodes` at PUSH time — used at all four entry-creation sites: `pushHistory` (covers every mutation-path entry), `commitDuplicateDrag` (the filtered entry re-validated even if its filter regresses), `popUndo`'s redo-push, and `popRedo`'s history-push. The invariant "every stored entry is endpoint-consistent" is now enforced where state enters the stacks, not only where it leaves; the restore guard remains as defense-in-depth.
+
+**TDD rigor (mutation-verified):**
+- Red: two round-trip pins — Alt+drag duplicate and Ctrl+V paste both undo → redo with the copy wire intact and no `unknown-wire-endpoint` banner. First version asserted the banner only AFTER redo and passed even under the dangling mutation (the geometry-gated wire is invisible to the count); fixed to assert right after the UNDO step, where a dangling entry surfaces.
+- Mutation 1 (dangling entry in `commitDuplicateDrag` + restore guards removed): Alt+drag pin fails — banner fires after undo (true Red).
+- Mutation 2 (same dangling source, but routed through `historyEntry` at push; restore guards STILL removed): pin passes — the push-time sanitize alone neutralizes the entry, independent of the restore boundary.
+- The paste pin stayed green through both mutations (its `pushHistory` path was never the mutated site).
+- `git checkout` restore of the mutated file wiped the uncommitted Green changes — re-applied (1 definition + 4 call sites, verified by grep).
+
+**Commits:** (pending)
+**Tests:** editor 541/541 (+2) · full UI suite 4,964/4,964 · typecheck clean · eslint 0 errors (pre-existing warnings only — the `selectMany` dep warning at commitDuplicateDrag predates this change) · i18n lint clean.
+**Risks / follow-ups:** none new. The `cancelDuplicateDrag` wire filter remains the journaled low-severity follow-up from 46af16e7.

@@ -126,6 +126,23 @@ function validWiresForNodes(
   const ids = new Set(nodes.map((n) => n.id));
   return wires.filter((w) => ids.has(w.fromNodeId) && ids.has(w.toNodeId));
 }
+/** Build a history/redo entry that is endpoint-consistent at PUSH time (see
+ *  validWiresForNodes): every wire in a stored entry references nodes present
+ *  in the SAME entry. The restore boundary (popUndo/popRedo) already drops
+ *  dangling wires as defense-in-depth; sanitizing at push keeps the stacks
+ *  themselves clean, so a corrupt entry can never even be stored — the
+ *  invariant is enforced where state enters the stacks, not only where it
+ *  leaves. Legitimate entries are unaffected (the filter is identity for any
+ *  consistent snapshot). */
+function historyEntry(
+  nodes: TopologyNodeData[],
+  wires: TopologyWireData[],
+): TopologyHistoryEntry<TopologyNodeData, TopologyWireData> {
+  return {
+    nodes: nodes.map((n) => ({ ...n })),
+    wires: validWiresForNodes(nodes, wires).map((w) => ({ ...w })),
+  };
+}
 /** Keyboard shortcuts listed in the header's help popover. `key` is the
  *  literal kbd text; `id` is the FTL description key (reuses existing
  *  topology strings where they already name the action). */
@@ -2316,7 +2333,9 @@ export default function NodeTopologyEditor({
       // closure state, but keeps pushHistory referentially STABLE so the
       // memoized card/wire layers don't churn on every nodes/wires change.
       const src = snapshot ?? { nodes: nodesRef.current, wires: wiresRef.current };
-      const entry: HistoryEntry = { nodes: src.nodes.map((n) => ({ ...n })), wires: src.wires.map((w) => ({ ...w })) };
+      // Push-time integrity: every stored entry is endpoint-consistent
+      // (see historyEntry) — a dangling wire can never even enter the stack.
+      const entry: HistoryEntry = historyEntry(src.nodes, src.wires);
       const next = [...prev, entry];
       if (next.length > 50) next.shift();
       return next;
@@ -2449,12 +2468,14 @@ export default function NodeTopologyEditor({
         const copySet = new Set(copyIds);
         setRedo([]); // new edit invalidates the redo branch
         setHistory((prev) => {
-          const entry: HistoryEntry = {
-            nodes: nodesRef.current.filter((n) => !copySet.has(n.id)).map((n) => ({ ...n })),
-            wires: wiresRef.current
-          .filter((w) => !copySet.has(w.fromNodeId) && !copySet.has(w.toNodeId))
-              .map((w) => ({ ...w })),
-          };
+          // The one FILTERED entry in the whole history (current state
+          // minus the copy ids). historyEntry re-validates it at push time
+          // so the entry stays endpoint-consistent even if the filter above
+          // ever regresses.
+          const entry: HistoryEntry = historyEntry(
+            nodesRef.current.filter((n) => !copySet.has(n.id)),
+            wiresRef.current.filter((w) => !copySet.has(w.fromNodeId) && !copySet.has(w.toNodeId)),
+          );
           const next = [...prev, entry];
           if (next.length > 50) next.shift();
           return next;
@@ -2808,8 +2829,9 @@ export default function NodeTopologyEditor({
     const stack = historyRef.current;
     if (stack.length === 0) return;
     const entry = stack[stack.length - 1]!;
-    // Push current state to redo before restoring
-    setRedo((prev) => [...prev, { nodes: nodes.map((n) => ({ ...n })), wires: wires.map((w) => ({ ...w })) }]);
+    // Push current state to redo before restoring — sanitized at push time
+    // like every other entry (see historyEntry).
+    setRedo((prev) => [...prev, historyEntry(nodes, wires)]);
     // Sibling setState calls (not nested in updater — fixes ADR audit #6)
     setNodes(entry.nodes);
     // Restore-boundary integrity: never land a wire whose endpoint nodes
@@ -2839,8 +2861,9 @@ export default function NodeTopologyEditor({
   const popRedo = useCallback(() => {
     if (redo.length === 0) return;
     const entry = redo[redo.length - 1]!;
-    // Push current state to history before restoring
-    setHistory((prev) => [...prev, { nodes: nodes.map((n) => ({ ...n })), wires: wires.map((w) => ({ ...w })) }]);
+    // Push current state to history before restoring — sanitized at push
+    // time like every other entry (see historyEntry).
+    setHistory((prev) => [...prev, historyEntry(nodes, wires)]);
     setNodes(entry.nodes);
     // Restore-boundary integrity: never land a wire whose endpoint nodes
     // are missing from the SAME entry (see validWiresForNodes).
