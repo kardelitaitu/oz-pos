@@ -4875,3 +4875,13 @@ Two regression pins:
 **Tests:** analytics-data 34/34 (+3 alignPrevBuckets) · AnalyticsScreen 66/66 · full UI suite 292/292, 5102.
 
 **Risks / follow-ups:** current-period charts still skip zero-sales days entirely (gap in the line, no 0 point) — honest but arguably less clear than a 0-dip; zero-filling the current series is a separate design slice. `revenueLabel`'s redundant ternary remains a trivial cleanup candidate.
+## 2026-08-13 — weekly_revenue bucketed Sundays while every other layer uses Mondays (TDD)
+
+**Problem:** three different week conventions coexisted. Rust `weekly_revenue` used `DATE(created_at, 'weekday 0', '-7 days')` (Sunday-based), while the UI's `weekStartKey` (tables/basket/heatmap), `rangeForGranularity('weekly')` ("Monday-first week start") and the dev-mock `get_weekly_revenue` were all Monday-first. A sale's `week_start` label on the revenue card (production: Sundays) disagreed with the tables/basket cards (Mondays) and with what the dev server showed. Worse, the SQL idiom is also off-by-one-week on the boundary day itself: verified empirically that a Sunday sale (2026-08-16) bucketed to `2026-08-09` — the PREVIOUS Sunday-based week, not its own.
+
+**Solution (TDD, Red→Green):** wrote `weekly_revenue_monday_first_week_start` first — pins Sunday 2026-08-16 → week_start `2026-08-10` (the Monday of the week containing that Sunday) and Monday 2026-08-10 → `2026-08-10` — watched it fail with `"2026-08-09"`. Green: replaced the expression with `DATE(created_at, '-6 days', 'weekday 1')` in both the SELECT and the correlated COGS subquery — the `-6 days` first guarantees `weekday 1` lands on the week's Monday for every day including Monday itself (the naive `'weekday 1', '-7 days'` would push a Monday sale into the previous week). Updated the three legacy tests that pinned Sunday `week_start` values (`partial_week_range` 07-19→07-20, `leap_day_falls_in_week` 02-25→02-26, `multiple_currencies_separate_rows` 07-19→07-20) and the doc comment. Verified the corrected idiom against SQLite directly for Mon/Sat/Sun/Mon-boundary cases before committing to it.
+
+**Commits:** (see below — fix + journal)
+**Tests:** oz-core lib 1803/1803 (56 reports; +1 new weekly test) · fmt clean · clippy -D warnings clean · UI suite 292/292, 5102 (no UI changes needed — UI bucketing was already Monday).
+
+**Risks / follow-ups:** `yearlyWeekIntensities` derives the year heatmap's week-of-month band from `week_start`'s day — the Monday shift moves a handful of boundary weeks one heatmap band (same month), acceptable. The zero-fill of current-period trend buckets (days with no sales render as gaps, not 0) remains the outstanding analytics follow-up.
