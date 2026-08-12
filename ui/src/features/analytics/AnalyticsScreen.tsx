@@ -30,6 +30,7 @@ interface AnalyticsCard {
 }
 
 const ANALYTICS_CARDS: AnalyticsCard[] = [
+  { key: 'heatmap',  workspace: null,          title: 'Peak Hours',             width: 'full' },
   { key: 'revenue',  workspace: null,          title: 'Revenue Overview',       width: 'half' },
   { key: 'staff',    workspace: null,          title: 'Staff Performance',      width: 'half' },
   { key: 'top-items',workspace: 'retail',      title: 'Top Products',           width: 'half' },
@@ -37,7 +38,6 @@ const ANALYTICS_CARDS: AnalyticsCard[] = [
   { key: 'category', workspace: 'retail',      title: 'Sales by Category',      width: 'half' },
   { key: 'tables',   workspace: 'restaurant',  title: 'Table Turnover',         width: 'half' },
   { key: 'payments', workspace: null,          title: 'Payment Methods',        width: 'half' },
-  { key: 'heatmap',  workspace: null,          title: 'Peak Hours',             width: 'full' },
 ];
 
 // ── Component ─────────────────────────────────────────────────────────
