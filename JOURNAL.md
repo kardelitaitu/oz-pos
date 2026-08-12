@@ -4865,3 +4865,13 @@ Two regression pins:
 **Tests:** analytics-data 31/31 (2 re-pinned + 1 new turnDelta) · AnalyticsScreen 66/66 · full UI suite 292/292, 5099.
 
 **Risks / follow-ups:** none new. The `revenueLabel` redundant ternary (`g === 'monthly' ? slice(5) : slice(5)`) remains a trivial cleanup candidate.
+## 2026-08-13 — Trend-card compare overlays misaligned when bucket sets differ (TDD)
+
+**Problem:** the previous TDD slice fixed the occupancy overlay's index-alignment by hour, and the journal claimed the other five compare overlays (Revenue, AOV, Tables, Inventory, Basket) were safe "because bucketing is deterministic." That claim was wrong: determinism holds for the *bucketing*, not the *row set*. The backend `daily_revenue` / `weekly_revenue` / `monthly_revenue` / `table_turnover` / `basket_size_trend` queries all `GROUP BY` with **no zero-fill** — a day (or week/month) with no sales drops its row. Two equal-length windows therefore frequently have different bucket sets, and each card's dashed previous line plotted `prevData.map(d => d.value)` **by array index** against the current x-axis — the exact misplot class fixed for occupancy, live on five more cards.
+
+**Solution (TDD, Red→Green):** wrote `alignPrevBuckets(current, previous)` — the label-keyed generalization of `alignPrevHourly` (map previous values onto current labels, fill absent buckets with 0, ignore previous-only labels) — with three unit tests written first (missing-bucket fill, order-independent identical sets, previous-only labels ignored), watched them fail on the missing export, then implemented and swapped all five overlay sites from `prevData.map(d => d.value)` to `alignPrevBuckets(data, prevData)`. The `periodDelta` chip totals are sums and are unaffected; only the dashed line's x-placement changed.
+
+**Commits:** (see below — fix + journal)
+**Tests:** analytics-data 34/34 (+3 alignPrevBuckets) · AnalyticsScreen 66/66 · full UI suite 292/292, 5102.
+
+**Risks / follow-ups:** current-period charts still skip zero-sales days entirely (gap in the line, no 0 point) — honest but arguably less clear than a 0-dip; zero-filling the current series is a separate design slice. `revenueLabel`'s redundant ternary remains a trivial cleanup candidate.
