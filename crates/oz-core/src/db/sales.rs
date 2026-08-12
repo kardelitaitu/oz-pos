@@ -374,9 +374,9 @@ impl Store<'_> {
                 });
                 continue;
             };
-            let ptype = crate::product::ProductType::parse_str(&ptype_str).unwrap_or_default();
+            let ptype = crate::product::ProductType::parse_str(ptype_str).unwrap_or_default();
             let tracks_inventory = ptype.tracks_inventory();
-            let recipe = self.get_recipe_ingredients(&pid)?;
+            let recipe = self.get_recipe_ingredients(pid)?;
             let has_recipe = !recipe.is_empty();
 
             if !tracks_inventory && !has_recipe {
@@ -386,7 +386,7 @@ impl Store<'_> {
 
             // 1. Check composite product stock if it tracks inventory
             if tracks_inventory {
-                let availability = stock_at_locations(&tx, &pid, stock_locations)?;
+                let availability = stock_at_locations(&tx, pid, stock_locations)?;
                 if let Some(allocations) =
                     crate::sale_deduction::allocate_stock_in_route_order(line.qty, &availability)
                 {
