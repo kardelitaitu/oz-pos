@@ -4709,3 +4709,19 @@ Two regression pins:
 **Commits:** (pending)
 **Tests:** editor 541/541 (+2) · full UI suite 4,964/4,964 · typecheck clean · eslint 0 errors (pre-existing warnings only — the `selectMany` dep warning at commitDuplicateDrag predates this change) · i18n lint clean.
 **Risks / follow-ups:** none new. The `cancelDuplicateDrag` wire filter remains the journaled low-severity follow-up from 46af16e7.
+
+## 2026-08-12 — Drop diagnostic for the history-integrity guards (corruption is loud, not silent)
+
+**Problem:** The push-time (`historyEntry`) and restore-time (`popUndo`/`popRedo`) guards dropped dangling wires silently — the journaled follow-up from baaee2c6. A future creation-path regression would be absorbed without a trace: the wire vanishes, the canvas stays clean, and nothing signals that state was corrupted and repaired.
+
+**Solution:** The integrity helpers moved out of the component file into a new pure module `ui/src/features/stores/topologyHistoryIntegrity.ts` (react-refresh forbids exporting a function from the component file; the directory's small-module pattern is the natural home). `validWiresForNodes` now takes an explicit `boundary: 'push' | 'restore'` label and emits `[topology] <boundary>-time guard dropped N dangling wire(s) ... <id> (from -> to)` via console.warn — matching the codebase's `[prefix]` convention — whenever it actually drops a wire. Legitimate snapshots are identity, so the diagnostic fires only on corruption.
+
+**TDD rigor:**
+- Red: 3 unit tests in `topologyHistoryIntegrity.test.ts` (module-missing Red, then silent-module Red — with the console.warn disabled, the two boundary tests fail `called 1 times but got 0`; the silence/identity test passes).
+- Green: the module with the diagnostic + editor rewiring (import replaces the two local helper definitions; both restore sites pass `'restore'`).
+- Editor pin: the Alt+drag undo→redo round-trip pin now also asserts zero `[topology]` warnings on a clean round-trip (pass-through spy, prefix-filtered).
+- Mutation: with `commitDuplicateDrag` pushed to dangle (real-code restore guard intact), the pin failed on the zero-diagnostic assertion AND the `[topology] restore-time guard dropped 1 dangling wire(s)...` warning visibly fired from the real restore path — end-to-end proof the diagnostic is wired through popUndo, not just the unit tests. Paste pin stayed green (unmutated path). Restored via precise reverse replacement (learned from the 9269e295 `git checkout` wipe — no checkout this time).
+
+**Commits:** (pending)
+**Tests:** topologyHistoryIntegrity 3/3 (+3) · editor 541/541 · full UI suite 4,967/4,967 · typecheck clean · eslint 0 errors (10 pre-existing warnings, none new — new module lint-clean) · i18n lint clean.
+**Risks / follow-ups:** none new. The diagnostic is console-only by design (an internal corruption signal, not user-facing — a user-facing surface would need FTL keys and would fire in the same impossible-to-reach corruption path).

@@ -10260,6 +10260,9 @@ describe('NodeTopologyEditor — Alt+drag to duplicate', () => {
     // undo → redo pins that the entry — and the redo-push it spawns — stay
     // endpoint-consistent: redo restores the copies AND the copy wire
     // together, never a wire whose endpoints are missing from the entry.
+    // A clean round-trip must also stay silent: the guard's [topology]
+    // diagnostic fires only when a wire is actually dropped (corruption).
+    const warn = vi.spyOn(console, 'warn');
     mockLoadTopology.mockResolvedValueOnce({
       nodes: [
         { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
@@ -10297,6 +10300,12 @@ describe('NodeTopologyEditor — Alt+drag to duplicate', () => {
     await waitFor(() => expect(getNodeCount()).toBe(4));
     expect(getWireCount()).toBe(2);
     expect(screen.queryByText('This wire references a node that is not in the graph.')).toBeNull();
+    // No corruption diagnostic on a clean round-trip — the guards only
+    // warn when they actually drop a dangling wire.
+    expect(
+      warn.mock.calls.filter((c) => typeof c[0] === 'string' && c[0].startsWith('[topology]')),
+    ).toHaveLength(0);
+    warn.mockRestore();
   });
 
   it('an Alt+dragged Branch Location copy is identity-less — never a second branch impersonation', async () => {

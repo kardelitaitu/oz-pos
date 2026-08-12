@@ -58,6 +58,7 @@ import { TopologyWireGroup } from './topologyWireGroup';
 import { planTopologyDiff, summarizeTopologyPlan } from './topologyDiff';
 import { cubicBezier, pointUnderCards, polylinePoint, wireUnderCardSegments } from './topologyWireGeometry';
 import { useTopologyEditorGraph, type TopologyHistoryEntry } from './nodeTopologyEditorState';
+import { historyEntry, validWiresForNodes } from './topologyHistoryIntegrity';
 import { useTopologyEditorSaveLifecycle } from './nodeTopologyEditorSaveState';
 import { useTopologyEditorSelection } from './nodeTopologyEditorSelectionState';
 import { useTopologyEditorDrag } from './nodeTopologyEditorDragState';
@@ -119,30 +120,7 @@ function normalizeVisualPort(port: string | null | undefined, fallback: PortName
  *  immediately surface the unknown-wire-endpoint gate, so dropping it is
  *  the only sane resolution; the canvas invariant stays "every wire's
  *  endpoints exist". */
-function validWiresForNodes(
-  nodes: TopologyNodeData[],
-  wires: TopologyWireData[],
-): TopologyWireData[] {
-  const ids = new Set(nodes.map((n) => n.id));
-  return wires.filter((w) => ids.has(w.fromNodeId) && ids.has(w.toNodeId));
-}
-/** Build a history/redo entry that is endpoint-consistent at PUSH time (see
- *  validWiresForNodes): every wire in a stored entry references nodes present
- *  in the SAME entry. The restore boundary (popUndo/popRedo) already drops
- *  dangling wires as defense-in-depth; sanitizing at push keeps the stacks
- *  themselves clean, so a corrupt entry can never even be stored — the
- *  invariant is enforced where state enters the stacks, not only where it
- *  leaves. Legitimate entries are unaffected (the filter is identity for any
- *  consistent snapshot). */
-function historyEntry(
-  nodes: TopologyNodeData[],
-  wires: TopologyWireData[],
-): TopologyHistoryEntry<TopologyNodeData, TopologyWireData> {
-  return {
-    nodes: nodes.map((n) => ({ ...n })),
-    wires: validWiresForNodes(nodes, wires).map((w) => ({ ...w })),
-  };
-}
+
 /** Keyboard shortcuts listed in the header's help popover. `key` is the
  *  literal kbd text; `id` is the FTL description key (reuses existing
  *  topology strings where they already name the action). */
@@ -2836,7 +2814,7 @@ export default function NodeTopologyEditor({
     setNodes(entry.nodes);
     // Restore-boundary integrity: never land a wire whose endpoint nodes
     // are missing from the SAME entry (see validWiresForNodes).
-    setWires(validWiresForNodes(entry.nodes, entry.wires));
+    setWires(validWiresForNodes(entry.nodes, entry.wires, 'restore'));
     setHistory((prev) => prev.slice(0, -1));
     // Dirty is derived: if the undone-to canvas matches the last applied
     // snapshot (e.g. undoing a same-preset load), no confirm fires; if it
@@ -2867,7 +2845,7 @@ export default function NodeTopologyEditor({
     setNodes(entry.nodes);
     // Restore-boundary integrity: never land a wire whose endpoint nodes
     // are missing from the SAME entry (see validWiresForNodes).
-    setWires(validWiresForNodes(entry.nodes, entry.wires));
+    setWires(validWiresForNodes(entry.nodes, entry.wires, 'restore'));
     setRedo((prev) => prev.slice(0, -1));
     // Same derived dirty rule as undo: redo to exactly the applied canvas
     // is clean; redo to anything else confirms on the next preset click.
