@@ -9,7 +9,7 @@ const MenuEngineeringScreen = lazy(() => import('./MenuEngineeringScreen'));
 const CustomReportScreen = lazy(() => import('./CustomReportScreen'));
 
 export function registerReportsFeature() {
-  registerPage({ route: 'dashboard', component: DashboardScreen, label: 'Dashboard' });
+  registerPage({ route: 'dashboard', component: DashboardScreen, label: 'Dashboard', fullscreen: true });
   registerNavItem({
     route: 'dashboard',
     label: 'Dashboard',

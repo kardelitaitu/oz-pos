@@ -8,7 +8,7 @@ export function registerAnalyticsFeature() {
   // analytics:view — owner/admin/manager only (0046 registry + 0048 scope).
   // The permission key is authoritative when the session carries granted
   // keys; requiredRole is the fallback for environments without them.
-  registerPage({ route: 'analytics', component: AnalyticsScreen, label: 'Staff Analytics', requiredRole: 'management', requiredPermission: 'analytics:view' });
+  registerPage({ route: 'analytics', component: AnalyticsScreen, label: 'Staff Analytics', requiredRole: 'management', requiredPermission: 'analytics:view', fullscreen: true });
   registerNavItem({
     route: 'analytics',
     label: 'Staff Analytics',

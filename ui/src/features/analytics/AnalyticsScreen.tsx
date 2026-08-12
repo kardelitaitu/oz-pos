@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { requiredLocalized } from '@/frontend/shared';
 import { l10nErrorMessage } from '@/utils/app-error';
 import { Card } from '@/components/Card';
@@ -39,6 +40,7 @@ interface KpiData {
 
 export default function AnalyticsScreen() {
   const { l10n } = useLocalization();
+  const { goToWorkspacePicker } = useWorkspaceNav();
   const { sessionToken: rawToken } = useWorkspace();
   const sessionToken = rawToken || '';
   const { currency } = useCurrency();
@@ -183,7 +185,15 @@ export default function AnalyticsScreen() {
   // ── Render ───────────────────────────────────────────────────────
 
   return (
-    <div className="analytics" role="region" aria-label={requiredLocalized(l10n, 'analytics-region-aria')}>
+    <div className="analytics analytics--fullscreen" role="region" aria-label={requiredLocalized(l10n, 'analytics-region-aria')}>
+      {/* Back button */}
+      <button type="button" className="analytics-back-btn" onClick={goToWorkspacePicker}
+        aria-label={l10n.getString('analytics-back-aria')}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
+          <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
+        </svg>
+        <Localized id="analytics-back"><span>Back</span></Localized>
+      </button>
       <div className="analytics-header">
         <div className="analytics-header-row">
           <div>

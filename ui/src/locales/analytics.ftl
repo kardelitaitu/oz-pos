@@ -50,3 +50,5 @@ analytics-deepdive-empty = No daily data available.
 # Export
 analytics-export-csv = CSV
 analytics-export-csv-aria = .aria-label = Export staff data as CSV
+analytics-back = Back
+analytics-back-aria = .aria-label = Back to home

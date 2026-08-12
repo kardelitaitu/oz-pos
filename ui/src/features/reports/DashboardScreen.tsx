@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { requiredLocalized } from '@/frontend/shared';
 import { Card } from '@/components/Card';
 import { Spinner } from '@/components/Spinner';
@@ -71,6 +72,7 @@ function fmtDelta(current: number, previous: number): string {
 
 export default function DashboardScreen() {
   const { l10n } = useLocalization();
+  const { goToWorkspacePicker } = useWorkspaceNav();
   const { sessionToken: rawToken } = useWorkspace();
   const sessionToken = rawToken || '';
   const { currency } = useCurrency();
@@ -235,7 +237,15 @@ export default function DashboardScreen() {
   if (error) return <div className="dashboard"><p className="dashboard-error">{error}</p></div>;
 
   return (
-    <div className="dashboard" role="region" aria-label={requiredLocalized(l10n, 'dashboard-region-aria')}>
+    <div className="dashboard dashboard--fullscreen" role="region" aria-label={requiredLocalized(l10n, 'dashboard-region-aria')}>
+      {/* Back button */}
+      <button type="button" className="dashboard-back-btn" onClick={goToWorkspacePicker}
+        aria-label={l10n.getString('dashboard-back-aria')}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
+          <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
+        </svg>
+        <Localized id="dashboard-back"><span>Back</span></Localized>
+      </button>
       {/* Header: title + date range + granularity */}
       <div className="dashboard-header">
         <div className="dashboard-header-top">

@@ -237,3 +237,8 @@
 
 /* Print */
 @media print { .analytics { padding: 1rem; } .analytics-filters, .analytics-export-btn, .analytics-header-row .analytics-export-btn { display: none; } .analytics-chart-row { grid-template-columns: 1fr 1fr; page-break-inside: avoid; } .analytics-kpi-row { grid-template-columns: repeat(4, 1fr); } .card { box-shadow: none; border: 1px solid #ccc; } }
+
+/* Fullscreen standalone */
+.analytics--fullscreen { background: #fff; color: #1a1a2e; min-height: 100dvh; }
+.analytics-back-btn { display: inline-flex; align-items: center; gap: var(--space-1); padding: var(--space-2) var(--space-3); border: 1px solid #e2e8f0; border-radius: var(--radius-sm); background: #fff; color: #64748b; font-size: var(--text-sm); cursor: pointer; margin-bottom: var(--space-3); }
+.analytics-back-btn:hover { background: #f1f5f9; color: #334155; }

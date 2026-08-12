@@ -17,3 +17,8 @@
 .dashboard-category-detail-pct { font-family: var(--font-mono); color: var(--color-fg-secondary); }
 .dashboard-category-detail-clear { margin-left: auto; border: none; background: none; color: var(--color-fg-tertiary); font-size: var(--text-lg); cursor: pointer; line-height: 1; }
 .dashboard-category-detail-clear:hover { color: var(--color-fg); }
+
+/* Fullscreen standalone */
+.dashboard--fullscreen { background: #fff; color: #1a1a2e; min-height: 100dvh; }
+.dashboard-back-btn { display: inline-flex; align-items: center; gap: var(--space-1); padding: var(--space-2) var(--space-3); border: 1px solid #e2e8f0; border-radius: var(--radius-sm); background: #fff; color: #64748b; font-size: var(--text-sm); cursor: pointer; margin-bottom: var(--space-3); }
+.dashboard-back-btn:hover { background: #f1f5f9; color: #334155; }
