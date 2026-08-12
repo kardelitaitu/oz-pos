@@ -4940,3 +4940,13 @@ Two regression pins:
 **Tests:** analytics-data 45/45 (+2) · AnalyticsScreen 66/66 · full UI suite 292/292, 5113.
 
 **Risks / follow-ups:** WEEKLY granularity has the same latent collision (a week-start "MM-DD" like "01-05" can repeat across years on multi-year ranges) — the journal's last open analytics item, scoped out of this slice because a year-aware weekly label needs a different format. The heatmap band unification also remains open. The collaborator's `dev-mock/tauri-api.ts` change remains uncommitted.
+## 2026-08-13 — Week labels collided across years on multi-year ranges (TDD)
+
+**Problem:** the year-aware label fix from the previous slice covered monthly/yearly but not weekly: weekly buckets are labeled "MM-DD" of their Monday week-start, and that date can repeat across years (e.g. a Monday Jan 5 in two consecutive years), so a multi-year weekly range could show colliding labels with the same ambiguity for `alignPrevBuckets`.
+
+**Solution (TDD, Red→Green):** one failing unit test first — revenue weekly Dec-2025→Jan-2026 → labels "12-29/25","01-05/26","01-12/26","01-19/26" — then the weekly branch of `revenueLabel` gained the same `multiYear` rule as monthly ("MM-DD/YY" when the range spans calendar years, "MM-DD" otherwise). All four trend loaders already pass `rangeSpansYears(q)`, so tables/basket weekly labels inherited the fix with no further changes.
+
+**Commits:** (see below — fix + journal)
+**Tests:** analytics-data 46/46 (+1) · AnalyticsScreen 66/66 · full UI suite 292/292, 5114.
+
+**Risks / follow-ups:** with this, the label-collision class is closed for all four granularities on every trend card. Remaining open analytics items: heatmap yearly band unification; the collaborator's `dev-mock/tauri-api.ts` change remains uncommitted.
