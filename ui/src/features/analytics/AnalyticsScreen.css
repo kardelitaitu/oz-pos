@@ -1,18 +1,177 @@
+/* ═════════════════════════════════════════════════════════════════════
+   Analytics Screen — three flex areas (top / menu / main)
+   ═════════════════════════════════════════════════════════════════════ */
 
-/* Top bar: back button | title | workspace selector */
-.analytics-topbar { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); }
-.analytics-back-btn { display: inline-flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.25rem; padding: 0; border: 1px solid #e2e8f0; border-radius: var(--radius-sm); background: #fff; color: #64748b; cursor: pointer; flex-shrink: 0; }
-.analytics-back-btn:hover { background: #f1f5f9; color: #334155; }
-.analytics-title-group { flex: 1; min-width: 0; }
-.analytics-title-group .analytics-title { margin: 0; }
-.analytics-title-group .analytics-subtitle { margin: 0; }
-.analytics-workspace-select { flex-shrink: 0; }
-.analytics-workspace-select-input { height: 2.25rem; padding: 0 var(--space-3); border: 1px solid #e2e8f0; border-radius: var(--radius-sm); background: #fff; color: #1a1a2e; font-size: var(--text-sm); cursor: pointer; }
-.analytics-workspace-select-input:focus { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+.analytics {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: #fff;
+  color: #1a1a2e;
+  font-family: var(--font-sans, system-ui, sans-serif);
+}
 
-/* Granularity toggle */
-.analytics-granularity { display: flex; gap: 0; border: 1px solid #e2e8f0; border-radius: var(--radius-md); overflow: hidden; }
-.analytics-granularity-btn { padding: var(--space-1) var(--space-3); border: none; background: #fff; color: #64748b; font-size: var(--text-sm); cursor: pointer; }
-.analytics-granularity-btn:not(:last-child) { border-right: 1px solid #e2e8f0; }
-.analytics-granularity-btn--active { background: var(--color-primary); color: #fff; }
-.analytics-granularity-btn:hover:not(.analytics-granularity-btn--active) { background: #f1f5f9; }
+/* ── AREA 1: Topbar ────────────────────────────────────────────── */
+
+.analytics-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px;
+  border-bottom: 1px solid #f1f5f9;
+  flex-shrink: 0;
+}
+
+.analytics-back-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #64748b;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.analytics-back-btn:hover {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.analytics-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.analytics-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #0f172a;
+}
+
+.analytics-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+/* ── AREA 2: Menu ──────────────────────────────────────────────── */
+
+.analytics-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 24px;
+  border-bottom: 1px solid #f1f5f9;
+  flex-shrink: 0;
+}
+
+.analytics-menu-row {
+  display: flex;
+  align-items: center;
+}
+
+/* Workspace selector (row 1) */
+.analytics-workspace-select-input {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #1a1a2e;
+  font-size: 14px;
+  cursor: pointer;
+  min-width: 160px;
+}
+
+.analytics-workspace-select-input:focus {
+  outline: 2px solid var(--color-primary, #4f46e5);
+  outline-offset: 1px;
+}
+
+/* Granularity pill buttons (row 2) */
+.analytics-granularity {
+  display: flex;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.analytics-granularity-btn {
+  padding: 6px 18px;
+  border: none;
+  background: #fff;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.analytics-granularity-btn:not(:last-child) {
+  border-right: 1px solid #e2e8f0;
+}
+
+.analytics-granularity-btn--active {
+  background: var(--color-primary, #4f46e5);
+  color: #fff;
+}
+
+.analytics-granularity-btn:hover:not(.analytics-granularity-btn--active) {
+  background: #f8fafc;
+  color: #334155;
+}
+
+/* ── AREA 3: Main content ──────────────────────────────────────── */
+
+.analytics-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.analytics-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  color: #cbd5e1;
+}
+
+.analytics-placeholder-icon {
+  opacity: 0.4;
+}
+
+.analytics-placeholder-text {
+  margin: 0;
+  font-size: 14px;
+  color: #94a3b8;
+  text-align: center;
+  max-width: 280px;
+  line-height: 1.5;
+}
+
+/* ── Print ─────────────────────────────────────────────────────── */
+
+@media print {
+  .analytics-back-btn,
+  .analytics-menu {
+    display: none;
+  }
+
+  .analytics-topbar {
+    border-bottom: none;
+    padding: 8px 0;
+  }
+}

@@ -1,30 +1,16 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import React from 'react';
-import { screen, waitFor } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import analyticsFtl from '@/locales/analytics.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 
-const {
-  mockGetSummary,
-  mockGetDaily,
-} = vi.hoisted(() => ({
-  mockGetSummary: vi.fn(),
-  mockGetDaily: vi.fn(),
-}));
+// --- mocks ---
 
-vi.mock('@/api/analytics', () => ({
-  getStaffAnalyticsScoped: (...args: unknown[]) => mockGetSummary(...args),
-  getStaffAnalyticsDailyScoped: (...args: unknown[]) => mockGetDaily(...args),
-}));
-
-// Mock echarts-for-react — jsdom has no Canvas
 vi.mock('echarts-for-react/lib/core', () => ({
-  default: (props: Record<string, unknown>) => {
-    const { option, notMerge, echarts, style, ...rest } = props;
-    return React.createElement('div', { ...rest, 'data-testid': 'echarts-mock', style });
-  },
+  default: (props: Record<string, unknown>) =>
+    React.createElement('div', { ...props, 'data-testid': 'echarts-mock' }),
 }));
 
 vi.mock('echarts/core', () => ({
@@ -39,42 +25,9 @@ vi.mock('echarts/charts', () => ({ BarChart: {}, LineChart: {}, PieChart: {}, He
 vi.mock('echarts/components', () => ({ GridComponent: {}, TooltipComponent: {}, LegendComponent: {}, VisualMapComponent: {} }));
 vi.mock('echarts/renderers', () => ({ CanvasRenderer: {} }));
 
-// Mock echarts-for-react — jsdom has no Canvas, so return a placeholder div
-vi.mock('echarts-for-react/lib/core', () => ({
-  default: (props: Record<string, unknown>) => {
-    const { option, notMerge, echarts, style, ...rest } = props;
-    return React.createElement('div', { ...rest, 'data-testid': 'echarts-mock', style });
-  },
-}));
-
-// Mock the echarts core modules used by the component
-vi.mock('echarts/core', () => ({
-  use: vi.fn(),
-  init: vi.fn(() => ({
-    setOption: vi.fn(), dispose: vi.fn(), resize: vi.fn(),
-    getOption: vi.fn(() => ({})), on: vi.fn(), off: vi.fn(),
-    clear: vi.fn(), isDisposed: vi.fn(() => false),
-    getWidth: vi.fn(() => 0), getHeight: vi.fn(() => 0),
-    getDom: vi.fn(() => document.createElement('div')),
-    showLoading: vi.fn(), hideLoading: vi.fn(), getDataURL: vi.fn(() => ''),
-  })),
-  getInstanceByDom: vi.fn(() => null),
-  dispose: vi.fn(),
-  graphic: { LinearGradient: vi.fn() },
-}));
-
-vi.mock('echarts/charts', () => ({ BarChart: {}, LineChart: {}, PieChart: {}, HeatmapChart: {} }));
-vi.mock('echarts/components', () => ({
-  GridComponent: {}, TooltipComponent: {}, LegendComponent: {}, VisualMapComponent: {},
-}));
-vi.mock('echarts/renderers', () => ({ CanvasRenderer: {} }));
-
-vi.mock('@/contexts/WorkspaceContext', () => ({
-  useWorkspace: () => ({ sessionToken: 'mock-session-token' }),
-}));
-
-vi.mock('@/contexts/CurrencyContext', () => ({
-  useCurrency: () => ({ currency: 'IDR', setCurrency: vi.fn(), loading: false }),
+const mockGoToPicker = vi.fn();
+vi.mock('@/hooks/useWorkspaceNav', () => ({
+  useWorkspaceNav: () => ({ goToWorkspacePicker: mockGoToPicker }),
 }));
 
 import AnalyticsScreen from '@/features/analytics/AnalyticsScreen';
@@ -83,88 +36,94 @@ import { registerStaffFeature } from '@/features/staff/register';
 import { getEnabledPages, clearPages, hasGrantedPermission } from '@/platform/ui/page-registry';
 import { getNavItems, clearNavItems } from '@/platform/ui/menu-registry';
 
-const summaryRows = [
-  {
-    user_id: 'user-staff-1',
-    display_name: 'Ayu',
-    shift_count: 3,
-    closed_shift_count: 2,
-    shift_sales_minor: 300000,
-    sale_count: 12,
-    sale_total_minor: 240000,
-  },
-  {
-    user_id: 'user-staff-2',
-    display_name: 'Budi',
-    shift_count: 1,
-    closed_shift_count: 1,
-    shift_sales_minor: 100000,
-    sale_count: 5,
-    sale_total_minor: 95000,
-  },
-];
+// ────────────────────────────────────────────────────────────────────
+// Layout shell tests
+// ────────────────────────────────────────────────────────────────────
 
-const dailyRows = [
-  { day: '2026-07-10', sale_count: 7, sale_total_minor: 140000, shift_count: 1, shift_sales_minor: 150000 },
-  { day: '2026-07-11', sale_count: 5, sale_total_minor: 100000, shift_count: 2, shift_sales_minor: 150000 },
-];
-
-describe('AnalyticsScreen', () => {
+describe('AnalyticsScreen layout shell', () => {
   beforeEach(() => {
-    mockGetSummary.mockReset();
-    mockGetDaily.mockReset();
+    mockGoToPicker.mockReset();
   });
 
-  it('renders the per-staff summary from the scoped API', async () => {
-    mockGetSummary.mockResolvedValue(summaryRows);
-    mockGetDaily.mockResolvedValue([]); // all staff daily calls return empty
+  it('renders the three-area layout structure', () => {
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 
-    await waitFor(() => {
-      expect(screen.getAllByText('Ayu').length).toBeGreaterThan(0);
-    });
-    expect(screen.getAllByText('Budi').length).toBeGreaterThan(0);
-    expect(mockGetSummary).toHaveBeenCalledWith(
-      'mock-session-token',
-      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
-      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
-    );
+    // Area 1 — header with back button and title
+    expect(screen.getByRole('button', { name: '.aria-label = Back to home' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Analytics' })).toBeTruthy();
+    expect(screen.getByText('Sales, products, and staff performance')).toBeTruthy();
   });
 
-  it('loads the daily series when a staff member is selected', async () => {
-    mockGetSummary.mockResolvedValue(summaryRows);
-    // Daily data: Ayu has real data, Budi empty
-    mockGetDaily.mockImplementation((_token: string, userId: string) => {
-      if (userId === 'user-staff-1') return Promise.resolve(dailyRows);
-      return Promise.resolve([]);
-    });
+  it('renders the workspace selector defaulting to Retail', () => {
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 
-    await waitFor(() => {
-      expect(screen.getAllByText('Ayu').length).toBeGreaterThan(0);
-    });
-
-    // Click the Ayu table cell to select
-    const ayuCells = screen.getAllByText('Ayu');
-    const ayuTableRow = ayuCells.find((el) => el.tagName === 'TD');
-    expect(ayuTableRow).toBeTruthy();
-    await userEvent.click(ayuTableRow!);
-
-    // After selection, the deep-dive section appears
-    await waitFor(() => {
-      expect(screen.getByText('Ayu — Daily Detail')).toBeTruthy();
-    });
+    const select = screen.getByRole('combobox', { name: '.aria-label = Select workspace type' });
+    expect(select).toBeTruthy();
+    expect((select as HTMLSelectElement).value).toBe('retail');
   });
 
-  it('shows the empty state when there is no staff activity', async () => {
-    mockGetSummary.mockResolvedValue([]);
+  it('renders all four granularity buttons with daily active by default', () => {
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 
-    await waitFor(() => {
-      expect(screen.getByText('No staff activity in this period.')).toBeTruthy();
-    });
+    const daily = screen.getByRole('radio', { name: 'Daily' });
+    const weekly = screen.getByRole('radio', { name: 'Weekly' });
+    const monthly = screen.getByRole('radio', { name: 'Monthly' });
+    const yearly = screen.getByRole('radio', { name: 'Yearly' });
+
+    expect(daily).toBeTruthy();
+    expect(weekly).toBeTruthy();
+    expect(monthly).toBeTruthy();
+    expect(yearly).toBeTruthy();
+    expect(daily.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('activates a different granularity on click', async () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    const weekly = screen.getByRole('radio', { name: 'Weekly' });
+    await userEvent.click(weekly);
+    expect(weekly.getAttribute('aria-checked')).toBe('true');
+
+    // Daily should no longer be active
+    const daily = screen.getByRole('radio', { name: 'Daily' });
+    expect(daily.getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('switches workspace and resets granularity to daily', async () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    // Click weekly first
+    const weekly = screen.getByRole('radio', { name: 'Weekly' });
+    await userEvent.click(weekly);
+    expect(weekly.getAttribute('aria-checked')).toBe('true');
+
+    // Switch to restaurant — should reset to daily
+    const select = screen.getByRole('combobox', { name: '.aria-label = Select workspace type' });
+    await userEvent.selectOptions(select, 'restaurant');
+    expect((select as HTMLSelectElement).value).toBe('restaurant');
+
+    const daily = screen.getByRole('radio', { name: 'Daily' });
+    expect(daily.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('back button calls goToWorkspacePicker', async () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    const backBtn = screen.getByRole('button', { name: '.aria-label = Back to home' });
+    await userEvent.click(backBtn);
+    expect(mockGoToPicker).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the placeholder content in the main area', () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    expect(screen.getByText(/Charts and data will appear here/)).toBeTruthy();
   });
 });
+
+// ────────────────────────────────────────────────────────────────────
+// Role gate tests (unchanged — registration, not component)
+// ────────────────────────────────────────────────────────────────────
 
 describe('analytics page role gate (0046 taxonomy)', () => {
   beforeEach(() => {
@@ -198,18 +157,12 @@ describe('analytics page role gate (0046 taxonomy)', () => {
   });
 
   it('permission gate is authoritative when the session carries granted keys', () => {
-    // A custom staff-role user WITH the grant sees analytics (0046 registry
-    // is the source of truth, not the role name).
     const granted = getEnabledPages(undefined, 'staff', ['sales:process', 'analytics:view']);
     expect(granted.some((p) => p.route === 'analytics')).toBe(true);
-    // A manager WITHOUT the grant is denied even though 'management' role
-    // would admit them — the permission check overrides the role fallback.
     const denied = getEnabledPages(undefined, 'manager', ['sales:process', 'sales:view']);
     expect(denied.some((p) => p.route === 'analytics')).toBe(false);
-    // Owner's global wildcard satisfies the key.
     const owner = getEnabledPages(undefined, 'owner', ['*']);
     expect(owner.some((p) => p.route === 'analytics')).toBe(true);
-    // An explicit empty key list is authoritative (no implicit role grant).
     const empty = getEnabledPages(undefined, 'owner', []);
     expect(empty.some((p) => p.route === 'analytics')).toBe(false);
   });
