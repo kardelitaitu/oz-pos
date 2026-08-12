@@ -4842,5 +4842,5 @@ Two regression pins:
 
 **Solution:** `no_migration_test_slices_all_by_array_tail` — a source-scanning regression guard (include_str on migrations.rs, comment-aware via split("//")) that forbids the `ALL.len() -` operator pattern, built at runtime with format! so the guard's own source can't self-match (discovered when the naive literal matched its own condition line). Mutation-verified: reintroducing `ALL.len() - 1` into the 135 test fails the guard with the offending line; restored, both tests green.
 
-**Commits:** `(pending)`
+**Commits:** `3a03a9a3` (test: migration tail-slice guard)
 **Tests:** oz-core full suite 2296/2296 (+1 guard) · migration tests 48/48 · clippy -D warnings clean · fmt clean.
