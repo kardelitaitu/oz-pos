@@ -25,8 +25,13 @@ pub fn openapi_spec() -> Value {
             "contact": { "name": "OZ-POS" }
         },
         "servers": [
-            { "url": "http://localhost:3099", "description": "Local development server" }
+            { "url": "http://localhost:{port}", "description": "Local development server", "variables": { "port": { "default": "3099", "description": "Server port (OZ_API_PORT env var)" } } },
+            { "url": "https://{host}", "description": "Production server (behind reverse proxy)", "variables": { "host": { "default": "pos.example.com", "description": "Your deployment hostname" } } }
         ],
+        "externalDocs": {
+            "description": "OZ-POS documentation",
+            "url": "https://github.com/oz-pos/oz-pos"
+        },
         "tags": [
             { "name": "Health", "description": "Server health and monitoring endpoints" },
             { "name": "Auth", "description": "Token generation and authentication" },
@@ -281,7 +286,7 @@ fn build_schemas() -> Value {
             "type": "object",
             "required": ["status"],
             "properties": {
-                "status": { "type": "string", "description": "New status: 'active', 'completed', or 'voided'", "enum": ["active", "completed", "voided"] }
+                "status": { "type": "string", "description": "New status: 'pending', 'active', 'completed', or 'voided'", "enum": ["pending", "active", "completed", "voided"] }
             }
         },
         "SyncStatusResponse": {
@@ -456,10 +461,10 @@ fn build_paths() -> Value {
                 "operationId": "createToken",
                 "requestBody": {
                     "required": true,
-                    "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTokenRequest" } } }
+                    "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTokenRequest" }, "example": { "label": "kitchen-display-1", "expiry_hours": 24, "tenant_id": "store-nyc" } } }
                 },
                 "responses": {
-                    "200": { "description": "Token created successfully", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTokenResponse" } } } },
+                    "200": { "description": "Token created successfully", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateTokenResponse" }, "example": { "token": { "token": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJraXRjaGVuLWRpc3BsYXktMSIsImV4cCI6MTc1MDAwMDAwMH0.abc123", "expires_at": "2026-08-13T00:00:00Z", "token_id": "550e8400-e29b-41d4-a716-446655440000" } } } } },
                     "400": { "description": "Invalid JSON body", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "415": { "description": "Unsupported content type", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "422": { "description": "Missing required field (label)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
@@ -530,13 +535,10 @@ fn build_paths() -> Value {
                     { "name": "sku", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Product SKU to look up" }
                 ],
                 "responses": {
-                    "200": { "description": "Product detail, or null if not found" },
+                    "200": { "description": "Product detail, or null if not found", "content": { "application/json": { "schema": { "oneOf": [{ "$ref": "#/components/schemas/ProductDetail" }, { "type": "null" }] } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
-            },
-            "parameters": [
-                { "name": "sku", "in": "path", "required": true, "schema": { "type": "string" } }
-            ]
+            }
         },
         "/api/v1/products/{sku}/stock": {
             "patch": {
@@ -656,10 +658,10 @@ fn build_paths() -> Value {
                 "security": [{ "bearerAuth": [] }],
                 "requestBody": {
                     "required": true,
-                    "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateSaleRequest" } } }
+                    "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateSaleRequest" }, "example": { "lines": [{ "sku": "COFFEE-001", "qty": 2, "unit_price": { "minor_units": 350, "currency": "USD" } }, { "sku": "MUFFIN-001", "qty": 1, "unit_price": { "minor_units": 425, "currency": "USD" } }] } } }
                 },
                 "responses": {
-                    "201": { "description": "Sale created (status: pending)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SaleDetail" } } } },
+                    "201": { "description": "Sale created (status: pending)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SaleDetail" }, "example": { "id": "sale-abc123", "status": "pending", "lines": [{ "sku": "COFFEE-001", "qty": 2, "unit_price": { "minor_units": 350, "currency": "USD" } }], "total": { "minor_units": 1125, "currency": "USD" }, "created_at": "2026-08-12T10:30:00Z" } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
                     "422": { "description": "Empty lines array", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
                 }
