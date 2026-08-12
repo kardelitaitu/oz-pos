@@ -75,6 +75,29 @@ const PALETTE = ['#4f46e5', '#3b82f6', '#06b6d4', '#22c55e', '#f59e0b', '#f97316
 
 const CHART_TEXT = '#94a3b8';
 
+/**
+ * Chart height per card, collapsed vs expanded (px). Kept in one place so
+ * the layout proportions are tunable without hunting literals across every
+ * card component.
+ */
+const CHART_HEIGHT: Record<string, { base: number; expanded: number }> = {
+  revenue: { base: 104, expanded: 240 },
+  aov: { base: 104, expanded: 240 },
+  customers: { base: 118, expanded: 210 },
+  payments: { base: 84, expanded: 180 },
+  category: { base: 118, expanded: 210 },
+  inventory: { base: 80, expanded: 170 },
+  tables: { base: 104, expanded: 240 },
+  basket: { base: 104, expanded: 240 },
+  occupancy: { base: 64, expanded: 150 },
+};
+
+/** Resolve a card's chart height for its current expanded state. */
+function chartHeight(cardKey: string, expanded?: boolean | undefined): number {
+  const h = CHART_HEIGHT[cardKey] ?? CHART_HEIGHT['revenue']!;
+  return expanded ? h.expanded : h.base;
+}
+
 // ── Shared building blocks ──────────────────────────────────────────
 
 /**
@@ -303,7 +326,7 @@ function RevenueCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title
         {delta !== null && <DeltaChip value={delta} />}
       </div>
       <div className="analytics-card-chart" role="img" aria-label={title}>
-        <ReactEChartsCore echarts={echarts} option={option!} style={{ height: expanded ? 240 : 104 }} notMerge />
+        <ReactEChartsCore echarts={echarts} option={option!} style={{ height: chartHeight('revenue', expanded) }} notMerge />
       </div>
       {peak && <p className="analytics-card-insight">{l10n.getString('analytics-card-peak', { label: peak.label, value: short(peak.value) })}</p>}
       {low && <p className="analytics-card-insight">{l10n.getString('analytics-card-low', { label: low.label, value: short(low.value) })}</p>}
@@ -352,7 +375,7 @@ function AovCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: st
         {delta !== null && <DeltaChip value={delta} />}
       </div>
       <div className="analytics-card-chart" role="img" aria-label={title}>
-        <ReactEChartsCore echarts={echarts} option={option!} style={{ height: expanded ? 240 : 104 }} notMerge />
+        <ReactEChartsCore echarts={echarts} option={option!} style={{ height: chartHeight('aov', expanded) }} notMerge />
       </div>
       {peak && <p className="analytics-card-insight">{l10n.getString('analytics-card-peak', { label: peak.label, value: fmt(peak.value) })}</p>}
       {low && <p className="analytics-card-insight">{l10n.getString('analytics-card-low', { label: low.label, value: fmt(low.value) })}</p>}
@@ -415,7 +438,7 @@ function CustomersCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
         {delta !== null && <DeltaChip value={delta} />}
       </div>
       <div className="analytics-card-chart analytics-card-chart--donut" role="img" aria-label={title}>
-        <ReactEChartsCore echarts={echarts} option={option!} style={{ height: expanded ? 210 : 118 }} notMerge />
+        <ReactEChartsCore echarts={echarts} option={option!} style={{ height: chartHeight('customers', expanded) }} notMerge />
       </div>
       <Legend items={[
         { name: l10n.getString('analytics-card-customers-new'), value: String(newCount), color: '#4f46e5' },
@@ -474,7 +497,7 @@ function PaymentsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; titl
         {delta !== null && <DeltaChip value={delta} />}
       </div>
       <div className="analytics-card-chart" role="img" aria-label={title}>
-        <ReactEChartsCore echarts={echarts} option={option!} style={{ height: expanded ? 180 : 84 }} notMerge />
+        <ReactEChartsCore echarts={echarts} option={option!} style={{ height: chartHeight('payments', expanded) }} notMerge />
       </div>
       <Legend items={segs.map((s, i) => ({ name: s.name, value: `${s.pct}%`, color: PALETTE[i % PALETTE.length]! }))} />
     </Visual>
@@ -661,7 +684,7 @@ function InventoryCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
       </div>
       {delta !== null && <p className="analytics-card-insight"><DeltaChip value={delta} /></p>}
       <div className="analytics-card-chart" role="img" aria-label={title}>
-        <ReactEChartsCore echarts={echarts} option={option!} style={{ height: expanded ? 170 : 80 }} notMerge />
+        <ReactEChartsCore echarts={echarts} option={option!} style={{ height: chartHeight('inventory', expanded) }} notMerge />
       </div>
     </Visual>
   );
