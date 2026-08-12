@@ -355,16 +355,20 @@ impl Store<'_> {
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
-    /// Weekly revenue (Sunday-based) for a date range.
+    /// Weekly revenue (Monday-first weeks) for a date range.
     pub fn weekly_revenue(
         &self,
         start_date: &str,
         end_date: &str,
     ) -> Result<Vec<WeeklyRevenueRow>, CoreError> {
-        // COGS is a correlated subquery keyed on the same week expression, so
-        // joining sale_lines never multiplies revenue/count per sale line.
+        // Monday-first weeks, matching the UI's `weekStartKey` and
+        // `rangeForGranularity('weekly')`. `'-6 days', 'weekday 1'` is the
+        // correct boundary idiom: `'weekday 1', '-7 days'` would push a
+        // Monday sale into the PREVIOUS week. COGS is a correlated subquery
+        // keyed on the same week expression, so joining sale_lines never
+        // multiplies revenue/count per sale line.
         let mut stmt = self.conn.prepare(
-            "SELECT DATE(s.created_at, 'weekday 0', '-7 days') AS week_start,
+            "SELECT DATE(s.created_at, '-6 days', 'weekday 1') AS week_start,
                     SUM(s.total_minor) AS total_minor, s.currency AS currency,
                     COUNT(*) AS sale_count,
                     (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty), 0)
@@ -373,8 +377,8 @@ impl Store<'_> {
                      LEFT JOIN products p2 ON sl2.sku = p2.sku
                      WHERE s2.status = 'completed'
                        AND s2.currency = s.currency
-                       AND DATE(s2.created_at, 'weekday 0', '-7 days')
-                           = DATE(s.created_at, 'weekday 0', '-7 days')) AS cogs_minor
+                       AND DATE(s2.created_at, '-6 days', 'weekday 1')
+                           = DATE(s.created_at, '-6 days', 'weekday 1')) AS cogs_minor
              FROM sales s
              WHERE s.status = 'completed' AND DATE(s.created_at) BETWEEN ?1 AND ?2
              GROUP BY week_start, s.currency
@@ -2056,15 +2060,15 @@ mod tests {
             .weekly_revenue("2026-07-20", "2026-07-20")
             .unwrap();
         assert_eq!(rows.len(), 1);
-        // 2026-07-20 is a Monday → preceding Sunday = 2026-07-19.
-        assert_eq!(rows[0].week_start, "2026-07-19");
+        // 2026-07-20 is a Monday → Monday-first week starts the same day.
+        assert_eq!(rows[0].week_start, "2026-07-20");
         assert_eq!(rows[0].total_minor, 100);
         assert_eq!(rows[0].sale_count, 1);
     }
 
-    /// Leap days are bucketed to their preceding Sunday by SQLite's
-    /// `'weekday 0', '-7 days'` modifier. Pins: Feb 29, 2024 (Thursday)
-    /// falls into the week that starts Sunday 2024-02-25.
+    /// Leap days are bucketed to their Monday-first week by SQLite's
+    /// `'-6 days', 'weekday 1'` modifier. Pins: Feb 29, 2024 (Thursday)
+    /// falls into the week that starts Monday 2024-02-26.
     #[test]
     fn weekly_revenue_leap_day_falls_in_week() {
         let conn = fresh();
@@ -2080,10 +2084,43 @@ mod tests {
             .unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(
-            rows[0].week_start, "2024-02-25",
-            "Feb 29 2024 (Thursday) -> preceding Sunday 2024-02-25"
+            rows[0].week_start, "2024-02-26",
+            "Feb 29 2024 (Thursday) -> Monday 2024-02-26"
         );
         assert_eq!(rows[0].total_minor, 100);
+    }
+
+    /// Week start must be Monday-first, matching the UI's `weekStartKey`
+    /// (tables/basket/heatmap), `rangeForGranularity('weekly')` and the
+    /// dev mock. Pins the two boundaries: a sale on Sunday 2026-08-16
+    /// belongs to the week that started Mon 2026-08-10, and a sale on a
+    /// Monday is its own week start.
+    #[test]
+    fn weekly_revenue_monday_first_week_start() {
+        let conn = fresh();
+        seed_completed_sale(&conn, "SKU", 1, 100);
+        let s = store(&conn);
+
+        // Sunday 2026-08-16 → week starting Monday 2026-08-10 (NOT the
+        // preceding Sunday 2026-08-09, and not the following Sunday).
+        conn.execute(
+            "UPDATE sales SET created_at = '2026-08-16T10:00:00.000Z'",
+            [],
+        )
+        .unwrap();
+        let rows = s.weekly_revenue("2026-08-16", "2026-08-16").unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].week_start, "2026-08-10");
+        assert_eq!(rows[0].total_minor, 100);
+
+        // A Monday sale starts its own week.
+        conn.execute(
+            "UPDATE sales SET created_at = '2026-08-10T10:00:00.000Z'",
+            [],
+        )
+        .unwrap();
+        let rows = s.weekly_revenue("2026-08-10", "2026-08-10").unwrap();
+        assert_eq!(rows[0].week_start, "2026-08-10");
     }
 
     /// Currency zero-boundary: a sale with `total_minor = 0` MUST
@@ -2167,7 +2204,7 @@ mod tests {
             .unwrap();
 
         let rows = s.weekly_revenue("2026-07-01", "2026-07-31").unwrap();
-        // Both sales are in the same week (Sun 2026-07-19 -> Sat 2026-07-25).
+        // Both sales are in the same week (Mon 2026-07-20 -> Sun 2026-07-26).
         assert_eq!(
             rows.len(),
             2,
@@ -2176,7 +2213,7 @@ mod tests {
         let currencies: Vec<String> = rows.iter().map(|r| r.currency.clone()).collect();
         assert!(currencies.contains(&"USD".to_string()));
         assert!(currencies.contains(&"GBP".to_string()));
-        assert!(rows.iter().all(|r| r.week_start == "2026-07-19"));
+        assert!(rows.iter().all(|r| r.week_start == "2026-07-20"));
     }
 
     // ── Payment method breakdown ───────────────────────────────────
