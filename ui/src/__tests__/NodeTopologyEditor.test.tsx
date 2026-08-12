@@ -8705,6 +8705,41 @@ describe('NodeTopologyEditor — zoom to selection & zoom shortcuts', () => {
     expect(zoomLevel()).toBe('100%');
   });
 
+  it('Ctrl+0 pan stays consistent when the fit zoom hits the 40% floor', async () => {
+    // A diagram spanning more than ~2.5 viewports makes the raw fitZoom
+    // drop below the 0.4 zoom floor. The pan MUST be computed at the
+    // CLAMPED zoom — using the raw fitZoom centers the diagram at a
+    // different scale than the one actually applied, so the "fit" lands
+    // off-center (error = |minX|·(0.4 − fitZoom)).
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140 },
+        { id: 'ws-1', type: 'workspace', name: 'Far POS', x: 4000, y: 140, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    mockCanvasSize(1200, 800);
+
+    fireEvent.keyDown(document, { key: '0', ctrlKey: true });
+
+    // viewW = 1200−120 = 1080; diagram width = 4160 → raw fitZoom ≈ 0.26,
+    // clamped to 0.4. The correct fit pan is padding − minX·clampedZoom =
+    // 60 − 80·0.4 = 28 (the diagram's left edge lands exactly at the 60px
+    // padding).
+    const vp = document.querySelector('.node-canvas-viewport') as HTMLElement;
+    const m = vp.style.transform.match(/translate\((-?[\d.]+)px, (-?[\d.]+)px\) scale\(([\d.]+)\)/);
+    expect(m).not.toBeNull();
+    const panX = parseFloat(m![1]!);
+    const panY = parseFloat(m![2]!);
+    const zoom = parseFloat(m![3]!);
+    expect(zoom).toBeCloseTo(0.4, 5);
+    // 60 − 80·0.4 = 28 — the raw-fitZoom pan (60 − 80·0.26 ≈ 39.2) fails this.
+    expect(panX).toBeCloseTo(28, 5);
+    expect(panY).toBeCloseTo(60 - 140 * 0.4, 5);
+  });
+
   it('Ctrl+= zooms in and Ctrl+- zooms out by a step', () => {
     renderEditor();
 

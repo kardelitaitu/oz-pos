@@ -2864,8 +2864,13 @@ export default function NodeTopologyEditor({
       Math.min(viewW / Math.max(maxX - minX, 1), viewH / Math.max(maxY - minY, 1)),
       1.5,
     );
-    setZoom(Math.max(0.4, Math.min(2.0, fitZoom)));
-    setPan({ x: padding - minX * fitZoom, y: padding - minY * fitZoom });
+    // The pan must be computed at the CLAMPED zoom that is actually
+    // applied — using the raw fitZoom (e.g. 0.26 for a diagram spanning
+    // ~2.5 viewports) centers the view at a different scale than the
+    // transform uses, so the fit lands off-center by |minX|·(0.4−fitZoom).
+    const appliedZoom = Math.max(0.4, Math.min(2.0, fitZoom));
+    setZoom(appliedZoom);
+    setPan({ x: padding - minX * appliedZoom, y: padding - minY * appliedZoom });
   }, [nodes]);
 
   /** Fit the current multi-selection — same bounds math as zoomToFit but
@@ -2886,8 +2891,11 @@ export default function NodeTopologyEditor({
       Math.min(viewW / Math.max(maxX - minX, 1), viewH / Math.max(maxY - minY, 1)),
       1.5,
     );
-    setZoom(Math.max(0.4, Math.min(2.0, fitZoom)));
-    setPan({ x: padding - minX * fitZoom, y: padding - minY * fitZoom });
+    // Same clamp-consistency rule as zoomToFit: pan at the applied zoom,
+    // not the raw fitZoom.
+    const appliedZoom = Math.max(0.4, Math.min(2.0, fitZoom));
+    setZoom(appliedZoom);
+    setPan({ x: padding - minX * appliedZoom, y: padding - minY * appliedZoom });
   }, [nodes, selectedNodeIds]);
 
   /** Step the zoom by a factor, clamped to the same 40%..200% range the

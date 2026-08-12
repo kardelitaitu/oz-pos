@@ -1,4 +1,15 @@
 
+## 2026-08-12 — TDD cycle: zoom-to-fit panned at the raw fitZoom while zooming at the clamped value — fits landed off-center on large diagrams
+
+### A diagram spanning >~2.5 viewports hit the 40% zoom floor, but the pan was still computed at the un-clamped fitZoom
+**Problem:** Fourteenth review pass — audited copy/paste (well-built: shared tier gate across Ctrl+D/Ctrl+V/Alt+drag, cascade, sanitize), rename (commit/persist/cancel + focus return all pinned), simulation (polyline-weighted pulse, reduced-motion), live validation (45+ contract tests), and the dirty projection (semantic wire fields are set only at creation/load and never re-editable, so omitting them from canvasStateEqual is safe). The defect surfaced in `zoomToFit`/`zoomToSelection`: the pan was computed as `padding − min·fitZoom` with the RAW fitZoom, while `setZoom` clamped to [0.4, 2.0]. Since fitZoom is always capped at 1.5, only the 0.4 FLOOR can engage — a diagram wider than ~2.5 viewports (fitZoom ≈ 0.26) got zoom 0.4 with a pan tuned for 0.26, landing the "fit" off-center by |minX|·(0.4 − fitZoom) (≈ 11px at minX=80, growing linearly for negative canvas coords — legal in the model). The auto-fit on load and Ctrl+0 both use this path, so every large loaded diagram was mis-fitted.
+
+**Solution:** Red→Green. (1) Red — a test loads two nodes spanning 80..4160 into a 1200×800 canvas (raw fitZoom ≈ 0.26), presses Ctrl+0, and asserts the viewport transform is zoom 0.4 with pan.x = 60 − 80·0.4 = 28 (left edge exactly at the 60px padding). Unfixed code produced pan.x ≈ 39.2. (2) Green — both `zoomToFit` and `zoomToSelection` now compute `appliedZoom = clamp(fitZoom, 0.4, 2.0)` ONCE and use it for both `setZoom` and the pan, so the transform is internally consistent; when the floor engages, the diagram left-aligns at the padding with the right side overflowing (the honest clamped fit).
+
+**Validation:** editor suite 521/521 (1 new, Red-confirmed via stash) · full UI suite 286 files / 4,931 tests · typecheck · eslint 0 errors (8 pre-existing warnings) · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** the finder's jump-to-target (`clientWidth/2 − match·zoomRef`) centers at the live zoom with no clamp — correct as-is. The context-menu edge-clip (pass-12 journal note) remains the only open popover item.
+
 ## 2026-08-12 — TDD cycle: import strictness gaps — a hand-edited wire port could crash the canvas on paste
 
 ### deserializeTopology accepted non-PortName wire ports (crash) and duplicate wire ids (two wires behave as one)
