@@ -57,7 +57,27 @@ dashboard-low-stock-alerts = Low Stock Alerts
 dashboard-popularity-trend = Popularity Trend
 dashboard-popularity-trend-aria = Popularity of the top category over the last 7 days
 dashboard-popularity-trend-empty = No popularity data yet
-dashboard-no-data = No sales data for today
+dashboard-no-data = No data yet
+dashboard-stock-ok = All stock levels are healthy.
+
+# Dashboard — granularity toggle
+dashboard-granularity-aria = .aria-label = Time granularity
+dashboard-granularity-daily = Daily
+dashboard-granularity-weekly = Weekly
+dashboard-granularity-monthly = Monthly
+
+# Dashboard — charts
+dashboard-chart-revenue = Revenue Trend
+dashboard-chart-revenue-aria = .aria-label = Revenue and profit trend chart
+dashboard-chart-profit = Profit
+dashboard-chart-category-breakdown = Category Breakdown
+dashboard-chart-category-aria = .aria-label = Sales breakdown by product category
+dashboard-chart-category = Categories
+dashboard-chart-heatmap = Sales Heatmap
+dashboard-chart-heatmap-aria = .aria-label = Hourly sales heatmap by day of week
+dashboard-chart-top-products = Top 10 Products
+dashboard-chart-top-products-aria = .aria-label = Top 10 products by revenue
+dashboard-heatmap-empty = No heatmap data yet
 
 # Dashboard — a11y
 dashboard-region-aria = Dashboard

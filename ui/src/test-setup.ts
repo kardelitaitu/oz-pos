@@ -6,6 +6,57 @@ import { cleanup } from '@testing-library/react';
 import { beforeEach, afterEach, vi } from 'vitest';
 import type * as WorkspaceContextModule from '@/contexts/WorkspaceContext';
 
+// ── Global mock: echarts-for-react ────────────────────────────────
+// jsdom lacks Canvas 2D context support, which causes zrender (ECharts'
+// rendering engine) to throw. This mock renders a simple placeholder div
+// so component tests can validate UI structure (KPIs, tables, labels)
+// without real charts. Tests needing actual chart rendering should use
+// Playwright E2E tests instead.
+vi.mock('echarts-for-react', () => ({
+  default: ({ style, ...props }: Record<string, unknown>) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { option, notMerge, lazyUpdate, onEvents, onChartReady, theme, ...rest } = props as Record<string, unknown>;
+    return {
+      type: 'div',
+      props: {
+        ...rest,
+        'data-testid': 'echarts-mock',
+        style: { ...(style as object), border: '1px dashed var(--color-border)' },
+      },
+    };
+  },
+}));
+
+// ── Global mock: echarts/core (for the minimal bundle imports) ─────
+vi.mock('echarts/core', () => ({
+  use: vi.fn(),
+  init: vi.fn(() => ({
+    setOption: vi.fn(),
+    dispose: vi.fn(),
+    resize: vi.fn(),
+    getOption: vi.fn(() => ({})),
+  })),
+  graphic: { LinearGradient: vi.fn() },
+}));
+
+vi.mock('echarts/charts', () => ({
+  BarChart: {},
+  LineChart: {},
+  PieChart: {},
+  HeatmapChart: {},
+}));
+
+vi.mock('echarts/components', () => ({
+  GridComponent: {},
+  TooltipComponent: {},
+  LegendComponent: {},
+  VisualMapComponent: {},
+}));
+
+vi.mock('echarts/renderers', () => ({
+  CanvasRenderer: {},
+}));
+
 // ── Global mock: @tauri-apps/api/event ─────────────────────────
 // SettingsContext uses a dynamic import('@tauri-apps/api/event')
 // which per-file vi.mock() cannot intercept.  This global mock

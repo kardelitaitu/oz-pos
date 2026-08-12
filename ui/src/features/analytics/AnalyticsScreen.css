@@ -1,4 +1,4 @@
-/* ui/src/features/analytics/AnalyticsScreen.css — staff analytics */
+/* ui/src/features/analytics/AnalyticsScreen.css — staff analytics with ECharts */
 
 .analytics {
   display: flex;
@@ -60,10 +60,6 @@
   width: 11rem;
 }
 
-.analytics-filter-select {
-  min-width: 10rem;
-}
-
 .analytics-apply-btn {
   height: 2.25rem;
   padding: 0 var(--space-3);
@@ -76,6 +72,73 @@
 
 .analytics-apply-btn:hover {
   filter: brightness(1.05);
+}
+
+/* ── KPI Row ─────────────────────────────────────────────── */
+
+.analytics-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--space-3);
+}
+
+.analytics-kpi {
+  padding: var(--space-3);
+  text-align: center;
+}
+
+.analytics-kpi-label {
+  display: block;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-fg-secondary);
+  margin-bottom: var(--space-1);
+}
+
+.analytics-kpi-value {
+  display: block;
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-bold);
+  font-family: var(--font-mono);
+}
+
+.analytics-kpi-value--name {
+  font-family: var(--font-sans);
+  font-size: var(--text-lg);
+}
+
+.analytics-kpi-sub {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--color-fg-tertiary);
+  margin-top: var(--space-1);
+}
+
+/* ── Chart + Table Row ───────────────────────────────────── */
+
+.analytics-chart-row {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: var(--space-4);
+}
+
+@media (max-width: 900px) {
+  .analytics-chart-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.analytics-chart-card,
+.analytics-table-card {
+  padding: var(--space-3);
+}
+
+.analytics-chart-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
 }
 
 /* ── Cards ───────────────────────────────────────────────── */
@@ -115,6 +178,8 @@
 
 .analytics-table-wrap {
   overflow-x: auto;
+  max-height: 340px;
+  overflow-y: auto;
 }
 
 .analytics-table {
@@ -133,6 +198,10 @@
 .analytics-table th {
   color: var(--text-muted);
   font-weight: 600;
+  position: sticky;
+  top: 0;
+  background: var(--bg-surface);
+  z-index: 1;
 }
 
 .analytics-row {

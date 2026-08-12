@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import React from 'react';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
@@ -17,6 +18,36 @@ vi.mock('@/api/analytics', () => ({
   getStaffAnalyticsScoped: (...args: unknown[]) => mockGetSummary(...args),
   getStaffAnalyticsDailyScoped: (...args: unknown[]) => mockGetDaily(...args),
 }));
+
+// Mock echarts-for-react — jsdom has no Canvas, so return a placeholder div
+vi.mock('echarts-for-react/lib/core', () => ({
+  default: (props: Record<string, unknown>) => {
+    const { option, notMerge, echarts, style, ...rest } = props;
+    return React.createElement('div', { ...rest, 'data-testid': 'echarts-mock', style });
+  },
+}));
+
+// Mock the echarts core modules used by the component
+vi.mock('echarts/core', () => ({
+  use: vi.fn(),
+  init: vi.fn(() => ({
+    setOption: vi.fn(), dispose: vi.fn(), resize: vi.fn(),
+    getOption: vi.fn(() => ({})), on: vi.fn(), off: vi.fn(),
+    clear: vi.fn(), isDisposed: vi.fn(() => false),
+    getWidth: vi.fn(() => 0), getHeight: vi.fn(() => 0),
+    getDom: vi.fn(() => document.createElement('div')),
+    showLoading: vi.fn(), hideLoading: vi.fn(), getDataURL: vi.fn(() => ''),
+  })),
+  getInstanceByDom: vi.fn(() => null),
+  dispose: vi.fn(),
+  graphic: { LinearGradient: vi.fn() },
+}));
+
+vi.mock('echarts/charts', () => ({ BarChart: {}, LineChart: {}, PieChart: {}, HeatmapChart: {} }));
+vi.mock('echarts/components', () => ({
+  GridComponent: {}, TooltipComponent: {}, LegendComponent: {}, VisualMapComponent: {},
+}));
+vi.mock('echarts/renderers', () => ({ CanvasRenderer: {} }));
 
 vi.mock('@/contexts/WorkspaceContext', () => ({
   useWorkspace: () => ({ sessionToken: 'mock-session-token' }),
@@ -89,13 +120,15 @@ describe('AnalyticsScreen', () => {
       expect(screen.getAllByText('Ayu').length).toBeGreaterThan(0);
     });
 
-    await userEvent.selectOptions(
-      screen.getByLabelText('Staff Member'),
-      'user-staff-1',
-    );
+    // Click the Ayu table cell to select and trigger daily series load
+    const ayuCells = screen.getAllByText('Ayu');
+    const ayuTableRow = ayuCells.find((el) => el.tagName === 'TD');
+    expect(ayuTableRow).toBeTruthy();
+    await userEvent.click(ayuTableRow!);
 
+    // After selection, the deep-dive section appears
     await waitFor(() => {
-      expect(screen.getByText('2026-07-10')).toBeTruthy();
+      expect(screen.getByText('Ayu — Daily Detail')).toBeTruthy();
     });
     expect(mockGetDaily).toHaveBeenCalledWith(
       'mock-session-token',

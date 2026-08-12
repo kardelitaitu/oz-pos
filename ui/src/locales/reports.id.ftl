@@ -7,8 +7,28 @@ dashboard-low-stock-alerts = Peringatan Stok Menipis
 dashboard-popularity-trend = Tren Popularitas
 dashboard-popularity-trend-aria = Popularitas kategori teratas selama 7 hari terakhir
 dashboard-popularity-trend-empty = Belum ada data popularitas
-dashboard-no-data = Belum ada data penjualan hari ini
+dashboard-no-data = Belum ada data
+dashboard-stock-ok = Semua level stok dalam kondisi baik.
 dashboard-view-report = Lihat Laporan Lengkap
+
+# Dashboard — granularity toggle
+dashboard-granularity-aria = .aria-label = Granularitas waktu
+dashboard-granularity-daily = Harian
+dashboard-granularity-weekly = Mingguan
+dashboard-granularity-monthly = Bulanan
+
+# Dashboard — charts
+dashboard-chart-revenue = Tren Pendapatan
+dashboard-chart-revenue-aria = .aria-label = Grafik tren pendapatan dan laba
+dashboard-chart-profit = Laba
+dashboard-chart-category-breakdown = Rincian Kategori
+dashboard-chart-category-aria = .aria-label = Rincian penjualan per kategori produk
+dashboard-chart-category = Kategori
+dashboard-chart-heatmap = Heatmap Penjualan
+dashboard-chart-heatmap-aria = .aria-label = Heatmap penjualan per jam dan hari
+dashboard-chart-top-products = 10 Produk Teratas
+dashboard-chart-top-products-aria = .aria-label = 10 produk teratas berdasarkan pendapatan
+dashboard-heatmap-empty = Belum ada data heatmap
 
 # Dashboard — a11y
 dashboard-region-aria = Dasbor

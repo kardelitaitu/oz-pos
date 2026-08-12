@@ -25,3 +25,24 @@ analytics-daily-shift-sales = Shift Sales
 analytics-daily-sales = Sales
 analytics-daily-sales-total = Sales Total
 analytics-daily-empty = Select a staff member to see daily activity.
+
+# ── KPI cards ──────────────────────────────────────────────
+analytics-kpi-shifts = Total Shifts
+analytics-kpi-closed = closed
+analytics-kpi-avg-sale = Avg Sale / Shift
+analytics-kpi-top-performer = Top Performer
+analytics-kpi-coverage = Coverage
+analytics-kpi-staff = staff
+analytics-kpi-total-sales = Total Sales
+
+# ── Charts ────────────────────────────────────────────────
+analytics-chart-daily-sales = Daily Sales by Staff
+analytics-chart-daily-sales-aria = .aria-label = Daily sales per staff member, select a staff member from the table to see details
+analytics-chart-sales = Sales
+analytics-chart-shifts = Shifts
+analytics-chart-select-hint = Select a staff member from the table to see daily sales breakdown.
+
+# ── Deep-dive ──────────────────────────────────────────────
+analytics-deepdive-title = { $name } — Daily Detail
+analytics-deepdive-aria = .aria-label = Daily sales and shifts for { $name }
+analytics-deepdive-empty = No daily data available.

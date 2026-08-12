@@ -1,11 +1,8 @@
 //! Staff Analytics Screen (analytics:view — owner/admin/manager).
 //!
-//! Per-staff shift + completed-sales summary for the session's store over
-//! a selectable date range, plus a per-day series when a staff member is
-//! chosen. Backed by `get_staff_analytics_scoped` /
-//! `get_staff_analytics_daily_scoped`; the backend enforces the
-//! `analytics:view` permission and the 0048 assignment scope (an
-//! out-of-scope session is denied fail-closed).
+//! KPI bar → daily sales stacked bar (ECharts) → staff summary table →
+//! individual deep-dive combo chart. Backed by `get_staff_analytics_scoped`
+//! / `get_staff_analytics_daily_scoped`.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
@@ -16,6 +13,15 @@ import { l10nErrorMessage } from '@/utils/app-error';
 import { Card } from '@/components/Card';
 import { Spinner } from '@/components/Spinner';
 import { formatMoney } from '@/types/domain';
+import ReactEChartsCore from 'echarts-for-react/lib/core';
+import * as echarts from 'echarts/core';
+import { BarChart, LineChart } from 'echarts/charts';
+import {
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+} from 'echarts/components';
+import { CanvasRenderer } from 'echarts/renderers';
 import {
   getStaffAnalyticsScoped,
   getStaffAnalyticsDailyScoped,
@@ -24,25 +30,37 @@ import {
 } from '@/api/analytics';
 import './AnalyticsScreen.css';
 
+// ── ECharts minimal bundle ──────────────────────────────────────────
+
+echarts.use([BarChart, LineChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
+
 // ── Date helpers ───────────────────────────────────────────────────
 
 function isoDay(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
-
 function today(): string {
   return isoDay(new Date());
 }
-
 function daysAgo(n: number): string {
   const d = new Date();
   d.setDate(d.getDate() - n);
   return isoDay(d);
 }
 
+// ── Types ──────────────────────────────────────────────────────────
+
+interface KpiData {
+  totalShifts: number;
+  closedShifts: number;
+  totalSales: number;
+  totalSalesMinor: number;
+  staffCount: number;
+}
+
 // ── Component ───────────────────────────────────────────────────────
 
-/** Staff analytics screen — per-staff shifts and sales over a date range. */
+/** Staff analytics screen — KPIs, stacked bar chart, drill-down. */
 export default function AnalyticsScreen() {
   const { l10n } = useLocalization();
   const { sessionToken: rawToken } = useWorkspace();
@@ -60,7 +78,7 @@ export default function AnalyticsScreen() {
   const [dailyLoading, setDailyLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ── Summary load ─────────────────────────────────────────────────
+  // ── Load summary ─────────────────────────────────────────────────
 
   const loadSummary = useCallback(async () => {
     setLoading(true);
@@ -68,7 +86,6 @@ export default function AnalyticsScreen() {
     try {
       const result = await getStaffAnalyticsScoped(sessionToken, from, to);
       setRows(result);
-      // Reset the selection if the picked member is no longer in range.
       setSelectedUserId((current) =>
         current && result.some((r) => r.user_id === current) ? current : '',
       );
@@ -81,7 +98,7 @@ export default function AnalyticsScreen() {
 
   useEffect(() => { loadSummary(); }, [loadSummary]);
 
-  // ── Daily series load ────────────────────────────────────────────
+  // ── Load daily series ────────────────────────────────────────────
 
   useEffect(() => {
     if (!selectedUserId) {
@@ -91,15 +108,9 @@ export default function AnalyticsScreen() {
     let cancelled = false;
     setDailyLoading(true);
     getStaffAnalyticsDailyScoped(sessionToken, selectedUserId, from, to)
-      .then((result) => {
-        if (!cancelled) setDaily(result);
-      })
-      .catch(() => {
-        if (!cancelled) setDaily([]);
-      })
-      .finally(() => {
-        if (!cancelled) setDailyLoading(false);
-      });
+      .then((result) => { if (!cancelled) setDaily(result); })
+      .catch(() => { if (!cancelled) setDaily([]); })
+      .finally(() => { if (!cancelled) setDailyLoading(false); });
     return () => { cancelled = true; };
   }, [sessionToken, selectedUserId, from, to]);
 
@@ -107,6 +118,122 @@ export default function AnalyticsScreen() {
     () => rows.find((r) => r.user_id === selectedUserId) ?? null,
     [rows, selectedUserId],
   );
+
+  // ── Computed KPIs ────────────────────────────────────────────────
+
+  const kpis = useMemo<KpiData>(() => {
+    const totalShifts = rows.reduce((s, r) => s + r.shift_count, 0);
+    const closedShifts = rows.reduce((s, r) => s + r.closed_shift_count, 0);
+    const totalSales = rows.reduce((s, r) => s + r.sale_count, 0);
+    const totalSalesMinor = rows.reduce((s, r) => s + r.sale_total_minor, 0);
+    return { totalShifts, closedShifts, totalSales, totalSalesMinor, staffCount: rows.length };
+  }, [rows]);
+
+  // ── ECharts: stacked bar — daily sales by staff ──────────────────
+
+  const stackedBarOption = useMemo(() => {
+    const staffNames = rows.map((r) => r.display_name);
+    const colors = ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#3ba272', '#fc8452', '#9a60b4'];
+
+    if (daily.length > 0 && selectedRow) {
+      const dates = [...new Set(daily.map((d) => d.day))].sort();
+      const nameIdx = staffNames.indexOf(selectedRow.display_name);
+      const series = staffNames.map((name, i) => ({
+        name,
+        type: 'bar' as const,
+        stack: 'total',
+        emphasis: { focus: 'series' as const },
+        itemStyle: { color: colors[i % colors.length] },
+        data: i === nameIdx
+          ? dates.map((date) => {
+              const point = daily.find((d) => d.day === date);
+              return point?.sale_total_minor ?? 0;
+            })
+          : [],
+      }));
+
+      return {
+        tooltip: {
+          trigger: 'axis' as const,
+          axisPointer: { type: 'shadow' as const },
+          valueFormatter: (val: unknown) =>
+            formatMoney({ minor_units: Number(val), currency }),
+        },
+        legend: { top: 0, type: 'scroll' as const },
+        grid: { left: '3%', right: '4%', bottom: '3%', top: 40, containLabel: true },
+        xAxis: { type: 'category' as const, data: dates, axisLabel: { rotate: 45 } },
+        yAxis: {
+          type: 'value' as const,
+          axisLabel: { formatter: (v: number) => `${(v / 1_000_000).toFixed(1)}M` },
+        },
+        series,
+      };
+    }
+
+    // Fallback: show per-staff summary totals as a simple grouped bar
+    return {
+      tooltip: {
+        trigger: 'axis' as const,
+        valueFormatter: (val: unknown) =>
+          formatMoney({ minor_units: Number(val), currency }),
+      },
+      legend: { top: 0, type: 'scroll' as const },
+      grid: { left: '3%', right: '4%', bottom: '3%', top: 40, containLabel: true },
+      xAxis: { type: 'category' as const, data: staffNames },
+      yAxis: {
+        type: 'value' as const,
+        axisLabel: { formatter: (v: number) => `${(v / 1_000_000).toFixed(1)}M` },
+      },
+      series: [{
+        name: l10n.getString('analytics-kpi-total-sales'),
+        type: 'bar' as const,
+        data: rows.map((r) => r.sale_total_minor),
+        itemStyle: { color: colors[0] },
+        emphasis: { focus: 'series' as const },
+      }],
+    };
+  }, [rows, daily, selectedRow, currency, l10n]);
+
+  // ── ECharts: individual deep-dive combo chart ────────────────────
+
+  const deepDiveOption = useMemo(() => {
+    if (daily.length === 0 || !selectedRow) return null;
+    const dates = daily.map((d) => d.day);
+    return {
+      tooltip: { trigger: 'axis' as const },
+      legend: { data: [l10n.getString('analytics-chart-sales'), l10n.getString('analytics-chart-shifts')] },
+      grid: { left: '3%', right: '4%', bottom: '3%', top: 40, containLabel: true },
+      xAxis: { type: 'category' as const, data: dates, axisLabel: { rotate: 45 } },
+      yAxis: [
+        {
+          type: 'value' as const,
+          name: l10n.getString('analytics-chart-sales'),
+          axisLabel: { formatter: (v: number) => `${(v / 1_000_000).toFixed(1)}M` },
+        },
+        {
+          type: 'value' as const,
+          name: l10n.getString('analytics-chart-shifts'),
+        },
+      ],
+      series: [
+        {
+          name: l10n.getString('analytics-chart-sales'),
+          type: 'bar' as const,
+          data: daily.map((d) => d.sale_total_minor),
+          itemStyle: { color: '#5470c6' },
+        },
+        {
+          name: l10n.getString('analytics-chart-shifts'),
+          type: 'line' as const,
+          yAxisIndex: 1,
+          data: daily.map((d) => d.shift_count),
+          itemStyle: { color: '#ee6666' },
+          symbol: 'circle',
+          symbolSize: 6,
+        },
+      ],
+    };
+  }, [daily, selectedRow, l10n]);
 
   const applyFilters = () => {
     setFrom(fromDraft);
@@ -117,6 +244,7 @@ export default function AnalyticsScreen() {
 
   return (
     <div className="analytics" role="region" aria-label={requiredLocalized(l10n, 'analytics-region-aria')}>
+      {/* Header */}
       <div className="analytics-header">
         <Localized id="analytics-title">
           <h1 className="analytics-title">Staff Analytics</h1>
@@ -126,171 +254,170 @@ export default function AnalyticsScreen() {
         </Localized>
       </div>
 
-      {/* ── Filters ─────────────────────────────────────── */}
+      {/* Filters */}
       <Card shadow="sm" className="analytics-filters">
         <div className="analytics-filter-field">
-          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- @fluent/react Localized wrapper */}
           <label htmlFor="analytics-from" className="analytics-filter-label">
             <Localized id="analytics-filter-from"><span>From</span></Localized>
           </label>
           <input
-            id="analytics-from"
-            type="date"
-            className="analytics-filter-input"
-            value={fromDraft}
-            max={toDraft}
+            id="analytics-from" type="date" className="analytics-filter-input"
+            value={fromDraft} max={toDraft}
             onChange={(e) => setFromDraft(e.target.value)}
             aria-label={l10n.getString('analytics-filter-from')}
           />
         </div>
         <div className="analytics-filter-field">
-          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- @fluent/react Localized wrapper */}
           <label htmlFor="analytics-to" className="analytics-filter-label">
             <Localized id="analytics-filter-to"><span>To</span></Localized>
           </label>
           <input
-            id="analytics-to"
-            type="date"
-            className="analytics-filter-input"
-            value={toDraft}
-            min={fromDraft}
+            id="analytics-to" type="date" className="analytics-filter-input"
+            value={toDraft} min={fromDraft}
             onChange={(e) => setToDraft(e.target.value)}
             aria-label={l10n.getString('analytics-filter-to')}
           />
         </div>
-        <div className="analytics-filter-field">
-          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- @fluent/react Localized wrapper */}
-          <label htmlFor="analytics-staff" className="analytics-filter-label">
-            <Localized id="analytics-filter-staff"><span>Staff Member</span></Localized>
-          </label>
-          <select
-            id="analytics-staff"
-            className="analytics-filter-select"
-            value={selectedUserId}
-            onChange={(e) => setSelectedUserId(e.target.value)}
-            aria-label={l10n.getString('analytics-filter-staff')}
-          >
-            <option value="">
-              {l10n.getString('analytics-filter-all-staff')}
-            </option>
-            {rows.map((r) => (
-              <option key={r.user_id} value={r.user_id}>{r.display_name}</option>
-            ))}
-          </select>
-        </div>
         <Localized id="analytics-btn-apply">
-          <button
-            type="button"
-            className="analytics-apply-btn"
-            onClick={applyFilters}
-            aria-label={l10n.getString('analytics-btn-apply')}
-          >
-            Apply
-          </button>
+          <button type="button" className="analytics-apply-btn" onClick={applyFilters}
+            aria-label={l10n.getString('analytics-btn-apply')}>Apply</button>
         </Localized>
       </Card>
 
-      {error && (
-        <div className="analytics-error" role="alert">{error}</div>
+      {error && <div className="analytics-error" role="alert">{error}</div>}
+
+      {loading ? (
+        <div className="analytics-loading"><Spinner aria-label={l10n.getString('analytics-loading')} /></div>
+      ) : rows.length === 0 ? (
+        <Localized id="analytics-empty">
+          <p className="analytics-empty">No staff activity in this period.</p>
+        </Localized>
+      ) : (
+        <>
+          {/* ── KPI Row ──────────────────────────────────── */}
+          <div className="analytics-kpi-row">
+            <Card shadow="sm" className="analytics-kpi">
+              <span className="analytics-kpi-label">
+                <Localized id="analytics-kpi-shifts"><span>Total Shifts</span></Localized>
+              </span>
+              <span className="analytics-kpi-value">{kpis.totalShifts}</span>
+              <span className="analytics-kpi-sub">
+                {kpis.closedShifts} {l10n.getString('analytics-kpi-closed')}
+              </span>
+            </Card>
+            <Card shadow="sm" className="analytics-kpi">
+              <span className="analytics-kpi-label">
+                <Localized id="analytics-kpi-avg-sale"><span>Avg Sale / Shift</span></Localized>
+              </span>
+              <span className="analytics-kpi-value">
+                {kpis.totalShifts > 0
+                  ? formatMoney({ minor_units: Math.round(kpis.totalSalesMinor / kpis.totalShifts), currency })
+                  : '-'}
+              </span>
+            </Card>
+            <Card shadow="sm" className="analytics-kpi">
+              <span className="analytics-kpi-label">
+                <Localized id="analytics-kpi-top-performer"><span>Top Performer</span></Localized>
+              </span>
+              <span className="analytics-kpi-value analytics-kpi-value--name">
+                {rows.length > 0
+                  ? rows.reduce((a, b) => a.sale_total_minor > b.sale_total_minor ? a : b).display_name
+                  : '-'}
+              </span>
+            </Card>
+            <Card shadow="sm" className="analytics-kpi">
+              <span className="analytics-kpi-label">
+                <Localized id="analytics-kpi-coverage"><span>Coverage</span></Localized>
+              </span>
+              <span className="analytics-kpi-value">
+                {kpis.totalShifts > 0 ? `${Math.round((kpis.closedShifts / kpis.totalShifts) * 100)}%` : '-'}
+              </span>
+              <span className="analytics-kpi-sub">
+                {kpis.staffCount} {l10n.getString('analytics-kpi-staff')}
+              </span>
+            </Card>
+          </div>
+
+          {/* ── Stacked bar chart + staff table ───────────── */}
+          <div className="analytics-chart-row">
+            <Card shadow="sm" className="analytics-chart-card">
+              <Localized id="analytics-chart-daily-sales">
+                <h2 className="analytics-card-title">Daily Sales by Staff</h2>
+              </Localized>
+              {daily.length > 0 ? (
+                <ReactEChartsCore
+                  echarts={echarts}
+                  option={stackedBarOption}
+                  style={{ height: 320 }}
+                  notMerge
+                  aria-label={l10n.getString('analytics-chart-daily-sales-aria')}
+                />
+              ) : (
+                <div className="analytics-chart-placeholder">
+                  <Localized id="analytics-chart-select-hint">
+                    <p className="analytics-empty">Select a staff member to see daily breakdown.</p>
+                  </Localized>
+                </div>
+              )}
+            </Card>
+            <Card shadow="sm" className="analytics-table-card">
+              <Localized id="analytics-summary-title">
+                <h2 className="analytics-card-title">Staff Summary</h2>
+              </Localized>
+              <div className="analytics-table-wrap">
+                <table className="analytics-table" aria-label={l10n.getString('analytics-summary-title')}>
+                  <thead>
+                    <tr>
+                      <Localized id="analytics-table-staff"><th>Staff</th></Localized>
+                      <Localized id="analytics-table-shifts"><th>Shifts</th></Localized>
+                      <Localized id="analytics-table-sales"><th>Sales</th></Localized>
+                      <Localized id="analytics-table-sales-total"><th>Total</th></Localized>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r) => (
+                      <tr
+                        key={r.user_id}
+                        className={r.user_id === selectedUserId ? 'analytics-row--selected' : 'analytics-row'}
+                        onClick={() => setSelectedUserId(r.user_id)}
+                      >
+                        <td className="analytics-cell-name">{r.display_name}</td>
+                        <td className="analytics-cell-num">{r.shift_count}</td>
+                        <td className="analytics-cell-num">{r.sale_count}</td>
+                        <td className="analytics-cell-mono">{formatMoney({ minor_units: r.sale_total_minor, currency })}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </div>
+
+          {/* ── Individual deep-dive ──────────────────────── */}
+          {selectedRow && (
+            <Card shadow="sm" className="analytics-card">
+              <Localized id="analytics-deepdive-title" vars={{ name: selectedRow.display_name }}>
+                <h2 className="analytics-card-title">{selectedRow.display_name} — Daily Detail</h2>
+              </Localized>
+              {dailyLoading ? (
+                <div className="analytics-loading"><Spinner aria-label={l10n.getString('analytics-loading')} /></div>
+              ) : deepDiveOption ? (
+                <ReactEChartsCore
+                  echarts={echarts}
+                  option={deepDiveOption}
+                  style={{ height: 280 }}
+                  notMerge
+                  aria-label={l10n.getString('analytics-deepdive-aria', { name: selectedRow.display_name })}
+                />
+              ) : (
+                <Localized id="analytics-deepdive-empty">
+                  <p className="analytics-empty">No daily data available.</p>
+                </Localized>
+              )}
+            </Card>
+          )}
+        </>
       )}
-
-      {/* ── Staff summary ───────────────────────────────── */}
-      <Card shadow="sm" className="analytics-card">
-        <Localized id="analytics-summary-title">
-          <h2 className="analytics-card-title">Staff Summary</h2>
-        </Localized>
-        {loading ? (
-          <div className="analytics-loading">
-            <Spinner aria-label={l10n.getString('analytics-loading')} />
-          </div>
-        ) : rows.length === 0 ? (
-          <Localized id="analytics-empty">
-            <p className="analytics-empty">No staff activity in this period.</p>
-          </Localized>
-        ) : (
-          <div className="analytics-table-wrap">
-            <table
-              className="analytics-table"
-              aria-label={l10n.getString('analytics-summary-title')}
-            >
-              <thead>
-                <tr>
-                  <Localized id="analytics-table-staff"><th>Staff Member</th></Localized>
-                  <Localized id="analytics-table-shifts"><th>Shifts</th></Localized>
-                  <Localized id="analytics-table-closed"><th>Closed</th></Localized>
-                  <Localized id="analytics-table-shift-sales"><th>Shift Sales</th></Localized>
-                  <Localized id="analytics-table-sales"><th>Sales</th></Localized>
-                  <Localized id="analytics-table-sales-total"><th>Sales Total</th></Localized>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr
-                    key={r.user_id}
-                    className={r.user_id === selectedUserId ? 'analytics-row--selected' : 'analytics-row'}
-                    onClick={() => setSelectedUserId(r.user_id)}
-                  >
-                    <td className="analytics-cell-name">{r.display_name}</td>
-                    <td className="analytics-cell-num">{r.shift_count}</td>
-                    <td className="analytics-cell-num">{r.closed_shift_count}</td>
-                    <td className="analytics-cell-mono">{formatMoney({ minor_units: r.shift_sales_minor, currency })}</td>
-                    <td className="analytics-cell-num">{r.sale_count}</td>
-                    <td className="analytics-cell-mono">{formatMoney({ minor_units: r.sale_total_minor, currency })}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-
-      {/* ── Daily activity ──────────────────────────────── */}
-      <Card shadow="sm" className="analytics-card">
-        <Localized id="analytics-daily-title">
-          <h2 className="analytics-card-title">Daily Activity</h2>
-        </Localized>
-        {!selectedRow ? (
-          <Localized id="analytics-daily-empty">
-            <p className="analytics-empty">Select a staff member to see daily activity.</p>
-          </Localized>
-        ) : dailyLoading ? (
-          <div className="analytics-loading">
-            <Spinner aria-label={l10n.getString('analytics-loading')} />
-          </div>
-        ) : daily.length === 0 ? (
-          <Localized id="analytics-empty">
-            <p className="analytics-empty">No staff activity in this period.</p>
-          </Localized>
-        ) : (
-          <div className="analytics-table-wrap">
-            <table
-              className="analytics-table"
-              aria-label={l10n.getString('analytics-daily-title')}
-            >
-              <thead>
-                <tr>
-                  <Localized id="analytics-daily-day"><th>Day</th></Localized>
-                  <Localized id="analytics-daily-shifts"><th>Shifts</th></Localized>
-                  <Localized id="analytics-daily-shift-sales"><th>Shift Sales</th></Localized>
-                  <Localized id="analytics-daily-sales"><th>Sales</th></Localized>
-                  <Localized id="analytics-daily-sales-total"><th>Sales Total</th></Localized>
-                </tr>
-              </thead>
-              <tbody>
-                {daily.map((d) => (
-                  <tr key={d.day}>
-                    <td className="analytics-cell-date">{d.day}</td>
-                    <td className="analytics-cell-num">{d.shift_count}</td>
-                    <td className="analytics-cell-mono">{formatMoney({ minor_units: d.shift_sales_minor, currency })}</td>
-                    <td className="analytics-cell-num">{d.sale_count}</td>
-                    <td className="analytics-cell-mono">{formatMoney({ minor_units: d.sale_total_minor, currency })}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
     </div>
   );
 }

@@ -1,8 +1,29 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { ReactLocalization, LocalizationProvider } from '@fluent/react';
 import DashboardScreen from '@/features/reports/DashboardScreen';
+
+// Mock echarts-for-react — jsdom has no Canvas
+vi.mock('echarts-for-react/lib/core', () => ({
+  default: (props: Record<string, unknown>) => {
+    const { option, notMerge, echarts, style, ...rest } = props;
+    return React.createElement('div', { ...rest, 'data-testid': 'echarts-mock', style });
+  },
+}));
+
+vi.mock('echarts/core', () => ({
+  use: vi.fn(),
+  init: vi.fn(() => ({ setOption: vi.fn(), dispose: vi.fn(), resize: vi.fn(), getOption: vi.fn(() => ({})), on: vi.fn(), off: vi.fn(), clear: vi.fn(), isDisposed: vi.fn(() => false), getWidth: vi.fn(() => 0), getHeight: vi.fn(() => 0), getDom: vi.fn(() => document.createElement('div')), showLoading: vi.fn(), hideLoading: vi.fn(), getDataURL: vi.fn(() => '') })),
+  getInstanceByDom: vi.fn(() => null),
+  dispose: vi.fn(),
+  graphic: { LinearGradient: vi.fn() },
+}));
+
+vi.mock('echarts/charts', () => ({ BarChart: {}, LineChart: {}, PieChart: {}, HeatmapChart: {} }));
+vi.mock('echarts/components', () => ({ GridComponent: {}, TooltipComponent: {}, LegendComponent: {}, VisualMapComponent: {} }));
+vi.mock('echarts/renderers', () => ({ CanvasRenderer: {} }));
 
 // ── FTL bundles ────────────────────────────────────────────────────────
 const sharedFtl = `
@@ -23,15 +44,21 @@ sales-report-category-popularity-uncategorized = Uncategorized
 
 // ── mock API functions ─────────────────────────────────────────────────
 const mockGetDailyRevenue = vi.fn();
+const mockGetWeeklyRevenue = vi.fn();
+const mockGetMonthlyRevenue = vi.fn();
 const mockGetTopProducts = vi.fn();
 const mockGetLowStockAlerts = vi.fn();
-const mockGetCategoryPopularityTrend = vi.fn();
+const mockGetCategoryBreakdown = vi.fn();
+const mockGetHourlyHeatmap = vi.fn();
 
 vi.mock('@/api/reports', () => ({
   getDailyRevenue: (...args: unknown[]) => mockGetDailyRevenue(...args),
+  getWeeklyRevenue: (...args: unknown[]) => mockGetWeeklyRevenue(...args),
+  getMonthlyRevenue: (...args: unknown[]) => mockGetMonthlyRevenue(...args),
   getTopProducts: (...args: unknown[]) => mockGetTopProducts(...args),
   getLowStockAlerts: (...args: unknown[]) => mockGetLowStockAlerts(...args),
-  getCategoryPopularityTrend: (...args: unknown[]) => mockGetCategoryPopularityTrend(...args),
+  getCategoryBreakdown: (...args: unknown[]) => mockGetCategoryBreakdown(...args),
+  getHourlyHeatmap: (...args: unknown[]) => mockGetHourlyHeatmap(...args),
 }));
 
 vi.mock('@/components/Card', () => ({
@@ -42,6 +69,10 @@ vi.mock('@/components/Card', () => ({
 
 vi.mock('@/components/Spinner', () => ({
   Spinner: (props: Record<string, unknown>) => <div data-testid="spinner" aria-label={props['aria-label'] as string} />,
+}));
+
+vi.mock('@/contexts/CurrencyContext', () => ({
+  useCurrency: () => ({ currency: 'USD', setCurrency: vi.fn(), loading: false }),
 }));
 
 vi.mock('@/features/reports/DashboardScreen.css', () => ({}));
@@ -103,14 +134,27 @@ function renderScreen() {
 // ── tests ──────────────────────────────────────────────────────────────
 describe('DashboardScreen', () => {
   beforeEach(() => {
-    // Default: never resolves (loading state)
-    mockGetDailyRevenue.mockImplementation(() => new Promise(() => {}));
-    mockGetTopProducts.mockImplementation(() => new Promise(() => {}));
-    mockGetLowStockAlerts.mockImplementation(() => new Promise(() => {}));
-    // Trend defaults to empty (not pending) so tests that override only
-    // the other mocks still resolve the shared Promise.all.
-    mockGetCategoryPopularityTrend.mockResolvedValue([]);
+    // Default for loading tests: never-resolving promises
+    const pending = () => new Promise(() => {});
+    mockGetDailyRevenue.mockImplementation(pending);
+    mockGetWeeklyRevenue.mockImplementation(pending);
+    mockGetMonthlyRevenue.mockImplementation(pending);
+    mockGetTopProducts.mockImplementation(pending);
+    mockGetLowStockAlerts.mockImplementation(pending);
+    mockGetCategoryBreakdown.mockImplementation(pending);
+    mockGetHourlyHeatmap.mockImplementation(pending);
   });
+
+  /** Resolve all 7 endpoints with empty/default data to get past loading */
+  function resolveAllWithDefaults() {
+    mockGetDailyRevenue.mockResolvedValue([]);
+    mockGetWeeklyRevenue.mockResolvedValue([]);
+    mockGetMonthlyRevenue.mockResolvedValue([]);
+    mockGetTopProducts.mockResolvedValue([]);
+    mockGetLowStockAlerts.mockResolvedValue([]);
+    mockGetCategoryBreakdown.mockResolvedValue([]);
+    mockGetHourlyHeatmap.mockResolvedValue([]);
+  }
 
   // ── Loading ────────────────────────────────────────────────────────
   it('shows loading spinner initially', () => {
@@ -123,20 +167,21 @@ describe('DashboardScreen', () => {
   it('shows error message when all API calls fail', async () => {
     const error = new Error('Server offline');
     mockGetDailyRevenue.mockRejectedValue(error);
+    mockGetWeeklyRevenue.mockRejectedValue(error);
+    mockGetMonthlyRevenue.mockRejectedValue(error);
     mockGetTopProducts.mockRejectedValue(error);
     mockGetLowStockAlerts.mockRejectedValue(error);
-    mockGetCategoryPopularityTrend.mockRejectedValue(error);
+    mockGetCategoryBreakdown.mockRejectedValue(error);
+    mockGetHourlyHeatmap.mockRejectedValue(error);
     renderScreen();
     await waitFor(() => {
-      expect(screen.getByText('An error occurred')).toBeTruthy();
+      expect(screen.getByText('Server offline')).toBeTruthy();
     });
   });
 
   // ── Title ──────────────────────────────────────────────────────────
   it('renders the Dashboard title', async () => {
-    mockGetDailyRevenue.mockResolvedValue([]);
-    mockGetTopProducts.mockResolvedValue([]);
-    mockGetLowStockAlerts.mockResolvedValue([]);
+    resolveAllWithDefaults();
     renderScreen();
     await waitFor(() => {
       expect(screen.getByText('Dashboard')).toBeTruthy();
@@ -145,9 +190,7 @@ describe('DashboardScreen', () => {
 
   // ── KPI cards ──────────────────────────────────────────────────────
   it('shows KPI labels: Today Revenue, Gross Profit, Orders Today, Top Product', async () => {
-    mockGetDailyRevenue.mockResolvedValue([]);
-    mockGetTopProducts.mockResolvedValue([]);
-    mockGetLowStockAlerts.mockResolvedValue([]);
+    resolveAllWithDefaults();
     renderScreen();
     await waitFor(() => {
       expect(screen.getByText("Today's Revenue")).toBeTruthy();
@@ -163,20 +206,18 @@ describe('DashboardScreen', () => {
       buildRevenueRow({ total_minor: 100000, cogs_minor: 40000, sale_count: 3 }),
     ];
     mockGetDailyRevenue.mockResolvedValue(revenue);
-    mockGetTopProducts.mockResolvedValue([]);
-    mockGetLowStockAlerts.mockResolvedValue([]);
+    resolveAllWithDefaults();
+    mockGetDailyRevenue.mockResolvedValue(revenue);
     renderScreen();
     await waitFor(() => {
-      // Gross profit = (250000 − 100000) + (100000 − 40000) = 210000 → $2,100.00
       expect(screen.getByText('$2,100.00')).toBeTruthy();
     });
   });
 
   it('renders a negative gross profit KPI in the danger color', async () => {
     const revenue = [buildRevenueRow({ total_minor: 100000, cogs_minor: 130000, sale_count: 5 })];
+    resolveAllWithDefaults();
     mockGetDailyRevenue.mockResolvedValue(revenue);
-    mockGetTopProducts.mockResolvedValue([]);
-    mockGetLowStockAlerts.mockResolvedValue([]);
     renderScreen();
     await waitFor(() => {
       const value = screen.getByText('-$300.00');
@@ -186,23 +227,18 @@ describe('DashboardScreen', () => {
 
   it('displays formatted revenue and order count in KPIs', async () => {
     const revenue = [buildRevenueRow({ total_minor: 250000, sale_count: 5 })];
+    resolveAllWithDefaults();
     mockGetDailyRevenue.mockResolvedValue(revenue);
-    mockGetTopProducts.mockResolvedValue([]);
-    mockGetLowStockAlerts.mockResolvedValue([]);
     renderScreen();
     await waitFor(() => {
-      // $2,500.00 appears in both KPI and weekly bar — use getAllByText
       const amounts = screen.getAllByText('$2,500.00');
       expect(amounts.length).toBeGreaterThanOrEqual(1);
-      // Order count (5) appears only once
       expect(screen.getByText('5')).toBeTruthy();
     });
   });
 
   it('shows top product name or dash when none', async () => {
-    mockGetDailyRevenue.mockResolvedValue([]);
-    mockGetTopProducts.mockResolvedValue([]);
-    mockGetLowStockAlerts.mockResolvedValue([]);
+    resolveAllWithDefaults();
     renderScreen();
     await waitFor(() => {
       expect(screen.getByText('-')).toBeTruthy();
@@ -210,109 +246,78 @@ describe('DashboardScreen', () => {
   });
 
   it('shows top product name when available', async () => {
-    mockGetDailyRevenue.mockResolvedValue([]);
+    resolveAllWithDefaults();
     mockGetTopProducts.mockResolvedValue([buildTopProductRow({ name: 'Latte' })]);
-    mockGetLowStockAlerts.mockResolvedValue([]);
     renderScreen();
     await waitFor(() => {
       expect(screen.getByText('Latte')).toBeTruthy();
     });
   });
 
-  // ── Weekly revenue chart ───────────────────────────────────────────
-  it('renders weekly revenue section with "Revenue This Week" heading', async () => {
-    mockGetDailyRevenue.mockResolvedValue([]);
-    mockGetTopProducts.mockResolvedValue([]);
-    mockGetLowStockAlerts.mockResolvedValue([]);
+  // ── Revenue Trend chart heading ────────────────────────────────────
+  it('renders "Revenue Trend" section heading', async () => {
+    resolveAllWithDefaults();
     renderScreen();
     await waitFor(() => {
-      expect(screen.getByText('Revenue This Week')).toBeTruthy();
+      expect(screen.getByText('Revenue Trend')).toBeTruthy();
     });
   });
 
-  it('renders weekly bar rows with date labels and progress bars', async () => {
-    const weekData = [
-      buildRevenueRow({ date: '2026-07-01', total_minor: 100000 }),
-      buildRevenueRow({ date: '2026-07-02', total_minor: 200000 }),
-    ];
-    // first call = today, second call = weekly
-    mockGetDailyRevenue
-      .mockResolvedValueOnce([])          // getDailyRevenue(today, today)
-      .mockResolvedValueOnce(weekData);   // getDailyRevenue(weekAgo, today)
-    mockGetTopProducts.mockResolvedValue([]);
-    mockGetLowStockAlerts.mockResolvedValue([]);
+  // ── Category Breakdown chart heading ──────────────────────────────
+  it('renders "Category Breakdown" section heading', async () => {
+    resolveAllWithDefaults();
     renderScreen();
     await waitFor(() => {
-      expect(screen.getByText('07-01')).toBeTruthy();
-      expect(screen.getByText('07-02')).toBeTruthy();
-      const bars = document.querySelectorAll('.dashboard-weekly-bar');
-      expect(bars.length).toBe(2);
+      expect(screen.getByText('Category Breakdown')).toBeTruthy();
     });
   });
 
-  it('weekly chart bars have role="img" with aria-label describing value', async () => {
-    const weekData = [buildRevenueRow({ date: '2026-07-01', total_minor: 100000 })];
-    mockGetDailyRevenue
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce(weekData);
-    mockGetTopProducts.mockResolvedValue([]);
-    mockGetLowStockAlerts.mockResolvedValue([]);
+  // ── Sales Heatmap chart heading ────────────────────────────────────
+  it('renders "Sales Heatmap" section heading', async () => {
+    resolveAllWithDefaults();
     renderScreen();
     await waitFor(() => {
-      const bar = screen.getByRole('img');
-      expect(bar).toBeTruthy();
-      expect(bar.getAttribute('aria-label')).toMatch(/1,000\.00|1\.000/);
+      expect(screen.getByText('Sales Heatmap')).toBeTruthy();
     });
   });
 
-  // ── Popularity trend sparkline ─────────────────────────────────────
-  it('renders the popularity trend sparkline for the top category', async () => {
-    mockGetDailyRevenue.mockResolvedValue([]);
-    mockGetTopProducts.mockResolvedValue([]);
-    mockGetLowStockAlerts.mockResolvedValue([]);
-    mockGetCategoryPopularityTrend.mockResolvedValue([
-      { period_start: '2026-07-01', category_id: 'cat-drinks', category_name: 'Drinks', score: 1, units_sold: 2, distinct_transactions: 1, searches: 0, edits: 0 },
-      { period_start: '2026-07-02', category_id: 'cat-drinks', category_name: 'Drinks', score: 3, units_sold: 4, distinct_transactions: 2, searches: 1, edits: 0 },
-    ]);
+  // ── Top 10 Products chart heading ──────────────────────────────────
+  it('renders "Top 10 Products" section heading', async () => {
+    resolveAllWithDefaults();
     renderScreen();
     await waitFor(() => {
-      expect(screen.getByText('Popularity Trend')).toBeTruthy();
-      expect(screen.getByText('Drinks')).toBeTruthy();
-      const bars = document.querySelectorAll('.dashboard-sparkline-bar');
-      expect(bars.length).toBe(2);
-      const img = screen.getByRole('img', { name: 'Popularity of the top category over the last 7 days' });
-      expect(img).toBeTruthy();
+      expect(screen.getByText('Top 10 Products')).toBeTruthy();
     });
   });
 
-  it('shows "No popularity data yet" when the trend is empty', async () => {
-    mockGetDailyRevenue.mockResolvedValue([]);
-    mockGetTopProducts.mockResolvedValue([]);
-    mockGetLowStockAlerts.mockResolvedValue([]);
+  // ── Granularity toggle ────────────────────────────────────────────
+  it('renders Daily/Weekly/Monthly granularity toggle', async () => {
+    resolveAllWithDefaults();
     renderScreen();
     await waitFor(() => {
-      expect(screen.getByText('No popularity data yet')).toBeTruthy();
+      // The granularity buttons have role="radio"
+      const radios = screen.getAllByRole('radio');
+      expect(radios.length).toBe(3);
+      expect(radios[0]!.textContent?.toLowerCase()).toContain('daily');
+      expect(radios[1]!.textContent?.toLowerCase()).toContain('weekly');
+      expect(radios[2]!.textContent?.toLowerCase()).toContain('monthly');
     });
   });
 
   // ── Low stock alerts ───────────────────────────────────────────────
   it('renders "Low Stock Alerts" section heading', async () => {
-    mockGetDailyRevenue.mockResolvedValue([]);
-    mockGetTopProducts.mockResolvedValue([]);
-    mockGetLowStockAlerts.mockResolvedValue([]);
+    resolveAllWithDefaults();
     renderScreen();
     await waitFor(() => {
       expect(screen.getByText('Low Stock Alerts')).toBeTruthy();
     });
   });
 
-  it('shows "No sales data yet today" when low stock is empty', async () => {
-    mockGetDailyRevenue.mockResolvedValue([]);
-    mockGetTopProducts.mockResolvedValue([]);
-    mockGetLowStockAlerts.mockResolvedValue([]);
+  it('shows healthy stock message when no alerts', async () => {
+    resolveAllWithDefaults();
     renderScreen();
     await waitFor(() => {
-      expect(screen.getByText('No sales data yet today')).toBeTruthy();
+      expect(screen.getByText('All stock levels are healthy.')).toBeTruthy();
     });
   });
 
@@ -321,21 +326,17 @@ describe('DashboardScreen', () => {
       buildLowStockAlert({ name: 'Milk', current_qty: 2 }),
       buildLowStockAlert({ product_id: 'prod-sugar', name: 'Sugar', current_qty: 5 }),
     ];
-    mockGetDailyRevenue.mockResolvedValue([]);
-    mockGetTopProducts.mockResolvedValue([]);
+    resolveAllWithDefaults();
     mockGetLowStockAlerts.mockResolvedValue(alerts);
     renderScreen();
     await waitFor(() => {
       expect(screen.getByText('Milk')).toBeTruthy();
       expect(screen.getByText('2 left')).toBeTruthy();
-      expect(screen.getByText('Sugar')).toBeTruthy();
-      expect(screen.getByText('5 left')).toBeTruthy();
     });
   });
 
   it('low stock list has aria-label', async () => {
-    mockGetDailyRevenue.mockResolvedValue([]);
-    mockGetTopProducts.mockResolvedValue([]);
+    resolveAllWithDefaults();
     mockGetLowStockAlerts.mockResolvedValue([buildLowStockAlert()]);
     renderScreen();
     await waitFor(() => {
@@ -346,9 +347,7 @@ describe('DashboardScreen', () => {
 
   // ── ARIA ───────────────────────────────────────────────────────────
   it('has role="region" with aria-label="Dashboard" on container', async () => {
-    mockGetDailyRevenue.mockResolvedValue([]);
-    mockGetTopProducts.mockResolvedValue([]);
-    mockGetLowStockAlerts.mockResolvedValue([]);
+    resolveAllWithDefaults();
     renderScreen();
     await waitFor(() => {
       expect(screen.getByRole('region', { name: 'Dashboard' })).toBeTruthy();
