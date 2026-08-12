@@ -210,6 +210,36 @@ describe('TtlCache sessionStorage persistence', () => {
     expect(store.has('oz-part-restaurant')).toBe(false);
   });
 
+  it('reports how many entries were restored and from how many partitions', () => {
+    const { api } = memStorage();
+    const partition = (entryKey: string) => `oz-part-${entryKey.split(':')[2]!}`;
+    const writer = new TtlCache<string>(1000, 200, api, 'oz-part', 1, partition);
+    writer.set('card:revenue:retail:daily', 'r1');
+    writer.set('card:revenue:retail:weekly', 'r2');
+    writer.set('card:revenue:restaurant:daily', 'd1');
+
+    const reader = new TtlCache<string>(1000, 200, api, 'oz-part', 1, partition);
+    const hyd = reader.hydration();
+    expect(hyd.restored).toBe(3);
+    expect(hyd.partitions).toBe(2); // retail + restaurant
+    expect(hyd.durationMs).not.toBeNull();
+    expect(hyd.durationMs!).toBeGreaterThanOrEqual(0);
+  });
+
+  it('reports zero restored entries when storage is cold or mismatched', () => {
+    const { api } = memStorage();
+    // Cold storage: nothing written yet.
+    const cold = new TtlCache<string>(1000, 200, api, 'oz-test-cache', 1);
+    expect(cold.hydration()).toEqual({ restored: 0, partitions: 0, durationMs: expect.any(Number) });
+
+    // Version mismatch: the snapshot is discarded, so nothing restores.
+    const writer = new TtlCache<string>(1000, 200, api, 'oz-test-cache', 1);
+    writer.set('a', '1');
+    const mismatched = new TtlCache<string>(1000, 200, api, 'oz-test-cache', 2);
+    expect(mismatched.hydration().restored).toBe(0);
+    expect(mismatched.size).toBe(0);
+  });
+
   it('keeps the original TTL: expired snapshots hydrate as stale, not fresh', () => {
     const { api } = memStorage();
     const writer = new TtlCache<string>(1000, 200, api);

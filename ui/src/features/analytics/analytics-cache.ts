@@ -126,6 +126,13 @@ export class TtlCache<T> {
   private readonly entries = new Map<string, CacheEntry<T>>();
   private readonly counters = new Map<string, CacheKeyMetrics>();
 
+  /** Entries actually restored from storage during construction. */
+  private hydratedCount = 0;
+  /** Storage partitions (snapshot keys) that yielded at least one entry. */
+  private readonly hydratedFrom = new Set<string>();
+  /** Elapsed ms of the construction-time hydration; `null` when none ran. */
+  private hydrationMs: number | null = null;
+
   constructor(
     private readonly ttlMs: number = ANALYTICS_CACHE_TTL_MS,
     private readonly maxEntries: number = ANALYTICS_CACHE_MAX_ENTRIES,
@@ -166,9 +173,11 @@ export class TtlCache<T> {
 
   /** Load a version-matching snapshot from storage; bad data is ignored. */
   private hydrate(): void {
+    const started = performance.now();
     for (const key of this.snapshotKeys()) {
       this.hydrateFrom(key);
     }
+    this.hydrationMs = Math.round((performance.now() - started) * 10) / 10;
   }
 
   private hydrateFrom(storageKey: string): void {
@@ -207,6 +216,8 @@ export class TtlCache<T> {
       // Keep the original expiresAt: expired entries hydrate as stale
       // (readable with `fresh: false`), identical to in-memory behavior.
       this.entries.set(key, { value: entry.value as T, expiresAt: entry.expiresAt });
+      this.hydratedCount += 1;
+      this.hydratedFrom.add(storageKey);
     }
   }
 
@@ -319,6 +330,20 @@ export class TtlCache<T> {
   }
 
   /**
+   * How much work construction-time hydration did: the number of
+   * entries restored from sessionStorage, from how many snapshot
+   * partitions, and the elapsed time. All zeros/`null` when the cache
+   * was created without persistence or found nothing to restore.
+   */
+  hydration(): { restored: number; partitions: number; durationMs: number | null } {
+    return {
+      restored: this.hydratedCount,
+      partitions: this.hydratedFrom.size,
+      durationMs: this.hydrationMs,
+    };
+  }
+
+  /**
    * Snapshot of per-key counters plus totals. Used by the analytics
    * status-bar debug readout and by tests.
    */
@@ -411,6 +436,18 @@ export const analyticsDataCache = new TtlCache<unknown>(
   ANALYTICS_CACHE_VERSION,
   (entryKey) => `${ANALYTICS_CACHE_STORAGE_KEY}-${cachePartition(entryKey)}`,
 );
+
+// Log hydration cost once, at module load, when a warm session was
+// restored. This is the one place we can see how much of the dashboard
+// was served from sessionStorage before any refetch: the count of
+// restored entries, the partitions they came from, and the elapsed ms.
+const hydration = analyticsDataCache.hydration();
+if (hydration.restored > 0) {
+  console.info(
+    `[analytics-cache] hydrated ${hydration.restored} entries from ` +
+      `${hydration.partitions} partition(s) in ${hydration.durationMs}ms`,
+  );
+}
 
 /** Wipe the shared cache (memory + persisted snapshot) — used by tests. */
 export function clearAnalyticsCache(): void {
