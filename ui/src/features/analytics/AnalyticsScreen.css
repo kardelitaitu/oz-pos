@@ -382,18 +382,36 @@
   color: #cbd5e1;
 }
 
-/* Monthly: one cell per day of the month, 7 columns (calendar weeks) */
+/* Monthly: real calendar — weekday header + day cells starting on the
+   correct weekday, with leading/trailing empty cells completing weeks */
 .analytics-heatmap--monthly {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.analytics-monthly-header,
+.analytics-monthly-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 6px 10px;
+  width: 100%;
   max-width: 340px;
-  margin: 0 auto;
+}
+
+.analytics-monthly-header {
+  text-align: center;
 }
 
 .analytics-heatmap--monthly .analytics-heat-block {
   width: 20px;
   height: 20px;
+}
+
+.analytics-heat-cell--empty {
+  min-height: 20px;
 }
 
 /* Yearly: 12 month columns × 4 week rows */

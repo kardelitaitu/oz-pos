@@ -30,7 +30,7 @@ vi.mock('@/hooks/useWorkspaceNav', () => ({
   useWorkspaceNav: () => ({ goToWorkspacePicker: mockGoToPicker }),
 }));
 
-import AnalyticsScreen, { nextExpandedKey, daysInCurrentMonth, smartScale } from '@/features/analytics/AnalyticsScreen';
+import AnalyticsScreen, { nextExpandedKey, daysInCurrentMonth, monthCalendarGrid, smartScale } from '@/features/analytics/AnalyticsScreen';
 import { registerAnalyticsFeature } from '@/features/analytics/register';
 import { registerStaffFeature } from '@/features/staff/register';
 import { getEnabledPages, clearPages, hasGrantedPermission } from '@/platform/ui/page-registry';
@@ -189,12 +189,16 @@ describe('AnalyticsScreen layout shell', () => {
     expect(cellCount()).toBe(168);
     expect(heatmap()?.querySelectorAll('.analytics-weekly-row').length).toBe(8); // header + 7 days
 
-    // Monthly → one cell per day of the current month (28–31)
+    // Monthly → real calendar: day 1 starts on its actual weekday,
+    // empty cells pad the first/last rows to complete weeks
     fireEvent.click(screen.getByRole('radio', { name: 'Monthly' }));
     flushRecalc();
-    expect(cellCount()).toBe(daysInCurrentMonth());
-    expect(cellCount()).toBeGreaterThanOrEqual(28);
-    expect(cellCount()).toBeLessThanOrEqual(31);
+    const filled = heatmap()?.querySelectorAll('.analytics-heat-cell[data-intensity]').length ?? 0;
+    const total = cellCount();
+    expect(filled).toBe(daysInCurrentMonth());
+    expect(filled).toBeGreaterThanOrEqual(28);
+    expect(filled).toBeLessThanOrEqual(31);
+    expect(total % 7).toBe(0); // complete calendar weeks
 
     // Yearly → 12 month columns × 4 week rows = 48 cells
     fireEvent.click(screen.getByRole('radio', { name: 'Yearly' }));
@@ -374,6 +378,27 @@ describe('nextExpandedKey — single-expansion invariant', () => {
         expect(next === null || next === current).toBe(true);
       }
     }
+  });
+});
+
+describe('monthCalendarGrid — monthly heatmap calendar layout', () => {
+  it('day 1 does not always start on the first cell', () => {
+    const grid = monthCalendarGrid();
+    expect(grid.leading).toBeGreaterThanOrEqual(0);
+    expect(grid.leading).toBeLessThanOrEqual(6);
+  });
+
+  it('has 28–31 day cells', () => {
+    const grid = monthCalendarGrid();
+    expect(grid.days).toBeGreaterThanOrEqual(28);
+    expect(grid.days).toBeLessThanOrEqual(31);
+  });
+
+  it('pads with leading/trailing empties so weeks are complete', () => {
+    const grid = monthCalendarGrid();
+    expect((grid.leading + grid.days + grid.trailing) % 7).toBe(0);
+    expect(grid.trailing).toBeGreaterThanOrEqual(0);
+    expect(grid.trailing).toBeLessThan(7);
   });
 });
 

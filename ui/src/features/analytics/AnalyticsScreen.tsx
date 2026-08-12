@@ -51,6 +51,22 @@ export function daysInCurrentMonth(): number {
   return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
 }
 
+/**
+ * Calendar layout for the current month. `leading` counts the empty
+ * cells before day 1 (Monday-first), `days` the day cells, and
+ * `trailing` the empty cells after the last day so the grid always
+ * completes whole weeks (leading + days + trailing ≡ 0 mod 7).
+ */
+export function monthCalendarGrid(): { leading: number; days: number; trailing: number } {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const days = new Date(year, month + 1, 0).getDate();
+  const leading = (new Date(year, month, 1).getDay() + 6) % 7; // 0 = Monday
+  const trailing = (7 - ((leading + days) % 7)) % 7;
+  return { leading, days, trailing };
+}
+
 // Heatmap time buckets per granularity. Custom falls back to the daily
 // week view until a real range is selected.
 const HEAT_BUCKETS: Record<Exclude<Granularity, 'custom'>, string[]> = {
@@ -209,20 +225,35 @@ export default function AnalyticsScreen() {
       );
     }
     if (granularity === 'monthly') {
-      const days = daysInCurrentMonth();
+      const { leading, days, trailing } = monthCalendarGrid();
+      const cells: JSX.Element[] = [];
+      for (let i = 0; i < leading; i++) {
+        cells.push(<div key={`lead-${i}`} className="analytics-heat-cell analytics-heat-cell--empty" />);
+      }
+      for (let d = 1; d <= days; d++) {
+        cells.push(
+          <div
+            key={d}
+            className="analytics-heat-cell"
+            data-intensity={(d * 37 + 7) % 5}
+            title={`Day ${d}`}
+          >
+            <div className="analytics-heat-block" />
+            <span className="analytics-heat-label">{d}</span>
+          </div>,
+        );
+      }
+      for (let i = 0; i < trailing; i++) {
+        cells.push(<div key={`trail-${i}`} className="analytics-heat-cell analytics-heat-cell--empty" />);
+      }
       return (
         <div className="analytics-heatmap analytics-heatmap--monthly" role="img" aria-label={aria}>
-          {Array.from({ length: days }, (_, i) => (
-            <div
-              key={i}
-              className="analytics-heat-cell"
-              data-intensity={(i * 37 + 7) % 5}
-              title={`Day ${i + 1}`}
-            >
-              <div className="analytics-heat-block" />
-              <span className="analytics-heat-label">{i + 1}</span>
-            </div>
-          ))}
+          <div className="analytics-monthly-header">
+            {HEAT_BUCKETS.daily.map((d) => (
+              <span key={d} className="analytics-heat-label">{d}</span>
+            ))}
+          </div>
+          <div className="analytics-monthly-grid">{cells}</div>
         </div>
       );
     }
