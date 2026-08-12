@@ -58,6 +58,24 @@ function isValidNode(n: unknown): n is TopologyNodeData {
   );
 }
 
+/** Strict authored-bend check: `bends` must be an array of objects with
+ *  FINITE numeric x/y when present. The geometry maps them RAW
+ *  (`wire.bends.map(...)` and `b.x`/`b.y` straight into path points) — a
+ *  non-array would throw in the render and a missing/non-finite coordinate
+ *  produces a NaN degenerate path. The strict contract refuses the whole
+ *  payload instead of half-loading a wire that cannot draw. An empty array
+ *  is canonical (the editor treats length 0 as unbent); extra keys on a
+ *  bend entry are allowed (forward compatibility). */
+function isValidBends(bends: unknown): boolean {
+  if (bends === undefined) return true;
+  if (!Array.isArray(bends)) return false;
+  return bends.every((b) => {
+    if (!b || typeof b !== 'object' || Array.isArray(b)) return false;
+    const bend = b as Record<string, unknown>;
+    return isFiniteNumber(bend['x']) && isFiniteNumber(bend['y']);
+  });
+}
+
 function isValidWire(w: unknown): w is TopologyWireData {
   if (!w || typeof w !== 'object') return false;
   const wire = w as Record<string, unknown>;
@@ -68,6 +86,7 @@ function isValidWire(w: unknown): w is TopologyWireData {
     && typeof wire['direction'] === 'string' && WIRE_DIRECTIONS.has(wire['direction'])
     && (wire['fromPort'] === undefined || (typeof wire['fromPort'] === 'string' && PORT_NAMES.has(wire['fromPort'])))
     && (wire['toPort'] === undefined || (typeof wire['toPort'] === 'string' && PORT_NAMES.has(wire['toPort'])))
+    && isValidBends(wire['bends'])
   );
 }
 
@@ -106,6 +125,13 @@ export function deserializeTopology(json: string): TopologyExportPayload | null 
   for (const n of payload['nodes'] as TopologyNodeData[]) {
     if (ids.has(n.id)) return null;
     ids.add(n.id);
+  }
+  // A wire whose endpoint references a node missing from the payload is a
+  // dangling edge: the geometry skips it (it cannot draw) and the imported
+  // diagram immediately banners unknown-wire-endpoint — a drifted document
+  // is refused whole like every other broken shape.
+  for (const w of payload['wires'] as TopologyWireData[]) {
+    if (!ids.has(w.fromNodeId) || !ids.has(w.toNodeId)) return null;
   }
   // Wire ids live in their own namespace (node ops never touch wires by
   // node id), but two wires under one id behave as a single wire — every

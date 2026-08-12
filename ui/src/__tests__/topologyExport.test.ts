@@ -128,6 +128,53 @@ describe('serializeTopology / deserializeTopology (versioned export envelope)', 
     expect(deserializeTopology(dup)).toBeNull();
   });
 
+  it('rejects malformed bend shapes on a wire', () => {
+    // The geometry reads bends RAW (`wire.bends.map(...)`): a hand-edited
+    // non-array would CRASH the canvas render, and a bend entry without
+    // finite x/y produces NaN-coordinate degenerate paths. The strict
+    // contract refuses the whole payload instead of half-loading it.
+    const badNonArray = serializeTopology(
+      nodes,
+      [{ ...wires[0]!, bends: 'oops' as unknown as Array<{ x: number; y: number }> }],
+    );
+    expect(deserializeTopology(badNonArray)).toBeNull();
+
+    const badMissingY = serializeTopology(
+      nodes,
+      [{ ...wires[0]!, bends: [{ x: 300 }] as unknown as Array<{ x: number; y: number }> }],
+    );
+    expect(deserializeTopology(badMissingY)).toBeNull();
+
+    const badStringCoords = serializeTopology(
+      nodes,
+      [{ ...wires[0]!, bends: [{ x: '300', y: 200 }] as unknown as Array<{ x: number; y: number }> }],
+    );
+    expect(deserializeTopology(badStringCoords)).toBeNull();
+
+    const badNonObjectEntry = serializeTopology(
+      nodes,
+      [{ ...wires[0]!, bends: [42] as unknown as Array<{ x: number; y: number }> }],
+    );
+    expect(deserializeTopology(badNonObjectEntry)).toBeNull();
+  });
+
+  it('rejects a wire whose endpoint references a node missing from the payload', () => {
+    // A dangling endpoint cannot render (the geometry skips it) and the
+    // imported diagram immediately banners unknown-wire-endpoint — a
+    // drifted document must be refused whole, like every other broken shape.
+    const danglingFrom = serializeTopology(
+      nodes,
+      [{ ...wires[0]!, fromNodeId: 'ghost-node' }],
+    );
+    expect(deserializeTopology(danglingFrom)).toBeNull();
+
+    const danglingTo = serializeTopology(
+      nodes,
+      [{ ...wires[0]!, toNodeId: 'ghost-node' }],
+    );
+    expect(deserializeTopology(danglingTo)).toBeNull();
+  });
+
   it('still round-trips canonical ports and wires after the stricter validation', () => {
     const wired = [
       { id: 'w3', fromNodeId: 'store-1', fromPort: 'right' as const, toNodeId: 'ws-1', toPort: 'left' as const, direction: 'reverse' as const },
@@ -135,6 +182,16 @@ describe('serializeTopology / deserializeTopology (versioned export envelope)', 
     const out = deserializeTopology(serializeTopology(nodes, wired));
     expect(out).not.toBeNull();
     expect(out!.wires).toEqual(wired);
+  });
+
+  it('keeps a canonical wire with a valid (and an empty) bends array lossless', () => {
+    const bent = [
+      { id: 'w-bent', fromNodeId: 'store-1', toNodeId: 'ws-1', direction: 'one-way' as const, bends: [{ x: 300, y: 200 }] },
+      { id: 'w-plain', fromNodeId: 'store-1', toNodeId: 'ws-1', direction: 'one-way' as const, bends: [] },
+    ];
+    const out = deserializeTopology(serializeTopology(nodes, bent));
+    expect(out).not.toBeNull();
+    expect(out!.wires).toEqual(bent);
   });
 });
 

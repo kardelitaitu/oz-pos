@@ -29,6 +29,17 @@ Post-repair state verified: 3 users → 3 `assignments` rows backfilled, 2 `assi
 **Follow-ups (deliberately NOT done):** this is the SECOND occurrence of the same workflow failure (120 on 2026-08-07, 128 on 2026-08-11). The guard that would catch it at COMMIT time instead of app startup is still not wired: a pre-commit check that diffs migration files against the checksums recorded in the local dev DBs (the 120 entry's follow-up #2). Until then: before editing ANY migration file, check the applied checksum on every dev DB that may have run it — a migration is "applied" the moment any database records its checksum, not when it ships.
 
 
+## 2026-08-12 — TDD cycle: strict import validation extended — malformed bend shapes and dangling wire endpoints now reject the whole payload
+
+### The two pass-13 "cosmetic-only" gaps were actually strictness holes: a non-array bends field can CRASH the render
+**Problem:** Seventeenth review pass, closing the pass-13 journal notes. `deserializeTopology` (the strict clipboard/import contract: "a drifted or hand-edited document can never half-load a broken diagram") still accepted two broken shapes. (1) **Malformed `bends`:** `isValidWire` never checked the field, and the geometry maps it RAW — `wire.bends.map(...)` throws when `bends` is a non-array (string/object/number) → a render CRASH on a hand-edited wire, and a bend entry missing x/y or carrying non-finite coords produced NaN-coordinate degenerate paths (invisible wire, dead simulation pulse). (2) **Dangling wire endpoints:** `fromNodeId`/`toNodeId` were only string-checked; a reference to a node absent from the payload imported a wire that cannot draw (geometry skips it) and immediately surfaced `unknown-wire-endpoint` as a canvas banner — the drifted document half-loaded, exactly what the strict contract promises to refuse.
+
+**Solution:** Red→Green. (1) Red — four rejection tests (non-array bends, missing-y bend, string-coordinate bend, non-object bend entry) and two dangling-endpoint tests (ghost fromNodeId, ghost toNodeId), plus a lossless guard for canonical bends AND an empty bends array (the editor treats length 0 as unbent; extra bend keys stay allowed for forward compatibility). (2) Green — a dedicated `isValidBends` (undefined | array of {finite x, finite y}) wired into `isValidWire`, and an endpoint-existence pass in `deserializeTopology` using the already-built node-id set, placed before the wire-id uniqueness loop. In-memory wires are always canonical (the editor only authors bend objects and endpoint-clean wires), so no legitimate export is affected — the round-trip guards confirm it.
+
+**Validation:** export suite 16/16 (2 new Red-confirmed via stash, 3 total new) · editor suite 526/526 (import path) · full UI suite 286 files / 4,942 tests · typecheck · eslint 0 errors · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** a self-loop wire (`fromNodeId === toNodeId`) still imports — both endpoints exist, so it is not dangling; the semantic validation contract flags it as an invalid connection. Bends with EXTRA keys and empty arrays are allowed (canonical/forward-compat).
+
 ## 2026-08-12 — TDD cycle: finder arrow navigation swallowed one press after the match list shrank (node deleted while the finder was open)
 
 ### The stale stored finderIndex made the highlight stick for exactly one ArrowUp/ArrowDown press after a delete
