@@ -68,7 +68,7 @@ analytics-action-zoom-out-aria = Perkecil
 analytics-action-zoom-in-aria = Perbesar
 
 # ── Card titles ─────────────────────────────────────────────
-analytics-card-peak-hours = Jam Sibuk
+analytics-card-heatmap = Peta Panas
 analytics-card-revenue = Ringkasan Pendapatan
 analytics-card-aov = Nilai Pesanan Rata-rata
 analytics-card-staff = Performa Staf

@@ -68,7 +68,7 @@ analytics-action-zoom-out-aria = Zoom out
 analytics-action-zoom-in-aria = Zoom in
 
 # ── Card titles ─────────────────────────────────────────────
-analytics-card-peak-hours = Peak Hours
+analytics-card-heatmap = Heat Map
 analytics-card-revenue = Revenue Overview
 analytics-card-aov = Average Order Value
 analytics-card-staff = Staff Performance

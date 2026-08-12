@@ -66,7 +66,7 @@ interface AnalyticsCard {
 
 const ANALYTICS_CARDS: AnalyticsCard[] = [
   // 2×1 wide heatmap
-  { key: 'heatmap',   workspace: null,         titleKey: 'analytics-card-peak-hours', title: 'Peak Hours',                size: 'wide' },
+  { key: 'heatmap',   workspace: null,         titleKey: 'analytics-card-heatmap', title: 'Heat Map', size: 'wide' },
   // Shared (both retail and restaurant)
   { key: 'revenue',   workspace: null,         titleKey: 'analytics-card-revenue',    title: 'Revenue Overview' },
   { key: 'aov',       workspace: null,         titleKey: 'analytics-card-aov',        title: 'Average Order Value' },
@@ -141,7 +141,7 @@ export default function AnalyticsScreen() {
   // yearly renders a 12-month × 4-week grid; other granularities are flat.
   // Intensity is a placeholder until real data is wired.
   const renderHeatmap = () => {
-    const aria = l10n.getString('analytics-card-peak-hours');
+    const aria = l10n.getString('analytics-card-heatmap');
     if (granularity === 'weekly') {
       const rows: JSX.Element[] = [
         <div key="header" className="analytics-weekly-row">

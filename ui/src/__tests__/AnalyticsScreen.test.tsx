@@ -259,7 +259,7 @@ describe('AnalyticsScreen layout shell', () => {
     expect(screen.getByText('Top Products')).toBeTruthy();
     expect(screen.getByText('Sales by Category')).toBeTruthy();
     // Full-width
-    expect(screen.getByText('Peak Hours')).toBeTruthy();
+    expect(screen.getByText('Heat Map')).toBeTruthy();
   });
 
   it('switches card titles when workspace changes to restaurant', async () => {
