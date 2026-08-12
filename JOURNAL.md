@@ -4855,3 +4855,13 @@ Two regression pins:
 **Tests:** analytics-data 32/32 (+2 alignPrevHourly) · AnalyticsScreen 66/66 · full UI suite 292/292, 5098.
 
 **Risks / follow-ups:** (1) the same index-alignment assumption could affect the other compare overlays (revenue/AOV/tables/inventory/basket) if any loader ever returns differing bucket sets for equal-length windows — bucketing is deterministic per granularity so it is safe today, but a future date-gap policy change should reuse the map-by-key approach. (2) `revenueLabel` still has a redundant identical-branch ternary (`g === 'monthly' ? slice(5) : slice(5)`) — a trivial cleanup candidate for a future slice.
+## 2026-08-13 — Trend chips fabricated 0% on zero-starting series (TDD)
+
+**Problem:** `seriesDelta` (the off-mode trend chip for Revenue/AOV, and via delegation `turnDelta` for Tables) returned `0` whenever the first bucket was zero — even though `periodDelta`'s documented contract says a zero baseline must yield `null` so the chip is omitted instead of showing misleading math. A week that went 0 → $150 revenue rendered a "0% change" chip; zero → zero rendered "no change" as a percentage. The old behavior was not just untested — it was **pinned by a test** asserting `[0, 150] → 0`.
+
+**Solution (TDD, Red→Green):** rewrote the pinned test to the correct spec (`[0, 150] → null`, `[0, 0] → null`) and added a `turnDelta` inheritance test; watched both fail (the old one on the assertion, the new one on the missing import), then changed the one line — `if (first === 0) return null` — and updated the doc comment to state the null-baseline contract. All callers already guard with `delta !== null &&`, so the fix is purely chip omission; `turnDelta` inherits it for free.
+
+**Commits:** (see below — fix + journal)
+**Tests:** analytics-data 31/31 (2 re-pinned + 1 new turnDelta) · AnalyticsScreen 66/66 · full UI suite 292/292, 5099.
+
+**Risks / follow-ups:** none new. The `revenueLabel` redundant ternary (`g === 'monthly' ? slice(5) : slice(5)`) remains a trivial cleanup candidate.
