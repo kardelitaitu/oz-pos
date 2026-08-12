@@ -4644,3 +4644,19 @@ Commits: a4aa2e23 (backend), 29215c3a (ui + docs)
 Tests: desktop staff 41, tablet 435, gate_audit 3, wiring_audit 6; UI
 4893/4893 (285 files) incl. staff screen 22 + contract 8; typecheck 0,
 fmt/clippy/drift/i18n-parity clean.
+## 2026-08-12 — Alt+drag duplicate route: no-dangling + sanitize guards pinned at the state level (3 pins)
+
+**Problem:** The Alt+drag duplicate route (`beginNodeDrag` with Alt held at mousedown, and `convertDragToDuplicate` for Alt pressed mid-move) is structurally immune to the same defects the clipboard import just gained — wires copy only when BOTH endpoints are dragged (filtered at both entry routes, remapped through `originalToCopy`), and `sanitizeCopiedNode` strips a Branch Location copy's canonical identity — but NONE of those guards were pinned, so a future refactor could silently drop them (the Ctrl+C/V audit proved the failure mode: both filters removed inject `toNodeId: undefined` wires that render nothing but corrupt state). A comment-drift bug also surfaced: three comments (convertDragToDuplicate, pasteClipboard, beginNodeDrag) claimed a Branch Location copy is "refused", but `duplicateRefusal` only gates the warehouse tier cap — the real behavior is copy + sanitize to a diagram-only card.
+
+**Solution:** Three state-level regression pins in the Alt+drag describe (canonical loads so the validation gate is active, banner = the state signal that survives the geometry-gated wire render):
+1. Mousedown-Alt drag of one endpoint of a wired pair → wire NOT copied, no banner.
+2. Alt pressed MID-move conversion of one endpoint → wire NOT copied, no banner (the conversion route applies the same rule).
+3. Alt+dragged Branch Location copy is identity-less — the selected copy's note leads with the multiple-branch guidance and its title carries the missing-identity error.
+
+All three failed under a temporary mutation removing the two both-endpoints filters and the two sanitize calls (true Red), while the pre-existing Ctrl+V identity-less pin stayed green (pasteClipboard untouched — pins are route-specific). The three stale comments were corrected to describe the sanitize behavior.
+
+**Commits:** (pending) — `test(topology)` pins + comment fix.
+
+**Test counts:** editor 532/532 (+3, all mutation-verified Red), full UI suite 4,948/4,948, typecheck clean, eslint 0 errors (8 pre-existing warnings), i18n lint + FTL dedupe clean.
+
+**Remaining risks / follow-ups:** The Ctrl+V (pasteClipboard) and Ctrl+D (duplicateSelection) routes have their own pins from prior passes; the mid-move conversion's `cancelDuplicateDrag` wire-filter (`!copyIds.has(w.fromNodeId) && !copyIds.has(w.toNodeId)`) is the one duplicate-path filter still unpinned — a mutation of that alone would strand copied wires in state on Escape. Low severity (the copies are removed with the nodes in the same filter pass), noted as a future slice.

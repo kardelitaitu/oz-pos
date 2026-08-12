@@ -2468,8 +2468,10 @@ export default function NodeTopologyEditor({
     const start = dragStartRef.current;
     if (start.size === 0) return;
     const draggedIds = new Set(start.keys());
-    // Refuse the mid-drag conversion when it would copy a Branch Location or
-    // duplicate a warehouse past the tier cap — the move simply stays a move.
+    // Refuse the mid-drag conversion when it would duplicate a warehouse past
+    // the tier cap — the move simply stays a move. A Branch Location copy is
+    // allowed but sanitized below into a diagram-only card (never a second
+    // branch impersonating the original).
     const refusal = duplicateRefusal(nodesRef.current.filter((n) => draggedIds.has(n.id)));
     if (refusal) {
       addToast({ message: l10n.getString(refusal), type: 'warning' });
@@ -3008,9 +3010,10 @@ export default function NodeTopologyEditor({
   const pasteClipboard = useCallback(() => {
     const clip = clipboardRef.current;
     if (clip.nodes.length === 0) return;
-    // Same creation-path gates as the other routes — a clipboard holding a
-    // Branch Location or warehouses past the tier cap is refused before any
-    // history entry or cascade offset.
+    // Same creation-path gates as the other routes — a clipboard holding
+    // warehouses past the tier cap is refused before any history entry or
+    // cascade offset. A Branch Location copy is allowed but sanitized below
+    // into a diagram-only card.
     const refusal = duplicateRefusal(clip.nodes);
     if (refusal) {
       addToast({ message: l10n.getString(refusal), type: 'warning' });
@@ -3534,9 +3537,10 @@ export default function NodeTopologyEditor({
     // follow the cursor while the originals stay put; the drop commits them
     // as ONE undo entry, Escape discards them. Wires copy only when BOTH
     // endpoints are in the selection (mirrors duplicateSelection).
-    // The creation-path gates apply to the duplicate paths too: an Alt+drag
-    // that would copy a Branch Location or a warehouse past the tier cap is
-    // refused up front (no copies, no drag, no history entry).
+    // The creation-path gate applies to the duplicate path too: an Alt+drag
+    // that would duplicate a warehouse past the tier cap is refused up front
+    // (no copies, no drag, no history entry). A Branch Location copy is
+    // allowed but sanitized below into a diagram-only card.
     // All reads go through refs so this handler stays referentially stable
     // across nodes/wires/pan/zoom changes — the memoized cards receive it as
     // a prop, and a churn here would re-render every card on any edit or

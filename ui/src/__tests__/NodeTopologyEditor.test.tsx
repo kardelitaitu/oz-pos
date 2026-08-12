@@ -10064,6 +10064,89 @@ describe('NodeTopologyEditor — Alt+drag to duplicate', () => {
     expect(wsCopy[0]!.style.left).toBe('560px');
   });
 
+  it('does not copy a wire when only one endpoint is Alt+dragged — no dangling copy', async () => {
+    // Canonical load (gate active) so a corrupted copy would surface as the
+    // graph banner — the wire render is geometry-gated, so the banner is
+    // the state-level signal that survives it.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 200, y: 200, store_profile_id: 'store-1' },
+        { id: 'ws-1', type: 'workspace', name: 'POS #1', x: 500, y: 200, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [{ id: 'w1', from_node_id: 'store-1', to_node_id: 'ws-1', direction: 'one-way' }],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    mockCanvasSize(1200, 800);
+
+    // Alt+drag the store alone — the wire's other endpoint (ws-1) is NOT in
+    // the selection, so the wire must NOT come along (mirror of the Ctrl+D
+    // one-endpoint pin, at the state level).
+    fireEvent.mouseDown(nodeBy('store-1'), { button: 0, altKey: true, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 100, clientY: 0 });
+    fireEvent.mouseUp(canvas(), { button: 0 });
+
+    expect(getNodeCount()).toBe(3); // store, ws, store-copy
+    expect(getWireCount()).toBe(1); // the ORIGINAL wire only
+    expect(document.querySelector('.topology-validation-banner')).toBeNull();
+  });
+
+  it('Alt pressed MID-move does not copy a wire with only one endpoint dragged', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 200, y: 200, store_profile_id: 'store-1' },
+        { id: 'ws-1', type: 'workspace', name: 'POS #1', x: 500, y: 200, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [{ id: 'w1', from_node_id: 'store-1', to_node_id: 'ws-1', direction: 'one-way' }],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    mockCanvasSize(1200, 800);
+
+    // Plain move of the store, then convert MID-move: the conversion route
+    // (convertDragToDuplicate) must apply the same both-endpoints rule.
+    fireEvent.mouseDown(nodeBy('store-1'), { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 100, clientY: 0 });
+    fireEvent.keyDown(canvas(), { key: 'Alt' });
+    fireEvent.mouseUp(canvas(), { button: 0 });
+
+    expect(getNodeCount()).toBe(3);
+    expect(getWireCount()).toBe(1);
+    expect(document.querySelector('.topology-validation-banner')).toBeNull();
+  });
+
+  it('an Alt+dragged Branch Location copy is identity-less — never a second branch impersonation', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', x: 80, y: 140, store_profile_id: 'store-1' },
+        { id: 'ws-1', type: 'workspace', name: 'POS #1', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [
+        { id: 'w-1', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+      ],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    mockCanvasSize(1200, 800);
+
+    fireEvent.mouseDown(nodeBy('store-1'), { button: 0, altKey: true, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas(), { clientX: 120, clientY: 0 });
+    fireEvent.mouseUp(canvas(), { button: 0 });
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+
+    // The copy took the selection. Its note leads with the multiple-branch
+    // guidance and the title carries the identity error — the copy is
+    // diagram-only, never a second branch impersonating the original
+    // (sanitizeCopiedNode must strip storeProfileId on THIS route too).
+    const selected = [...document.querySelectorAll('.topology-node.node-selected')] as HTMLElement[];
+    expect(selected).toHaveLength(1);
+    expect(
+      within(selected[0]!).getByText('Keep exactly one Branch Location node in this graph.'),
+    ).toBeInTheDocument();
+    const note = selected[0]!.querySelector('.node-validation-note') as HTMLElement | null;
+    expect(note?.title).toContain('missing its store profile identity');
+  });
+
   it('the duplicate drop is ONE undo entry', async () => {
     mockLoadTopology.mockResolvedValueOnce({
       nodes: [{ id: 'a', type: 'store', name: 'A', x: 200, y: 200 }],
