@@ -1,5 +1,6 @@
 //! Staff Repository — database persistence for users and roles.
 
+use crate::error::StaffError;
 use crate::models::{Role, User};
 use rusqlite::{Connection, params};
 
@@ -15,7 +16,7 @@ impl<'a> StaffRepository<'a> {
     }
 
     /// Retrieve a user by ID.
-    pub fn get_user(&self, id: &str) -> Result<Option<User>, anyhow::Error> {
+    pub fn get_user(&self, id: &str) -> Result<Option<User>, StaffError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, username, pin_hash, display_name, role_id, is_active, created_at, updated_at
              FROM users WHERE id = ?1",
@@ -40,7 +41,7 @@ impl<'a> StaffRepository<'a> {
     }
 
     /// Retrieve a role by ID.
-    pub fn get_role(&self, id: &str) -> Result<Option<Role>, anyhow::Error> {
+    pub fn get_role(&self, id: &str) -> Result<Option<Role>, StaffError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, name, description, permissions, created_at, updated_at
              FROM roles WHERE id = ?1",

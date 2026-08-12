@@ -1,5 +1,6 @@
 //! CRM Repository — database persistence for customer profiles.
 
+use crate::error::CrmError;
 use crate::models::Customer;
 use foundation::{Email, Phone};
 use rusqlite::{Connection, Transaction, params};
@@ -16,7 +17,7 @@ impl<'a> CrmRepository<'a> {
     }
 
     /// Retrieve a customer by ID.
-    pub fn get_customer(&self, id: &str) -> Result<Option<Customer>, anyhow::Error> {
+    pub fn get_customer(&self, id: &str) -> Result<Option<Customer>, CrmError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, name, email, phone, loyalty_points, total_spent_minor, currency, notes, created_at, updated_at
              FROM customers WHERE id = ?1",
@@ -53,7 +54,7 @@ impl<'a> CrmRepository<'a> {
         &self,
         tx: &Transaction,
         customer: &Customer,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), CrmError> {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         tx.execute(
             "INSERT INTO customers (id, name, email, phone, loyalty_points, total_spent_minor, currency, notes, created_at, updated_at)

@@ -6,6 +6,7 @@
 
 use std::sync::{Arc, Mutex};
 
+use crate::error::InventoryError;
 use crate::models::ProductType;
 use foundation::contracts::{EventHandler, ModuleResult};
 use foundation::events::SaleCompleted;
@@ -56,7 +57,7 @@ impl InventoryStockHandler {
         tx: &rusqlite::Transaction<'_>,
         sku: &str,
         qty: i64,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), InventoryError> {
         use rusqlite::params;
 
         // Look up product ID by SKU.
@@ -125,7 +126,10 @@ impl InventoryStockHandler {
                     );
                 }
                 _ => {
-                    return Err(anyhow::anyhow!("insufficient stock for SKU {sku}"));
+                    return Err(InventoryError::validation(
+                        "stock",
+                        format!("insufficient stock for SKU {sku}"),
+                    ));
                 }
             }
         } else {
@@ -157,9 +161,12 @@ impl InventoryStockHandler {
                         );
                     }
                     _ => {
-                        return Err(anyhow::anyhow!(
-                            "insufficient stock for SKU {}",
-                            ingredient_sku.as_deref().unwrap_or(sku)
+                        return Err(InventoryError::validation(
+                            "stock",
+                            format!(
+                                "insufficient stock for SKU {}",
+                                ingredient_sku.as_deref().unwrap_or(sku)
+                            ),
                         ));
                     }
                 }

@@ -1,5 +1,6 @@
 //! Inventory Repository — database queries for products, categories, and stock levels.
 
+use crate::error::InventoryError;
 use crate::models::{Inventory, LocationId, Product, ProductType};
 use foundation::{Barcode, Currency, Money, Sku};
 use rusqlite::{Connection, Transaction, params};
@@ -16,7 +17,7 @@ impl<'a> InventoryRepository<'a> {
     }
 
     /// Retrieve a product by ID.
-    pub fn get_product(&self, id: &str) -> Result<Option<Product>, anyhow::Error> {
+    pub fn get_product(&self, id: &str) -> Result<Option<Product>, InventoryError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, product_type, version, cost_minor, brand, rack_location, notes, unit, is_active, default_supplier_id, popularity_score
              FROM products WHERE id = ?1",
@@ -31,10 +32,11 @@ impl<'a> InventoryRepository<'a> {
         let currency_str: String = row.get(4)?;
         let currency: Currency = currency_str
             .parse()
-            .map_err(|_| anyhow::anyhow!("Invalid currency"))?;
+            .map_err(|_| InventoryError::validation("currency", "invalid currency code"))?;
         let price_minor: i64 = row.get(3)?;
         let sku_str: String = row.get(1)?;
-        let sku = Sku::try_new(sku_str).ok_or_else(|| anyhow::anyhow!("Invalid SKU"))?;
+        let sku = Sku::try_new(sku_str)
+            .ok_or_else(|| InventoryError::validation("sku", "invalid SKU"))?;
 
         let barcode_str: Option<String> = row.get(6)?;
         let barcode = barcode_str.and_then(|b| Barcode::new(b).ok());
@@ -69,7 +71,7 @@ impl<'a> InventoryRepository<'a> {
     }
 
     /// Retrieve product stock level for a SKU.
-    pub fn get_stock(&self, sku: &Sku) -> Result<Option<Inventory>, anyhow::Error> {
+    pub fn get_stock(&self, sku: &Sku) -> Result<Option<Inventory>, InventoryError> {
         let mut stmt = self.conn.prepare(
             "SELECT product_id, sku, qty, low_stock_threshold, updated_at, location_id
              FROM inventory WHERE sku = ?1",
@@ -82,7 +84,8 @@ impl<'a> InventoryRepository<'a> {
         };
 
         let sku_str: String = row.get(1)?;
-        let sku = Sku::try_new(sku_str).ok_or_else(|| anyhow::anyhow!("Invalid SKU"))?;
+        let sku = Sku::try_new(sku_str)
+            .ok_or_else(|| InventoryError::validation("sku", "invalid SKU"))?;
         let loc_str: String = row.get(5).unwrap_or_default();
 
         Ok(Some(Inventory {
@@ -101,7 +104,7 @@ impl<'a> InventoryRepository<'a> {
         tx: &Transaction,
         sku: &Sku,
         delta: i64,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), InventoryError> {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         tx.execute(
             "UPDATE inventory SET qty = qty + ?1, updated_at = ?2 WHERE sku = ?3",

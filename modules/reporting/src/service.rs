@@ -1,5 +1,6 @@
 //! Reporting Service — sales and operational reporting workflows.
 
+use crate::error::ReportingError;
 use crate::models::DailyReport;
 use crate::repository::ReportingRepository;
 use rusqlite::Connection;
@@ -12,7 +13,7 @@ impl ReportingService {
     pub fn generate_daily_report(
         conn: &Connection,
         date: &str,
-    ) -> Result<DailyReport, anyhow::Error> {
+    ) -> Result<DailyReport, ReportingError> {
         let repo = ReportingRepository::new(conn);
         repo.generate_daily_report(date)
     }

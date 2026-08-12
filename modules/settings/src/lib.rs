@@ -42,9 +42,12 @@ next: Migrate settings commands into this module | perf: N/A.
 //! # use modules_settings::{SettingsModule, SettingsService, SettingItem};
 //! ```
 
+pub mod error;
 pub mod models;
 pub mod repository;
 pub mod service;
+
+pub use error::SettingsError;
 
 pub use models::SettingItem;
 pub use repository::SettingsRepository;

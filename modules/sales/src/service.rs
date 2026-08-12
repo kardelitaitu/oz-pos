@@ -1,5 +1,6 @@
 //! Sales Service — domain business logic, checkout orchestration, and event dispatching.
 
+use crate::error::SalesError;
 use foundation::{Cart, SaleStatus};
 use rusqlite::Connection;
 
@@ -16,9 +17,10 @@ impl SalesService {
         cart: &Cart,
         user_id: Option<String>,
         payment_method: String,
-    ) -> Result<Sale, anyhow::Error> {
-        let mut sale = Sale::from_cart_with_user(cart, user_id)
-            .ok_or_else(|| anyhow::anyhow!("Failed to construct sale from cart — corrupt total"))?;
+    ) -> Result<Sale, SalesError> {
+        let mut sale = Sale::from_cart_with_user(cart, user_id).ok_or_else(|| {
+            SalesError::validation("cart", "failed to construct sale from cart — corrupt total")
+        })?;
 
         sale.payment_method = Some(payment_method);
         sale.transition_to(SaleStatus::Active)?;
@@ -35,20 +37,21 @@ impl SalesService {
     }
 
     /// Retrieve sale by ID using `SalesRepository`.
-    pub fn get_sale(conn: &Connection, id: &str) -> Result<Option<Sale>, anyhow::Error> {
+    pub fn get_sale(conn: &Connection, id: &str) -> Result<Option<Sale>, SalesError> {
         let repo = SalesRepository::new(conn);
         repo.get_sale(id)
     }
 
     /// Void an active or completed sale.
-    pub fn void_sale(conn: &Connection, id: &str) -> Result<(), anyhow::Error> {
+    pub fn void_sale(conn: &Connection, id: &str) -> Result<(), SalesError> {
         let repo = SalesRepository::new(conn);
-        let sale = repo
-            .get_sale(id)?
-            .ok_or_else(|| anyhow::anyhow!("Sale not found: {}", id))?;
+        let sale = repo.get_sale(id)?.ok_or_else(|| SalesError::NotFound {
+            entity: "sale",
+            id: id.to_string(),
+        })?;
 
         if sale.is_terminal() && sale.status == SaleStatus::Voided {
-            return Err(anyhow::anyhow!("Sale is already voided"));
+            return Err(SalesError::validation("status", "sale is already voided"));
         }
 
         repo.update_sale_status(id, SaleStatus::Voided)?;

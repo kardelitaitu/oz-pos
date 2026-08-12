@@ -40,10 +40,13 @@ next: Migrate DB CRUD + Tauri commands into this module | perf: N/A — no hot p
 //! # use modules_crm::{CrmModule, Customer};
 //! ```
 
+pub mod error;
 pub mod handlers;
 pub mod models;
 pub mod repository;
 pub mod service;
+
+pub use error::CrmError;
 
 pub use foundation::{Email, Phone};
 pub use models::Customer;

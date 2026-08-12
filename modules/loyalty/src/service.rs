@@ -1,5 +1,6 @@
 //! Loyalty & Gift Card Service — business logic workflows.
 
+use crate::error::LoyaltyError;
 use crate::models::{GiftCard, LoyaltyAccount};
 use crate::repository::LoyaltyRepository;
 use rusqlite::Connection;
@@ -12,7 +13,7 @@ impl LoyaltyService {
     pub fn get_account_by_customer(
         conn: &Connection,
         customer_id: &str,
-    ) -> Result<Option<LoyaltyAccount>, anyhow::Error> {
+    ) -> Result<Option<LoyaltyAccount>, LoyaltyError> {
         let repo = LoyaltyRepository::new(conn);
         repo.get_account_by_customer(customer_id)
     }
@@ -21,7 +22,7 @@ impl LoyaltyService {
     pub fn get_gift_card(
         conn: &Connection,
         card_number: &str,
-    ) -> Result<Option<GiftCard>, anyhow::Error> {
+    ) -> Result<Option<GiftCard>, LoyaltyError> {
         let repo = LoyaltyRepository::new(conn);
         repo.get_gift_card_by_number(card_number)
     }

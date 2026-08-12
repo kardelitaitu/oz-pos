@@ -52,9 +52,12 @@ controls where a trusted network identity exists | perf: N/A.
 //! # use modules_staff::{StaffModule, User, Role, builtin_roles};
 //! ```
 
+pub mod error;
 pub mod models;
 pub mod repository;
 pub mod service;
+
+pub use error::StaffError;
 
 pub use models::{Role, User, UserId, builtin_roles, seed_users};
 pub use repository::StaffRepository;

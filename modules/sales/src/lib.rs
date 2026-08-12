@@ -32,9 +32,12 @@ next: Migrate cart/sales logic into this module | perf: N/A.
 //!
 //! See `modules/sales/manifest.json` for the module metadata.
 
+pub mod error;
 pub mod models;
 pub mod repository;
 pub mod service;
+
+pub use error::SalesError;
 
 pub use foundation::{Cart, CartError, CartId, CartLine, LineId, Money, SaleStatus, Sku};
 pub use models::{

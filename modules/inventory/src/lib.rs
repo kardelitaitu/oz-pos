@@ -41,10 +41,13 @@ next: Migrate DB CRUD + commands into this module | perf: N/A.
 //! # use modules_inventory::{InventoryModule, Product, Category, Inventory};
 //! ```
 
+pub mod error;
 pub mod handlers;
 pub mod models;
 pub mod repository;
 pub mod service;
+
+pub use error::InventoryError;
 
 pub use foundation::{Money, Sku};
 pub use models::{

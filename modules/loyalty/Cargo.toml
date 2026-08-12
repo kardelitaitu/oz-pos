@@ -8,6 +8,7 @@ description = "OZ-POS Loyalty Module: customer loyalty program, tier-based earni
 
 [dependencies]
 anyhow = { workspace = true }
+thiserror = { workspace = true }
 foundation = { workspace = true }
 rusqlite = { workspace = true }
 chrono = { workspace = true }

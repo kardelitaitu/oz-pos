@@ -1,5 +1,6 @@
 //! Loyalty & Gift Card Repository — database persistence layer.
 
+use crate::error::LoyaltyError;
 use crate::models::{GiftCard, LoyaltyAccount};
 use rusqlite::{Connection, params};
 
@@ -18,7 +19,7 @@ impl<'a> LoyaltyRepository<'a> {
     pub fn get_account_by_customer(
         &self,
         customer_id: &str,
-    ) -> Result<Option<LoyaltyAccount>, anyhow::Error> {
+    ) -> Result<Option<LoyaltyAccount>, LoyaltyError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, customer_id, points, lifetime_points, tier_id, updated_at, created_at
              FROM loyalty_accounts WHERE customer_id = ?1",
@@ -45,7 +46,7 @@ impl<'a> LoyaltyRepository<'a> {
     pub fn get_gift_card_by_number(
         &self,
         card_number: &str,
-    ) -> Result<Option<GiftCard>, anyhow::Error> {
+    ) -> Result<Option<GiftCard>, LoyaltyError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, card_number, pin, initial_balance_minor, current_balance_minor, currency, status, issued_to, issue_date, expiry_date, created_by, updated_at
              FROM gift_cards WHERE card_number = ?1",

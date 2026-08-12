@@ -1,5 +1,6 @@
 //! Sales Repository — database persistence layer for sales, held carts, and refunds.
 
+use crate::error::SalesError;
 use foundation::{Currency, Money, SaleStatus};
 use rusqlite::{Connection, Transaction, params};
 
@@ -17,7 +18,7 @@ impl<'a> SalesRepository<'a> {
     }
 
     /// Retrieve a sale by ID including its line items.
-    pub fn get_sale(&self, id: &str) -> Result<Option<Sale>, anyhow::Error> {
+    pub fn get_sale(&self, id: &str) -> Result<Option<Sale>, SalesError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, status, total_minor, line_count, currency, payment_method, tendered_minor, user_id, created_at, updated_at, discount_percent, discount_label, subtotal_minor, tax_total_minor, customer_id, version
              FROM sales WHERE id = ?1",
@@ -30,9 +31,12 @@ impl<'a> SalesRepository<'a> {
         };
 
         let currency_str: String = row.get(4)?;
-        let currency: Currency = currency_str
-            .parse()
-            .map_err(|_| anyhow::anyhow!("Invalid currency code: {}", currency_str))?;
+        let currency: Currency = currency_str.parse().map_err(|_| {
+            SalesError::validation(
+                "currency",
+                format!("invalid currency code: {}", currency_str),
+            )
+        })?;
 
         let status_str: String = row.get(1)?;
         let status: SaleStatus =
@@ -119,7 +123,7 @@ impl<'a> SalesRepository<'a> {
     }
 
     /// Insert a new sale and its line items inside a transaction.
-    pub fn create_sale_tx(&self, tx: &Transaction, sale: &Sale) -> Result<(), anyhow::Error> {
+    pub fn create_sale_tx(&self, tx: &Transaction, sale: &Sale) -> Result<(), SalesError> {
         let status_str = serde_json::to_string(&sale.status)?
             .trim_matches('"')
             .to_string();
@@ -173,7 +177,7 @@ impl<'a> SalesRepository<'a> {
     }
 
     /// Update sale status.
-    pub fn update_sale_status(&self, id: &str, status: SaleStatus) -> Result<(), anyhow::Error> {
+    pub fn update_sale_status(&self, id: &str, status: SaleStatus) -> Result<(), SalesError> {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let status_str = serde_json::to_string(&status)?
             .trim_matches('"')

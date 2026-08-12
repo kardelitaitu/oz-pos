@@ -8,6 +8,7 @@ description = "OZ-POS Settings Module: store configuration, feature flags, recei
 
 [dependencies]
 anyhow = { workspace = true }
+thiserror = { workspace = true }
 foundation = { workspace = true }
 rusqlite = { workspace = true }
 chrono = { workspace = true }

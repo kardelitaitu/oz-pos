@@ -1,5 +1,6 @@
 //! Inventory Service — product catalog and stock adjustment orchestration.
 
+use crate::error::InventoryError;
 use crate::models::{Inventory, Product};
 use crate::repository::InventoryRepository;
 use foundation::Sku;
@@ -10,19 +11,23 @@ pub struct InventoryService;
 
 impl InventoryService {
     /// Retrieve product by ID.
-    pub fn get_product(conn: &Connection, id: &str) -> Result<Option<Product>, anyhow::Error> {
+    pub fn get_product(conn: &Connection, id: &str) -> Result<Option<Product>, InventoryError> {
         let repo = InventoryRepository::new(conn);
         repo.get_product(id)
     }
 
     /// Retrieve inventory stock level for a SKU.
-    pub fn get_stock(conn: &Connection, sku: &Sku) -> Result<Option<Inventory>, anyhow::Error> {
+    pub fn get_stock(conn: &Connection, sku: &Sku) -> Result<Option<Inventory>, InventoryError> {
         let repo = InventoryRepository::new(conn);
         repo.get_stock(sku)
     }
 
     /// Adjust stock level for a product.
-    pub fn adjust_stock(conn: &mut Connection, sku: &Sku, delta: i64) -> Result<(), anyhow::Error> {
+    pub fn adjust_stock(
+        conn: &mut Connection,
+        sku: &Sku,
+        delta: i64,
+    ) -> Result<(), InventoryError> {
         let tx = conn.transaction()?;
         {
             let repo = InventoryRepository::new(&tx);

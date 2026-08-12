@@ -6,6 +6,7 @@
 
 use std::sync::{Arc, Mutex};
 
+use crate::error::ReportingError;
 use foundation::contracts::{EventHandler, ModuleResult};
 use foundation::events::SaleCompleted;
 use rusqlite::Connection;
@@ -33,7 +34,7 @@ impl SaleCompletedReporter {
     }
 
     /// Ensure the `report_sales` table exists.
-    fn ensure_table(&self, conn: &Connection) -> Result<(), anyhow::Error> {
+    fn ensure_table(&self, conn: &Connection) -> Result<(), ReportingError> {
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS report_sales (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,

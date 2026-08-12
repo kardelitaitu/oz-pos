@@ -8,6 +8,7 @@ description = "OZ-POS Staff Module: user management, role management, authentica
 
 [dependencies]
 anyhow = { workspace = true }
+thiserror = { workspace = true }
 foundation = { workspace = true }
 platform-core = { workspace = true }
 rusqlite = { workspace = true }
