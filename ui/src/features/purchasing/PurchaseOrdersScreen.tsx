@@ -191,7 +191,7 @@ export default function PurchaseOrdersScreen() {
                 <Localized id="po-col-total"><th>Total</th></Localized>
                 <Localized id="po-col-items"><th>Items</th></Localized>
                 <Localized id="po-col-actions" attrs={{ 'aria-label': true }}>
-                  <th aria-label="Actions"> </th>
+                  <th aria-label={l10n.getString('actions-aria')}> </th>
                 </Localized>
               </tr>
             </thead>

@@ -184,7 +184,7 @@ export default function SuppliersScreen() {
             placeholder="Search by name, code, or contact…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            aria-label="Search suppliers"
+            aria-label={l10n.getString('search-aria')}
           />
         </Localized>
       </div>
@@ -264,7 +264,7 @@ export default function SuppliersScreen() {
                 <Localized id="suppliers-col-email"><th>Email</th></Localized>
                 <Localized id="suppliers-col-status"><th>Status</th></Localized>
                 <Localized id="suppliers-col-actions" attrs={{ 'aria-label': true }}>
-                  <th aria-label="Actions"> </th>
+                  <th aria-label={l10n.getString('actions-aria')}> </th>
                 </Localized>
               </tr>
             </thead>

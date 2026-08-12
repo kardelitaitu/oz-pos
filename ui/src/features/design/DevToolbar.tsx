@@ -147,7 +147,7 @@ export function DevToolbar() {
       className="dev-toolbar"
       style={style}
       role="toolbar"
-      aria-label="Developer tools"
+      aria-label={l10n.getString('developer-tools-aria')}
     >
       {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
       <div className="dev-toolbar-header" onMouseDown={onMouseDown}>
@@ -156,7 +156,7 @@ export function DevToolbar() {
 
       <div className="dev-toolbar-body">
         <p className="dev-toolbar-label">Theme</p>
-        <div className="dev-toolbar-themes" role="radiogroup" aria-label="Theme selector">
+        <div className="dev-toolbar-themes" role="radiogroup" aria-label={l10n.getString('theme-selector-aria')}>
           {THEMES.map((t) => (
             <button
               key={t.key}

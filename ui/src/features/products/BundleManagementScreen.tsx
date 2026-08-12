@@ -245,7 +245,7 @@ export default function BundleManagementScreen() {
                 <Localized id="bundles-items"><th>Items</th></Localized>
                 <Localized id="bundles-active"><th>Active</th></Localized>
                 <Localized id="bundles-actions-aria" attrs={{ 'aria-label': true }}>
-                  <th aria-label="Actions"> </th>
+                  <th aria-label={l10n.getString('actions-aria')}> </th>
                 </Localized>
               </tr>
             </thead>

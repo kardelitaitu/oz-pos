@@ -172,7 +172,7 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
                   className="refund-close"
                   onClick={() => exit.requestClose()}
                   disabled={exit.exiting}
-                  aria-label="Cancel refund"
+                  aria-label={l10n.getString('cancel-refund-aria')}
                 >
                 &times;
               </button>
@@ -219,7 +219,7 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
                             className="refund-qty-btn"
                             onClick={() => updateQty(line.id, selectedQty - 1)}
                             disabled={selectedQty <= 1}
-                            aria-label="Decrease refund quantity"
+                            aria-label={l10n.getString('decrease-qty-aria')}
                           >−</button>
                         </Localized>
                         <span className="refund-qty-value">{selectedQty}</span>
@@ -229,7 +229,7 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
                             className="refund-qty-btn"
                             onClick={() => updateQty(line.id, selectedQty + 1)}
                             disabled={selectedQty >= (line.qty ?? 1)}
-                            aria-label="Increase refund quantity"
+                            aria-label={l10n.getString('increase-qty-aria')}
                           >+</button>
                         </Localized>
                         <span className="refund-line-total">

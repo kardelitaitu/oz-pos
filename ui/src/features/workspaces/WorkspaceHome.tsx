@@ -676,7 +676,7 @@ export default function WorkspaceHome() {
               </p>
             </div>
           ) : (
-            <div className="workspace-grid" ref={gridRef} role="group" aria-label="Workspaces">
+            <div className="workspace-grid" ref={gridRef} role="group" aria-label={l10n.getString('workspaces-aria')}>
               {sortedWorkspaces.map((ws, idx) => {
                 const disabled = !canAccess(ws.type_key);
                 const colorClass = WS_COLORS[ws.type_key] ?? '';

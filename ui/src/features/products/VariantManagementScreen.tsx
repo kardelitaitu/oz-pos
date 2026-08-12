@@ -157,7 +157,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
               type="button"
               className="product-mgmt-modal-close"
               onClick={onClose}
-              aria-label="Close"
+              aria-label={l10n.getString('close-aria')}
             >
               &times;
             </button>
@@ -230,7 +230,7 @@ export default function VariantManagementScreen({ productSku, productName, onClo
                     <Localized id="variant-mgmt-col-barcode"><th>Barcode</th></Localized>
                     <Localized id="variant-mgmt-col-status"><th>Status</th></Localized>
                     <Localized id="variant-mgmt-actions-aria" attrs={{ 'aria-label': true }}>
-                      <th aria-label="Actions"> </th>
+                      <th aria-label={l10n.getString('actions-aria')}> </th>
                     </Localized>
                   </tr>
                 </thead>

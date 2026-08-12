@@ -586,7 +586,7 @@ export default function SalesHistoryScreen() {
 
       {/* ── Filter bar ──────────────────────────────────────────── */}
       <Localized id="sales-history-filter-aria" attrs={{ 'aria-label': true }}>
-        <div className="sales-history-filters" role="search" aria-label="Filter sales">
+        <div className="sales-history-filters" role="search" aria-label={l10n.getString('filter-sales-aria')}>
         {/* Search */}
         <div className="sales-history-filter-group">
           <Localized id="sales-history-search-label">
@@ -601,7 +601,7 @@ export default function SalesHistoryScreen() {
                 placeholder="Search sale ID, payment, cashier…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                aria-label="Search sales"
+                aria-label={l10n.getString('search-aria')}
               />
             </Localized>
           </Localized>
@@ -613,7 +613,7 @@ export default function SalesHistoryScreen() {
             <span className="sales-history-filter-label"><span>Status</span></span>
           </Localized>
           <Localized id="sales-history-status-filter-aria" attrs={{ 'aria-label': true }}>
-            <div className="sales-history-filter-chips" role="radiogroup" aria-label="Filter by status">
+            <div className="sales-history-filter-chips" role="radiogroup" aria-label={l10n.getString('filter-status-aria')}>
               {STATUS_OPTIONS.map((opt) => {
                 const statusIds: Record<string, string> = {
                   'All': 'sales-history-status-all',
@@ -651,7 +651,7 @@ export default function SalesHistoryScreen() {
               className="sales-history-filter-date"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
-              aria-label="From date"
+              aria-label={l10n.getString('from-date-aria')}
             />
           </Localized>
         </div>
@@ -666,7 +666,7 @@ export default function SalesHistoryScreen() {
               className="sales-history-filter-date"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              aria-label="To date"
+              aria-label={l10n.getString('to-date-aria')}
             />
           </Localized>
         </div>
@@ -682,7 +682,7 @@ export default function SalesHistoryScreen() {
               className="sales-history-filter-select"
               value={cashierFilter}
               onChange={(e) => setCashierFilter(e.target.value)}
-              aria-label="Filter by cashier"
+              aria-label={l10n.getString('filter-cashier-aria')}
             >
             <Localized id="sales-history-cashier-all">
               <option value=""><span>All Cashiers</span></option>
@@ -786,7 +786,7 @@ export default function SalesHistoryScreen() {
       ) : (
         <div className="sales-history-table-wrap">
           <Localized id="sales-history-table-aria" attrs={{ 'aria-label': true }}>
-            <table className="sales-history-table" aria-label="Sales history">
+            <table className="sales-history-table" aria-label={l10n.getString('sales-history-aria')}>
             <thead>
               <tr>
                 <Localized id="sales-history-col-id">
@@ -841,7 +841,7 @@ export default function SalesHistoryScreen() {
                   <th><span>Cashier</span></th>
                 </Localized>
                 <Localized id="sales-history-actions-aria" attrs={{ 'aria-label': true }}>
-                  <th aria-label="Actions"> </th>
+                  <th aria-label={l10n.getString('actions-aria')}> </th>
                 </Localized>
               </tr>
             </thead>
@@ -864,7 +864,7 @@ export default function SalesHistoryScreen() {
       {/* ── Pagination controls ────────────────────────────── */}
       {!loading && filteredSales.length > pageSize && (
         <Localized id="sales-history-pagination-aria" attrs={{ 'aria-label': true }}>
-        <nav className="sales-history-pagination" aria-label="Pagination">
+        <nav className="sales-history-pagination" aria-label={l10n.getString('pagination-aria')}>
           <Localized id="sales-history-prev-aria" attrs={{ 'aria-label': true }}>
           <Localized id="sales-history-prev-page">
             <button
@@ -872,7 +872,7 @@ export default function SalesHistoryScreen() {
               className="sales-history-page-btn"
               disabled={safePage <= 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              aria-label="Previous page"
+              aria-label={l10n.getString('previous-page-aria')}
             >
               <span>&larr; Prev</span>
             </button>
@@ -890,7 +890,7 @@ export default function SalesHistoryScreen() {
               className="sales-history-page-btn"
               disabled={safePage >= totalPages}
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              aria-label="Next page"
+              aria-label={l10n.getString('next-page-aria')}
             >
               <span>Next &rarr;</span>
             </button>
@@ -906,7 +906,7 @@ export default function SalesHistoryScreen() {
               className="sales-history-page-size-select"
               value={pageSize}
               onChange={(e) => setPageSize(Number(e.target.value))}
-              aria-label="Results per page"
+              aria-label={l10n.getString('results-per-page-aria')}
             >
               {PAGE_SIZE_OPTIONS.map((size) => (
                 <option key={size} value={size}>{size}</option>
@@ -931,7 +931,7 @@ export default function SalesHistoryScreen() {
       {/* ── Void Confirmation Modal ──────────────────────────── */}
       {voidExit.shouldRender && voidTarget && (
         <Localized id="sales-history-void-overlay-aria" attrs={{ 'aria-label': true }}>
-        <div className={`sales-history-overlay${voidExit.exiting ? ' sales-history-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label="Void order">
+        <div className={`sales-history-overlay${voidExit.exiting ? ' sales-history-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('void-order-aria')}>
           <div ref={voidPanelRef} className={`sales-history-modal sales-history-void-modal${voidExit.exiting ? ' sales-history-modal--exiting' : ''}`}>
             <div className="sales-history-modal-header">
               <Localized id="sales-history-void-title">
@@ -942,7 +942,7 @@ export default function SalesHistoryScreen() {
                   type="button"
                   className="sales-history-modal-close"
                   onClick={voidExit.requestClose}
-                  aria-label="Close void dialog"
+                  aria-label={l10n.getString('close-void-aria')}
                 >
                   &times;
                 </button>
@@ -972,7 +972,7 @@ export default function SalesHistoryScreen() {
                     placeholder="e.g. Customer cancellation"
                     value={voidReason}
                     onChange={(e) => setVoidReason(e.target.value)}
-                    aria-label="Void reason"
+                    aria-label={l10n.getString('void-reason-aria')}
                   />
                 </Localized>
                 </Localized>
@@ -1009,7 +1009,7 @@ export default function SalesHistoryScreen() {
       {/* ── Detail modal ────────────────────────────────────────── */}
       {detailExit.shouldRender && detail && (
         <Localized id="sales-history-detail-overlay-aria" attrs={{ 'aria-label': true }}>
-        <div className={`sales-history-overlay${detailExit.exiting ? ' sales-history-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label="Sale detail">
+        <div className={`sales-history-overlay${detailExit.exiting ? ' sales-history-overlay--exiting' : ''}`} role="dialog" aria-modal="true" aria-label={l10n.getString('sale-detail-aria')}>
           <div ref={detailPanelRef} className={`sales-history-modal${detailExit.exiting ? ' sales-history-modal--exiting' : ''}`}>
             <div className="sales-history-modal-header">
               <Localized id="sales-history-detail-title">
@@ -1021,7 +1021,7 @@ export default function SalesHistoryScreen() {
                   type="button"
                   className="sales-history-modal-close"
                   onClick={detailExit.requestClose}
-                  aria-label="Close"
+                  aria-label={l10n.getString('close-aria')}
                 >
                   &times;
                 </button>
@@ -1128,7 +1128,7 @@ export default function SalesHistoryScreen() {
                   <h3><span>Line Items</span></h3>
                 </Localized>
                 <Localized id="sales-history-lines-aria" attrs={{ 'aria-label': true }}>
-                <table className="sales-history-lines-table" aria-label="Sale line items">
+                <table className="sales-history-lines-table" aria-label={l10n.getString('sale-line-items-aria')}>
                   <thead>
                     <tr>
                       <Localized id="sales-history-line-sku"><th><span>SKU</span></th></Localized>
@@ -1189,7 +1189,7 @@ export default function SalesHistoryScreen() {
                         </div>
                         <div className="sales-history-refund-reason">{rf.reason}</div>
                         <Localized id="sales-history-refund-lines-aria" attrs={{ 'aria-label': true }}>
-                        <table className="sales-history-lines-table" aria-label="Refund line items">
+                        <table className="sales-history-lines-table" aria-label={l10n.getString('refund-line-items-aria')}>
                           <thead>
                             <tr>
                               <Localized id="refund-line-sku"><th><span>SKU</span></th></Localized>

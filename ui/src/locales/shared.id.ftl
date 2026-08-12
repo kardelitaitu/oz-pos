@@ -394,3 +394,35 @@ auth-create-pin-error-fields = Semua bidang wajib diisi.
 auth-create-pin-error-pin-length = PIN minimal harus 4 karakter.
 auth-create-pin-error-pin-mismatch = PIN tidak cocok.
 auth-create-pin-error-generic = Terjadi kesalahan saat membuat akun pemilik.
+
+# Additional common aria-label attributes (Indonesian)
+close-aria = .aria-label = Tutup
+search-customers-aria = .aria-label = Cari pelanggan
+search-products-aria = .aria-label = Cari produk
+barcode-input-aria = .aria-label = Input kode batang
+submit-barcode-aria = .aria-label = Kirim kode batang
+select-course-aria = .aria-label = Pilih kursus
+revert-changes-aria = .aria-label = Kembalikan perubahan
+add-sample-line-aria = .aria-label = Tambah contoh baris
+previous-page-aria = .aria-label = Halaman sebelumnya
+next-page-aria = .aria-label = Halaman berikutnya
+results-per-page-aria = .aria-label = Hasil per halaman
+void-order-aria = .aria-label = Batalkan pesanan
+close-void-aria = .aria-label = Tutup dialog pembatalan
+void-reason-aria = .aria-label = Alasan pembatalan
+sale-detail-aria = .aria-label = Detail penjualan
+sale-line-items-aria = .aria-label = Item baris penjualan
+refund-line-items-aria = .aria-label = Item baris pengembalian
+orders-aria = .aria-label = Pesanan
+back-to-orders-aria = .aria-label = Kembali ke daftar pesanan
+order-line-items-aria = .aria-label = Item baris pesanan
+decrease-card-size-aria = .aria-label = Kurangi ukuran kartu
+increase-card-size-aria = .aria-label = Tambah ukuran kartu
+decrease-font-size-aria = .aria-label = Kurangi ukuran font
+increase-font-size-aria = .aria-label = Tambah ukuran font
+primary-colour-picker-aria = .aria-label = Pemilih warna utama
+colour-hex-aria = .aria-label = Nilai heksadesimal warna
+reset-colour-aria = .aria-label = Kembalikan warna ke awal
+pick-logo-aria = .aria-label = Pilih file logo
+reset-appearance-aria = .aria-label = Kembalikan semua pengaturan tampilan
+save-appearance-aria = .aria-label = Simpan tampilan

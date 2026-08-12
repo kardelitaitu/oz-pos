@@ -248,7 +248,7 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
                 type="search"
                 className="product-search-input"
                 placeholder="Search products…"
-                aria-label="Search products"
+                aria-label={l10n.getString('search-products-aria')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={handleSearchKeyDown}
@@ -271,7 +271,7 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
                 type="text"
                 className="product-barcode-input"
                 placeholder="Scan barcode…"
-                aria-label="Barcode input"
+                aria-label={l10n.getString('barcode-input-aria')}
                 value={barcodeInput}
                 onChange={(e) => setBarcodeInput(e.target.value)}
                 onKeyDown={handleBarcodeKeyDown}
@@ -284,7 +284,7 @@ export default function ProductLookupScreen({ onAddProduct }: ProductLookupScree
               type="button"
               className="product-scan-btn"
               onClick={handleBarcodeScan}
-              aria-label="Submit barcode"
+              aria-label={l10n.getString('submit-barcode-aria')}
             >
               <BarcodeIcon />
               <Localized id="product-lookup-barcode-scan">

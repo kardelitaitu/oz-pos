@@ -206,7 +206,7 @@ export function AppearanceSettings({
                 type="color"
                 value={activeColour}
                 onChange={(e) => updateColour(e.target.value)}
-                aria-label="Primary colour picker"
+                aria-label={l10n.getString('primary-colour-picker-aria')}
                 className="appearance-colour-picker"
               />
             </Localized>
@@ -221,7 +221,7 @@ export function AppearanceSettings({
                   if (normalised) updateColour(normalised);
                 }}
                 className="appearance-colour-hex settings-input"
-                aria-label="Colour hex value"
+                aria-label={l10n.getString('colour-hex-aria')}
                 {...cmInput}
               />
             </Localized>
@@ -233,7 +233,7 @@ export function AppearanceSettings({
                 iconOnly
                 className="appearance-colour-reset"
                 onClick={() => updateColour(DEFAULT_COLOUR)}
-                aria-label="Reset colour to default"
+                aria-label={l10n.getString('reset-colour-aria')}
                 title={l10n.getString('appearance-reset-colour')}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
@@ -262,7 +262,7 @@ export function AppearanceSettings({
               </Localized>
             )}
             <Localized id="appearance-choose-logo-aria" attrs={{ 'aria-label': true }}>
-              <Button variant="secondary" onClick={handlePickLogo} aria-label="Pick logo file">
+              <Button variant="secondary" onClick={handlePickLogo} aria-label={l10n.getString('pick-logo-aria')}>
                 <Localized id="appearance-choose-logo">Choose Logo</Localized>
               </Button>
             </Localized>
@@ -441,7 +441,7 @@ export function AppearanceSettings({
                   className="appearance-reset-all-btn"
                   onClick={handleResetAll}
                   disabled={resetting}
-                  aria-label="Reset all appearance settings"
+                  aria-label={l10n.getString('reset-appearance-aria')}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
                     <polyline points="1 4 1 10 7 10" />
@@ -456,7 +456,7 @@ export function AppearanceSettings({
           {!embedded && (
             <div className="settings-actions">
               <Localized id="appearance-save-aria" attrs={{ 'aria-label': true }}>
-                <Button variant="primary" onClick={save} disabled={saving} aria-label="Save appearance">
+                <Button variant="primary" onClick={save} disabled={saving} aria-label={l10n.getString('save-appearance-aria')}>
                   <Localized id="save">Save</Localized>
                 </Button>
               </Localized>

@@ -317,7 +317,7 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
                     <Localized id="void-orders-col-total"><th>Total</th></Localized>
                     <Localized id="void-orders-col-items"><th>Items</th></Localized>
                     <Localized id="void-orders-col-payment"><th>Payment</th></Localized>
-                    <Localized id="void-orders-col-actions-aria" attrs={{ 'aria-label': true }}><th aria-label="Actions"> </th></Localized>
+                    <Localized id="void-orders-col-actions-aria" attrs={{ 'aria-label': true }}><th aria-label={l10n.getString('actions-aria')}> </th></Localized>
                   </tr>
                 </thead>
                 <tbody>{Array.from({ length: 5 }).map((_, i) => (
@@ -361,7 +361,7 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
         ) : (
           <div className="void-orders-table-wrap">
             <Localized id="void-orders-table-aria" attrs={{ 'aria-label': true }}>
-              <table className="void-orders-table" aria-label="Orders">
+              <table className="void-orders-table" aria-label={l10n.getString('orders-aria')}>
                 <thead>
                   <tr>
                     <Localized id="void-orders-col-order-id">
@@ -383,7 +383,7 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
                       <th>Payment</th>
                     </Localized>
                     <Localized id="void-orders-col-actions-aria" attrs={{ 'aria-label': true }}>
-                      <th aria-label="Actions"> </th>
+                      <th aria-label={l10n.getString('actions-aria')}> </th>
                     </Localized>
                   </tr>
                 </thead>
@@ -453,7 +453,7 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
             type="button"
             className="void-orders-back-btn"
             onClick={backToList}
-            aria-label="Back to orders list"
+            aria-label={l10n.getString('back-to-orders-aria')}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
               <line x1="19" y1="12" x2="5" y2="12" />
@@ -587,7 +587,7 @@ export default function VoidOrdersScreen({ initialSaleId }: VoidOrdersScreenProp
               <h3 className="void-orders-section-title">Line Items</h3>
             </Localized>
             <Localized id="void-orders-line-items-aria" attrs={{ 'aria-label': true }}>
-              <table className="void-orders-lines-table" aria-label="Order line items">
+              <table className="void-orders-lines-table" aria-label={l10n.getString('order-line-items-aria')}>
                 <thead>
                   <tr>
                     <Localized id="void-orders-line-sku">

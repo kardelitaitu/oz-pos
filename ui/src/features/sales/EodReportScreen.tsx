@@ -461,7 +461,7 @@ export default function EodReportScreen() {
             className="eod-report-refresh-btn"
             onClick={exportCsv}
             disabled={csvExporting || !report}
-            aria-label="Export CSV"
+            aria-label={l10n.getString('export-csv-aria')}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />

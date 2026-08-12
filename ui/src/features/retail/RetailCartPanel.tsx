@@ -197,7 +197,7 @@ export default function RetailCartPanel({
                               </button>
                               {/* ── Course dropdown ──── */}
                               {courseDropdownLine === line.id && (
-                                <span className="retail-cart-course-dropdown" role="listbox" aria-label="Select course" ref={courseDropdownGroupRef}>
+                                <span className="retail-cart-course-dropdown" role="listbox" aria-label={l10n.getString('select-course-aria')} ref={courseDropdownGroupRef}>
                                   <button
                                     type="button"
                                     className={`retail-cart-course-option${!line.courseId ? ' retail-cart-course-option--active' : ''}`}

@@ -697,7 +697,7 @@ export default function StaffManagementScreen() {
                 <Localized id="staff-col-id"><th>ID</th></Localized>
                 <Localized id="staff-col-status"><th>Status</th></Localized>
                 <Localized id="staff-col-actions" attrs={{ "aria-label": true }}>
-                  <th aria-label="Actions"> </th>
+                  <th aria-label={l10n.getString('actions-aria')}> </th>
                 </Localized>
               </tr>
             </thead>

@@ -962,7 +962,7 @@ function SettingsPageContent() {
                 type="button"
                 className={`settings-btn-revert${isDirty && !saving && !saved ? '' : ' settings-btn-revert--hidden'}`}
                 onClick={handleRevert}
-                aria-label="Revert changes"
+                aria-label={l10n.getString('revert-changes-aria')}
                 tabIndex={isDirty && !saving && !saved ? undefined : -1}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">

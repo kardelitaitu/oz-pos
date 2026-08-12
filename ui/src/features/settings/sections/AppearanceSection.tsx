@@ -54,7 +54,7 @@ export default function AppearanceSection({
                     className="settings-size-btn"
                     disabled={displayCardSize <= 0}
                     onClick={() => { setDisplayCardSize((s) => Math.max(0, s - 1)); markDirty(); }}
-                    aria-label="Decrease card size"
+                    aria-label={l10n.getString('decrease-card-size-aria')}
                   >
                     &minus;
                   </button>
@@ -66,7 +66,7 @@ export default function AppearanceSection({
                     className="settings-size-btn"
                     disabled={displayCardSize >= 4}
                     onClick={() => { setDisplayCardSize((s) => Math.min(4, s + 1)); markDirty(); }}
-                    aria-label="Increase card size"
+                    aria-label={l10n.getString('increase-card-size-aria')}
                   >
                     +
                   </button>
@@ -87,7 +87,7 @@ export default function AppearanceSection({
                     className="settings-size-btn"
                     disabled={displayFontSize <= 0}
                     onClick={() => { setDisplayFontSize((s) => Math.max(0, s - 1)); markDirty(); }}
-                    aria-label="Decrease font size"
+                    aria-label={l10n.getString('decrease-font-size-aria')}
                   >
                     &minus;
                   </button>
@@ -99,7 +99,7 @@ export default function AppearanceSection({
                     className="settings-size-btn"
                     disabled={displayFontSize >= 4}
                     onClick={() => { setDisplayFontSize((s) => Math.min(4, s + 1)); markDirty(); }}
-                    aria-label="Increase font size"
+                    aria-label={l10n.getString('increase-font-size-aria')}
                   >
                     +
                   </button>

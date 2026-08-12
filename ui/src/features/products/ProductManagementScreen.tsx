@@ -425,7 +425,7 @@ export default function ProductManagementScreen() {
                 <Localized id="product-mgmt-col-type"><th>Type</th></Localized>
                 <Localized id="product-mgmt-col-stock"><th>Stock</th></Localized>
                 <Localized id="product-mgmt-actions-aria" attrs={{ 'aria-label': true }}>
-                  <th aria-label="Actions"> </th>
+                  <th aria-label={l10n.getString('actions-aria')}> </th>
                 </Localized>
               </tr>
             </thead>
@@ -519,7 +519,7 @@ export default function ProductManagementScreen() {
                   type="button"
                   className="product-mgmt-modal-close"
                   onClick={modalExit.requestClose}
-                  aria-label="Close"
+                  aria-label={l10n.getString('close-aria')}
                 >
                   &times;
                 </button>

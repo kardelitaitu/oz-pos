@@ -73,7 +73,7 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
               type="button"
               className="retail-edit-modal-close"
               onClick={onClose}
-              aria-label="Close"
+              aria-label={l10n.getString('close-aria')}
             >
               &times;
             </button>

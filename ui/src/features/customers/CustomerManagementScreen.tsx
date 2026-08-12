@@ -411,7 +411,7 @@ export default function CustomerManagementScreen() {
             placeholder="Search by name, email, or phone…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            aria-label="Search customers"
+            aria-label={l10n.getString('search-customers-aria')}
           />
         </Localized>
       </div>
@@ -540,7 +540,7 @@ export default function CustomerManagementScreen() {
                 <Localized id="customer-mgmt-col-phone"><th>Phone</th></Localized>
                 <Localized id="customer-mgmt-col-notes"><th>Notes</th></Localized>
                 <Localized id="customer-mgmt-col-actions" attrs={{ 'aria-label': true }}>
-                  <th aria-label="Actions"> </th>
+                  <th aria-label={l10n.getString('actions-aria')}> </th>
                 </Localized>
               </tr>
             </thead>

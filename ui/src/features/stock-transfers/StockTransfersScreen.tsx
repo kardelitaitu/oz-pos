@@ -377,7 +377,7 @@ export default function StockTransfersScreen() {
                 <Localized id="stock-transfers-destination"><th>Destination</th></Localized>
                 <Localized id="stock-transfers-created"><th>Created</th></Localized>
                 <Localized id="stock-transfers-actions" attrs={{ 'aria-label': true }}>
-                  <th aria-label="Actions"> </th>
+                  <th aria-label={l10n.getString('actions-aria')}> </th>
                 </Localized>
               </tr>
             </thead>

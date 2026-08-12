@@ -391,3 +391,35 @@ auth-create-pin-error-fields = All fields are required.
 auth-create-pin-error-pin-length = PIN must be at least 4 characters.
 auth-create-pin-error-pin-mismatch = PINs do not match.
 auth-create-pin-error-generic = An error occurred while creating the owner account.
+
+# Additional common aria-label attributes
+close-aria = .aria-label = Close
+search-customers-aria = .aria-label = Search customers
+search-products-aria = .aria-label = Search products
+barcode-input-aria = .aria-label = Barcode input
+submit-barcode-aria = .aria-label = Submit barcode
+select-course-aria = .aria-label = Select course
+revert-changes-aria = .aria-label = Revert changes
+add-sample-line-aria = .aria-label = Add a sample line
+previous-page-aria = .aria-label = Previous page
+next-page-aria = .aria-label = Next page
+results-per-page-aria = .aria-label = Results per page
+void-order-aria = .aria-label = Void order
+close-void-aria = .aria-label = Close void dialog
+void-reason-aria = .aria-label = Void reason
+sale-detail-aria = .aria-label = Sale detail
+sale-line-items-aria = .aria-label = Sale line items
+refund-line-items-aria = .aria-label = Refund line items
+orders-aria = .aria-label = Orders
+back-to-orders-aria = .aria-label = Back to orders list
+order-line-items-aria = .aria-label = Order line items
+decrease-card-size-aria = .aria-label = Decrease card size
+increase-card-size-aria = .aria-label = Increase card size
+decrease-font-size-aria = .aria-label = Decrease font size
+increase-font-size-aria = .aria-label = Increase font size
+primary-colour-picker-aria = .aria-label = Primary colour picker
+colour-hex-aria = .aria-label = Colour hex value
+reset-colour-aria = .aria-label = Reset colour to default
+pick-logo-aria = .aria-label = Pick logo file
+reset-appearance-aria = .aria-label = Reset all appearance settings
+save-appearance-aria = .aria-label = Save appearance

@@ -542,7 +542,7 @@ export default function TerminalManagementScreen() {
                 <Localized id="terminal-last-seen"><th>Last Seen</th></Localized>
                 <Localized id="terminal-created"><th>Created</th></Localized>
                 <Localized id="terminal-col-actions" attrs={{ "aria-label": true }}>
-                  <th aria-label="Actions"> </th>
+                  <th aria-label={l10n.getString('actions-aria')}> </th>
                 </Localized>
               </tr>
             </thead>

@@ -67,7 +67,7 @@ export default function CartScreen({
         onClick={handleAddSample}
         disabled={busy}
         aria-busy={busy}
-        aria-label="Add a sample line"
+        aria-label={l10n.getString('add-sample-line-aria')}
       >
         <Localized id="sale-pay-button">
           <span>Pay</span>
