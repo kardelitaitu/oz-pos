@@ -381,29 +381,80 @@ fn raw_permission_literals(src: &str) -> Vec<String> {
     bad
 }
 
+/// Census one module: `.rs` files are counted directly; a subdirectory
+/// (split modules like `topology/`) is aggregated under its directory name
+/// so the pin tracks the *module's* permission surface wherever its files
+/// live. `calls` sums across files; `keys` unions.
+fn census_file(path: &Path) -> (usize, Vec<String>) {
+    let src = fs::read_to_string(path).expect("read command file");
+    let stripped = strip_test_blocks(&src);
+    let raw = raw_permission_literals(&stripped);
+    let label = path.to_string_lossy().into_owned();
+    assert!(
+        raw.is_empty(),
+        "{label} passes raw string-literal permissions to the gate: {raw:?}"
+    );
+    census(&stripped)
+}
+
 fn census_dir(dir: &Path) -> BTreeMap<String, (usize, Vec<String>)> {
-    let mut out = BTreeMap::new();
+    let mut out: BTreeMap<String, (usize, Vec<String>)> = BTreeMap::new();
     for entry in fs::read_dir(dir).expect("read commands dir") {
-        let path = entry.expect("dir entry").path();
-        if path.extension().and_then(|e| e.to_str()) != Some("rs") {
-            continue;
-        }
+        let entry = entry.expect("dir entry");
+        let path = entry.path();
+        let file_type = entry.file_type().expect("dir entry type");
         let stem = path
             .file_stem()
             .expect("file stem")
             .to_string_lossy()
             .into_owned();
+        if file_type.is_dir() {
+            let (dir_calls, dir_keys) = census_dir(&path)
+                .into_values()
+                .reduce(|a, b| {
+                    (a.0 + b.0, {
+                        let mut keys = a.1;
+                        keys.extend(b.1);
+                        keys.sort();
+                        keys.dedup();
+                        keys
+                    })
+                })
+                .unwrap_or((0, Vec::new()));
+            // A split module can keep a same-named root file (e.g. the thin
+            // `topology.rs` beside `topology/`): sum it in rather than let
+            // read_dir order decide which entry wins.
+            match out.get_mut(&stem) {
+                Some((calls, keys)) => {
+                    *calls += dir_calls;
+                    keys.extend(dir_keys);
+                    keys.sort();
+                    keys.dedup();
+                }
+                None => {
+                    out.insert(stem, (dir_calls, dir_keys));
+                }
+            }
+            continue;
+        }
+        if path.extension().and_then(|e| e.to_str()) != Some("rs") {
+            continue;
+        }
         if stem == "authz" || stem == "mod" {
             continue;
         }
-        let src = fs::read_to_string(&path).expect("read command file");
-        let stripped = strip_test_blocks(&src);
-        let raw = raw_permission_literals(&stripped);
-        assert!(
-            raw.is_empty(),
-            "{stem}.rs passes raw string-literal permissions to the gate: {raw:?}"
-        );
-        out.insert(stem, census(&stripped));
+        let (file_calls, file_keys) = census_file(&path);
+        match out.get_mut(&stem) {
+            Some((calls, keys)) => {
+                *calls += file_calls;
+                keys.extend(file_keys);
+                keys.sort();
+                keys.dedup();
+            }
+            None => {
+                out.insert(stem, (file_calls, file_keys));
+            }
+        }
     }
     out
 }
