@@ -635,13 +635,17 @@ describe('AnalyticsScreen layout shell', () => {
     expect(screen.getByText('Layout saved')).toBeTruthy();
   });
 
-  it('fills the scroll progress bar as the main area scrolls', () => {
+  it('sits flush below the menu and fills as the main area scrolls', () => {
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 
-    const main = document.querySelector('.analytics-main') as HTMLElement;
+    // The bar is a sibling between the menu and the main area — directly
+    // below the menu with no wrapper or gap between them.
     const bar = document.querySelector('.analytics-scroll-progress') as HTMLElement;
+    expect(bar.previousElementSibling).toBe(document.querySelector('nav.analytics-menu'));
+    expect(bar.nextElementSibling).toBe(document.querySelector('main.analytics-main'));
     expect(bar.style.width).toBe('0%');
 
+    const main = document.querySelector('.analytics-main') as HTMLElement;
     // Halfway: scrollHeight - clientHeight = 1000, scrollTop = 500
     Object.defineProperty(main, 'scrollHeight', { value: 1600, configurable: true });
     Object.defineProperty(main, 'clientHeight', { value: 600, configurable: true });

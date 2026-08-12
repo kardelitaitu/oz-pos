@@ -826,15 +826,14 @@
   color: var(--analytics-fg-faint);
 }
 
-/* Scroll progress bar — top of the scrollable main area */
+/* Scroll progress bar — flush below the menu (no gap), tracks the main
+   area's scroll position. Width animates smoothly on fill/shrink. */
 .analytics-scroll-progress {
-  position: sticky;
-  top: 0;
-  z-index: 5;
+  flex-shrink: 0;
   height: 3px;
   background: var(--color-primary, #4f46e5);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  transition: width 0.1s linear;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Transient action toasts */

@@ -901,6 +901,10 @@ const [paletteOpen, setPaletteOpen] = useState(false);
         </div>
       </nav>
 
+      {/* Scroll progress — flush against the menu's bottom edge, tracks
+          the main area's scroll position (no gap, no own spacing) */}
+      <div className="analytics-scroll-progress" style={{ width: `${scrollProgress * 100}%` }} aria-hidden="true" />
+
       {/* ══════════════════════════════════════════════════════════
           AREA 3 — Main content: smart analytics card grid
           ══════════════════════════════════════════════════════════ */}
@@ -914,7 +918,6 @@ const [paletteOpen, setPaletteOpen] = useState(false);
           setScrollProgress(max > 0 ? Math.min(1, el.scrollTop / max) : 0);
         }}
       >
-        <div className="analytics-scroll-progress" style={{ width: `${scrollProgress * 100}%` }} />
         {/* View status — card count + workspace + time view */}
         <div className="analytics-status">
           <span className="analytics-status-item">
