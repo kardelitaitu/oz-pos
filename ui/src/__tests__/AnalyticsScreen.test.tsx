@@ -168,10 +168,11 @@ describe('AnalyticsScreen layout shell', () => {
     // Default: daily → 7 weekday buckets
     expect(cellCount()).toBe(7);
 
-    // Weekly → 4 week buckets
+    // Weekly → 24 hours × 7 days
     await userEvent.click(screen.getByRole('radio', { name: 'Weekly' }));
     await new Promise((r) => setTimeout(r, 650));
-    expect(cellCount()).toBe(4);
+    expect(cellCount()).toBe(168);
+    expect(heatmap()?.querySelectorAll('.analytics-weekly-row').length).toBe(25); // header + 24 hours
 
     // Monthly → one cell per day of the current month (28–31)
     await userEvent.click(screen.getByRole('radio', { name: 'Monthly' }));

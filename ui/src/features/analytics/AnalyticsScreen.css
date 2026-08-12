@@ -338,6 +338,37 @@
   width: 100%;
 }
 
+/* Weekly: 24 hour rows × 7 day columns */
+.analytics-heatmap--weekly {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  align-items: center;
+}
+
+.analytics-weekly-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.analytics-weekly-row .analytics-heat-block {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+}
+
+.analytics-weekly-row .analytics-heat-label {
+  width: 20px;
+  text-align: right;
+  font-size: 9px;
+}
+
+.analytics-weekly-hour {
+  width: 20px;
+}
+
 /* Monthly: one cell per day of the month, 7 columns (calendar weeks) */
 .analytics-heatmap--monthly {
   display: grid;

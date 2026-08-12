@@ -142,6 +142,38 @@ export default function AnalyticsScreen() {
   // Intensity is a placeholder until real data is wired.
   const renderHeatmap = () => {
     const aria = l10n.getString('analytics-card-peak-hours');
+    if (granularity === 'weekly') {
+      const rows: JSX.Element[] = [
+        <div key="header" className="analytics-weekly-row">
+          <span className="analytics-heat-label analytics-weekly-hour" />
+          {HEAT_BUCKETS.daily.map((d) => (
+            <span key={d} className="analytics-heat-label">{d}</span>
+          ))}
+        </div>,
+      ];
+      for (let h = 0; h < 24; h++) {
+        rows.push(
+          <div key={h} className="analytics-weekly-row">
+            <span className="analytics-heat-label analytics-weekly-hour">{String(h).padStart(2, '0')}</span>
+            {HEAT_BUCKETS.daily.map((d, di) => (
+              <div
+                key={`${d}-${h}`}
+                className="analytics-heat-cell"
+                data-intensity={(h * 7 + di * 3 + 5) % 5}
+                title={`${d} ${String(h).padStart(2, '0')}:00`}
+              >
+                <div className="analytics-heat-block" />
+              </div>
+            ))}
+          </div>,
+        );
+      }
+      return (
+        <div className="analytics-heatmap analytics-heatmap--weekly" role="img" aria-label={aria}>
+          {rows}
+        </div>
+      );
+    }
     if (granularity === 'monthly') {
       const days = daysInCurrentMonth();
       return (
