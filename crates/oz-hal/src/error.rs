@@ -71,6 +71,21 @@ pub enum HalError {
     Busy,
 }
 
+impl Clone for HalError {
+    fn clone(&self) -> Self {
+        match self {
+            Self::NotFound(s) => Self::NotFound(s.clone()),
+            Self::Disconnected => Self::Disconnected,
+            Self::Io(e) => Self::Io(std::io::Error::new(e.kind(), e.to_string())),
+            Self::Usb(s) => Self::Usb(s.clone()),
+            Self::Bluetooth(s) => Self::Bluetooth(s.clone()),
+            Self::Timeout(n) => Self::Timeout(*n),
+            Self::Protocol(s) => Self::Protocol(s.clone()),
+            Self::Busy => Self::Busy,
+        }
+    }
+}
+
 impl HalError {
     /// Map a `HalError` to its [`HalErrorKind`] discriminator.
     pub fn kind(&self) -> HalErrorKind {
