@@ -150,6 +150,7 @@ pub async fn plan_middleware(
 ///
 /// Each item is inserted with its existing client-generated ID. Duplicate
 /// IDs (UNIQUE constraint violation) are reported as `Rejected`.
+#[tracing::instrument(skip(state, items), fields(tenant_id = claims.tenant_id.as_deref().unwrap_or("default"), item_count = items.len()))]
 async fn push_handler(
     State(state): State<SyncState>,
     Extension(claims): Extension<ApiTokenClaims>,
@@ -227,6 +228,7 @@ async fn push_handler(
 /// `cursor` from the previous page's `next_cursor` to fetch the next page.
 /// Each page returns at most 500 items. When `next_cursor` is null, all
 /// pages have been consumed.
+#[tracing::instrument(skip(state, req), fields(tenant_id = claims.tenant_id.as_deref().unwrap_or("default"), since = req.since.as_deref().unwrap_or("null")))]
 async fn pull_handler(
     State(state): State<SyncState>,
     Extension(claims): Extension<ApiTokenClaims>,
@@ -372,6 +374,7 @@ async fn pull_handler(
 /// `tenant_id` from JWT claims (same pattern as `create_product` in
 /// `oz-api/src/routes/products.rs`). New tax rates and users are
 /// correctly scoped per-tenant for snapshot isolation.
+#[tracing::instrument(skip(state), fields(tenant_id = claims.tenant_id.as_deref().unwrap_or("default")))]
 async fn snapshot_handler(
     State(state): State<SyncState>,
     Extension(claims): Extension<ApiTokenClaims>,
@@ -527,6 +530,7 @@ async fn snapshot_handler(
 }
 
 /// `GET /api/sync/status` — return server health, version, and pending queue depth.
+#[tracing::instrument(skip(state), fields(tenant_id = claims.tenant_id.as_deref().unwrap_or("default")))]
 async fn status_handler(
     State(state): State<SyncState>,
     Extension(claims): Extension<ApiTokenClaims>,
