@@ -5,7 +5,23 @@ import {
   analyticsQueryKey,
   cardQueryKey,
   clearAnalyticsCache,
+  ANALYTICS_CACHE_STORAGE_KEY,
+  ANALYTICS_CACHE_VERSION,
+  type CachePersistence,
 } from '@/features/analytics/analytics-cache';
+
+/** In-memory storage double for persistence tests. */
+function memStorage(): { store: Map<string, string>; api: CachePersistence } {
+  const store = new Map<string, string>();
+  return {
+    store,
+    api: {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => { store.set(k, v); },
+      removeItem: (k: string) => { store.delete(k); },
+    },
+  };
+}
 
 describe('TtlCache', () => {
   beforeEach(() => {
@@ -137,6 +153,117 @@ describe('TtlCache metrics', () => {
     expect(cache.get('a')).toBeUndefined(); // miss
     expect(cache.metrics().perKey.get('a')?.hits).toBe(1);
     expect(cache.metrics().perKey.get('a')?.misses).toBe(1);
+  });
+});
+
+describe('TtlCache sessionStorage persistence', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('hydrates a fresh entry written by an earlier instance', () => {
+    const { api } = memStorage();
+    const writer = new TtlCache<string>(1000, 200, api);
+    writer.set('a', 'hello');
+
+    // A brand-new instance (e.g. after an in-tab navigation) reads the
+    // same storage and serves the query from the snapshot.
+    const reader = new TtlCache<string>(1000, 200, api);
+    expect(reader.get('a')).toEqual({ value: 'hello', fresh: true });
+    expect(reader.hasFresh('a')).toBe(true);
+  });
+
+  it('keeps the original TTL: expired snapshots hydrate as stale, not fresh', () => {
+    const { api } = memStorage();
+    const writer = new TtlCache<string>(1000, 200, api);
+    writer.set('a', 'hello');
+
+    vi.advanceTimersByTime(1001);
+    const reader = new TtlCache<string>(1000, 200, api);
+    // Value still readable (stale-while-revalidate), but not fresh — a
+    // back-navigation past the TTL must refetch.
+    expect(reader.get('a')).toEqual({ value: 'hello', fresh: false });
+    expect(reader.hasFresh('a')).toBe(false);
+  });
+
+  it('discards snapshots stamped with a different version', () => {
+    const { api } = memStorage();
+    const writer = new TtlCache<string>(1000, 200, api, 'oz-test-cache', 1);
+    writer.set('a', 'old');
+
+    // Same storage key, newer schema version → old cache is dropped.
+    const reader = new TtlCache<string>(1000, 200, api, 'oz-test-cache', 2);
+    expect(reader.get('a')).toBeUndefined();
+    expect(reader.size).toBe(0);
+  });
+
+  it('ignores corrupt JSON instead of crashing', () => {
+    const { api, store } = memStorage();
+    store.set('oz-test-cache', 'not-json{{{');
+    const cache = new TtlCache<string>(1000, 200, api, 'oz-test-cache', 1);
+    expect(cache.size).toBe(0);
+    expect(cache.get('a')).toBeUndefined();
+  });
+
+  it('persists set and invalidate, and removes the key on clear', () => {
+    const { api, store } = memStorage();
+    const cache = new TtlCache<string>(1000, 200, api, 'oz-test-cache', 1);
+    cache.set('a', '1');
+    expect(store.has('oz-test-cache')).toBe(true);
+
+    cache.invalidate('a');
+    const reader = new TtlCache<string>(1000, 200, api, 'oz-test-cache', 1);
+    expect(reader.get('a')).toBeUndefined();
+
+    cache.set('b', '2');
+    cache.clear();
+    expect(store.has('oz-test-cache')).toBe(false);
+  });
+
+  it('degrades gracefully when storage writes fail (quota)', () => {
+    const failing: CachePersistence = {
+      getItem: () => null,
+      setItem: () => { throw new Error('QuotaExceededError'); },
+      removeItem: () => { throw new Error('QuotaExceededError'); },
+    };
+    const cache = new TtlCache<string>(1000, 200, failing, 'oz-test-cache', 1);
+    expect(() => cache.set('a', '1')).not.toThrow();
+    expect(cache.get('a')).toEqual({ value: '1', fresh: true });
+    expect(() => cache.clear()).not.toThrow();
+  });
+
+  it('degrades gracefully when storage reads fail (private mode)', () => {
+    const failing: CachePersistence = {
+      getItem: () => { throw new Error('SecurityError'); },
+      setItem: () => { throw new Error('SecurityError'); },
+      removeItem: () => { throw new Error('SecurityError'); },
+    };
+    expect(() => new TtlCache<string>(1000, 200, failing)).not.toThrow();
+    const cache = new TtlCache<string>(1000, 200, failing);
+    cache.set('a', '1');
+    expect(cache.get('a')).toEqual({ value: '1', fresh: true });
+  });
+
+  it('shared analytics cache persists to the real sessionStorage', () => {
+    const key = ANALYTICS_CACHE_STORAGE_KEY;
+    clearAnalyticsCache();
+    expect(sessionStorage.getItem(key)).toBeNull();
+
+    analyticsDataCache.set('persist:smoke', { ok: true });
+    const raw = sessionStorage.getItem(key);
+    expect(raw).not.toBeNull();
+    const snap = JSON.parse(raw!) as { version: number; entries: Array<[string, { value: unknown }]> };
+    expect(snap.version).toBe(ANALYTICS_CACHE_VERSION);
+    expect(snap.entries.some(([k]) => k === 'persist:smoke')).toBe(true);
+
+    // clearAnalyticsCache wipes both memory and the snapshot.
+    clearAnalyticsCache();
+    expect(sessionStorage.getItem(key)).toBeNull();
+    expect(analyticsDataCache.size).toBe(0);
   });
 });
 
