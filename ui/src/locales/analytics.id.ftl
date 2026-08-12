@@ -86,3 +86,5 @@ analytics-card-tables = Perputaran Meja
 analytics-card-occupancy = Okupansi Meja
 analytics-card-waitstaff = Pelayan Terbaik
 analytics-card-voids = Item yang Di-void
+analytics-card-expand-aria = Perluas kartu
+analytics-card-restore-aria = Pulihkan ukuran kartu

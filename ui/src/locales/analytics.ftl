@@ -86,3 +86,5 @@ analytics-card-tables = Table Turnover
 analytics-card-occupancy = Table Occupancy
 analytics-card-waitstaff = Top Waitstaff
 analytics-card-voids = Voided Items
+analytics-card-expand-aria = Expand card
+analytics-card-restore-aria = Restore card

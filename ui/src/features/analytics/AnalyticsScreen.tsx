@@ -83,6 +83,7 @@ export default function AnalyticsScreen() {
   const [customTo, setCustomTo] = useState(isoToday());
   const [calculating, setCalculating] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const calcTimer = useRef<ReturnType<typeof setTimeout>>();
 
   const MIN_ZOOM = 0.6;
@@ -109,6 +110,13 @@ export default function AnalyticsScreen() {
   const visibleCards = ANALYTICS_CARDS.filter(
     (c) => c.workspace === null || c.workspace === workspaceView,
   );
+
+  const cardId = (c: AnalyticsCard) => `${c.key}-${c.workspace ?? 'shared'}`;
+
+  // When a card is expanded, only it is shown; otherwise all visible cards
+  const displayedCards = expandedKey && visibleCards.some((c) => cardId(c) === expandedKey)
+    ? visibleCards.filter((c) => cardId(c) === expandedKey)
+    : visibleCards;
 
   // Smart heatmap — bucket cells change with the selected granularity.
   // Intensity is a placeholder until real data is wired.
@@ -312,6 +320,7 @@ export default function AnalyticsScreen() {
             onChange={(e) => {
               setWorkspaceView(e.target.value as WorkspaceView);
               setGranularity('daily');
+              setExpandedKey(null);
             }}
             aria-label={l10n.getString('analytics-workspace-select-aria')}
           >
@@ -429,15 +438,45 @@ export default function AnalyticsScreen() {
           ══════════════════════════════════════════════════════════ */}
       <main className="analytics-main">
         <div className="analytics-grid" style={{ zoom: zoomLevel }}>
-          {visibleCards.map((card) => (
+          {displayedCards.map((card) => {
+            const cid = cardId(card);
+            const isExpanded = expandedKey === cid;
+            return (
             <div
-              key={`${card.key}-${card.workspace ?? 'shared'}`}
-              className={`analytics-card${card.size ? ` analytics-card--${card.size}` : ''}`}
+              key={cid}
+              className={`analytics-card${card.size ? ` analytics-card--${card.size}` : ''}${isExpanded ? ' analytics-card--expanded' : ''}`}
             >
               <div className="analytics-card-header">
                 <Localized id={card.titleKey}>
                   <h2 className="analytics-card-title">{card.title}</h2>
                 </Localized>
+                <div className="analytics-card-actions">
+                  <button
+                    type="button"
+                    className="analytics-card-action"
+                    onClick={() => setExpandedKey(isExpanded ? null : cid)}
+                    aria-label={l10n.getString(isExpanded ? 'analytics-card-restore-aria' : 'analytics-card-expand-aria')}
+                    title={l10n.getString(isExpanded ? 'analytics-card-restore-aria' : 'analytics-card-expand-aria')}
+                  >
+                    {isExpanded ? (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                        strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
+                        <polyline points="4 14 10 14 10 20" />
+                        <polyline points="20 10 14 10 14 4" />
+                        <line x1="14" y1="10" x2="21" y2="3" />
+                        <line x1="3" y1="21" x2="10" y2="14" />
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                        strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
+                        <polyline points="15 3 21 3 21 9" />
+                        <polyline points="9 21 3 21 3 15" />
+                        <line x1="21" y1="3" x2="14" y2="10" />
+                        <line x1="3" y1="21" x2="10" y2="14" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
               </div>
               <div className="analytics-card-body">
                 {calculating ? (
@@ -458,7 +497,8 @@ export default function AnalyticsScreen() {
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </main>
 

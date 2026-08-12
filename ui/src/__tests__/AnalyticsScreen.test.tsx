@@ -184,6 +184,28 @@ describe('AnalyticsScreen layout shell', () => {
     expect(cellCount()).toBe(4);
   });
 
+  it('expands a card to fill the main area and restores it', async () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    // Wait for the initial recalculation skeleton to clear
+    await new Promise((r) => setTimeout(r, 650));
+
+    // All cards visible before expanding
+    expect(screen.getByText('Revenue Overview')).toBeTruthy();
+
+    // Expand the Revenue card (first expand button)
+    const expandButtons = screen.getAllByRole('button', { name: 'Expand card' });
+    await userEvent.click(expandButtons[1]);
+
+    // Only the expanded card remains visible, with a restore button
+    expect(screen.getByRole('button', { name: 'Restore card' })).toBeTruthy();
+    expect(screen.getByText('Revenue Overview')).toBeTruthy();
+
+    // Restore brings the grid back
+    await userEvent.click(screen.getByRole('button', { name: 'Restore card' }));
+    expect(screen.getAllByRole('button', { name: 'Expand card' }).length).toBeGreaterThan(0);
+  });
+
   it('renders the analytics card grid with workspace-appropriate titles', () => {
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 

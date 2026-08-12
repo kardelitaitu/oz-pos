@@ -258,8 +258,45 @@
   grid-column: 1 / -1;
 }
 
+/* Expanded card fills the main area */
+.analytics-card--expanded {
+  grid-column: 1 / -1;
+  min-height: 70vh;
+}
+
 .analytics-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 14px 18px 0;
+}
+
+.analytics-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.analytics-card-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.analytics-card-action:hover {
+  background: #f1f5f9;
+  color: #334155;
 }
 
 .analytics-card-title {
