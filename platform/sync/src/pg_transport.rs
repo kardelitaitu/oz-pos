@@ -303,7 +303,7 @@ impl PgTransport {
 
     /// Pull updates from the remote PostgreSQL database.
     ///
-    /// Returns up to [`PG_PULL_PAGE_SIZE`] items ordered by
+    /// Returns up to `PG_PULL_PAGE_SIZE` items ordered by
     /// `(created_at, id)` — the composite cursor key — so rows sharing an
     /// exact `created_at` timestamp are never skipped. The `since` anchor
     /// filters on `created_at` (not `synced_at`), so rows whose remote
