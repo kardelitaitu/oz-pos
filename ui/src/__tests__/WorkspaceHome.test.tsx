@@ -5,10 +5,16 @@
 // based access control, and per-workspace accent colors.
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { screen, waitFor, fireEvent, within } from '@testing-library/react';
+import { screen, waitFor, fireEvent, within, configure } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithFluent } from '@/__tests__/test-utils/render';
 import WorkspaceHome from '@/features/workspaces/WorkspaceHome';
+
+// WorkspaceHome renders a heavy multi-section screen driven by async
+// context mocks; under parallel CI load a full render can exceed the
+// default 1s waitFor timeout (the same flake class as SettingsPage).
+// Vitest isolates module state per file, so this does not leak.
+configure({ asyncUtilTimeout: 5000 });
 
 // ── Hoisted mocks ──────────────────────────────────────────────
 

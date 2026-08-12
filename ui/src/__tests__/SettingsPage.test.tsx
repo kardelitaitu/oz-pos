@@ -14,10 +14,17 @@
 // using fireEvent.
 
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
+import { screen, waitFor, cleanup, fireEvent, configure } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { renderWithProvidersSync } from '@/__tests__/test-utils/render';
+
+// The page mounts many IPC-driven sections; under parallel CI load a full
+// render + microtask flush can exceed the default 1s waitFor timeout, which
+// surfaced as intermittent flakes. Give this file's waitFor/findBy calls a
+// comfortable 5s window (vitest isolates module state per file, so this
+// does not leak into other suites).
+configure({ asyncUtilTimeout: 5000 });
 import settingsFtl from '@/locales/settings.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 import SettingsPage from '@/features/settings/SettingsPage';

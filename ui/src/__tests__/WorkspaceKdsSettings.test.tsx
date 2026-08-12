@@ -12,6 +12,7 @@ import type { ReactNode, ReactElement } from 'react';
 import { LocalizationProvider } from '@fluent/react';
 import { ToastProvider } from '@/frontend/shared/Toast';
 import { WorkspaceKdsSettings } from '@/features/settings/workspace-cards/WorkspaceKdsSettings';
+import { getSetting } from '@/api/settings';
 
 const testL10n = {
   bundles: [], areBundlesEmpty: () => true,
@@ -74,6 +75,15 @@ vi.mock('../features/settings/SettingsSelect', () => ({
       {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
   ),
+}));
+
+// Resolve the settings IPC deterministically: the dev-mock invoke adds a
+// fixed 50ms real-timer delay per call, and its get_setting returns ''
+// (which parses to the card defaults). The regression test below also
+// overrides a single call via mockImplementationOnce.
+vi.mock('@/api/settings', () => ({
+  getSetting: vi.fn(() => Promise.resolve(null)),
+  setSettings: vi.fn(() => Promise.resolve()),
 }));
 
 function Wrapper({ children }: { children: ReactNode }) {
@@ -154,6 +164,32 @@ describe('WorkspaceKdsSettings', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /save/i })).not.toBeDisabled());
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled(), { timeout: 3000 });
+  });
+
+  it('keeps a toggle made before the settings load lands (no draft-overwrite race)', async () => {
+    let releaseLoad!: (v: string | null) => void;
+    // Gate the first getSetting call (kds.sound_enabled) so the whole load
+    // stays in flight; the remaining four calls resolve via the default
+    // mock (null). Releasing it as 'false' makes the *untouched* sound
+    // toggle flip only once the load actually lands — our landing signal.
+    vi.mocked(getSetting).mockImplementationOnce(
+      () => new Promise<string | null>((resolve) => { releaseLoad = resolve; }),
+    );
+
+    renderCard();
+    const toggle = document.getElementById('kds-auto-ack') as HTMLInputElement;
+    // Edit while the load is still in flight.
+    fireEvent.click(toggle);
+    expect(toggle.checked).toBe(true);
+
+    // Let the load land: the untouched sound toggle (persisted 'false')
+    // flips to unchecked — proving the loaded values were applied.
+    releaseLoad('false');
+    const sound = document.getElementById('kds-sound') as HTMLInputElement;
+    await waitFor(() => expect(sound.checked).toBe(false));
+
+    // The user's auto-ack toggle must NOT have been reverted by the load.
+    expect(toggle.checked).toBe(true);
   });
 
   it('hides Save button in inspector-drawer variant', () => {
