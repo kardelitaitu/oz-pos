@@ -160,11 +160,14 @@ export default function AnalyticsScreen() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [allCollapsed, setAllCollapsed] = useState(false);
-  const [paletteOpen, setPaletteOpen] = useState(false);
+const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState('');
   const [paletteIndex, setPaletteIndex] = useState(0);
   const [scrollProgress, setScrollProgress] = useState(0);
   const [toasts, setToasts] = useState<{ id: number; message: string }[]>([]);
+  const [menuCardId, setMenuCardId] = useState<string | null>(null);
+  const [collapsedCards, setCollapsedCards] = useState<Set<string>>(new Set());
+  const [zoomPopover, setZoomPopover] = useState(false);
   const paletteInputRef = useRef<HTMLInputElement | null>(null);
   const toastId = useRef(0);
   const [cardOrder, setCardOrder] = useState<string[]>([]);
@@ -232,6 +235,8 @@ export default function AnalyticsScreen() {
       } else if (k === 'Escape') {
         setExpandedKey(null);
         setShowShortcuts(false);
+        setMenuCardId(null);
+        setZoomPopover(false);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -300,6 +305,38 @@ export default function AnalyticsScreen() {
     order.splice(j, 0, from);
     persistOrder(order);
     showToast(l10n.getString('analytics-toast-layout-saved'));
+  };
+
+  const moveCard = (id: string, dir: 'up' | 'down' | 'top' | 'bottom') => {
+    const order = [...cardOrder];
+    const i = order.indexOf(id);
+    if (i < 0) return;
+    if (dir === 'up' && i > 0) {
+      order.splice(i, 1);
+      order.splice(i - 1, 0, id);
+    } else if (dir === 'down' && i < order.length - 1) {
+      order.splice(i, 1);
+      order.splice(i + 1, 0, id);
+    } else if (dir === 'top' && i > 0) {
+      order.splice(i, 1);
+      order.unshift(id);
+    } else if (dir === 'bottom' && i < order.length - 1) {
+      order.splice(i, 1);
+      order.push(id);
+    } else {
+      return;
+    }
+    persistOrder(order);
+    showToast(l10n.getString('analytics-toast-layout-saved'));
+  };
+
+  const toggleCardCollapsed = (id: string) => {
+    setCollapsedCards((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   const isDefaultOrder = JSON.stringify(cardOrder) === JSON.stringify(defaultOrder);
@@ -874,12 +911,34 @@ export default function AnalyticsScreen() {
             <button
               type="button"
               className="analytics-zoom-badge"
-              onClick={zoomReset}
-              aria-label={l10n.getString('analytics-action-zoom-reset-aria')}
-              title={l10n.getString('analytics-action-zoom-reset-aria')}
+              onClick={() => setZoomPopover((o) => !o)}
+              aria-label={l10n.getString('analytics-zoom-slider-aria')}
+              title={l10n.getString('analytics-zoom-slider-aria')}
             >
               {Math.round(zoomLevel * 100)}%
             </button>
+            {zoomPopover && (
+              <div className="analytics-zoom-popover" role="dialog" aria-label={l10n.getString('analytics-zoom-slider-aria')}>
+                <input
+                  type="range"
+                  className="analytics-zoom-slider"
+                  min={ZOOM_MIN * 100}
+                  max={ZOOM_MAX * 100}
+                  step={ZOOM_STEP * 100}
+                  value={Math.round(zoomLevel * 100)}
+                  onChange={(e) => setZoomLevel(Number(e.target.value) / 100)}
+                  aria-label={l10n.getString('analytics-zoom-slider-aria')}
+                />
+                <span className="analytics-zoom-popover-value">{Math.round(zoomLevel * 100)}%</span>
+                <button
+                  type="button"
+                  className="analytics-zoom-reset-btn"
+                  onClick={zoomReset}
+                >
+                  {l10n.getString('analytics-action-zoom-reset-aria')}
+                </button>
+              </div>
+            )}
             <button
               type="button"
               className="analytics-action-btn"
@@ -980,8 +1039,13 @@ export default function AnalyticsScreen() {
           {orderedCards.map((card) => {
             const cid = cardId(card);
             const isExpanded = expandedKey === cid;
+            const isCollapsed = !isExpanded && (allCollapsed || collapsedCards.has(cid));
             const isDragging = dragId === cid;
             const isDropTarget = overId === cid;
+            const menuOpen = menuCardId === cid;
+            const idx = cardOrder.indexOf(cid);
+            const isFirst = idx === 0;
+            const isLast = idx === cardOrder.length - 1;
             return (
             <div
               key={cid}
@@ -991,7 +1055,7 @@ export default function AnalyticsScreen() {
               onDragLeave={() => setOverId((o) => (o === cid ? null : o))}
               onDrop={(e) => { e.preventDefault(); reorderCard(dragId ?? '', cid); setDragId(null); setOverId(null); }}
               onDragEnd={() => { setDragId(null); setOverId(null); }}
-              className={`analytics-card${card.size ? ` analytics-card--${card.size}` : ''}${isExpanded ? ' analytics-card--expanded' : ''}${allCollapsed ? ' analytics-card--collapsed' : ''}${isDragging ? ' analytics-card--dragging' : ''}${isDropTarget ? ' analytics-card--drop-target' : ''}`}
+              className={`analytics-card${card.size ? ` analytics-card--${card.size}` : ''}${isExpanded ? ' analytics-card--expanded' : ''}${isCollapsed ? ' analytics-card--collapsed' : ''}${isDragging ? ' analytics-card--dragging' : ''}${isDropTarget ? ' analytics-card--drop-target' : ''}`}
             >
               <div className="analytics-card-header">
                 <span className="analytics-card-grip" aria-hidden="true">
@@ -1036,6 +1100,56 @@ export default function AnalyticsScreen() {
                       </svg>
                     )}
                   </button>
+                  <button
+                    type="button"
+                    className={`analytics-card-action${menuOpen ? ' analytics-card-action--active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenuCardId(menuOpen ? null : cid);
+                    }}
+                    aria-label={l10n.getString('analytics-card-menu-aria')}
+                    aria-haspopup="menu"
+                    aria-expanded={menuOpen}
+                    title={l10n.getString('analytics-card-menu-aria')}
+                  >
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" aria-hidden="true">
+                      <circle cx="5" cy="12" r="1.6" />
+                      <circle cx="12" cy="12" r="1.6" />
+                      <circle cx="19" cy="12" r="1.6" />
+                    </svg>
+                  </button>
+                  {menuOpen && (
+                    <div className="analytics-card-menu" role="menu" aria-label={l10n.getString('analytics-card-menu-aria')}>
+                      <button type="button" role="menuitem" disabled={isFirst}
+                        onClick={() => { moveCard(cid, 'up'); setMenuCardId(null); }}>
+                        {l10n.getString('analytics-menu-move-up')}
+                      </button>
+                      <button type="button" role="menuitem" disabled={isLast}
+                        onClick={() => { moveCard(cid, 'down'); setMenuCardId(null); }}>
+                        {l10n.getString('analytics-menu-move-down')}
+                      </button>
+                      <button type="button" role="menuitem" disabled={isFirst}
+                        onClick={() => { moveCard(cid, 'top'); setMenuCardId(null); }}>
+                        {l10n.getString('analytics-menu-move-top')}
+                      </button>
+                      <button type="button" role="menuitem" disabled={isLast}
+                        onClick={() => { moveCard(cid, 'bottom'); setMenuCardId(null); }}>
+                        {l10n.getString('analytics-menu-move-bottom')}
+                      </button>
+                      <div className="analytics-card-menu-sep" role="separator" />
+                      <button type="button" role="menuitem"
+                        onClick={() => {
+                          setExpandedKey((current) => nextExpandedKey(current, cid));
+                          setMenuCardId(null);
+                        }}>
+                        {l10n.getString(isExpanded ? 'analytics-card-restore-aria' : 'analytics-card-expand-aria')}
+                      </button>
+                      <button type="button" role="menuitem"
+                        onClick={() => { toggleCardCollapsed(cid); setMenuCardId(null); }}>
+                        {l10n.getString(isCollapsed ? 'analytics-menu-show-card' : 'analytics-menu-collapse-card')}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="analytics-card-body" ref={isExpanded ? expandedBodyRef : undefined}>
@@ -1082,6 +1196,11 @@ export default function AnalyticsScreen() {
           </button>
         )}
       </main>
+
+      {/* Outside-click backdrop for the per-card options menu */}
+      {menuCardId && (
+        <div className="analytics-menu-backdrop" onClick={() => setMenuCardId(null)} />
+      )}
 
       {/* Transient action feedback toasts */}
       {toasts.length > 0 && (

@@ -171,18 +171,22 @@ describe('AnalyticsScreen layout shell', () => {
     expect(grid.style.zoom).toBe('0.8');
   });
 
-  it('shows a zoom badge that resets zoom on click', () => {
+  it('shows a zoom badge that opens a slider popover and resets zoom', () => {
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 
     const grid = document.querySelector('.analytics-grid') as HTMLElement;
-    const badge = screen.getByRole('button', { name: 'Reset zoom to 100%' });
+    const badge = screen.getByRole('button', { name: 'Zoom level' });
     expect(badge.textContent).toBe('100%');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
-    expect(badge.textContent).toBe('120%');
-    expect(grid.style.zoom).toBe('1.2');
-
+    // Open the slider popover and drag to 120%
     fireEvent.click(badge);
+    const slider = screen.getByRole('slider', { name: 'Zoom level' });
+    fireEvent.change(slider, { target: { value: '120' } });
+    expect(grid.style.zoom).toBe('1.2');
+    expect(badge.textContent).toBe('120%');
+
+    // Reset from inside the popover
+    fireEvent.click(screen.getByRole('button', { name: 'Reset zoom to 100%' }));
     expect(badge.textContent).toBe('100%');
     expect(grid.style.zoom).toBe('1');
   });
@@ -314,6 +318,38 @@ describe('AnalyticsScreen layout shell', () => {
     expect(cards()[0]!.querySelector('.analytics-card-title')?.textContent).toBe('Heat Map');
   });
 
+  it('moves a card up and down from its options menu', () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    const titles = () => [...document.querySelectorAll('.analytics-card-title')].map((t) => t.textContent);
+    expect(titles()[0]).toBe('Heat Map');
+
+    // Open the menu on the first card and move it down
+    fireEvent.click(screen.getAllByRole('button', { name: 'Card options' })[0]!);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move down' }));
+    expect(titles()[0]).toBe('Revenue Overview');
+    expect(titles()[1]).toBe('Heat Map');
+
+    // Move it back up
+    fireEvent.click(screen.getAllByRole('button', { name: 'Card options' })[1]!);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move up' }));
+    expect(titles()[0]).toBe('Heat Map');
+  });
+
+  it('collapses a single card from its options menu', () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    expect(document.querySelectorAll('.analytics-card--collapsed').length).toBe(0);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Card options' })[0]!);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Collapse card' }));
+    expect(document.querySelectorAll('.analytics-card--collapsed').length).toBe(1);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Card options' })[0]!);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Show card' }));
+    expect(document.querySelectorAll('.analytics-card--collapsed').length).toBe(0);
+  });
+
   it('reorders cards by drag and persists the layout', () => {
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 
@@ -380,8 +416,9 @@ describe('AnalyticsScreen layout shell', () => {
     vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
 
-    // Zoom in then reset — reset shows a toast
+    // Zoom in, then open the popover and reset — reset shows a toast
     fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom level' }));
     fireEvent.click(screen.getByRole('button', { name: 'Reset zoom to 100%' }));
     expect(screen.getByText('Zoom reset to 100%')).toBeTruthy();
 
