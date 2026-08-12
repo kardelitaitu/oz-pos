@@ -132,6 +132,11 @@ export function revenueLabel(g: Granularity, raw: string, multiYear = false): st
   if (g === 'monthly' || g === 'yearly') {
     return multiYear ? `${raw.slice(5)}/${raw.slice(2, 4)}` : raw.slice(5);
   }
+  if (g === 'weekly') {
+    // "MM-DD" of the Monday week-start can repeat across years on a
+    // multi-year range — carry the year then too.
+    return multiYear ? `${raw.slice(5)}/${raw.slice(2, 4)}` : raw.slice(5);
+  }
   return raw.slice(5);
 }
 

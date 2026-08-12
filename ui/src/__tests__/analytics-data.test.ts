@@ -497,6 +497,25 @@ describe('loaders — raw rows mapped to card shapes', () => {
     expect(trend.sale_count).toBe(30);
   });
 
+  it('loadRevenue labels weeks with the year on multi-year ranges', async () => {
+    const { getWeeklyRevenue } = await import('@/api/reports');
+    (getWeeklyRevenue as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { week_start: '2025-12-29', total_minor: 500, currency: 'USD', sale_count: 5, cogs_minor: 0, gross_profit_minor: 500, gross_margin_percent: 100 },
+      { week_start: '2026-01-12', total_minor: 900, currency: 'USD', sale_count: 9, cogs_minor: 0, gross_profit_minor: 900, gross_margin_percent: 100 },
+    ]);
+    const buckets = await loadRevenue({
+      workspace: 'retail', granularity: 'weekly', from: '2025-12-29', to: '2026-01-19', sessionToken: 's',
+    });
+    // Bare "MM-DD" week-start labels could repeat across years — the year
+    // must show once the range spans calendar years.
+    expect(buckets).toEqual([
+      { label: '12-29/25', value: 500 },
+      { label: '01-05/26', value: 0 },
+      { label: '01-12/26', value: 900 },
+      { label: '01-19/26', value: 0 },
+    ]);
+  });
+
   it('loadRevenue labels months with the year when the range spans years', async () => {
     const { getMonthlyRevenue } = await import('@/api/reports');
     (getMonthlyRevenue as ReturnType<typeof vi.fn>).mockResolvedValue([
