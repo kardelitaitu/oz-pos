@@ -119,6 +119,7 @@ const TOPOLOGY_EN: Record<string, string> = {
   'topology-validation-invalid-warehouse-operation-source': 'Warehouse Operation In must receive an Operation feed from Retail POS.',
   'topology-validation-missing-branch': 'Add exactly one Branch Location node.',
   'topology-validation-multiple-branches': 'Keep exactly one Branch Location node in this graph.',
+  'topology-validation-branch-identity': 'This Branch Location is missing its store profile identity.',
   'topology-validation-invalid-purpose': 'This workspace purpose is not supported by its technical type.',
   'topology-node-stock-wire-hint': "Connect a workspace's Stock Out or another Warehouse's output to this Warehouse's Stock In.",
   'topology-validation-unknown-wire-endpoint': 'This wire references a node that is not in the graph.',
@@ -8234,6 +8235,109 @@ describe('NodeTopologyEditor — clipboard & bulk duplication', () => {
     fireEvent.keyDown(document, { key: 'v', ctrlKey: true });
     await waitFor(() => expect(nodeCount()).toBe(5));
     expect(nodePos()).toContainEqual({ x: 128, y: 188 });
+  });
+
+  it('drops a half-copied wire — a partial selection never pastes a dangling endpoint', async () => {
+    // Canonical load (the branch has identity, so the live-validation gate
+    // is ACTIVE — a corrupted wire would surface as a graph banner).
+    // ws-1's wire w-1 has an unselected endpoint (store-1): copying only
+    // ws-1 must not carry it into the clip. The both-endpoints filter at
+    // COPY time is the structural guarantee against a paste that dangles.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', store_profile_id: 'store-1', x: 80, y: 140 },
+        { id: 'ws-1', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'ws-2', type: 'workspace', name: 'POS B', x: 680, y: 140, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [
+        { id: 'w-1', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+        { id: 'w-2', from_node_id: 'store-1', to_node_id: 'ws-2', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+      ],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+    selectNode(1); // ws-1
+
+    fireEvent.keyDown(document, { key: 'c', ctrlKey: true });
+    fireEvent.keyDown(document, { key: 'v', ctrlKey: true });
+
+    await waitFor(() => expect(getNodeCount()).toBe(4)); // 3 + the ws-1 copy
+    // NO new wire landed — the half-copied w-1 was dropped at copy, so the
+    // paste could not create a wire referencing an absent node. (The ws-1
+    // copy's missing Location In is a NODE note; a corrupted pasted wire
+    // would instead surface as the graph-level unknown-wire banner.)
+    expect(getWireCount()).toBe(2);
+    expect(document.querySelector('.topology-validation-banner')).toBeNull();
+  });
+
+  it('a fully-copied wire pastes remapped to the copies — never a dangling endpoint', async () => {
+    // store-1 + ws-1 selected: w-1 (both endpoints covered) is copied; w-2
+    // (ws-2 unselected) is dropped. The pasted w-1 must connect the two
+    // NEW copies via the idMap remap (so the remapped pair cannot dangle),
+    // and the whole paste is ONE undo unit. Canonical load keeps the
+    // validation gate active so any broken wire would surface as a banner.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', store_profile_id: 'store-1', x: 80, y: 140 },
+        { id: 'ws-1', type: 'workspace', name: 'POS A', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+        { id: 'ws-2', type: 'workspace', name: 'POS B', x: 680, y: 140, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [
+        { id: 'w-1', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+        { id: 'w-2', from_node_id: 'store-1', to_node_id: 'ws-2', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+      ],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+    selectNode(0);
+    selectNode(1, true);
+
+    fireEvent.keyDown(document, { key: 'c', ctrlKey: true });
+    fireEvent.keyDown(document, { key: 'v', ctrlKey: true });
+
+    await waitFor(() => expect(getNodeCount()).toBe(5)); // 3 + 2 copies
+    expect(getWireCount()).toBe(3); // 2 original + the remapped w-1
+    expect(document.querySelector('.topology-validation-banner')).toBeNull();
+
+    // One undo removes the copies AND the remapped wire together.
+    fireEvent.keyDown(document, { key: 'z', ctrlKey: true });
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+    expect(getWireCount()).toBe(2);
+  });
+
+  it('a pasted Branch Location copy is identity-less — never a second branch impersonation', async () => {
+    // sanitizeCopiedNode strips storeProfileId on every duplicate route, so
+    // the pasted store is a diagram-only card: the graph still has exactly
+    // one canonical branch, and validation flags the copy's missing
+    // identity instead of letting it impersonate the real branch.
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'store-1', type: 'store', name: 'Branch', store_profile_id: 'store-1', x: 80, y: 140 },
+        { id: 'ws-1', type: 'workspace', name: 'POS #1', x: 380, y: 140, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [
+        { id: 'w-1', from_node_id: 'store-1', to_node_id: 'ws-1', from_port_id: 'location-out', to_port_id: 'location-in', relationship_type: 'location', direction: 'one-way' },
+      ],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+    selectNode(0); // the canonical store
+
+    fireEvent.keyDown(document, { key: 'c', ctrlKey: true });
+    fireEvent.keyDown(document, { key: 'v', ctrlKey: true });
+
+    await waitFor(() => expect(getNodeCount()).toBe(3));
+    // The pasted copies became the selection — the store copy is the only
+    // selected card. Its visible note leads with the multiple-branch
+    // guidance, and the note's title (all errors) carries the identity
+    // error — the copy is diagram-only, never a second branch impersonation.
+    const selected = [...document.querySelectorAll('.topology-node.node-selected')] as HTMLElement[];
+    expect(selected).toHaveLength(1);
+    expect(
+      within(selected[0]!).getByText('Keep exactly one Branch Location node in this graph.'),
+    ).toBeInTheDocument();
+    const note = selected[0]!.querySelector('.node-validation-note') as HTMLElement | null;
+    expect(note?.title).toContain('missing its store profile identity');
   });
 
   it('Ctrl+A selects every node on the canvas', async () => {
