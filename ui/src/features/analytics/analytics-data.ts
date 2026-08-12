@@ -122,10 +122,22 @@ export function rangeForGranularity(
 
 // ── Pure mapping helpers ────────────────────────────────────────────
 
-/** Short bucket label for a revenue row by granularity. */
-export function revenueLabel(g: Granularity, raw: string): string {
-  // daily/weekly raw = "YYYY-MM-DD" → "MM-DD"; monthly = "YYYY-MM" → "MM".
-  return g === 'monthly' ? raw.slice(5) : raw.slice(5);
+/**
+ * Short bucket label for a revenue row by granularity. daily/weekly raw =
+ * "YYYY-MM-DD" → "MM-DD"; monthly/yearly raw = "YYYY-MM" → "MM" — or
+ * "MM/YY" when `multiYear` (the query range spans calendar years), because
+ * bare "MM" labels would collide across years on a multi-year range.
+ */
+export function revenueLabel(g: Granularity, raw: string, multiYear = false): string {
+  if (g === 'monthly' || g === 'yearly') {
+    return multiYear ? `${raw.slice(5)}/${raw.slice(2, 4)}` : raw.slice(5);
+  }
+  return raw.slice(5);
+}
+
+/** True when the query window spans more than one calendar year. */
+function rangeSpansYears(q: AnalyticsQuery): boolean {
+  return q.from.slice(0, 4) !== q.to.slice(0, 4);
 }
 
 /**
@@ -369,7 +381,7 @@ export async function loadRevenue(q: AnalyticsQuery): Promise<Bucket[]> {
     byKey.set(rowKey(r), (byKey.get(rowKey(r)) ?? 0) + r.total_minor);
   }
   return bucketKeys(q.granularity, q.from, q.to).map((key) => ({
-    label: revenueLabel(q.granularity, key),
+    label: revenueLabel(q.granularity, key, rangeSpansYears(q)),
     value: byKey.get(key) ?? 0,
   }));
 }
@@ -388,7 +400,7 @@ export async function loadAov(q: AnalyticsQuery): Promise<Bucket[]> {
   return bucketKeys(q.granularity, q.from, q.to).map((key) => {
     const agg = byKey.get(key);
     return {
-      label: revenueLabel(q.granularity, key),
+      label: revenueLabel(q.granularity, key, rangeSpansYears(q)),
       value: agg && agg.count > 0 ? Math.round(agg.total / agg.count) : 0,
     };
   });
@@ -482,7 +494,7 @@ export async function loadTables(q: AnalyticsQuery): Promise<Bucket[]> {
           ? 7 * 1440
           : 1440;
     return {
-      label: key.slice(5),
+      label: revenueLabel(q.granularity, key, rangeSpansYears(q)),
       value: orders > 0 ? Math.round(bucketMinutes / orders) : 0,
     };
   });
@@ -524,7 +536,7 @@ export async function loadBasketSize(q: AnalyticsQuery): Promise<BasketTrend> {
     const sales = salesByKey.get(key) ?? 0;
     const lines = linesByKey.get(key) ?? 0;
     return {
-      label: key.slice(5),
+      label: revenueLabel(q.granularity, key, rangeSpansYears(q)),
       value: sales > 0 ? Math.round((lines / sales) * 10) / 10 : 0,
     };
   });

@@ -497,6 +497,39 @@ describe('loaders — raw rows mapped to card shapes', () => {
     expect(trend.sale_count).toBe(30);
   });
 
+  it('loadRevenue labels months with the year when the range spans years', async () => {
+    const { getMonthlyRevenue } = await import('@/api/reports');
+    (getMonthlyRevenue as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { month: '2025-11', total_minor: 1000, currency: 'USD', sale_count: 1, cogs_minor: 0, gross_profit_minor: 1000, gross_margin_percent: 100 },
+      { month: '2026-01', total_minor: 3000, currency: 'USD', sale_count: 3, cogs_minor: 0, gross_profit_minor: 3000, gross_margin_percent: 100 },
+    ]);
+    const buckets = await loadRevenue({
+      workspace: 'retail', granularity: 'monthly', from: '2025-11-01', to: '2026-02-28', sessionToken: 's',
+    });
+    // Bare "MM" labels would collide across years — the year must show.
+    expect(buckets).toEqual([
+      { label: '11/25', value: 1000 },
+      { label: '12/25', value: 0 },
+      { label: '01/26', value: 3000 },
+      { label: '02/26', value: 0 },
+    ]);
+  });
+
+  it('loadTables labels months with the year across year boundaries', async () => {
+    const { getTableTurnover } = await import('@/api/reports');
+    (getTableTurnover as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { date: '2025-12-10', table_orders: 10 },
+    ]);
+    const buckets = await loadTables({
+      workspace: 'restaurant', granularity: 'monthly', from: '2025-11-01', to: '2026-01-31', sessionToken: 's',
+    });
+    expect(buckets).toEqual([
+      { label: '11/25', value: 0 },
+      { label: '12/25', value: 4464 }, // 31×1440/10
+      { label: '01/26', value: 0 },
+    ]);
+  });
+
   it('loadTables buckets yearly granularity by month, not by year', async () => {
     const { getTableTurnover } = await import('@/api/reports');
     (getTableTurnover as ReturnType<typeof vi.fn>).mockResolvedValue([
