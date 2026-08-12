@@ -21,7 +21,7 @@ pub fn openapi_spec() -> Value {
         "info": {
             "title": "OZ-POS Cloud Server API",
             "version": env!("CARGO_PKG_VERSION"),
-            "description": "REST API for the OZ-POS point-of-sale cloud sync server. Provides product management, sales processing, category listing, tax rate configuration, user management, token-based authentication, sync push/pull endpoints, and webhook receivers.",
+            "description": "REST API for the OZ-POS point-of-sale cloud sync server.\n\n## Authentication\nMost endpoints require a JWT bearer token from `POST /api/v1/tokens`. Pass it as `Authorization: Bearer <token>`.\n\n## Versioning\nThe API is versioned by URL path prefix (`/api/v1/`). Breaking changes will ship under a new version prefix (`/api/v2/`) — the old version remains available for at least 6 months after the new one lands.\n\n## Pagination\nList endpoints accept `?limit` (default 50, max 200) and `?offset` (default 0) query parameters and return a `PaginatedResponse` envelope with `data`, `total`, `limit`, and `offset` fields.\n\n## Errors\nAll error responses share a common envelope: `{ \"error\": { \"code\": \"MACHINE_READABLE\", \"message\": \"Human description\", \"details\": [...] } }`. The `code` field is stable across versions — use it for programmatic error handling, not the message string.\n\n## Rate Limiting\nSync endpoints return `X-RateLimit-Remaining`, `X-RateLimit-Reset`, and `Retry-After` headers when nearing the per-tenant limit.",
             "contact": { "name": "OZ-POS" }
         },
         "servers": [
@@ -43,7 +43,13 @@ pub fn openapi_spec() -> Value {
             { "name": "Sync", "description": "Offline queue push/pull sync endpoints" },
             { "name": "Plans", "description": "Tenant cloud sync plans (ADR sync-plan-gating)" },
             { "name": "Terminals", "description": "Terminal registration for client-credential authentication" },
-            { "name": "Webhooks", "description": "Third-party payment provider webhook receivers" }
+            { "name": "Webhooks", "description": "Third-party payment provider webhook receivers" },
+            { "name": "Inventory", "description": "Stock movements, transfers, low-stock alerts, and purchase order management" },
+            { "name": "Orders", "description": "Kitchen display order routing, course firing, and production tracking" },
+            { "name": "Reports", "description": "Sales summaries, category breakdowns, hourly heatmaps, and staff performance reports" },
+            { "name": "Customers", "description": "Customer profiles, loyalty points, gift card balances, and CRM integrations" },
+            { "name": "Notifications", "description": "Push notification registration, email alerts, and in-app messaging" },
+            { "name": "Analytics", "description": "Menu engineering scores, popularity metrics, trend forecasts, and margin analysis" }
         ],
         "components": {
             "securitySchemes": {
@@ -158,6 +164,72 @@ fn build_schemas() -> Value {
             "required": ["error"],
             "properties": {
                 "error": { "type": "string", "description": "Human-readable error description" }
+            },
+            "deprecated": true,
+            "description": "Legacy flat error format. New code should use `ErrorEnvelope`."
+        },
+        "ErrorEnvelope": {
+            "type": "object",
+            "required": ["error"],
+            "properties": {
+                "error": {
+                    "type": "object",
+                    "required": ["code", "message"],
+                    "properties": {
+                        "code": { "type": "string", "description": "Machine-readable error code (stable across versions)", "example": "invalid_status_transition" },
+                        "message": { "type": "string", "description": "Human-readable description", "example": "Cannot transition from pending to completed" },
+                        "details": { "type": "array", "items": { "type": "object" }, "description": "Optional per-field validation details" }
+                    }
+                }
+            },
+            "description": "Standard error envelope for all 4xx/5xx responses. The `code` field is the stable contract — use it for programmatic handling."
+        },
+        "PaginatedResponse": {
+            "type": "object",
+            "required": ["data", "total", "limit", "offset"],
+            "properties": {
+                "data": { "type": "array", "items": {}, "description": "Page of results (item schema varies by endpoint)" },
+                "total": { "type": "integer", "format": "int64", "description": "Total number of items matching the query (across all pages)" },
+                "limit": { "type": "integer", "format": "int64", "description": "Requested page size (max 200)" },
+                "offset": { "type": "integer", "format": "int64", "description": "Zero-based offset of the current page" }
+            },
+            "description": "Standard pagination envelope. All list endpoints will adopt this when pagination support lands."
+        },
+        "PaginationParams": {
+            "limit": {
+                "name": "limit",
+                "in": "query",
+                "required": false,
+                "schema": { "type": "integer", "format": "int64", "default": 50, "maximum": 200 },
+                "description": "Maximum items per page (default 50, max 200)"
+            },
+            "offset": {
+                "name": "offset",
+                "in": "query",
+                "required": false,
+                "schema": { "type": "integer", "format": "int64", "default": 0 },
+                "description": "Zero-based page offset"
+            },
+            "sort": {
+                "name": "sort",
+                "in": "query",
+                "required": false,
+                "schema": { "type": "string" },
+                "description": "Field to sort by (endpoint-specific)"
+            },
+            "order": {
+                "name": "order",
+                "in": "query",
+                "required": false,
+                "schema": { "type": "string", "enum": ["asc", "desc"], "default": "asc" },
+                "description": "Sort order"
+            },
+            "q": {
+                "name": "q",
+                "in": "query",
+                "required": false,
+                "schema": { "type": "string" },
+                "description": "Free-text search across name/SKU/barcode fields"
             }
         },
         "Money": {
@@ -508,9 +580,16 @@ fn build_paths() -> Value {
             "get": {
                 "tags": ["Products"],
                 "summary": "List all products",
-                "description": "Returns all products ordered by name, including category name and stock quantity. Requires JWT auth.",
+                "description": "Returns all products ordered by name, including category name and stock quantity. Requires JWT auth. Returns a flat array today; will adopt `PaginatedResponse` envelope when pagination support lands.",
                 "operationId": "listProducts",
                 "security": [{ "bearerAuth": [] }],
+                "parameters": [
+                    { "$ref": "#/components/schemas/PaginationParams/limit" },
+                    { "$ref": "#/components/schemas/PaginationParams/offset" },
+                    { "$ref": "#/components/schemas/PaginationParams/sort" },
+                    { "$ref": "#/components/schemas/PaginationParams/order" },
+                    { "$ref": "#/components/schemas/PaginationParams/q" }
+                ],
                 "responses": {
                     "200": { "description": "List of products (may be empty)", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/ProductDetail" } } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
@@ -611,9 +690,15 @@ fn build_paths() -> Value {
             "get": {
                 "tags": ["Categories"],
                 "summary": "List all categories",
-                "description": "Returns all product categories with ID, name, colour, and timestamps. Requires JWT auth.",
+                "description": "Returns all product categories with ID, name, colour, and timestamps. Requires JWT auth. Returns a flat array today; will adopt `PaginatedResponse` envelope when pagination support lands.",
                 "operationId": "listCategories",
                 "security": [{ "bearerAuth": [] }],
+                "parameters": [
+                    { "$ref": "#/components/schemas/PaginationParams/limit" },
+                    { "$ref": "#/components/schemas/PaginationParams/offset" },
+                    { "$ref": "#/components/schemas/PaginationParams/sort" },
+                    { "$ref": "#/components/schemas/PaginationParams/order" }
+                ],
                 "responses": {
                     "200": { "description": "List of categories (may be empty)", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/CategoryDto" } } } } },
                     "401": { "description": "Missing or invalid JWT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
@@ -722,7 +807,7 @@ fn build_paths() -> Value {
             "get": {
                 "tags": ["Sync"],
                 "summary": "Sync status",
-                "description": "Returns the current state of the offline sync queue: pending count, conflict count, and total items. Scoped to the tenant in the JWT.",
+                "description": "Returns the current state of the offline sync queue: pending count, conflict count, and total items. Scoped to the tenant in the JWT.\n\nRate limit headers returned when approaching per-tenant limits: `X-RateLimit-Remaining` (int), `X-RateLimit-Reset` (Unix timestamp), `Retry-After` (seconds).",
                 "operationId": "syncStatus",
                 "security": [{ "bearerAuth": [] }],
                 "responses": {
@@ -914,6 +999,13 @@ mod tests {
         assert!(tags.contains(&"Plans"));
         assert!(tags.contains(&"Terminals"));
         assert!(tags.contains(&"Webhooks"));
+        // Future tag groups — reserved for planned features.
+        assert!(tags.contains(&"Inventory"));
+        assert!(tags.contains(&"Orders"));
+        assert!(tags.contains(&"Reports"));
+        assert!(tags.contains(&"Customers"));
+        assert!(tags.contains(&"Notifications"));
+        assert!(tags.contains(&"Analytics"));
     }
 
     #[tokio::test]
