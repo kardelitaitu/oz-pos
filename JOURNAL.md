@@ -4920,3 +4920,13 @@ Two regression pins:
 **Tests:** analytics-data 43/43 (+2 yearly) · AnalyticsScreen 66/66 · full UI suite 292/292, 5111.
 
 **Risks / follow-ups:** MM labels collide across years for multi-year custom ranges (Jan-2025 and Jan-2026 both "01") — pre-existing on revenue, now shared by tables/basket; a year-aware label (e.g. "Jan '25") is a future slice. Peak/Low insight lines still include zero-filled no-data buckets (cosmetic). The collaborator's `dev-mock/tauri-api.ts` change remains uncommitted.
+## 2026-08-13 — Peak/Low read zero-filled no-data days as real readings on rate cards (TDD)
+
+**Problem:** the zero-fill work gave the rate-metric trend cards (AOV, Tables, Basket) full-range axes, but their Peak/Low insight lines still reduced over the WHOLE series. A zero-filled day has value 0, so the tables card rendered "Low: 08-13 · 0m" for a day with no table orders — as if the restaurant turned tables in zero minutes (the fastest turns ever). AOV similarly read a no-sales day as the "$0 AOV" low; basket as "0.0 items/order". Revenue correctly keeps zeros (a $0 day is real data for a sum metric).
+
+**Solution (TDD, Red→Green):** added two assertions to the restaurant screen test first — `queryByText('Low: 08-13 · 0m')` must be null and the tables low must come from the active buckets (`Low: 08-11 · 48m`) — watched the test fail on the rendered 0m line, then switched the three cards' peak/low derivation from `data` to the already-computed `activeBuckets` (BasketCard gained an `active` binding; AOV/Tables reused theirs). The chart still renders the full zero-filled axis; only the insight lines now skip no-data days.
+
+**Commits:** (see below — fix + journal)
+**Tests:** AnalyticsScreen 66/66 (restaurant test gained the two assertions) · full UI suite 292/292, 5111.
+
+**Risks / follow-ups:** the AOV low could still be asserted card-specifically (its "· $0.00" sibling on RevenueCard is real), left for a future slice. Year-aware month labels (multi-year "01" collisions) and the heatmap band unification remain open follow-ups. The collaborator's `dev-mock/tauri-api.ts` change remains uncommitted.
