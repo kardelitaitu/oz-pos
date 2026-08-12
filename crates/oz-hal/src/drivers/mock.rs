@@ -13,12 +13,12 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 
-use crate::drivers::scale::{WeightReading, WeightScale};
 use crate::error::HalError;
 use crate::traits::barcode::BarcodeScanner;
 use crate::traits::cash_drawer::CashDrawer;
 use crate::traits::customer_display::{CustomerDisplay, DisplayContent};
 use crate::traits::printer::{PaperStatus, PrinterStatus, ReceiptPrinter};
+use crate::traits::weight_scale::{WeightReading, WeightScale};
 use crate::types::{Barcode, DeviceInfo};
 
 // --- Barcode scanner mock -----------------------------------------------
