@@ -3406,6 +3406,10 @@ export default function NodeTopologyEditor({
     const dragged = new Set(draggingNodeIdsRef.current);
     const isDuplicate = duplicateDragRef.current;
     const moved = dragHasMovedRef.current;
+    // The pre-drag positions, captured before the drag start map is cleared
+    // below — the no-op-drag pop compares each dragged node's final resting
+    // spot against these.
+    const startPositions = new Map(dragStartRef.current);
     commitDuplicateDrag();
     endDrag();
     dragHasMovedRef.current = false;
@@ -3425,9 +3429,14 @@ export default function NodeTopologyEditor({
     // own pinned contract). Flush alignment (0 gap, guide landing) is not
     // an overlap and survives. The resolution is part of the drag's own
     // undo entry (the drag already pushed history on first movement).
+    // The drop-overlap resolution output, if it ran — used as the final
+    // position source for the no-op check below (a settle that moved a
+    // dragged node means the drop DID change the canvas).
+    let settledPositions: Array<{ id: string; x: number; y: number }> | null = null;
     if (!isDuplicate && dragged.size > 0 && moved) {
       const resolved = resolveDropOverlaps(nodesRef.current, dragged);
       if (resolved) {
+        settledPositions = resolved;
         // Merge only the resolved positions back onto the full nodes — the
         // helper is position-focused, and replacing the objects wholesale
         // would strip type/name/metadata off every card.
@@ -3438,7 +3447,24 @@ export default function NodeTopologyEditor({
         }));
       }
     }
-  }, [commitDuplicateDrag, endDrag, setNodes]);
+    // No-op drag: a COMPLETED drag whose every dragged node landed exactly
+    // at its pre-drag position (a grab-and-return, or a wiggle that snapped
+    // back onto the same grid cell) pushed a history entry that restores
+    // identical state — pop it so Undo never appears enabled but does
+    // nothing. The cancel paths already pop their entries; this closes the
+    // one path that commits.
+    if (moved && !isDuplicate && dragged.size > 0) {
+      const finalNodes = settledPositions ?? nodesRef.current;
+      const allAtOrigin = [...dragged].every((id) => {
+        const start = startPositions.get(id);
+        const cur = finalNodes.find((n) => n.id === id);
+        return start !== undefined && cur !== undefined && cur.x === start.x && cur.y === start.y;
+      });
+      if (allAtOrigin) {
+        setHistory((prev) => prev.slice(0, -1));
+      }
+    }
+  }, [commitDuplicateDrag, endDrag, setNodes, setHistory]);
 
   /** Arm a node drag (mouse mousedown or the touch gesture loop): set the
    *  dragging set, compute each node's grip offset from the pointer, and —

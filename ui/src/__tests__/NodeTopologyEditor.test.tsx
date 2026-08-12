@@ -5214,6 +5214,50 @@ describe('NodeTopologyEditor — canvas pan', () => {
     expect(viewport.style.transform).toContain('translate(0px, 0px)');
   });
 
+  it('a grab-and-return drag with snap OFF leaves NO undo entry (undo would be a no-op)', () => {
+    renderEditor();
+    const firstNode = document.querySelector('.topology-node') as HTMLElement;
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    expect(firstNode.style.left).toBe('80px');
+
+    // Snap off: positions are raw, so returning the cursor to the exact
+    // start point restores the node to EXACTLY 80px. The gesture pushed a
+    // history entry on first movement — a COMPLETED no-op drag must pop
+    // it, so Undo never appears enabled but restores identical positions.
+    fireEvent.click(screen.getByText('Snap to grid'));
+    fireEvent.mouseDown(firstNode, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 48, clientY: 0 });
+    expect(firstNode.style.left).toBe('128px');
+    fireEvent.mouseMove(canvas, { clientX: 0, clientY: 0 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+
+    expect(firstNode.style.left).toBe('80px');
+    expect(screen.queryByText('Undo (Ctrl+Z)')).not.toBeInTheDocument();
+  });
+
+  it('a wiggle-and-return drag of an ON-GRID node with snap ON leaves NO undo entry', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [{ id: 'x', type: 'store', name: 'X', x: 96, y: 96 }],
+      wires: [],
+    } as never);
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(1));
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    const node = document.querySelector('.topology-node') as HTMLElement;
+    expect(node.style.left).toBe('96px');
+
+    // Wiggle right and return: the on-grid origin (96) snaps back to
+    // EXACTLY 96 — a completed drag that changed nothing. No undo entry.
+    fireEvent.mouseDown(node, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(canvas, { clientX: 48, clientY: 0 });
+    expect(node.style.left).toBe('144px');
+    fireEvent.mouseMove(canvas, { clientX: 0, clientY: 0 });
+    fireEvent.mouseUp(canvas, { button: 0 });
+
+    expect(node.style.left).toBe('96px');
+    expect(screen.queryByText('Undo (Ctrl+Z)')).not.toBeInTheDocument();
+  });
+
   it('Space+drag pans like the middle button without clearing the selection or opening a marquee', () => {
     renderEditor();
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;

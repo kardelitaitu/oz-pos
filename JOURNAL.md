@@ -1,4 +1,15 @@
 
+## 2026-08-12 — TDD cycle: completed no-op drags no longer leave an undo entry
+
+### A grab-and-return (or snap-back) drag pushed a history entry that restored identical state — Undo appeared but did nothing
+**Problem:** Seventh review pass over the topology editor, undo semantics again. The drag path pushes its history entry on the FIRST real movement (`dragHasMovedRef`), and the cancel paths pop it when the gesture is cancelled — but a COMPLETED drag whose nodes ended exactly at their pre-drag positions kept the entry: grab the card, move right, return the cursor to the exact start point, release → Undo lights up but restores byte-identical positions. Same for a wiggle that snaps back onto the same grid cell. Reproducing this in a test taught two hard lessons about the drag geometry: (1) `snap(80) = 72` — the retail preset's store card sits at an OFF-GRID x=80, so with snap on, ANY drag re-grids it to 72 and the "return" is a REAL move (correct to keep the entry); (2) the y-axis never returns either — the alignment engine pins y=140 to wh-1's top edge. The honest no-op cases are snap OFF with an exact cursor return, or an ON-GRID origin with snap on.
+
+**Solution:** Red→Green. (1) Red — two tests failed on unfixed code (Undo button present after a no-op drop): a snap-off grab-and-return on the preset store card (80 → 128 → back to exactly 80), and a snap-on wiggle-and-return of a single on-grid node (96 → 144 → back to exactly 96). (2) Green — `finalizeNodeDrag` now captures the pre-drag start map before it is cleared, and after the drop-overlap settle runs, pops the top history entry when EVERY dragged node's final resting spot (settle output if it moved anything, else the live nodes) equals its start position. Gated on a real move, non-duplicate, non-empty drag set; the cancel paths were already popping. One fix covers mouse, canvas, and touch finalizes — they share the same callback.
+
+**Validation:** editor suite 515/515 (2 new, both Red-confirmed) · full UI suite 286 files / 4,922 tests · eslint 0 errors (8 pre-existing warnings) · typecheck · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** the off-grid gridding (80 → 72 on any snapped drag) is pre-existing, intended snap behavior — a drag that changes the canvas must keep its entry, and the new tests document why the off-grid preset card is NOT a no-op case. The alignment-guide y-pin (140 = wh-1's top edge) is likewise untouched. The no-op pop assumes the gesture pushed exactly one entry (true: pushHistory on first move, redo branch already cleared); a future change that pushes per-move inside a drag would need this revisited.
+
 ## 2026-08-12 — TDD cycle: arrow-key nudges now coalesce into one undo entry per burst
 
 ### Discrete arrow presses pushed one undo entry each — undo reverted a single pixel step at a time
