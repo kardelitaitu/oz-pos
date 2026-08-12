@@ -10,6 +10,7 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { requiredLocalized } from '@/frontend/shared';
+import { l10nErrorMessage } from '@/utils/app-error';
 import { Card } from '@/components/Card';
 import { Spinner } from '@/components/Spinner';
 import { minorUnitExponent } from '@/types/domain';
@@ -129,7 +130,7 @@ export default function DashboardScreen() {
       setHeatmap(heat);
       setPrevDaily(prev);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(l10nErrorMessage(e, l10n, 'dashboard-error-load'));
     } finally {
       setLoading(false);
     }
@@ -246,19 +247,19 @@ export default function DashboardScreen() {
         <Localized id="dashboard-title"><h1 className="dashboard-title">Dashboard</h1></Localized>
         <div className="dashboard-kpi-row">
           {[1,2,3,4].map((i) => (
-            <div key={i} className="card dashboard-kpi dashboard-kpi--skeleton"><div className="card-body">
+            <div key={i} className="dashboard-kpi dashboard-kpi--skeleton">
               <span className="dashboard-kpi-label-skeleton" />
               <span className="dashboard-kpi-value-skeleton" />
-            </div></div>
+            </div>
           ))}
         </div>
         <div className="dashboard-chart-row">
-          <div className="card dashboard-chart-card"><div className="card-body"><h2 className="dashboard-section-title">Revenue Trend</h2><div className="dashboard-chart-skeleton" /></div></div>
-          <div className="card dashboard-chart-card"><div className="card-body"><h2 className="dashboard-section-title">Category Breakdown</h2><div className="dashboard-chart-skeleton" /></div></div>
+          <div className="dashboard-chart-card dashboard-chart-card--skeleton"><h2 className="dashboard-section-title">Revenue Trend</h2><div className="dashboard-chart-skeleton" /></div>
+          <div className="dashboard-chart-card dashboard-chart-card--skeleton"><h2 className="dashboard-section-title">Category Breakdown</h2><div className="dashboard-chart-skeleton" /></div>
         </div>
         <div className="dashboard-chart-row">
-          <div className="card dashboard-chart-card"><div className="card-body"><h2 className="dashboard-section-title">Sales Heatmap</h2><div className="dashboard-chart-skeleton" /></div></div>
-          <div className="card dashboard-chart-card"><div className="card-body"><h2 className="dashboard-section-title">Top 10 Products</h2><div className="dashboard-chart-skeleton" /></div></div>
+          <div className="dashboard-chart-card dashboard-chart-card--skeleton"><h2 className="dashboard-section-title">Sales Heatmap</h2><div className="dashboard-chart-skeleton" /></div>
+          <div className="dashboard-chart-card dashboard-chart-card--skeleton"><h2 className="dashboard-section-title">Top 10 Products</h2><div className="dashboard-chart-skeleton" /></div>
         </div>
       </div>
     );

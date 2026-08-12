@@ -174,8 +174,10 @@ describe('DashboardScreen', () => {
     mockGetCategoryBreakdown.mockRejectedValue(error);
     mockGetHourlyHeatmap.mockRejectedValue(error);
     renderScreen();
+    // ERR-05: raw backend text must never leak — the screen renders the
+    // localized user-safe message instead of `err.message`.
     await waitFor(() => {
-      expect(screen.getByText('Server offline')).toBeTruthy();
+      expect(screen.getByText('Something went wrong. Please try again.')).toBeTruthy();
     });
   });
 

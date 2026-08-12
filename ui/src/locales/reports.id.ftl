@@ -175,3 +175,4 @@ dashboard-export-csv-aria = .aria-label = Ekspor data dasbor sebagai CSV
 dashboard-category-clear-aria = .aria-label = Hapus pilihan kategori
 dashboard-back = Kembali
 dashboard-back-aria = .aria-label = Kembali ke beranda
+dashboard-error-load = Gagal memuat data dasbor. Silakan coba lagi.

@@ -374,6 +374,10 @@ const SCREENS: ScreenEntry[] = [
     name: 'DashboardScreen',
     tsx: 'reports/DashboardScreen.tsx',
     css: ['reports/DashboardScreen.css'],
+    // `card`/`card-body` belong to the global Card component stylesheet;
+    // `dashboard-kpi-delta--` modifiers are built via template literal.
+    externalClasses: ['card', 'card-body'],
+    dynamicClassPrefixes: ['dashboard-kpi-delta--'],
   },
   {
     name: 'InventoryReportScreen',

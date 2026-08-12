@@ -174,3 +174,4 @@ dashboard-export-csv-aria = .aria-label = Export dashboard data as CSV
 dashboard-category-clear-aria = .aria-label = Clear category selection
 dashboard-back = Back
 dashboard-back-aria = .aria-label = Back to home
+dashboard-error-load = Failed to load dashboard data. Please try again.
