@@ -5183,6 +5183,37 @@ describe('NodeTopologyEditor — canvas pan', () => {
     expect(viewport.style.transform).toContain('translate(50px, 30px)');
   });
 
+  it('minimap viewport rect tracks pan/zoom in canvas coordinates (the −pan/zoom origin)', () => {
+    renderEditor();
+    const viewport = document.querySelector('.topology-minimap-viewport') as SVGRectElement;
+    // Derive the live minimap scale from two known preset node rects
+    // (store-1 at x=80, wh-1 at x=680 → 600 canvas px apart on the map).
+    const nodeRects = [...document.querySelectorAll('.topology-minimap-node')]
+      .map((r) => parseFloat(r.getAttribute('x')!));
+    const scale = (nodeRects[2]! - nodeRects[0]!) / 600;
+    const PAD = 8;
+    const MIN_X = 80; // leftmost content edge of the retail preset
+    // Screen(0) is the viewport's left edge, so the visible canvas range is
+    // [−pan/zoom, (canvasW − pan)/zoom] — the box origin is −pan/zoom.
+    const expectedX = (panX: number, zoom: number) => PAD + (-panX / zoom - MIN_X) * scale;
+
+    // pan=0, zoom=1: the box starts just left of the content box.
+    expect(parseFloat(viewport.getAttribute('x')!)).toBeCloseTo(expectedX(0, 1));
+
+    // Middle-drag pan by (+50, +30): the box must move LEFT in canvas
+    // terms (−pan.x), not right (the pan.x bug renders it 100px off).
+    const canvas = document.querySelector('.node-canvas-container') as HTMLElement;
+    fireEvent.mouseDown(canvas, { button: 1, clientX: 100, clientY: 100 });
+    fireEvent.mouseMove(document, { clientX: 150, clientY: 130 });
+    fireEvent.mouseUp(document, { button: 1 });
+    expect(parseFloat(viewport.getAttribute('x')!)).toBeCloseTo(expectedX(50, 1));
+
+    // Zoom out to 0.8 (pan untouched): the origin math must divide the
+    // pan by the new zoom — the visible canvas left edge is −50/0.8.
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom out' }));
+    expect(parseFloat(viewport.getAttribute('x')!)).toBeCloseTo(expectedX(50, 0.8));
+  });
+
   it('does not open the context menu after a right-button pan drag', () => {
     renderEditor();
     const canvas = document.querySelector('.node-canvas-container') as HTMLElement;

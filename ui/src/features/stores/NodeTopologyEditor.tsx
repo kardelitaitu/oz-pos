@@ -6428,8 +6428,12 @@ export default function NodeTopologyEditor({
                 ))}
                 <rect
                   className="topology-minimap-viewport"
-                  x={MINIMAP_PAD + (pan.x - contentBounds.minX) * minimapScale}
-                  y={MINIMAP_PAD + (pan.y - contentBounds.minY) * minimapScale}
+                  // Screen(0) is the viewport's left/top edge, so the visible
+                  // canvas range is [−pan/zoom, (canvasW − pan)/zoom] — the
+                  // box origin is −pan/zoom (pan.x directly would put the box
+                  // on the wrong side of the map and ignore the zoom).
+                  x={MINIMAP_PAD + (-pan.x / zoom - contentBounds.minX) * minimapScale}
+                  y={MINIMAP_PAD + (-pan.y / zoom - contentBounds.minY) * minimapScale}
                   width={Math.max(MINIMAP_VIEWPORT_MIN, ((canvasRef.current?.clientWidth ?? 0) / zoom) * minimapScale)}
                   height={Math.max(MINIMAP_VIEWPORT_MIN, ((canvasRef.current?.clientHeight ?? 0) / zoom) * minimapScale)}
                 />

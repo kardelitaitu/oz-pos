@@ -1,4 +1,15 @@
 
+## 2026-08-12 — TDD cycle: minimap viewport box ignored the −pan/zoom origin
+
+### The "you are here" box drifted off the diagram as soon as the user panned or zoomed
+**Problem:** Eighth review pass, focusing on the minimap — the one surface flagged in pass 1 but never deep-reviewed. The viewport indicator rect (the box showing the visible area) computed its origin from `pan.x` directly, but the canvas transform is `translate(pan) scale(zoom)`, so screen(0) is the viewport's left edge and the visible canvas range is `[−pan/zoom, (canvasW − pan)/zoom]` — the box's left edge should be `−pan.x/zoom`. With pan.x as the origin the box renders on the WRONG SIDE of the map (sign) and ignores the zoom entirely (the width/height DID divide by zoom — only the origin was wrong). A +50px pan put the box 100 canvas px from its true spot; the error grew with zoom. The Apply-boundary audit that opened this pass came back clean (idMap path clears history with the dangling-ids rationale; the plain path deliberately preserves it; undo-after-save re-derives dirty correctly) — a legitimate no-finding.
+
+**Solution:** Red→Green. (1) Red — a test deriving the live minimap scale from two known preset node rects (store-1 x=80, wh-1 x=680 → 600 canvas px apart) asserted the box origin against `−pan/zoom` at pan=0, after a +50px middle-drag pan, and after a zoom-out to 0.8. It failed with exactly the predicted numbers: buggy 2.29 vs correct −16.76 (100 canvas px × scale). (2) Green — the rect's x/y now use `(−pan.x / zoom − contentBounds.minX) * scale` (and the y analogue), with the derivation documented in a JSX comment.
+
+**Validation:** editor suite 516/516 (1 new, Red-confirmed) · full UI suite 286 files / 4,923 tests · eslint 0 errors (8 pre-existing warnings) · typecheck · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** the recenter click/drag math and the arrow-key nudge on the minimap are unaffected (they were correct). The HUD cursor readout, zoom clamp (0.4–2.0), and the minimap's content-box derivation were all re-verified as sound during the review. The Apply-boundary audit found nothing to fix — recorded here so a future pass doesn't re-litigate it.
+
 ## 2026-08-12 — TDD cycle: completed no-op drags no longer leave an undo entry
 
 ### A grab-and-return (or snap-back) drag pushed a history entry that restored identical state — Undo appeared but did nothing
