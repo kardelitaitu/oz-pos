@@ -66,3 +66,23 @@ analytics-custom-to = To
 analytics-action-refresh-aria = Refresh data
 analytics-action-zoom-out-aria = Zoom out
 analytics-action-zoom-in-aria = Zoom in
+
+# ── Card titles ─────────────────────────────────────────────
+analytics-card-peak-hours = Peak Hours
+analytics-card-revenue = Revenue Overview
+analytics-card-aov = Average Order Value
+analytics-card-staff = Staff Performance
+analytics-card-customers = New vs Returning Customers
+analytics-card-payments = Payment Methods
+analytics-card-discounts = Discounts & Promotions
+analytics-card-refunds = Refunds & Voids
+analytics-card-top-products = Top Products
+analytics-card-category = Sales by Category
+analytics-card-basket = Average Basket Size
+analytics-card-inventory = Stock Turnover
+analytics-card-low-stock = Low Stock Alerts
+analytics-card-top-menu = Top Menu Items
+analytics-card-tables = Table Turnover
+analytics-card-occupancy = Table Occupancy
+analytics-card-waitstaff = Top Waitstaff
+analytics-card-voids = Voided Items

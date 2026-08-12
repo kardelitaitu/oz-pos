@@ -66,3 +66,23 @@ analytics-custom-to = Hingga
 analytics-action-refresh-aria = Muat ulang data
 analytics-action-zoom-out-aria = Perkecil
 analytics-action-zoom-in-aria = Perbesar
+
+# ── Card titles ─────────────────────────────────────────────
+analytics-card-peak-hours = Jam Sibuk
+analytics-card-revenue = Ringkasan Pendapatan
+analytics-card-aov = Nilai Pesanan Rata-rata
+analytics-card-staff = Performa Staf
+analytics-card-customers = Pelanggan Baru vs Kembali
+analytics-card-payments = Metode Pembayaran
+analytics-card-discounts = Diskon & Promo
+analytics-card-refunds = Pengembalian & Void
+analytics-card-top-products = Produk Terlaris
+analytics-card-category = Penjualan per Kategori
+analytics-card-basket = Rata-rata Isi Keranjang
+analytics-card-inventory = Perputaran Stok
+analytics-card-low-stock = Peringatan Stok Menipis
+analytics-card-top-menu = Menu Terlaris
+analytics-card-tables = Perputaran Meja
+analytics-card-occupancy = Okupansi Meja
+analytics-card-waitstaff = Pelayan Terbaik
+analytics-card-voids = Item yang Di-void
