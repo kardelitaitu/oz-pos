@@ -42,15 +42,17 @@ impl DbPool {
     /// Create a new `DbPool` from the environment.
     ///
     /// Resolution order:
-    /// 1. If `DATABASE_URL` starts with `postgres://` or `postgresql://`,
-    ///    connect to PostgreSQL.
-    /// 2. Otherwise, open SQLite from `OZ_DB_PATH` (default `oz-pos.db`).
     /// Create a new `DbPool` from a [`CloudServerConfig`].
+    ///
+    /// Resolution order:
+    /// 1. If `database_url` starts with `postgres://` or `postgresql://`,
+    ///    connect to PostgreSQL.
+    /// 2. Otherwise, open SQLite from `db_path`.
     pub async fn from_config(config: &CloudServerConfig) -> Result<Self, DbError> {
-        if let Some(ref url) = config.database_url {
-            if url.starts_with("postgres://") || url.starts_with("postgresql://") {
-                return Self::connect_postgres(url).await;
-            }
+        if let Some(ref url) = config.database_url
+            && (url.starts_with("postgres://") || url.starts_with("postgresql://"))
+        {
+            return Self::connect_postgres(url).await;
         }
         Self::connect_sqlite(&config.db_path)
     }

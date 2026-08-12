@@ -143,7 +143,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let redirect_router = Router::new()
             .fallback(|| async { axum::http::StatusCode::MISDIRECTED_REQUEST })
             .layer(axum::middleware::from_fn_with_state(
-                redirect_url,
+                Some(redirect_url),
                 redirect::redirect_middleware,
             ));
         serve(redirect_router, config).await?;
@@ -388,7 +388,10 @@ pub fn build_router(
         .merge(api_router)
         .merge(sync_router)
         .merge(webhook_router)
-        .layer(axum::middleware::from_fn(redirect::redirect_middleware))
+        .layer(axum::middleware::from_fn_with_state(
+            config.sync_redirect_url.clone(),
+            redirect::redirect_middleware,
+        ))
         .layer(CompressionLayer::new().gzip(true))
         .layer(cors)
 } // ── Tests ─────────────────────────────────────────────────────────────────
