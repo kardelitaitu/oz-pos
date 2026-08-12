@@ -1,4 +1,15 @@
 
+## 2026-08-12 — TDD cycle: an existing bend dragged back to its start left a no-op undo entry
+
+### The pass-9 journal noted this as a future slice — the pass-7 node-drag fix's bend analogue
+**Problem:** Tenth review pass, closing the last bend-gesture gap. The bend drag pushes its entry on first movement, and the CANCEL path pops it — but a COMPLETED drag of an EXISTING bend that landed exactly at its start position kept the entry (Undo appeared but restored identical geometry). The pass-9 fix deferred ghost-bend insertion, so a CREATED bend ending at the ghost midpoint is a real edit (the bend's existence is the change) — only the existing-bend return-to-start case is a no-op. The wire-click direction cycle was also audited: every click is a real direction change (the 3-state cycle never wraps to the same value), so no no-op there; the click-to-select-cycles-direction UX remains a documented design decision.
+
+**Solution:** Red→Green. (1) Red — a test loads a diagram with a bent wire (clean baseline), selects the wire and undoes the direction-cycle entry (returning to clean while keeping the selection + bend), then drags the bend away to (250,250) and back to its exact start (200,200) — the Undo button stayed present on unfixed code. (2) Green — `startBendDrag`'s document mouseup finalizer now pops the top entry when the drag moved, the bend is NOT created-by-this-gesture, and the committed bend (`wiresRef`) equals the start coordinates. The pop is gated on the committed state, so a snap/settle discrepancy can never pop a real edit.
+
+**Validation:** bend block 16/16 (1 new, Red-confirmed) · editor suite 518/518 · full UI suite 286 files / 4,925 tests · eslint 0 errors (8 pre-existing warnings) · typecheck · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** the wire-click direction-cycle entries stay as designed (each click is a visible direction change; the "select without cycling" affordance is a product decision — the journal's earlier "the whole wire is the affordance" note stands). A wire click during an ARMED connection cycles that wire's direction (a stray edit mid-gesture) — observed but judged marginal; noted here as a candidate if it ever surfaces in use.
+
 ## 2026-08-12 — TDD cycle: midpoint-ghost click inserted a phantom, non-undoable bend
 
 ### A mousedown+mouseup without movement on a wire's midpoint ghost left a permanent bend with no undo entry

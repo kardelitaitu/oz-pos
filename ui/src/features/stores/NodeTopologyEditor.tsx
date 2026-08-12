@@ -4797,10 +4797,24 @@ export default function NodeTopologyEditor({
       );
     };
     const handleUp = () => {
+      const d = bendDragRef.current;
       document.removeEventListener('mousemove', handleMove);
       document.removeEventListener('mouseup', handleUp);
       bendDragCleanupRef.current = null;
       bendDragRef.current = null;
+      // No-op bend drag: a COMPLETED drag of an EXISTING bend that landed
+      // exactly at its start position pushed an entry (on first movement)
+      // that restores identical state — pop it so Undo never appears but
+      // does nothing. A CREATED bend ending at the ghost midpoint is NOT a
+      // no-op — the bend's existence is the edit — so only non-created
+      // bends are checked. (Cancel already pops via cancelBendDrag.)
+      if (d && d.moved && !d.created) {
+        const wire = wiresRef.current.find((w) => w.id === d.wireId);
+        const bend = wire?.bends?.[d.index];
+        if (bend && bend.x === d.startX && bend.y === d.startY) {
+          setHistory((prev) => prev.slice(0, -1));
+        }
+      }
     };
     document.addEventListener('mousemove', handleMove);
     document.addEventListener('mouseup', handleUp);      bendDragCleanupRef.current = () => {
@@ -4809,7 +4823,7 @@ export default function NodeTopologyEditor({
       bendDragCleanupRef.current = null;
       bendDragRef.current = null;
     };
-  }, [clearSelection, pan, zoom, selectWire, canvasRef, setWires]);
+  }, [clearSelection, pan, zoom, selectWire, canvasRef, setWires, setHistory]);
 
   /** Drag on a midpoint ghost: one gesture creates and positions a fresh
    *  bend. The insertion is DEFERRED to the first drag movement (the

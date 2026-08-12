@@ -6529,6 +6529,43 @@ describe('NodeTopologyEditor — wire bend editing', () => {
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
   });
 
+  it('a bend dragged away and back to its exact start leaves NO undo entry', async () => {
+    mockLoadTopology.mockResolvedValueOnce({
+      nodes: [
+        { id: 'ws-1', type: 'workspace', name: 'POS One', x: 80, y: 120, metadata: { typeKey: 'store-pos' } },
+        { id: 'ws-2', type: 'workspace', name: 'POS Two', x: 240, y: 80, metadata: { typeKey: 'store-pos' } },
+      ],
+      wires: [
+        { id: 'w-1', from_node_id: 'ws-1', to_node_id: 'ws-2', direction: 'one-way', bends: [{ x: 200, y: 200 }] },
+      ],
+    });
+    renderEditor();
+    await waitFor(() => expect(getNodeCount()).toBe(2));
+
+    // Select the wire: the click cycles direction (one entry, dirties the
+    // canvas). Undo the cycle to return to the CLEAN baseline — undo keeps
+    // the selection and the bend survives.
+    const hitbox = document.querySelector('.wire-hitbox') as Element;
+    fireEvent.click(hitbox);
+    fireEvent.click(screen.getByText('Undo (Ctrl+Z)'));
+    expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
+    const handle = document.querySelector('.wire-bend-handle') as Element;
+    expect(handle).not.toBeNull();
+
+    // Drag the bend away and return the cursor to the exact start: the
+    // bend lands back at (200, 200) — a completed no-op drag must pop the
+    // entry it pushed on first movement.
+    fireEvent.mouseDown(handle, { button: 0, clientX: 200, clientY: 200 });
+    fireEvent.mouseMove(document, { clientX: 250, clientY: 250 });
+    fireEvent.mouseMove(document, { clientX: 200, clientY: 200 });
+    fireEvent.mouseUp(document, { button: 0 });
+
+    expect(handle.getAttribute('cx')).toBe('200');
+    expect(handle.getAttribute('cy')).toBe('200');
+    expect(screen.queryByText('Undo (Ctrl+Z)')).not.toBeInTheDocument();
+    expect(screen.queryByText('Unsaved changes') === null).toBe(true);
+  });
+
   it('a click without drag on a midpoint ghost creates nothing (no phantom bend, no dirty)', () => {
     renderEditor();
     // Select w-1 and cycle the direction back to one-way (3 clicks) so the
