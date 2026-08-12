@@ -19,6 +19,7 @@ function memStorage(): { store: Map<string, string>; api: CachePersistence } {
       getItem: (k: string) => store.get(k) ?? null,
       setItem: (k: string, v: string) => { store.set(k, v); },
       removeItem: (k: string) => { store.delete(k); },
+      keys: () => [...store.keys()],
     },
   };
 }
@@ -177,6 +178,38 @@ describe('TtlCache sessionStorage persistence', () => {
     expect(reader.hasFresh('a')).toBe(true);
   });
 
+  it('splits persistence per partition via the storage-key resolver', () => {
+    const { api, store } = memStorage();
+    // Mirrors the real resolver: card keys embed workspace at index 2.
+    const partition = (entryKey: string) => {
+      const ws = entryKey.split(':')[2]!;
+      return `oz-part-${ws}`;
+    };
+    const writer = new TtlCache<string>(1000, 200, api, 'oz-part', 1, partition);
+    writer.set('card:revenue:retail:daily', 'r1');
+    writer.set('card:revenue:restaurant:daily', 'd1');
+
+    // Two separate snapshots exist under the resolver's keys.
+    expect(store.has('oz-part-retail')).toBe(true);
+    expect(store.has('oz-part-restaurant')).toBe(true);
+    // The base key itself is never written when a resolver is present.
+    expect(store.has('oz-part')).toBe(false);
+
+    // A fresh instance hydrates both partitions back into one cache.
+    const reader = new TtlCache<string>(1000, 200, api, 'oz-part', 1, partition);
+    expect(reader.get('card:revenue:retail:daily')).toEqual({ value: 'r1', fresh: true });
+    expect(reader.get('card:revenue:restaurant:daily')).toEqual({ value: 'd1', fresh: true });
+
+    // Invalidating the last retail entry prunes the retail partition.
+    writer.invalidate('card:revenue:retail:daily');
+    expect(store.has('oz-part-retail')).toBe(false);
+    expect(store.has('oz-part-restaurant')).toBe(true);
+
+    // clear removes every partition.
+    writer.clear();
+    expect(store.has('oz-part-restaurant')).toBe(false);
+  });
+
   it('keeps the original TTL: expired snapshots hydrate as stale, not fresh', () => {
     const { api } = memStorage();
     const writer = new TtlCache<string>(1000, 200, api);
@@ -248,21 +281,35 @@ describe('TtlCache sessionStorage persistence', () => {
     expect(cache.get('a')).toEqual({ value: '1', fresh: true });
   });
 
-  it('shared analytics cache persists to the real sessionStorage', () => {
-    const key = ANALYTICS_CACHE_STORAGE_KEY;
+  it('shared analytics cache persists per-workspace snapshots', () => {
     clearAnalyticsCache();
-    expect(sessionStorage.getItem(key)).toBeNull();
+    const retailKey = `${ANALYTICS_CACHE_STORAGE_KEY}-retail`;
+    const restaurantKey = `${ANALYTICS_CACHE_STORAGE_KEY}-restaurant`;
+    expect(sessionStorage.getItem(retailKey)).toBeNull();
+    expect(sessionStorage.getItem(restaurantKey)).toBeNull();
 
-    analyticsDataCache.set('persist:smoke', { ok: true });
-    const raw = sessionStorage.getItem(key);
-    expect(raw).not.toBeNull();
-    const snap = JSON.parse(raw!) as { version: number; entries: Array<[string, { value: unknown }]> };
-    expect(snap.version).toBe(ANALYTICS_CACHE_VERSION);
-    expect(snap.entries.some(([k]) => k === 'persist:smoke')).toBe(true);
+    analyticsDataCache.set(cardQueryKey('revenue', 'retail', 'daily'), { ok: true });
+    analyticsDataCache.set(cardQueryKey('revenue', 'restaurant', 'daily'), { ok: 2 });
 
-    // clearAnalyticsCache wipes both memory and the snapshot.
+    // Each workspace lands in its own partition, never the shared base key.
+    expect(sessionStorage.getItem(ANALYTICS_CACHE_STORAGE_KEY)).toBeNull();
+    const retailSnap = JSON.parse(sessionStorage.getItem(retailKey)!) as {
+      version: number; entries: Array<[string, { value: unknown }]>;
+    };
+    const restaurantSnap = JSON.parse(sessionStorage.getItem(restaurantKey)!) as {
+      version: number; entries: Array<[string, { value: unknown }]>;
+    };
+    expect(retailSnap.version).toBe(ANALYTICS_CACHE_VERSION);
+    expect(retailSnap.entries.map(([k]) => k)).toContain('card:revenue:retail:daily::');
+    expect(restaurantSnap.entries.map(([k]) => k)).toContain('card:revenue:restaurant:daily::');
+    // Partitions stay separate: retail's snapshot never contains restaurant rows.
+    expect(retailSnap.entries.some(([k]) => k.includes('restaurant'))).toBe(false);
+    expect(restaurantSnap.entries.some(([k]) => k.includes('retail'))).toBe(false);
+
+    // clearAnalyticsCache wipes both memory and every partition.
     clearAnalyticsCache();
-    expect(sessionStorage.getItem(key)).toBeNull();
+    expect(sessionStorage.getItem(retailKey)).toBeNull();
+    expect(sessionStorage.getItem(restaurantKey)).toBeNull();
     expect(analyticsDataCache.size).toBe(0);
   });
 });

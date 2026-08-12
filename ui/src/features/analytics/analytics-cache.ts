@@ -14,8 +14,11 @@
 //! analytics page within the same session skips refetching queries that
 //! are still inside their TTL window. The version stamp guards the
 //! schema: caches written by an older build are discarded on hydration.
-//! We deliberately do not use localStorage so stale data never survives
-//! a browser restart.
+//! The persisted snapshots are split per workspace (retail vs
+//! restaurant) so each dashboard keeps its own snapshot under
+//! `oz-analytics-cache-v1-<workspace>`, and hydration only ever loads
+//! back what this session actually queried. We deliberately do not use
+//! localStorage so stale data never survives a browser restart.
 
 /** How long a computed analytics query stays fresh (5 minutes). */
 export const ANALYTICS_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -29,7 +32,11 @@ export const ANALYTICS_CACHE_MAX_ENTRIES = 200;
  */
 export const ANALYTICS_CACHE_VERSION = 1;
 
-/** sessionStorage key under which the cache snapshot is stored. */
+/**
+ * sessionStorage key prefix for persisted cache snapshots. Snapshots
+ * live under `ANALYTICS_CACHE_STORAGE_KEY + '-' + workspace`; the base
+ * string is also the prefix used to enumerate every snapshot.
+ */
 export const ANALYTICS_CACHE_STORAGE_KEY = 'oz-analytics-cache-v1';
 
 export interface CacheEntry<T> {
@@ -77,6 +84,8 @@ export interface CachePersistence {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
   removeItem(key: string): void;
+  /** Enumerate existing keys (needed for multi-snapshot persistence). */
+  keys?(): string[];
 }
 
 /** On-disk shape of the persisted snapshot. */
@@ -106,6 +115,12 @@ function emptyKeyMetrics(): CacheKeyMetrics {
  * different version are dropped) and keeps each entry's original
  * `expiresAt`, so a query still inside its TTL window survives an
  * in-tab navigation or reload without a refetch.
+ *
+ * Pass a `storageKeyFor` resolver to split persistence into multiple
+ * snapshots (e.g. one per workspace): each entry is stored under
+ * `storageKeyFor(entryKey)` instead of a single shared key, hydration
+ * loads every snapshot whose key starts with `storageKey`, and `clear`
+ * removes them all. The in-memory cache remains a single map.
  */
 export class TtlCache<T> {
   private readonly entries = new Map<string, CacheEntry<T>>();
@@ -117,8 +132,14 @@ export class TtlCache<T> {
     private readonly persistence: CachePersistence | null = null,
     private readonly storageKey: string = ANALYTICS_CACHE_STORAGE_KEY,
     private readonly version: number = ANALYTICS_CACHE_VERSION,
+    private readonly storageKeyFor: ((entryKey: string) => string) | null = null,
   ) {
     if (persistence) this.hydrate();
+  }
+
+  /** Resolve an entry's storage key (base key when no resolver given). */
+  private resolveStorageKey(entryKey: string): string {
+    return this.storageKeyFor ? this.storageKeyFor(entryKey) : this.storageKey;
   }
 
   private bump(key: string, field: keyof CacheKeyMetrics): void {
@@ -127,12 +148,34 @@ export class TtlCache<T> {
     this.counters.set(key, m);
   }
 
+  /** Storage keys that hold snapshots for this cache (single or many). */
+  private snapshotKeys(): string[] {
+    if (!this.persistence) return [];
+    const keys = [this.storageKey];
+    try {
+      // If the resolver splits entries across multiple keys, hydration
+      // and clear must reach every snapshot under the storageKey prefix.
+      for (const k of this.persistence.keys?.() ?? []) {
+        if (k.startsWith(this.storageKey)) keys.push(k);
+      }
+    } catch {
+      // enumeration unavailable — fall back to the base key only
+    }
+    return keys;
+  }
+
   /** Load a version-matching snapshot from storage; bad data is ignored. */
   private hydrate(): void {
+    for (const key of this.snapshotKeys()) {
+      this.hydrateFrom(key);
+    }
+  }
+
+  private hydrateFrom(storageKey: string): void {
     if (!this.persistence) return;
     let raw: string | null = null;
     try {
-      raw = this.persistence.getItem(this.storageKey);
+      raw = this.persistence.getItem(storageKey);
     } catch {
       return; // storage unavailable (private mode, quota, etc.)
     }
@@ -170,16 +213,44 @@ export class TtlCache<T> {
   /** Write the current entries to storage; failures degrade silently. */
   private persist(): void {
     if (!this.persistence) return;
-    const snap: PersistedSnapshot = {
-      version: this.version,
-      savedAt: Date.now(),
-      entries: [...this.entries.entries()],
-    };
-    try {
-      this.persistence.setItem(this.storageKey, JSON.stringify(snap));
-    } catch {
-      // Quota exceeded / storage unavailable — the in-memory cache is
-      // unaffected; persistence simply lapses for this write.
+    // Group entries by their resolved storage key so each snapshot only
+    // contains that partition's queries.
+    const groups = new Map<string, Array<[string, CacheEntry<T>]>>();
+    for (const [key, entry] of this.entries) {
+      const target = this.resolveStorageKey(key);
+      const group = groups.get(target) ?? [];
+      group.push([key, entry]);
+      groups.set(target, group);
+    }
+    const written = new Set<string>(groups.keys());
+    if (this.storageKeyFor === null) {
+      // Single-key cache: always (re)write the base key, even when empty,
+      // so invalidating the last entry leaves a clean empty snapshot
+      // instead of a stale one from an earlier write.
+      written.add(this.storageKey);
+    }
+    for (const target of written) {
+      const snap: PersistedSnapshot = {
+        version: this.version,
+        savedAt: Date.now(),
+        entries: groups.get(target) ?? [],
+      };
+      try {
+        this.persistence.setItem(target, JSON.stringify(snap));
+      } catch {
+        // Quota exceeded / storage unavailable — the in-memory cache is
+        // unaffected; persistence simply lapses for this write.
+      }
+    }
+    // Drop partitions that no longer hold entries so a workspace whose
+    // last query was invalidated doesn't leave an orphaned snapshot.
+    for (const key of this.snapshotKeys()) {
+      if (written.has(key)) continue;
+      try {
+        this.persistence.removeItem(key);
+      } catch {
+        // storage unavailable — stale snapshot remains, harmless
+      }
     }
   }
 
@@ -228,13 +299,14 @@ export class TtlCache<T> {
     this.persist();
   }
 
-  /** Drop every entry and reset all metrics (tests, full refresh). */
+  /** Drop every entry, reset all metrics, and remove all snapshots. */
   clear(): void {
     this.entries.clear();
     this.counters.clear();
-    if (this.persistence) {
+    if (!this.persistence) return;
+    for (const key of this.snapshotKeys()) {
       try {
-        this.persistence.removeItem(this.storageKey);
+        this.persistence.removeItem(key);
       } catch {
         // storage unavailable — in-memory state is already cleared
       }
@@ -283,24 +355,61 @@ export function cardQueryKey(
   return `card:${cardKey}:${workspace}:${granularity}:${from}:${to}`;
 }
 
-/** sessionStorage instance when available; `null` in SSR/test envs. */
+/**
+ * sessionStorage adapter. A wrapper (rather than the raw Storage) is
+ * required because some environments — notably jsdom — hand out a fresh
+ * `Storage` object on every property access, so adding a `keys()` method
+ * to it would not survive; the wrapper also keeps the `keys()`
+ * enumeration stable across reads.
+ */
 function sessionStorageOrNull(): CachePersistence | null {
   try {
-    return typeof sessionStorage !== 'undefined' ? sessionStorage : null;
+    const storage = typeof sessionStorage !== 'undefined' ? sessionStorage : null;
+    if (!storage) return null;
+    return {
+      getItem: (k: string) => storage.getItem(k),
+      setItem: (k: string, v: string) => storage.setItem(k, v),
+      removeItem: (k: string) => storage.removeItem(k),
+      keys: () => {
+        try {
+          // Storage's own enumeration API (key(i)/length) — `Object.keys`
+          // does not expose jsdom's Storage entries.
+          return Array.from({ length: storage.length }, (_, i) => storage.key(i) ?? '').filter(Boolean);
+        } catch {
+          return [];
+        }
+      },
+    };
   } catch {
     return null; // some browsers throw on property access in sandboxes
   }
 }
 
 /**
+ * Persisted snapshot partition for a query key: `retail` / `restaurant`
+ * (both query keys embed the workspace), falling back to `shared` for
+ * anything unusual.
+ */
+function cachePartition(entryKey: string): string {
+  const parts = entryKey.split(':');
+  // card:revenue:retail:daily:... | query:retail:daily:...
+  const workspace = parts[0] === 'card' ? parts[2] : parts[1];
+  return workspace && (workspace === 'retail' || workspace === 'restaurant') ? workspace : 'shared';
+}
+
+/**
  * Shared cache used by the analytics page and its cards. Persisted to
- * sessionStorage so in-tab navigation back to the page skips refetches
- * for queries still inside their TTL window.
+ * sessionStorage as per-workspace snapshots so in-tab navigation back
+ * to the page skips refetches for queries still inside their TTL
+ * window, and retail/restaurant dashboards never share a snapshot.
  */
 export const analyticsDataCache = new TtlCache<unknown>(
   ANALYTICS_CACHE_TTL_MS,
   ANALYTICS_CACHE_MAX_ENTRIES,
   sessionStorageOrNull(),
+  ANALYTICS_CACHE_STORAGE_KEY,
+  ANALYTICS_CACHE_VERSION,
+  (entryKey) => `${ANALYTICS_CACHE_STORAGE_KEY}-${cachePartition(entryKey)}`,
 );
 
 /** Wipe the shared cache (memory + persisted snapshot) — used by tests. */
