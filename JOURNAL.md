@@ -1,4 +1,15 @@
 
+## 2026-08-12 — TDD cycle: branch-compare panel could compare a branch with itself
+
+### The compare target was never re-derived when the selected branch moved — a switch or delete stranded it on the branch now on canvas
+**Problem:** Fifth review pass over the topology editor, this time the TopologyScreen host. `compareOtherBranchId` is captured once by `openCompare` (the first OTHER branch) and edited only through the panel's own "compare against" select. Nothing re-derives it when `selectedBranchId` changes, so two reachable paths compared a branch with itself: (1) with 3+ branches, opening compare against B then switching the main selector to B left the panel comparing B vs B — the summary read "No differences", actively misleading an operator about how two locations differ; (2) with 2 branches, deleting the selected branch moved selection onto the compare target, and with a single branch left the panel had nothing to compare but stayed open. The comparison fetch even went out with both sides equal.
+
+**Solution:** Red→Green. (1) Red — two new TopologyScreen tests: the selector-switch re-target test (3 branches, asserts the last loadTopology pair is selected/other, never equal) and the delete-leaves-one test (asserts the panel closes). Writing the Red exposed a harness bug first: the SettingsSelect mock captured `onChange` from the LAST-rendered select, so once the compare panel was open `capturedBranchOnChange` pointed at the compare-other select (which renders after the toolbar) — the mock now keys handles by id (`topology-branch-select` vs `topology-compare-other-select`), and the re-target test also pins that a valid user-chosen target is preserved. (2) Green — a re-derive effect keyed on `compareOpen`/`stores`/`selectedBranchId`: it closes the panel when no other branch remains, and re-points a null/self/stale target at the first other branch while preserving a user-chosen target that still exists and differs. The load effect gained a self-comparison guard so a transient intermediate render never issues a self-fetch.
+
+**Validation:** TopologyScreen suite 44/44 (2 new, both Red-confirmed via stash) · full UI suite 286 files / 4,917 tests · eslint 0 errors · typecheck · i18n lint + FTL dedupe clean.
+
+**Deliberately NOT done:** the redundant double-fetch on open (`openCompare` calls `loadCompare` directly AND the open-effect re-fires it — observed as 4 initial loadTopology calls) was left alone: harmless and out of this slice's scope, noted here as a future one-line cleanup. The panel-stays-open-across-jumps UX stands as designed — it now re-targets instead of lying. ADR #34 product gates (ticket-routing cardinality, legacy schema migration UI) still await product input.
+
 ## 2026-08-12 — TDD cycle: simulation pulse ignores prefers-reduced-motion (WCAG 2.3.3)
 
 ### The Test Order Simulation churned React state on a 30ms interval regardless of the OS motion preference

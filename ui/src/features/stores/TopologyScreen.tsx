@@ -235,11 +235,38 @@ export default function TopologyScreen() {
     setCompareFocus(false);
   }, []);
 
-  // Recompute when the user picks a different comparison target.
+  // Keep the comparison honest across branch changes. The target is
+  // captured once by openCompare and only edited through the panel's own
+  // select — nothing re-derives it when the SELECTED branch moves, so a
+  // main-selector switch onto the target (or a deletion that moves
+  // selection onto it) would compare a branch with itself. Whenever the
+  // selected branch changes: close the panel when no other branch remains,
+  // otherwise re-point a null/self/stale target at the first other branch
+  // (a user-chosen target that still exists is preserved).
   useEffect(() => {
-    if (!compareOpen || compareOtherBranchId === null) return;
+    if (!compareOpen) return;
+    const others = stores.filter((s) => s.id !== selectedBranchId);
+    if (others.length === 0) {
+      closeCompare();
+      return;
+    }
+    if (
+      compareOtherBranchId === null ||
+      compareOtherBranchId === selectedBranchId ||
+      !others.some((s) => s.id === compareOtherBranchId)
+    ) {
+      setCompareOtherBranchId(others[0]!.id);
+    }
+  }, [compareOpen, stores, selectedBranchId, compareOtherBranchId, closeCompare]);
+
+  // Recompute when the user picks a different comparison target. Never
+  // fetch when the target IS the selected branch — the re-derive effect
+  // above re-points that state; this guard just keeps a transient
+  // intermediate render from issuing a self-comparison fetch.
+  useEffect(() => {
+    if (!compareOpen || compareOtherBranchId === null || compareOtherBranchId === selectedBranchId) return;
     void loadCompare(compareOtherBranchId);
-  }, [compareOpen, compareOtherBranchId, loadCompare]);
+  }, [compareOpen, compareOtherBranchId, selectedBranchId, loadCompare]);
 
   useEffect(() => { void load(); }, [load]);
   // Mount: load the default branch's instances once.

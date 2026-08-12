@@ -135,12 +135,20 @@ vi.mock('@/features/stores/NodeTopologyEditor', () => ({
   },
 }));
 
-// Capture the branch selector's onChange so tests can simulate switching
-// the branch (SettingsSelect is a custom combobox, not a native select).
+// Capture each selector's onChange so tests can simulate picking a branch
+// (SettingsSelect is a custom combobox, not a native select). Handles are
+// keyed by id — the compare panel's "compare against" select renders AFTER
+// the branch toolbar, so a single shared handle would point at the wrong
+// select once the panel is open.
 let capturedBranchOnChange: ((value: string) => void) | null = null;
 let capturedBranchOptions: { value: string; label: string }[] = [];
+let capturedCompareOtherOnChange: ((value: string) => void) | null = null;
 vi.mock('@/features/settings/SettingsSelect', () => ({
-  default: (props: { onChange: (value: string) => void; options?: { value: string; label: string }[] }) => {
+  default: (props: { id?: string; onChange: (value: string) => void; options?: { value: string; label: string }[] }) => {
+    if (props.id === 'topology-compare-other-select') {
+      capturedCompareOtherOnChange = props.onChange;
+      return null;
+    }
     capturedBranchOnChange = props.onChange;
     capturedBranchOptions = props.options ?? [];
     return null;
@@ -256,6 +264,7 @@ describe('TopologyScreen', () => {
     capturedEditorProps = {};
     capturedBranchOnChange = null;
     capturedBranchOptions = [];
+    capturedCompareOtherOnChange = null;
     mockListStores.mockResolvedValue(sampleStores);
     mockListWorkspacesScoped.mockResolvedValue(loadedInstances);
     mockApplyTopologyDiff.mockResolvedValue({ revision: 1 });
@@ -656,6 +665,73 @@ describe('TopologyScreen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'topology-compare-close' }));
     await waitFor(() => expect(capturedEditorProps.compareOverlay).toBeNull());
     expect(capturedEditorProps.compareFocus).toBe(false);
+  });
+
+  it('re-targets the comparison when the selected branch becomes the compare target (never self-compare)', async () => {
+    // Three branches so the comparison can be re-pointed at a real other.
+    mockListStores.mockResolvedValue([
+      { id: 'store-1', name: 'Main Street', is_primary: true, address: '', tax_id: '', currency: 'USD', timezone: 'UTC', created_at: '', updated_at: '' },
+      { id: 'store-2', name: 'Second Street', is_primary: false, address: '', tax_id: '', currency: 'USD', timezone: 'UTC', created_at: '', updated_at: '' },
+      { id: 'store-3', name: 'Third Street', is_primary: false, address: '', tax_id: '', currency: 'USD', timezone: 'UTC', created_at: '', updated_at: '' },
+    ]);
+    mockLoadTopology.mockImplementation((_branchId?: string) =>
+      Promise.resolve({
+        nodes: [{ id: 'ws-pos', type: 'workspace', name: 'Front Register', x: 0, y: 0, metadata: { typeKey: 'store-pos' } }],
+        wires: [],
+      }),
+    );
+    await renderReady(1);
+
+    // Open compare: the target defaults to the first OTHER branch (store-2).
+    // (The initial pair may repeat — openCompare fetches once and the
+    // open-effect fetches again; slice(0,2) reads the first pair.)
+    fireEvent.click(screen.getByRole('button', { name: 'topology-compare-open' }));
+    await waitFor(() =>
+      expect(mockLoadTopology.mock.calls.map((c) => c[0]).slice(0, 2)).toEqual(['store-1', 'store-2']),
+    );
+
+    // Switch the main selector to the branch currently being compared
+    // against. The comparison must re-point at another branch — never
+    // compare a branch with itself: the last pair reads (selected=store-2,
+    // other=store-1).
+    act(() => capturedBranchOnChange?.('store-2'));
+    await waitFor(() =>
+      expect(mockLoadTopology.mock.calls.map((c) => c[0]).slice(-2)).toEqual(['store-2', 'store-1']),
+    );
+
+    // A user-chosen valid target is preserved: picking store-3 in the
+    // compare panel re-compares the current branch against it.
+    act(() => capturedCompareOtherOnChange?.('store-3'));
+    await waitFor(() =>
+      expect(mockLoadTopology.mock.calls.map((c) => c[0]).slice(-2)).toEqual(['store-2', 'store-3']),
+    );
+  });
+
+  it('closes the compare panel when deleting the selected branch leaves a single branch', async () => {
+    mockListStores.mockResolvedValue([
+      { id: 'store-1', name: 'Main Street', is_primary: true, address: '', tax_id: '', currency: 'USD', timezone: 'UTC', created_at: '', updated_at: '' },
+      { id: 'store-2', name: 'Second Street', is_primary: false, address: '', tax_id: '', currency: 'USD', timezone: 'UTC', created_at: '', updated_at: '' },
+    ]);
+    mockLoadTopology.mockImplementation((_branchId?: string) =>
+      Promise.resolve({
+        nodes: [{ id: 'ws-pos', type: 'workspace', name: 'Front Register', x: 0, y: 0, metadata: { typeKey: 'store-pos' } }],
+        wires: [],
+      }),
+    );
+    await renderReady(1);
+
+    // Open the comparison against the only other branch.
+    fireEvent.click(screen.getByRole('button', { name: 'topology-compare-open' }));
+    await waitFor(() => expect(screen.getByText('topology-compare-title')).toBeInTheDocument());
+
+    // Deleting the selected branch moves selection to the remaining one —
+    // with a single branch there is nothing left to compare, so the panel
+    // must close instead of comparing the branch with itself.
+    fireEvent.click(screen.getByRole('button', { name: 'topology-branch-delete' }));
+    fireEvent.click(screen.getByRole('button', { name: 'topology-branch-delete-confirm-btn' }));
+
+    await waitFor(() => expect(mockDeleteStore).toHaveBeenCalledWith('store-1'));
+    await waitFor(() => expect(screen.queryByText('topology-compare-title')).not.toBeInTheDocument());
   });
 
   // ── #4: Atomic diff — single applyTopologyDiff call ────────────
