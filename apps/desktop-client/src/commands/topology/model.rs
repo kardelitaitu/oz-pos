@@ -260,9 +260,6 @@ pub(crate) const TOPOLOGY_APPLY_RECOVERY_KEY: &str = "oz-pos/topology/apply-reco
 pub(crate) const TOPOLOGY_APPLY_REQUEST_PREFIX: &str = "oz-pos/topology/apply-request/";
 /// Schema version stamped into every saved topology envelope.
 pub(crate) const TOPOLOGY_SCHEMA_VERSION: u64 = 1;
-/// Shared semantic pairing contract consumed by the validation engine.
-pub(crate) const SHARED_TOPOLOGY_SEMANTICS_JSON: &str =
-    include_str!("../../../../../ui/src/features/stores/topologySemantics.json");
 
 /// Request body for updating a workspace instance within a topology diff.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]

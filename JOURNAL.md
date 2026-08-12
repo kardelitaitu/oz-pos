@@ -4805,3 +4805,22 @@ Two regression pins:
 **Tests:** desktop-client 947/947 · `cargo clippy -p oz-pos-app --all-targets -D warnings` clean · `cargo fmt --all` clean.
 
 **Risks / follow-ups:** the split is mechanical; the semantic engine in `semantics.rs` is Tauri-free and could later move toward `oz-core` if it gains a second consumer. `topology_tests.rs` is still the largest file at ~2.6k — a future split could carve the save/load roundtrip tests further, but it's under the guideline. The `gate_audit` census recursion is depth-agnostic; a nested split (subdir within a command dir) would aggregate recursively under the same module key.
+
+## 2026-08-12 — Topology semantic-validation core moved into oz-core
+
+**Problem:** The ADR #34 semantic-validation engine (validate_semantic_json + its 12 helpers + the shared contract const) lived in the desktop command layer (`commands/topology/semantics.rs`), even though it is pure domain logic — Tauri-free, value-level — that any client (desktop Apply, tablet preview, tooling) should share. The file-split refactor (92e30da7) made the engine's isolation obvious.
+
+**Solution:** New `oz-core::topology` module hosting the pure core, moved verbatim:
+- `validate_semantic_json`, `ambiguous_legacy_wire`, `find_directed_cycle_node`, `semantic_wire_matches_contract`, the `semantic_*`/`has_semantic_fields`/`value_string` helpers, port-set + pairing helpers, and `SHARED_TOPOLOGY_SEMANTICS_JSON` (include_str path re-based to the crate).
+- New `CoreError::TopologyValidation { code, node_id, wire_id, port_id, message }` variant (kind: `Validation`) so the core returns a structured, machine-readable failure.
+- Desktop `semantics.rs` shrank 858 → ~270 lines: re-exports the value-level helpers (test-only consumers in a `#[cfg(test)]` re-export to keep the lib build warning-free) and adapts `validate_semantic_json` CoreError → `AppError::TopologyValidation` (same variant/fields as before, so the 947-test suite is untouched). `model.rs` dropped the moved const.
+
+**TDD rigor:**
+- Red: 6 oz-core unit tests (missing-branch-location, valid graph passes, invalid-purpose, cycle-detected, contract parses, ambiguous legacy wire). First fixture bug caught: a branchless graph with NO semantic fields is intentionally accepted (legacy-geometry escape hatch), so the missing-branch test needed a store_profile_id marker.
+- Green: module + error variant. Then the desktop rewiring — 915 lib + 32 integration tests stayed green with zero code changes in tests.
+- Docs: the extraction ranges off-by-included two doc comments (legacy-topology + validate_topology_envelope) that belong to desktop fns — both restored to the desktop file, orphaned copies removed from oz-core; diff-verified that every removed doc line corresponds to a moved fn.
+
+**Commits:** (pending)
+**Tests:** oz-core topology 9/9 (+9) · desktop lib 915/915 · integration 32/32 (gate 3, wiring 6, kernel 7, window 11+2, parity 3) · clippy -D warnings clean on both crates · fmt clean.
+
+**Risks / follow-ups:** (1) `migrations::tests::migration_135_backfills_cost_snapshot_from_product_cost` FAILS on the committed baseline (verified by temporarily reverting my files) — a pre-existing breakage from the retail-attribute schema work, unrelated to this change; needs its own fix. (2) The core exposes only the fns desktop consumes as pub; the full pairing matrix helpers remain private — a tablet consumer can widen them deliberately. (3) Desktop lib tests could only run via `--lib` (plus a fresh target dir for integration tests) because a running dev instance of `oz-pos-app` holds the bin exe lock; the app was not killed per the shared-tree rule.

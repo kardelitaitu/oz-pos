@@ -132,6 +132,8 @@ pub mod terminal;
 pub mod terminal_override;
 /// Terminal profile configuration.
 pub mod terminal_profile;
+/// Semantic validation for the topology graph (ADR #34 contract gates).
+pub mod topology;
 /// Staff user accounts and role-based access control.
 pub mod user;
 /// Per-user display preferences (card size, font size, etc.).
