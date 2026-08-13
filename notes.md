@@ -132,3 +132,52 @@ NodeTopologyEditor). Fixed items are committed; the rest remain open.
 8. **Render-phase ref writes** — `historyRef.current = history` (and similar
    mirrors) assign during render, the same documented-but-impure pattern as
    `startRecalculating` in the analytics screen.
+
+---
+
+# WorkspaceHome audit (2026-08-13)
+
+Audit of the workspace selection page (`WorkspaceHome.tsx` + CSS).
+
+## Fixed (committed)
+
+- ✅ **`canAccess` predicate** — replaced the role-blind
+  `cashierOnly.has(key) || (kitchen && kitchenOnly.has(key))` with a
+  role-grouped gate: owner/admin/manager/staff → all, cashier → POS only,
+  kitchen → KDS only (accepting both bare and `role-`-prefixed forms).
+- ✅ **`savePins` / `saveLastUsed`** — now try/catch-guarded (mirroring the
+  `load*` helpers) and called as a normal event-handler side effect instead of
+  inside a `setState` updater (which StrictMode can run twice).
+- ✅ **Ripple timers** — the 600ms fallback `setTimeout` is tracked and cleared
+  on unmount (the `animationend` path also cancels it).
+- ✅ **`getColumns`** — derives the column count from the grid's actual layout
+  (first-row `offsetTop` break) instead of splitting `gridTemplateColumns`,
+  so `repeat()`/`minmax()` resolved values can't miscount arrow-key movement.
+- ✅ **Number-key quick-launch** — maps directly to `activateWorkspace` over the
+  workspace list (not the enabled-card NodeList), so the Analytics/Reports
+  shortcuts are no longer addressable by a phantom number key.
+- ✅ **Pin button** — `tabIndex` `-1` → `0`, making the existing
+  Enter/Space handler reachable.
+- ✅ **SkeletonGrid** — dropped the `aria-label` on a role-less `<div>` (the
+  `role="status"` span already announces loading).
+- ✅ **Retry button** — floating retry `title` now uses the localized
+  `workspace-home-retry-btn` key instead of a hardcoded `"Retry"`.
+- ✅ **Dead exit animation** — removed `exitingWorkspace` state, the
+  `workspace-card--exiting` classes + `ws-card-exit` keyframes (the card
+  unmounts the same tick, so the animation never played), and the stray
+  empty `{ }` JSX.
+- ✅ **`getIcon` drift** — the icon-key allowlist is now derived from
+  `WS_ORDER` + `COMING_SOON_CARDS` instead of a hardcoded list that had gone
+  stale (`Analytics` listed, `Reports` missing).
+- ✅ **`displayName` fallback** — no longer falls back to `role_name`, so the
+  greeting can't read "Hello, owner".
+
+## Still open
+
+### Greeting
+
+1. **Randomized multilingual greeting** — `pickGreeting()` runs inside a
+   `useMemo` (so it may re-pick under StrictMode double-render) and can show
+   "Selamat datang" to an English-locale user. Deliberate design flourish;
+   needs a product call on whether the greeting should follow the active
+   locale instead of cycling languages.

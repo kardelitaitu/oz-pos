@@ -331,19 +331,6 @@
   animation: ws-card-hover-sway var(--duration-3500) var(--ease-in-out) infinite;
 }
 
-/* ── Card exit animation ─────────────────────────────────────────── */
-
-.workspace-card--exiting {
-  pointer-events: none;
-  animation: ws-card-exit 0.3s cubic-bezier(0.5, 0, 0.75, 0) forwards;
-}
-
-.workspace-card--exiting ~ .workspace-card {
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.15s var(--ease-out);
-}
-
 /* Subtle scale-in for the icon on the active card */
 .workspace-card--active .workspace-card-icon {
   transform: scale(1.05);
@@ -1109,17 +1096,6 @@
   }
 }
 
-@keyframes ws-card-exit {
-  from {
-    opacity: 1;
-    transform: scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-}
-
 @keyframes ws-glow-breath {
   0%, 100% {
     opacity: 0.6;
@@ -1264,11 +1240,6 @@
   .workspace-card:hover .workspace-card-overlay {
     opacity: 1;
     transform: none;
-  }
-
-  .workspace-card--exiting {
-    animation: none;
-    opacity: 0;
   }
 }
 

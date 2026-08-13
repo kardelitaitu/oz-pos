@@ -323,7 +323,6 @@ const SCREENS: ScreenEntry[] = [
     dynamicClassPrefixes: ['ws-color-', 'role-badge--'],
     externalClasses: [
       'workspace-home-user',
-      'workspace-card--exiting',
       'workspace-card--active',
       'workspace-card-ripple',
     ],

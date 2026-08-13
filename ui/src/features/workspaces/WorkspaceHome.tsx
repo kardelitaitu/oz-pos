@@ -35,7 +35,11 @@ function loadPins(): Set<string> {
 }
 
 function savePins(pins: Set<string>) {
-  localStorage.setItem(PINS_KEY, JSON.stringify(Array.from(pins)));
+  try {
+    localStorage.setItem(PINS_KEY, JSON.stringify(Array.from(pins)));
+  } catch {
+    // Quota / private-mode / disabled storage — fail silently (mirrors loadPins).
+  }
 }
 
 function loadLastUsed(): Record<string, number> {
@@ -49,7 +53,11 @@ function loadLastUsed(): Record<string, number> {
 }
 
 function saveLastUsed(lastUsed: Record<string, number>) {
-  localStorage.setItem(LAST_USED_KEY, JSON.stringify(lastUsed));
+  try {
+    localStorage.setItem(LAST_USED_KEY, JSON.stringify(lastUsed));
+  } catch {
+    // Quota / private-mode / disabled storage — fail silently (mirrors loadLastUsed).
+  }
 }
 
 // ── Workspace sort order ──────────────────────────────────────────
@@ -62,11 +70,35 @@ const WS_ORDER: Record<string, number> = {
   admin: 5,
 };
 
+// ── Role-scoped workspace access ─────────────────────────────────
+// POS terminals are cashier-facing; KDS is kitchen-facing. Owners,
+// admins, managers and staff get every workspace, matching
+// AuthContext.isManager (which counts `staff` as manager-level).
+
+const POS_WORKSPACE_KEYS = new Set(['restaurant-pos', 'store-pos']);
+const KDS_WORKSPACE_KEYS = new Set(['kds']);
+
+// ── Dummy coming-soon cards (placeholder for future workspaces) ──
+
+const COMING_SOON_CARDS = [
+  { name: 'Loyalty', description: 'Coming soon' },
+  { name: 'Marketing', description: 'Coming soon' },
+  { name: 'Online Orders', description: 'Coming soon' },
+];
+
 // ── Icons ─────────────────────────────────────────────────────────
+//
+// Workspace type keys (WS_ORDER) plus the coming-soon placeholders are
+// the only icon sources; anything else falls back to the default icon
+// and is logged so new workspace keys surface during development.
+
+const KNOWN_ICON_KEYS = new Set<string>([
+  ...Object.keys(WS_ORDER),
+  ...COMING_SOON_CARDS.map((c) => c.name),
+]);
 
 function getIcon(key: string) {
-  const known = ['restaurant-pos', 'store-pos', 'kds', 'inventory', 'admin', 'Loyalty', 'Marketing', 'Online Orders', 'Analytics'];
-  if (!known.includes(key)) {
+  if (!KNOWN_ICON_KEYS.has(key)) {
     console.warn(`WorkspaceHome: unknown workspace key "${key}" — using default icon`);
   }
   return <WorkspaceIcon wsKey={key} />;
@@ -74,9 +106,9 @@ function getIcon(key: string) {
 
 // ── Skeleton ──────────────────────────────────────────────────────
 
-function SkeletonGrid({ l10n: skL10n }: { l10n: ReturnType<typeof useLocalization>['l10n'] }) {
+function SkeletonGrid() {
   return (
-    <div className="workspace-skeleton-grid" aria-label={requiredLocalized(skL10n, 'workspace-home-loading-aria')}>
+    <div className="workspace-skeleton-grid">
       {[1, 2, 3].map((i) => (
         <div key={i} className="workspace-skeleton-card">
           <div className="workspace-skeleton-icon" />
@@ -121,14 +153,6 @@ const GREETINGS: { word: string; lang: string }[] = [
 function pickGreeting(): { word: string; lang: string } {
   return GREETINGS[Math.floor(Math.random() * GREETINGS.length)]!;
 }
-
-// ── Dummy coming-soon cards (placeholder for future workspaces) ──
-
-const COMING_SOON_CARDS = [
-  { name: 'Loyalty', description: 'Coming soon' },
-  { name: 'Marketing', description: 'Coming soon' },
-  { name: 'Online Orders', description: 'Coming soon' },
-];
 
 // ── Role color map ────────────────────────────────────────────────
 
@@ -225,7 +249,6 @@ function LayerFloatingButtons({
                 <span className={`workspace-home-user-role ${getRoleColor(roleName)}`}>{roleName}</span>
               </div>
             </button>
-            { }
             <button type="button" className="workspace-home-logout-btn" onClick={handleLogoutClick}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" width="20" height="20">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -237,12 +260,11 @@ function LayerFloatingButtons({
           </>
         )}
         {error && (
-           
           <button
             type="button"
             className="workspace-home-logout-btn"
             onClick={retry}
-            title="Retry"
+            title={l10n.getString('workspace-home-retry-btn')}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
               <polyline points="1 4 1 10 7 10" />
@@ -267,8 +289,8 @@ export default function WorkspaceHome() {
   const { session, logout } = useAuth();
   const gridRef = useRef<HTMLDivElement>(null);
   const ripplesRef = useRef<HTMLSpanElement[]>([]);
+  const rippleTimersRef = useRef<number[]>([]);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
-  const [exitingWorkspace, setExitingWorkspace] = useState<string | null>(null);
 
   const roleName = (session?.role_name ?? '').toLowerCase();
 
@@ -277,23 +299,35 @@ export default function WorkspaceHome() {
   const [pinnedKeys, setPinnedKeys] = useState<Set<string>>(loadPins);
   const [lastUsedMap, setLastUsedMap] = useState<Record<string, number>>(loadLastUsed);
 
+  // Refs mirror the state so event handlers can compute the next value
+  // synchronously and persist it as a normal side effect, instead of
+  // mutating localStorage inside a setState updater (which React may run
+  // twice under StrictMode).
+  const pinnedKeysRef = useRef(pinnedKeys);
+  const lastUsedMapRef = useRef(lastUsedMap);
+
+  useEffect(() => {
+    pinnedKeysRef.current = pinnedKeys;
+  }, [pinnedKeys]);
+
+  useEffect(() => {
+    lastUsedMapRef.current = lastUsedMap;
+  }, [lastUsedMap]);
+
   const togglePin = useCallback((key: string) => {
-    setPinnedKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      savePins(next);
-      return next;
-    });
+    const next = new Set(pinnedKeysRef.current);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    pinnedKeysRef.current = next;
+    setPinnedKeys(next);
+    savePins(next);
   }, []);
 
   const recordLastUsed = useCallback((key: string) => {
-    const now = Date.now();
-    setLastUsedMap((prev) => {
-      const next = { ...prev, [key]: now };
-      saveLastUsed(next);
-      return next;
-    });
+    const next = { ...lastUsedMapRef.current, [key]: Date.now() };
+    lastUsedMapRef.current = next;
+    setLastUsedMap(next);
+    saveLastUsed(next);
   }, []);
 
   // Sort workspaces: pinned first (by pin order), then by last-used, then by static order
@@ -321,9 +355,6 @@ export default function WorkspaceHome() {
     return [...pinnedArr, ...unpinnedArr];
   }, [availableWorkspaces, pinnedKeys, lastUsedMap]);
 
-  const cashierOnly = useMemo(() => new Set(['restaurant-pos', 'store-pos']), []);
-  const kitchenOnly = useMemo(() => new Set(['kds']), []);
-
   const isAdminOrOwner =
     roleName === 'owner' ||
     roleName === 'role-owner' ||
@@ -341,22 +372,37 @@ export default function WorkspaceHome() {
     [setActiveWorkspace],
   );
 
+  // Role-scoped access gate. `roleName` is already lower-cased, and both
+  // the bare and `role-`-prefixed forms are accepted so legacy sessions
+  // and the demo fallback behave identically.
   const canAccess = useCallback(
-    (key: string) =>
-      roleName === 'owner' ||
-      roleName === 'role-owner' ||
-      roleName === 'admin' ||
-      roleName === 'role-admin' ||
-      roleName === 'manager' ||
-      roleName === 'role-manager' ||
-      cashierOnly.has(key) ||
-      (roleName === 'kitchen' && kitchenOnly.has(key)),
-    [roleName, cashierOnly, kitchenOnly],
+    (key: string) => {
+      switch (roleName) {
+        case 'owner':
+        case 'role-owner':
+        case 'admin':
+        case 'role-admin':
+        case 'manager':
+        case 'role-manager':
+        case 'staff':
+        case 'role-staff':
+          return true;
+        case 'cashier':
+        case 'role-cashier':
+          return POS_WORKSPACE_KEYS.has(key);
+        case 'kitchen':
+        case 'role-kitchen':
+          return KDS_WORKSPACE_KEYS.has(key);
+        default:
+          return false;
+      }
+    },
+    [roleName],
   );
 
   const greeting = useMemo(() => pickGreeting(), []);
 
-  const displayName = session?.display_name ?? session?.role_name ?? '';
+  const displayName = session?.display_name ?? '';
 
   // ── Loading state (no entrance animations) ────────────────────
 
@@ -384,23 +430,28 @@ export default function WorkspaceHome() {
 
   useEffect(() => {
     return () => {
+      rippleTimersRef.current.forEach((t) => clearTimeout(t));
+      rippleTimersRef.current = [];
       ripplesRef.current.forEach(r => r.remove());
       ripplesRef.current = [];
     };
   }, []);
 
-  // ── Click ripple + immediate navigation ──────────────────────────
-  //
-  // Navigates on the same event loop tick — no 300ms exit delay.
-  // The exiting state is set briefly for the CSS animation but the
-  // component unmounts before it completes; on re-entry the state is
-  // fresh from the useState initialiser.
+  // ── Workspace activation + click ripple ─────────────────────────
+
+  const activateWorkspace = useCallback(
+    (key: string): boolean => {
+      if (!canAccess(key)) return false;
+      recordLastUsed(key);
+      setActiveWorkspace(key);
+      return true;
+    },
+    [canAccess, recordLastUsed, setActiveWorkspace],
+  );
 
   const handleCardClick = useCallback(
     (key: string, e: React.MouseEvent<HTMLButtonElement>) => {
-      if (!canAccess(key)) return;
-      if (exitingWorkspace) return;
-      recordLastUsed(key);
+      if (!activateWorkspace(key)) return;
       const card = e.currentTarget;
       const rect = card.getBoundingClientRect();
 
@@ -410,29 +461,34 @@ export default function WorkspaceHome() {
       const size = Math.max(rect.width, rect.height);
       const clickX = e.clientX !== 0 ? e.clientX : rect.left + rect.width / 2;
       const clickY = e.clientY !== 0 ? e.clientY : rect.top + rect.height / 2;
-      const x = clickX - rect.left - size / 2;
-      const y = clickY - rect.top - size / 2;
       ripple.style.width = ripple.style.height = `${size}px`;
-      ripple.style.left = `${x}px`;
-      ripple.style.top = `${y}px`;
+      ripple.style.left = `${clickX - rect.left - size / 2}px`;
+      ripple.style.top = `${clickY - rect.top - size / 2}px`;
       card.appendChild(ripple);
       ripplesRef.current.push(ripple);
-      ripple.addEventListener('animationend', () => {
-        ripple.remove();
-        ripplesRef.current = ripplesRef.current.filter(r => r !== ripple);
-      });
-      setTimeout(() => {
-        if (ripple.parentNode) {
-          ripple.remove();
-          ripplesRef.current = ripplesRef.current.filter(r => r !== ripple);
-        }
-      }, 600);
 
-      // Navigate immediately — no exit animation delay
-      setExitingWorkspace(key);
-      setActiveWorkspace(key);
+      const removeRipple = () => {
+        if (ripple.parentNode) ripple.remove();
+        ripplesRef.current = ripplesRef.current.filter(r => r !== ripple);
+      };
+
+      let timer: number | undefined;
+      const cleanup = () => {
+        if (timer !== undefined) {
+          clearTimeout(timer);
+          rippleTimersRef.current = rippleTimersRef.current.filter(t => t !== timer);
+          timer = undefined;
+        }
+        removeRipple();
+      };
+
+      ripple.addEventListener('animationend', cleanup);
+      // Fallback if `animationend` never fires (reduced motion or an
+      // interrupted animation). Tracked so it can be cleared on unmount.
+      timer = window.setTimeout(cleanup, 600);
+      rippleTimersRef.current.push(timer);
     },
-    [canAccess, setActiveWorkspace, exitingWorkspace, recordLastUsed],
+    [activateWorkspace],
   );
 
   // ── Keyboard navigation ──────────────────────────────────────
@@ -451,27 +507,34 @@ export default function WorkspaceHome() {
       }
     }
 
+    // Column count is derived from the grid's actual layout (cards in the
+    // first row), so it stays correct regardless of how the CSS expresses
+    // the track list (`repeat(3, 1fr)`, `minmax(...)`, etc.).
     function getColumns(): number {
-      const style = grid ? getComputedStyle(grid) : { gridTemplateColumns: '1' } as CSSStyleDeclaration;
-      const gridCols = style.gridTemplateColumns.split(' ');
-      return gridCols.length;
+      const all = grid!.querySelectorAll<HTMLElement>('.workspace-card');
+      if (all.length === 0) return 1;
+      const firstTop = all[0]!.offsetTop;
+      let cols = 0;
+      for (const el of all) {
+        if (el.offsetTop !== firstTop) break;
+        cols += 1;
+      }
+      return Math.max(cols, 1);
     }
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // ── Quick-launch: number keys 1-9 select workspace by index ───
+      // ── Quick-launch: number keys 1-9 select a workspace by index ──
+      // Only the workspace cards (which render a visible number hint) are
+      // mapped; the Analytics/Reports shortcuts and coming-soon cards are
+      // intentionally excluded.
       if (e.key >= '1' && e.key <= '9' && !e.ctrlKey && !e.altKey && !e.metaKey) {
         const activeTag = document.activeElement?.tagName;
         if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT') return;
         const idx = parseInt(e.key, 10) - 1;
-        if (idx < cards.length) {
+        const key = sortedWorkspaces[idx]?.type_key;
+        if (key && canAccess(key)) {
           e.preventDefault();
-          const target = cards[idx];
-          if (target && !target.disabled && !target.classList.contains('workspace-card--disabled')) {
-            // Programmatic click won't create a ripple,
-            // but we still need to activate the workspace.
-            // dispatchEvent is used to trigger the React onClick handler.
-            target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-          }
+          activateWorkspace(key);
         }
         return;
       }
@@ -520,7 +583,7 @@ export default function WorkspaceHome() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [sortedWorkspaces, setActiveWorkspace, canAccess]);
+  }, [sortedWorkspaces, canAccess, activateWorkspace]);
 
 
 
@@ -564,7 +627,7 @@ export default function WorkspaceHome() {
           </div>
           <div className="ws-main">
             <header className="workspace-home-header" />
-            <SkeletonGrid l10n={l10n} />
+            <SkeletonGrid />
           </div>
           <div className="ws-footer" />
         </div>
@@ -621,7 +684,6 @@ export default function WorkspaceHome() {
                   <span>Could not load your workspaces. Check your connection and try again.</span>
                 </Localized>
               </p>
-              { }
               <button
                 type="button"
                 className="workspace-error-retry"
@@ -737,7 +799,7 @@ export default function WorkspaceHome() {
                     key={ws.type_key}
                     type="button"
                     aria-current={isActive ? 'true' : undefined}
-                    className={`workspace-card ${colorClass}${isActive ? ' workspace-card--active' : ''}${exitingWorkspace === ws.type_key ? ' workspace-card--exiting' : ''}`}
+                    className={`workspace-card ${colorClass}${isActive ? ' workspace-card--active' : ''}`}
                     data-testid="workspace-card"
                     onClick={(e) => handleCardClick(ws.type_key, e)}
                     aria-label={l10n.getString('workspace-card-open-aria', { name: ws.name })}
@@ -751,7 +813,7 @@ export default function WorkspaceHome() {
                       onClick={(e) => { e.stopPropagation(); togglePin(ws.type_key); }}
                       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); togglePin(ws.type_key); } }}
                       aria-label={pinnedKeys.has(ws.type_key) ? l10n.getString('workspace-card-unpin-aria', { name: ws.name }) : l10n.getString('workspace-card-pin-aria', { name: ws.name })}
-                      tabIndex={-1}
+                      tabIndex={0}
                     >
                       <svg viewBox="0 0 24 24" fill={pinnedKeys.has(ws.type_key) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
                         <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />

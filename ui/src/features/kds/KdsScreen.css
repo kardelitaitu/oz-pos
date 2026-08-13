@@ -1133,8 +1133,6 @@
 .kds-loading-line--short { width: 40%; }
 .kds-loading-line--medium { width: 65%; }
 .kds-loading-line--long { width: 85%; }
-.kds-loading-line--header { height: 1rem; width: 50%; }
-.kds-loading-line--badge { height: 1.5rem; width: 2rem; border-radius: var(--radius-2xl); }
 
 /* ── Keyboard shortcuts popover ──────────────────────────────── */
 
