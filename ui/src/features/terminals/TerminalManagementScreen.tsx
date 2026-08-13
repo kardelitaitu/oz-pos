@@ -628,7 +628,7 @@ export default function TerminalManagementScreen() {
               type="text"
               id="terminal-field-name"
               value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
               placeholder="e.g. Front Counter"
               autoComplete="off"
             />
@@ -646,7 +646,7 @@ export default function TerminalManagementScreen() {
               type="text"
               id="terminal-field-device-id"
               value={form.deviceId}
-              onChange={(e) => setForm({ ...form, deviceId: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, deviceId: e.target.value }))}
               placeholder="e.g. hostname or MAC address"
               autoComplete="off"
             />
@@ -664,7 +664,7 @@ export default function TerminalManagementScreen() {
               type="password"
               id="terminal-field-secret"
               value={form.terminalSecret}
-              onChange={(e) => setForm({ ...form, terminalSecret: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, terminalSecret: e.target.value }))}
               autoComplete="off"
             />
           </label>
@@ -679,7 +679,7 @@ export default function TerminalManagementScreen() {
             className="terminal-mgmt-input terminal-mgmt-textarea"
             id="terminal-field-metadata"
             value={form.metadata}
-            onChange={(e) => setForm({ ...form, metadata: e.target.value })}
+            onChange={(e) => setForm((prev) => ({ ...prev, metadata: e.target.value }))}
             rows={3}
           />
         </label>
@@ -692,7 +692,7 @@ export default function TerminalManagementScreen() {
               type="checkbox"
               id="terminal-field-active"
               checked={form.isActive}
-              onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+              onChange={(e) => setForm((prev) => ({ ...prev, isActive: e.target.checked }))}
             />
             <Localized id="terminal-is-active">
               <label className="terminal-mgmt-checkbox-label" htmlFor="terminal-field-active">
