@@ -1130,3 +1130,32 @@ Three more sources of stderr noise removed from the full-suite run:
   selector-count mismatch, duplicate keys). Remaining stderr is
   intentional error-path logging (tests asserting failure surfaces).
 - typecheck ✅ · lint 0 errors ✅
+
+# Githooks portability fix (2026-08-14)
+
+The pre-commit hook hardcoded a WSL-only rustup path
+(`/mnt/c/Users/Dika/.cargo/bin/rustup.exe`) that cannot resolve in Git Bash on
+Windows — the cargo fmt gate was silently dead for every commit made outside
+WSL (all commits in this session needed `--no-verify` + manual gate runs).
+
+Fix: resolve rustup portably — `command -v rustup` → `rustup.exe` → fallback
+glob `/c/Users/*/.cargo/bin/rustup.exe`. First commit (`5ebf378b`) where the
+hook's cargo fmt gate actually ran and passed; `--no-verify` no longer needed.
+
+Note: the hook's `cargo fmt --all` formats the whole workspace, including the
+user's in-flight `migrations.rs` in the worktree — restored via `git checkout`
+after commit (the hook only re-stages staged files, so nothing foreign was
+committed).
+
+# Githooks portability fix round 2 — post-commit (2026-08-14)
+
+`post-commit` hardcoded the machine-specific CBM binary path
+(`C:/Users/Dika/AppData/Local/Programs/codebase-memory-mcp/codebase-memory-mcp.exe`)
+and the repo root (`C:/My Script/oz-pos`), silently disabling background
+codebase indexing on any other machine or checkout.
+
+Fix (`f3aff42c`): derive the repo root from `git rev-parse --show-toplevel`
+and resolve the binary via `CBM_EXE` env override → PATH → standard Windows
+install location glob. Verified the indexer process actually spawns after a
+commit. All remaining hardcoded paths in `.githooks/` + `scripts/` cleared
+(the one `verify-docker-all.sh` path is a deliberate test fixture).
