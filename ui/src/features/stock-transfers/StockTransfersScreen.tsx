@@ -38,9 +38,11 @@ function localizedStatusLabel(l10n: RequiredLocalizedL10n, status: string): stri
   return l10n.getString(`stock-transfers-status-${status}`) ?? statusLabel(status);
 }
 
-function formatDate(iso: string | null): string {
+function formatDate(iso: string | null, locale: string): string {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString(undefined, {
+  // toLocaleString (not toLocaleDateString) so hour/minute options are honored,
+  // formatted in the active Fluent locale rather than the browser default.
+  return new Date(iso).toLocaleString(locale, {
     year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 }
@@ -54,6 +56,7 @@ interface LineFormEntry {
 /** Stock transfers screen — create, send, receive, and cancel stock transfers between store locations or terminals. */
 export default function StockTransfersScreen() {
   const { l10n } = useLocalization();
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
   const { sessionToken: rawToken } = useWorkspace();
   const sessionToken = rawToken || '';
   const [transfers, setTransfers] = useState<StockTransfer[]>([]);
@@ -83,6 +86,7 @@ export default function StockTransfersScreen() {
   const [receiveTransferId, setReceiveTransferId] = useState<string | null>(null);
   const [receiveLines, setReceiveLines] = useState<Record<string, string>>({});
   const [receiveSaving, setReceiveSaving] = useState(false);
+  const [receiveError, setReceiveError] = useState<string | null>(null);
   const receivePanelRef = useRef<HTMLDivElement>(null);
 
   // ── Exit animations ───────────────────────────────────────────
@@ -160,12 +164,21 @@ export default function StockTransfersScreen() {
 
   const handleReceive = useCallback(async () => {
     if (!receiveTransferId || !sessionToken) return;
+    // ST-03: received quantities are whole units — reject fractional input
+    // instead of silently truncating it via parseInt.
+    for (const qtyStr of Object.values(receiveLines)) {
+      const qty = Number(qtyStr);
+      if (!Number.isInteger(qty) || qty < 0) {
+        setReceiveError(l10n.getString('stock-transfers-error-qty-integer'));
+        return;
+      }
+    }
     setReceiveSaving(true);
     try {
       const receivedLines: ReceivedLineInput[] = Object.entries(receiveLines).map(
         ([lineId, qtyStr]) => ({
           line_id: lineId,
-          received_qty: parseInt(qtyStr, 10) || 0,
+          received_qty: qtyStr === '' ? 0 : Number(qtyStr),
         }),
       );
       await receiveStockTransfer(sessionToken, receiveTransferId, receivedLines);
@@ -227,16 +240,26 @@ export default function StockTransfersScreen() {
     setCreateSaving(true);
     setCreateError(null);
     try {
-      const lines = createLines
-        .filter((l) => l.sku.trim() && parseInt(l.qty, 10) > 0)
-        .map((l) => ({
-          id: '',
-          transfer_id: '',
-          sku: l.sku.trim(),
-          product_name: l.productName,
-          qty: parseInt(l.qty, 10),
-          received_qty: 0,
-        }));
+      // ST-04: line quantities are whole units — reject fractional input
+      // instead of silently truncating it via parseInt.
+      const validLines = createLines.filter((l) => l.sku.trim());
+      const invalidQty = validLines.some((l) => {
+        const qty = Number(l.qty);
+        return !Number.isInteger(qty) || qty <= 0;
+      });
+      if (invalidQty) {
+        setCreateError(l10n.getString('stock-transfers-error-qty-integer'));
+        setCreateSaving(false);
+        return;
+      }
+      const lines = validLines.map((l) => ({
+        id: '',
+        transfer_id: '',
+        sku: l.sku.trim(),
+        product_name: l.productName,
+        qty: Number(l.qty),
+        received_qty: 0,
+      }));
       if (lines.length === 0) {
         setCreateError(l10n.getString('stock-transfers-error-no-lines'));
         setCreateSaving(false);
@@ -399,7 +422,7 @@ export default function StockTransfersScreen() {
                   </td>
                   <td>{t.source_location ?? t.source_terminal_id ?? '—'}</td>
                   <td>{t.destination_location ?? t.destination_terminal_id ?? '—'}</td>
-                  <td className="stock-transfers-cell-date">{formatDate(t.created_at)}</td>
+                  <td className="stock-transfers-cell-date">{formatDate(t.created_at, numLocale)}</td>
                   <td className="stock-transfers-cell-actions">
                     <Localized id="stock-transfers-view">
                       <button
@@ -498,18 +521,18 @@ export default function StockTransfersScreen() {
                   </div>
                   <div className="stock-transfers-detail-field">
                     <Localized id="stock-transfers-created"><span className="stock-transfers-detail-label">Created</span></Localized>
-                    <span>{formatDate(detail.transfer.created_at)}</span>
+                    <span>{formatDate(detail.transfer.created_at, numLocale)}</span>
                   </div>
                   {detail.transfer.sent_at && (
                     <div className="stock-transfers-detail-field">
                       <Localized id="stock-transfers-sent-at"><span className="stock-transfers-detail-label">Sent</span></Localized>
-                      <span>{formatDate(detail.transfer.sent_at)}</span>
+                      <span>{formatDate(detail.transfer.sent_at, numLocale)}</span>
                     </div>
                   )}
                   {detail.transfer.received_at && (
                     <div className="stock-transfers-detail-field">
                       <Localized id="stock-transfers-received-at"><span className="stock-transfers-detail-label">Received</span></Localized>
-                      <span>{formatDate(detail.transfer.received_at)}</span>
+                      <span>{formatDate(detail.transfer.received_at, numLocale)}</span>
                     </div>
                   )}
                 </div>
@@ -646,7 +669,6 @@ export default function StockTransfersScreen() {
                   </div>
                 ))}
                 <datalist id="product-skus">
-                  { }
                   {products.map((p) => <option key={p.sku} value={p.sku} />)}
                 </datalist>
               </div>
@@ -679,18 +701,23 @@ export default function StockTransfersScreen() {
               <Localized id="stock-transfers-receive-instruction">
                 <p>Enter the quantity received for each line item.</p>
               </Localized>
+              {receiveError && <div className="stock-transfers-error" role="alert">{receiveError}</div>}
               {detail.lines.map((l) => (
                 <label key={l.id} className="stock-transfers-field">
-                  <span className="stock-transfers-label">{l.sku} — {l.product_name} (ordered: {l.qty})</span>
-                  <input
-                    className="stock-transfers-input"
-                    type="number"
-                    min="0"
-                    max={l.qty}
-                    value={receiveLines[l.id] ?? String(l.qty)}
-                    onChange={(e) => setReceiveLines({ ...receiveLines, [l.id]: e.target.value })}
-                    aria-label={`${l.sku} received quantity`}
-                  />
+                  <Localized id="stock-transfers-receive-line" vars={{ sku: l.sku, product: l.product_name, qty: String(l.qty) }}>
+                    <span className="stock-transfers-label">{l.sku} — {l.product_name} (ordered: {l.qty})</span>
+                  </Localized>
+                  <Localized id="stock-transfers-received-qty-aria" attrs={{ 'aria-label': true }} vars={{ sku: l.sku }}>
+                    <input
+                      className="stock-transfers-input"
+                      type="number"
+                      min="0"
+                      max={l.qty}
+                      value={receiveLines[l.id] ?? String(l.qty)}
+                      onChange={(e) => setReceiveLines((prev) => ({ ...prev, [l.id]: e.target.value }))}
+                      aria-label={`${l.sku} received quantity`}
+                    />
+                  </Localized>
                 </label>
               ))}
             </div>

@@ -623,3 +623,36 @@ Audit of `src/features/products/` (4 screens) + `products.ftl` /
 3. **`formatVariantPrice`** — hardcodes `Intl.NumberFormat('en-US', ...)`
    instead of the active Fluent locale; the domain `formatMoney` already
    handles IDR minor-unit exponents, so this could reuse it.
+
+---
+
+# Stock-transfers audit (2026-08-13)
+
+Audit of `StockTransfersScreen.tsx` + `stock-transfers.ftl` /
+`stock-transfers.id.ftl`.
+
+## Fixed (committed)
+
+- ✅ **`formatDate` bug** — called `toLocaleDateString` with `hour`/`minute`
+  options, which are silently dropped, and used the browser default locale.
+  Now `toLocaleString` with the active Fluent locale, so created/sent/received
+  timestamps show the time and match the UI language.
+- ✅ **Strict-integer quantities** — receive qty (`parseInt('4.5') || 0` sent
+  4) and create-line qty (`parseInt` truncated) now reject fractional input
+  with a new `stock-transfers-error-qty-integer` message instead of silently
+  truncating. Regression test added for the receive flow.
+- ✅ **Receive modal localized** — the `(ordered: {qty})` line label and the
+  `{sku} received quantity` aria-label were hardcoded English; now Fluent
+  (`stock-transfers-receive-line`, `stock-transfers-received-qty-aria`).
+  Receive validation errors surface via `role="alert"` (new `receiveError`
+  state); `setReceiveLines` uses a functional updater; stray `{ }` JSX in
+  the product datalist removed.
+
+## Still open
+
+1. **`localizedStatusLabel` fallback** — unknown backend statuses render the
+  capitalized raw value; the dynamic `stock-transfers-status-*` keys cover
+  the known set (used by filter tabs + badges).
+2. **Create-line `productName`** — when typing a SKU that doesn't match a
+  known product, the line name falls back to the raw SKU text; intentional
+  for free-form entries.

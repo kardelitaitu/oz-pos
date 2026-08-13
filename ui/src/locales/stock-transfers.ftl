@@ -56,3 +56,7 @@ stock-transfers-error-receive = Failed to receive transfer
 stock-transfers-error-cancel = Failed to cancel transfer
 stock-transfers-error-create = Failed to create transfer
 stock-transfers-error-no-lines = Add at least one line item with a quantity greater than 0.
+stock-transfers-error-qty-integer = Quantities must be whole numbers
+stock-transfers-receive-line = { $sku } — { $product } (ordered: { $qty })
+stock-transfers-received-qty-aria =
+    .aria-label = { $sku } received quantity
