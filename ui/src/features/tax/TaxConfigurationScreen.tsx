@@ -337,7 +337,7 @@ export default function TaxConfigurationScreen() {
                     <Localized id="tax-config-col-type"><th>Type</th></Localized>
                     <Localized id="tax-config-col-default"><th>Default</th></Localized>
                     <Localized id="tax-config-col-actions" attrs={{ "aria-label": true }}>
-                      <th aria-label={l10n.getString('actions-aria')}> </th>
+                      <th> </th>
                     </Localized>
                   </tr>
                 </thead>
@@ -417,7 +417,7 @@ export default function TaxConfigurationScreen() {
                       <Localized id="tax-config-col-category"><th>Category</th></Localized>
                       <Localized id="tax-config-col-assigned"><th>Assigned Tax Rates</th></Localized>
                       <Localized id="tax-config-col-actions" attrs={{ "aria-label": true }}>
-                        <th aria-label={l10n.getString('actions-aria')}> </th>
+                        <th> </th>
                       </Localized>
                     </tr>
                   </thead>

@@ -283,3 +283,41 @@ Audit of the owner/admin reports dashboard (`DashboardScreen.tsx` +
    `refund-reason/note-placeholder` inputs (correctly served by their
    `<Localized attrs>` wrappers). Added `scanAttributeOnlyGetString()` to the
    `barePlaceholderScan` gate so this class fails closed.
+
+---
+
+# Tax configuration audit (2026-08-13)
+
+Audit of `TaxConfigurationScreen.tsx` + `tax.ftl` / `tax.id.ftl`.
+
+## Fixed (committed)
+
+- ✅ **Inclusive/Exclusive toggle keyboard access** — the two `role="radio"`
+  buttons now form a real WAI-ARIA radiogroup: Arrow keys move focus + selection
+  and a roving tabindex keeps only the checked option in the Tab order.
+- ✅ **Rate parsing** — `parseInt` (which silently truncated `825.5` → `825`)
+  replaced with `Number` + `Number.isInteger`, so non-integer bps is rejected
+  with the existing localized error instead of being saved as the wrong rate.
+- ✅ **Name trimming** — the tax name is trimmed before save (the Save button
+  already required a non-blank name, but surrounding whitespace was preserved).
+- ✅ **Dead `aria-label` on the actions `<th>`** — both tables' actions column
+  headers carried `aria-label={getString('actions-aria')}` under a
+  `<Localized attrs={{ "aria-label": true }}>` wrapper that already injects the
+  localized `tax-config-col-actions` attribute, overriding the explicit prop.
+  Removed the dead prop.
+- ✅ **Orphan FTL keys removed** — `tax-config-loading`, `tax-config-modal-aria`,
+  `tax-config-cat-modal-aria`, `tax-config-modal-close` (both locales) and
+  `tax-config-field-name-aria` (en only) were never read by any code.
+
+## Still open
+
+1. **Non-functional `setForm` updates** — the name/rate/checkbox/radio `onChange`
+   handlers spread `form` from the closure (`setForm({ ...form, … })`) rather
+   than a functional updater. Harmless for single controlled fields but a
+   latent stale-closure risk if two fields change in the same tick; low priority.
+2. **Category modal always saves** — `SettingsPopup` for category rates has no
+   `saveDisabled`, so a no-op save (unchanged assignment) round-trips the IPC.
+   Cosmetic; could diff against `catTaxRates.get(editingCatId)`.
+3. **Redundant `aria-label` on picker labels** — the category rate `<label>`s
+   set `aria-label={r.name}`, which overrides the richer label text (rate % +
+   type). Confirm whether the bare name is the intended accessible name.
