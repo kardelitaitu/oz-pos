@@ -34,7 +34,6 @@ offline-queue-last-error = Last Error
 offline-queue-created = Created
 offline-queue-synced-at = Synced At
 offline-queue-delete = Delete
-offline-queue-delete-success = Item deleted.
 offline-queue-none = —
 offline-queue-table-aria = Offline queue items
 offline-queue-pull-to-refresh = Pull to refresh

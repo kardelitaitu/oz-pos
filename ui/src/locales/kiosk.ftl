@@ -6,7 +6,6 @@ kiosk-checkout = Checkout
 kiosk-checkout-title = Checkout
 kiosk-total = Total
 kiosk-pay = Pay
-kiosk-return = Return to Menu
 kiosk-decrease = Decrease
 kiosk-increase = Increase
 kiosk-stock-left = { $count } left

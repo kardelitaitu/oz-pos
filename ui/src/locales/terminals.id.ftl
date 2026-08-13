@@ -77,9 +77,6 @@ terminal-binding-primary = (Utama)
 terminal-binding-update = Perbarui Pengikatan
 terminal-binding-bind = Ikat Terminal
 terminal-binding-clear = Hapus Pengikatan
-terminal-binding-error-load = Gagal memuat pengikatan perangkat
-terminal-binding-error-save = Gagal menyimpan pengikatan perangkat
-terminal-binding-error-clear = Gagal menghapus pengikatan perangkat
 
 # Feature override counts
 terminal-overrides-count = { $count ->

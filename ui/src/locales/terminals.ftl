@@ -79,9 +79,6 @@ terminal-binding-primary = (Primary)
 terminal-binding-update = Update Binding
 terminal-binding-bind = Bind Terminal
 terminal-binding-clear = Clear Binding
-terminal-binding-error-load = Failed to load device binding
-terminal-binding-error-save = Failed to save device binding
-terminal-binding-error-clear = Failed to clear device binding
 
 # Feature override counts
 terminal-overrides-count = { $count ->

@@ -4,7 +4,6 @@ kiosk-checkout = Pembayaran
 kiosk-checkout-title = Pembayaran
 kiosk-total = Total
 kiosk-pay = Bayar
-kiosk-return = Kembali ke Menu
 
 # ── Kitchen Display System ──
 kiosk-decrease = Kurangi
