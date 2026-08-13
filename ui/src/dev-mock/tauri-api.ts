@@ -230,84 +230,91 @@ const _initialKdsOrders = [
     id: 'kds-order-1',
     display_number: 101,
     status: 'pending',
-    received_at: new Date(Date.now() - 45000).toISOString(),
+    received_at: new Date(Date.now() - 30000).toISOString(),
     items_summary: '2x Nasi Goreng Spesial, 1x Es Teh Manis',
     item_count: 3,
     order_type: 'dine_in',
     table_number: 'T3',
     notes: 'Pedas level 2',
+    priority: false,
     store_id: 'store-1',
   },
   {
     id: 'kds-order-2',
     display_number: 102,
     status: 'pending',
-    received_at: new Date(Date.now() - 30000).toISOString(),
+    received_at: new Date(Date.now() - 90000).toISOString(),
     items_summary: '1x Ayam Bakar Madu, 1x Soto Ayam',
     item_count: 2,
     order_type: 'dine_in',
     table_number: 'T5',
     notes: null,
+    priority: false,
     store_id: 'store-1',
   },
   {
     id: 'kds-order-3',
     display_number: 103,
     status: 'preparing',
-    received_at: new Date(Date.now() - 180000).toISOString(),
+    received_at: new Date(Date.now() - 240000).toISOString(),
     items_summary: '1x Sate Ayam 10 Tusuk, 2x Es Teh Manis',
     item_count: 3,
     order_type: 'dine_in',
     table_number: 'T7',
     notes: 'Sate tanpa kacang',
+    priority: false,
     store_id: 'store-1',
   },
   {
     id: 'kds-order-4',
     display_number: 104,
     status: 'preparing',
-    received_at: new Date(Date.now() - 240000).toISOString(),
+    received_at: new Date(Date.now() - 360000).toISOString(),
     items_summary: '1x Rawon Daging, 1x Gado-Gado',
     item_count: 2,
     order_type: 'dine_in',
     table_number: 'T2',
     notes: null,
+    priority: false,
     store_id: 'store-1',
   },
   {
     id: 'kds-order-5',
     display_number: 105,
     status: 'preparing',
-    received_at: new Date(Date.now() - 360000).toISOString(),
+    received_at: new Date(Date.now() - 480000).toISOString(),
     items_summary: '3x Mie Goreng Jawa, 2x Kopi Tubruk',
     item_count: 5,
     order_type: 'dine_in',
     table_number: 'T10',
     notes: 'Mie goreng setengah matang',
+    priority: true,
     store_id: 'store-1',
   },
   {
     id: 'kds-order-6',
     display_number: 106,
     status: 'ready',
-    received_at: new Date(Date.now() - 420000).toISOString(),
+    received_at: new Date(Date.now() - 600000).toISOString(),
     items_summary: '2x Caffè Latte, 1x Cappuccino',
     item_count: 3,
     order_type: 'dine_in',
     table_number: 'T1',
     notes: null,
+    priority: true,
     store_id: 'store-1',
   },
   {
     id: 'kds-order-7',
     display_number: 107,
     status: 'ready',
-    received_at: new Date(Date.now() - 540000).toISOString(),
+    received_at: new Date(Date.now() - 720000).toISOString(),
     items_summary: '1x Nasi Goreng Spesial, 1x Es Jeruk Peras',
     item_count: 2,
     order_type: 'takeaway',
     table_number: null,
     notes: 'Extra sambal',
+    priority: true,
     store_id: 'store-1',
   },
   {
@@ -320,30 +327,33 @@ const _initialKdsOrders = [
     order_type: 'dine_in',
     table_number: 'T4',
     notes: null,
+    priority: false,
     store_id: 'store-1',
   },
   {
     id: 'kds-order-9',
     display_number: 109,
     status: 'pending',
-    received_at: new Date(Date.now() - 60000).toISOString(),
+    received_at: new Date(Date.now() - 120000).toISOString(),
     items_summary: '1x Ayam Bakar Madu, 1x Tahu Goreng, 1x Tempe Goreng',
     item_count: 3,
     order_type: 'dine_in',
     table_number: 'T8',
     notes: 'Ayam bakar tanpa kulit',
+    priority: false,
     store_id: 'store-1',
   },
   {
     id: 'kds-order-10',
     display_number: 110,
     status: 'ready',
-    received_at: new Date(Date.now() - 660000).toISOString(),
+    received_at: new Date(Date.now() - 840000).toISOString(),
     items_summary: '1x Es Campur, 1x Klepon',
     item_count: 2,
     order_type: 'dine_in',
     table_number: 'T6',
     notes: null,
+    priority: true,
     store_id: 'store-1',
   },
 ];
@@ -593,6 +603,95 @@ function startKdsAutoGeneration(): void {
 
 // Start auto-generation on load.
 startKdsAutoGeneration();
+
+// ── Auto-progress: advance orders through stages ──
+// pending → preparing (2-5 min), preparing → ready (3-8 min).
+// Keeps the KDS screen alive by moving orders through the kitchen.
+const KDS_PROGRESS_INTERVAL_MS = 10_000; // check every 10s
+const KDS_PENDING_TO_PREPARING_MIN_MS = 120_000; // 2 min minimum before prep
+const KDS_PENDING_TO_PREPARING_MAX_MS = 300_000; // 5 min
+const KDS_PREPARING_TO_READY_MIN_MS = 180_000; // 3 min minimum before ready
+const KDS_PREPARING_TO_READY_MAX_MS = 480_000; // 8 min
+
+function startKdsAutoProgress(): void {
+  setInterval(() => {
+    let changed = false;
+    const now = Date.now();
+    for (const order of mockKdsOrders) {
+      const status = order['status'] as string;
+      const receivedAt = new Date(order['received_at'] as string).getTime();
+      const elapsed = now - receivedAt;
+
+      if (status === 'pending') {
+        const threshold = KDS_PENDING_TO_PREPARING_MIN_MS +
+          Math.random() * (KDS_PENDING_TO_PREPARING_MAX_MS - KDS_PENDING_TO_PREPARING_MIN_MS);
+        if (elapsed >= threshold) {
+          order['status'] = 'preparing';
+          order['started_at'] = new Date().toISOString();
+          // Progress some line items to 'cooking'
+          const lines = mockKdsLineItems[order['id'] as string];
+          if (lines) {
+            for (const line of lines) {
+              if (line['item_status'] === 'pending') {
+                line['item_status'] = 'cooking';
+                line['started_at'] = new Date().toISOString();
+                break; // only start one item at a time
+              }
+            }
+          }
+          changed = true;
+        }
+      } else if (status === 'preparing') {
+        const threshold = KDS_PREPARING_TO_READY_MIN_MS +
+          Math.random() * (KDS_PREPARING_TO_READY_MAX_MS - KDS_PREPARING_TO_READY_MIN_MS);
+        if (elapsed >= threshold) {
+          order['status'] = 'ready';
+          order['ready_at'] = new Date().toISOString();
+          // Mark all line items as ready
+          const lines = mockKdsLineItems[order['id'] as string];
+          if (lines) {
+            for (const line of lines) {
+              if (line['item_status'] !== 'ready') {
+                line['item_status'] = 'ready';
+                line['ready_at'] = new Date().toISOString();
+              }
+            }
+          }
+          changed = true;
+        }
+      } else if (status === 'ready') {
+        // Auto-serve after 5-10 minutes of being ready
+        const readyAt = order['ready_at'] ? new Date(order['ready_at'] as string).getTime() : receivedAt;
+        const readyElapsed = now - readyAt;
+        if (readyElapsed >= 300_000 + Math.random() * 300_000) {
+          order['status'] = 'served';
+          order['served_at'] = new Date().toISOString();
+          const lines = mockKdsLineItems[order['id'] as string];
+          if (lines) {
+            for (const line of lines) {
+              line['item_status'] = 'served';
+              line['served_at'] = new Date().toISOString();
+            }
+          }
+          changed = true;
+        }
+      }
+
+      // Escalate priority after 10 minutes total
+      if (elapsed >= 600_000 && !order['priority']) {
+        order['priority'] = true;
+        changed = true;
+      }
+    }
+    if (changed) {
+      evictCompletedOrders();
+      saveMockKdsState();
+      void emit('kds:orders-changed', null);
+    }
+  }, KDS_PROGRESS_INTERVAL_MS);
+}
+
+startKdsAutoProgress();
 
 /** Push a new KDS order derived from cart lines into the mock queue. */
 function pushKdsOrderFromCart(lines: CartLine[], storeId: string) {
