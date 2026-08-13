@@ -51,12 +51,38 @@ const RAW_MOCK_PRODUCTS = [
   // menu is populated in the E2E dev-mock and a completed restaurant sale
   // feeds the Kitchen Display (KDS) ticket queue. The retail grid also shows
   // these — harmless for the artificial mock catalog.
+  // ── Hot Drinks ──
   { sku: 'LATTE', name: 'Caffè Latte', category: 'Hot Drinks', price: { minor_units: 45000, currency: 'IDR' }, barcode: '4901234567890', in_stock: true, stock_qty: 50, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
   { sku: 'CAPPU', name: 'Cappuccino', category: 'Hot Drinks', price: { minor_units: 42000, currency: 'IDR' }, barcode: '4901234567891', in_stock: true, stock_qty: 40, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
   { sku: 'ESPR', name: 'Espresso Shot', category: 'Hot Drinks', price: { minor_units: 28000, currency: 'IDR' }, barcode: '4901234567892', in_stock: true, stock_qty: 60, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
+  { sku: 'KOPI-T', name: 'Kopi Tubruk', category: 'Hot Drinks', price: { minor_units: 15000, currency: 'IDR' }, barcode: '4901234567900', in_stock: true, stock_qty: 80, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
+  { sku: 'TEH-T', name: 'Teh Tarik', category: 'Hot Drinks', price: { minor_units: 18000, currency: 'IDR' }, barcode: '4901234567901', in_stock: true, stock_qty: 70, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
+  // ── Cold Drinks ──
+  { sku: 'ICED', name: 'Iced Coffee', category: 'Cold Drinks', price: { minor_units: 32000, currency: 'IDR' }, barcode: '4901234567893', in_stock: true, stock_qty: 50, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
+  { sku: 'MATCHA', name: 'Matcha Latte', category: 'Cold Drinks', price: { minor_units: 38000, currency: 'IDR' }, barcode: '4901234567895', in_stock: true, stock_qty: 35, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
+  { sku: 'ES-TEH', name: 'Es Teh Manis', category: 'Cold Drinks', price: { minor_units: 8000, currency: 'IDR' }, barcode: '4901234567902', in_stock: true, stock_qty: 100, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
+  { sku: 'ES-JERUK', name: 'Es Jeruk Peras', category: 'Cold Drinks', price: { minor_units: 12000, currency: 'IDR' }, barcode: '4901234567903', in_stock: true, stock_qty: 60, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
+  { sku: 'JUS-ALPUKAT', name: 'Jus Alpukat', category: 'Cold Drinks', price: { minor_units: 20000, currency: 'IDR' }, barcode: '4901234567904', in_stock: true, stock_qty: 40, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
+  { sku: 'SODA-GEMBIRA', name: 'Soda Gembira', category: 'Cold Drinks', price: { minor_units: 20000, currency: 'IDR' }, barcode: '4901234567905', in_stock: true, stock_qty: 45, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
+  { sku: 'AIR-MINERAL', name: 'Air Mineral', category: 'Cold Drinks', price: { minor_units: 5000, currency: 'IDR' }, barcode: '4901234567906', in_stock: true, stock_qty: 200, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
+  // ── Main Food ──
+  { sku: 'NASI-GORENG', name: 'Nasi Goreng Spesial', category: 'Food', price: { minor_units: 35000, currency: 'IDR' }, barcode: '4901234567910', in_stock: true, stock_qty: 30, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
+  { sku: 'MIE-GORENG', name: 'Mie Goreng Jawa', category: 'Food', price: { minor_units: 28000, currency: 'IDR' }, barcode: '4901234567911', in_stock: true, stock_qty: 35, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
+  { sku: 'AYAM-BAKAR', name: 'Ayam Bakar Madu', category: 'Food', price: { minor_units: 38000, currency: 'IDR' }, barcode: '4901234567912', in_stock: true, stock_qty: 25, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
+  { sku: 'SATE-AYAM', name: 'Sate Ayam 10 Tusuk', category: 'Food', price: { minor_units: 32000, currency: 'IDR' }, barcode: '4901234567913', in_stock: true, stock_qty: 40, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
+  { sku: 'SOTO-AYAM', name: 'Soto Ayam', category: 'Food', price: { minor_units: 25000, currency: 'IDR' }, barcode: '4901234567914', in_stock: true, stock_qty: 30, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
+  { sku: 'RAWON', name: 'Rawon Daging', category: 'Food', price: { minor_units: 35000, currency: 'IDR' }, barcode: '4901234567915', in_stock: true, stock_qty: 20, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
+  { sku: 'GADO-GADO', name: 'Gado-Gado', category: 'Food', price: { minor_units: 22000, currency: 'IDR' }, barcode: '4901234567916', in_stock: true, stock_qty: 35, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
+  // ── Appetizers & Sides ──
   { sku: 'CROISS', name: 'Butter Croissant', category: 'Food', price: { minor_units: 35000, currency: 'IDR' }, barcode: '4901234567896', in_stock: true, stock_qty: 45, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
-  { sku: 'BAGEL', name: 'Plain Bagel', category: 'Food', price: { minor_units: 25000, currency: 'IDR' }, barcode: '4901234567894', in_stock: true, stock_qty: 100, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
-  { sku: 'SANDW-C', name: 'Chicken Sandwich', category: 'Food', price: { minor_units: 75000, currency: 'IDR' }, barcode: '4901234567899', in_stock: true, stock_qty: 15, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
+  { sku: 'BAKWAN', name: 'Bakwan Sayur', category: 'Food', price: { minor_units: 10000, currency: 'IDR' }, barcode: '4901234567920', in_stock: true, stock_qty: 50, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
+  { sku: 'TAHU-GORENG', name: 'Tahu Goreng', category: 'Food', price: { minor_units: 12000, currency: 'IDR' }, barcode: '4901234567921', in_stock: true, stock_qty: 60, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
+  { sku: 'TEMPE-GORENG', name: 'Tempe Goreng', category: 'Food', price: { minor_units: 10000, currency: 'IDR' }, barcode: '4901234567922', in_stock: true, stock_qty: 60, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
+  // ── Desserts ──
+  { sku: 'PISANG-GORENG', name: 'Pisang Goreng', category: 'Dessert', price: { minor_units: 15000, currency: 'IDR' }, barcode: '4901234567930', in_stock: true, stock_qty: 40, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
+  { sku: 'ES-KRIM', name: 'Es Krim Coklat', category: 'Dessert', price: { minor_units: 18000, currency: 'IDR' }, barcode: '4901234567931', in_stock: true, stock_qty: 30, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
+  { sku: 'KLEPON', name: 'Klepon', category: 'Dessert', price: { minor_units: 12000, currency: 'IDR' }, barcode: '4901234567932', in_stock: true, stock_qty: 50, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
+  { sku: 'ES-CAMPUR', name: 'Es Campur', category: 'Dessert', price: { minor_units: 18000, currency: 'IDR' }, barcode: '4901234567933', in_stock: true, stock_qty: 35, tax_rate_ids: [], created_at: new Date().toISOString(), price_updated_at: new Date().toISOString(), product_type: 'restaurant' },
 ];
 
 // ADR #36/#37: enrich the raw mock catalog with the retail attribute fields
@@ -196,42 +222,127 @@ function saveMockWorkspaces(): void {
 const mockWorkspaces: typeof MOCK_WORKSPACES_SEED = loadMockWorkspaces();
 
 // ── Mock KDS orders ──────────────────────────────────────────────
-// ── Mock KDS orders ──────────────────────────────────────────────
 // Use let + mutable array so complete_sale can push new orders for E2E tests.
+// 10 initial orders with realistic Indonesian food items, spread across
+// statuses and timestamps for a live kitchen feel.
 const _initialKdsOrders = [
   {
     id: 'kds-order-1',
     display_number: 101,
     status: 'pending',
-    received_at: new Date(Date.now() - 60000).toISOString(),
-    items_summary: '1x Caffè Latte, 1x Butter Croissant',
-    item_count: 2,
+    received_at: new Date(Date.now() - 45000).toISOString(),
+    items_summary: '2x Nasi Goreng Spesial, 1x Es Teh Manis',
+    item_count: 3,
     order_type: 'dine_in',
     table_number: 'T3',
-    notes: null,
+    notes: 'Pedas level 2',
     store_id: 'store-1',
   },
   {
     id: 'kds-order-2',
     display_number: 102,
-    status: 'preparing',
-    received_at: new Date(Date.now() - 300000).toISOString(),
-    items_summary: '2x Espresso Shot, 1x Iced Coffee',
-    item_count: 3,
-    order_type: 'takeaway',
-    table_number: null,
-    notes: 'No ice please',
+    status: 'pending',
+    received_at: new Date(Date.now() - 30000).toISOString(),
+    items_summary: '1x Ayam Bakar Madu, 1x Soto Ayam',
+    item_count: 2,
+    order_type: 'dine_in',
+    table_number: 'T5',
+    notes: null,
     store_id: 'store-1',
   },
   {
     id: 'kds-order-3',
     display_number: 103,
-    status: 'ready',
-    received_at: new Date(Date.now() - 600000).toISOString(),
-    items_summary: '1x Matcha Latte',
-    item_count: 1,
+    status: 'preparing',
+    received_at: new Date(Date.now() - 180000).toISOString(),
+    items_summary: '1x Sate Ayam 10 Tusuk, 2x Es Teh Manis',
+    item_count: 3,
     order_type: 'dine_in',
     table_number: 'T7',
+    notes: 'Sate tanpa kacang',
+    store_id: 'store-1',
+  },
+  {
+    id: 'kds-order-4',
+    display_number: 104,
+    status: 'preparing',
+    received_at: new Date(Date.now() - 240000).toISOString(),
+    items_summary: '1x Rawon Daging, 1x Gado-Gado',
+    item_count: 2,
+    order_type: 'dine_in',
+    table_number: 'T2',
+    notes: null,
+    store_id: 'store-1',
+  },
+  {
+    id: 'kds-order-5',
+    display_number: 105,
+    status: 'preparing',
+    received_at: new Date(Date.now() - 360000).toISOString(),
+    items_summary: '3x Mie Goreng Jawa, 2x Kopi Tubruk',
+    item_count: 5,
+    order_type: 'dine_in',
+    table_number: 'T10',
+    notes: 'Mie goreng setengah matang',
+    store_id: 'store-1',
+  },
+  {
+    id: 'kds-order-6',
+    display_number: 106,
+    status: 'ready',
+    received_at: new Date(Date.now() - 420000).toISOString(),
+    items_summary: '2x Caffè Latte, 1x Cappuccino',
+    item_count: 3,
+    order_type: 'dine_in',
+    table_number: 'T1',
+    notes: null,
+    store_id: 'store-1',
+  },
+  {
+    id: 'kds-order-7',
+    display_number: 107,
+    status: 'ready',
+    received_at: new Date(Date.now() - 540000).toISOString(),
+    items_summary: '1x Nasi Goreng Spesial, 1x Es Jeruk Peras',
+    item_count: 2,
+    order_type: 'takeaway',
+    table_number: null,
+    notes: 'Extra sambal',
+    store_id: 'store-1',
+  },
+  {
+    id: 'kds-order-8',
+    display_number: 108,
+    status: 'pending',
+    received_at: new Date(Date.now() - 15000).toISOString(),
+    items_summary: '1x Pisang Goreng, 2x Teh Tarik',
+    item_count: 3,
+    order_type: 'dine_in',
+    table_number: 'T4',
+    notes: null,
+    store_id: 'store-1',
+  },
+  {
+    id: 'kds-order-9',
+    display_number: 109,
+    status: 'pending',
+    received_at: new Date(Date.now() - 60000).toISOString(),
+    items_summary: '1x Ayam Bakar Madu, 1x Tahu Goreng, 1x Tempe Goreng',
+    item_count: 3,
+    order_type: 'dine_in',
+    table_number: 'T8',
+    notes: 'Ayam bakar tanpa kulit',
+    store_id: 'store-1',
+  },
+  {
+    id: 'kds-order-10',
+    display_number: 110,
+    status: 'ready',
+    received_at: new Date(Date.now() - 660000).toISOString(),
+    items_summary: '1x Es Campur, 1x Klepon',
+    item_count: 2,
+    order_type: 'dine_in',
+    table_number: 'T6',
     notes: null,
     store_id: 'store-1',
   },
@@ -239,16 +350,45 @@ const _initialKdsOrders = [
 // ── Mock KDS line items (course-grouped for per-item advance) ──
 const _initialKdsLineItems: Record<string, Array<Record<string, unknown>>> = {
   'kds-order-1': [
-    { id: 'kds-line-1-1', kds_order_id: 'kds-order-1', sku: 'LATTE', display_name: 'Caffè Latte', qty: 1, course: 'beverage', modifiers: [], line_position: 1, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
-    { id: 'kds-line-1-2', kds_order_id: 'kds-order-1', sku: 'CROISS', display_name: 'Butter Croissant', qty: 1, course: 'main', modifiers: [], line_position: 2, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+    { id: 'kds-line-1-1', kds_order_id: 'kds-order-1', sku: 'NASI-GORENG', display_name: 'Nasi Goreng Spesial', qty: 2, course: 'main', modifiers: [{ name: 'Level', choice: 'Pedas 2', price_minor: 0 }], line_position: 1, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+    { id: 'kds-line-1-2', kds_order_id: 'kds-order-1', sku: 'ES-TEH', display_name: 'Es Teh Manis', qty: 1, course: 'beverage', modifiers: [], line_position: 2, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
   ],
   'kds-order-2': [
-    { id: 'kds-line-2-1', kds_order_id: 'kds-order-2', sku: 'ESPR', display_name: 'Espresso Shot', qty: 2, course: 'beverage', modifiers: [], line_position: 1, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
-    { id: 'kds-line-2-2', kds_order_id: 'kds-order-2', sku: 'ICED', display_name: 'Iced Coffee', qty: 1, course: 'beverage', modifiers: [], line_position: 2, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
-    { id: 'kds-line-2-3', kds_order_id: 'kds-order-2', sku: 'TOAST', display_name: 'Avocado Toast', qty: 1, course: 'main', modifiers: [], line_position: 3, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+    { id: 'kds-line-2-1', kds_order_id: 'kds-order-2', sku: 'AYAM-BAKAR', display_name: 'Ayam Bakar Madu', qty: 1, course: 'main', modifiers: [], line_position: 1, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+    { id: 'kds-line-2-2', kds_order_id: 'kds-order-2', sku: 'SOTO-AYAM', display_name: 'Soto Ayam', qty: 1, course: 'main', modifiers: [], line_position: 2, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
   ],
   'kds-order-3': [
-    { id: 'kds-line-3-1', kds_order_id: 'kds-order-3', sku: 'MATCHA', display_name: 'Matcha Latte', qty: 1, course: 'beverage', modifiers: [], line_position: 1, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+    { id: 'kds-line-3-1', kds_order_id: 'kds-order-3', sku: 'SATE-AYAM', display_name: 'Sate Ayam 10 Tusuk', qty: 1, course: 'main', modifiers: [{ name: 'Sambal', choice: 'Tanpa Kacang', price_minor: 0 }], line_position: 1, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+    { id: 'kds-line-3-2', kds_order_id: 'kds-order-3', sku: 'ES-TEH', display_name: 'Es Teh Manis', qty: 2, course: 'beverage', modifiers: [], line_position: 2, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+  ],
+  'kds-order-4': [
+    { id: 'kds-line-4-1', kds_order_id: 'kds-order-4', sku: 'RAWON', display_name: 'Rawon Daging', qty: 1, course: 'main', modifiers: [], line_position: 1, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+    { id: 'kds-line-4-2', kds_order_id: 'kds-order-4', sku: 'GADO-GADO', display_name: 'Gado-Gado', qty: 1, course: 'main', modifiers: [], line_position: 2, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+  ],
+  'kds-order-5': [
+    { id: 'kds-line-5-1', kds_order_id: 'kds-order-5', sku: 'MIE-GORENG', display_name: 'Mie Goreng Jawa', qty: 3, course: 'main', modifiers: [{ name: 'Matang', choice: 'Setengah Matang', price_minor: 0 }], line_position: 1, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+    { id: 'kds-line-5-2', kds_order_id: 'kds-order-5', sku: 'KOPI-T', display_name: 'Kopi Tubruk', qty: 2, course: 'beverage', modifiers: [], line_position: 2, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+  ],
+  'kds-order-6': [
+    { id: 'kds-line-6-1', kds_order_id: 'kds-order-6', sku: 'LATTE', display_name: 'Caffè Latte', qty: 2, course: 'beverage', modifiers: [], line_position: 1, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+    { id: 'kds-line-6-2', kds_order_id: 'kds-order-6', sku: 'CAPPU', display_name: 'Cappuccino', qty: 1, course: 'beverage', modifiers: [], line_position: 2, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+  ],
+  'kds-order-7': [
+    { id: 'kds-line-7-1', kds_order_id: 'kds-order-7', sku: 'NASI-GORENG', display_name: 'Nasi Goreng Spesial', qty: 1, course: 'main', modifiers: [{ name: 'Sambal', choice: 'Extra Sambal', price_minor: 0 }], line_position: 1, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+    { id: 'kds-line-7-2', kds_order_id: 'kds-order-7', sku: 'ES-JERUK', display_name: 'Es Jeruk Peras', qty: 1, course: 'beverage', modifiers: [], line_position: 2, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+  ],
+  'kds-order-8': [
+    { id: 'kds-line-8-1', kds_order_id: 'kds-order-8', sku: 'PISANG-GORENG', display_name: 'Pisang Goreng', qty: 1, course: 'dessert', modifiers: [], line_position: 1, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+    { id: 'kds-line-8-2', kds_order_id: 'kds-order-8', sku: 'TEH-T', display_name: 'Teh Tarik', qty: 2, course: 'beverage', modifiers: [], line_position: 2, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+  ],
+  'kds-order-9': [
+    { id: 'kds-line-9-1', kds_order_id: 'kds-order-9', sku: 'AYAM-BAKAR', display_name: 'Ayam Bakar Madu', qty: 1, course: 'main', modifiers: [{ name: 'Kulit', choice: 'Tanpa Kulit', price_minor: 0 }], line_position: 1, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+    { id: 'kds-line-9-2', kds_order_id: 'kds-order-9', sku: 'TAHU-GORENG', display_name: 'Tahu Goreng', qty: 1, course: 'side', modifiers: [], line_position: 2, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+    { id: 'kds-line-9-3', kds_order_id: 'kds-order-9', sku: 'TEMPE-GORENG', display_name: 'Tempe Goreng', qty: 1, course: 'side', modifiers: [], line_position: 3, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+  ],
+  'kds-order-10': [
+    { id: 'kds-line-10-1', kds_order_id: 'kds-order-10', sku: 'ES-CAMPUR', display_name: 'Es Campur', qty: 1, course: 'dessert', modifiers: [], line_position: 1, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
+    { id: 'kds-line-10-2', kds_order_id: 'kds-order-10', sku: 'KLEPON', display_name: 'Klepon', qty: 1, course: 'dessert', modifiers: [], line_position: 2, item_status: 'pending', started_at: null, ready_at: null, served_at: null, created_at: new Date().toISOString() },
   ],
 };
 
@@ -305,12 +445,154 @@ const mockKdsState = loadMockKdsState();
 const mockKdsOrders: Record<string, unknown>[] = mockKdsState.orders;
 const mockKdsLineItems: Record<string, Array<Record<string, unknown>>> = mockKdsState.lineItems;
 // Next ticket number = one past the highest persisted display_number (the
-// backend's per-day counter), never below the seed baseline of 104.
+// backend's per-day counter), never below the seed baseline of 110.
 const maxDisplay = mockKdsOrders.reduce((max, o) => {
   const n = Number(o['display_number']);
   return Number.isFinite(n) ? Math.max(max, n) : max;
-}, 103);
+}, 110);
 let kdsDisplayCounter = maxDisplay + 1;
+
+// ── Auto-generation: 1 new order per minute, max 20 active orders ──
+// Provides a steady stream of kitchen orders in dev mode so the KDS
+// screen looks alive. Removes served/cancelled orders to cap at 20.
+const KDS_MAX_ACTIVE_ORDERS = 20;
+const KDS_ORDER_INTERVAL_MS = 60_000; // 1 minute
+
+/** Indonesian restaurant menu items for auto-generated orders. */
+const KDS_MOCK_MENU: Array<{ sku: string; name: string; course: string; price: number }> = [
+  // Hot Drinks
+  { sku: 'LATTE', name: 'Caffè Latte', course: 'beverage', price: 45000 },
+  { sku: 'CAPPU', name: 'Cappuccino', course: 'beverage', price: 42000 },
+  { sku: 'ESPR', name: 'Espresso Shot', course: 'beverage', price: 28000 },
+  { sku: 'KOPI-T', name: 'Kopi Tubruk', course: 'beverage', price: 15000 },
+  { sku: 'TEH-T', name: 'Teh Tarik', course: 'beverage', price: 18000 },
+  // Cold Drinks
+  { sku: 'ICED', name: 'Iced Coffee', course: 'beverage', price: 32000 },
+  { sku: 'MATCHA', name: 'Matcha Latte', course: 'beverage', price: 38000 },
+  { sku: 'ES-TEH', name: 'Es Teh Manis', course: 'beverage', price: 8000 },
+  { sku: 'ES-JERUK', name: 'Es Jeruk Peras', course: 'beverage', price: 12000 },
+  { sku: 'JUS-ALPUKAT', name: 'Jus Alpukat', course: 'beverage', price: 20000 },
+  { sku: 'SODA-GEMBIRA', name: 'Soda Gembira', course: 'beverage', price: 20000 },
+  { sku: 'AIR-MINERAL', name: 'Air Mineral', course: 'beverage', price: 5000 },
+  // Main Food
+  { sku: 'NASI-GORENG', name: 'Nasi Goreng Spesial', course: 'main', price: 35000 },
+  { sku: 'MIE-GORENG', name: 'Mie Goreng Jawa', course: 'main', price: 28000 },
+  { sku: 'AYAM-BAKAR', name: 'Ayam Bakar Madu', course: 'main', price: 38000 },
+  { sku: 'SATE-AYAM', name: 'Sate Ayam 10 Tusuk', course: 'main', price: 32000 },
+  { sku: 'SOTO-AYAM', name: 'Soto Ayam', course: 'main', price: 25000 },
+  { sku: 'RAWON', name: 'Rawon Daging', course: 'main', price: 35000 },
+  { sku: 'GADO-GADO', name: 'Gado-Gado', course: 'main', price: 22000 },
+  // Appetizers & Sides
+  { sku: 'CROISS', name: 'Butter Croissant', course: 'main', price: 35000 },
+  { sku: 'BAKWAN', name: 'Bakwan Sayur', course: 'side', price: 10000 },
+  { sku: 'TAHU-GORENG', name: 'Tahu Goreng', course: 'side', price: 12000 },
+  { sku: 'TEMPE-GORENG', name: 'Tempe Goreng', course: 'side', price: 10000 },
+  // Desserts
+  { sku: 'PISANG-GORENG', name: 'Pisang Goreng', course: 'dessert', price: 15000 },
+  { sku: 'ES-KRIM', name: 'Es Krim Coklat', course: 'dessert', price: 18000 },
+  { sku: 'KLEPON', name: 'Klepon', course: 'dessert', price: 12000 },
+  { sku: 'ES-CAMPUR', name: 'Es Campur', course: 'dessert', price: 18000 },
+];
+
+const KDS_NOTES = [
+  null, null, null, null, null, // 60% chance of no notes
+  'Pedas level 2',
+  'Extra sambal',
+  'Tanpa es',
+  'Setengah matang',
+  'Kurang garam',
+  'Tambah kecap',
+  'Tanpa bawang',
+  'Porsi besar',
+  'Lekas!',
+];
+
+const KDS_TABLES = ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10','T11','T12'];
+
+/** Pick a random element from an array. */
+function pickRandom<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)] as T;
+}
+
+/** Generate a random KDS order with 1-4 items. */
+function generateRandomKdsOrder(): { order: Record<string, unknown>; lines: Array<Record<string, unknown>> } {
+  const displayNumber = kdsDisplayCounter++;
+  const now = new Date().toISOString();
+  const orderId = `kds-order-auto-${Date.now()}-${displayNumber}`;
+  const numItems = Math.floor(Math.random() * 4) + 1; // 1-4 items
+  const picked: Array<typeof KDS_MOCK_MENU[0]> = [];
+  while (picked.length < numItems) {
+    const item = pickRandom(KDS_MOCK_MENU);
+    if (!picked.some(p => p.sku === item.sku)) picked.push(item);
+  }
+  const itemCount = picked.length;
+  const itemsSummary = picked.map(item => `1x ${item.name}`).join(', ');
+  const kdsTablesWithNull: (string | null)[] = [...KDS_TABLES, null];
+  const tableNumber = pickRandom(kdsTablesWithNull);
+  const orderType = tableNumber ? 'dine_in' : 'takeaway';
+
+  const order: Record<string, unknown> = {
+    id: orderId,
+    display_number: displayNumber,
+    status: 'pending',
+    received_at: now,
+    items_summary: itemsSummary,
+    item_count: itemCount,
+    order_type: orderType,
+    table_number: tableNumber,
+    notes: pickRandom(KDS_NOTES),
+    store_id: 'store-1',
+  };
+
+  const lines: Array<Record<string, unknown>> = picked.map((item, i) => ({
+    id: `kds-line-auto-${orderId}-${i}`,
+    kds_order_id: orderId,
+    sku: item.sku,
+    display_name: item.name,
+    qty: 1,
+    course: item.course,
+    modifiers: [],
+    line_position: i + 1,
+    item_status: 'pending',
+    started_at: null,
+    ready_at: null,
+    served_at: null,
+    created_at: now,
+  }));
+
+  return { order, lines };
+}
+
+/** Evict served/cancelled orders when queue exceeds max. */
+function evictCompletedOrders(): void {
+  while (mockKdsOrders.length > KDS_MAX_ACTIVE_ORDERS) {
+    const idx = mockKdsOrders.findIndex(o => o['status'] === 'served' || o['status'] === 'cancelled');
+    if (idx === -1) break;
+    const removed = mockKdsOrders.splice(idx, 1)[0];
+    if (removed) delete mockKdsLineItems[removed['id'] as string];
+  }
+}
+
+/** Auto-generate one order per interval (dev mode only). */
+function startKdsAutoGeneration(): void {
+  // Skip if already running or if we have too many orders on first load.
+  if (mockKdsOrders.length > KDS_MAX_ACTIVE_ORDERS) {
+    mockKdsOrders.length = KDS_MAX_ACTIVE_ORDERS;
+  }
+
+  setInterval(() => {
+    const { order, lines } = generateRandomKdsOrder();
+    mockKdsOrders.push(order);
+    mockKdsLineItems[order['id'] as string] = lines;
+    evictCompletedOrders();
+    saveMockKdsState();
+    // Notify KDS screens of new order.
+    void emit('kds:orders-changed', null);
+  }, KDS_ORDER_INTERVAL_MS);
+}
+
+// Start auto-generation on load.
+startKdsAutoGeneration();
 
 /** Push a new KDS order derived from cart lines into the mock queue. */
 function pushKdsOrderFromCart(lines: CartLine[], storeId: string) {
@@ -338,7 +620,8 @@ function pushKdsOrderFromCart(lines: CartLine[], storeId: string) {
   const courseForSku = (sku: string): string => {
     const p = MOCK_PRODUCTS.find((prod) => prod.sku === sku);
     const category = p?.category ?? '';
-    if (category === 'Hot Drinks') return 'beverage';
+    if (category === 'Hot Drinks' || category === 'Cold Drinks') return 'beverage';
+    if (category === 'Dessert') return 'dessert';
     if (category === 'Food') return 'main';
     return 'main';
   };
