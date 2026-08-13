@@ -2091,13 +2091,17 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     { product_id: 'RAM-D4-16GB-KF', sku: 'RAM-D4-16GB-KF', name: 'Kingston Fury Beast 16GB DDR4 3200', current_qty: 3, threshold: 10, currency: 'IDR', price_minor: 450000, cost_minor: 390000 },
     { product_id: 'MB-B650-ROG', sku: 'MB-B650-ROG', name: 'ASUS ROG Strix B650-A Gaming WiFi', current_qty: 5, threshold: 10, currency: 'IDR', price_minor: 2850000, cost_minor: 2500000 },
     { product_id: 'SSD-NV2-1TB', sku: 'SSD-NV2-1TB', name: 'Kingston NV2 1TB NVMe SSD', current_qty: 4, threshold: 8, currency: 'IDR', price_minor: 950000, cost_minor: 820000 },
-    { product_id: 'PSU-RM750', sku: 'PSU-RM750', name: 'Corsair RM750e 80+ Gold PSU', current_qty: 6, threshold: 6, currency: 'IDR', price_minor: 1850000, cost_minor: 1650000 },
+    { product_id: 'PSU-RM750', sku: 'PSU-RM750', name: 'Corsair RM750e 80+ Gold PSU', current_qty: 6, threshold: 10, currency: 'IDR', price_minor: 1850000, cost_minor: 1650000 },
     { product_id: 'GPU-RTX4070', sku: 'GPU-RTX4070', name: 'MSI RTX 4070 Ventus 2X', current_qty: 2, threshold: 5, currency: 'IDR', price_minor: 8900000, cost_minor: 8100000 },
     { product_id: 'CPU-7800X3D', sku: 'CPU-7800X3D', name: 'AMD Ryzen 7 7800X3D', current_qty: 8, threshold: 10, currency: 'IDR', price_minor: 5400000, cost_minor: 4900000 },
   ],
   'get_category_breakdown': () => {
+    // Category breakdown feeds the retail-only "Sales by Category" card —
+    // filter to retail products so restaurant categories (Hot Drinks, Food)
+    // don't leak into the retail view.
     const byCat = new Map<string, { category_id: string | null; category_name: string; total_minor: number; sale_count: number }>();
     MOCK_PRODUCTS.forEach((p, i) => {
+      if (p.product_type !== 'retail') return;
       const total = mockRevenue(i) % 4_000_000;
       const existing = byCat.get(p.category);
       if (existing) {
@@ -2111,21 +2115,27 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     const grand = rows.reduce((s, r) => s + r.total_minor, 0) || 1;
     return rows.map((r) => ({ ...r, percentage: (r.total_minor / grand) * 100 }));
   },
-  'get_menu_engineering': () => ({
-    rows: MOCK_PRODUCTS.slice(0, 6).map((p, i) => ({
-      product_id: p.sku,
-      sku: p.sku,
-      name: p.name,
-      total_volume: 2 + (i * 5) % 40,
-      unit_price_minor: p.price.minor_units,
-      unit_cost_minor: Math.floor(p.price.minor_units * 0.6),
-      margin_per_unit: Math.floor(p.price.minor_units * 0.4),
-      total_margin_minor: Math.floor(p.price.minor_units * 0.4) * (2 + (i * 5) % 40),
-      total_revenue_minor: p.price.minor_units * (2 + (i * 5) % 40),
-    })),
-    median_volume: 15,
-    median_margin: 500_000,
-  }),
+  'get_menu_engineering': () => {
+    // Menu engineering is a restaurant-only card — the mock must return
+    // restaurant products, not the retail catalog (which would show CPUs
+    // under "Top Menu Items").
+    const items = MOCK_PRODUCTS.filter((p) => p.product_type === 'restaurant');
+    return {
+      rows: items.slice(0, 6).map((p, i) => ({
+        product_id: p.sku,
+        sku: p.sku,
+        name: p.name,
+        total_volume: 2 + (i * 5) % 40,
+        unit_price_minor: p.price.minor_units,
+        unit_cost_minor: Math.floor(p.price.minor_units * 0.6),
+        margin_per_unit: Math.floor(p.price.minor_units * 0.4),
+        total_margin_minor: Math.floor(p.price.minor_units * 0.4) * (2 + (i * 5) % 40),
+        total_revenue_minor: p.price.minor_units * (2 + (i * 5) % 40),
+      })),
+      median_volume: 15,
+      median_margin: 500_000,
+    };
+  },
   'build_custom_report': () => ({
     rows: [], columns: [], total: 0, page: 1, pageSize: 50, totalPages: 1,
   }),
