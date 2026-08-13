@@ -539,3 +539,44 @@ Audit of `ExchangeRateScreen.tsx` + `currency.ftl` / `currency.id.ftl`.
 ## Still open
 
 None.
+
+---
+
+# Inventory audit (2026-08-13)
+
+Audit of `src/features/inventory/` (11 screens) + `inventory.ftl` /
+`stock-counting.ftl` / `*.id.ftl` bundles.
+
+## Fixed (committed)
+
+- ✅ **Fractional quantities rejected (no silent `parseInt` truncation)** —
+  `InventoryAdjustmentScreen` (2.5 → 2), `StockCountDetail` expected/counted
+  qty (10.5 → 10), and `ThresholdConfigScreen` (5.5 → 5) all accepted
+  fractional input and silently truncated it. Now `Number` +
+  `Number.isInteger`: adjustment shows the localized error and disables
+  Apply, counted-qty keystrokes ignore fractional in-progress input,
+  add-line shows a new `sc-error-qty-integer` message, thresholds toast the
+  existing error. Regression test added.
+- ✅ **Locale-aware dates** — 7 screens rendered dates/times with the
+  browser default locale (`toLocaleDateString`/`toLocaleTimeString`/
+  `toLocaleString` with no args). All now derive the locale from the active
+  Fluent bundle (`[...l10n.bundles][0]?.locales[0]`, `en-US` fallback):
+  ShiftBar, StockAlertPanel, StockCountDetail, StockCountHistory,
+  StockCountsScreen, TransactionLogScreen, TransitAuditScreen.
+- ✅ **Orphan FTL keys removed** — 8 never-read keys deleted from both
+  bundles: `inv-alert-acknowledge-btn`, `inv-alert-col-triggered`,
+  `inv-log-type-purchase-order-receive` (superseded by `-po-receive`),
+  `inv-report-loading-aria`, `inv-shift-notes-label`,
+  `inv-shift-select-location`, `inv-transit-col-overdue`, `sc-loading`.
+  (`sc-status-*`/`sc-type-*` are used via dynamic ids — kept.)
+
+## Still open
+
+1. **`StockCountForm` type toggle** — the radiogroup (`role="radiogroup"`
+   + plain buttons) predates the arrow-key/roving-tabindex pattern applied
+   to tax and categories; low value since it has only 3 options.
+2. **`stockStatus` low threshold** — hardcoded `< 10` in
+   `InventoryAdjustmentScreen` while thresholds are configurable elsewhere.
+3. **`ShiftBar` note field** — `inv-shift-notes-label` was orphan because
+   the visible label isn't localized (the `<label>` renders raw English
+   "Notes"); the placeholder is localized. Worth a visual check.

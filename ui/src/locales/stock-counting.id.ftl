@@ -2,7 +2,6 @@
 
 sc-title = Stok Opname
 sc-new-count = Opname Baru
-sc-loading = Memuat…
 sc-empty-list = Belum ada stok opname.
 sc-view = Lihat
 sc-view-aria = Lihat opname { $id }

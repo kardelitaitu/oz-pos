@@ -2,7 +2,6 @@
 
 sc-title = Stock Counts
 sc-new-count = New Count
-sc-loading = Loading…
 sc-empty-list = No stock counts yet.
 sc-view = View
 sc-view-aria = View count { $id }
