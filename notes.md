@@ -515,8 +515,27 @@ Audit of `LoyaltyManagementScreen.tsx` + `loyalty.ftl` / `loyalty.id.ftl`.
    (`earn`/`redeem`/`adjust`); an unknown backend type falls back to the
    capitalized raw value.
 
+---
 
+# Exchange-rate audit (2026-08-13)
 
+Audit of `ExchangeRateScreen.tsx` + `currency.ftl` / `currency.id.ftl`.
 
+## Fixed (committed)
 
+- ✅ **Functional `setForm` updates + tightened `formValid`** — all five modal
+  fields now use functional updaters (no stale-closure spread). The rate
+  validity check now survives the millionths conversion: a sub-0.000001 rate
+  (which passed `parseFloat > 0` but rounded to 0 millionths and silently did
+  nothing on Save) is rejected. `Number.isFinite` + `rateMillionths > 0` guard
+  tiny/overflowing values.
+- ✅ **Delete confirmation dialog** — deleting an exchange rate is now a
+  two-step flow via `ConfirmDialog` (danger variant, uses the previously
+  dead `currency-delete-confirm` key; added `currency-delete-title`). The
+  delete test was updated to confirm the dialog.
+- ✅ **Orphan FTL keys removed** — `currency-add`, `currency-loading`, and
+  `currency-modal-add-label` had zero consumers; deleted from both bundles.
 
+## Still open
+
+None.

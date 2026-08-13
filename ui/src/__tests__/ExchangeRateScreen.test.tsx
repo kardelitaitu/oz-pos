@@ -258,6 +258,13 @@ describe('ExchangeRateScreen', () => {
     const user = userEvent.setup();
     await user.click(screen.getByText('Delete'));
 
+    // The row Delete button opens a confirmation dialog; the dialog's
+    // confirm button is the only one with the plain "Delete" name.
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Delete' })).toBeTruthy();
+    });
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+
     await waitFor(() => {
       expect(mockDeleteExchangeRate).toHaveBeenCalledWith('rate-1');
     });

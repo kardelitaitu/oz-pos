@@ -1,8 +1,6 @@
 # ui/src/locales/currency.ftl — Exchange rates
 
 currency-title = Exchange Rates
-currency-add = Add Exchange Rate
-currency-loading = Loading exchange rates…
 currency-empty = No exchange rates configured
 currency-col-from = From
 currency-col-to = To
@@ -11,6 +9,7 @@ currency-col-source = Source
 currency-col-effective = Effective Date
 currency-delete = Delete
 currency-delete-confirm = Are you sure you want to delete this exchange rate?
+currency-delete-title = Delete Exchange Rate
 currency-btn-cancel = Cancel
 currency-btn-save = Save
 currency-btn-add = Add
@@ -23,7 +22,6 @@ currency-field-date = Effective Date
 currency-source-manual = manual
 currency-table-actions = Actions
 currency-delete-label = Delete { $from }-{ $to }
-currency-modal-add-label = Add exchange rate
 currency-select-placeholder = Select currency…
 currency-rate-placeholder =
     .placeholder = 1.25

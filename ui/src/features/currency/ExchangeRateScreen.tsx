@@ -13,6 +13,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Skeleton } from '@/components/Skeleton';
 import { SettingsPopup, requiredLocalized } from '@/frontend/shared';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useToast } from '@/frontend/shared/Toast';
 import './ExchangeRateScreen.css';
 
@@ -51,6 +52,7 @@ export default function ExchangeRateScreen() {
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ExchangeRateDto | null>(null);
 
   // LOAD-07: request-generation guard — a slow response from an earlier
   // load/unmount must never overwrite newer state.
@@ -85,6 +87,14 @@ export default function ExchangeRateScreen() {
     setShowModal(true);
   }, []);
 
+  const handleDeleteClick = useCallback((rate: ExchangeRateDto) => {
+    setDeleteTarget(rate);
+  }, []);
+
+  const closeDelete = useCallback(() => {
+    setDeleteTarget(null);
+  }, []);
+
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
@@ -109,8 +119,11 @@ export default function ExchangeRateScreen() {
     }
   }, [form, load, l10n, addToast]);
 
-  const confirmDelete = useCallback(async (id: string) => {
+  const confirmDelete = useCallback(async () => {
+    if (!deleteTarget) return;
+    const id = deleteTarget.id;
     setDeleting(id);
+    setDeleteTarget(null);
     try {
       await deleteExchangeRate(id);
       setDeleting(null);
@@ -119,7 +132,7 @@ export default function ExchangeRateScreen() {
       addToast({ message: requiredLocalized(l10n, 'currency-delete-error'), type: 'error' });
       setDeleting(null);
     }
-  }, [load, l10n, addToast]);
+  }, [deleteTarget, load, l10n, addToast]);
 
   const currencyOptions = currencies.map((c) => (
     <option key={c.code} value={c.code}>
@@ -127,13 +140,16 @@ export default function ExchangeRateScreen() {
     </option>
   ));
 
+  // The rate must also survive the millionths conversion — a sub-0.000001
+  // rate would otherwise pass these checks and silently do nothing on Save.
+  const rateMillionths = Math.round(parseFloat(form.rate) * 1_000_000);
   const formValid =
-    form.fromCurrency &&
-    form.toCurrency &&
+    !!form.fromCurrency &&
+    !!form.toCurrency &&
     form.fromCurrency !== form.toCurrency &&
-    form.rate.trim() &&
-    !Number.isNaN(parseFloat(form.rate)) &&
-    parseFloat(form.rate) > 0;
+    form.rate.trim() !== '' &&
+    Number.isFinite(rateMillionths) &&
+    rateMillionths > 0;
 
   return (
     <div className="exchange-rate-config">
@@ -219,7 +235,7 @@ export default function ExchangeRateScreen() {
                     <button
                       type="button"
                       className="exchange-rate-action-btn exchange-rate-action-btn--danger"
-                      onClick={() => confirmDelete(r.id)}
+                      onClick={() => handleDeleteClick(r)}
                       disabled={deleting === r.id}
                       aria-label={l10n.getString('currency-delete-label', { from: r.from_currency, to: r.to_currency })}
                     >
@@ -256,7 +272,7 @@ export default function ExchangeRateScreen() {
             className="exchange-rate-input exchange-rate-select"
             id="er-field-from"
             value={form.fromCurrency}
-            onChange={(e) => setForm({ ...form, fromCurrency: e.target.value })}
+            onChange={(e) => setForm((prev) => ({ ...prev, fromCurrency: e.target.value }))}
           >
             <Localized id="currency-select-placeholder">
               <option value="">Select currency&hellip;</option>
@@ -276,7 +292,7 @@ export default function ExchangeRateScreen() {
             className="exchange-rate-input exchange-rate-select"
             id="er-field-to"
             value={form.toCurrency}
-            onChange={(e) => setForm({ ...form, toCurrency: e.target.value })}
+            onChange={(e) => setForm((prev) => ({ ...prev, toCurrency: e.target.value }))}
           >
             <Localized id="currency-select-placeholder">
               <option value="">Select currency&hellip;</option>
@@ -300,7 +316,7 @@ export default function ExchangeRateScreen() {
               min="0"
               step="any"
               value={form.rate}
-              onChange={(e) => setForm({ ...form, rate: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, rate: e.target.value }))}
               placeholder="1.25"
             />
           </Localized>
@@ -319,7 +335,7 @@ export default function ExchangeRateScreen() {
               type="text"
               id="er-field-source"
               value={form.source}
-              onChange={(e) => setForm({ ...form, source: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, source: e.target.value }))}
               placeholder="e.g. ECB"
             />
           </Localized>
@@ -337,10 +353,23 @@ export default function ExchangeRateScreen() {
             type="date"
             id="er-field-date"
             value={form.effectiveDate}
-            onChange={(e) => setForm({ ...form, effectiveDate: e.target.value })}
+            onChange={(e) => setForm((prev) => ({ ...prev, effectiveDate: e.target.value }))}
           />
         </div>
       </SettingsPopup>
+
+      {/* Delete confirmation (currency-delete-confirm) */}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onCancel={closeDelete}
+        onConfirm={confirmDelete}
+        title={l10n.getString('currency-delete-title')}
+        message={l10n.getString('currency-delete-confirm')}
+        variant="danger"
+        loading={deleting !== null}
+        confirmLabel={l10n.getString('currency-delete')}
+        cancelLabel={l10n.getString('currency-btn-cancel')}
+      />
     </div>
   );
 }
