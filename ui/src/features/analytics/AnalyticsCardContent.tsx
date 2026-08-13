@@ -256,6 +256,31 @@ function exportPaymentsCsv(
   );
 }
 
+/** Download the sales-by-category breakdown as CSV. */
+function exportCategoryCsv(
+  rows: CategoryBreakdownRow[],
+  from: string,
+  to: string,
+  fmt: (minor: number) => string,
+  getString: (id: string) => string,
+) {
+  downloadCsv(
+    `category-${from}-to-${to}.csv`,
+    [
+      { key: 'category', label: getString('analytics-export-col-category') },
+      { key: 'sales', label: getString('analytics-export-col-sales') },
+      { key: 'orders', label: getString('analytics-export-col-orders') },
+      { key: 'share', label: getString('analytics-export-col-share') },
+    ],
+    rows.map((r) => ({
+      category: r.category_name,
+      sales: fmt(r.total_minor),
+      orders: String(r.sale_count),
+      share: String(Math.round(r.percentage)),
+    })),
+  );
+}
+
 /**
  * Small delta pill (▲/▼ %). The "vs previous period" suffix renders only
  * in compare mode — off-mode chips are in-period trends (first→last
@@ -715,6 +740,7 @@ function TopItemsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; titl
 
 function CategoryCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: string; expanded?: boolean | undefined; compare?: boolean | undefined }) {
   const { l10n } = useLocalization();
+  const { fmt } = useMoney();
   const { data: rows, prev: prevRows, error } = useCardDataCompare<CategoryBreakdownRow[]>('category', q, compare ?? false);
   const names = rows ? rows.map((r) => r.category_name).slice(0, 8) : [];
   const pcts = rows ? rows.map((r) => Math.round(r.percentage)).slice(0, 8) : [];
@@ -737,7 +763,10 @@ function CategoryCard({ q, title, expanded, compare }: { q: AnalyticsQuery; titl
     <Visual className="analytics-card-visual--split">
       <div className="analytics-kpi-row">
         {topName && <Kpi value={topName} label={l10n.getString('analytics-card-category-top')} />}
-        {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
+        <div className="analytics-kpi-actions">
+          {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
+          <ExportCsvButton ariaLabel={l10n.getString('analytics-export-category-aria')} onClick={() => exportCategoryCsv(rows, q.from, q.to, fmt, (id) => l10n.getString(id))} />
+        </div>
       </div>
       <div className="analytics-card-chart analytics-card-chart--donut" role="img" aria-label={title}>
         <ReactEChartsCore echarts={echarts} option={option!} style={{ height: chartHeight('category', expanded) }} notMerge />

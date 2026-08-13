@@ -934,6 +934,23 @@ describe('AnalyticsScreen layout shell', () => {
     expect(rows[1]).toMatchObject({ method: 'Card', sales: '$9,000.00', orders: '45' });
   });
 
+  it('exports the category breakdown CSV from the category card', async () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
+    await flushRecalc();
+
+    vi.mocked(downloadCsv).mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Export categories as CSV' }));
+
+    expect(downloadCsv).toHaveBeenCalledTimes(1);
+    const [filename, columns, rows] = vi.mocked(downloadCsv).mock.calls[0]!;
+    expect(filename).toContain('category-');
+    expect(columns.map((c) => c.key)).toEqual(['category', 'sales', 'orders', 'share']);
+    expect(columns.map((c) => c.label)).toEqual(['Category', 'Total sales', 'Orders', 'Share %']);
+    expect(rows[0]).toMatchObject({ category: 'Beverages', sales: '$5,000.00', orders: '40', share: '55' });
+    expect(rows[1]).toMatchObject({ category: 'Food', sales: '$3,000.00', orders: '25', share: '33' });
+  });
+
   it('keeps card visuals rendering as granularity changes', async () => {
     vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
