@@ -39,7 +39,7 @@ dashboard-heatmap-tooltip = { $day } { $hour }: { $count } pesanan
 # Dashboard — a11y
 dashboard-region-aria = Dasbor
 dashboard-stock-alerts-aria = Peringatan stok menipis
-dashboard-stock-left = tersisa
+dashboard-stock-below-threshold = { $qty } tersisa (di bawah { $threshold })
 
 top-products-title = Produk Terlaris
 top-products-period = Periode
@@ -178,6 +178,7 @@ dashboard-back = Kembali
 dashboard-back-aria = Kembali ke beranda
 dashboard-error-load = Gagal memuat data dasbor. Silakan coba lagi.
 dashboard-refreshing = Menyegarkan…
+dashboard-delta-new = Baru
 
 # Dashboard — CSV export columns
 dashboard-export-col-date = Tanggal

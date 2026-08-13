@@ -88,7 +88,7 @@ dashboard-heatmap-tooltip = { $day } { $hour }: { $count } orders
 # Dashboard — a11y
 dashboard-region-aria = Dashboard
 dashboard-stock-alerts-aria = Low stock alerts
-dashboard-stock-left = left
+dashboard-stock-below-threshold = { $qty } left (below { $threshold })
 
 # Menu Engineering
 menu-eng-title = Menu Engineering
@@ -177,6 +177,7 @@ dashboard-back = Back
 dashboard-back-aria = Back to home
 dashboard-error-load = Failed to load dashboard data. Please try again.
 dashboard-refreshing = Refreshing…
+dashboard-delta-new = New
 
 # Dashboard — CSV export columns
 dashboard-export-col-date = Date

@@ -38,7 +38,8 @@ spinner-label = Loading dashboard
 const reportsFtl = `
 dashboard-region-aria = Dashboard
 dashboard-stock-alerts-aria = Low stock alerts
-dashboard-stock-left = left
+dashboard-stock-below-threshold = { $qty } left (below { $threshold })
+dashboard-delta-new = New
 dashboard-popularity-trend = Popularity Trend
 dashboard-popularity-trend-aria = Popularity of the top category over the last 7 days
 dashboard-popularity-trend-empty = No popularity data yet
@@ -81,7 +82,10 @@ vi.mock('@/contexts/CurrencyContext', () => ({
 vi.mock('@/features/reports/DashboardScreen.css', () => ({}));
 
 // ── helpers ────────────────────────────────────────────────────────────
-const bundle = new FluentBundle('en');
+// `useIsolating: false` matches the production loader (i18n/index.ts), so
+// interpolated numbers render without U+2068/U+2069 bidi-isolating markers
+// that would otherwise break `getByText` assertions.
+const bundle = new FluentBundle('en', { useIsolating: false });
 bundle.addResource(new FluentResource(sharedFtl));
 bundle.addResource(new FluentResource(reportsFtl));
 const l10n = new ReactLocalization([bundle]);
@@ -326,7 +330,7 @@ describe('DashboardScreen', () => {
     });
   });
 
-  it('renders low stock items with name and quantity', async () => {
+  it('renders low stock items with name, quantity, and threshold context', async () => {
     const alerts = [
       buildLowStockAlert({ name: 'Milk', current_qty: 2 }),
       buildLowStockAlert({ product_id: 'prod-sugar', name: 'Sugar', current_qty: 5 }),
@@ -336,7 +340,7 @@ describe('DashboardScreen', () => {
     renderScreen();
     await waitFor(() => {
       expect(screen.getByText('Milk')).toBeTruthy();
-      expect(screen.getByText('2 left')).toBeTruthy();
+      expect(screen.getByText('2 left (below 10)')).toBeTruthy();
     });
   });
 
@@ -356,6 +360,20 @@ describe('DashboardScreen', () => {
     renderScreen();
     await waitFor(() => {
       expect(screen.getByRole('region', { name: 'Dashboard' })).toBeTruthy();
+    });
+  });
+
+  // ── Delta edge case (no previous period) ─────────────────────────
+  it('shows a localized "New" delta when there is no previous period', async () => {
+    const revenue = [buildRevenueRow({ total_minor: 250000, sale_count: 5 })];
+    resolveAllWithDefaults();
+    // First getDailyRevenue call is the current range; second is the previous
+    // period (empty → prev totals are zero).
+    mockGetDailyRevenue.mockResolvedValueOnce(revenue);
+    mockGetDailyRevenue.mockResolvedValueOnce([]);
+    renderScreen();
+    await waitFor(() => {
+      expect(screen.getAllByText('New').length).toBeGreaterThan(0);
     });
   });
 

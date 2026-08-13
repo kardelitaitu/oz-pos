@@ -100,8 +100,8 @@ function fmtShort(minor: number, currency: string, locale = 'en'): string {
   }).format(minor / 10 ** exp);
 }
 
+/** Format a period-over-period percentage delta (caller must guard `previous === 0`). */
 function fmtDelta(current: number, previous: number): string {
-  if (previous === 0) return current > 0 ? '+∞' : '−';
   const pct = ((current - previous) / previous) * 100;
   const sign = pct >= 0 ? '+' : '';
   return `${sign}${pct.toFixed(1)}%`;
@@ -340,6 +340,14 @@ export default function DashboardScreen() {
     };
   }, [topProducts, currency, l10n, numLocale]);
 
+  // Localized period-over-period delta label. A zero previous period has no
+  // meaningful %, so a genuinely new metric shows a localized "New" badge
+  // instead of the old unlocalized `+∞` / `−` math symbols.
+  const renderDelta = (current: number, previous: number) => {
+    if (previous === 0) return current > 0 ? <Localized id="dashboard-delta-new"><span>New</span></Localized> : null;
+    return fmtDelta(current, previous);
+  };
+
   // ── Render ───────────────────────────────────────────────────────
 
   // The full-screen spinner/error replace the dashboard only on the very first
@@ -420,7 +428,7 @@ export default function DashboardScreen() {
           <span className="dashboard-kpi-label"><Localized id="dashboard-revenue"><span>Revenue</span></Localized></span>
           <span className="dashboard-kpi-value">{fmtCurrency(rangeKPIs.rangeRev, rangeKPIs.currency, numLocale)}</span>
           <span className={`dashboard-kpi-delta${rangeKPIs.rangeRev >= rangeKPIs.prevRev ? '' : ' dashboard-kpi-delta--down'}`}>
-            {rangeKPIs.prevRev > 0 ? fmtDelta(rangeKPIs.rangeRev, rangeKPIs.prevRev) : ''}
+            {renderDelta(rangeKPIs.rangeRev, rangeKPIs.prevRev)}
           </span>
         </Card>
         <Card shadow="sm" className="dashboard-kpi">
@@ -429,14 +437,14 @@ export default function DashboardScreen() {
             {fmtCurrency(rangeKPIs.rangeProfit, rangeKPIs.currency, numLocale)}
           </span>
           <span className={`dashboard-kpi-delta${rangeKPIs.rangeProfit >= rangeKPIs.prevProfit ? '' : ' dashboard-kpi-delta--down'}`}>
-            {rangeKPIs.prevProfit > 0 ? fmtDelta(rangeKPIs.rangeProfit, rangeKPIs.prevProfit) : ''}
+            {renderDelta(rangeKPIs.rangeProfit, rangeKPIs.prevProfit)}
           </span>
         </Card>
         <Card shadow="sm" className="dashboard-kpi">
           <span className="dashboard-kpi-label"><Localized id="dashboard-orders"><span>Orders</span></Localized></span>
           <span className="dashboard-kpi-value">{rangeKPIs.rangeOrders}</span>
           <span className={`dashboard-kpi-delta${rangeKPIs.rangeOrders >= rangeKPIs.prevOrders ? '' : ' dashboard-kpi-delta--down'}`}>
-            {rangeKPIs.prevOrders > 0 ? fmtDelta(rangeKPIs.rangeOrders, rangeKPIs.prevOrders) : ''}
+            {renderDelta(rangeKPIs.rangeOrders, rangeKPIs.prevOrders)}
           </span>
         </Card>
         <Card shadow="sm" className="dashboard-kpi">
@@ -509,7 +517,9 @@ export default function DashboardScreen() {
             {lowStock.map((item) => (
               <li key={item.product_id} className="dashboard-low-stock-item">
                 <span className="dashboard-low-stock-name">{item.name}</span>
-                <span className="dashboard-low-stock-qty">{item.current_qty} {l10n.getString('dashboard-stock-left')}</span>
+                <Localized id="dashboard-stock-below-threshold" vars={{ qty: item.current_qty, threshold: item.threshold }}>
+                  <span className="dashboard-low-stock-qty">{item.current_qty} left (below {item.threshold})</span>
+                </Localized>
               </li>
             ))}
           </ul>

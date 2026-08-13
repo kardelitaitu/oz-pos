@@ -225,11 +225,13 @@ Audit of the owner/admin reports dashboard (`DashboardScreen.tsx` +
    dashboard only on the first load. Reloads keep stale data visible with a
    `role="status"` "Refreshing…" indicator, and reload failures show an inline
    `role="alert"` banner instead of wiping the screen.
-3. **`fmtDelta` `+∞` / `−`** — unlocalized math symbols for the
-   previous-period-is-zero case; currently unreachable because the KPI delta
-   guards on `prev > 0`.
-4. **Low-stock rows lack threshold context** — "2 left" doesn't say the item
-   is below its configured threshold.
+3. ✅ **`fmtDelta` edge case fixed** — the unlocalized `+∞` / `−` symbols are
+   gone; a metric with no previous period now renders a localized
+   `dashboard-delta-new` "New"/"Baru" badge (and `fmtDelta` is a pure
+   `%` formatter whose caller guards `previous === 0`).
+4. ✅ **Low-stock threshold context added** — the row now reads
+   "2 left (below 10)" via the localized `dashboard-stock-below-threshold`
+   message instead of a bare "2 left".
 
 ### Systemic i18n finding
 
