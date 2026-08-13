@@ -175,7 +175,7 @@ export default function GiftCardsScreen() {
                 </div>
                 <div className="gift-card-summary-right">
                   <span className={`gift-card-status ${STATUS_CLASS[gc.card.status] || ''}`}>
-                    {gc.card.status}
+                    {l10n.getString(`gift-cards-status-${gc.card.status}`, null, gc.card.status)}
                   </span>
                   <span className="gift-card-balance">
                     {formatMoney({ minor_units: gc.card.current_balance_minor, currency: gc.card.currency })}
@@ -270,7 +270,7 @@ export default function GiftCardsScreen() {
                             <tr key={txn.id}>
                               <td>
                                 <span className={`gift-card-txn-type gift-card-txn-type--${txn.txn_type}`}>
-                                  {txn.txn_type}
+                                  {l10n.getString(`gift-cards-txn-${txn.txn_type}`, null, txn.txn_type)}
                                 </span>
                               </td>
                               <td className={`gift-card-txn-amount ${txn.amount_minor < 0 ? 'negative' : 'positive'}`}>
