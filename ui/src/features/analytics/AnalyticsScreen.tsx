@@ -19,6 +19,7 @@ import { AnalyticsCardContent, ExportCsvButton } from './AnalyticsCardContent';
 import { analyticsDataCache, analyticsQueryKey, clearAnalyticsCache, cardQueryKey } from './analytics-cache';
 import {
   buildHeatmapCells,
+  heatLow,
   heatPeak,
   heatmapGranularityForRange,
   loadHeatmapRows,
@@ -774,6 +775,15 @@ const [paletteOpen, setPaletteOpen] = useState(false);
     ? l10n.getString('analytics-heat-busiest', {
         label: heatPeakLabel(heatmapGranularity, heatPeakCell.key),
         sales: fmt(heatPeakCell.cell.minor),
+      })
+    : null;
+  const heatLowCell = heatmapData ? heatLow(heatCells) : null;
+  // The quietest slot only reads as a takeaway when it differs from the
+  // busiest — a single active cell would otherwise repeat the same label.
+  const lowInsight = heatLowCell && peakKey && peakKey !== heatLowCell.key
+    ? l10n.getString('analytics-heat-quietest', {
+        label: heatPeakLabel(heatmapGranularity, heatLowCell.key),
+        sales: fmt(heatLowCell.cell.minor),
       })
     : null;
 
@@ -1534,6 +1544,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
                       <>
                         {renderHeatmap()}
                         {peakInsight && <p className="analytics-card-insight">{peakInsight}</p>}
+                        {lowInsight && <p className="analytics-card-insight">{lowInsight}</p>}
                         <div
                           className="analytics-heat-scale"
                           role="group"

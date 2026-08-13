@@ -863,6 +863,16 @@ describe('AnalyticsScreen layout shell', () => {
     expect(screen.getByText(/Tue 11:00/)).toBeTruthy();
   });
 
+  it('shows a quietest-time insight line alongside the busiest', async () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
+    await flushRecalc();
+
+    // Two distinct active slots → both the busiest and quietest lines render.
+    expect(screen.getByText(/Quietest:/)).toBeTruthy();
+    expect(screen.getByText(/Mon 10:00/)).toBeTruthy();
+  });
+
   it('shows revenue and order count in each heat cell tooltip', async () => {
     vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);

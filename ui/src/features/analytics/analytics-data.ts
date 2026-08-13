@@ -392,6 +392,16 @@ export function heatPeak(cells: Map<string, HeatCell>): { key: string; cell: Hea
   return best;
 }
 
+/** The weakest active cell (lowest positive revenue) — the heatmap's "quietest" slot. */
+export function heatLow(cells: Map<string, HeatCell>): { key: string; cell: HeatCell } | null {
+  let best: { key: string; cell: HeatCell } | null = null;
+  for (const [key, cell] of cells) {
+    if (cell.minor <= 0) continue; // zero-activity cells never count as "quietest"
+    if (!best || cell.minor < best.cell.minor) best = { key, cell };
+  }
+  return best;
+}
+
 /** Hourly rows aggregated by day-of-week (daily/custom view). */
 export function weekdayIntensities(rows: HourlyHeatmapRow[]): Map<string, number> {
   return normalizeTotals(heatTotals('daily', { hourly: rows }));

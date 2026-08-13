@@ -59,6 +59,7 @@ import {
   buildHeatmapIntensities,
   alignPrevBuckets,
   alignPrevHourly,
+  heatLow,
   heatPeak,
   heatmapGranularityForRange,
   intensityFromPct,
@@ -508,6 +509,16 @@ describe('buildHeatmapCells — per-cell values for the heatmap card', () => {
 
     const empty = buildHeatmapCells('weekly', { hourly: [{ day_of_week: 1, hour: 10, total_minor: 0, sale_count: 0 }] });
     expect(heatPeak(empty)).toBeNull();
+  });
+
+  it('heatLow returns the weakest active cell and ignores zero-activity cells', () => {
+    const cells = buildHeatmapCells('weekly', { hourly });
+    const low = heatLow(cells);
+    expect(low?.key).toBe('1:11');
+    expect(low?.cell.minor).toBe(50);
+
+    const empty = buildHeatmapCells('weekly', { hourly: [{ day_of_week: 1, hour: 10, total_minor: 0, sale_count: 0 }] });
+    expect(heatLow(empty)).toBeNull();
   });
 });
 

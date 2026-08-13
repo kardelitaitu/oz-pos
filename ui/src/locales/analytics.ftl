@@ -123,6 +123,7 @@ analytics-heatmap-hour-tooltip = { $day } { $hour }:00
 analytics-heatmap-day-tooltip = Day { $day }
 analytics-heatmap-week-tooltip = { $month } week { $week }
 analytics-heat-busiest = Busiest: { $label } · { $sales }
+analytics-heat-quietest = Quietest: { $label } · { $sales }
 analytics-heat-cell-orders = { $count ->
     [one] { $count } order
    *[other] { $count } orders
