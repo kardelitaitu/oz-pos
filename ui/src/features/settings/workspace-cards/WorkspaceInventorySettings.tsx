@@ -124,7 +124,12 @@ export function WorkspaceInventorySettings({
               value={lowStockThreshold}
               onChange={(e) => {
                 touchedRef.current.add('lowStockThreshold');
-                setLowStockThreshold(Math.max(0, parseInt(e.target.value, 10) || 0));
+                // Threshold is a whole number — ignore fractional in-progress
+                // input instead of silently truncating it via parseInt.
+                const v = Number(e.target.value);
+                if (e.target.value === '' || (Number.isInteger(v) && v >= 0)) {
+                  setLowStockThreshold(e.target.value === '' ? 0 : v);
+                }
               }}
             />
             {!isCompact && (

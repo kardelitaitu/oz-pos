@@ -107,9 +107,9 @@ interface SettingsSnapshot {
 
 // ── Clock helper ──────────────────────────────────────────────────
 
-function useClock(): string {
+function useClock(locale: string): string {
   const [clock, setClock] = useState(() =>
-    new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
+    new Date().toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }),
   );
   useEffect(() => {
     let intervalId: ReturnType<typeof setInterval> | undefined;
@@ -121,7 +121,7 @@ function useClock(): string {
     const timeout = setTimeout(() => {
       const tick = () =>
         setClock(
-          new Date().toLocaleTimeString(undefined, {
+          new Date().toLocaleTimeString(locale, {
             hour: '2-digit',
             minute: '2-digit',
           }),
@@ -133,15 +133,15 @@ function useClock(): string {
       clearTimeout(timeout);
       if (intervalId) clearInterval(intervalId);
     };
-  }, []);
+  }, [locale]);
   return clock;
 }
 
 /** Return today's formatted date. The date only changes at midnight and
  *  the settings page is not expected to stay open across day boundaries,
  *  so we compute once at mount rather than polling every 60 seconds. */
-function getToday(): string {
-  return new Date().toLocaleDateString(undefined, {
+function getToday(locale: string): string {
+  return new Date().toLocaleDateString(locale, {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
@@ -345,8 +345,9 @@ function SettingsPageContent() {
 
   // ── Accordion state moved to SettingsNavTree.tsx ──────────────
 
-  const clock = useClock();
-  const today = getToday();
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
+  const clock = useClock(numLocale);
+  const today = getToday(numLocale);
 
   // ── Snapshot for Revert-to-saved ──────────────────────────
 

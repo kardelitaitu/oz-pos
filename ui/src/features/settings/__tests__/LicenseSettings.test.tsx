@@ -70,6 +70,8 @@ const { mockL10n, mockUseLocalization } = vi.hoisted(() => {
       };
       return map[id] || id;
     },
+    // Empty bundles array: the en-US fallback is used by locale formatting.
+    bundles: [],
   };
   const mockUseLocalization = vi.fn(() => ({ l10n: mockL10n }));
   return { mockL10n, mockUseLocalization };
@@ -785,7 +787,7 @@ describe('LicenseSettings', () => {
       // (the pre-fix behavior that caused the "Checking…" hang).
       let callCount = 0;
       mockUseLocalization.mockImplementation(() => ({
-        l10n: { getString: (id: string) => mockL10n.getString(id), _seq: callCount++ },
+        l10n: { getString: (id: string) => mockL10n.getString(id), _seq: callCount++, bundles: [] },
       }));
 
       // Use a test harness that forces parent re-renders.

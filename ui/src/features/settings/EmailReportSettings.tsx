@@ -236,7 +236,14 @@ export default function EmailReportSettings() {
               min={1}
               max={65535}
               value={config.port}
-              onChange={(e) => updateField('port', parseInt(e.target.value, 10) || 587)}
+              onChange={(e) => {
+                // SMTP ports are whole numbers — ignore fractional in-progress
+                // input instead of silently truncating it via parseInt.
+                const v = Number(e.target.value);
+                if (e.target.value === '' || Number.isInteger(v)) {
+                  updateField('port', e.target.value === '' ? 587 : v);
+                }
+              }}
               style={{ maxWidth: '120px' }}
             />
           </span>
@@ -516,7 +523,15 @@ export default function EmailReportSettings() {
                 type="number"
                 min={1}
                 max={365}
-                value={schedule.lookback_days}                    onChange={(e) => updateSchedField('lookback_days', parseInt(e.target.value, 10) || 1)}
+                value={schedule.lookback_days}
+                onChange={(e) => {
+                  // Lookback days are whole numbers — ignore fractional input
+                  // instead of silently truncating it via parseInt.
+                  const v = Number(e.target.value);
+                  if (e.target.value === '' || Number.isInteger(v)) {
+                    updateSchedField('lookback_days', e.target.value === '' ? 1 : v);
+                  }
+                }}
                 aria-label={l10n.getString('settings-schedule-lookback')}
                 style={{ maxWidth: '120px' }}
               />
