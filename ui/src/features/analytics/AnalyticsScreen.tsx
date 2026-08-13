@@ -9,10 +9,21 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
+import { useCurrency } from '@/contexts/CurrencyContext';
+import { minorUnitExponent } from '@/types/domain';
 import { l10nErrorMessage } from '@/utils/app-error';
-import { AnalyticsCardContent } from './AnalyticsCardContent';
+import { downloadCsv } from '@/utils/export-csv';
+import { AnalyticsCardContent, ExportCsvButton } from './AnalyticsCardContent';
 import { analyticsDataCache, analyticsQueryKey, clearAnalyticsCache, cardQueryKey } from './analytics-cache';
-import { buildHeatmapIntensities, loadHeatmapRows, rangeForGranularity, yearlyHeatmapColumns } from './analytics-data';
+import {
+  buildHeatmapIntensities,
+  loadHeatmapRows,
+  rangeForGranularity,
+  yearlyHeatmapColumns,
+  type DailyRevenueRow,
+  type HourlyHeatmapRow,
+  type WeeklyRevenueRow,
+} from './analytics-data';
 import { clearAnalyticsErrors, useAnalyticsQuery } from './useAnalyticsQuery';
 import './AnalyticsScreen.css';
 
@@ -141,6 +152,63 @@ const DAY_LABEL_KEYS = ['day-monday', 'day-tuesday', 'day-wednesday', 'day-thurs
 const MONTH_LABEL_KEYS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 
 /**
+ * Download the heatmap's underlying revenue rows as CSV, shaped by the
+ * card's effective granularity: the 7×24 hourly grid for weekly, one row
+ * per calendar day for monthly, and one row per Monday-week for yearly.
+ */
+function exportHeatmapCsv(
+  g: Granularity,
+  data: { daily: DailyRevenueRow[]; hourly: HourlyHeatmapRow[]; weekly: WeeklyRevenueRow[] },
+  from: string,
+  to: string,
+  fmt: (minor: number) => string,
+  getString: (id: string) => string,
+) {
+  const dayLabels = DAY_LABEL_KEYS.map((k) => getString(k));
+  const filename = `heatmap-${from}-to-${to}.csv`;
+  if (g === 'monthly') {
+    downloadCsv(
+      filename,
+      [
+        { key: 'date', label: getString('analytics-export-col-date') },
+        { key: 'sales', label: getString('analytics-export-col-sales') },
+        { key: 'orders', label: getString('analytics-export-col-orders') },
+      ],
+      data.daily.map((r) => ({ date: r.date, sales: fmt(r.total_minor), orders: String(r.sale_count) })),
+    );
+    return;
+  }
+  if (g === 'yearly') {
+    downloadCsv(
+      filename,
+      [
+        { key: 'week', label: getString('analytics-export-col-week') },
+        { key: 'sales', label: getString('analytics-export-col-sales') },
+        { key: 'orders', label: getString('analytics-export-col-orders') },
+      ],
+      data.weekly.map((r) => ({ week: r.week_start, sales: fmt(r.total_minor), orders: String(r.sale_count) })),
+    );
+    return;
+  }
+  // weekly (and daily/custom, which remap to weekly): the 7×24 hourly grid.
+  downloadCsv(
+    filename,
+    [
+      { key: 'day', label: getString('analytics-export-col-day') },
+      { key: 'hour', label: getString('analytics-export-col-hour') },
+      { key: 'sales', label: getString('analytics-export-col-sales') },
+      { key: 'orders', label: getString('analytics-export-col-orders') },
+    ],
+    data.hourly.map((r) => ({
+      day: dayLabels[(r.day_of_week + 6) % 7] ?? String(r.day_of_week),
+      hour: String(r.hour).padStart(2, '0'),
+      sales: fmt(r.total_minor),
+      orders: String(r.sale_count),
+    })),
+  );
+}
+
+/**
  * Short, stable label for a cache key in the debug readout:
  * `card:revenue:retail:daily:...` → `revenue`, `query:retail:daily:...` → `query`.
  */
@@ -199,6 +267,13 @@ const ANALYTICS_CARDS: AnalyticsCard[] = [
 
 export default function AnalyticsScreen() {
   const { l10n } = useLocalization();
+  const { currency } = useCurrency();
+  const exp = minorUnitExponent(currency);
+  // Number formatting follows the active Fluent locale, matching the other
+  // analytics cards' money formatter (never a hardcoded English locale).
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
+  const fmt = (minor: number) =>
+    new Intl.NumberFormat(numLocale, { style: 'currency', currency, maximumFractionDigits: exp }).format(minor / 10 ** exp);
   const { goToWorkspacePicker } = useWorkspaceNav();
   const { sessionToken: rawToken, availableWorkspaces, activeInstance } = useWorkspace();
   const sessionToken = rawToken || '';
@@ -598,8 +673,9 @@ const [paletteOpen, setPaletteOpen] = useState(false);
     cardQueryKey('heatmap', workspaceView, heatmapGranularity, heatmapRange.from, heatmapRange.to),
     () => loadHeatmapRows({ workspace: workspaceView, granularity: heatmapGranularity, from: heatmapRange.from, to: heatmapRange.to, sessionToken }),
   );
-  const heatmapIntensities = heatmapQuery.data
-    ? buildHeatmapIntensities(heatmapGranularity, heatmapQuery.data)
+  const heatmapData = heatmapQuery.data;
+  const heatmapIntensities = heatmapData
+    ? buildHeatmapIntensities(heatmapGranularity, heatmapData)
     : new Map<string, number>();
   const heatCell = (key: string, label: string, reactKey?: string) => (
     <div
@@ -1222,6 +1298,12 @@ const [paletteOpen, setPaletteOpen] = useState(false);
                   <h2 className="analytics-card-title">{card.title}</h2>
                 </Localized>
                 <div className="analytics-card-actions">
+                  {card.key === 'heatmap' && heatmapData && (
+                    <ExportCsvButton
+                      ariaLabel={l10n.getString('analytics-export-heatmap-aria')}
+                      onClick={() => exportHeatmapCsv(heatmapGranularity, heatmapData, heatmapRange.from, heatmapRange.to, fmt, (id) => l10n.getString(id))}
+                    />
+                  )}
                   <button
                     type="button"
                     className="analytics-card-action analytics-card-info"

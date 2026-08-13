@@ -111,7 +111,7 @@ const mockGetCategoryBreakdown = vi.fn(() => Promise.resolve([
 // Per-day basket-size rows: 100 total sales, weighted avg 2.5 items/order
 // — a real trend for the basket chart, not a flat range average.
 // Range-anchored to the queried week (see the daysAfter helper above).
-const mockGetBasketSizeTrend = vi.fn((startDate?: string) => {
+const mockGetBasketSizeTrend = vi.fn((startDate?: string, _endDate?: string, _token?: string) => {
   const base = startDate ?? '2026-08-03';
   const d = (n: number) => daysAfter(base, n);
   return Promise.resolve([
@@ -143,7 +143,7 @@ const mockGetInventoryTurnover = vi.fn(() => Promise.resolve({ units_sold: 500, 
 // off-range fixed date would be dropped (rendering an all-zero chart).
 const daysAfter = (iso: string, n: number) =>
   new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
-const mockGetInventoryTrend = vi.fn((startDate?: string) => Promise.resolve([
+const mockGetInventoryTrend = vi.fn((startDate?: string, _endDate?: string, _token?: string) => Promise.resolve([
   { date: startDate ?? '2026-07-21', units_sold: 15 },
   { date: daysAfter(startDate ?? '2026-07-21', 1), units_sold: 18 },
 ]));
@@ -1129,6 +1129,26 @@ describe('AnalyticsScreen layout shell', () => {
     expect(voidsCols.map((c) => c.key)).toEqual(['name', 'qty']);
     expect(voidsCols.map((c) => c.label)).toEqual(['Name', 'Quantity']);
     expect(voidsRows[0]).toMatchObject({ name: 'Cold Brew', qty: '2' });
+  });
+
+  it('exports the heatmap CSV from the heatmap card', async () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
+    await flushRecalc();
+
+    vi.mocked(downloadCsv).mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Export heatmap as CSV' }));
+
+    expect(downloadCsv).toHaveBeenCalledTimes(1);
+    const [filename, columns, rows] = vi.mocked(downloadCsv).mock.calls[0]!;
+    expect(filename).toContain('heatmap-');
+    expect(columns.map((c) => c.key)).toEqual(['day', 'hour', 'sales', 'orders']);
+    expect(columns.map((c) => c.label)).toEqual(['Day', 'Hour', 'Total sales', 'Orders']);
+    // Weekly grid rows: day-of-week 1 (Sun-first) → Monday; 2 → Tuesday.
+    expect(rows).toEqual([
+      { day: 'Mon', hour: '10', sales: '$3,500.00', orders: '3' },
+      { day: 'Tue', hour: '11', sales: '$4,000.00', orders: '4' },
+    ]);
   });
 
   it('keeps card visuals rendering as granularity changes', async () => {

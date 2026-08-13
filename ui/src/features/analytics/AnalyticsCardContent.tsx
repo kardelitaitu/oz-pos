@@ -156,7 +156,7 @@ function Kpi({ value, label, tone }: { value: string; label: string; tone?: 'goo
 }
 
 /** Small CSV export action — aria label describes what the card exports. */
-function ExportCsvButton({ onClick, ariaLabel }: { onClick: () => void; ariaLabel: string }) {
+export function ExportCsvButton({ onClick, ariaLabel }: { onClick: () => void; ariaLabel: string }) {
   const { l10n } = useLocalization();
   return (
     <button
