@@ -47,20 +47,9 @@ settings-sidebar-clear-results = Hapus pencarian
 settings-theme-toggle-dark-aria = Beralih ke mode gelap
 settings-theme-toggle-light-aria = Beralih ke mode terang
 settings-store-name = Nama Toko
-settings-store-address = Alamat
 settings-tax-id = NPWP
-settings-language = Bahasa
-settings-language-en = English
-settings-language-id = Bahasa Indonesia
 settings-theme = Tema
-settings-theme-light = Terang
-settings-theme-dark = Gelap
-settings-theme-system = Sistem
-settings-receipt-footer = Kaki Nota
 settings-save = Simpan Pengaturan
-settings-general = Umum
-settings-data = Manajemen Data
-settings-features = Fitur
 
 appearance-preview-btn-label = Tombol Utama
 appearance-preview-btn-outline-label = Sekunder
@@ -232,7 +221,6 @@ ws-preview-name-admin = Admin
 settings-page-title = Pengaturan
 settings-loading = Memuat pengaturan…
 settings-section-loading = Memuat…
-settings-load-failed = Gagal memuat pengaturan
 settings-load-partial = Sebagian pengaturan gagal dimuat. Coba lagi.
 settings-section-store = Toko
 settings-section-currency = Mata Uang
@@ -261,14 +249,8 @@ settings-font-size-increase-aria =
     .aria-label = Tambah ukuran font
 settings-field-font-smoothing = Penghalusan Font
 settings-toggle-show-currency = Tampilkan simbol mata uang
-settings-toggle-show-currency-aria =
-    .aria-label = Tampilkan simbol mata uang
 settings-toggle-show-tax = Tampilkan baris pajak di nota
-settings-toggle-show-tax-aria =
-    .aria-label = Tampilkan baris pajak di nota
 settings-toggle-show-table-number = Tampilkan nomor meja di keranjang dan nota
-settings-toggle-show-table-number-aria =
-    .aria-label = Tampilkan nomor meja di keranjang dan nota
 settings-btn-save = Simpan
 settings-btn-revert = Kembalikan
 
@@ -339,7 +321,6 @@ settings-retry = Coba Lagi
 settings-sync-not-configured = Sinkronisasi belum dikonfigurasi. Masukkan URL server dan aktifkan sinkronisasi.
 settings-sync-status-idle = Siap
 settings-sync-status-ok = Terhubung
-settings-sync-status-error = Gagal terhubung
 settings-sync-pending-count = { $count } tertunda
 settings-sync-summary-pending = tertunda
 settings-sync-summary-synced = tersinkron
@@ -361,7 +342,6 @@ settings-sync-pull = Tarik dari Server
 settings-sync-pulling = Menarik…
 settings-sync-pull-empty = Server mengembalikan snapshot kosong
 settings-sync-pull-result = Tarik terakhir: { $products } produk, { $tax_rates } tarif pajak, { $users } pengguna
-settings-appearance = Tampilan
 appearance-primary-colour = Warna Utama
 appearance-primary-colour-picker-aria =
     .aria-label = Pemilih warna utama
@@ -390,8 +370,6 @@ appearance-store-name-fallback = OZ-POS
 appearance-hw-accel = Akselerasi Perangkat Keras
 appearance-hw-accel-aria =
     .aria-label = Aktifkan/nonaktifkan akselerasi perangkat keras
-appearance-hw-accel-on = Aktif
-appearance-hw-accel-off = Nonaktif
 appearance-hw-accel-hint = Nonaktifkan jika animasi UI terasa lambat di perangkat rendah. Mulai ulang aplikasi agar perubahan diterapkan sepenuhnya.
 appearance-preview = Pratinjau
 appearance-reset-all-aria =
@@ -408,14 +386,8 @@ appearance-save-failed = Gagal menyimpan pengaturan tampilan
 settings-decimal-separator-dot = 1,00 (titik)
 settings-decimal-separator-comma = 1,00 (koma)
 settings-decimal-separator-none = 1 (tanpa)
-settings-paper-narrow = 58 mm (thermal)
 settings-paper-width-narrow = 58 mm (sempit)
-settings-paper-standard = 80 mm (thermal)
 settings-paper-width-standard = 80 mm (standar)
-settings-paper-a4 = A4 (210 × 297 mm)
-settings-paper-letter = Letter (8.5 × 11 in)
-settings-paper-9x11 = 9.5 × 11 in (3-ply NCR / continuous)
-settings-paper-9x5 = 9.5 × 5.5 in (half-sheet continuous)
 
 # ── Data Management ──
 data-mgmt-title = Manajemen Data
@@ -458,11 +430,9 @@ data-mgmt-encrypt-export = Ekspor
 data-mgmt-import-wizard-aria = Wizard impor
 data-mgmt-import-title = Pilih file cadangan
 data-mgmt-import-desc = Pilih file .ozpkg terenkripsi untuk diimpor. File harus dibuat oleh ekspor OZ-POS.
-data-mgmt-import-drop-text = Seret & letakkan file .ozpkg di sini, atau
 data-mgmt-import-browse = Cari file…
 data-mgmt-import-preview-title = Pratinjau impor
 data-mgmt-import-meta-file = File
-data-mgmt-import-meta-not-selected = Belum dipilih
 data-mgmt-import-meta-store = Toko
 data-mgmt-import-meta-version = Versi
 data-mgmt-import-meta-created = Dibuat
@@ -507,8 +477,6 @@ data-mgmt-toast-import-success = Impor selesai
 data-mgmt-toast-import-fail = Impor gagal
 data-mgmt-toast-file-picker-fail = Gagal membuka pemilih file
 data-mgmt-toast-backup-status-fail = Gagal memuat status cadangan
-data-mgmt-dismiss-aria =
-    .aria-label = Tutup notifikasi
 
 # ── Feature Toggles ──
 feature-toggle-title = Alih Fitur
@@ -545,8 +513,6 @@ feature-toggle-bulk-disabled = Semua fitur { $group } dinonaktifkan
 feature-toggle-requires = Memerlukan: { $deps }
 feature-toggle-group-aria = Fitur { $group }
 feature-toggle-toggle-aria = Aktifkan/nonaktifkan { $name }
-feature-toggle-dismiss-aria =
-    .aria-label = Tutup notifikasi
 
 # ── Data Management ──
 data-mgmt-password-show-aria = Tampilkan kata sandi
@@ -564,169 +530,47 @@ category-name-fallback = (tanpa nama)
 # ── POS (remaining) ──
 
 # ── Settings Tabs ──
-settings-general-tab = Umum
-settings-receipt-tab = Nota
-settings-printer-tab = Printer
-settings-scanner-tab = Pemindai
-settings-credit-tab = Kredit
-settings-payments-tab = Pembayaran
-settings-system-tab = Sistem
-settings-appearance-tab = Tampilan
-settings-features-tab = Fitur
-settings-data-tab = Data
-settings-sync-tab = Sinkronisasi
 
-settings-header-options = Opsi
-settings-saving-btn = Menyimpan…
 
 # ── General Settings ──
-settings-general-heading = Pengaturan Umum
-settings-branch-label = Cabang
-settings-tax-id-label = NPWP
 # ── Receipt Settings ──
-settings-receipt-heading = Pengaturan Nota
-settings-show-currency-label = Tampilkan simbol mata uang
-settings-show-tax-label = Tampilkan baris pajak
-settings-show-table-label = Tampilkan nomor meja
-settings-decimal-sep-label = Pemisah desimal
-settings-paper-width-label = Lebar kertas
-settings-footer-label = Teks kaki nota
 settings-margins-heading = Margin Kertas (mm)
 settings-margin-top = Atas
 settings-margin-bottom = Bawah
 settings-margin-left = Kiri
 settings-margin-right = Kanan
-settings-click-preview = Klik untuk pratinjau
 
 # ── Receipt Preview ──
-settings-receipt-preview-store-fallback = Toko Anda
-settings-receipt-preview-address-fallback = Jl. Contoh No. 123
-settings-receipt-preview-cashier = Kasir:
-settings-receipt-preview-col-item = Item
-settings-receipt-preview-col-qty = Jml
-settings-receipt-preview-col-price = Harga
-settings-receipt-preview-subtotal = Subtotal
-settings-receipt-preview-tax = PPN
-settings-receipt-preview-total = TOTAL
 
 # ── Decimal separator options ──
-settings-decimal-sep-dot = 1.00 (titik)
-settings-decimal-sep-comma = 1,00 (koma)
-settings-decimal-sep-none = 1 (tanpa)
 
 # ── Printer Settings ──
-settings-printer-heading = Printer Nota
-settings-connection-label = Koneksi
-settings-printer-connection-auto = Deteksi otomatis
-settings-printer-connection-usb = USB
-settings-printer-connection-serial = Serial (COM)
-settings-printer-connection-network = Jaringan (TCP/IP)
-settings-device-path-label = Jalur perangkat
-settings-device-path-placeholder = Mis. /dev/usb/printer0
-settings-printer-paper-size-label = Ukuran kertas
-settings-printer-info = Konfigurasi printer disimpan di terminal ini. Perubahan berlaku setelah mulai ulang.
 
 # ── Scanner Settings ──
-settings-scanner-heading = Pemindai Barcode
-settings-scanner-none = Tidak ada pemindai terdeteksi. Hubungkan pemindai dan mulai ulang.
-settings-scanner-device-label = Perangkat pemindai
-settings-auto-add-label = Tambah produk otomatis saat scan
-settings-input-mode-label = Mode masukan
-settings-input-mode-auto = Deteksi otomatis
-settings-input-mode-keyboard = Keyboard wedge
-settings-input-mode-serial = Serial/COM
 
 # ── Credit Settings ──
-settings-credit-heading = Pengaturan Kredit
-settings-enable-credit-label = Aktifkan penjualan kredit
-settings-reminder-interval-label = Interval pengingat (jam)
-settings-reminder-interval-hint = Seberapa sering lencana pengingat kredit muncul di layar POS
-settings-max-credit-label = Batas kredit maksimum (Rp)
-settings-max-credit-hint = Saldo maksimum yang diizinkan per pelanggan (0 = tanpa batas)
-settings-credit-status-enabled = aktif
-settings-credit-status-disabled = nonaktif
-settings-credit-status-max = Batas maks: Rp { $amount }
-settings-credit-status-no-limit = Tanpa batas.
-settings-credit-status-label = Penjualan kredit saat ini { $status }.
 
 # ── System Settings ──
-settings-system-heading = Sistem
-settings-app-version-label = Versi aplikasi
-settings-cashier-label = Kasir
-settings-terminal-label = Terminal
-settings-theme-label = Tema
-settings-auto-lock-label = Kunci otomatis setelah (menit)
-settings-auto-lock-hint = Kunci sesi setelah tidak aktif (1–120 mnt)
 
 # ── Sound & Language ──
-settings-sound-label = Efek Suara
-settings-language-label = Bahasa
 
 # ── Quick Links ──
-settings-quick-links-heading = Konfigurasi Lainnya
-settings-quick-links-note = Tarif pajak dan alih fitur dapat dikonfigurasi dari halaman Pengaturan utama, yang dapat diakses melalui bilah sisi.
 
 # ── Customer-Facing Display ──
-settings-display-heading = Layar Pelanggan
-settings-display-none = Tidak ada layar pelanggan terdeteksi. Hubungkan layar untuk mengaktifkan fitur ini.
-settings-display-count = { $count } layar terhubung
-settings-display-test-label = Pesan Uji
-settings-display-test-placeholder = Selamat datang di toko kami!
-settings-display-test-btn = Tampilkan
-settings-display-test-sent = Pesan terkirim ke layar
-settings-display-test-failed = Gagal mengirim ke layar
-settings-display-info = Layar pelanggan menampilkan nama item dan total saat dipindai selama penjualan.
 
 # ── Section headings (sub-screens) ──
-settings-appearance-heading = Tampilan
-settings-features-heading = Alih Fitur
-settings-data-heading = Manajemen Data
 
 # ── Payment Gateways ──
-settings-payments-heading = Gateway Pembayaran
-settings-payments-no-gateways = Tidak ada gateway pembayaran yang dikonfigurasi
-settings-stripe-api-key = Kunci API Stripe
-settings-stripe-key-placeholder = sk_live_...
-settings-stripe-key-hint = Masukkan kunci rahasia Stripe Anda untuk mengaktifkan pembayaran kartu
-settings-square-api-key = Kunci API Square
-settings-square-key-placeholder = sq0atp-...
-settings-square-key-hint = Masukkan token akses Square Anda untuk mengaktifkan pembayaran kartu
-settings-midtrans-key = Kunci Server Midtrans
-settings-midtrans-key-placeholder = Mid-server-...
-settings-midtrans-key-hint = Masukkan kunci server Midtrans Anda untuk pembayaran QRIS
 
 # ── Tender Presets ──
-settings-tender-presets-heading = Tombol Tunai Cepat
-settings-tender-presets-desc = Sesuaikan tombol tender cepat yang ditampilkan di layar pembayaran tunai. Nilai dalam rupiah (mis. 50000 = Rp 50.000).
-settings-tender-preset-label = Preset { $n }
-settings-tender-preset-aria = Jumlah preset { $n }
-settings-tender-preset-remove-aria = Hapus preset { $n }
-settings-tender-preset-add = Tambah preset
 
 # ── Cloud Sync ──
 settings-font-smoothing-antialiased = Antialiased (tajam)
 settings-font-smoothing-subpixel = Subpixel (halus)
-settings-sync-heading = Sinkronisasi Cloud
-settings-sync-enabled-label = Aktifkan sinkronisasi cloud
-settings-sync-server-label = URL Server
-settings-sync-server-placeholder = https://sync.oz-pos.example.com
-settings-sync-server-hint = Endpoint yang menerima snapshot cadangan terenkripsi Anda
-settings-sync-token-label = Token Autentikasi
-settings-sync-token-placeholder = tempel token sinkronisasi di sini
 settings-sync-token-hint = Disimpan dengan aman di database — tidak pernah di localStorage
-settings-sync-interval-label = Interval sinkronisasi otomatis (menit)
-settings-sync-interval-hint = Atur ke 0 untuk menonaktifkan sinkronisasi otomatis
-settings-sync-now-btn = Sinkron sekarang
-settings-sync-testing-btn = Menguji…
-settings-sync-test-connection-btn = Uji koneksi
-settings-sync-status-online = Daring
-settings-sync-status-offline = Luring
-settings-sync-status-never = Belum pernah sinkron
 settings-sync-last = Sinkronisasi terakhir
 settings-sync-pending = Perubahan tertunda
 settings-sync-confirm-overwrite = Timpa data lokal dengan snapshot server?
-settings-sync-force-pull-btn = Tarik dari server
-settings-sync-pulling-btn = Menarik…
 settings-sync-toast-success = Sinkronisasi berhasil
 settings-sync-toast-fail = Sinkronisasi gagal — periksa URL server dan token
 settings-sync-toast-test-success = Uji koneksi berhasil
@@ -755,7 +599,6 @@ settings-license-tenant-id = ID Tenant
 settings-license-allowed-types = Tipe Ruang Kerja Diizinkan
 settings-license-allowed-types-all = Semua
 settings-license-not-activated = Tidak ada lisensi yang diaktifkan. Aktifkan lisensi untuk melihat detail di sini.
-settings-license-check-server = Periksa Status Server
 settings-license-server-tier = Tingkat Server
 settings-license-server-active = Server Aktif
 settings-license-server-expires = Server Kedaluwarsa
@@ -793,13 +636,6 @@ settings-license-load-failed = Gagal memuat info lisensi
 settings-copyright-notice-value = OZ-POS © 2025–2026 OZ Systems. Seluruh hak cipta dilindungi.
 
 # ── Toast messages ──
-settings-toast-failed-tax-rates = Gagal memuat tarif pajak
-settings-toast-failed-store-settings = Gagal memuat pengaturan toko
-settings-toast-failed-receipt-settings = Gagal memuat pengaturan nota
-settings-toast-failed-credit-settings = Gagal memuat pengaturan kredit
-settings-toast-failed-hardware-settings = Gagal memuat pengaturan perangkat keras
-settings-toast-failed-scanners = Gagal memuat pemindai
-settings-toast-failed-sync = Gagal memuat pengaturan sinkronisasi
 
 # ── Updates ──
 settings-updates-heading = Pembaruan
@@ -814,15 +650,12 @@ settings-update-status-label = Status
 settings-update-not-checked = Belum diperiksa
 settings-update-check-error = Pemeriksaan pembaruan gagal
 settings-update-retry = Coba Lagi
-settings-toast-failed-displays = Gagal memuat layar
 settings-field-language = Bahasa
 
 # ── Field validation ──
 settings-store-name-required = Nama toko wajib diisi
 settings-tax-id-pattern-error = Hanya huruf, angka, garis, titik, dan garis miring yang diizinkan
 settings-tax-id-pattern-hint = Hanya huruf, angka, garis, titik, dan garis miring, maks 20 karakter
-settings-toast-saved = Pengaturan tersimpan
-settings-toast-failed-save = Gagal menyimpan pengaturan
 
 # ── Email Report Settings ──
 settings-section-email = Laporan Email

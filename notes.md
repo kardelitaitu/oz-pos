@@ -918,3 +918,46 @@ The first full `vitest run` of the session surfaced 4 failing compliance tests
 - id-only orphans remain across several bundles (customers-add/inventory-*,
   products-add, orders-*, shared app-name/done/export/filter, staff-activate…)
   — all have zero TSX consumers and zero en counterparts.
+
+# KDS locale/truncation fixes + full orphan sweep (2026-08-14)
+
+## KDS repairs
+
+- `KdsHistoryPanel` — the received/served timestamps used browser-locale
+  `toLocaleString()`; now formatted with the active Fluent locale
+  (`numLocale` derived from `l10n.bundles`).
+- `KdsTicketCard` edit-count input — `parseInt(editCount)` silently truncated
+  fractional keystrokes (e.g. 2.5 → 2). The input now rejects non-integer /
+  <1 values at the keystroke level (established strict-integer pattern).
+  Regression test: `rejects fractional edit counts at the keystroke level`.
+
+## Definitive orphan-key sweep (505 keys across 11 bundles)
+
+Built a fast exact-substring orphan scanner (all TSX/TS incl. tests as
+references, dynamic template/concatenation prefixes protected, Fluent terms
+excluded). Removed dead keys from:
+
+- inventory.id (5), multi-store + .id (6 each), products.id (11),
+  reports.id (13), sales (42), sales.id (70), settings (155),
+  settings.id (162), shared (16), shared.id (19)
+
+Highlights: the settings bundles carried ~150 legacy keys from the section
+refactor (settings-appearance, settings-sync-*, settings-credit-*, ...);
+sales carried stale pos-*/payment-*/orders-* duplicates; products.id kept
+products-add/title/price... with no en counterpart. All had zero TSX
+consumers. Kept: `customers-add` (barePlaceholderScan discriminator pin),
+dynamic-prefix keys (setup-feature-*, analytics-*, sc-status-*, kds-*),
+Fluent terms.
+
+## Verification
+
+- Full suite: **296 files / 5211 tests pass** (4 pre-existing dev-mock
+  timer errors, not failures).
+- typecheck ✅ · lint 0 errors ✅ · i18n lint clean ✅ · bundle parity
+  0 missing ✅ (3860 en / 3939 id keys across 25 files).
+- Compliance tests (barePlaceholderScan 50, themeToken, noiseDither,
+  animation) all pass.
+
+## Deferred (unchanged)
+
+- `src/dev-mock/tauri-api.ts` timer `emit` cleanup.

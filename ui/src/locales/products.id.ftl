@@ -1,14 +1,4 @@
-products-title = Produk
-products-add = Tambah Produk
-products-edit = Ubah Produk
-products-delete = Hapus Produk
 products-name = Nama
-products-sku = SKU
-products-price = Harga
-products-barcode = Barcode
-products-category = Kategori
-products-stock = Stok
-products-no-products = Belum ada produk
 
 restaurant-menu-search-placeholder = Cari Menu
 restaurant-menu-hamburger-aria = Menu
@@ -207,8 +197,6 @@ categories-name-placeholder =
     .placeholder = mis. Toko Roti, Barang
 categories-colour = Warna
 categories-icon = Ikon
-categories-icon-aria =
-    .aria-label = Pilih ikon untuk kategori
 categories-id-preview = Pratinjau ID
 categories-edit = Ubah
 categories-create = Buat

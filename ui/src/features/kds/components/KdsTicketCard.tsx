@@ -306,7 +306,10 @@ export const KdsTicketCard = memo(function KdsTicketCard({
                 type="number"
                 min={1}
                 value={editCount}
-                onChange={(e) => setEditCount(e.target.value)}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  if (e.target.value === '' || (Number.isInteger(v) && v >= 1)) setEditCount(e.target.value);
+                }}
                 onKeyDown={handleKeyDown}
                 aria-label={requiredLocalized(l10n, 'kds-edit-count-aria')}
               />

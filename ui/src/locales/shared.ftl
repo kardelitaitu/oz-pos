@@ -12,10 +12,6 @@ theme-toggle-aria =
     } mode
 
 # Badge
-badge-default = Badge
-badge-success = Success
-badge-warning = Warning
-badge-danger = Danger
 badge-info = Info
 
 # Loading / Spinner
@@ -30,16 +26,12 @@ toast-info = This is an informational message
 
 # Empty state
 empty-state-title = Nothing here yet
-empty-state-desc = Get started by adding your first item
-empty-state-cta = Add Product
 
 # Error boundary
 error-boundary-title = Something went wrong
 error-boundary-retry = Try Again
 
 # Error state
-error-state-title = Something went wrong
-error-state-desc = An unexpected error occurred. Please try again.
 error-state-retry = Retry
 
 # AppError user-safe copy (ERR-05/ERR-06 — typed normalizer output)
@@ -247,9 +239,7 @@ nav-stock-transfers = Stock Transfers
 nav-custom-report = Custom Report
 nav-pos = POS
 nav-stock = Stock
-nav-history = History
 nav-reports = Reports
-nav-section-app = App
 nav-sidebar-collapse = Collapse sidebar
 nav-sidebar-expand = Expand sidebar
 nav-main-aria = Main navigation
@@ -262,17 +252,14 @@ workspace-home-fullscreen-hint = F11
 fullscreen-enabled = Fullscreen mode enabled
 fullscreen-disabled = Fullscreen mode disabled
 workspace-home-loading = Loading workspaces…
-workspace-home-loading-aria = Loading workspaces
 workspace-home-sr-error = Connection error
 workspace-home-available = { $count } workspaces available
 workspace-home-coming-soon = Coming soon
 workspace-card-active-aria = Active workspace
-workspace-home-subtitle = Select a workspace to start
 workspace-home-empty = No workspaces available
 workspace-home-empty-desc = You don't have access to any workspaces yet. Contact an administrator.
 workspace-card-open-aria = Open { $name }
 workspace-card-no-access-aria = { $name } — not available for your role
-workspace-card-no-access-title = Your role ({ $role }) cannot access this workspace
 workspace-card-no-access-badge = Not available
 workspace-home-logout = Logout
 workspace-home-logout-confirm-title = Logout?
@@ -289,13 +276,10 @@ workspace-card-pin-aria = Pin { $name } to top
 workspace-card-unpin-aria = Unpin { $name }
 
 # Shell
-shell-loading = Loading…
 
 # Status Bar
 status-bar-connected = Backend connected
 status-bar-disconnected = Backend disconnected
-status-bar-checking = Checking backend connection
-status-bar-authenticating = Authenticating...
 # Sync connection status
 status-bar-sync-connected = Cloud sync connected
 status-bar-sync-disconnected = Cloud sync disconnected

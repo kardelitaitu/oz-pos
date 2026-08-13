@@ -11,13 +11,8 @@ inventory-report-threshold = Batas
 inventory-report-reorder = Pesan Ulang
 inventory-report-export-csv = Ekspor CSV
 
-inventory-title = Stok
 inventory-adjust = Sesuaikan Stok
 inventory-product = Produk
-inventory-current-qty = Jml Saat Ini
-inventory-new-qty = Jml Baru
-inventory-reason = Alasan
-inventory-adjustment-made = Stok disesuaikan
 
 inv-title = Penyesuaian Stok
 inv-step-select-product = 1. Pilih Produk

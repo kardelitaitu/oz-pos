@@ -1,5 +1,4 @@
 -app-name = OZ-POS
-app-name = { -app-name }
 
 save = Simpan
 cancel = Batal
@@ -35,8 +34,6 @@ nav-general = Umum
 nav-settings = Pengaturan
 nav-reports = Laporan
 nav-design = Sistem Desain
-nav-login = Masuk Staf
-nav-logout = Keluar
 nav-orders = Pesanan
 
 error-boundary-title = Terjadi kesalahan
@@ -45,8 +42,6 @@ error-boundary-retry = Coba Lagi
 # Status Bar
 status-bar-connected = Backend terhubung
 status-bar-disconnected = Backend terputus
-status-bar-checking = Memeriksa koneksi backend
-status-bar-authenticating = Mengautentikasi…
 # Sync connection status
 status-bar-sync-connected = Sinkronisasi cloud terhubung
 status-bar-sync-disconnected = Sinkronisasi cloud terputus
@@ -65,14 +60,9 @@ statusbar-license = Lisensi Proprietary
 
 # POS Cart Line Items
 shared-loading = Memuat…
-shell-loading = Memuat…
 ds-title = Sistem Desain
 
 # Badge
-badge-default = Badge
-badge-success = Berhasil
-badge-warning = Peringatan
-badge-danger = Bahaya
 badge-info = Info
 
 # Toast
@@ -86,12 +76,8 @@ modal-close-aria = Tutup dialog
 
 # Empty state
 empty-state-title = Belum ada apa pun di sini
-empty-state-desc = Mulai dengan menambahkan item pertama Anda
-empty-state-cta = Tambah Produk
 
 # Error state
-error-state-title = Terjadi kesalahan
-error-state-desc = Terjadi kesalahan yang tidak terduga. Silakan coba lagi.
 error-state-retry = Coba Lagi
 
 # AppError user-safe copy (ERR-05/ERR-06 — output normalizer terketik)
@@ -208,8 +194,6 @@ nav-suppliers = Pemasok
 nav-purchase-orders = Pesanan Pembelian
 nav-stock-transfers = Transfer Stok
 nav-stock = Stok
-nav-history = Riwayat
-nav-section-app = Aplikasi
 nav-sidebar-collapse = Tutup sidebar
 nav-sidebar-expand = Buka sidebar
 nav-switch-workspace = Ganti Ruang Kerja
@@ -290,12 +274,10 @@ fullscreen-enabled = Mode layar penuh aktif
 fullscreen-disabled = Mode layar penuh nonaktif
 workspace-home-user-aria = Masuk sebagai { $name }
 workspace-home-loading = Memuat ruang kerja…
-workspace-home-loading-aria = Memuat ruang kerja
 workspace-home-sr-error = Kesalahan koneksi
 workspace-home-available = { $count } ruang kerja tersedia
 workspace-home-coming-soon = Segera hadir
 workspace-card-active-aria = Ruang kerja aktif
-workspace-home-subtitle = Pilih ruang kerja untuk memulai
 workspace-home-empty = Tidak ada ruang kerja tersedia
 workspace-home-empty-desc = Anda belum memiliki akses ke ruang kerja apa pun. Hubungi administrator.
 workspace-home-logout = Keluar
@@ -306,7 +288,6 @@ workspace-home-logout-confirm-confirm = Keluar
 workspace-home-shortcut-hint = Tekan { $key } untuk membuka
 workspace-card-open-aria = Buka ruang kerja { $name }
 workspace-card-no-access-aria = { $name } — tidak tersedia untuk peran Anda
-workspace-card-no-access-title = Tidak tersedia untuk peran { $role }
 workspace-card-no-access-badge = Tidak tersedia
 workspace-home-error-title = Galat Koneksi
 workspace-home-error-desc = Tidak dapat memuat ruang kerja. Periksa koneksi Anda dan coba lagi.
