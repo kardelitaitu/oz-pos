@@ -26,7 +26,7 @@
   --analytics-warning:       #ea580c;
   --analytics-warning-bright:#f59e0b;
   --analytics-warning-bg:    #fff7ed;
-  --analytics-heat-1:        #dbeafe;
+  --analytics-heat-1:        #bfdbfe;
   --analytics-heat-2:        #93c5fd;
   --analytics-heat-3:        #3b82f6;
   --analytics-heat-4:        #1d4ed8;
@@ -540,15 +540,15 @@
   color: var(--color-primary, #4f46e5);
 }
 
-/* Per-card options menu (…) */
+/* Per-card action buttons (info / expand / options) */
 .analytics-card-actions {
   position: relative;
 }
 
+/* Portaled to document.body at a fixed viewport position (set inline), so
+   the card's `overflow: hidden` can't clip the open menu. */
 .analytics-card-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
+  position: fixed;
   z-index: 30;
   min-width: 160px;
   padding: 5px;
@@ -974,7 +974,7 @@
 .analytics-kpi-value--bad  { color: var(--analytics-danger); }
 
 .analytics-kpi-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--analytics-fg-tertiary);
   white-space: nowrap;
@@ -1017,7 +1017,7 @@
   gap: 3px;
   padding: 2px 7px;
   border-radius: var(--radius-full);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -1041,7 +1041,7 @@
 /* One-line insight caption under trend charts */
 .analytics-card-insight {
   margin: 6px 0 0;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--analytics-fg-secondary);
 }
@@ -1140,7 +1140,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--analytics-fg-secondary);
 }
 
@@ -1300,7 +1300,7 @@
 }
 
 .analytics-weekly-row .analytics-heat-label {
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .analytics-weekly-day {
@@ -1429,7 +1429,7 @@
 }
 
 .analytics-heat-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--analytics-fg-tertiary);
 }

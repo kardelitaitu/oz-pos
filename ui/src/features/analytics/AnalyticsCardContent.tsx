@@ -368,6 +368,26 @@ function exportDiscountsCsv(
   );
 }
 
+/** Download the refunds/voids summary (count, amount, average) as CSV. */
+function exportRefundsCsv(
+  summary: VoidedSummaryRow,
+  from: string,
+  to: string,
+  fmt: (minor: number) => string,
+  getString: (id: string) => string,
+) {
+  const average = summary.void_count > 0 ? Math.round(summary.void_total_minor / summary.void_count) : 0;
+  downloadCsv(
+    `refunds-${from}-to-${to}.csv`,
+    [
+      { key: 'count', label: getString('analytics-card-refunds-count') },
+      { key: 'amount', label: getString('analytics-card-refunds-amount') },
+      { key: 'average', label: getString('analytics-card-refunds-avg') },
+    ],
+    [{ count: String(summary.void_count), amount: fmt(summary.void_total_minor), average: fmt(average) }],
+  );
+}
+
 /** Download voided/refund item rows as CSV (name + quantity). */
 function exportVoidedItemsCsv(
   cardKey: string,
@@ -775,17 +795,39 @@ const PAYMENT_NAMES: Record<string, string> = {
   ewallet: 'analytics-card-payments-ewallet',
 };
 
+/**
+ * Largest-remainder rounding of a set of percentages so the segments
+ * always sum to exactly 100 instead of drifting from independent rounding.
+ */
+function largestRemainderPcts(values: number[], total: number): number[] {
+  if (total <= 0 || values.length === 0) return values.map(() => 0);
+  const shares = values.map((v) => (v / total) * 100);
+  const pcts = shares.map((s) => Math.floor(s));
+  let remainder = 100 - pcts.reduce((sum, p) => sum + p, 0);
+  const byFraction = shares
+    .map((s, i) => ({ i, fraction: s - Math.floor(s) }))
+    .sort((a, b) => b.fraction - a.fraction);
+  for (const { i } of byFraction) {
+    if (remainder <= 0) break;
+    pcts[i] = (pcts[i] ?? 0) + 1;
+    remainder -= 1;
+  }
+  return pcts;
+}
+
 function PaymentsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: string; expanded?: boolean | undefined; compare?: boolean | undefined }) {
   const { l10n } = useLocalization();
   const { fmt } = useMoney();
   const { data: rows, prev: prevRows, error } = useCardDataCompare<PaymentMethodRow[]>('payments', q, compare ?? false);
   const total = rows ? rows.reduce((s, r) => s + r.total_minor, 0) : 0;
   const prevTotal = prevRows ? prevRows.reduce((s, r) => s + r.total_minor, 0) : 0;
+  // Largest-remainder rounding so the stacked bar always sums to 100.
+  const pctByMethod = rows ? largestRemainderPcts(rows.map((r) => r.total_minor), total) : [];
   const segs = rows
-    ? rows.map((r) => ({
+    ? rows.map((r, i) => ({
         key: r.payment_method,
         name: PAYMENT_NAMES[r.payment_method] ? l10n.getString(PAYMENT_NAMES[r.payment_method]!) : r.payment_method,
-        pct: total > 0 ? Math.round((r.total_minor / total) * 100) : 0,
+        pct: pctByMethod[i] ?? 0,
       }))
     : [];
   const pcts = segs.map((s) => s.pct);
@@ -855,30 +897,26 @@ function DiscountsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
   );
 }
 
-function RefundsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: string; expanded?: boolean | undefined; compare?: boolean | undefined }) {
+function RefundsCard({ q, compare }: { q: AnalyticsQuery; title: string; expanded?: boolean | undefined; compare?: boolean | undefined }) {
   const { l10n } = useLocalization();
   const { fmt } = useMoney();
-  const { data: loaded, prev: prevLoaded, error } = useCardDataCompare<[VoidedSummaryRow, VoidedItemRow[]]>('refunds', q, compare ?? false);
+  const { data: summary, prev: prevSummary, error } = useCardDataCompare<VoidedSummaryRow>('refunds', q, compare ?? false);
   if (error) return <CardError error={error} />;
-  if (!loaded) return <CardLoading />;
-  const [summary, items] = loaded;
-  if (items.length === 0) return <CardEmpty message={l10n.getString('analytics-empty-generic')} />;
-  const rows = rowDeltas(
-    items.map((it) => ({ name: it.name, value: it.qty, display: `${it.qty}×` })),
-    prevLoaded ? prevLoaded[1].map((it) => ({ name: it.name, value: it.qty, display: '' })) : null,
-  );
-  const delta = compare && prevLoaded ? periodDelta(summary.void_count, prevLoaded[0].void_count) : null;
+  if (!summary) return <CardLoading />;
+  if (summary.void_count === 0) return <CardEmpty message={l10n.getString('analytics-empty-generic')} />;
+  const avgRefund = summary.void_count > 0 ? Math.round(summary.void_total_minor / summary.void_count) : 0;
+  const delta = compare && prevSummary ? periodDelta(summary.void_count, prevSummary.void_count) : null;
   return (
     <Visual>
       <div className="analytics-kpi-tiles">
         <Kpi value={String(summary.void_count)} label={l10n.getString('analytics-card-refunds-count')} tone="bad" />
         <Kpi value={fmt(summary.void_total_minor)} label={l10n.getString('analytics-card-refunds-amount')} tone="bad" />
+        <Kpi value={fmt(avgRefund)} label={l10n.getString('analytics-card-refunds-avg')} />
       </div>
       <div className="analytics-kpi-actions analytics-card-insight">
         {delta !== null && <DeltaChip value={delta} tone="bad" compare={compare === true} />}
-        <ExportCsvButton ariaLabel={l10n.getString('analytics-export-refunds-aria')} onClick={() => exportVoidedItemsCsv('refunds', items, q.from, q.to, (id) => l10n.getString(id))} />
+        <ExportCsvButton ariaLabel={l10n.getString('analytics-export-refunds-aria')} onClick={() => exportRefundsCsv(summary, q.from, q.to, fmt, (id) => l10n.getString(id))} />
       </div>
-      <RankedList rows={rows} ariaLabel={title} limit={expanded ? undefined : 5} />
     </Visual>
   );
 }

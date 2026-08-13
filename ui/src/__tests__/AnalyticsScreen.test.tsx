@@ -1017,6 +1017,23 @@ describe('AnalyticsScreen layout shell', () => {
     expect(rows[1]).toMatchObject({ method: 'Card', sales: '$9,000.00', orders: '45' });
   });
 
+  it('rounds payment shares so the stacked segments sum to 100', async () => {
+    vi.useFakeTimers();
+    // 1000/3000 = 33.3% each; independent rounding would total 99 (33+33+33).
+    mockGetPaymentMethodBreakdown.mockResolvedValueOnce([
+      { payment_method: 'cash', total_minor: 1000, sale_count: 1 },
+      { payment_method: 'card', total_minor: 1000, sale_count: 1 },
+      { payment_method: 'qris', total_minor: 1000, sale_count: 1 },
+    ]);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
+    await flushRecalc();
+
+    const paymentsCard = screen.getByText('Top payment method').closest('.analytics-card') as HTMLElement;
+    const legendValues = [...paymentsCard.querySelectorAll('.analytics-legend-value')]
+      .map((n) => parseInt(n.textContent ?? '0', 10));
+    expect(legendValues.reduce((sum, v) => sum + v, 0)).toBe(100);
+  });
+
   it('exports the category breakdown CSV from the category card', async () => {
     vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
@@ -1135,12 +1152,9 @@ describe('AnalyticsScreen layout shell', () => {
     expect(downloadCsv).toHaveBeenCalledTimes(1);
     const [filename, columns, rows] = vi.mocked(downloadCsv).mock.calls[0]!;
     expect(filename).toContain('refunds-');
-    expect(columns.map((c) => c.key)).toEqual(['name', 'qty']);
-    expect(columns.map((c) => c.label)).toEqual(['Name', 'Quantity']);
-    expect(rows).toEqual([
-      { name: 'Cold Brew', qty: '2' },
-      { name: 'Croissant', qty: '1' },
-    ]);
+    expect(columns.map((c) => c.key)).toEqual(['count', 'amount', 'average']);
+    expect(columns.map((c) => c.label)).toEqual(['Refund count', 'Refunded amount', 'Average refund']);
+    expect(rows).toEqual([{ count: '3', amount: '$450.00', average: '$150.00' }]);
   });
 
   it('exports the low stock CSV from the low-stock card', async () => {
@@ -1442,22 +1456,17 @@ describe('AnalyticsScreen layout shell', () => {
     expect(expanded.textContent).toContain('Filter Paper');
   });
 
-  it('expands the refunds card to reveal the voided-items list', async () => {
+  it('renders the refunds card as a money summary without a voided-items list', async () => {
     vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
     await flushRecalc();
 
-    // Refunds card pairs the KPI tiles with the ranked voided-items list
     const refundsCard = screen.getByText('Refunds & Voids').closest('.analytics-card') as HTMLElement;
-    expect(refundsCard.querySelectorAll('.analytics-rank-row').length).toBe(2);
-    expect(refundsCard.textContent).toContain('Cold Brew');
-    expect(refundsCard.textContent).toContain('2×');
-
-    // Expanded keeps the full list and the summary tiles
-    fireEvent.click(refundsCard.querySelector('button[aria-label="Expand card"]') as HTMLButtonElement);
-    const expanded = document.querySelector('.analytics-card--expanded') as HTMLElement;
-    expect(expanded.querySelectorAll('.analytics-rank-row').length).toBe(2);
-    expect(expanded.textContent).toContain('Croissant');
+    expect(refundsCard.textContent).toContain('Refund count');
+    expect(refundsCard.textContent).toContain('Refunded amount');
+    expect(refundsCard.textContent).toContain('Average refund');
+    // The voided-items list now lives on the restaurant-only Voids card.
+    expect(refundsCard.querySelectorAll('.analytics-rank-row').length).toBe(0);
   });
 
   it('overlays the previous period on every card when compare mode is on', async () => {

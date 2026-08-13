@@ -75,6 +75,31 @@ describe('TtlCache', () => {
     expect(cache.get('b')?.fresh).toBe(true);
     expect(cache.get('c')?.fresh).toBe(true);
   });
+
+  it('purges an expired entry instead of evicting a still-live one', () => {
+    const cache = new TtlCache<string>(1000, 2);
+    cache.set('a', '1');
+    vi.advanceTimersByTime(500);
+    cache.set('b', '2'); // 'a' expires first (t=1000), 'b' at t=1500
+    vi.advanceTimersByTime(700); // t=1200: 'a' expired, 'b' still fresh
+    cache.set('c', '3');
+    // 'a' was dropped for being expired; 'b' (live) survived the insert.
+    expect(cache.get('a')).toBeUndefined();
+    expect(cache.get('b')).toEqual({ value: '2', fresh: true });
+    expect(cache.get('c')).toEqual({ value: '3', fresh: true });
+  });
+
+  it('evicts by recency: a read promotes a key above an unread one', () => {
+    const cache = new TtlCache<string>(1000, 2);
+    cache.set('a', '1');
+    cache.set('b', '2');
+    cache.get('a'); // promote 'a' to most-recently-used
+    cache.set('c', '3');
+    // 'b' was not read, so it is the LRU entry and gets evicted.
+    expect(cache.get('a')).toEqual({ value: '1', fresh: true });
+    expect(cache.get('b')).toBeUndefined();
+    expect(cache.get('c')).toEqual({ value: '3', fresh: true });
+  });
 });
 
 describe('TtlCache metrics', () => {

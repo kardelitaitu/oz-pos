@@ -287,6 +287,10 @@ export class TtlCache<T> {
       this.bump(key, 'misses');
       return undefined;
     }
+    // Promote to most-recently-used so `set` evicts the true LRU entry
+    // rather than the first-inserted one.
+    this.entries.delete(key);
+    this.entries.set(key, entry);
     // Capture the clock once so the hit/expiry metric and the returned
     // `fresh` flag always agree, even exactly at the TTL boundary.
     const now = Date.now();
@@ -300,18 +304,35 @@ export class TtlCache<T> {
 
   /** Store `value` under `key`, expiring after the TTL. */
   set(key: string, value: T): void {
+    this.entries.delete(key); // re-insert to refresh the LRU position
     this.entries.set(key, { value, expiresAt: Date.now() + this.ttlMs });
     this.bump(key, 'sets');
-    // Keep the cache bounded: Map preserves insertion order, so the
-    // first key is the oldest — evict it.
-    if (this.entries.size > this.maxEntries) {
-      const oldest = this.entries.keys().next().value;
-      if (oldest !== undefined) {
-        this.entries.delete(oldest);
-        this.bump(oldest, 'evictions');
+    this.evictIfNeeded();
+    this.persist();
+  }
+
+  /**
+   * Keep the cache bounded. Expired entries are dropped first so they
+   * never waste a slot a live entry needs; while still over the limit,
+   * the least-recently-used (first) entry is evicted. `get` promotes on
+   * read, so the first entry is genuinely LRU, not merely oldest-inserted.
+   */
+  private evictIfNeeded(): void {
+    if (this.entries.size <= this.maxEntries) return;
+    const now = Date.now();
+    for (const [key, entry] of this.entries) {
+      if (entry.expiresAt <= now) {
+        this.entries.delete(key);
+        this.bump(key, 'evictions');
+        if (this.entries.size <= this.maxEntries) return;
       }
     }
-    this.persist();
+    while (this.entries.size > this.maxEntries) {
+      const oldest = this.entries.keys().next().value;
+      if (oldest === undefined) break;
+      this.entries.delete(oldest);
+      this.bump(oldest, 'evictions');
+    }
   }
 
   /** Drop a single entry (metrics history is kept for the readout). */

@@ -827,12 +827,9 @@ export const CARD_LOADERS: Record<string, (q: AnalyticsQuery) => Promise<CardLoa
   customers: (q) => getCustomerSplit(q.from, q.to, q.sessionToken),
   payments: (q) => getPaymentMethodBreakdown(q.from, q.to, q.sessionToken),
   discounts: (q) => getDiscountsSummary(q.from, q.to, q.sessionToken),
-  refunds: (q) =>
-    Promise.all([
-      getVoidedSalesSummary(q.from, q.to, q.sessionToken),
-      // Higher limit so the expanded card can reveal the full list.
-      getVoidedItems(q.from, q.to, q.sessionToken, 25),
-    ]),
+  // Refunds is a money/totals summary (count + amount + average); the
+  // voided-item list belongs to the separate restaurant-only Voids card.
+  refunds: (q) => getVoidedSalesSummary(q.from, q.to, q.sessionToken),
   'top-items': loadTopItems,
   category: (q) => getCategoryBreakdown(q.from, q.to, q.sessionToken),
   basket: loadBasketSize,

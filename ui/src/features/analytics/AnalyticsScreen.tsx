@@ -6,6 +6,7 @@
 //! Main:   smart card grid — cards adapt to retail vs restaurant
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
@@ -348,6 +349,8 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
   const [toasts, setToasts] = useState<{ id: number; message: string; exiting?: boolean }[]>([]);
   const [menuCardId, setMenuCardId] = useState<string | null>(null);
+  /** Viewport anchor for the portaled per-card options menu. */
+  const [menuAnchor, setMenuAnchor] = useState<{ bottom: number; right: number } | null>(null);
   const [collapsedCards, setCollapsedCards] = useState<Set<string>>(new Set());
   const [zoomPopover, setZoomPopover] = useState(false);
   const [showCacheMetrics, setShowCacheMetrics] = useState(false);
@@ -381,12 +384,15 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   const startRecalculating = useRef<(force?: boolean) => void>();
   startRecalculating.current = (force = false) => {
     if (force) {
-      // Refresh wipes the cached payloads AND the recorded query
-      // failures so the data actually recomputes; the TTL-bounded
-      // cache refills on the next render.
+      // Refresh also wipes the cached payloads so the data actually
+      // recomputes; the TTL-bounded cache refills on the next render.
       clearAnalyticsCache();
-      clearAnalyticsErrors();
     }
+    // Every recalc is a fresh navigation: forget recorded failures so a
+    // query that failed earlier retries when revisited (refresh also
+    // wipes the cache itself). The per-key failure guard still stops a
+    // re-render retry loop; only re-navigating (filter change) retries.
+    clearAnalyticsErrors();
     setRecalcTick((n) => n + 1);
   };
 
@@ -1447,7 +1453,15 @@ const [paletteOpen, setPaletteOpen] = useState(false);
                     className={`analytics-card-action${menuOpen ? ' analytics-card-action--active' : ''}`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setMenuCardId(menuOpen ? null : cid);
+                      if (menuOpen) {
+                        setMenuCardId(null);
+                      } else {
+                        // Anchor the (portaled) menu to the trigger so it
+                        // escapes the card's overflow clipping.
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setMenuAnchor({ bottom: rect.bottom, right: window.innerWidth - rect.right });
+                        setMenuCardId(cid);
+                      }
                     }}
                     aria-label={l10n.getString('analytics-card-menu-aria')}
                     aria-haspopup="menu"
@@ -1460,8 +1474,17 @@ const [paletteOpen, setPaletteOpen] = useState(false);
                       <circle cx="19" cy="12" r="1.6" />
                     </svg>
                   </button>
-                  {menuOpen && (
-                    <div className="analytics-card-menu" role="menu" aria-label={l10n.getString('analytics-card-menu-aria')}>
+                  {menuOpen && createPortal(
+                    <div
+                      className="analytics-card-menu"
+                      role="menu"
+                      aria-label={l10n.getString('analytics-card-menu-aria')}
+                      style={{
+                        position: 'fixed',
+                        top: (menuAnchor?.bottom ?? 0) + 4,
+                        right: menuAnchor?.right ?? 0,
+                      }}
+                    >
                       <button type="button" role="menuitem" disabled={isFirst}
                         onClick={() => { moveCard(cid, 'up'); setMenuCardId(null); }}>
                         {l10n.getString('analytics-menu-move-up')}
@@ -1490,7 +1513,8 @@ const [paletteOpen, setPaletteOpen] = useState(false);
                         onClick={() => { toggleCardCollapsed(cid); setMenuCardId(null); }}>
                         {l10n.getString(isCollapsed ? 'analytics-menu-show-card' : 'analytics-menu-collapse-card')}
                       </button>
-                    </div>
+                    </div>,
+                    document.body,
                   )}
                 </div>
               </div>
