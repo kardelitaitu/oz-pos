@@ -3,6 +3,8 @@ tax-config-add = Tambah Tarif Pajak
 tax-config-empty = Belum ada tarif pajak
 tax-config-col-name = Nama
 tax-config-col-rate = Tarif (%)
+tax-config-table-aria = Tarif pajak
+tax-config-cat-table-aria = Tarif pajak kategori
 tax-config-modal-title = { $editing ->
     [true] Ubah Tarif Pajak
    *[other] Tambah Tarif Pajak

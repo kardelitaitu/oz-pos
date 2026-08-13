@@ -38,6 +38,9 @@ const ESSENTIAL_KEYFRAMES = new Set([
   // New-ticket arrival highlight (functional feedback — must pulse to
   // catch the kitchen's attention when a ticket is sent)
   'kds-new-ticket',
+  // Urgent-ticket blink (critical kitchen alarm — must keep blinking
+  // even with reduced-motion; the shake/sweep stay gated)
+  'kds-urgent-blink',
   // Tooltip / toast
   'toast-slide-in', 'ctx-menu-enter',
   // Update banner (functional — must show/hide)

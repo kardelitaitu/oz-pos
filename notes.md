@@ -686,3 +686,235 @@ Audit of `ShiftManagementScreen.tsx` + `shifts.ftl` / `shifts.id.ftl`.
   intentional per SHIFT-03 but worth confirming the drawer-empty default.
 2. **`reason` fallback** — payout reason defaults to the raw English string
   `'safe drop'` when blank; not localized (backend free-text field).
+
+---
+
+# Staff audit (2026-08-14)
+
+Audit of `StaffManagementScreen.tsx` + `staff.ftl` / `staff.id.ftl`.
+
+## Fixed (committed)
+
+- ✅ **Functional `setForm` updaters** — 19 `setForm({ ...form })` stale-closure
+  spreads converted to `setForm((prev) => ...)` (name, PIN, role, phone,
+  active toggle, and the edit-drawer fields).
+- ✅ **Dead hardcoded aria-labels removed** — 2 `aria-label` props that were
+  overridden by `<Localized attrs>` wrappers.
+- ✅ **Orphan FTL keys removed** — 9 never-read keys deleted from both bundles:
+  `staff-error-generic`, `staff-loading`, `staff-login-title/subtitle/step-pin/verifying`
+  (the login screen renders `store_name` + hardcoded strings; the test fixtures
+  defined them but never asserted), `staff-no-staff-found`, `staff-pin-placeholder`,
+  `staff-shifts-tab`.
+
+## Verification
+
+- typecheck ✅ · lint 0 errors ✅ · i18n lint clean · bundle parity 0 missing ·
+  FTL dedupe clean ✅
+- StaffManagementScreen tests 22/22 ✅
+
+## Still open
+
+1. **Login screen strings** — `StaffLoginScreen` still renders a couple of
+  hardcoded English strings (title fallback, "Enter your PIN", "Verifying…");
+  the dead `staff-login-*` keys were removed, so localizing it means adding
+  keys back deliberately.
+
+---
+
+# Promotions + purchasing audit (2026-08-14)
+
+Audit of `PromotionManagementScreen.tsx`, `PurchaseOrderForm.tsx`,
+`SuppliersScreen.tsx` + their bundles.
+
+## Fixed (committed)
+
+- ✅ **Strict-integer numeric inputs** — promotions `value_minor` (fixed-amount
+  discount in minor units), `min_qty`, `reward_qty`, `min_order_minor`, plus
+  PO line `qty` and `unit_cost_minor` silently truncated fractional input via
+  `parseInt` (12.5 -> 12). Now non-integer keystrokes are ignored, matching
+  the inventory-threshold pattern; inputs gained `min={0}`. Regression test
+  for the promotions value field added.
+- ✅ **Orphan FTL key removed** — `suppliers-loading` (skeleton is
+  `aria-hidden`, CSS-class only) deleted from both purchasing bundles. The
+  `po-status-*` keys are read dynamically via `id={\`po-status-${s}\`}` — kept.
+
+## Verification
+
+- typecheck ✅ · lint 0 errors ✅ · i18n lint clean · bundle parity 0 missing ·
+  FTL dedupe clean ✅
+- PromotionManagementScreen 18/18, PurchaseOrderForm + PurchaseOrdersScreen
+  35/35 ✅
+
+## Still open
+
+1. **No client-side value validation** — `handleSave` only requires a name; a
+  percentage promo of 0% or a fixed_amount of 0 saves fine. Backend may
+  reject; worth an inline check.
+2. **Raw minor-unit inputs** — the promo value/min-order fields present raw
+  minor units (5000 = $50.00) rather than a formatted amount; consistent with
+  the existing table display but not ideal UX.
+
+---
+
+# Sales audit (2026-08-14)
+
+Audit of the sales feature (PosScreen, EodReportScreen, RefundModal,
+PaymentModal, PriceOverrideModal, StockShortfallDialog).
+
+## Fixed (committed)
+
+- ✅ **Locale-aware times/dates** — EOD report on-screen shift times passed
+  `[]` as locale (browser default); now the active Fluent locale. RefundModal
+  sale date likewise. The printable receipt's hardcoded `en-US` body is a
+  deliberate 58mm print artifact and was left alone.
+- ✅ **Strict-integer POS inputs** — discount %, closing/opening balances
+  (raw minor units), loyalty points-to-redeem, price override (monetary
+  minor units), and stock-shortfall split qty all silently truncated
+  fractional input via `parseInt` (10.5 -> 10). Now non-integer keystrokes
+  are ignored; the Apply/Close-Shift disabled checks and the
+  open/close/discount handlers validate whole numbers.
+
+## Verification
+
+- typecheck ✅ · lint 0 errors ✅
+- 9 sales test files, 132/132 ✅
+
+## Still open
+
+1. **Hardcoded 'Failed to delete held cart' toast** — PosScreen line ~826
+  uses a raw English toast string (unlocalized). Needs an FTL key.
+2. **`discountName` fallback** — `handleApplyDiscount` builds the label as
+  `` `${pct}% Discount` `` when the optional name is blank — raw English
+  string in the cart.
+3. **PaymentModal receipt dates** — lines 467/771 use `toLocaleDateString('en-US')`
+  for the printable receipt artifact — intentional, consistent with EOD print.
+
+---
+
+# Retail + auth + offline audit (2026-08-14)
+
+Audit of retail product modals (Add/EditProductModal, RetailModals),
+SessionLockScreen, OfflineQueueScreen.
+
+## Fixed (committed)
+
+- ✅ **Strict-integer product fields** — Add/EditProductModal price, stock
+  qty, low/high thresholds, and cost (monetary minor units) silently
+  truncated fractional input via `parseInt` (1850.5 -> 1850). Now non-integer
+  keystrokes are ignored. Regression test for the price field added.
+- ✅ **Locale-aware dates/times** — SessionLockScreen clock/date, offline
+  queue created/synced times + last-polled time, and RetailModals shift
+  opened-at + credit-created dates all used the browser default locale; now
+  the active Fluent locale.
+
+## Verification
+
+- typecheck ✅ · lint 0 errors ✅ · i18n lint clean · bundle parity 0 missing ·
+  FTL dedupe clean ✅
+- AddProductModal 6/6, EditProductModal + SessionLock + OfflineQueue +
+  RetailModals 65/65 ✅
+
+## Still open
+
+1. **RestaurantMenu localStorage parses** — `parseInt` on card-size/font-size
+  storage reads are integer-clamped settings (0-4); low risk, intentionally
+  left.
+
+---
+
+# Multi-bundle orphan sweep (2026-08-14)
+
+Careful pass over kiosk / offline / loyalty / terminals / gift-cards / tax /
+currency / customers / stock-counting / inventory / multi-store / kds /
+analytics bundles with a zero-hit grep (code-only, excluding the FTL files
+themselves).
+
+## Fixed (committed)
+
+- ✅ Removed 11 confirmed-dead keys from both bundles:
+  - kiosk: `kiosk-return`
+  - offline: `offline-queue-delete-success`
+  - loyalty: `loyalty-earn`, `loyalty-adjust`, `loyalty-points-value`,
+    `loyalty-redeem-at-checkout`, `loyalty-available-points`,
+    `loyalty-enter-points`
+  - terminals: `terminal-binding-error-load/save/clear` (screen uses
+    `terminal-error-binding-*`)
+
+## Kept (verified used)
+
+- `gift-cards-txn-*` (issue/redeem/refund/topup) — dynamic
+  `l10n.getString(\`gift-cards-txn-${type}\`)`.
+- `sc-status-*` / `sc-type-*` — dynamic `id={\`sc-status-${status}\`}`.
+- `topology-*` (multi-store) — read from object literals
+  (`ariaId: 'topology-align-left'`) and template ids
+  (`topology-new-${type}`); the bundle is heavily dynamic.
+- tables status keys, tax/currency error keys — used via
+  `l10nErrorMessage(err, l10n, 'key')`.
+
+## Note
+
+Naive "orphan" greps are unreliable here: keys are referenced through
+`requiredLocalized(l10n, 'k')`, `l10nErrorMessage(err, l10n, 'k')`, object
+literals, and template ids. Any future sweep must use the zero-hit,
+code-only grep pattern.
+
+# Compliance suite repairs (full-suite sweep)
+
+The first full `vitest run` of the session surfaced 4 failing compliance tests
+(plus 2 mock gaps in the SessionLock tests). All repaired:
+
+## What landed
+
+- **animationCompliance**: `kds-urgent-blink` is a critical kitchen alarm that
+  must keep blinking even under reduced-motion; added to `ESSENTIAL_KEYFRAMES`
+  alongside `kds-pulse` / `kds-new-ticket`.
+- **themeTokenCompliance (9 violations)**:
+  - AnalyticsScreen: 6× `font-size: 11px` → `var(--text-xs)` (KPI labels,
+    delta pill, insight, legends, heat labels).
+  - KdsScreen: urgent/rush badge colors `#1a1a1a` / `#ffffff` →
+    `var(--color-warning-fg)` / `var(--color-danger-fg)` (TBL-11 status
+    foreground pairs); keycap `box-shadow` → `var(--shadow-sm)`.
+- **noiseDitherCompliance**: `.kds-column` (kanban) and `.kds-shortcut-key`
+  were elevated surfaces (`--shadow-sm`) without the noise-dither overlay.
+  Registered both in all three components.css blocks (main / contrast /
+  reduced) + `KNOWN_NOISE_SELECTORS`, and gave each `position: relative` so
+  the absolute ::after overlay anchors correctly.
+- **KdsScreen.css corrupt rule**: the shortcuts-overlay commit left a mangled
+  `}ht: 1.5rem;` fragment inside `.kds-offline-dismiss-btn:focus-visible`
+  (215 vs 218 braces — an unbalanced file for months) plus a duplicated
+  `:hover`/`:focus-visible` pair. Reconstructed: single base (1.75rem) +
+  one `:hover` + one `:focus-visible`. Braces now 215/215.
+- **barePlaceholderScan stale pin**: the id contract for
+  `category-colour-swatch-aria` used to DROP `$colour` (the round-164
+  discriminator), but commit 6840fbf3 added it back for swatch parity. Switched
+  the discriminator to key-set membership — `customers-add` is id-only, so it
+  must be absent from en contracts and present in id contracts.
+- **SessionLockScreen tests**: both l10n mocks lacked the `bundles: []` stub
+  the locale lookup needs (same fix as LicenseSettings/TerminalStatusPanel).
+- **Missing id translations found during the sweep** (used via `getString` /
+  dynamic ids, invisible to bundle-parity's `<Localized>`-only scan):
+  - loyalty: `loyalty-table-aria`, `loyalty-txn-table-aria`
+  - tax: `tax-config-table-aria`, `tax-config-cat-table-aria`
+  - settings: 15 `setup-feature-*-label` keys (analytics, audit-log, cloud-sync,
+    customer-display, discount-engine, multi-*, promotions-engine, staff-*, etc.)
+
+## Verification
+
+- Full suite: **296 files / 5211 tests pass**. The 5 "errors" are the
+  pre-existing unhandled `emit` timer noise from `src/dev-mock/tauri-api.ts`
+  (test hygiene, not failures).
+- typecheck ✅ · lint 0 errors ✅ · i18n lint clean ✅ · bundle parity
+  0 missing ✅ · FTL dedupe clean ✅
+
+## Deferred
+
+- `src/dev-mock/tauri-api.ts` KDS progress timer fires after
+  NodeTopologyEditor/AnalyticsScreen tests tear down and hits the
+  `@tauri-apps/api/event` mock without `emit` — 5 unhandled rejections per run.
+  Needs a `vi.mock` with `emit` or a timer cleanup hook in those tests.
+- en-only settings keys `settings-sync-last-at` / `settings-currency-options-label`
+  are dead in the en bundle (no TSX consumers) — candidates for the next
+  careful settings-ftl dead-key pass.
+- id-only orphans remain across several bundles (customers-add/inventory-*,
+  products-add, orders-*, shared app-name/done/export/filter, staff-activate…)
+  — all have zero TSX consumers and zero en counterparts.

@@ -121,6 +121,8 @@ const KNOWN_NOISE_SELECTORS = [
   '.modifier-modal',
   '.kds-ticket-rush-badge',
   '.kds-picker-modal',
+  '.kds-column',
+  '.kds-shortcut-key',
   '.retail-cart-course-dropdown',
   '.pos-hold-modal',
   '.pos-held-list-modal',

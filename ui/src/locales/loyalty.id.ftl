@@ -40,5 +40,7 @@ loyalty-txn-type = Tipe
 loyalty-txn-points = Poin
 loyalty-txn-description = Deskripsi
 loyalty-txn-date = Tanggal
+loyalty-table-aria = Akun loyalitas
+loyalty-txn-table-aria = Transaksi terbaru
 
 # ── Reports (remaining) ──

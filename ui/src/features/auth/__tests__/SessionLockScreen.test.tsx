@@ -34,6 +34,7 @@ vi.mock('@fluent/react', () => ({
   Localized: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useLocalization: () => ({
     l10n: {
+      bundles: [],
       getString: (id: string, vars?: Record<string, string>) => {
         const map: Record<string, string> = {
           'session-lock-title': 'Session Locked',

@@ -305,15 +305,24 @@ describe('scanTranslationVars (repo integrity)', () => {
 
 describe('shared bundle and site maps (round 168)', () => {
   it('loads the en contracts with the canonical attribute vars', () => {
-    // Discriminating: the id translation DROPS `$colour`, so if the en
-    // glob ever matched id bundles, this pin fails (the round-164 bug).
+    // Discriminating: `customers-add` exists ONLY in the id bundles, so
+    // if the en glob ever matched id files, en contracts would gain it —
+    // this pin fails (the round-164 bug). The var-level discriminator
+    // (id used to DROP `$colour`) was retired when the id translation
+    // gained the var for swatch parity, so key-set membership is the
+    // remaining lock on the glob direction.
     const en = loadEnContracts();
     expect(en.get('category-colour-swatch-aria')!.attributes.get('aria-label')).toEqual(['colour']);
+    expect(en.has('customers-add')).toBe(false);
   });
 
-  it('loads the id contracts without the dropped var', () => {
+  it('loads the id contracts keeping the parity var', () => {
+    // Parity fix 6840fbf3 added `$colour` to the id translation, so both
+    // bundles now declare it. The id-only `customers-add` key must still
+    // be present — it proves the id glob is reading id files, not en.
     const id = loadIdContracts();
-    expect(id.get('category-colour-swatch-aria')!.attributes.get('aria-label')).toEqual([]);
+    expect(id.get('category-colour-swatch-aria')!.attributes.get('aria-label')).toEqual(['colour']);
+    expect(id.has('customers-add')).toBe(true);
   });
 
   it('loads every production site with its attrs', () => {
