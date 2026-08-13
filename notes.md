@@ -320,3 +320,39 @@ Audit of `TaxConfigurationScreen.tsx` + `tax.ftl` / `tax.id.ftl`.
 3. **Redundant `aria-label` on picker labels** — the category rate `<label>`s
    set `aria-label={r.name}`, which may override the richer label text (rate % +
    type). Confirm whether the bare name is the intended accessible name.
+
+---
+
+# Customer management audit (2026-08-13)
+
+Audit of `CustomerManagementScreen.tsx` + `customers.ftl` / `customers.id.ftl`.
+
+## Fixed (committed)
+
+- ✅ **Dead + hardcoded-English `aria-label` props** — the search input
+  (`aria-label={getString('search-customers-aria')}`), actions column header
+  (`aria-label={getString('actions-aria')}`), and the history/edit/delete row
+  buttons (`aria-label={`View history for ${name}`}` etc.) were all overridden
+  by their `<Localized attrs={{ 'aria-label': true }}>` wrappers. Removed; the
+  wrappers now provide the localized labels.
+- ✅ **Hardcoded `en-US` formatting** — `formatSaleTotal`, `formatDate`, and the
+  loyalty point counts now derive the locale from the active Fluent bundle
+  (`[...l10n.bundles][0]?.locales[0]`) instead of hardcoding `en-US` / the
+  browser locale.
+- ✅ **Name field updater** — the name input now uses the functional
+  `updateField('name', …)` like the other fields instead of a stale-closure
+  `setForm({ ...form, … })` spread.
+- ✅ **Stray `{ }` JSX** — removed five empty expressions (table row + four
+  placeholder `Localized` wrappers).
+- ✅ **Orphan FTL keys** — removed 12 never-read keys per locale
+  (`customer-mgmt-loading`, `-name-aria`, `-email-aria`, `-phone-aria`,
+  `-notes-aria`, `-modal-add-aria`, `-modal-edit-aria`, `-modal-close`, and
+  `-history-sale-date/total/items/status`).
+
+## Still open
+
+1. **`search-customers-aria` in shared.ftl is now orphan** — after removing the
+   dead prop, the shared `search-customers-aria` key has no remaining consumers
+   (`PaymentModal` uses a separate `payment-search-customers-aria` key). Left in
+   place to avoid touching the shared bundle in this pass.
+
