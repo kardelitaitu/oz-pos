@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, type KeyboardEvent } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef, type KeyboardEvent } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import {
@@ -260,6 +260,17 @@ export default function TaxConfigurationScreen() {
     );
   }, []);
 
+  // Disable the category save button until the assignment actually changes,
+  // so an untouched "Save" can't round-trip a no-op IPC write.
+  const catSaveDisabled = useMemo(() => {
+    if (!editingCatId) return true;
+    const original = catTaxRates.get(editingCatId) ?? [];
+    if (original.length !== selectedCatRateIds.length) return false;
+    const a = [...original].sort();
+    const b = [...selectedCatRateIds].sort();
+    return a.every((id, i) => id === b[i]);
+  }, [catTaxRates, editingCatId, selectedCatRateIds]);
+
   return (
     <div className="tax-config">
       <div className="tax-config-header">
@@ -498,7 +509,7 @@ export default function TaxConfigurationScreen() {
             type="text"
             id="tax-field-name"
             value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
             placeholder={l10n.getString('tax-config-field-name-placeholder')}
           />
         </div>
@@ -517,7 +528,7 @@ export default function TaxConfigurationScreen() {
               id="tax-field-rate"
               min="0"
               value={form.rateBps}
-              onChange={(e) => setForm({ ...form, rateBps: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, rateBps: e.target.value }))}
               placeholder={l10n.getString('tax-config-field-rate-placeholder')}
               max={String(MAX_RATE_BPS)}
             />
@@ -541,7 +552,7 @@ export default function TaxConfigurationScreen() {
               aria-checked={!form.isInclusive}
               aria-label={l10n.getString('tax-config-type-exclusive-label')}
               className={`tax-config-toggle-btn ${!form.isInclusive ? 'tax-config-toggle-btn--active' : ''}`}
-              onClick={() => setForm({ ...form, isInclusive: false })}
+              onClick={() => setForm((prev) => ({ ...prev, isInclusive: false }))}
               onKeyDown={handleTaxTypeKeyDown}
             >
               <Localized id="tax-config-type-exclusive-label">
@@ -559,7 +570,7 @@ export default function TaxConfigurationScreen() {
               aria-checked={form.isInclusive}
               aria-label={l10n.getString('tax-config-type-inclusive-label')}
               className={`tax-config-toggle-btn ${form.isInclusive ? 'tax-config-toggle-btn--active' : ''}`}
-              onClick={() => setForm({ ...form, isInclusive: true })}
+              onClick={() => setForm((prev) => ({ ...prev, isInclusive: true }))}
               onKeyDown={handleTaxTypeKeyDown}
             >
               <Localized id="tax-config-type-inclusive-label">
@@ -576,7 +587,7 @@ export default function TaxConfigurationScreen() {
           <input
             type="checkbox"
             checked={form.isDefault}
-            onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
+            onChange={(e) => setForm((prev) => ({ ...prev, isDefault: e.target.checked }))}
           />
           {l10n.getString('tax-config-set-default')}
         </label>
@@ -635,6 +646,7 @@ export default function TaxConfigurationScreen() {
         title={l10n.getString('tax-config-cat-modal-title', { name: editingCatName })}
         saving={savingCat}
         onSave={handleSaveCat}
+        saveDisabled={catSaveDisabled}
         saveLabel={l10n.getString('tax-config-btn-save')}
         cancelLabel={l10n.getString('tax-config-btn-cancel')}
         size="sm"

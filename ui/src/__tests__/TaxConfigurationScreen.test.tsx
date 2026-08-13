@@ -379,6 +379,29 @@ describe('TaxConfigurationScreen', () => {
     });
   });
 
+  it('disables the category save button until the assignment changes', async () => {
+    renderWithFluentSync(<ToastProvider><TaxConfigurationScreen /></ToastProvider>, taxFtl);
+    await waitForTable();
+
+    // Open the category edit modal for Food (Sales Tax already assigned).
+    const foodRow = screen.getByText('Food').closest('tr')!;
+    await userEvent.click(within(foodRow).getByRole('button', { name: /edit/i }));
+
+    const dialog = screen.getByRole('dialog');
+    const saveBtn = within(dialog).getByRole('button', { name: /save/i });
+
+    // Unchanged assignment → save disabled (no no-op IPC round-trip).
+    expect(saveBtn).toBeDisabled();
+
+    // Toggle VAT on → save enabled.
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: /VAT/i }));
+    expect(saveBtn).toBeEnabled();
+
+    // Toggle VAT back off → save disabled again.
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: /VAT/i }));
+    expect(saveBtn).toBeDisabled();
+  });
+
   it('rejects a non-integer rate instead of silently truncating it', async () => {
     renderWithFluentSync(<ToastProvider><TaxConfigurationScreen /></ToastProvider>, taxFtl);
     await waitForTable();

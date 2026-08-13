@@ -311,13 +311,12 @@ Audit of `TaxConfigurationScreen.tsx` + `tax.ftl` / `tax.id.ftl`.
 
 ## Still open
 
-1. **Non-functional `setForm` updates** — the name/rate/checkbox/radio `onChange`
-   handlers spread `form` from the closure (`setForm({ ...form, … })`) rather
-   than a functional updater. Harmless for single controlled fields but a
-   latent stale-closure risk if two fields change in the same tick; low priority.
-2. **Category modal always saves** — `SettingsPopup` for category rates has no
-   `saveDisabled`, so a no-op save (unchanged assignment) round-trips the IPC.
-   Cosmetic; could diff against `catTaxRates.get(editingCatId)`.
+1. ✅ **Non-functional `setForm` updates fixed** — the name/rate/checkbox/radio
+   handlers now use functional updaters (`setForm((prev) => …)`), removing the
+   latent stale-closure risk.
+2. ✅ **Category modal no-op save fixed** — `SettingsPopup` now receives
+   `saveDisabled` (a sorted-id diff against `catTaxRates.get(editingCatId)`), so
+   an untouched assignment can't round-trip the IPC write.
 3. **Redundant `aria-label` on picker labels** — the category rate `<label>`s
-   set `aria-label={r.name}`, which overrides the richer label text (rate % +
+   set `aria-label={r.name}`, which may override the richer label text (rate % +
    type). Confirm whether the bare name is the intended accessible name.
