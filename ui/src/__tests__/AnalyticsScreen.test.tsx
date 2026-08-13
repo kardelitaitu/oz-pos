@@ -697,8 +697,10 @@ describe('AnalyticsScreen layout shell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reset zoom to 100%' }));
     expect(screen.getByText('Zoom reset to 100%')).toBeTruthy();
 
-    // Toast auto-dismisses after its lifetime
-    act(() => { vi.advanceTimersByTime(2700); });
+    // After its lifetime the toast fades out (exiting class) before unmounting.
+    act(() => { vi.advanceTimersByTime(2600); });
+    expect(screen.getByText('Zoom reset to 100%')).toHaveClass('analytics-toast--exiting');
+    act(() => { vi.advanceTimersByTime(300); });
     expect(screen.queryByText('Zoom reset to 100%')).toBeNull();
   });
 

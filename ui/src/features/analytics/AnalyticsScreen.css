@@ -870,6 +870,19 @@
   animation: analytics-fade-in 0.25s ease;
 }
 
+/* Symmetric exit: toasts fade out instead of snapping away on auto-dismiss.
+   Mirrors the entry keyframe (opacity only) and locks the TO-frame so there
+   is no flash between animation end and React unmount. */
+@keyframes analytics-fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+.analytics-toast--exiting {
+  animation: analytics-fade-out 0.25s ease both;
+  pointer-events: none;
+}
+
 /* Scroll-to-top button */
 .analytics-scroll-top {
   position: sticky;

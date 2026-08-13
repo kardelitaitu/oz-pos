@@ -11,6 +11,7 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { minorUnitExponent } from '@/types/domain';
+import { animDuration } from '@/utils/animation';
 import { l10nErrorMessage } from '@/utils/app-error';
 import { downloadCsv } from '@/utils/export-csv';
 import { AnalyticsCardContent, ExportCsvButton } from './AnalyticsCardContent';
@@ -337,7 +338,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState('');
   const [paletteIndex, setPaletteIndex] = useState(0);
   const [scrollProgress, setScrollProgress] = useState(0);
-  const [toasts, setToasts] = useState<{ id: number; message: string }[]>([]);
+  const [toasts, setToasts] = useState<{ id: number; message: string; exiting?: boolean }[]>([]);
   const [menuCardId, setMenuCardId] = useState<string | null>(null);
   const [collapsedCards, setCollapsedCards] = useState<Set<string>>(new Set());
   const [zoomPopover, setZoomPopover] = useState(false);
@@ -346,6 +347,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   const [, setMetricsTick] = useState(0);
   const paletteInputRef = useRef<HTMLInputElement | null>(null);
   const toastId = useRef(0);
+  const toastTimersRef = useRef(new Map<number, ReturnType<typeof setTimeout>>());
   const cardRefs = useRef(new Map<string, HTMLDivElement>());
   const [cardOrder, setCardOrder] = useState<string[]>([]);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -405,12 +407,35 @@ const [paletteOpen, setPaletteOpen] = useState(false);
     return () => clearInterval(id);
   }, [showCacheMetrics]);
 
-  // Transient toast feedback — auto-dismisses per toast
+  // Transient toast feedback — auto-dismisses per toast. Dismissal runs a
+  // two-phase exit (fade out, then unmount) so a toast never snaps away.
+  const dismissToast = (id: number) => {
+    // Phase 1: mark exiting → the `--exiting` mirror keyframe runs.
+    setToasts((t) => t.map((x) => (x.id === id ? { ...x, exiting: true } : x)));
+    // Phase 2: unmount after the exit animation completes.
+    const timer = setTimeout(() => {
+      setToasts((t) => t.filter((x) => x.id !== id));
+      toastTimersRef.current.delete(id);
+    }, animDuration(250));
+    toastTimersRef.current.set(id, timer);
+  };
+
   const showToast = (message: string) => {
     const id = ++toastId.current;
     setToasts((t) => [...t.slice(-2), { id, message }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 2600);
+    const timer = setTimeout(() => dismissToast(id), 2600);
+    toastTimersRef.current.set(id, timer);
   };
+
+  // Cancel any in-flight toast timers on unmount — never setState against
+  // an unmounted component.
+  useEffect(() => {
+    const timers = toastTimersRef.current;
+    return () => {
+      for (const t of timers.values()) clearTimeout(t);
+      timers.clear();
+    };
+  }, []);
 
   // Persist zoom across sessions
   useEffect(() => {
@@ -1519,7 +1544,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
       {toasts.length > 0 && (
         <div className="analytics-toasts" role="status" aria-live="polite">
           {toasts.map((t) => (
-            <div key={t.id} className="analytics-toast">{t.message}</div>
+            <div key={t.id} className={`analytics-toast${t.exiting ? ' analytics-toast--exiting' : ''}`}>{t.message}</div>
           ))}
         </div>
       )}
