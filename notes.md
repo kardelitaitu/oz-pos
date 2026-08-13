@@ -449,6 +449,38 @@ and `gift-cards.ftl` / `sales.ftl`.
    real operator identity land.
 3. **`gift-cards-loading` orphan** (in `sales.ftl`) — the screen uses a skeleton.
 
+---
+
+# Promotions audit (2026-08-13)
+
+Audit of `PromotionManagementScreen.tsx` + `promotions.ftl` / `promotions.id.ftl`.
+
+## Fixed (committed)
+
+- ✅ **Functional `setForm` updates** — the eleven promotion form field
+  handlers used `setForm({ ...form, … })`; converted to functional updaters.
+- ✅ **Locale-aware dates** — the Starts/Ends columns used
+  `toLocaleDateString()` (browser locale); now formatted in the active Fluent
+  locale via a shared `formatDate` helper.
+
+## Still open
+
+1. **`parseInt` truncation in numeric fields** — `value_minor`,
+   `min_order_minor` (via `parseInt(e.target.value) || 0`) and `min_qty` /
+   `reward_qty` (via `parseInt(e.target.value)`) silently truncate decimals
+   like `500.5` → `500`. Number inputs with default `step=1` usually prevent
+   this, but the truncation is silent if a decimal is typed.
+2. **`datetime-local` timezone round-trip** — the Starts/Ends pickers write
+   `new Date(value).toISOString()` (UTC) and read back
+   `iso.substring(0, 16)` (treated as local), so an operator in UTC+7 sees the
+   stored time shifted by the offset on reopen. Needs a deliberate decision on
+   whether promotions store local wall-clock time.
+3. **`value` column display** — for `fixed_amount` / `buy_x_get_y` the raw
+   `value_minor` integer is shown without currency formatting; for
+   `percentage` it renders `{n}%`. Confirm the intended display for non-
+   percentage types.
+
+
 
 
 

@@ -30,6 +30,13 @@ const PROMO_TYPE_LABELS: Record<string, string> = {
   buy_x_get_y: 'promotions-buy-x-get-y',
 };
 
+/** Short readable date in the active locale (guards invalid ISO strings). */
+function formatDate(iso: string, locale: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(locale);
+}
+
 const emptyForm = (): Promotion => ({
   id: '',
   name: '',
@@ -51,6 +58,8 @@ const emptyForm = (): Promotion => ({
 
 export default function PromotionManagementScreen() {
   const { l10n } = useLocalization();
+  // Dates follow the active Fluent locale (not the browser default).
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
   const deleteModalRef = useRef<HTMLDivElement>(null);
   const promoModalRef = useRef<HTMLDivElement>(null);
   const { session } = useAuth();
@@ -238,8 +247,8 @@ export default function PromotionManagementScreen() {
                       <span className="promo-mgmt-toggle-slider" />
                     </label>
                   </td>
-                  <td>{p.starts_at ? new Date(p.starts_at).toLocaleDateString() : '—'}</td>
-                  <td>{p.ends_at ? new Date(p.ends_at).toLocaleDateString() : '—'}</td>
+                  <td>{p.starts_at ? formatDate(p.starts_at, numLocale) : '—'}</td>
+                  <td>{p.ends_at ? formatDate(p.ends_at, numLocale) : '—'}</td>
                   <td className="promo-mgmt-actions">
                     <Localized id="promotions-edit">
                       <button type="button" className="promo-mgmt-btn" onClick={() => openEdit(p)} aria-label={l10n.getString('promotions-edit-label', { name: p.name })}>Edit</button>
