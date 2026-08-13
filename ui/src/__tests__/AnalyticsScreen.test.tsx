@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import { withFluent, withFluentLocale } from '@/locales/test-utils';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import analyticsFtl from '@/locales/analytics.ftl?raw';
 import analyticsIdFtl from '@/locales/analytics.id.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
@@ -42,6 +43,30 @@ vi.mock('@/hooks/useWorkspaceNav', () => ({
 vi.mock('@/contexts/CurrencyContext', () => ({
   useCurrency: () => ({ currency: 'USD', setCurrency: vi.fn(), loading: false }),
 }));
+
+// The global WorkspaceContext stub (test-setup.ts) returns a safe no-instance
+// default. Tests that need instances override it with
+// vi.mocked(useWorkspace).mockReturnValue(...); restore the default after
+// every test so the override never leaks into later tests.
+afterEach(() => {
+  vi.mocked(useWorkspace).mockImplementation(() => ({
+    activeWorkspace: null,
+    setActiveWorkspace: vi.fn(),
+    activeInstance: null,
+    setActiveInstance: vi.fn(),
+    availableWorkspaces: [],
+    workspaceScreens: [],
+    loading: false,
+    error: null,
+    retry: vi.fn(),
+    lastWorkspace: null,
+    switchStore: vi.fn(),
+    resolvedStoreId: 'default',
+    sessionToken: 'mock-session-token',
+    terminalId: 'mock-terminal',
+    swapSessionToken: vi.fn(() => Promise.resolve()),
+  }));
+});
 
 // ── Real-data IPC mocks ─────────────────────────────────────────────
 // The cards now load through the scoped reporting commands. jsdom has no
@@ -244,6 +269,34 @@ describe('AnalyticsScreen layout shell', () => {
     const select = screen.getByRole('combobox', { name: 'Select workspace type' });
     expect(select).toBeTruthy();
     expect((select as HTMLSelectElement).value).toBe('retail');
+  });
+
+  it('labels the selector options with the real workspace names', () => {
+    vi.mocked(useWorkspace).mockReturnValue({
+      ...useWorkspace(),
+      availableWorkspaces: [
+        { instance_id: 'i-store', type_key: 'store-pos', store_id: 'default', store_name: 'Main Store', purpose_key: 'general', name: 'Store POS', description: 'Point of Sale', icon: 'store', layout_mode: 'fullscreen', colour: null, is_default: false },
+        { instance_id: 'i-resto', type_key: 'restaurant-pos', store_id: 'default', store_name: 'Main Store', purpose_key: 'general', name: 'Restaurant POS', description: 'Table service', icon: 'restaurant', layout_mode: 'fullscreen', colour: null, is_default: false },
+      ],
+    });
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    const select = screen.getByRole('combobox', { name: 'Select workspace type' }) as HTMLSelectElement;
+    const retailOption = select.querySelector('option[value="retail"]');
+    const restaurantOption = select.querySelector('option[value="restaurant"]');
+    expect(retailOption?.textContent).toBe('Store POS');
+    expect(restaurantOption?.textContent).toBe('Restaurant POS');
+  });
+
+  it('defaults to Restaurant view when the active instance is a restaurant POS', () => {
+    vi.mocked(useWorkspace).mockReturnValue({
+      ...useWorkspace(),
+      activeInstance: { instance_id: 'i-resto', type_key: 'restaurant-pos', store_id: 'default', store_name: 'Main Store', purpose_key: 'general', name: 'Restaurant POS', description: 'Table service', icon: 'restaurant', layout_mode: 'fullscreen', colour: null, is_default: false },
+    });
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+
+    const select = screen.getByRole('combobox', { name: 'Select workspace type' }) as HTMLSelectElement;
+    expect(select.value).toBe('restaurant');
   });
 
   it('renders all five granularity buttons with daily active by default', () => {
