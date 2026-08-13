@@ -1235,3 +1235,20 @@ before tagging, changelog draft + canonical heading), release.yml
 bump-version.ps1 full file list (all present, lockfiles regenerated),
 updater tooling (synthetic versions only), mobile CI (version-agnostic),
 docs/releases/release-process.md consistent with scripts.
+
+# dev-up audit (2026-08-14)
+
+- **dev-up.sh JWT secret fallback bug**: without openssl, the uuidgen
+  fallback (`uuidgen | tr -d '-' | head -c 64`) produced only 32 hex
+  chars — half the intended 64-char secret strength, and inconsistent
+  with the ps1 twin (exactly 64). Now uses 32 bytes of /dev/urandom via
+  od (verified: exactly 64 hex chars on both paths). Commit `87a6f1e7`.
+
+Verified the rest of dev-up.sh/.ps1 + docker-entrypoint.sh:
+- health-check service names match docker-compose.yml (redis,
+  license-server, pos-cloud-server; + pos-cloud-db in pg mode)
+- `$(cat ...)` command substitution strips trailing newlines (PEM key
+  parity with ps1's `.Trim()`); e2e newline-escaping chain consistent
+  with Go normalizePEM() (tested)
+- license key path matches generate-license-keys.sh; gitignored correctly
+- entrypoint privilege-drop + gosu fallback sound
