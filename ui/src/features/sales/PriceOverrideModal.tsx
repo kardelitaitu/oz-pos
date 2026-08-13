@@ -253,9 +253,13 @@ export default function PriceOverrideModal({
               min="1"
               value={newPriceMinor}
               onChange={(e) => {
-                const val = parseInt(e.target.value, 10) || 0;
-                setNewPriceMinor(val);
-                setPriceError(null);
+                // Whole number only — ignore fractional in-progress input
+                // instead of silently truncating it via parseInt.
+                const v = Number(e.target.value);
+                if (e.target.value === '' || (Number.isInteger(v) && v >= 0)) {
+                  setNewPriceMinor(e.target.value === '' ? 0 : v);
+                  setPriceError(null);
+                }
               }}
               aria-label={requiredLocalized(l10n, 'price-override-new-aria')}
             />

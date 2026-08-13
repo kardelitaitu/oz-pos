@@ -20,6 +20,8 @@ interface RefundModalProps {
 /** Refund modal — select line items to refund with quantity, reason, and note. Dispatches the refund to the backend on confirm. */
 export default function RefundModal({ open, sale, onClose, onRefunded }: RefundModalProps) {
   const { l10n } = useLocalization();
+  // Date follows the active Fluent locale (not the browser default).
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
   const { session } = useAuth();
   const [selectedLines, setSelectedLines] = useState<Record<string, number>>({});
   const [reason, setReason] = useState('');
@@ -185,8 +187,8 @@ export default function RefundModal({ open, sale, onClose, onRefunded }: RefundM
               <Localized id="refund-sale-total" vars={{ amount: formatMoney(sale.total as Money) }}>
                 <span>Total: {formatMoney(sale.total as Money)}</span>
               </Localized>
-              <Localized id="refund-sale-date" vars={{ date: new Date(sale.createdAt).toLocaleDateString() }}>
-                <span>Date: {new Date(sale.createdAt).toLocaleDateString()}</span>
+              <Localized id="refund-sale-date" vars={{ date: new Date(sale.createdAt).toLocaleDateString(numLocale) }}>
+                <span>Date: {new Date(sale.createdAt).toLocaleDateString(numLocale)}</span>
               </Localized>
             </div>
 

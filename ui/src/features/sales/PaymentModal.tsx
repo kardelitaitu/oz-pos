@@ -1514,7 +1514,14 @@ export default function PaymentModal({
                         type="number"
                         className="payment-loyalty-input"
                         value={pointsToRedeem}
-                        onChange={(e) => setPointsToRedeem(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                        onChange={(e) => {
+                          // Whole number only — ignore fractional in-progress input
+                          // instead of silently truncating it via parseInt.
+                          const v = Number(e.target.value);
+                          if (e.target.value === '' || (Number.isInteger(v) && v >= 0)) {
+                            setPointsToRedeem(e.target.value === '' ? 0 : v);
+                          }
+                        }}
                         min={0}
                         max={loyaltyAccount.account.points}
                         aria-label={l10n.getString('payment-loyalty-points-aria')}

@@ -834,8 +834,10 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   }, [resetCart, customerDisplayPaymentComplete, activeOpenBillId, loadOpenBills, addToast, sessionToken]);
 
   const handleApplyDiscount = useCallback(() => {
-    const pct = parseInt(discountInput, 10);
-    if (Number.isNaN(pct) || pct < 1 || pct > 100) return;
+    // Whole percentage only — reject fractional input instead of
+    // silently truncating it via parseInt.
+    const pct = Number(discountInput);
+    if (!Number.isInteger(pct) || pct < 1 || pct > 100) return;
     setDiscount(pct, discountName.trim() || `${pct}% Discount`);
     setShowDiscountInput(false);
     setDiscountInput('');
@@ -1050,8 +1052,10 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
 
   const handleConfirmCloseShift = useCallback(async () => {
     if (!activeShift) return;
-    const balance = parseInt(closingBalance, 10);
-    if (Number.isNaN(balance) || balance < 0) return;
+    // Whole-number minor units — reject fractional input instead of
+    // silently truncating it via parseInt.
+    const balance = Number(closingBalance);
+    if (!Number.isInteger(balance) || balance < 0) return;
 
     setClosingShift(true);
     setCloseShiftError(null);
@@ -1073,8 +1077,8 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
   }, []);
 
   const handleConfirmOpenShift = useCallback(async () => {
-    const balance = parseInt(openingBalance, 10);
-    const safeBalance = !Number.isNaN(balance) && balance >= 0 ? balance : 0;
+    const balance = Number(openingBalance);
+    const safeBalance = !Number.isNaN(balance) && Number.isInteger(balance) && balance >= 0 ? balance : 0;
 
     setOpeningShift(true);
     try {
@@ -1664,7 +1668,14 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                               max="100"
                               placeholder="%"
                               value={discountInput}
-                              onChange={(e) => setDiscountInput(e.target.value)}
+                              onChange={(e) => {
+                                // Whole number only — ignore fractional in-progress input
+                                // instead of silently truncating it via parseInt.
+                                const v = Number(e.target.value);
+                                if (e.target.value === '' || (Number.isInteger(v) && v >= 0)) {
+                                  setDiscountInput(e.target.value);
+                                }
+                              }}
                               aria-label={l10n.getString('pos-cart-discount-pct-aria')}
                             />
                           </Localized>
@@ -1683,7 +1694,7 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                               type="button"
                               className="pos-cart-discount-apply"
                               onClick={handleApplyDiscount}
-                              disabled={!discountInput || parseInt(discountInput, 10) < 1 || parseInt(discountInput, 10) > 100}
+                              disabled={!discountInput || !Number.isInteger(Number(discountInput)) || Number(discountInput) < 1 || Number(discountInput) > 100}
                             >
                               Apply
                             </button>
@@ -2041,7 +2052,14 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                   min="0"
                   placeholder="e.g. 15000 for $150.00"
                   value={closingBalance}
-                  onChange={(e) => setClosingBalance(e.target.value)}
+                  onChange={(e) => {
+                    // Whole number only — ignore fractional in-progress input
+                    // instead of silently truncating it via parseInt.
+                    const v = Number(e.target.value);
+                    if (e.target.value === '' || (Number.isInteger(v) && v >= 0)) {
+                      setClosingBalance(e.target.value);
+                    }
+                  }}
                   aria-label={l10n.getString('pos-close-shift-balance-aria')}
                 />
               </Localized>
@@ -2088,8 +2106,8 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                 disabled={
                   closingShift ||
                   !closingBalance ||
-                  parseInt(closingBalance, 10) < 0 ||
-                  Number.isNaN(parseInt(closingBalance, 10))
+                  !Number.isInteger(Number(closingBalance)) ||
+                  Number(closingBalance) < 0
                 }
               >
                 <Localized id={closingShift ? 'pos-close-shift-closing' : 'pos-close-shift-confirm'}>
@@ -2237,7 +2255,14 @@ export default function PosScreen({ onNavigate }: PosScreenProps) {
                   min="0"
                   placeholder="e.g. 500 for $5.00"
                   value={openingBalance}
-                  onChange={(e) => setOpeningBalance(e.target.value)}
+                  onChange={(e) => {
+                    // Whole number only — ignore fractional in-progress input
+                    // instead of silently truncating it via parseInt.
+                    const v = Number(e.target.value);
+                    if (e.target.value === '' || (Number.isInteger(v) && v >= 0)) {
+                      setOpeningBalance(e.target.value);
+                    }
+                  }}
                   aria-label={l10n.getString('pos-open-shift-balance-aria')}
                 />
               </Localized>
