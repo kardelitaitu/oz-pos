@@ -166,7 +166,17 @@ function exportHeatmapCsv(
 ) {
   const dayLabels = DAY_LABEL_KEYS.map((k) => getString(k));
   const filename = `heatmap-${from}-to-${to}.csv`;
+  // The backend emits one daily/weekly revenue row per currency — sum per
+  // bucket so a multi-currency day/week exports as one combined row, the
+  // same normalization the intensity builders already apply.
   if (g === 'monthly') {
+    const byDate = new Map<string, { minor: number; orders: number }>();
+    for (const r of data.daily) {
+      const e = byDate.get(r.date) ?? { minor: 0, orders: 0 };
+      e.minor += r.total_minor;
+      e.orders += r.sale_count;
+      byDate.set(r.date, e);
+    }
     downloadCsv(
       filename,
       [
@@ -174,11 +184,18 @@ function exportHeatmapCsv(
         { key: 'sales', label: getString('analytics-export-col-sales') },
         { key: 'orders', label: getString('analytics-export-col-orders') },
       ],
-      data.daily.map((r) => ({ date: r.date, sales: fmt(r.total_minor), orders: String(r.sale_count) })),
+      [...byDate.entries()].map(([date, e]) => ({ date, sales: fmt(e.minor), orders: String(e.orders) })),
     );
     return;
   }
   if (g === 'yearly') {
+    const byWeek = new Map<string, { minor: number; orders: number }>();
+    for (const r of data.weekly) {
+      const e = byWeek.get(r.week_start) ?? { minor: 0, orders: 0 };
+      e.minor += r.total_minor;
+      e.orders += r.sale_count;
+      byWeek.set(r.week_start, e);
+    }
     downloadCsv(
       filename,
       [
@@ -186,7 +203,7 @@ function exportHeatmapCsv(
         { key: 'sales', label: getString('analytics-export-col-sales') },
         { key: 'orders', label: getString('analytics-export-col-orders') },
       ],
-      data.weekly.map((r) => ({ week: r.week_start, sales: fmt(r.total_minor), orders: String(r.sale_count) })),
+      [...byWeek.entries()].map(([week, e]) => ({ week, sales: fmt(e.minor), orders: String(e.orders) })),
     );
     return;
   }

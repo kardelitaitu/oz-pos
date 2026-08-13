@@ -1151,6 +1151,32 @@ describe('AnalyticsScreen layout shell', () => {
     ]);
   });
 
+  it('sums multi-currency rows in the monthly heatmap CSV export', async () => {
+    vi.useFakeTimers();
+    // Two currencies for the same day — the export must emit one combined row.
+    mockGetDailyRevenue.mockResolvedValueOnce([
+      dailyRevenueRow('2026-08-01'),
+      { ...dailyRevenueRow('2026-08-01'), currency: 'IDR', total_minor: 500000, sale_count: 5 },
+    ]);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
+    await flushRecalc();
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Monthly' }));
+    await flushRecalc();
+
+    vi.mocked(downloadCsv).mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Export heatmap as CSV' }));
+
+    expect(downloadCsv).toHaveBeenCalledTimes(1);
+    const [filename, columns, rows] = vi.mocked(downloadCsv).mock.calls[0]!;
+    expect(filename).toContain('heatmap-');
+    expect(columns.map((c) => c.key)).toEqual(['date', 'sales', 'orders']);
+    // 12 + 5 orders, $12,500.00 + $5,000.00 → one combined August 1st row.
+    expect(rows.filter((r) => r['date'] === '2026-08-01')).toEqual([
+      { date: '2026-08-01', sales: '$17,500.00', orders: '17' },
+    ]);
+  });
+
   it('gives the waitstaff card a distinct export label from staff', async () => {
     vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
