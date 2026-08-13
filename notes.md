@@ -111,10 +111,13 @@ NodeTopologyEditor). Fixed items are committed; the rest remain open.
 
 ### AnalyticsScreen
 
-3. **`menuAnchor` is fixed at open** — a window resize/scroll while the card
-   menu is open leaves it detached from its trigger.
-4. **Popover dismissal inconsistency** — the zoom/shortcuts/cache popovers close
-   only on Escape, while the card menu closes on outside-click too.
+3. ✅ **`menuAnchor` staleness fixed** — the portaled card menu now re-anchors
+   to its trigger on window scroll (capture-phase, since scroll doesn't bubble)
+   and resize, with a 0.5px change-guard so per-frame scroll events don't
+   churn the grid.
+4. ✅ **Popover dismissal unified** — the zoom/shortcuts/cache popovers now
+   close on outside pointerdown (toggle buttons excluded so a close-then-
+   reopen never happens), and Escape also closes the cache metrics popover.
 
 ### RetailProductGrid
 

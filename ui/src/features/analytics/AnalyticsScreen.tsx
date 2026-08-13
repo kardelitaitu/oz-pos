@@ -368,6 +368,13 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   const scrollRafRef = useRef<number | null>(null);
   const cardMenuRef = useRef<HTMLDivElement | null>(null);
   const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const lastMenuAnchorRef = useRef<{ bottom: number; right: number } | null>(null);
+  const zoomPopoverRef = useRef<HTMLDivElement | null>(null);
+  const shortcutsPopoverRef = useRef<HTMLDivElement | null>(null);
+  const cachePopoverRef = useRef<HTMLDivElement | null>(null);
+  const zoomBadgeRef = useRef<HTMLButtonElement | null>(null);
+  const shortcutsButtonRef = useRef<HTMLButtonElement | null>(null);
+  const cacheChipRef = useRef<HTMLButtonElement | null>(null);
 
   // Date ranges are derived per card from its effective granularity via
   // cardRange, so a card that remaps granularity gets the matching window
@@ -479,6 +486,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
       } else if (k === 'Escape') {
         setExpandedKey(null);
         setShowShortcuts(false);
+        setShowCacheMetrics(false);
         setMenuCardId(null);
         setZoomPopover(false);
       }
@@ -596,6 +604,62 @@ const [paletteOpen, setPaletteOpen] = useState(false);
     const first = cardMenuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not([disabled])');
     first?.focus();
   }, [menuCardId]);
+
+  // Re-anchor the portaled menu to its trigger's live viewport position. The
+  // anchor is captured at open time as a fixed position, so without this the
+  // menu drifts away from its card whenever the grid scrolls or the viewport
+  // resizes while it is open.
+  const repositionCardMenu = useCallback(() => {
+    const trigger = menuTriggerRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const bottom = rect.bottom;
+    const right = window.innerWidth - rect.right;
+    const last = lastMenuAnchorRef.current;
+    if (last && Math.abs(last.bottom - bottom) < 0.5 && Math.abs(last.right - right) < 0.5) return;
+    lastMenuAnchorRef.current = { bottom, right };
+    setMenuAnchor({ bottom, right });
+  }, []);
+
+  useEffect(() => {
+    if (!menuCardId) return;
+    // Scroll events don't bubble, so capture-phase listening catches the
+    // grid's own scroll (and any other scroller) without wiring each one up.
+    window.addEventListener('scroll', repositionCardMenu, true);
+    window.addEventListener('resize', repositionCardMenu);
+    return () => {
+      window.removeEventListener('scroll', repositionCardMenu, true);
+      window.removeEventListener('resize', repositionCardMenu);
+    };
+  }, [menuCardId, repositionCardMenu]);
+
+  // Close the toolbar popovers (zoom / shortcuts / cache) when the user
+  // clicks or taps outside them — the same behaviour the per-card options
+  // menu already gets via its backdrop.
+  useEffect(() => {
+    if (!zoomPopover && !showShortcuts && !showCacheMetrics) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node | null;
+      if (!target) return;
+      const insidePopover =
+        zoomPopoverRef.current?.contains(target) ||
+        shortcutsPopoverRef.current?.contains(target) ||
+        cachePopoverRef.current?.contains(target);
+      // Clicks on a toggle button are handled by its own onClick, which
+      // flips the state — treat them as "inside" so we don't close-then-
+      // reopen in the same gesture.
+      const onToggle =
+        zoomBadgeRef.current?.contains(target) ||
+        shortcutsButtonRef.current?.contains(target) ||
+        cacheChipRef.current?.contains(target);
+      if (insidePopover || onToggle) return;
+      setZoomPopover(false);
+      setShowShortcuts(false);
+      setShowCacheMetrics(false);
+    };
+    window.addEventListener('pointerdown', onPointerDown);
+    return () => window.removeEventListener('pointerdown', onPointerDown);
+  }, [zoomPopover, showShortcuts, showCacheMetrics]);
 
   // Throttle the grid's scroll handler to one state commit per animation
   // frame — raw scroll events otherwise re-render the whole screen (and
@@ -1165,6 +1229,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
             </button>
             <button
               type="button"
+              ref={zoomBadgeRef}
               className="analytics-zoom-badge"
               onClick={() => setZoomPopover((o) => !o)}
               aria-label={l10n.getString('analytics-zoom-slider-aria')}
@@ -1173,7 +1238,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
               {Math.round(zoomLevel * 100)}%
             </button>
             {zoomPopover && (
-              <div className="analytics-zoom-popover" role="dialog" aria-label={l10n.getString('analytics-zoom-slider-aria')}>
+              <div ref={zoomPopoverRef} className="analytics-zoom-popover" role="dialog" aria-label={l10n.getString('analytics-zoom-slider-aria')}>
                 <input
                   type="range"
                   className="analytics-zoom-slider"
@@ -1212,6 +1277,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
             </button>
             <button
               type="button"
+              ref={shortcutsButtonRef}
               className="analytics-action-btn"
               onClick={() => setShowShortcuts((s) => !s)}
               aria-label={l10n.getString('analytics-shortcuts-aria')}
@@ -1226,7 +1292,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
             </button>
 
             {showShortcuts && (
-              <div className="analytics-shortcuts-popover" role="dialog" aria-label={l10n.getString('analytics-shortcuts-title')}>
+              <div ref={shortcutsPopoverRef} className="analytics-shortcuts-popover" role="dialog" aria-label={l10n.getString('analytics-shortcuts-title')}>
                 <h3 className="analytics-shortcuts-title">{l10n.getString('analytics-shortcuts-title')}</h3>
                 <ul className="analytics-shortcuts-list">
                   {SHORTCUTS.map((s) => (
@@ -1291,6 +1357,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
           <div className="analytics-cache-metrics">
             <button
               type="button"
+              ref={cacheChipRef}
               className={`analytics-cache-chip${showCacheMetrics ? ' analytics-cache-chip--open' : ''}`}
               onClick={() => setShowCacheMetrics((o) => !o)}
               aria-expanded={showCacheMetrics}
@@ -1307,7 +1374,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
               </span>
             </button>
             {showCacheMetrics && (
-              <div className="analytics-cache-popover" role="dialog" aria-label={l10n.getString('analytics-cache-metrics-aria')}>
+              <div ref={cachePopoverRef} className="analytics-cache-popover" role="dialog" aria-label={l10n.getString('analytics-cache-metrics-aria')}>
                 <div className="analytics-cache-popover-head">
                   <div className="analytics-cache-popover-meta">
                     <h3 className="analytics-cache-popover-title">
