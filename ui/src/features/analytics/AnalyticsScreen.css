@@ -1287,15 +1287,21 @@
   align-items: center;
 }
 
+/* Each row fills the card width; the 24 hour columns share the remaining
+   space equally while the day-label column stays pinned at 28px. */
 .analytics-weekly-row {
   display: flex;
   align-items: center;
   gap: 4px;
+  width: 100%;
 }
 
+/* Blocks scale with their column while staying square, so the 7×24 grid
+   fills the wide card instead of a fixed 16px centered strip. */
 .analytics-weekly-row .analytics-heat-block {
-  width: 16px;
-  height: 16px;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
   border-radius: 3px;
 }
 
@@ -1305,14 +1311,22 @@
 
 .analytics-weekly-day {
   width: 28px;
+  flex: 0 0 28px;
   text-align: right;
   font-weight: 500;
 }
 
 .analytics-weekly-hour {
-  width: 16px;
+  flex: 1 1 0;
+  min-width: 0;
   text-align: center;
   color: var(--analytics-fg-faint);
+}
+
+/* Data cells mirror the header's hour columns so labels stay aligned. */
+.analytics-heatmap--weekly .analytics-heat-cell {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 /* Monthly: real calendar — weekday header + day cells starting on the
