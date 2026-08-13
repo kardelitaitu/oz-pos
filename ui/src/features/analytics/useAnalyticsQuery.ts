@@ -28,8 +28,6 @@ export interface AnalyticsQueryResult<T> {
   status: QueryStatus;
   /** Raw failure when `status === 'error'`; `null` otherwise. */
   error: unknown;
-  /** `false` when the served value came from an entry past its TTL. */
-  fresh?: boolean;
 }
 
 /** Per-key failures, module-level so refresh can clear them globally. */
@@ -40,11 +38,17 @@ export function clearAnalyticsErrors(): void {
   failures.clear();
 }
 
+/** Internal cache read: carries the TTL freshness used by stale-while-revalidate. */
+interface CachedRead<T> {
+  data: T;
+  fresh: boolean;
+}
+
 /** Read the shared cache with the right payload type. */
-function readCached<T>(key: string): AnalyticsQueryResult<T> | undefined {
+function readCached<T>(key: string): CachedRead<T> | undefined {
   const hit = analyticsDataCache.get(key);
   if (!hit) return undefined;
-  return { data: hit.value as T, status: 'ready', error: null, fresh: hit.fresh };
+  return { data: hit.value as T, fresh: hit.fresh };
 }
 
 /**
@@ -98,7 +102,13 @@ export function useAnalyticsQuery<T>(
         },
       );
     }
-    return cached;
+    // A revalidation that already failed must not keep serving the stale
+    // value indefinitely: surface the error so the card renders its error
+    // state, and the refresh action clears it for an explicit retry.
+    if (failures.has(key)) {
+      return { data: null, status: 'error', error: failures.get(key) };
+    }
+    return { data: cached.data, status: 'ready', error: null };
   }
 
   // A previously failed key stays failed until explicitly cleared —

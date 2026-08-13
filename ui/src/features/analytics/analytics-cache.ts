@@ -287,20 +287,15 @@ export class TtlCache<T> {
       this.bump(key, 'misses');
       return undefined;
     }
-    if (Date.now() < entry.expiresAt) {
+    // Capture the clock once so the hit/expiry metric and the returned
+    // `fresh` flag always agree, even exactly at the TTL boundary.
+    const now = Date.now();
+    if (now < entry.expiresAt) {
       this.bump(key, 'hits');
     } else {
       this.bump(key, 'expiries');
     }
-    return { value: entry.value, fresh: Date.now() < entry.expiresAt };
-  }
-
-  /** `true` when a fresh (unexpired) entry exists for `key`. */
-  hasFresh(key: string): boolean {
-    // Peek without metering: `hasFresh` is a skeleton-suppression probe
-    // that runs alongside a real `get`, so counting it would double-count.
-    const entry = this.entries.get(key);
-    return entry !== undefined && Date.now() < entry.expiresAt;
+    return { value: entry.value, fresh: now < entry.expiresAt };
   }
 
   /** Store `value` under `key`, expiring after the TTL. */
@@ -379,11 +374,6 @@ export class TtlCache<T> {
 }
 
 // ── Analytics query keys ─────────────────────────────────────────────
-
-/** Canonical cache key for a full dashboard query (drives skeleton suppression). */
-export function analyticsQueryKey(workspace: string, granularity: string, from: string, to: string): string {
-  return `query:${workspace}:${granularity}:${from}:${to}`;
-}
 
 /** Canonical cache key for one card's payload (range optional). */
 export function cardQueryKey(

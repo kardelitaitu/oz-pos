@@ -16,7 +16,7 @@ import { l10nErrorMessage } from '@/utils/app-error';
 import { downloadCsv } from '@/utils/export-csv';
 import Tooltip from '@/frontend/shell/Tooltip';
 import { AnalyticsCardContent, ExportCsvButton } from './AnalyticsCardContent';
-import { analyticsDataCache, analyticsQueryKey, clearAnalyticsCache, cardQueryKey } from './analytics-cache';
+import { analyticsDataCache, clearAnalyticsCache, cardQueryKey } from './analytics-cache';
 import {
   buildHeatmapCells,
   heatLow,
@@ -380,17 +380,12 @@ const [paletteOpen, setPaletteOpen] = useState(false);
    */
   const startRecalculating = useRef<(force?: boolean) => void>();
   startRecalculating.current = (force = false) => {
-    const key = analyticsQueryKey(workspaceView, granularity, customFrom, customTo);
     if (force) {
       // Refresh wipes the cached payloads AND the recorded query
       // failures so the data actually recomputes; the TTL-bounded
       // cache refills on the next render.
       clearAnalyticsCache();
       clearAnalyticsErrors();
-    } else {
-      // Mark the query computed — revisits within the TTL render
-      // instantly (card payloads were cached when they rendered).
-      analyticsDataCache.set(key, { computedAt: Date.now() });
     }
     setRecalcTick((n) => n + 1);
   };

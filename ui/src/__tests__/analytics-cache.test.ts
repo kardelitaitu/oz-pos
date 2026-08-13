@@ -2,7 +2,6 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import {
   TtlCache,
   analyticsDataCache,
-  analyticsQueryKey,
   cardQueryKey,
   clearAnalyticsCache,
   ANALYTICS_CACHE_STORAGE_KEY,
@@ -37,16 +36,14 @@ describe('TtlCache', () => {
     const cache = new TtlCache<string>();
     cache.set('a', 'hello');
     expect(cache.get('a')).toEqual({ value: 'hello', fresh: true });
-    expect(cache.hasFresh('a')).toBe(true);
   });
 
   it('expires entries after the TTL, keeping stale values readable', () => {
     const cache = new TtlCache<string>(1000);
     cache.set('a', 'hello');
     vi.advanceTimersByTime(999);
-    expect(cache.hasFresh('a')).toBe(true);
+    expect(cache.get('a')).toEqual({ value: 'hello', fresh: true });
     vi.advanceTimersByTime(2);
-    expect(cache.hasFresh('a')).toBe(false);
     // Stale-while-revalidate: the value is still readable, just not fresh.
     expect(cache.get('a')).toEqual({ value: 'hello', fresh: false });
   });
@@ -54,7 +51,6 @@ describe('TtlCache', () => {
   it('returns undefined for unknown keys', () => {
     const cache = new TtlCache<string>();
     expect(cache.get('nope')).toBeUndefined();
-    expect(cache.hasFresh('nope')).toBe(false);
   });
 
   it('invalidates and clears entries', () => {
@@ -62,11 +58,11 @@ describe('TtlCache', () => {
     cache.set('a', '1');
     cache.set('b', '2');
     cache.invalidate('a');
-    expect(cache.hasFresh('a')).toBe(false);
-    expect(cache.hasFresh('b')).toBe(true);
+    expect(cache.get('a')).toBeUndefined();
+    expect(cache.get('b')).toEqual({ value: '2', fresh: true });
     cache.clear();
     expect(cache.size).toBe(0);
-    expect(cache.hasFresh('b')).toBe(false);
+    expect(cache.get('b')).toBeUndefined();
   });
 
   it('evicts the oldest entry when over capacity', () => {
@@ -75,9 +71,9 @@ describe('TtlCache', () => {
     cache.set('b', '2');
     cache.set('c', '3');
     expect(cache.size).toBe(2);
-    expect(cache.hasFresh('a')).toBe(false); // evicted
-    expect(cache.hasFresh('b')).toBe(true);
-    expect(cache.hasFresh('c')).toBe(true);
+    expect(cache.get('a')).toBeUndefined(); // evicted
+    expect(cache.get('b')?.fresh).toBe(true);
+    expect(cache.get('c')?.fresh).toBe(true);
   });
 });
 
@@ -126,16 +122,6 @@ describe('TtlCache metrics', () => {
     expect(perKey.get('c')?.evictions).toBe(0);
   });
 
-  it('hasFresh peeks without double-counting reads', () => {
-    const cache = new TtlCache<string>(1000);
-    cache.set('a', 'x');
-    cache.hasFresh('a');
-    cache.hasFresh('a');
-    const { totals } = cache.metrics();
-    expect(totals.reads).toBe(0);
-    expect(totals.hitRate).toBeNull();
-  });
-
   it('clear resets metrics history', () => {
     const cache = new TtlCache<string>(1000);
     cache.set('a', 'x');
@@ -175,7 +161,6 @@ describe('TtlCache sessionStorage persistence', () => {
     // same storage and serves the query from the snapshot.
     const reader = new TtlCache<string>(1000, 200, api);
     expect(reader.get('a')).toEqual({ value: 'hello', fresh: true });
-    expect(reader.hasFresh('a')).toBe(true);
   });
 
   it('splits persistence per partition via the storage-key resolver', () => {
@@ -287,7 +272,6 @@ describe('TtlCache sessionStorage persistence', () => {
     // Value still readable (stale-while-revalidate), but not fresh — a
     // back-navigation past the TTL must refetch.
     expect(reader.get('a')).toEqual({ value: 'hello', fresh: false });
-    expect(reader.hasFresh('a')).toBe(false);
   });
 
   it('discards snapshots stamped with a different version', () => {
@@ -381,21 +365,14 @@ describe('TtlCache sessionStorage persistence', () => {
   });
 });
 
-describe('analytics query keys', () => {
+describe('analytics card query keys', () => {
   it('builds canonical, stable keys', () => {
-    expect(analyticsQueryKey('retail', 'daily', '2026-08-01', '2026-08-12'))
-      .toBe('query:retail:daily:2026-08-01:2026-08-12');
     expect(cardQueryKey('revenue', 'retail', 'daily')).toBe('card:revenue:retail:daily::');
     expect(cardQueryKey('revenue', 'retail', 'daily', '2026-08-01', '2026-08-12'))
       .toBe('card:revenue:retail:daily:2026-08-01:2026-08-12');
   });
 
   it('distinguishes queries that differ in any dimension', () => {
-    const base = analyticsQueryKey('retail', 'daily', '2026-08-01', '2026-08-12');
-    expect(analyticsQueryKey('restaurant', 'daily', '2026-08-01', '2026-08-12')).not.toBe(base);
-    expect(analyticsQueryKey('retail', 'weekly', '2026-08-01', '2026-08-12')).not.toBe(base);
-    expect(analyticsQueryKey('retail', 'daily', '2026-08-02', '2026-08-12')).not.toBe(base);
-    expect(analyticsQueryKey('retail', 'daily', '2026-08-01', '2026-08-13')).not.toBe(base);
     expect(cardQueryKey('revenue', 'retail', 'daily')).not.toBe(cardQueryKey('revenue', 'retail', 'weekly'));
     expect(cardQueryKey('revenue', 'retail', 'daily', '2026-08-01', '2026-08-12'))
       .not.toBe(cardQueryKey('revenue', 'retail', 'daily', '2026-08-02', '2026-08-12'));
@@ -408,6 +385,5 @@ describe('shared analytics cache', () => {
     expect(analyticsDataCache.size).toBeGreaterThan(0);
     clearAnalyticsCache();
     expect(analyticsDataCache.size).toBe(0);
-    expect(analyticsDataCache.hasFresh('k')).toBe(false);
   });
 });
