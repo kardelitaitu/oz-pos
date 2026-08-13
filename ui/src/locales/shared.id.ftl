@@ -148,15 +148,12 @@ update-banner-title = Pembaruan tersedia
 update-banner-new-version = Versi baru
 update-banner-install = Pasang
 update-banner-installing = Memasang…
-update-banner-install-aria =
-    .aria-label = Unduh dan pasang pembaruan
-update-banner-installing-aria =
-    .aria-label = Memasang pembaruan…
+update-banner-install-aria = Unduh dan pasang pembaruan
+update-banner-installing-aria = Memasang pembaruan…
 update-banner-dismiss-aria = Tutup notifikasi pembaruan
 update-banner-dismiss = Tutup
 update-banner-backing-up = Mencadangkan…
-update-banner-backing-up-aria =
-    .aria-label = Mencadangkan basis data sebelum pembaruan
+update-banner-backing-up-aria = Mencadangkan basis data sebelum pembaruan
 update-banner-backup-error = Cadangan gagal
 update-banner-version-blocked-title = Pembaruan tidak tersedia
 update-banner-version-blocked-desc = Versi Anda { $current } di bawah minimum { $minimum } yang diperlukan. Silakan instal ulang dari situs web.
@@ -365,29 +362,29 @@ auth-create-pin-confirm-placeholder =
 auth-create-pin-creating = Membuat...
 auth-create-pin-create = Buat Akun Pemilik
 # Common aria-label attributes (Indonesian)
-clear-aria = .aria-label = Hapus
-backspace-aria = .aria-label = Hapus
-username-aria = .aria-label = Nama Pengguna
-actions-aria = .aria-label = Aksi
-collapse-aria = .aria-label = Tutup bilah sisi
-notifications-aria = .aria-label = Notifikasi
-settings-aria = .aria-label = Pengaturan
-export-csv-aria = .aria-label = Ekspor CSV
-search-aria = .aria-label = Cari
-workspaces-aria = .aria-label = Ruang Kerja
-developer-tools-aria = .aria-label = Alat Pengembang
-theme-selector-aria = .aria-label = Pemilih Tema
-cancel-refund-aria = .aria-label = Batalkan pengembalian
-decrease-qty-aria = .aria-label = Kurangi jumlah
-increase-qty-aria = .aria-label = Tambah jumlah
-filter-sales-aria = .aria-label = Filter penjualan
-filter-status-aria = .aria-label = Filter berdasarkan status
-from-date-aria = .aria-label = Dari tanggal
-to-date-aria = .aria-label = Sampai tanggal
-filter-cashier-aria = .aria-label = Filter berdasarkan kasir
-sales-history-aria = .aria-label = Riwayat penjualan
-pagination-aria = .aria-label = Halaman
-badge-tooltip-aria = .aria-label = Lencana dengan keterangan
+clear-aria = Hapus
+backspace-aria = Hapus
+username-aria = Nama Pengguna
+actions-aria = Aksi
+collapse-aria = Tutup bilah sisi
+notifications-aria = Notifikasi
+settings-aria = Pengaturan
+export-csv-aria = Ekspor CSV
+search-aria = Cari
+workspaces-aria = Ruang Kerja
+developer-tools-aria = Alat Pengembang
+theme-selector-aria = Pemilih Tema
+cancel-refund-aria = Batalkan pengembalian
+decrease-qty-aria = Kurangi jumlah
+increase-qty-aria = Tambah jumlah
+filter-sales-aria = Filter penjualan
+filter-status-aria = Filter berdasarkan status
+from-date-aria = Dari tanggal
+to-date-aria = Sampai tanggal
+filter-cashier-aria = Filter berdasarkan kasir
+sales-history-aria = Riwayat penjualan
+pagination-aria = Halaman
+badge-tooltip-aria = Lencana dengan keterangan
 
 auth-create-pin-success = Akun pemilik berhasil dibuat!
 auth-create-pin-error-fields = Semua bidang wajib diisi.
@@ -396,43 +393,43 @@ auth-create-pin-error-pin-mismatch = PIN tidak cocok.
 auth-create-pin-error-generic = Terjadi kesalahan saat membuat akun pemilik.
 
 # Additional common aria-label attributes (Indonesian)
-close-aria = .aria-label = Tutup
-search-customers-aria = .aria-label = Cari pelanggan
-search-products-aria = .aria-label = Cari produk
-barcode-input-aria = .aria-label = Input kode batang
-submit-barcode-aria = .aria-label = Kirim kode batang
-select-course-aria = .aria-label = Pilih kursus
-revert-changes-aria = .aria-label = Kembalikan perubahan
-add-sample-line-aria = .aria-label = Tambah contoh baris
-previous-page-aria = .aria-label = Halaman sebelumnya
-next-page-aria = .aria-label = Halaman berikutnya
-results-per-page-aria = .aria-label = Hasil per halaman
-void-order-aria = .aria-label = Batalkan pesanan
-close-void-aria = .aria-label = Tutup dialog pembatalan
-void-reason-aria = .aria-label = Alasan pembatalan
-sale-detail-aria = .aria-label = Detail penjualan
-sale-line-items-aria = .aria-label = Item baris penjualan
-refund-line-items-aria = .aria-label = Item baris pengembalian
-orders-aria = .aria-label = Pesanan
-back-to-orders-aria = .aria-label = Kembali ke daftar pesanan
-order-line-items-aria = .aria-label = Item baris pesanan
-decrease-card-size-aria = .aria-label = Kurangi ukuran kartu
-increase-card-size-aria = .aria-label = Tambah ukuran kartu
-decrease-font-size-aria = .aria-label = Kurangi ukuran font
-increase-font-size-aria = .aria-label = Tambah ukuran font
-primary-colour-picker-aria = .aria-label = Pemilih warna utama
-colour-hex-aria = .aria-label = Nilai heksadesimal warna
-reset-colour-aria = .aria-label = Kembalikan warna ke awal
-pick-logo-aria = .aria-label = Pilih file logo
-reset-appearance-aria = .aria-label = Kembalikan semua pengaturan tampilan
-save-appearance-aria = .aria-label = Simpan tampilan
+close-aria = Tutup
+search-customers-aria = Cari pelanggan
+search-products-aria = Cari produk
+barcode-input-aria = Input kode batang
+submit-barcode-aria = Kirim kode batang
+select-course-aria = Pilih kursus
+revert-changes-aria = Kembalikan perubahan
+add-sample-line-aria = Tambah contoh baris
+previous-page-aria = Halaman sebelumnya
+next-page-aria = Halaman berikutnya
+results-per-page-aria = Hasil per halaman
+void-order-aria = Batalkan pesanan
+close-void-aria = Tutup dialog pembatalan
+void-reason-aria = Alasan pembatalan
+sale-detail-aria = Detail penjualan
+sale-line-items-aria = Item baris penjualan
+refund-line-items-aria = Item baris pengembalian
+orders-aria = Pesanan
+back-to-orders-aria = Kembali ke daftar pesanan
+order-line-items-aria = Item baris pesanan
+decrease-card-size-aria = Kurangi ukuran kartu
+increase-card-size-aria = Tambah ukuran kartu
+decrease-font-size-aria = Kurangi ukuran font
+increase-font-size-aria = Tambah ukuran font
+primary-colour-picker-aria = Pemilih warna utama
+colour-hex-aria = Nilai heksadesimal warna
+reset-colour-aria = Kembalikan warna ke awal
+pick-logo-aria = Pilih file logo
+reset-appearance-aria = Kembalikan semua pengaturan tampilan
+save-appearance-aria = Simpan tampilan
 
 # Workspace home — Insights section (owner/admin only)
 workspace-home-insights-section = Wawasan
 workspace-home-analytics-title = Analitik
 workspace-home-analytics-desc = Performa staf, tren penjualan, dan metrik shift
-workspace-home-analytics-aria = .aria-label = Buka Analitik
+workspace-home-analytics-aria = Buka Analitik
 workspace-home-reports-title = Laporan
 workspace-home-reports-desc = Dasbor laporan penjualan, inventaris, dan kustom
-workspace-home-reports-aria = .aria-label = Buka Laporan
+workspace-home-reports-aria = Buka Laporan
 workspace-home-shortcut-open = Buka

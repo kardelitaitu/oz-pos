@@ -74,29 +74,29 @@ no-results = No results found
 error-occurred = An error occurred
 
 # Common aria-label attributes for generic UI actions
-clear-aria = .aria-label = Clear
-backspace-aria = .aria-label = Backspace
-username-aria = .aria-label = Username
-actions-aria = .aria-label = Actions
-collapse-aria = .aria-label = Collapse sidebar
-notifications-aria = .aria-label = Notifications
-settings-aria = .aria-label = Settings
-export-csv-aria = .aria-label = Export CSV
-search-aria = .aria-label = Search
-workspaces-aria = .aria-label = Workspaces
-developer-tools-aria = .aria-label = Developer tools
-theme-selector-aria = .aria-label = Theme selector
-cancel-refund-aria = .aria-label = Cancel refund
-decrease-qty-aria = .aria-label = Decrease quantity
-increase-qty-aria = .aria-label = Increase quantity
-filter-sales-aria = .aria-label = Filter sales
-filter-status-aria = .aria-label = Filter by status
-from-date-aria = .aria-label = From date
-to-date-aria = .aria-label = To date
-filter-cashier-aria = .aria-label = Filter by cashier
-sales-history-aria = .aria-label = Sales history
-pagination-aria = .aria-label = Pagination
-badge-tooltip-aria = .aria-label = Badge with tooltip
+clear-aria = Clear
+backspace-aria = Backspace
+username-aria = Username
+actions-aria = Actions
+collapse-aria = Collapse sidebar
+notifications-aria = Notifications
+settings-aria = Settings
+export-csv-aria = Export CSV
+search-aria = Search
+workspaces-aria = Workspaces
+developer-tools-aria = Developer tools
+theme-selector-aria = Theme selector
+cancel-refund-aria = Cancel refund
+decrease-qty-aria = Decrease quantity
+increase-qty-aria = Increase quantity
+filter-sales-aria = Filter sales
+filter-status-aria = Filter by status
+from-date-aria = From date
+to-date-aria = To date
+filter-cashier-aria = Filter by cashier
+sales-history-aria = Sales history
+pagination-aria = Pagination
+badge-tooltip-aria = Badge with tooltip
 
 # Audit Log
 audit-log-title = Audit Log
@@ -393,43 +393,43 @@ auth-create-pin-error-pin-mismatch = PINs do not match.
 auth-create-pin-error-generic = An error occurred while creating the owner account.
 
 # Additional common aria-label attributes
-close-aria = .aria-label = Close
-search-customers-aria = .aria-label = Search customers
-search-products-aria = .aria-label = Search products
-barcode-input-aria = .aria-label = Barcode input
-submit-barcode-aria = .aria-label = Submit barcode
-select-course-aria = .aria-label = Select course
-revert-changes-aria = .aria-label = Revert changes
-add-sample-line-aria = .aria-label = Add a sample line
-previous-page-aria = .aria-label = Previous page
-next-page-aria = .aria-label = Next page
-results-per-page-aria = .aria-label = Results per page
-void-order-aria = .aria-label = Void order
-close-void-aria = .aria-label = Close void dialog
-void-reason-aria = .aria-label = Void reason
-sale-detail-aria = .aria-label = Sale detail
-sale-line-items-aria = .aria-label = Sale line items
-refund-line-items-aria = .aria-label = Refund line items
-orders-aria = .aria-label = Orders
-back-to-orders-aria = .aria-label = Back to orders list
-order-line-items-aria = .aria-label = Order line items
-decrease-card-size-aria = .aria-label = Decrease card size
-increase-card-size-aria = .aria-label = Increase card size
-decrease-font-size-aria = .aria-label = Decrease font size
-increase-font-size-aria = .aria-label = Increase font size
-primary-colour-picker-aria = .aria-label = Primary colour picker
-colour-hex-aria = .aria-label = Colour hex value
-reset-colour-aria = .aria-label = Reset colour to default
-pick-logo-aria = .aria-label = Pick logo file
-reset-appearance-aria = .aria-label = Reset all appearance settings
-save-appearance-aria = .aria-label = Save appearance
+close-aria = Close
+search-customers-aria = Search customers
+search-products-aria = Search products
+barcode-input-aria = Barcode input
+submit-barcode-aria = Submit barcode
+select-course-aria = Select course
+revert-changes-aria = Revert changes
+add-sample-line-aria = Add a sample line
+previous-page-aria = Previous page
+next-page-aria = Next page
+results-per-page-aria = Results per page
+void-order-aria = Void order
+close-void-aria = Close void dialog
+void-reason-aria = Void reason
+sale-detail-aria = Sale detail
+sale-line-items-aria = Sale line items
+refund-line-items-aria = Refund line items
+orders-aria = Orders
+back-to-orders-aria = Back to orders list
+order-line-items-aria = Order line items
+decrease-card-size-aria = Decrease card size
+increase-card-size-aria = Increase card size
+decrease-font-size-aria = Decrease font size
+increase-font-size-aria = Increase font size
+primary-colour-picker-aria = Primary colour picker
+colour-hex-aria = Colour hex value
+reset-colour-aria = Reset colour to default
+pick-logo-aria = Pick logo file
+reset-appearance-aria = Reset all appearance settings
+save-appearance-aria = Save appearance
 
 # Workspace home — Insights section (owner/admin only)
 workspace-home-insights-section = Insights
 workspace-home-analytics-title = Analytics
 workspace-home-analytics-desc = Staff performance, sales trends, and shift metrics
-workspace-home-analytics-aria = .aria-label = Open Analytics
+workspace-home-analytics-aria = Open Analytics
 workspace-home-reports-title = Reports
 workspace-home-reports-desc = Sales, inventory, and custom reports dashboard
-workspace-home-reports-aria = .aria-label = Open Reports
+workspace-home-reports-aria = Open Reports
 workspace-home-shortcut-open = Open

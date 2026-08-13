@@ -14,10 +14,14 @@
 // screen readers.
 //
 // This test parses the real production bundles and fails if any message
-// VALUE still starts with a `.`-attribute marker. It is the permanent
-// regression guard against re-introducing the single-line form.
+// VALUE still starts with a `.`-attribute marker. It also pins the
+// `update-banner-*-aria` keys as plain values in BOTH locales: they are
+// read via `getString`, so an attribute-only Indonesian translation
+// would render the raw key id instead of the translated text.
 import { describe, it, expect } from 'vitest';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
+import sharedEn from '@/locales/shared.ftl?raw';
+import sharedId from '@/locales/shared.id.ftl?raw';
 import reportsEn from '@/locales/reports.ftl?raw';
 import reportsId from '@/locales/reports.id.ftl?raw';
 
@@ -41,12 +45,49 @@ function scanStrayAttributes(ftl: string): Array<{ key: string; value: string }>
   return out;
 }
 
-describe('i18n stray attribute syntax (reports bundles)', () => {
+/** Assert `key` has a plain (non-null) message value in `ftl`. */
+function plainValue(ftl: string, key: string): string {
+  const bundle = new FluentBundle('en', { useIsolating: false });
+  bundle.addResource(new FluentResource(ftl));
+  const msg = bundle.getMessage(key);
+  expect(msg, `key "${key}" must exist`).toBeDefined();
+  expect(
+    msg?.value,
+    `key "${key}" must be a plain value, not an attribute-only message`,
+  ).not.toBeNull();
+  return bundle.formatPattern(msg!.value!, null, []);
+}
+
+describe('i18n stray attribute syntax', () => {
+  it('shared.ftl has no message value that starts with a `.attr =` marker', () => {
+    expect(scanStrayAttributes(sharedEn)).toEqual([]);
+  });
+
+  it('shared.id.ftl has no message value that starts with a `.attr =` marker', () => {
+    expect(scanStrayAttributes(sharedId)).toEqual([]);
+  });
+
   it('reports.ftl has no message value that starts with a `.attr =` marker', () => {
     expect(scanStrayAttributes(reportsEn)).toEqual([]);
   });
 
   it('reports.id.ftl has no message value that starts with a `.attr =` marker', () => {
     expect(scanStrayAttributes(reportsId)).toEqual([]);
+  });
+});
+
+describe('i18n update-banner aria keys are plain values (getString consumers)', () => {
+  const KEYS = ['update-banner-install-aria', 'update-banner-installing-aria', 'update-banner-backing-up-aria'];
+
+  it('every key resolves as a plain value in English', () => {
+    for (const key of KEYS) {
+      expect(plainValue(sharedEn, key), key).not.toContain('.aria-label');
+    }
+  });
+
+  it('every key resolves as a plain value in Indonesian', () => {
+    for (const key of KEYS) {
+      expect(plainValue(sharedId, key), key).not.toContain('.aria-label');
+    }
   });
 });
