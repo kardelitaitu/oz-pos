@@ -304,7 +304,7 @@ describe('SettingsContext', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(result.current.error).toBe('Failed to load settings');
+    expect(result.current.error).toBe('settings-load-failed');
     expect(result.current.hasPartialError).toBe(false);
   });
 

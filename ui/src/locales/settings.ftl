@@ -323,6 +323,7 @@ settings-btn-save-aria =
     }
 settings-save-error = Failed to save settings. Please try again.
 settings-save-partial = Some settings could not be saved. Try again.
+settings-load-failed = Failed to load settings
 settings-retry = Retry
 settings-sync-not-configured = Sync is not configured. Enter a server URL and enable sync.
 settings-sync-status-idle = Ready

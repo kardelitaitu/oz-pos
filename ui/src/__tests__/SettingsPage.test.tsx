@@ -261,11 +261,11 @@ describe('SettingsPage', () => {
 
   // ── Full error state ─────────────────────────────────────────
 
-  it('renders error with retry button when all APIs fail', async () => {
+  it('renders localized error with retry button when all APIs fail', async () => {
     invokeMock.mockRejectedValue(new Error('IPC error'));
     renderWithProvidersSync(<TestWrapper><SettingsPage /></TestWrapper>, settingsFtl, sharedFtl);
     await waitFor(() => {
-      expect(screen.getByText(/failed to load/i)).toBeInTheDocument();
+      expect(screen.getByText('Failed to load settings')).toBeInTheDocument();
     });
     expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
   });

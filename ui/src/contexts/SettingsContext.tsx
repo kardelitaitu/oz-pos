@@ -108,7 +108,7 @@ export interface SettingsContextValue {
   settings: SettingsState;
   /** True during initial fetch and during active refetch windows. */
   loading: boolean;
-  /** Error message when ALL APIs fail; null when at least one succeeded. */
+  /** Fluent key id when ALL APIs fail; null when at least one succeeded. */
   error: string | null;
   /** True when the most recent load succeeded partially (some APIs failed). */
   hasPartialError: boolean;
@@ -328,7 +328,7 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
       }
 
       if (results.every((r) => r.status === 'rejected')) {
-        setError('Failed to load settings');
+        setError('settings-load-failed');
         setHasPartialError(false);
       } else {
         setHasPartialError(hasAnyFailure);

@@ -675,7 +675,7 @@ function SettingsPageContent() {
     return (
       <div className="settings-page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div className="settings-error" role="alert">
-          <p>{loadError}</p>
+          <p>{l10n.getString(loadError)}</p>
           <Button variant="secondary" onClick={() => { setInitialized(false); settingsCtx.refetch(); }}>
             <Localized id="settings-retry"><span>Retry</span></Localized>
           </Button>

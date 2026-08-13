@@ -1010,3 +1010,23 @@ failure.
 
 - Full suite: **296 files / 5214 tests pass, 0 unhandled errors** (was
   4 errors). NodeTopologyEditor 541/541 clean.
+
+# Settings error i18n repair (2026-08-14)
+
+`SettingsContext` stored a hardcoded English string (`'Failed to load
+settings'`) in its `error` field, which `SettingsPage` rendered directly
+in the full-failure alert — a user-visible i18n violation. The
+`settings-load-failed` key (removed in the orphan sweep) was the missing
+consumer.
+
+- Context now stores the Fluent key id (`settings-load-failed`); doc
+  comment updated to say the field holds a key id.
+- SettingsPage renders `l10n.getString(loadError)`.
+- Restored `settings-load-failed` to both bundles (en + id).
+- Updated SettingsContext test assertion; SettingsPage error test now
+  asserts the localized string exactly.
+
+## Verification
+
+- typecheck ✅ · i18n lint clean ✅ · parity 0 missing ✅ · dedupe clean ✅
+- SettingsContext + SettingsPage suites: 80/80 pass.
