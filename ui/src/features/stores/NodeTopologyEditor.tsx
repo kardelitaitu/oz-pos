@@ -964,11 +964,31 @@ export default function NodeTopologyEditor({
   const [zoom, setZoom] = useState(() => (savedView ? Math.max(0.4, Math.min(2.0, savedView.zoom)) : 1));
   const [pan, setPan] = useState<{ x: number; y: number }>(() => savedView?.pan ?? { x: 0, y: 0 });
 
-  useEffect(() => {
+  /** Debounced viewport persist. Pan/zoom update at pointer-move rate, and a
+   *  synchronous localStorage write per frame can jank the canvas — flush the
+   *  latest value 250ms after the last change (and once more on unmount). */
+  const viewPersistRef = useRef<{ viewKey: string; zoom: number; pan: { x: number; y: number } } | null>(null);
+  const viewPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const persistViewport = useCallback(() => {
+    const v = viewPersistRef.current;
+    if (!v) return;
     try {
-      localStorage.setItem(viewKey, JSON.stringify({ zoom, pan }));
+      localStorage.setItem(v.viewKey, JSON.stringify({ zoom: v.zoom, pan: v.pan }));
     } catch { /* storage may be unavailable (private mode) — view pref only */ }
-  }, [viewKey, zoom, pan]);
+  }, []);
+
+  useEffect(() => {
+    viewPersistRef.current = { viewKey, zoom, pan };
+    if (viewPersistTimerRef.current) clearTimeout(viewPersistTimerRef.current);
+    viewPersistTimerRef.current = setTimeout(persistViewport, 250);
+  }, [viewKey, zoom, pan, persistViewport]);
+
+  // Flush any pending viewport persist on unmount so a branch switch never
+  // drops the last 250ms of panning.
+  useEffect(() => () => {
+    if (viewPersistTimerRef.current) clearTimeout(viewPersistTimerRef.current);
+    persistViewport();
+  }, [persistViewport]);
 
   /** Node finder (Ctrl+F): a quick-jump overlay. finderQuery drives the
    *  filtered match list; finderIndex is the highlighted row (clamped to the
