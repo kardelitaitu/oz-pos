@@ -370,6 +370,135 @@ mod tests {
         }
     }
 
+    /// Count rows matching an arbitrary scalar SQL query.
+    fn row_count(conn: &rusqlite::Connection, sql: &str) -> i64 {
+        conn.query_row(sql, [], |r| r.get::<_, i64>(0)).unwrap()
+    }
+
+    /// Pin the bootstrap seed rows a fresh install depends on. The reset
+    /// collapsed 131 migrations into one `init.sql`; the original failure mode
+    /// was that the schema dumped fine but the seed INSERTs were dropped, so
+    /// domain FK targets such as `workspaces.key = 'retail-pos'` had nothing
+    /// to reference. This fails if any essential lookup row is removed or renamed.
+    #[test]
+    fn seed_data_bootstraps_essential_rows() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        // Currencies (ISO-4217 lookups).
+        for code in ["USD", "IDR"] {
+            assert_eq!(
+                row_count(
+                    &conn,
+                    &format!("SELECT COUNT(*) FROM currencies WHERE code = '{code}'"),
+                ),
+                1,
+                "missing currency seed {code}"
+            );
+        }
+
+        // Default store profile — the FK target for store-scoped rows and the
+        // canonical `workspace_instances` store.
+        assert_eq!(
+            row_count(
+                &conn,
+                "SELECT COUNT(*) FROM store_profiles WHERE id = 'default'",
+            ),
+            1,
+            "missing default store profile"
+        );
+
+        // Loyalty tiers.
+        assert_eq!(
+            row_count(&conn, "SELECT COUNT(*) FROM loyalty_tiers"),
+            4,
+            "loyalty tier seeds must survive"
+        );
+
+        // Workspaces — `retail-pos` is the legacy cashier workspace that the
+        // assignment tests reference by FK.
+        for key in [
+            "restaurant-pos",
+            "store-pos",
+            "warehouse",
+            "admin",
+            "kds",
+            "retail-pos",
+        ] {
+            assert_eq!(
+                row_count(
+                    &conn,
+                    &format!("SELECT COUNT(*) FROM workspaces WHERE key = '{key}'"),
+                ),
+                1,
+                "missing workspace seed {key}"
+            );
+        }
+
+        // Workspace types and the canonical default instances.
+        assert_eq!(
+            row_count(&conn, "SELECT COUNT(*) FROM workspace_types"),
+            6,
+            "workspace type seeds must survive"
+        );
+        assert_eq!(
+            row_count(&conn, "SELECT COUNT(*) FROM workspace_instances"),
+            5,
+            "default workspace instance seeds must survive"
+        );
+
+        // Tenant subscription and inventory locations.
+        assert_eq!(
+            row_count(
+                &conn,
+                "SELECT COUNT(*) FROM tenant_subscription WHERE tenant_id = 'default'",
+            ),
+            1,
+            "missing default tenant subscription"
+        );
+        assert_eq!(
+            row_count(&conn, "SELECT COUNT(*) FROM inventory_locations"),
+            2,
+            "inventory location seeds must survive"
+        );
+    }
+
+    /// Pin the consolidated schema surface: 92 tables, 121 indexes, 4
+    /// triggers. A count assertion catches a table/index/trigger silently
+    /// dropping out of `init.sql` — something a name-list check misses when a
+    /// name changes.
+    #[test]
+    fn init_sql_creates_complete_schema_surface() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        // The runner adds `schema_migrations` on top of the 92 init tables.
+        assert_eq!(
+            row_count(
+                &conn,
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'schema_migrations'",
+            ),
+            92,
+            "table surface drifted"
+        );
+        assert_eq!(
+            row_count(
+                &conn,
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'",
+            ),
+            121,
+            "index surface drifted"
+        );
+        assert_eq!(
+            row_count(
+                &conn,
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger'"
+            ),
+            4,
+            "trigger surface drifted"
+        );
+    }
+
     // ── Store-scoped isolation (DB-04 end-state) ───────────────────
     //
     // The consolidated schema carries a store_id FK on products, customers,

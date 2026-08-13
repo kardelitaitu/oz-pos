@@ -172,9 +172,10 @@ INSERT OR IGNORE INTO workspaces (id, key, name, description, icon) VALUES
 | Generate init SQL (schema + seed) | ✅ Done | 92 tables, 121 indexes, 4 triggers, 11 seed INSERTs |
 | Add IF NOT EXISTS | ✅ Done | All statements idempotent for existing DBs |
 | Add seed data | ✅ Done | 11 INSERT statements matching old migration state |
+| Add regression tests | ✅ Done | `seed_data_bootstraps_essential_rows` + `init_sql_creates_complete_schema_surface` (92 tables / 121 indexes / 4 triggers) |
 | Fix test adjustments | ✅ Done | 2 tests updated for seed data (workspace types count, load_all count) |
 | Verify cargo check | ✅ Done | Compiles clean |
-| Verify all tests pass | ✅ Done | `cargo test -p oz-core --lib` → **1769 passed, 0 failed** |
+| Verify all tests pass | ✅ Done | `cargo test -p oz-core --lib` → **1771 passed, 0 failed** |
 
 ### ✅ All Complete
 
@@ -186,7 +187,7 @@ INSERT OR IGNORE INTO workspaces (id, key, name, description, icon) VALUES
 | 4. Fix tenant_subscription columns | Used actual table columns (max_pos_instances, not max_terminals_per_store) | ✅ |
 | 5. Fix settings seed | Removed currency.default (not seeded on fresh DB by old migrations) | ✅ |
 | 6. Adjust test expectations | workspace_types count (5→6), load_all count (2→≥2) | ✅ |
-| 7. Run full test suite | **1769 passed, 0 failed** (one dead guard test removed) | ✅ |
+| 7. Run full test suite | **1771 passed, 0 failed** (two seed/surface regression tests added) | ✅ |
 | 8. Verify cargo check | Compiles clean | ✅ |
 
 ---
@@ -269,7 +270,7 @@ The 131 old rows are harmless:
 | Risk | Mitigation |
 |------|------------|
 | Existing dev databases break | `IF NOT EXISTS` + `INSERT OR IGNORE` makes init a no-op on existing DBs |
-| Schema drift | `fresh_install_and_upgrade_path_produce_identical_schema` test still runs (trivially passes with 1 migration) |
+| Schema drift | `init_sql_creates_complete_schema_surface` pins 92 tables / 121 indexes / 4 triggers; `fresh_install_and_upgrade_path_produce_identical_schema` still runs |
 | Lost migration history | Git history preserves all old files if ever needed |
 | Dead rows in schema_migrations | 131 rows of harmless dead data, can be cleaned up later |
 | Missing seed data causes test failures | Extract and append seed data from old migrations (see Solution section) |
