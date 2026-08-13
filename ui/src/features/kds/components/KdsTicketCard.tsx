@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, memo, useCallback } from 'react';
+import { useEffect, useRef, useState, memo, useCallback, useMemo } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useTicketSla } from '@/features/kds/hooks/useTicketSla';
 import { useSound } from '@/frontend/shared/useSound';
 import { requiredLocalized } from '@/frontend/shared';
 import { getKdsOrderLinesScoped, type KdsOrder, type KdsStatus, type KdsLineItem } from '@/api/kds';
+import { createCooldownWrapper } from '@/features/kds/hooks/useActionCooldown';
 
 /** Props for the KdsTicketCard component. */
 export interface KdsTicketCardProps {
@@ -164,13 +165,16 @@ export const KdsTicketCard = memo(function KdsTicketCard({
     if (e.key === 'Escape') handleCancelEdit();
   }, [handleSaveEdit, handleCancelEdit]);
 
-  const handleClick = () => {
-    if (editing) return;
-    const currentIdx = STATUS_ORDER.indexOf(order.status as KdsStatus);
-    if (currentIdx >= 0 && currentIdx < STATUS_ORDER.length - 1) {
-      onAdvance(order);
-    }
-  };
+  const handleClick = useMemo(
+    () => createCooldownWrapper(() => {
+      if (editing) return;
+      const currentIdx = STATUS_ORDER.indexOf(order.status as KdsStatus);
+      if (currentIdx >= 0 && currentIdx < STATUS_ORDER.length - 1) {
+        onAdvance(order);
+      }
+    }, 200),
+    [editing, order, onAdvance],
+  );
 
   const startEditing = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -227,7 +231,7 @@ export const KdsTicketCard = memo(function KdsTicketCard({
                   onClick={(e) => {
                     if (canAdvanceItem && onAdvanceItem) {
                       e.stopPropagation();
-                      onAdvanceItem(item);
+                      createCooldownWrapper(() => onAdvanceItem(item), 200)();
                     }
                   }}
                   role={canAdvanceItem ? 'button' : undefined}
