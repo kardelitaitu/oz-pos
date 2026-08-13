@@ -39,9 +39,33 @@ echarts.use([
 
 // ── Date helpers ───────────────────────────────────────────────────
 
-function isoDay(d: Date): string { return d.toISOString().slice(0, 10); }
+function isoDay(d: Date): string {
+  // Local calendar date — `toISOString()` is UTC and can return the
+  // previous day for late-evening/early-morning local times.
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 function today(): string { return isoDay(new Date()); }
 function daysAgo(n: number): string { const d = new Date(); d.setDate(d.getDate() - n); return isoDay(d); }
+
+/** Parse an ISO date into a local-midnight `Date` (never `new Date(str)`, which parses as UTC). */
+function parseLocalDate(s: string): Date {
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y!, m! - 1, d!);
+}
+/** Inclusive whole-day count between two ISO dates (DST-safe). */
+function daysBetween(from: string, to: string): number {
+  const f = parseLocalDate(from);
+  const t = parseLocalDate(to);
+  return Math.round(
+    (Date.UTC(t.getFullYear(), t.getMonth(), t.getDate()) - Date.UTC(f.getFullYear(), f.getMonth(), f.getDate())) / 86400000,
+  ) + 1;
+}
+/** Shift an ISO date by whole days, preserving the local calendar date. */
+function shiftDate(s: string, days: number): string {
+  const d = parseLocalDate(s);
+  d.setDate(d.getDate() + days);
+  return isoDay(d);
+}
 
 type Granularity = 'daily' | 'weekly' | 'monthly';
 
@@ -103,13 +127,9 @@ export default function DashboardScreen() {
     setLoading(true);
     setError(null);
     try {
-      const days = (new Date(to).getTime() - new Date(from).getTime()) / 86400000 + 1;
-      const prevFromDate = new Date(from);
-      prevFromDate.setDate(prevFromDate.getDate() - days);
-      const prevToDate = new Date(from);
-      prevToDate.setDate(prevToDate.getDate() - 1);
-      const prevFrom = isoDay(prevFromDate);
-      const prevTo = isoDay(prevToDate);
+      const days = daysBetween(from, to);
+      const prevFrom = shiftDate(from, -days);
+      const prevTo = shiftDate(from, -1);
 
       const [daily, weekly, monthly, top, stock, cats, heat, prev] = await Promise.all([
         getDailyRevenue(from, to, sessionToken),
@@ -150,16 +170,18 @@ export default function DashboardScreen() {
 
   // ── KPI computed values with deltas ──────────────────────────────
 
-  const todayKPIs = useMemo(() => {
-    const todayRev = dailyRevenue.reduce((s, r) => s + r.total_minor, 0);
-    const todayProfit = dailyRevenue.reduce((s, r) => s + r.gross_profit_minor, 0);
-    const todayOrders = dailyRevenue.reduce((s, r) => s + r.sale_count, 0);
+  // KPI totals are sums over the WHOLE selected range (not "today") — the
+  // delta compares them against the previous equal-length period.
+  const rangeKPIs = useMemo(() => {
+    const rangeRev = dailyRevenue.reduce((s, r) => s + r.total_minor, 0);
+    const rangeProfit = dailyRevenue.reduce((s, r) => s + r.gross_profit_minor, 0);
+    const rangeOrders = dailyRevenue.reduce((s, r) => s + r.sale_count, 0);
     const prevRev = prevDaily.reduce((s, r) => s + r.total_minor, 0);
     const prevProfit = prevDaily.reduce((s, r) => s + r.gross_profit_minor, 0);
     const prevOrders = prevDaily.reduce((s, r) => s + r.sale_count, 0);
     const top = topProducts[0];
     return {
-      todayRev, todayProfit, todayOrders, top,
+      rangeRev, rangeProfit, rangeOrders, top,
       prevRev, prevProfit, prevOrders,
       currency: dailyRevenue[0]?.currency ?? currency,
     };
@@ -182,6 +204,10 @@ export default function DashboardScreen() {
     };
   }, [revenueSeries, currency, granularity, l10n]);
 
+  // ECharts renders to <canvas>, which cannot resolve CSS variables in a
+  // fill — read the theme foreground color into a concrete value at render.
+  const fgColor = getComputedStyle(document.documentElement).getPropertyValue('--color-fg').trim() || '#111';
+
   const categoryDonutOption = useMemo(() => {
     if (categoryBreakdown.length === 0) return null;
     const total = categoryBreakdown.reduce((s, c) => s + c.total_minor, 0);
@@ -198,9 +224,9 @@ export default function DashboardScreen() {
         data: categoryBreakdown.map((c) => ({ value: c.total_minor, name: c.category_name })),
       }],
       graphic: total > 0 ? [{ type: 'text' as const, left: '24%', top: 'middle',
-        style: { text: fmtShort(total, currency), textAlign: 'center' as const, fill: 'var(--color-fg)', fontSize: 14, fontWeight: 'bold' } }] : undefined,
+        style: { text: fmtShort(total, currency), textAlign: 'center' as const, fill: fgColor, fontSize: 14, fontWeight: 'bold' } }] : undefined,
     };
-  }, [categoryBreakdown, currency, l10n]);
+  }, [categoryBreakdown, currency, l10n, fgColor]);
 
   const heatmapOption = useMemo(() => {
     if (heatmap.length === 0) return null;
@@ -236,34 +262,6 @@ export default function DashboardScreen() {
 
   if (loading) return <div className="dashboard"><Spinner aria-label={l10n.getString('spinner-label')} /></div>;
   if (error) return <div className="dashboard"><p className="dashboard-error">{error}</p></div>;
-
-  if (loading) {
-    return (
-      <div className="dashboard dashboard--fullscreen" role="region" aria-label={requiredLocalized(l10n, 'dashboard-region-aria')}>
-        <button type="button" className="dashboard-back-btn" onClick={goToWorkspacePicker} aria-label={l10n.getString('dashboard-back-aria')}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg>
-          <Localized id="dashboard-back"><span>Back</span></Localized>
-        </button>
-        <Localized id="dashboard-title"><h1 className="dashboard-title">Dashboard</h1></Localized>
-        <div className="dashboard-kpi-row">
-          {[1,2,3,4].map((i) => (
-            <div key={i} className="dashboard-kpi dashboard-kpi--skeleton">
-              <span className="dashboard-kpi-label-skeleton" />
-              <span className="dashboard-kpi-value-skeleton" />
-            </div>
-          ))}
-        </div>
-        <div className="dashboard-chart-row">
-          <div className="dashboard-chart-card dashboard-chart-card--skeleton"><h2 className="dashboard-section-title">Revenue Trend</h2><div className="dashboard-chart-skeleton" /></div>
-          <div className="dashboard-chart-card dashboard-chart-card--skeleton"><h2 className="dashboard-section-title">Category Breakdown</h2><div className="dashboard-chart-skeleton" /></div>
-        </div>
-        <div className="dashboard-chart-row">
-          <div className="dashboard-chart-card dashboard-chart-card--skeleton"><h2 className="dashboard-section-title">Sales Heatmap</h2><div className="dashboard-chart-skeleton" /></div>
-          <div className="dashboard-chart-card dashboard-chart-card--skeleton"><h2 className="dashboard-section-title">Top 10 Products</h2><div className="dashboard-chart-skeleton" /></div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="dashboard dashboard--fullscreen" role="region" aria-label={requiredLocalized(l10n, 'dashboard-region-aria')}>
@@ -321,30 +319,30 @@ export default function DashboardScreen() {
       <div className="dashboard-kpi-row">
         <Card shadow="sm" className="dashboard-kpi">
           <span className="dashboard-kpi-label"><Localized id="dashboard-today-revenue"><span>Revenue</span></Localized></span>
-          <span className="dashboard-kpi-value">{fmtCurrency(todayKPIs.todayRev, todayKPIs.currency)}</span>
-          <span className={`dashboard-kpi-delta${todayKPIs.todayRev >= todayKPIs.prevRev ? '' : ' dashboard-kpi-delta--down'}`}>
-            {todayKPIs.prevRev > 0 ? fmtDelta(todayKPIs.todayRev, todayKPIs.prevRev) : ''}
+          <span className="dashboard-kpi-value">{fmtCurrency(rangeKPIs.rangeRev, rangeKPIs.currency)}</span>
+          <span className={`dashboard-kpi-delta${rangeKPIs.rangeRev >= rangeKPIs.prevRev ? '' : ' dashboard-kpi-delta--down'}`}>
+            {rangeKPIs.prevRev > 0 ? fmtDelta(rangeKPIs.rangeRev, rangeKPIs.prevRev) : ''}
           </span>
         </Card>
         <Card shadow="sm" className="dashboard-kpi">
           <span className="dashboard-kpi-label"><Localized id="dashboard-gross-profit"><span>Gross Profit</span></Localized></span>
-          <span className={`dashboard-kpi-value${todayKPIs.todayProfit < 0 ? ' dashboard-kpi-negative' : ''}`}>
-            {fmtCurrency(todayKPIs.todayProfit, todayKPIs.currency)}
+          <span className={`dashboard-kpi-value${rangeKPIs.rangeProfit < 0 ? ' dashboard-kpi-negative' : ''}`}>
+            {fmtCurrency(rangeKPIs.rangeProfit, rangeKPIs.currency)}
           </span>
-          <span className={`dashboard-kpi-delta${todayKPIs.todayProfit >= todayKPIs.prevProfit ? '' : ' dashboard-kpi-delta--down'}`}>
-            {todayKPIs.prevProfit > 0 ? fmtDelta(todayKPIs.todayProfit, todayKPIs.prevProfit) : ''}
+          <span className={`dashboard-kpi-delta${rangeKPIs.rangeProfit >= rangeKPIs.prevProfit ? '' : ' dashboard-kpi-delta--down'}`}>
+            {rangeKPIs.prevProfit > 0 ? fmtDelta(rangeKPIs.rangeProfit, rangeKPIs.prevProfit) : ''}
           </span>
         </Card>
         <Card shadow="sm" className="dashboard-kpi">
           <span className="dashboard-kpi-label"><Localized id="dashboard-orders-today"><span>Orders</span></Localized></span>
-          <span className="dashboard-kpi-value">{todayKPIs.todayOrders}</span>
-          <span className={`dashboard-kpi-delta${todayKPIs.todayOrders >= todayKPIs.prevOrders ? '' : ' dashboard-kpi-delta--down'}`}>
-            {todayKPIs.prevOrders > 0 ? fmtDelta(todayKPIs.todayOrders, todayKPIs.prevOrders) : ''}
+          <span className="dashboard-kpi-value">{rangeKPIs.rangeOrders}</span>
+          <span className={`dashboard-kpi-delta${rangeKPIs.rangeOrders >= rangeKPIs.prevOrders ? '' : ' dashboard-kpi-delta--down'}`}>
+            {rangeKPIs.prevOrders > 0 ? fmtDelta(rangeKPIs.rangeOrders, rangeKPIs.prevOrders) : ''}
           </span>
         </Card>
         <Card shadow="sm" className="dashboard-kpi">
           <span className="dashboard-kpi-label"><Localized id="dashboard-top-product"><span>Top Product</span></Localized></span>
-          <span className="dashboard-kpi-value dashboard-kpi-value--name">{todayKPIs.top?.name ?? '-'}</span>
+          <span className="dashboard-kpi-value dashboard-kpi-value--name">{rangeKPIs.top?.name ?? '-'}</span>
         </Card>
       </div>
 
