@@ -2,8 +2,7 @@
 
 Created 2026-08-13 during the analytics cards audit. Items found in code
 review but left for a later pass are listed below. Completed items are noted
-with ✅ and the commit that resolved them, so this file stays a live index
-rather than a stale backlog.
+with ✅, so this file stays a live index rather than a stale backlog.
 
 ## Completed (no longer open)
 
@@ -24,6 +23,12 @@ rather than a stale backlog.
   and purges expired entries before evicting live ones.
 - ✅ **Sticky failure map** — recorded query failures are cleared on every
   filter change, so re-navigating back to a previously-failed card retries.
+- ✅ **Heatmap per-cell data reachable by AT** — the grid dropped its
+  `role="img"` (which made descendants presentational); each cell with data is
+  now `role="img"` + `aria-label` carrying its revenue/order detail.
+- ✅ **Card container `aria-label` duplicates the heading** — the card group
+  now uses `aria-labelledby` pointing at its `<h2>` instead of a duplicated
+  `aria-label`.
 
 ## Still open — verify in the UI
 
@@ -36,17 +41,6 @@ rather than a stale backlog.
   the hover lift implies the body is clickable.
 - **Likely fix:** drag from the grip only (or drop the grip), and limit the
   hover lift to the header.
-
-## Still open — accessibility
-
-- **Heatmap per-cell tooltips are hover-only** — `heatCell()` in
-  `AnalyticsScreen.tsx` wraps each cell in `Tooltip`, but the trigger has no
-  `tabIndex`, so keyboard/AT users can't reach per-cell revenue/order detail.
-  Likely fix: make cells focusable or surface the data another way.
-- **`role="group"` + `aria-label` duplicates the card heading** — the card
-  container carries `aria-label={title}` while the `<h2>` already names it.
-  Likely fix: use `aria-labelledby` pointing at the `<h2>`, or drop the
-  `aria-label`.
 
 ## Still open — cache & query layer design items
 

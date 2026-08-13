@@ -801,10 +801,11 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   const heatCell = (key: string, label: string, opts?: { reactKey?: string; showLabel?: string }) => {
     const cell = heatCells.get(key);
     const isPeak = peakKey !== null && key === peakKey;
+    const tooltip = heatCellTooltip(label, cell);
     return (
       <Tooltip
         key={opts?.reactKey ?? key}
-        content={heatCellTooltip(label, cell)}
+        content={tooltip}
         position="top"
         portal
         showDelay={0}
@@ -812,6 +813,8 @@ const [paletteOpen, setPaletteOpen] = useState(false);
         <div
           className={`analytics-heat-cell${isPeak ? ' analytics-heat-cell--peak' : ''}`}
           data-intensity={cell?.level ?? 0}
+          role={cell ? 'img' : undefined}
+          aria-label={cell ? tooltip : undefined}
         >
           <div className="analytics-heat-block" />
           {opts?.showLabel !== undefined && <span className="analytics-heat-label">{opts.showLabel}</span>}
@@ -821,7 +824,6 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   };
 
   const renderHeatmap = () => {
-    const aria = l10n.getString('analytics-card-heatmap');
     const dayLabels = DAY_LABEL_KEYS.map((k) => l10n.getString(k));
     if (heatmapGranularity === 'weekly') {
       const rows: JSX.Element[] = [
@@ -849,7 +851,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
         );
       });
       return (
-        <div className="analytics-heatmap analytics-heatmap--weekly" role="img" aria-label={aria}>
+        <div className="analytics-heatmap analytics-heatmap--weekly">
           {rows}
         </div>
       );
@@ -873,7 +875,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
         cells.push(<div key={`trail-${i}`} className="analytics-heat-cell analytics-heat-cell--empty" />);
       }
       return (
-        <div className="analytics-heatmap analytics-heatmap--monthly" role="img" aria-label={aria}>
+        <div className="analytics-heatmap analytics-heatmap--monthly">
           <div className="analytics-monthly-header">
             {dayLabels.map((d) => (
               <span key={d} className="analytics-heat-label">{d}</span>
@@ -885,7 +887,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
     }
     if (heatmapGranularity === 'yearly') {
       return (
-        <div className="analytics-heatmap analytics-heatmap--yearly" role="img" aria-label={aria}>
+        <div className="analytics-heatmap analytics-heatmap--yearly">
           {heatmapColumns.map((col) => {
             const label = yearlyMonthLabel(col.key);
             return (
@@ -907,7 +909,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
     // today — custom remaps to weekly and daily is no longer selectable —
     // but it mirrors `buildHeatmapIntensities`'s flat weekday fallback.
     return (
-      <div className="analytics-heatmap" role="img" aria-label={aria}>
+      <div className="analytics-heatmap">
         {dayLabels.map((label, i) =>
           heatCell(String(i), label, { showLabel: label }),
         )}
@@ -1377,7 +1379,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
               key={cid}
               role="group"
               draggable={!isExpanded}
-              aria-label={l10n.getString(card.titleKey)}
+              aria-labelledby={`analytics-card-title-${cid}`}
               onDragStart={(e) => { setDragId(cid); if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'; }}
               onDragOver={(e) => { e.preventDefault(); if (overId !== cid) setOverId(cid); }}
               onDragLeave={() => setOverId((o) => (o === cid ? null : o))}
@@ -1394,7 +1396,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
                   </svg>
                 </span>
                 <Localized id={card.titleKey}>
-                  <h2 className="analytics-card-title">{card.title}</h2>
+                  <h2 className="analytics-card-title" id={`analytics-card-title-${cid}`}>{card.title}</h2>
                 </Localized>
                 <div className="analytics-card-actions">
                   {card.key === 'heatmap' && heatmapData && (
