@@ -480,6 +480,42 @@ Audit of `PromotionManagementScreen.tsx` + `promotions.ftl` / `promotions.id.ftl
    `percentage` it renders `{n}%`. Confirm the intended display for non-
    percentage types.
 
+---
+
+# Loyalty audit (2026-08-13)
+
+Audit of `LoyaltyManagementScreen.tsx` + `loyalty.ftl` / `loyalty.id.ftl`.
+
+## Fixed (committed)
+
+- ✅ **Functional `setTierForm` updates + stray `{ }`** — the five tier form
+  fields now use functional updaters; nine stray empty `{ }` JSX expressions
+  removed (tier edit form, table header, expand cell, txn rows).
+- ✅ **Integer tier-field parsing** — `parseInt` silently truncated decimals
+  (`"10.5"` → `10`) and turned an empty `min_points` into `0`. Now `Number` +
+  `Number.isInteger` + non-empty checks reject fractional/blank integer fields
+  with the localized error; the earn multiplier still accepts decimals.
+  Regression test added.
+- ✅ **Tier badge contrast** — the white text on the tier colour was unreadable
+  for light colours; now uses `contrastFg(tier.colour)` (same utility as the
+  category picker).
+- ✅ **Locale-aware numbers/dates** — points, lifetime points, points-to-next,
+  min-points, and transaction dates now use the active Fluent locale instead of
+  the browser default.
+- ✅ **`customerMap` memoized** — no longer rebuilt on every render.
+
+## Still open
+
+1. **Nested interactive row** — each loyalty account `<tr>` is
+   `role="button" tabIndex={0}` with an expand handler, AND contains a real
+   `<button>` doing the same toggle. Screen readers and keyboard users see two
+   controls for one action. Needs a design decision (drop the row role, or the
+   inner chevron button).
+2. **Dynamic `loyalty-${txn.txn_type}` keys** — covered for the known types
+   (`earn`/`redeem`/`adjust`); an unknown backend type falls back to the
+   capitalized raw value.
+
+
 
 
 
