@@ -414,5 +414,41 @@ Audit of `CategoryManagementScreen.tsx` + `products.ftl` / `settings.ftl`.
    so AT users can't tell them apart. Minor; needs a product call on distinct
    labels.
 
+---
+
+# Gift cards audit (2026-08-13)
+
+Audit of `GiftCardsScreen.tsx` + `IssueGiftCardModal.tsx` + `GiftCardPayment.tsx`
+and `gift-cards.ftl` / `sales.ftl`.
+
+## Fixed (committed)
+
+- ✅ **Raw backend status/txn type** — the card status badge and transaction
+  type rendered the raw backend values (`"active"`, `"redeem"`, `"topup"`, …) in
+  English. Mapped both through the Fluent bundle (adding
+  `gift-cards-txn-issue/redeem/topup/refund` keys) with a raw-value fallback.
+- ✅ **`aria-expanded`** — the expandable card summary button now exposes its
+  toggle state to assistive tech.
+- ✅ **Unnamed dialog** — the issue modal `role="dialog"` had no accessible name;
+  added `aria-labelledby` → its `<h2>`.
+- ✅ **Dead `cardInputRef`** — removed the unused ref in `IssueGiftCardModal`.
+- ✅ **Top-up parsing** — `parseInt` (silently truncating `500.5` → `500`)
+  replaced with `Number` + `Number.isInteger`.
+- ✅ **Browser-locale dates** — issue/expiry/transaction dates now use the
+  active Fluent locale instead of `toLocaleDateString()`'s browser default.
+
+## Still open
+
+1. **`formatMoney` default locale is `id-ID`** — the gift-card balances/totals
+   call `formatMoney` without a locale, so English-locale users see Indonesian
+   grouping ("Rp 50.000"). Systemic across the app; worth a dedicated pass that
+   threads the active Fluent locale into `formatMoney` call sites (and reconciles
+   with the per-store receipt `decimalSep` override).
+2. **Hardcoded `currency: 'IDR'` + `created_by: 'staff'`** in
+   `IssueGiftCardModal` — likely intentional until multi-currency gift cards and
+   real operator identity land.
+3. **`gift-cards-loading` orphan** (in `sales.ftl`) — the screen uses a skeleton.
+
+
 
 

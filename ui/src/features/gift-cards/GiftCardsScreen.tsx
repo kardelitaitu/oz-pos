@@ -26,9 +26,18 @@ const STATUS_CLASS: Record<string, string> = {
   expired: 'gift-card-status--expired',
 };
 
+/** Short readable date in the active locale (guards invalid ISO strings). */
+function formatDate(iso: string, locale: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(locale);
+}
+
 /** Gift card management screen — list, search, filter, freeze/unfreeze, top up, and issue gift cards. */
 export default function GiftCardsScreen() {
   const { l10n } = useLocalization();
+  // Dates follow the active Fluent locale (not the browser default).
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
   const [cards, setCards] = useState<GiftCardWithTransactions[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -71,8 +80,10 @@ export default function GiftCardsScreen() {
   }, [load, addToast, l10n]);
 
   const handleTopUp = useCallback(async (cardNumber: string) => {
-    const amount = parseInt(topUpAmount, 10);
-    if (Number.isNaN(amount) || amount <= 0) {
+    // Reject non-integers (e.g. "500.5") rather than silently truncating.
+    const raw = topUpAmount.trim();
+    const amount = Number(raw);
+    if (raw === '' || !Number.isInteger(amount) || amount <= 0) {
       setTopUpError(l10n.getString('gift-cards-topup-invalid'));
       return;
     }
@@ -196,12 +207,12 @@ export default function GiftCardsScreen() {
                     </div>
                     <div className="gift-card-info-item">
                       <Localized id="gift-cards-info-issued"><span className="gift-card-info-label">Issued</span></Localized>
-                      <span>{new Date(gc.card.issue_date).toLocaleDateString()}</span>
+                      <span>{formatDate(gc.card.issue_date, numLocale)}</span>
                     </div>
                     {gc.card.expiry_date && (
                       <div className="gift-card-info-item">
                         <Localized id="gift-cards-info-expires"><span className="gift-card-info-label">Expires</span></Localized>
-                        <span>{new Date(gc.card.expiry_date).toLocaleDateString()}</span>
+                        <span>{formatDate(gc.card.expiry_date, numLocale)}</span>
                       </div>
                     )}
                   </div>
@@ -280,7 +291,7 @@ export default function GiftCardsScreen() {
                               </td>
                               <td>{formatMoney({ minor_units: txn.balance_after_minor, currency: gc.card.currency })}</td>
                               <td className="gift-card-txn-notes">{txn.notes}</td>
-                              <td className="gift-card-txn-date">{new Date(txn.created_at).toLocaleDateString()}</td>
+                              <td className="gift-card-txn-date">{formatDate(txn.created_at, numLocale)}</td>
                             </tr>
                           ))}
 </tbody>
