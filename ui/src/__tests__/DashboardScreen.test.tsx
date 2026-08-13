@@ -8,6 +8,9 @@ import DashboardScreen from '@/features/reports/DashboardScreen';
 // Mock echarts-for-react — jsdom has no Canvas
 vi.mock('echarts-for-react/lib/core', () => ({
   default: (props: Record<string, unknown>) => {
+    // Drop the chart-only props so React doesn't warn about unknown DOM
+    // attributes (notMerge, option, …) on the placeholder div.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { option, notMerge, echarts, style, ...rest } = props;
     return React.createElement('div', { ...rest, 'data-testid': 'echarts-mock', style });
   },
