@@ -37,6 +37,17 @@ vi.mock('echarts/components', () => ({ GridComponent: {}, TooltipComponent: {}, 
 vi.mock('echarts/renderers', () => ({ CanvasRenderer: {} }));
 vi.mock('@/utils/export-csv', () => ({ downloadCsv: vi.fn() }));
 
+// The analytics screen renders one Tooltip per heat cell (168 in the weekly
+// grid). Mock it to a passthrough that stamps the resolved content onto the
+// trigger cell, so tests assert the wiring without paying for 168 portals or
+// re-testing the shared Tooltip's hover timing (covered by Tooltip.test.tsx).
+vi.mock('@/frontend/shell/Tooltip', () => ({
+  default: ({ content, children }: { content: React.ReactNode; children: React.ReactElement }) =>
+    React.cloneElement(children as React.ReactElement<Record<string, unknown>>, {
+      'data-tooltip-content': typeof content === 'string' ? content : undefined,
+    }),
+}));
+
 const mockGoToPicker = vi.fn();
 vi.mock('@/hooks/useWorkspaceNav', () => ({
   useWorkspaceNav: () => ({ goToWorkspacePicker: mockGoToPicker }),
@@ -857,16 +868,16 @@ describe('AnalyticsScreen layout shell', () => {
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
     await flushRecalc();
 
-    // The busiest cell (Tue 11:00) carries its value in the hover title.
+    // The busiest cell (Tue 11:00) wires its value into the styled tooltip.
     const peak = document.querySelector('.analytics-heat-cell--peak');
-    const title = peak?.getAttribute('title') ?? '';
-    expect(title).toContain('Tue 11:00');
-    expect(title).toContain('4 orders');
-    expect(title).toMatch(/\$/);
+    const tip = peak?.getAttribute('data-tooltip-content') ?? '';
+    expect(tip).toContain('Tue 11:00');
+    expect(tip).toContain('4 orders');
+    expect(tip).toMatch(/\$/);
 
     // A zero-activity cell keeps the label-only tooltip (no $0 / 0 orders noise).
     const firstCell = document.querySelectorAll('.analytics-heat-cell')[0] as HTMLElement | undefined;
-    expect(firstCell?.getAttribute('title') ?? '').not.toContain('orders');
+    expect(firstCell?.getAttribute('data-tooltip-content') ?? '').not.toContain('orders');
   });
 
   it('renders designed content in the non-heatmap cards', async () => {

@@ -14,6 +14,7 @@ import { minorUnitExponent } from '@/types/domain';
 import { animDuration } from '@/utils/animation';
 import { l10nErrorMessage } from '@/utils/app-error';
 import { downloadCsv } from '@/utils/export-csv';
+import Tooltip from '@/frontend/shell/Tooltip';
 import { AnalyticsCardContent, ExportCsvButton } from './AnalyticsCardContent';
 import { analyticsDataCache, analyticsQueryKey, clearAnalyticsCache, cardQueryKey } from './analytics-cache';
 import {
@@ -791,15 +792,21 @@ const [paletteOpen, setPaletteOpen] = useState(false);
     const cell = heatCells.get(key);
     const isPeak = peakKey !== null && key === peakKey;
     return (
-      <div
+      <Tooltip
         key={opts?.reactKey ?? key}
-        className={`analytics-heat-cell${isPeak ? ' analytics-heat-cell--peak' : ''}`}
-        data-intensity={cell?.level ?? 0}
-        title={heatCellTooltip(label, cell)}
+        content={heatCellTooltip(label, cell)}
+        position="top"
+        portal
+        showDelay={0}
       >
-        <div className="analytics-heat-block" />
-        {opts?.showLabel !== undefined && <span className="analytics-heat-label">{opts.showLabel}</span>}
-      </div>
+        <div
+          className={`analytics-heat-cell${isPeak ? ' analytics-heat-cell--peak' : ''}`}
+          data-intensity={cell?.level ?? 0}
+        >
+          <div className="analytics-heat-block" />
+          {opts?.showLabel !== undefined && <span className="analytics-heat-label">{opts.showLabel}</span>}
+        </div>
+      </Tooltip>
     );
   };
 

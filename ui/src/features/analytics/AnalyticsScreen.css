@@ -1390,6 +1390,14 @@
   outline-offset: 1px;
 }
 
+/* The shared Tooltip wrapper is display:flex; width:100% (built for
+   full-width controls). Inside the dense heatmap it must not introduce a
+   layout box — portal-mode tooltips key off the trigger cell's own rect, so
+   `display: contents` keeps the weekly/calendar/yearly grids intact. */
+.analytics-heatmap .tooltip-wrapper {
+  display: contents;
+}
+
 /* Heatmap intensity scale legend */
 .analytics-heat-scale {
   display: flex;
