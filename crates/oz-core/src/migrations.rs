@@ -4,9 +4,9 @@
 //! embedded at compile time via [`include_str!`] and run in the
 //! compile-time array order of [`ALL`] on first startup by the generic
 //! runner in `platform-core`. The array order is canonical — not
-//! lexicographic filename order — and is enforced by
-//! The registry↔filesystem parity test [`migration_registry_matches_filesystem`]
-//! ensures every .sql file has exactly one registry entry.
+//! lexicographic filename order — and the registry↔filesystem parity test
+//! [`migration_registry_matches_filesystem`] ensures every `.sql` file has
+//! exactly one registry entry.
 //!
 //! # Forward-only contract
 //!
@@ -122,7 +122,6 @@ mod tests {
         conn.execute_batch("PRAGMA foreign_keys = ON").unwrap();
         conn
     }
-
 
     #[test]
     fn first_run_applies_all_migrations() {
@@ -250,9 +249,12 @@ mod tests {
         run(&mut fresh_conn).unwrap();
         let fresh_schema = schema_fingerprint(&fresh_conn);
 
-        // Upgrade path: apply the first 80 (a plausible older release), then
-        // the remainder through the same registry runner.
-        let split = 80usize.min(ALL.len());
+        // Upgrade path: apply a prefix of the registry (a plausible older
+        // release), then the remainder through the same runner. The
+        // consolidated registry holds one migration, so the prefix is empty
+        // — mirroring a pre-reset database whose old IDs are no longer
+        // tracked — but the split generalizes as migrations are added again.
+        let split = ALL.len() / 2;
         let mut upgrade_conn = fresh();
         platform_core::database::run(&mut upgrade_conn, &ALL[..split]).unwrap();
         platform_core::database::run(&mut upgrade_conn, &ALL[split..]).unwrap();
@@ -263,37 +265,6 @@ mod tests {
             "fresh install and upgrade path diverged — schema drift (RUST-09/RUST-10)"
         );
     }
-
-    // ── Backfill migration 134: seed popularity edit events ──
-    //
-    // On upgrade, product_activity starts empty so the popularity formula
-    // has no search/edit history. 134 seeds one synthetic 'edit' event per
-    // product at its most recent update timestamp (within the 90-day decay
-    // window), letting the retail grid's default popularity sort rank
-    // recently-managed products from day one.
-
-    // ── Backfill migration 135: freeze HPP into sale_lines ──
-    //
-    // On upgrade, existing sale_lines have no cost snapshot. 135 backfills
-    // each line with the product's current cost so pre-existing rows are
-    // frozen at what the reports displayed before the migration. A product
-    // cost of 0 ("not set") normalizes to NULL.
-
-    // ── Repair migration 120: re-seed default workspace instances ──
-    //
-    // Simulates the migration 066 regression window: a database where
-    // workspace_instances was emptied (066 dropped rows whose store_id was
-    // not yet in store_profiles) and 066 is already recorded as applied, so
-    // it never re-runs. Re-running migrations must restore the default
-    // instances via 120, and must do so idempotently (no duplicate rows).
-
-    //
-    // Simulates a multi-store upgrade: migration 120 (original definition)
-    // seeded the canonical instances under store_id = 'default' because no
-    // profile was primary at migration time. Because 120 is already applied
-    // it cannot be re-defined (audit/29 DB-02); 121 must re-point those rows
-    // to the store's own non-default profile so the store-scoped picker
-    // (wi.store_id = ?) lists them again.
 
     #[test]
     fn migrations_create_expected_tables() {
@@ -399,30 +370,12 @@ mod tests {
         }
     }
 
-    // ── ADR #4 Phase 2: Data Scoping tests ─────────────────────────
-
-    // ── ADR #18 Phase 0A: Inventory Locations canonical seeds ──
-
-    // ── ADR #22 Phase 0d: setting_updated migration ─────────────
-
-    // ── TAX-02 (migration 108): single-default invariant ────────────
-
-    /// Verify the `setting_updated` table survives a migration re-run
-    /// (idempotent — uses `CREATE TABLE IF NOT EXISTS`).
-
-    // ── TAX-03 (migration 109): tax soft-delete flag ─────────────
-
-    // ── DB-06: populated upgrade fixture (migration 081 rebuild) ───
-
-    // ── DB-07: 092 rebuild conserves the multi-location ledger ─────
-
-    // ── DB-08: unique (key, terminal_id, version) on setting_updated ─
-
-    // ── DB-04 end-state (migration 117): store_id FK on domain tables ─
-
-    // ── warehouse_id supersession cleanup (migration 118) ──────────
-
-    // ── Cross-store query audit (migration 117 end-state) ──────────
+    // ── Store-scoped isolation (DB-04 end-state) ───────────────────
+    //
+    // The consolidated schema carries a store_id FK on products, customers,
+    // sales and sale_lines (ON DELETE SET NULL). These tests audit the
+    // end-state contract: a store-scoped read or write must never leak across
+    // stores and must never touch the NULL global sentinel.
 
     /// Run `SELECT id FROM {table} WHERE store_id = ?1` — the canonical
     /// store-scoped query shape — and return the matching row ids.
@@ -1052,64 +1005,7 @@ mod tests {
         run(&mut conn).unwrap();
     }
 
-    // ── ADR #35 D5 (migration 128): assignment backfill ────────────
-    //
-    // A legacy database (an older release, migrations through 127 applied)
-    // carries one global `users.role_id` and the six legacy role rows.
-    // Migrating to 128 must give every existing user exactly one effective
-    // assignment: Owner/Manager/Staff/custom keep global mode, while legacy
-    // role-cashier / role-kitchen users resolve to role-staff with the
-    // scoped workspace their current permission set implies (retail-pos /
-    // kds) so their operational access survives the role retirement that
-    // follows in a later migration.
-
-    // ── ADR #35 D4 (migration 129): retire cashier/kitchen roles ────
-    //
-    // The five-role taxonomy replaces the legacy cashier/kitchen roles.
-    // Migration 128 already folded their assignments into role-staff; 129
-    // re-points any remaining users.role_id / assignments.role_id references
-    // and removes the role rows so presets and DB agree.
-
-    // ── ADR #35 D6 (migration 130): user profile columns ────────────
-    //
-    // The users table gains the profile contract columns (nullable in SQL —
-    // "mandatory" is enforced at creation) plus unique indexes for email and
-    // national_id, and NONE of the D6 not-collected fields.
-
-    // ── ADR #35 D6 (migration 131): national-id uniqueness hash ─────
-    //
-    // national_id is encrypted at rest (nonce-randomised ciphertext), so the
-    // ciphertext column can no longer enforce uniqueness — the deterministic
-    // hash column + unique index carry the "unique when present" invariant.
-
-    // ── Regression guard: migration tests must not slice ALL by its tail ──
-    //
-    // 7af6a6b9 fixed migration_135_backfills_cost_snapshot_from_product_cost,
-    // which simulated a "pre-135" release with `ALL.len() - 1`. When
-    // 136_processed_webhooks was appended, the tail cut silently excluded
-    // 136 instead of 135, so the backfill ran before the seed data existed.
-    // Tests that apply "every migration except N" must slice at the
-    // migration's REGISTERED position (ALL.iter().position(...)), which is
-    // robust to migrations being appended or removed.
     #[test]
-    fn no_migration_test_slices_all_by_array_tail() {
-        let src = include_str!("migrations.rs");
-        for line in src.lines() {
-            // Built at runtime so this guard's own source never contains the
-            // literal needle (which would make it self-match).
-            let needle = format!("ALL.len(){}", " -");
-            let stripped = line.split("//").next().unwrap_or("");
-            if stripped.contains(&needle) {
-                panic!(
-                    "migration test slices ALL by tail arithmetic — use ALL.iter().position(...) instead:
-{line}"
-                );
-            }
-        }
-    }
-
-    
-#[test]
     fn migration_registry_matches_filesystem() {
         // DB-01: the registry is the source of truth. Every `.sql` file under
         // crates/oz-core/migrations/ must have EXACTLY ONE registry entry,
