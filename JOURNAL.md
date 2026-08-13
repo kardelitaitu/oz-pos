@@ -4950,3 +4950,13 @@ Two regression pins:
 **Tests:** analytics-data 46/46 (+1) · AnalyticsScreen 66/66 · full UI suite 292/292, 5114.
 
 **Risks / follow-ups:** with this, the label-collision class is closed for all four granularities on every trend card. Remaining open analytics items: heatmap yearly band unification; the collaborator's `dev-mock/tauri-api.ts` change remains uncommitted.
+## 2026-08-13 — Yearly heatmap merged the 5th Monday's week into the 4th band (TDD)
+
+**Problem:** `yearlyWeekIntensities` derived the year heatmap's week band with day-of-month arithmetic capped at 3 (`Math.min(3, Math.floor((day−1)/7))`). Any month with five Mondays (Mar/Jun/Aug/Nov 2026) silently merged two DISTINCT weeks into one cell `month:3` — the 5th Monday's week (e.g. Mon Aug 31, covering Aug 31–Sep 6) collapsed into the 4th week's cell, losing its revenue as a separate reading. This was the fragility the week-convention slice flagged: the banding depended on `week_start`'s day rather than the app's Monday-first week structure (`weekStartKey`).
+
+**Solution (TDD, Red→Green):** two failing tests first — (1) `yearlyWeekIntensities` with March 2026's 23rd AND 30th Mondays must produce BOTH `2:3` and `2:4` (watched `2:4` fail, merged into `2:3`); (2) the screen test's yearly grid count becomes dynamic (`mondayWeeksInMonth` × 12) instead of hard-coded 48. Green: the band is now the week's ordinal among the month's Mondays (0-based), computed with the same `mondayFirst` idiom the rest of the module uses — identical to the old formula for every 4-Monday month, and the 5th Monday naturally gets band 4. The yearly grid renders `mondayWeeksInMonth(currentYear, mi)` cells per column (4–5), mirroring how the monthly calendar already varies its row count by month. Comment/docs updated (cell-keys contract + renderer comment). One unused variable caught by tsc during Verify.
+
+**Commits:** (see below — fix + journal)
+**Tests:** analytics-data 47/47 (+1) · AnalyticsScreen 66/66 (yearly count now computed via `mondayWeeksInMonth`) · full UI suite 292/292, 5115.
+
+**Risks / follow-ups:** the yearly heatmap's 12 columns are still generic current-year months — a multi-year custom range renders the current year's band structure with the range's data (pre-existing quirk, unchanged). The collaborator's `dev-mock/tauri-api.ts` change remains uncommitted.
