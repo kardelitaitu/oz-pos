@@ -25,9 +25,9 @@ import './OfflineQueueScreen.css';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-function formatDate(iso: string): string {
+function formatDate(iso: string, locale: string): string {
   const d = new Date(iso);
-  return d.toLocaleDateString(undefined, {
+  return d.toLocaleDateString(locale, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -88,6 +88,8 @@ function formatRelativeTime(iso: string | null): { fluentKey: string; fluentArgs
 /** Offline queue screen — view pending, synced, and failed offline operations with retry and delete capabilities. */
 export default function OfflineQueueScreen() {
   const { l10n } = useLocalization();
+  // Dates follow the active Fluent locale (not the browser default).
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
   const [items, setItems] = useState<OfflineQueueItemDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -358,7 +360,7 @@ export default function OfflineQueueScreen() {
           {lastPolledAt && (
             <span className="offline-queue-stale-time">
               {requiredLocalized(l10n, 'offline-queue-last-refreshed', {
-                time: lastPolledAt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
+                time: lastPolledAt.toLocaleTimeString(numLocale, { hour: '2-digit', minute: '2-digit' }),
               })}
             </span>
           )}
@@ -533,9 +535,9 @@ export default function OfflineQueueScreen() {
                       </Localized>
                     )}
                   </td>
-                  <td className="offline-queue-cell-created">{formatDate(item.createdAt)}</td>
+                  <td className="offline-queue-cell-created">{formatDate(item.createdAt, numLocale)}</td>
                   <td className="offline-queue-cell-synced">
-                    {item.syncedAt ? formatDate(item.syncedAt) : (
+                    {item.syncedAt ? formatDate(item.syncedAt, numLocale) : (
                       <Localized id="offline-queue-none">
                         <span className="offline-queue-cell-none">—</span>
                       </Localized>

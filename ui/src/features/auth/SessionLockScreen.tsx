@@ -206,8 +206,10 @@ export default function SessionLockScreen({
     [handleDigit, handleBackspace],
   );
 
-  const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const dateStr = time.toLocaleDateString(undefined, {
+  // Clock follows the active Fluent locale (not the browser default).
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
+  const timeStr = time.toLocaleTimeString(numLocale, { hour: '2-digit', minute: '2-digit' });
+  const dateStr = time.toLocaleDateString(numLocale, {
     weekday: 'long',
     month: 'long',
     day: 'numeric',

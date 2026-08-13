@@ -206,8 +206,13 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 className="retail-edit-input"
                 value={priceMinor}
                 onChange={(e) => {
+                  // Whole number only — ignore fractional in-progress input
+                  // instead of silently truncating it via parseInt.
                   const v = e.target.value;
-                  setPriceMinor(v === '' ? '' : Math.max(0, parseInt(v, 10) || 0));
+                  const n = Number(v);
+                  if (v === '' || (Number.isInteger(n) && n >= 0)) {
+                    setPriceMinor(v === '' ? '' : n);
+                  }
                 }}
                 required
               />
@@ -227,8 +232,13 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 className="retail-edit-input"
                 value={stockQty}
                 onChange={(e) => {
+                  // Whole number only — ignore fractional in-progress input
+                  // instead of silently truncating it via parseInt.
                   const v = e.target.value;
-                  setStockQty(v === '' ? '' : Math.max(0, parseInt(v, 10) || 0));
+                  const n = Number(v);
+                  if (v === '' || (Number.isInteger(n) && n >= 0)) {
+                    setStockQty(v === '' ? '' : n);
+                  }
                 }}
                 required
               />
@@ -250,8 +260,13 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 className="retail-edit-input"
                 value={lowThreshold}
                 onChange={(e) => {
+                  // Whole number only — ignore fractional in-progress input
+                  // instead of silently truncating it via parseInt.
                   const v = e.target.value;
-                  setLowThreshold(v === '' ? '' : Math.max(0, parseInt(v, 10) || 0));
+                  const n = Number(v);
+                  if (v === '' || (Number.isInteger(n) && n >= 0)) {
+                    setLowThreshold(v === '' ? '' : n);
+                  }
                 }}
                 required
               />
@@ -271,8 +286,13 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 className="retail-edit-input"
                 value={highThreshold}
                 onChange={(e) => {
+                  // Whole number only — ignore fractional in-progress input
+                  // instead of silently truncating it via parseInt.
                   const v = e.target.value;
-                  setHighThreshold(v === '' ? '' : Math.max(0, parseInt(v, 10) || 0));
+                  const n = Number(v);
+                  if (v === '' || (Number.isInteger(n) && n >= 0)) {
+                    setHighThreshold(v === '' ? '' : n);
+                  }
                 }}
                 required
               />
@@ -296,8 +316,13 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
                 className="retail-edit-input"
                 value={costMinor}
                 onChange={(e) => {
+                  // Whole number only — ignore fractional in-progress input
+                  // instead of silently truncating it via parseInt.
                   const v = e.target.value;
-                  setCostMinor(v === '' ? '' : Math.max(0, parseInt(v, 10) || 0));
+                  const n = Number(v);
+                  if (v === '' || (Number.isInteger(n) && n >= 0)) {
+                    setCostMinor(v === '' ? '' : n);
+                  }
                 }}
               />
             </div>

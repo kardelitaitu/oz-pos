@@ -170,6 +170,8 @@ export interface RetailModalsProps {
 /** All retail POS modals and overlays — each with proper dialog semantics, focus trapping, and exit animations. */
 export default function RetailModals(props: RetailModalsProps) {
   const { l10n } = useLocalization();
+  // Dates follow the active Fluent locale (not the browser default).
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
   const {
     shift,
     discount,
@@ -276,7 +278,7 @@ export default function RetailModals(props: RetailModalsProps) {
             <h3>{l10n.getString('pos-close-shift-title')}</h3>
             {shift.closeShiftError && <div className="retail-shift-error">{shift.closeShiftError}</div>}
             <div className="retail-shift-opened-info">
-              {l10n.getString('pos-close-shift-opened')}: {shift.activeShift ? new Date(shift.activeShift.openedAt).toLocaleString() : ''}
+              {l10n.getString('pos-close-shift-opened')}: {shift.activeShift ? new Date(shift.activeShift.openedAt).toLocaleString(numLocale) : ''}
             </div>
             <label htmlFor="retail-closing">{l10n.getString('pos-close-shift-counted-label')}</label>
             <input
@@ -373,7 +375,7 @@ export default function RetailModals(props: RetailModalsProps) {
                         {formatMoney({ minor_units: c.totalMinor, currency: c.currency })}
                       </td>
                       <td className="retail-credit-td--center">
-                        {new Date(c.createdAt).toLocaleDateString()}
+                        {new Date(c.createdAt).toLocaleDateString(numLocale)}
                       </td>
                       <td>
                         <button

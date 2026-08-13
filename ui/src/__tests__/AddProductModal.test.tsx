@@ -63,6 +63,29 @@ describe('AddProductModal', () => {
     expect(screen.getByPlaceholderText('e.g. Logitech G Pro X Wireless Mouse')).toBeInTheDocument();
   });
 
+  it('rejects fractional price input instead of truncating it', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AddProductModal
+        categories={sampleCategories}
+        isOpen={true}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+      />,
+      { wrapper },
+    );
+
+    // Price and cost both default to 0 (ADR #36), so disambiguate by order.
+    const priceInput = screen.getAllByDisplayValue('0')[0] as HTMLInputElement;
+    await user.clear(priceInput);
+    await user.type(priceInput, '1850.5');
+
+    // Fractional keystrokes are ignored — the field must not silently
+    // truncate 1850.5 to 1850 via parseInt.
+    expect(priceInput.value).toBe('1850');
+  });
+
   it('creates new product when form is submitted', async () => {
     const user = userEvent.setup();
     const handleSave = vi.fn();
