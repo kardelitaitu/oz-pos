@@ -5,7 +5,7 @@
 //!         + inline custom date range
 //! Main:   smart card grid — cards adapt to retail vs restaurant
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type UIEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
@@ -365,6 +365,9 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   const [, setRecalcTick] = useState(0);
   const expandedBodyRef = useRef<HTMLDivElement | null>(null);
   const mainRef = useRef<HTMLElement | null>(null);
+  const scrollRafRef = useRef<number | null>(null);
+  const cardMenuRef = useRef<HTMLDivElement | null>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   // Date ranges are derived per card from its effective granularity via
   // cardRange, so a card that remaps granularity gets the matching window
@@ -579,6 +582,38 @@ const [paletteOpen, setPaletteOpen] = useState(false);
       return next;
     });
   };
+
+  /** Close the per-card options menu and restore focus to its trigger. */
+  const closeCardMenu = useCallback(() => {
+    setMenuCardId(null);
+    menuTriggerRef.current?.focus();
+  }, []);
+
+  // Focus the first enabled menuitem when a card menu opens (the menu is
+  // portaled to document.body, so it never inherits focus from the trigger).
+  useEffect(() => {
+    if (!menuCardId) return;
+    const first = cardMenuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not([disabled])');
+    first?.focus();
+  }, [menuCardId]);
+
+  // Throttle the grid's scroll handler to one state commit per animation
+  // frame — raw scroll events otherwise re-render the whole screen (and
+  // every card's query hook) many times per frame.
+  const handleMainScroll = (e: UIEvent<HTMLElement>) => {
+    const el = e.currentTarget;
+    if (scrollRafRef.current !== null) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      setShowScrollTop(el.scrollTop > 240);
+      const max = el.scrollHeight - el.clientHeight;
+      setScrollProgress(max > 0 ? Math.min(1, el.scrollTop / max) : 0);
+    });
+  };
+
+  useEffect(() => () => {
+    if (scrollRafRef.current !== null) cancelAnimationFrame(scrollRafRef.current);
+  }, []);
 
   const isDefaultOrder = JSON.stringify(cardOrder) === JSON.stringify(defaultOrder);
 
@@ -1217,12 +1252,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
       <main
         className="analytics-main"
         ref={mainRef}
-        onScroll={(e) => {
-          const el = e.currentTarget;
-          setShowScrollTop(el.scrollTop > 240);
-          const max = el.scrollHeight - el.clientHeight;
-          setScrollProgress(max > 0 ? Math.min(1, el.scrollTop / max) : 0);
-        }}
+        onScroll={handleMainScroll}
       >
         {/* View status — card count + workspace + time view */}
         <div className="analytics-status">
@@ -1380,7 +1410,14 @@ const [paletteOpen, setPaletteOpen] = useState(false);
               role="group"
               draggable={!isExpanded}
               aria-labelledby={`analytics-card-title-${cid}`}
-              onDragStart={(e) => { setDragId(cid); if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'; }}
+              onDragStart={(e) => {
+                setDragId(cid);
+                if (e.dataTransfer) {
+                  e.dataTransfer.effectAllowed = 'move';
+                  // Firefox refuses to begin a drag without setData.
+                  e.dataTransfer.setData('text/plain', cid);
+                }
+              }}
               onDragOver={(e) => { e.preventDefault(); if (overId !== cid) setOverId(cid); }}
               onDragLeave={() => setOverId((o) => (o === cid ? null : o))}
               onDrop={(e) => { e.preventDefault(); reorderCard(dragId ?? '', cid); setDragId(null); setOverId(null); }}
@@ -1456,11 +1493,13 @@ const [paletteOpen, setPaletteOpen] = useState(false);
                     onClick={(e) => {
                       e.stopPropagation();
                       if (menuOpen) {
-                        setMenuCardId(null);
+                        closeCardMenu();
                       } else {
                         // Anchor the (portaled) menu to the trigger so it
-                        // escapes the card's overflow clipping.
+                        // escapes the card's overflow clipping, and remember
+                        // the trigger so focus can be restored on close.
                         const rect = e.currentTarget.getBoundingClientRect();
+                        menuTriggerRef.current = e.currentTarget;
                         setMenuAnchor({ bottom: rect.bottom, right: window.innerWidth - rect.right });
                         setMenuCardId(cid);
                       }
@@ -1478,41 +1517,69 @@ const [paletteOpen, setPaletteOpen] = useState(false);
                   </button>
                   {menuOpen && createPortal(
                     <div
+                      ref={cardMenuRef}
                       className="analytics-card-menu"
                       role="menu"
+                      tabIndex={-1}
                       aria-label={l10n.getString('analytics-card-menu-aria')}
                       style={{
                         position: 'fixed',
                         top: (menuAnchor?.bottom ?? 0) + 4,
                         right: menuAnchor?.right ?? 0,
                       }}
+                      onKeyDown={(e) => {
+                        const items = Array.from(
+                          e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not([disabled])'),
+                        );
+                        if (e.key === 'Escape') {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          closeCardMenu();
+                          return;
+                        }
+                        if (items.length === 0) return;
+                        const idx = items.indexOf(document.activeElement as HTMLButtonElement);
+                        if (e.key === 'ArrowDown') {
+                          e.preventDefault();
+                          items[(idx + 1) % items.length]?.focus();
+                        } else if (e.key === 'ArrowUp') {
+                          e.preventDefault();
+                          items[(idx - 1 + items.length) % items.length]?.focus();
+                        } else if (e.key === 'Home') {
+                          e.preventDefault();
+                          items[0]?.focus();
+                        } else if (e.key === 'End') {
+                          e.preventDefault();
+                          items[items.length - 1]?.focus();
+                        }
+                      }}
                     >
                       <button type="button" role="menuitem" disabled={isFirst}
-                        onClick={() => { moveCard(cid, 'up'); setMenuCardId(null); }}>
+                        onClick={() => { moveCard(cid, 'up'); closeCardMenu(); }}>
                         {l10n.getString('analytics-menu-move-up')}
                       </button>
                       <button type="button" role="menuitem" disabled={isLast}
-                        onClick={() => { moveCard(cid, 'down'); setMenuCardId(null); }}>
+                        onClick={() => { moveCard(cid, 'down'); closeCardMenu(); }}>
                         {l10n.getString('analytics-menu-move-down')}
                       </button>
                       <button type="button" role="menuitem" disabled={isFirst}
-                        onClick={() => { moveCard(cid, 'top'); setMenuCardId(null); }}>
+                        onClick={() => { moveCard(cid, 'top'); closeCardMenu(); }}>
                         {l10n.getString('analytics-menu-move-top')}
                       </button>
                       <button type="button" role="menuitem" disabled={isLast}
-                        onClick={() => { moveCard(cid, 'bottom'); setMenuCardId(null); }}>
+                        onClick={() => { moveCard(cid, 'bottom'); closeCardMenu(); }}>
                         {l10n.getString('analytics-menu-move-bottom')}
                       </button>
                       <div className="analytics-card-menu-sep" role="separator" />
                       <button type="button" role="menuitem"
                         onClick={() => {
                           setExpandedKey((current) => nextExpandedKey(current, cid));
-                          setMenuCardId(null);
+                          closeCardMenu();
                         }}>
                         {l10n.getString(isExpanded ? 'analytics-card-restore-aria' : 'analytics-card-expand-aria')}
                       </button>
                       <button type="button" role="menuitem"
-                        onClick={() => { toggleCardCollapsed(cid); setMenuCardId(null); }}>
+                        onClick={() => { toggleCardCollapsed(cid); closeCardMenu(); }}>
                         {l10n.getString(isCollapsed ? 'analytics-menu-show-card' : 'analytics-menu-collapse-card')}
                       </button>
                     </div>,
@@ -1606,7 +1673,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
           className="analytics-menu-backdrop"
           role="presentation"
           tabIndex={-1}
-          onClick={(e) => { if (e.target === e.currentTarget) setMenuCardId(null); }}
+          onClick={(e) => { if (e.target === e.currentTarget) closeCardMenu(); }}
         />
       )}
 

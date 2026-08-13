@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import { withFluent, withFluentLocale } from '@/locales/test-utils';
@@ -729,7 +729,7 @@ describe('AnalyticsScreen layout shell', () => {
     expect(screen.getByText('Layout saved')).toBeTruthy();
   });
 
-  it('sits flush below the menu and fills as the main area scrolls', () => {
+  it('sits flush below the menu and fills as the main area scrolls', async () => {
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     // The bar is a sibling between the menu and the main area — directly
@@ -745,10 +745,10 @@ describe('AnalyticsScreen layout shell', () => {
     Object.defineProperty(main, 'clientHeight', { value: 600, configurable: true });
     Object.defineProperty(main, 'scrollTop', { value: 500, configurable: true });
     fireEvent.scroll(main);
-    expect(bar.style.width).toBe('50%');
+    await waitFor(() => expect(bar.style.width).toBe('50%'));
   });
 
-  it('shows the scroll-to-top button after scrolling the main area', () => {
+  it('shows the scroll-to-top button after scrolling the main area', async () => {
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     const main = document.querySelector('.analytics-main') as HTMLElement;
@@ -757,12 +757,12 @@ describe('AnalyticsScreen layout shell', () => {
     // Scroll the main area down past the threshold
     Object.defineProperty(main, 'scrollTop', { value: 400, configurable: true });
     fireEvent.scroll(main);
-    expect(screen.getByRole('button', { name: 'Back to top' })).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Back to top' })).toBeTruthy());
 
     // Scroll back up — button hides
     Object.defineProperty(main, 'scrollTop', { value: 0, configurable: true });
     fireEvent.scroll(main);
-    expect(screen.queryByRole('button', { name: 'Back to top' })).toBeNull();
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Back to top' })).toBeNull());
   });
 
   it('renders a smart heatmap that changes buckets with granularity', async () => {
