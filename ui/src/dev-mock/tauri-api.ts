@@ -535,8 +535,43 @@ function generateRandomKdsOrder(): { order: Record<string, unknown>; lines: Arra
     const item = pickRandom(KDS_MOCK_MENU);
     if (!picked.some(p => p.sku === item.sku)) picked.push(item);
   }
-  const itemCount = picked.length;
-  const itemsSummary = picked.map(item => `1x ${item.name}`).join(', ');
+  // Generate realistic quantities — beverages/sides often ordered in multiples
+  const lines: Array<Record<string, unknown>> = picked.map((item, i) => {
+    let qty = 1;
+    if (item.course === 'beverage') {
+      // Drinks: 55% ×1, 25% ×2, 15% ×3, 5% ×4
+      const r = Math.random();
+      if (r > 0.95) qty = 4;
+      else if (r > 0.80) qty = 3;
+      else if (r > 0.55) qty = 2;
+    } else if (item.course === 'side') {
+      // Sides: 55% ×1, 30% ×2, 15% ×3
+      const r = Math.random();
+      if (r > 0.85) qty = 3;
+      else if (r > 0.55) qty = 2;
+    } else {
+      // Mains/desserts: mostly ×1, rarely ×2
+      if (Math.random() > 0.85) qty = 2;
+    }
+    return {
+      id: `kds-line-auto-${orderId}-${i}`,
+      kds_order_id: orderId,
+      sku: item.sku,
+      display_name: item.name,
+      qty,
+      course: item.course,
+      modifiers: [],
+      line_position: i + 1,
+      item_status: 'pending',
+      started_at: null,
+      ready_at: null,
+      served_at: null,
+      created_at: now,
+    };
+  });
+
+  const itemCount = lines.reduce((sum, l) => sum + (l['qty'] as number), 0);
+  const itemsSummary = lines.map(l => `${l['qty']}x ${l['display_name']}`).join(', ');
   const kdsTablesWithNull: (string | null)[] = [...KDS_TABLES, null];
   const tableNumber = pickRandom(kdsTablesWithNull);
   const orderType = tableNumber ? 'dine_in' : 'takeaway';
@@ -553,22 +588,6 @@ function generateRandomKdsOrder(): { order: Record<string, unknown>; lines: Arra
     notes: pickRandom(KDS_NOTES),
     store_id: 'store-1',
   };
-
-  const lines: Array<Record<string, unknown>> = picked.map((item, i) => ({
-    id: `kds-line-auto-${orderId}-${i}`,
-    kds_order_id: orderId,
-    sku: item.sku,
-    display_name: item.name,
-    qty: 1,
-    course: item.course,
-    modifiers: [],
-    line_position: i + 1,
-    item_status: 'pending',
-    started_at: null,
-    ready_at: null,
-    served_at: null,
-    created_at: now,
-  }));
 
   return { order, lines };
 }

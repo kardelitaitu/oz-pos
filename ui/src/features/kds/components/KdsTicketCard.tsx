@@ -248,7 +248,10 @@ export const KdsTicketCard = memo(function KdsTicketCard({
                   <div className="kds-ticket-item-status-row">
                     <span className={`kds-ticket-item-status-dot kds-ticket-item-status-dot--${item.item_status}`} aria-hidden="true" />
                     <span className="kds-ticket-item-name">
-                      {item.qty > 1 ? `${item.display_name} x${item.qty}` : item.display_name}
+                      {item.display_name}
+                      {item.qty > 1 && (
+                        <span className="kds-ticket-item-qty">×{item.qty}</span>
+                      )}
                     </span>
                     <span className="kds-ticket-item-status-label">
                       {requiredLocalized(l10n, `kds-item-status-${item.item_status}`)}
