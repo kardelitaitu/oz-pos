@@ -4970,3 +4970,36 @@ Two regression pins:
 **Tests:** analytics-data 50/50 (+3) · AnalyticsScreen 66/66 · full UI suite 292/292, 5118.
 
 **Risks / follow-ups:** `HEAT_BUCKETS.monthly/weekly/yearly` entries are now dead (only `daily` is live) — a cosmetic cleanup for a future slice. The monthly heatmap still shows the CURRENT month's calendar regardless of the range (same class of quirk, pre-existing; the default monthly range is the current month so it's invisible there). The collaborator's `dev-mock/tauri-api.ts` work is now committed upstream (`a49d719b`).
+
+## 2026-08-13 — Analytics UX pass: granularity remap, custom auto-bucketing, full localization
+
+**Problem:** several analytics UX gaps accumulated. The `Daily` selector button was redundant — every card mapped `daily → weekly`, so Daily and Weekly rendered identical data. Custom ranges rendered one point per day (a 365-day range was an unreadable 365-point wall), and the heatmap fell back to a dead 7-cell weekday strip on custom. The heatmap still baked English day/month/quarter labels and tooltips into JSX, and unit suffixes (`134m`, `12d`) and card accessible names were hardcoded English — violations of the no-hardcoded-English rule.
+
+**Solution:** removed `daily` from `GRANULARITIES` (weekly/monthly/yearly/custom remain) and re-mapped the keyboard shortcuts to 1–4. Added a per-card `granularityMap` + exported `cardGranularity`/`cardRange` so each card's loader, cache key, AND date window follow its *effective* granularity (not the selector's). Added `spanDays`/`bucketGranularity` so custom ranges auto-bucket by span — ≤31d → daily, 32–180d → weekly, >180d → monthly — threaded through revenue/AOV/tables/basket/inventory; the heatmap remaps `custom → weekly` for the 7×24 grid while `cardRange` preserves the user-picked dates. Localized the heatmap via Fluent: day labels reuse `reports.ftl` `day-*` keys, new `analytics-month-*` abbreviations, and `analytics-heatmap-{hour,day,week}-tooltip` messages; `yearlyHeatmapColumns` now returns structured keys (no baked English `label`). Unit suffixes (`analytics-unit-minutes`/`-days`, plural-aware) and card `aria-label`s went through `l10n`. Also made the Low Stock card 2×1 with percentage-based gutters.
+
+**Commits:** `a09b52f9` (plus follow-up slices) — see git log.
+**Tests:** analytics-data 56/56 · AnalyticsScreen 91/91 · full UI suite 292/292, 5149.
+
+**Risks / follow-ups:** with `daily → weekly` everywhere the Daily/Weekly distinction is gone entirely; only custom short ranges still render per-day. The `HEAT_BUCKETS` English arrays and the dead `analytics-granularity-daily` key were removed in the same pass (closing the prior slice's dead-code follow-up).
+
+## 2026-08-13 — Per-card CSV export across the analytics grid
+
+**Problem:** no analytics card could export its data — the `analytics-export-csv` Fluent keys existed but were dead, and there was no export affordance anywhere on the grid.
+
+**Solution:** added a shared `ExportCsvButton` and per-card export helpers (`exportStaffCsv`, `exportTopItemsCsv`, `exportPaymentsCsv`, `exportCategoryCsv`, `exportTrendCsv`, `exportCustomersCsv`, `exportDiscountsCsv`, `exportVoidedItemsCsv`, `exportLowStockCsv`, `exportOccupancyCsv`, `exportHeatmapCsv`) wired onto every card, all localized (column headers + aria labels in en/id) via the shared `downloadCsv` util. The heatmap exports its underlying revenue rows shaped by its effective granularity (7×24 hourly grid / per-day / per-Monday-week). The waitstaff card got a distinct label (`Export waitstaff as CSV`) and `waitstaff-` filename so it no longer shares the staff card's accessible name in restaurant view. Fixed the export button's hardcoded `11px` (theme-token violation) by switching to design tokens.
+
+**Commits:** `6181cf1f` … `51a73590` (one per card group) — see git log.
+**Tests:** AnalyticsScreen 91/91 (each export's columns + rows asserted; waitstaff label/filename distinctness).
+
+**Risks / follow-ups:** none outstanding.
+
+## 2026-08-13 — Empty states for cards with no data
+
+**Problem:** a zero-row query rendered a blank ranked list/chart. The Low Stock card was the worst case — an empty alert list with three zero KPI tiles and no reassurance that the store is actually fine. The heatmap rendered an all-zero grid with no hint that the range simply had no sales.
+
+**Solution:** added a muted `CardEmpty` placeholder (`.analytics-card-empty`, `role="status"`) and guards in ten cards: low-stock shows a specific "all items sufficiently stocked" message, the other list/breakdown cards (staff, waitstaff, top-items, discounts, refunds, voids, customers, payments, category) a generic no-data message, and the heatmap a "no sales recorded in this range" message instead of the zero-filled grid.
+
+**Commits:** `7009411c`, `02ac0a2c`.
+**Tests:** AnalyticsScreen 91/91 (empty-state coverage for low-stock, generic, and heatmap).
+
+**Risks / follow-ups:** none outstanding.
