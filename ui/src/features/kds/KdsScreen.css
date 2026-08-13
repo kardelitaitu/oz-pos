@@ -197,8 +197,8 @@
 .kds-ticket {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1_5);
-  padding: var(--space-4);
+  gap: var(--space-3);
+  padding: var(--space-5);
   background: var(--kds-ticket-bg);
   border: 1px solid var(--kds-ticket-border);
   border-radius: var(--radius-xl);
@@ -403,6 +403,21 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: var(--space-2);
+}
+
+.kds-ticket-item-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  padding: 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--kds-text);
+  background: var(--kds-column-bg);
+  border-radius: var(--radius-2xl);
 }
 
 .kds-ticket-id-group {
@@ -412,8 +427,8 @@
 }
 
 .kds-ticket-number {
-  font-size: var(--text-2xl);
-  font-weight: 800;
+  font-size: var(--text-xl);
+  font-weight: 700;
   color: var(--kds-ticket-number);
 }
 
@@ -427,13 +442,15 @@
 }
 
 .kds-ticket-time {
-  font-size: var(--text-base);
-  font-weight: 600;
-  color: var(--kds-subtle);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--kds-text);
   background: var(--kds-column-bg);
-  padding: var(--space-0_5) var(--space-2_5);
+  padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-3xl);
   flex-shrink: 0;
+  min-width: 5rem;
+  text-align: center;
 }
 
 .kds-ticket-time--green {
@@ -451,8 +468,9 @@
 
 .kds-ticket-actions {
   display: flex;
-  gap: var(--space-1_5);
+  gap: var(--space-2);
   align-self: flex-start;
+  margin-top: var(--space-2);
 }
 
 .kds-ticket-edit-btn,
@@ -460,8 +478,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-0_5) var(--space-2);
-  font-size: var(--text-xs);
+  min-height: 2rem;
+  min-width: 2rem;
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-sm);
   font-weight: 600;
   border-radius: var(--radius-md);
   cursor: pointer;
@@ -613,40 +633,48 @@
 .kds-ticket-line-items {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-3);
+  margin-top: var(--space-2);
 }
 
 .kds-ticket-course-group {
   display: flex;
   flex-direction: column;
-  gap: var(--space-0_5);
+  gap: var(--space-1);
 }
 
 .kds-ticket-course-group + .kds-ticket-course-group {
-  padding-top: var(--space-1_5);
-  border-top: 1px dashed var(--kds-ticket-border);
+  padding-top: var(--space-3);
+  margin-top: var(--space-2);
+  border-top: 2px solid var(--kds-ticket-border);
 }
 
 .kds-ticket-course-header {
-  display: inline-block;
-  font-size: var(--text-xs);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
   font-weight: 700;
   letter-spacing: var(--tracking-wider);
   text-transform: uppercase;
-  color: var(--kds-subtle);
-  padding: var(--space-0_25) var(--space-1_5);
+  color: var(--kds-text);
+  padding: var(--space-1) var(--space-3);
   background: var(--kds-column-bg);
+  border-left: 3px solid var(--color-accent);
   border-radius: var(--radius-sm);
   align-self: flex-start;
-  margin-bottom: var(--space-0_5);
+  margin-bottom: var(--space-2);
   user-select: none;
 }
 
 .kds-ticket-item-row {
   display: flex;
   flex-direction: column;
-  gap: var(--space-0_25);
-  padding-left: var(--space-0_5);
+  gap: var(--space-0_5);
+  padding: var(--space-1_5);
+  margin-bottom: var(--space-1);
+  background: var(--kds-column-bg);
+  border-radius: var(--radius-md);
 }
 
 /* Per-item status dot + label (TODO 3e) */
@@ -670,8 +698,8 @@
 
 .kds-ticket-item-status-dot {
   display: inline-block;
-  width: 8px;
-  height: 8px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -689,8 +717,8 @@
 }
 
 .kds-ticket-item-name {
-  font-size: var(--text-lg);
-  font-weight: 500;
+  font-size: var(--text-xl);
+  font-weight: 600;
   color: var(--kds-accent);
   line-height: 1.3;
 }

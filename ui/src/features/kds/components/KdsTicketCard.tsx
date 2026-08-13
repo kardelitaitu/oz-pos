@@ -197,6 +197,7 @@ export const KdsTicketCard = memo(function KdsTicketCard({
           {showTableNumber && order.table_number && (
             <span className="kds-ticket-table">{order.table_number}</span>
           )}
+          <span className="kds-ticket-item-count-badge">{order.item_count}</span>
         </span>
         <span className={`kds-ticket-time kds-ticket-time--${level}`}>{display}</span>
       </div>
