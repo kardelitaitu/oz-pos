@@ -82,10 +82,11 @@ export the PFX without a password, or verify the step succeeds in a
 | `KEY_PASSWORD` | ✅ (falls back to `KEYSTORE_PASSWORD`) | key password |
 | `KEY_ALIAS` | ✅ | key alias in the keystore |
 
-The workflow decodes the keystore to `apps/tablet-client/oz-pos.keystore` and
-passes the passwords via `TAURI_ANDROID_KEYSTORE_PASSWORD` /
-`TAURI_ANDROID_KEY_PASSWORD` / `TAURI_ANDROID_KEY_ALIAS` to
-`cargo tauri android build`. Without the keystore the APK/AAB build is not
+The workflow decodes the keystore into `apps/tablet-client/gen/android/` and
+writes `keystore.properties` (password / keyAlias / storeFile) from
+`KEYSTORE_PASSWORD` / `KEY_ALIAS` — the official Tauri v2 signing route
+consumed by the tracked `build.gradle.kts` `signingConfigs` block (the CLI
+has no keystore flags). Without the keystore the APK/AAB build is not
 signed.
 
 ### iOS (`ios.yml`)

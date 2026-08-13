@@ -57,9 +57,13 @@ Add these secrets to the repository (Settings → Secrets and variables → Acti
 | Secret Name | Value | Required |
 |-------------|-------|----------|
 | `ANDROID_KEYSTORE_BASE64` | Contents of `oz-pos-release.keystore.b64` | Yes |
-| `KEYSTORE_PASSWORD` | The `-storepass` value | Yes |
-| `KEY_PASSWORD` | The `-keypass` value (defaults to KEYSTORE_PASSWORD if same) | No |
+| `KEYSTORE_PASSWORD` | The `-storepass` value (also used as key password — the Tauri v2 `keystore.properties` route has a single `password` field for both; generate the keystore with matching `-storepass`/`-keypass`) | Yes |
 | `KEY_ALIAS` | The `-alias` value (e.g. `oz-pos-key`) | Yes |
+
+> The workflows write `keystore.properties` (password / keyAlias / storeFile) into
+> `apps/tablet-client/gen/android/`; the tracked `build.gradle.kts`
+> `signingConfigs` block reads it. The Tauri CLI has no keystore flags, so this
+> file is the only signing route.
 
 ## 4. Verify Signing in CI
 
@@ -89,7 +93,7 @@ When the keystore expires (or is compromised):
 
 1. Generate a new keystore (step 1 above)
 2. Update `ANDROID_KEYSTORE_BASE64` secret
-3. Update `KEYSTORE_PASSWORD` and `KEY_PASSWORD` secrets
+3. Update `KEYSTORE_PASSWORD` secret
 4. Update `KEY_ALIAS` if the alias changed
 5. Run a manual workflow build to verify
 

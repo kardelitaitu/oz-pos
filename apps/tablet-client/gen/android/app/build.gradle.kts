@@ -6,8 +6,21 @@ plugins {
     id("rust")
 }
 
+import java.io.FileInputStream
+
 val tauriProperties = Properties().apply {
     val propFile = file("tauri.properties")
+    if (propFile.exists()) {
+        propFile.inputStream().use { load(it) }
+    }
+}
+
+// Official Tauri v2 Android signing route (https://v2.tauri.app/distribute/sign/android/):
+// a keystore.properties file in gen/android/ holding password / keyAlias /
+// storeFile. CI writes it from secrets; local unsigned builds simply skip
+// the signingConfig (the file is absent) — same behavior as before.
+val keystoreProperties = Properties().apply {
+    val propFile = rootProject.file("keystore.properties")
     if (propFile.exists()) {
         propFile.inputStream().use { load(it) }
     }
@@ -24,6 +37,16 @@ android {
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
     }
+    signingConfigs {
+        create("release") {
+            if (keystoreProperties.containsKey("storeFile")) {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["password"] as String
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["password"] as String
+            }
+        }
+    }
     buildTypes {
         getByName("debug") {
             manifestPlaceholders["usesCleartextTraffic"] = "true"
@@ -37,6 +60,9 @@ android {
             }
         }
         getByName("release") {
+            if (keystoreProperties.containsKey("storeFile")) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = true
             proguardFiles(
                 *fileTree(".") { include("**/*.pro") }

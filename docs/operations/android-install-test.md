@@ -124,9 +124,18 @@ keytool -genkey -v -keystore oz-pos.keystore \
   -alias oz-pos -keyalg RSA -keysize 2048 -validity 10000
 # You will be prompted for passwords — use a strong password and save it
 
-# Build signed release APK
-$env:TAURI_ANDROID_KEYSTORE_PASSWORD = "your-keystore-password"
-$env:TAURI_ANDROID_KEY_PASSWORD = "your-key-password"
+# Build signed release APK (official Tauri v2 route — CLI has no keystore flags)
+# Write gen/android/keystore.properties: password / keyAlias / storeFile
+# (see android-keystore-guide.md); the tracked build.gradle.kts signingConfigs
+# block picks it up. When the file is absent the APK builds unsigned.
+# keystore.properties lives in gen/android/ and is read by the tracked
+# build.gradle.kts signingConfigs block; storeFile points at the keystore
+# generated above (apps/tablet-client/oz-pos.keystore).
+cd gen/android
+"password=your-keystore-password" | Out-File keystore.properties -Encoding ascii
+"keyAlias=oz-pos" | Add-Content keystore.properties
+"storeFile=$(Resolve-Path ..)\oz-pos.keystore" | Add-Content keystore.properties
+cd ..
 cargo tauri android build --apk --target aarch64
 cd ../..
 ```

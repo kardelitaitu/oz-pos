@@ -66,37 +66,26 @@ Keep the keystore **out of version control**. Add `*.keystore` to
 `../../.gitignore` if not already there. In CI, restore it from a base64-encoded
 GitHub secret.
 
-### 2. Configure signing in `tauri.conf.json`
+### 2. Configure signing (official Tauri v2 route)
 
-```jsonc
-{
-  "bundle": {
-    "android": {
-      "minSdkVersion": 26,
-      "signing": {
-        "keystore": "./oz-pos.keystore",
-        "keystorePassword": "",   // use env vars instead
-        "keyAlias": "",
-        "keyPassword": ""
-      }
-    }
-  }
-}
+The Tauri v2 CLI has **no keystore flags** on `android build`; release
+signing is configured via `gen/android/keystore.properties`
+(https://v2.tauri.app/distribute/sign/android/), which the tracked
+`gen/android/app/build.gradle.kts` `signingConfigs` block reads. When the
+file is absent (local unsigned builds) the release build simply skips
+signing.
+
+```properties
+# gen/android/keystore.properties (never commit)
+password=<keystore password>
+keyAlias=<alias>
+storeFile=/abs/path/to/oz-pos.keystore
 ```
 
-Leave passwords blank and pass them at build time via environment variables:
-
-| Env var | Purpose |
-|---------|---------|
-| `TAURI_ANDROID_KEYSTORE_PASSWORD` | Keystore master password |
-| `TAURI_ANDROID_KEY_PASSWORD` | Key-specific password (defaults to keystore password if omitted) |
-| `TAURI_ANDROID_KEY_ALIAS` | Override the alias from config (optional) |
-
-Or pass them on the CLI:
-
-```bash
-cargo tauri android build --apk --keystore ./oz-pos.keystore --keystore-password $env:PW --key-password $env:PW
-```
+CI (`.github/workflows/android.yml` / `nightly.yml`) decodes the base64
+keystore secret into `gen/android/` and writes this file from
+`KEYSTORE_PASSWORD` / `KEY_ALIAS` secrets. The same two secrets plus
+`ANDROID_KEYSTORE_BASE64` are all that release signing needs.
 
 ---
 
