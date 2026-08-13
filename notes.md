@@ -1196,3 +1196,21 @@ cloud-server db.rs), which means committed writes may live entirely in the
 Note: this machine lacks the `sqlite3` CLI binary (both backup scripts
 depend on it; POSIX-targeted) — the fix was verified via Python's identical
 sqlite3 backup API.
+
+# E2E hygiene round (2026-08-14)
+
+- `e2e-sale-to-history.spec.ts`: removed leftover `[diag]` console.log debug
+  output from the tendered-amount fallback chain (logic + guards kept;
+  verified spec passes against dev server, 13.3s).
+- `.gitignore`: added `/ui/test-results` (Playwright default outputDir),
+  `/ui/e2e-results` (CI json/html reporters), `/ui/.e2e-auth.json`
+  (storageState with session tokens from fixtures.ts). Previously any E2E
+  run polluted `git status` and risked committing local auth state.
+
+Audited the rest of ui/e2e (29 specs, 4750 lines): 170 `waitForTimeout`
+calls all guard dev-mock async and are followed by assertions (not pure
+timing waits); helpers.ts/fixtures.ts robust (reduced-motion emulation,
+storageState-per-worker); perf-smoke budgets env-overridable with sane
+fallbacks; pageerror/perf logs intentional. playwright.config.ts clean
+(webServer auto-start, retain-on-failure trace, reducedMotion, forbidOnly
+on CI).
