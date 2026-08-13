@@ -570,11 +570,13 @@ describe('loaders — raw rows mapped to card shapes', () => {
     expect(buckets[0]?.value).toBe(1250000);
   });
 
-  it('loadAov divides revenue by sale count', async () => {
-    const buckets = await loadAov({
+  it('loadAov divides revenue by sale count and returns range totals', async () => {
+    const result = await loadAov({
       workspace: 'retail', granularity: 'daily', from: '2026-07-27', to: '2026-07-27', sessionToken: 's',
     });
-    expect(buckets[0]?.value).toBe(Math.round(1250000 / 12));
+    expect(result.buckets[0]?.value).toBe(Math.round(1250000 / 12));
+    expect(result.total_minor).toBe(1250000);
+    expect(result.total_orders).toBe(12);
   });
 
   it('loadRevenue zero-fills days without sales rows', async () => {
@@ -635,13 +637,17 @@ describe('loaders — raw rows mapped to card shapes', () => {
     (getDailyRevenue as ReturnType<typeof vi.fn>).mockResolvedValue([
       { date: '2026-07-27', total_minor: 24000, currency: 'USD', sale_count: 6, cogs_minor: 0, gross_profit_minor: 24000, gross_margin_percent: 100 },
     ]);
-    const buckets = await loadAov({
+    const result = await loadAov({
       workspace: 'retail', granularity: 'daily', from: '2026-07-27', to: '2026-07-28', sessionToken: 's',
     });
-    expect(buckets).toEqual([
+    expect(result.buckets).toEqual([
       { label: '07-27', value: 4000 },
       { label: '07-28', value: 0 },
     ]);
+    // Zero-filled gaps contribute no orders, so the range totals come only
+    // from the active bucket.
+    expect(result.total_minor).toBe(24000);
+    expect(result.total_orders).toBe(6);
   });
 
   it('loadBasketSize buckets daily rows with weighted averages', async () => {

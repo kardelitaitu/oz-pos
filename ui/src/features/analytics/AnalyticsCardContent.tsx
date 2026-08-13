@@ -31,6 +31,7 @@ import {
   seriesDelta,
   turnDelta,
   type AnalyticsQuery,
+  type AovTrend,
   type BasketTrend,
   type Bucket,
   type RankRow,
@@ -78,6 +79,11 @@ function useMoney() {
 const PALETTE = ['#4f46e5', '#3b82f6', '#06b6d4', '#22c55e', '#f59e0b', '#f97316', '#ef4444', '#8b5cf6'];
 
 const CHART_TEXT = '#94a3b8';
+
+/** Stable empty bucket list — the AOV card's `data?.buckets` fallback so a
+ *  fresh `[]` literal isn't recreated every render (a referential-stability
+ *  fix for the chart's `useMemo` dependency array). */
+const NO_BUCKETS: Bucket[] = [];
 
 /**
  * Stock at or below this many units is flagged "critical" (vs merely
@@ -470,6 +476,7 @@ function RankedList({ rows, ariaLabel, limit }: { rows: RankRow[]; ariaLabel: st
           aria-label={r.delta !== undefined
             ? l10n.getString('analytics-rank-delta-aria', {
                 name: r.name,
+                value: r.display,
                 dir: l10n.getString(r.delta >= 0 ? 'analytics-rank-up' : 'analytics-rank-down'),
                 pct: Math.abs(r.delta).toFixed(1),
               })
@@ -630,39 +637,41 @@ function RevenueCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title
 function AovCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: string; expanded?: boolean | undefined; compare?: boolean | undefined }) {
   const { l10n } = useLocalization();
   const { fmt } = useMoney();
-  const { data, prev, error } = useCardDataCompare<Bucket[]>('aov', q, compare ?? false);
-  const prevData = prev ?? [];
-  const active = activeBuckets(data ?? []);
-  const prevActive = activeBuckets(prevData);
-  const avg = active.length ? Math.round(active.reduce((s, d) => s + d.value, 0) / active.length) : 0;
-  const prevAvg = prevActive.length ? Math.round(prevActive.reduce((s, d) => s + d.value, 0) / prevActive.length) : 0;
+  const { data, prev, error } = useCardDataCompare<AovTrend>('aov', q, compare ?? false);
+  const buckets = data ? data.buckets : NO_BUCKETS;
+  const prevBuckets = prev ? prev.buckets : NO_BUCKETS;
+  const active = activeBuckets(buckets);
+  // True average order value: total revenue ÷ total orders across the
+  // range (a weighted average), not an unweighted mean of per-bucket AOVs.
+  const avg = data && data.total_orders > 0 ? Math.round(data.total_minor / data.total_orders) : 0;
+  const prevAvg = prev && prev.total_orders > 0 ? Math.round(prev.total_minor / prev.total_orders) : 0;
   // Peak/Low come from the active buckets — a zero-filled no-sales day is
   // not a $0 AOV reading.
   const peak = active.length ? active.reduce((a, b) => (b.value > a.value ? b : a)) : null;
   const low = active.length ? active.reduce((a, b) => (b.value < a.value ? b : a)) : null;
   const delta = compare ? periodDelta(avg, prevAvg) : active.length ? seriesDelta(active) : null;
-  const option = useMemo(() => (data ? ({
+  const option = useMemo(() => (buckets.length ? ({
     grid: { left: 8, right: 8, top: 12, bottom: 0, containLabel: true },
     tooltip: { trigger: 'axis' as const, valueFormatter: (v: unknown) => fmt(Number(v)) },
     xAxis: {
-      type: 'category' as const, data: data.map((d) => d.label),
+      type: 'category' as const, data: buckets.map((d) => d.label),
       axisLabel: { fontSize: 9, color: CHART_TEXT }, axisLine: { show: false }, axisTick: { show: false },
     },
     yAxis: { type: 'value' as const, show: false },
     series: [
       {
-        type: 'line' as const, data: data.map((d) => d.value),
+        type: 'line' as const, data: buckets.map((d) => d.value),
         smooth: true, symbol: 'circle', symbolSize: 4,
         itemStyle: { color: '#4f46e5' }, areaStyle: { opacity: 0.12 }, lineStyle: { width: 2 },
       },
-      ...(compare && prevData.length ? [{
+      ...(compare && prevBuckets.length ? [{
         name: l10n.getString('analytics-card-prev'),
-        type: 'line' as const, data: alignPrevBuckets(data, prevData),
+        type: 'line' as const, data: alignPrevBuckets(buckets, prevBuckets),
         smooth: true, symbol: 'none',
         itemStyle: { color: '#94a3b8' }, lineStyle: { width: 1.5, color: '#94a3b8', type: 'dashed' as const },
       }] : []),
     ],
-  }) : null), [data, prevData, compare, fmt, l10n]);
+  }) : null), [buckets, prevBuckets, compare, fmt, l10n]);
   if (error) return <CardError error={error} />;
   if (!data) return <CardLoading />;
   return (
@@ -671,7 +680,7 @@ function AovCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: st
         <Kpi value={fmt(avg)} label={l10n.getString('analytics-card-aov')} />
         <div className="analytics-kpi-actions">
           {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
-          <ExportCsvButton ariaLabel={l10n.getString('analytics-export-aov-aria')} onClick={() => exportTrendCsv('aov', l10n.getString('analytics-export-col-aov'), data, q.from, q.to, (id) => l10n.getString(id), fmt)} />
+          <ExportCsvButton ariaLabel={l10n.getString('analytics-export-aov-aria')} onClick={() => exportTrendCsv('aov', l10n.getString('analytics-export-col-aov'), buckets, q.from, q.to, (id) => l10n.getString(id), fmt)} />
         </div>
       </div>
       <div className="analytics-card-chart" role="img" aria-label={title}>

@@ -551,8 +551,22 @@ export async function loadRevenue(q: AnalyticsQuery): Promise<Bucket[]> {
   }));
 }
 
+/**
+ * AOV card slice: per-bucket average order value (zero-filled to the
+ * range) plus the range totals so the KPI can compute the true weighted
+ * average (revenue ÷ orders) instead of an unweighted mean of daily AOVs.
+ */
+export interface AovTrend {
+  /** Per-bucket AOV (total_minor ÷ sale_count), zero-filled to the range. */
+  buckets: Bucket[];
+  /** Total revenue across the range in minor units. */
+  total_minor: number;
+  /** Total completed orders across the range. */
+  total_orders: number;
+}
+
 /** Average order value per bucket (AOV card), zero-filled to the range. */
-export async function loadAov(q: AnalyticsQuery): Promise<Bucket[]> {
+export async function loadAov(q: AnalyticsQuery): Promise<AovTrend> {
   const g = bucketGranularity(q.granularity, q.from, q.to);
   const rows = await revenueRows(g, q);
   const byKey = new Map<string, { total: number; count: number }>();
@@ -563,13 +577,20 @@ export async function loadAov(q: AnalyticsQuery): Promise<Bucket[]> {
     agg.count += r.sale_count;
     byKey.set(key, agg);
   }
-  return bucketKeys(g, q.from, q.to).map((key) => {
+  const buckets = bucketKeys(g, q.from, q.to).map((key) => {
     const agg = byKey.get(key);
     return {
       label: revenueLabel(g, key, rangeSpansYears(q)),
       value: agg && agg.count > 0 ? Math.round(agg.total / agg.count) : 0,
     };
   });
+  let totalMinor = 0;
+  let totalOrders = 0;
+  for (const [, agg] of byKey) {
+    totalMinor += agg.total;
+    totalOrders += agg.count;
+  }
+  return { buckets, total_minor: totalMinor, total_orders: totalOrders };
 }
 
 /** Staff analytics (shared Staff Performance + restaurant Top Waitstaff). */

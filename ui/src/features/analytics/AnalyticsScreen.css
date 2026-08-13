@@ -665,12 +665,6 @@
   outline-offset: -2px;
 }
 
-/* Focusable card (keyboard navigation) */
-.analytics-card:focus-visible {
-  outline: 2px solid var(--color-primary, #4f46e5);
-  outline-offset: 2px;
-}
-
 /* Hover lift on cards */
 .analytics-card {
   transition: box-shadow 0.2s ease, transform 0.2s ease;
