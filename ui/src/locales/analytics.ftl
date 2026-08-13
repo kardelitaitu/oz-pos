@@ -3,49 +3,6 @@
 analytics-title = Analytics
 analytics-subtitle = Sales, products, and staff performance
 analytics-region-aria = Staff analytics
-analytics-summary-title = Staff Summary
-analytics-daily-title = Daily Activity
-analytics-filter-from = From
-analytics-filter-to = To
-analytics-filter-staff = Staff Member
-analytics-filter-all-staff = All staff
-analytics-btn-apply = Apply
-analytics-empty = No staff activity in this period.
-analytics-loading = Loading analytics…
-analytics-error = Could not load analytics.
-analytics-table-staff = Staff Member
-analytics-table-shifts = Shifts
-analytics-table-closed = Closed
-analytics-table-shift-sales = Shift Sales
-analytics-table-sales = Sales
-analytics-table-sales-total = Sales Total
-analytics-daily-day = Day
-analytics-daily-shifts = Shifts
-analytics-daily-shift-sales = Shift Sales
-analytics-daily-sales = Sales
-analytics-daily-sales-total = Sales Total
-analytics-daily-empty = Select a staff member to see daily activity.
-
-# ── KPI cards ──────────────────────────────────────────────
-analytics-kpi-shifts = Total Shifts
-analytics-kpi-closed = closed
-analytics-kpi-avg-sale = Avg Sale / Shift
-analytics-kpi-top-performer = Top Performer
-analytics-kpi-coverage = Coverage
-analytics-kpi-staff = staff
-analytics-kpi-total-sales = Total Sales
-
-# ── Charts ────────────────────────────────────────────────
-analytics-chart-daily-sales = Daily Sales by Staff
-analytics-chart-daily-sales-aria = Daily sales per staff member, select a staff member from the table to see details
-analytics-chart-sales = Sales
-analytics-chart-shifts = Shifts
-analytics-chart-select-hint = Select a staff member from the table to see daily sales breakdown.
-
-# ── Deep-dive ──────────────────────────────────────────────
-analytics-deepdive-title = { $name } — Daily Detail
-analytics-deepdive-aria = Daily sales and shifts for { $name }
-analytics-deepdive-empty = No daily data available.
 
 # Export
 analytics-export-csv = CSV
@@ -229,7 +186,6 @@ analytics-card-discounts-redeemed = redeemed
 analytics-card-category-top = Top category
 analytics-card-top-product = Top product
 analytics-card-discounts-share = of sales from discounts
-analytics-card-refunds-rate = Refund rate
 analytics-card-refunds-count = Refund count
 analytics-card-refunds-amount = Refunded amount
 analytics-card-inventory-turnover = Turnover
@@ -237,7 +193,6 @@ analytics-card-inventory-days = Days of stock
 analytics-card-inventory-skus = Active SKUs
 analytics-card-basket-items = items / order
 analytics-card-basket-orders = orders
-analytics-card-basket-range = Average across the selected range
 analytics-card-low-stock-left = left
 analytics-card-low-stock-restock = Est. restock cost
 analytics-card-low-stock-items = items flagged
@@ -249,8 +204,6 @@ analytics-card-occupancy-peak = Peak hour
 analytics-card-occupancy-orders = table orders
 analytics-card-occupancy-hourly = Occupancy by hour
 analytics-card-voids-count = Voided items
-analytics-card-voids-value = Voided value
-analytics-card-voids-rate = { $pct }% of orders voided
 analytics-card-waitstaff-covers = covers
 analytics-card-waitstaff-total = Total covers
 analytics-card-error-load = Couldn't load this chart. Check your connection and refresh.
@@ -291,5 +244,5 @@ analytics-card-desc-low-stock = Products near or below reorder level.
 analytics-card-desc-top-menu = Best-selling menu items by revenue and quantity.
 analytics-card-desc-tables = Table turnover and covers served.
 analytics-card-desc-occupancy = Table utilization over time.
-analytics-card-desc-waitstaff = Top-performing waitstaff by sales.
+analytics-card-desc-waitstaff = Top-performing waitstaff by covers served.
 analytics-card-desc-voids = Items voided or removed from orders.

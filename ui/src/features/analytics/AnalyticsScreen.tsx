@@ -356,7 +356,6 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   const paletteInputRef = useRef<HTMLInputElement | null>(null);
   const toastId = useRef(0);
   const toastTimersRef = useRef(new Map<number, ReturnType<typeof setTimeout>>());
-  const cardRefs = useRef(new Map<string, HTMLDivElement>());
   const [cardOrder, setCardOrder] = useState<string[]>([]);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
@@ -1375,26 +1374,9 @@ const [paletteOpen, setPaletteOpen] = useState(false);
             return (
             <div
               key={cid}
-              ref={(el) => { if (el) cardRefs.current.set(cid, el); else cardRefs.current.delete(cid); }}
-              role="button"
-              tabIndex={0}
+              role="group"
               draggable={!isExpanded}
               aria-label={l10n.getString(card.titleKey)}
-              onKeyDown={(e) => {
-                const idx = orderedCards.findIndex((c) => cardId(c) === cid);
-                if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-                  e.preventDefault();
-                  const next = orderedCards[idx + 1];
-                  if (next) cardRefs.current.get(cardId(next))?.focus();
-                } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-                  e.preventDefault();
-                  const prev = orderedCards[idx - 1];
-                  if (prev) cardRefs.current.get(cardId(prev))?.focus();
-                } else if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  setExpandedKey((current) => nextExpandedKey(current, cid));
-                }
-              }}
               onDragStart={(e) => { setDragId(cid); if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'; }}
               onDragOver={(e) => { e.preventDefault(); if (overId !== cid) setOverId(cid); }}
               onDragLeave={() => setOverId((o) => (o === cid ? null : o))}

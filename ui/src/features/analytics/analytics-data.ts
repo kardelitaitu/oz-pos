@@ -39,6 +39,7 @@ import type {
   InventoryTrendRow,
   InventoryTurnoverRow,
   LowStockAlert,
+  MenuEngineeringRow,
   MonthlyRevenueRow,
   PaymentMethodRow,
   TopProductRow,
@@ -577,7 +578,7 @@ export function loadStaff(q: AnalyticsQuery): Promise<StaffAnalyticsRow[]> {
 }
 
 /** Top products (retail) / menu engineering (restaurant). */
-export function loadTopItems(q: AnalyticsQuery): Promise<TopProductRow[] | unknown[]> {
+export function loadTopItems(q: AnalyticsQuery): Promise<TopProductRow[] | MenuEngineeringRow[]> {
   if (q.workspace === 'retail') {
     return getTopProducts(q.from, q.to, 10, q.sessionToken, 'revenue');
   }
@@ -743,15 +744,8 @@ export async function loadInventory(
 
 /** Live floor-plan occupancy derived from the `tables` snapshot. */
 export interface TableOccupancy {
-  /** Total active tables on the floor plan. */
-  total: number;
-  /** Tables currently `occupied` (linked to an active sale). */
-  occupied: number;
   /** Percentage of tables currently occupied (0–100). */
   rate: number;
-  /** Seats in use on occupied tables vs total capacity. */
-  seats_used: number;
-  seats_total: number;
   /**
    * Completed table orders per hour (0–23). `pct` is percent-of-peak on the
    * same scale as the heatmap (`pctOfPeak`) and `level` is the matching
@@ -775,10 +769,6 @@ export async function loadTableOccupancy(q: AnalyticsQuery): Promise<TableOccupa
   ]);
   const active = tables.filter((t) => t.active);
   const occupied = active.filter((t) => t.status === 'occupied').length;
-  const seatsUsed = active
-    .filter((t) => t.status === 'occupied')
-    .reduce((sum, t) => sum + t.capacity, 0);
-  const seatsTotal = active.reduce((sum, t) => sum + t.capacity, 0);
   // Shared normalization with the heatmap: percent-of-peak plus the 0–4
   // heat level, so the curve and the heatmap cells speak the same scale.
   const pcts = pctOfPeak(hourlyRows.map((r) => r.table_orders));
@@ -799,11 +789,7 @@ export async function loadTableOccupancy(q: AnalyticsQuery): Promise<TableOccupa
     }
   }
   return {
-    total: active.length,
-    occupied,
     rate: active.length > 0 ? Math.round((occupied / active.length) * 100) : 0,
-    seats_used: seatsUsed,
-    seats_total: seatsTotal,
     hourly,
     peak_hour: peak,
   };
@@ -833,11 +819,7 @@ export const CARD_LOADERS: Record<string, (q: AnalyticsQuery) => Promise<CardLoa
   'low-stock': (q) => getLowStockAlerts(10, q.sessionToken),
   waitstaff: loadStaff,
   tables: loadTables,
-  voids: (q) =>
-    Promise.all([
-      getVoidedSalesSummary(q.from, q.to, q.sessionToken),
-      getVoidedItems(q.from, q.to, q.sessionToken, 5),
-    ]),
+  voids: (q) => getVoidedItems(q.from, q.to, q.sessionToken, 5),
   occupancy: loadTableOccupancy,
 };
 

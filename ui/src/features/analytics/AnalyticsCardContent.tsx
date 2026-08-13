@@ -71,12 +71,20 @@ function useMoney() {
       notation: 'compact',
       maximumFractionDigits: 1,
     }).format(minor / 10 ** exp);
-  return { fmt, short };
+  const count = (n: number) => new Intl.NumberFormat(numLocale).format(n);
+  return { fmt, short, count };
 }
 
 const PALETTE = ['#4f46e5', '#3b82f6', '#06b6d4', '#22c55e', '#f59e0b', '#f97316', '#ef4444', '#8b5cf6'];
 
 const CHART_TEXT = '#94a3b8';
+
+/**
+ * Stock at or below this many units is flagged "critical" (vs merely
+ * "low") in the low-stock card — the red severity tier that precedes a
+ * full out-of-stock.
+ */
+const CRITICAL_STOCK_LEVEL = 5;
 
 /**
  * Chart height per card, collapsed vs expanded (px). Kept in one place so
@@ -205,8 +213,11 @@ function exportStaffCsv(
   to: string,
   fmt: (minor: number) => string,
   getString: (id: string) => string,
+  rankBy: 'sales' | 'covers' = 'sales',
 ) {
-  const ranked = [...staff].sort((a, b) => b.sale_total_minor - a.sale_total_minor);
+  const ranked = [...staff].sort((a, b) =>
+    rankBy === 'covers' ? b.sale_count - a.sale_count : b.sale_total_minor - a.sale_total_minor,
+  );
   downloadCsv(
     `${cardKey}-${from}-to-${to}.csv`,
     staffCsvColumns(getString),
@@ -1046,24 +1057,25 @@ function InventoryCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
   );
 }
 
-function LowStockCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: string; expanded?: boolean | undefined; compare?: boolean | undefined }) {
+function LowStockCard({ q, title, expanded }: { q: AnalyticsQuery; title: string; expanded?: boolean | undefined }) {
   const { l10n } = useLocalization();
   const { fmt } = useMoney();
-  const { data: alerts, prev: prevAlerts, error } = useCardDataCompare<LowStockAlert[]>('low-stock', q, compare ?? false);
+  // Low-stock alerts are a live inventory snapshot with no time-bounded
+  // history, so a period-over-period baseline would diff the snapshot
+  // against itself (a spurious 0.0% chip). Load through the plain
+  // single-window hook and never render a compare delta.
+  const { data: alerts, error } = useCardData<LowStockAlert[]>('low-stock', q);
   if (error) return <CardError error={error} />;
   if (!alerts) return <CardLoading />;
   if (alerts.length === 0) return <CardEmpty message={l10n.getString('analytics-empty-low-stock')} />;
-  const build = (list: LowStockAlert[]) => list.map((a) => ({
+  const rows = alerts.map((a) => ({
     name: a.name,
     stock: a.current_qty,
     reorder: Math.max(0, a.threshold - a.current_qty),
     cost: a.cost_minor,
   }));
-  const rows = build(alerts);
   const restockCost = rows.reduce((s, r) => s + r.reorder * r.cost, 0);
-  const prevCost = prevAlerts ? build(prevAlerts).reduce((s, r) => s + r.reorder * r.cost, 0) : 0;
-  const criticalCount = rows.filter((r) => r.stock <= 5).length;
-  const delta = compare ? periodDelta(restockCost, prevCost) : null;
+  const criticalCount = rows.filter((r) => r.stock <= CRITICAL_STOCK_LEVEL).length;
   // Collapsed cards cap the alert list; expanding reveals every alert.
   const shown = expanded ? rows : rows.slice(0, 5);
   return (
@@ -1074,7 +1086,6 @@ function LowStockCard({ q, title, expanded, compare }: { q: AnalyticsQuery; titl
         <Kpi value={String(criticalCount)} label={l10n.getString('analytics-card-low-stock-critical')} tone="bad" />
       </div>
       <div className="analytics-kpi-actions analytics-card-insight">
-        {delta !== null && <DeltaChip value={delta} tone="bad" compare={compare === true} />}
         <ExportCsvButton ariaLabel={l10n.getString('analytics-export-low-stock-aria')} onClick={() => exportLowStockCsv(alerts, q.from, q.to, fmt, (id) => l10n.getString(id))} />
       </div>
       <ul className="analytics-alert-list" aria-label={title}>
@@ -1228,15 +1239,18 @@ function OccupancyCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
 
 function WaitstaffCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: string; expanded?: boolean | undefined; compare?: boolean | undefined }) {
   const { l10n } = useLocalization();
-  const { short, fmt } = useMoney();
+  const { fmt, count } = useMoney();
   const { data: staff, prev: prevStaff, error } = useCardDataCompare<StaffAnalyticsRow[]>('waitstaff', q, compare ?? false);
   if (error) return <CardError error={error} />;
   if (!staff) return <CardLoading />;
   if (staff.length === 0) return <CardEmpty message={l10n.getString('analytics-empty-generic')} />;
+  // Rank waitstaff by covers served (sale_count), not revenue — the
+  // differentiator versus the shared Staff Performance card, which ranks by
+  // sales total.
   const buildRows = (rows: StaffAnalyticsRow[]): RankRow[] => rows
     .slice()
-    .sort((a, b) => b.sale_total_minor - a.sale_total_minor)
-    .map((r) => ({ name: r.display_name, value: r.sale_total_minor, display: short(r.sale_total_minor) }));
+    .sort((a, b) => b.sale_count - a.sale_count)
+    .map((r) => ({ name: r.display_name, value: r.sale_count, display: `${count(r.sale_count)} ${l10n.getString('analytics-card-waitstaff-covers')}` }));
   const rows = rowDeltas(buildRows(staff), prevStaff ? buildRows(prevStaff) : null);
   // "Total covers" is a count (orders served), not a money figure — sum the
   // sale counts so the KPI matches its label.
@@ -1246,10 +1260,10 @@ function WaitstaffCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
   return (
     <Visual>
       <div className="analytics-kpi-row">
-        <Kpi value={totalCovers.toLocaleString()} label={l10n.getString('analytics-card-waitstaff-total')} />
+        <Kpi value={count(totalCovers)} label={l10n.getString('analytics-card-waitstaff-total')} />
         <div className="analytics-kpi-actions">
           {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
-          <ExportCsvButton ariaLabel={l10n.getString('analytics-export-waitstaff-aria')} onClick={() => exportStaffCsv('waitstaff', staff, q.from, q.to, fmt, (id) => l10n.getString(id))} />
+          <ExportCsvButton ariaLabel={l10n.getString('analytics-export-waitstaff-aria')} onClick={() => exportStaffCsv('waitstaff', staff, q.from, q.to, fmt, (id) => l10n.getString(id), 'covers')} />
         </div>
       </div>
       <RankedList rows={rows} ariaLabel={title} limit={expanded ? undefined : 5} />
@@ -1259,17 +1273,16 @@ function WaitstaffCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
 
 function VoidsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: string; expanded?: boolean | undefined; compare?: boolean | undefined }) {
   const { l10n } = useLocalization();
-  const { data: loaded, prev: prevLoaded, error } = useCardDataCompare<[VoidedSummaryRow, VoidedItemRow[]]>('voids', q, compare ?? false);
+  const { data: items, prev: prevItems, error } = useCardDataCompare<VoidedItemRow[]>('voids', q, compare ?? false);
   if (error) return <CardError error={error} />;
-  if (!loaded) return <CardLoading />;
-  const items = loaded[1];
+  if (!items) return <CardLoading />;
   if (items.length === 0) return <CardEmpty message={l10n.getString('analytics-empty-generic')} />;
   const rows = rowDeltas(
     items.map((it) => ({ name: it.name, value: it.qty, display: `${it.qty}×` })),
-    prevLoaded ? prevLoaded[1].map((it) => ({ name: it.name, value: it.qty, display: '' })) : null,
+    prevItems ? prevItems.map((it) => ({ name: it.name, value: it.qty, display: '' })) : null,
   );
   const totalQty = rows.reduce((s, r) => s + r.value, 0);
-  const prevQty = prevLoaded ? prevLoaded[1].reduce((s, it) => s + it.qty, 0) : 0;
+  const prevQty = prevItems ? prevItems.reduce((s, it) => s + it.qty, 0) : 0;
   const delta = compare ? periodDelta(totalQty, prevQty) : null;
   return (
     <Visual>
@@ -1331,7 +1344,7 @@ export function AnalyticsCardContent({
     case 'category': return <CategoryCard q={q} title={title} expanded={expanded} compare={compare} />;
     case 'basket': return <BasketCard q={q} title={title} expanded={expanded} compare={compare} />;
     case 'inventory': return <InventoryCard q={q} title={title} expanded={expanded} compare={compare} />;
-    case 'low-stock': return <LowStockCard q={q} title={title} expanded={expanded} compare={compare} />;
+    case 'low-stock': return <LowStockCard q={q} title={title} expanded={expanded} />;
     case 'tables': return <TablesCard q={q} title={title} expanded={expanded} compare={compare} />;
     case 'occupancy': return <OccupancyCard q={q} title={title} expanded={expanded} compare={compare} />;
     case 'waitstaff': return <WaitstaffCard q={q} title={title} expanded={expanded} compare={compare} />;

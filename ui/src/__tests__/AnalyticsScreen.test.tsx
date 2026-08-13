@@ -1282,6 +1282,24 @@ describe('AnalyticsScreen layout shell', () => {
     expect(filename).toContain('waitstaff-');
   });
 
+  it('ranks the waitstaff card by covers served, not sales revenue', async () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
+    await flushRecalc();
+
+    const select = screen.getByRole('combobox', { name: 'Select workspace type' });
+    fireEvent.change(select, { target: { value: 'restaurant' } });
+    await flushRecalc();
+
+    // The shared Staff Performance card ranks by revenue (currency values);
+    // Top Waitstaff ranks by covers served (plain counts).
+    const staffCard = screen.getByText('Staff Performance').closest('.analytics-card') as HTMLElement;
+    const waitstaffCard = screen.getByText('Top Waitstaff').closest('.analytics-card') as HTMLElement;
+
+    expect(waitstaffCard.querySelector('.analytics-rank-row')?.textContent).toContain('covers');
+    expect(staffCard.querySelector('.analytics-rank-row')?.textContent).not.toContain('covers');
+  });
+
   it('shows empty states when a card has no data', async () => {
     vi.useFakeTimers();
     mockGetLowStockAlerts.mockResolvedValueOnce([]);
@@ -1884,8 +1902,8 @@ describe('AnalyticsScreen currency locale', () => {
     expect(screen.getAllByText(/US\$85/).length).toBeGreaterThan(0);
 
     // Card container accessible names are localized too (not the English
-    // `card.title` fallback) — the heatmap card reads "Peta Panas".
-    expect(screen.getByRole('button', { name: 'Peta Panas' })).toBeTruthy();
+    // `card.title` fallback) — the heatmap card's group reads "Peta Panas".
+    expect(screen.getByRole('group', { name: 'Peta Panas' })).toBeTruthy();
   });
 });
 

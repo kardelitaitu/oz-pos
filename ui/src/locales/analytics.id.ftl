@@ -3,49 +3,6 @@
 analytics-title = Analitik
 analytics-subtitle = Penjualan, produk, dan performa staf
 analytics-region-aria = Analitik staf
-analytics-summary-title = Ringkasan Staf
-analytics-daily-title = Aktivitas Harian
-analytics-filter-from = Dari
-analytics-filter-to = Hingga
-analytics-filter-staff = Anggota Staf
-analytics-filter-all-staff = Semua staf
-analytics-btn-apply = Terapkan
-analytics-empty = Tidak ada aktivitas staf pada periode ini.
-analytics-loading = Memuat analitik…
-analytics-error = Gagal memuat analitik.
-analytics-table-staff = Anggota Staf
-analytics-table-shifts = Shift
-analytics-table-closed = Ditutup
-analytics-table-shift-sales = Penjualan Shift
-analytics-table-sales = Penjualan
-analytics-table-sales-total = Total Penjualan
-analytics-daily-day = Hari
-analytics-daily-shifts = Shift
-analytics-daily-shift-sales = Penjualan Shift
-analytics-daily-sales = Penjualan
-analytics-daily-sales-total = Total Penjualan
-analytics-daily-empty = Pilih anggota staf untuk melihat aktivitas harian.
-
-# ── KPI cards ──────────────────────────────────────────────
-analytics-kpi-shifts = Total Shift
-analytics-kpi-closed = ditutup
-analytics-kpi-avg-sale = Rata-rata / Shift
-analytics-kpi-top-performer = Performer Teratas
-analytics-kpi-coverage = Cakupan
-analytics-kpi-staff = staf
-analytics-kpi-total-sales = Total Penjualan
-
-# ── Charts ────────────────────────────────────────────────
-analytics-chart-daily-sales = Penjualan Harian per Staf
-analytics-chart-daily-sales-aria = Penjualan harian per anggota staf, pilih staf dari tabel untuk detail
-analytics-chart-sales = Penjualan
-analytics-chart-shifts = Shift
-analytics-chart-select-hint = Pilih anggota staf dari tabel untuk melihat rincian penjualan harian.
-
-# ── Deep-dive ──────────────────────────────────────────────
-analytics-deepdive-title = { $name } — Detail Harian
-analytics-deepdive-aria = Penjualan dan shift harian untuk { $name }
-analytics-deepdive-empty = Tidak ada data harian.
 
 # Export
 analytics-export-csv = CSV
@@ -223,7 +180,6 @@ analytics-card-discounts-redeemed = digunakan
 analytics-card-category-top = Kategori teratas
 analytics-card-top-product = Produk teratas
 analytics-card-discounts-share = dari penjualan lewat diskon
-analytics-card-refunds-rate = Tingkat refund
 analytics-card-refunds-count = Jumlah refund
 analytics-card-refunds-amount = Nominal refund
 analytics-card-inventory-turnover = Perputaran
@@ -231,7 +187,6 @@ analytics-card-inventory-days = Hari stok
 analytics-card-inventory-skus = SKU aktif
 analytics-card-basket-items = item / pesanan
 analytics-card-basket-orders = pesanan
-analytics-card-basket-range = Rata-rata pada rentang terpilih
 analytics-card-low-stock-left = tersisa
 analytics-card-low-stock-restock = Estimasi biaya restok
 analytics-card-low-stock-items = item terindikasi
@@ -243,8 +198,6 @@ analytics-card-occupancy-peak = Jam puncak
 analytics-card-occupancy-orders = pesanan meja
 analytics-card-occupancy-hourly = Okupansi per jam
 analytics-card-voids-count = Item dibatalkan
-analytics-card-voids-value = Nilai void
-analytics-card-voids-rate = { $pct }% pesanan di-void
 analytics-card-waitstaff-covers = meja ditangani
 analytics-card-waitstaff-total = Total meja ditangani
 analytics-card-error-load = Tidak dapat memuat grafik ini. Periksa koneksi Anda lalu muat ulang.
@@ -285,5 +238,5 @@ analytics-card-desc-low-stock = Produk mendekati atau di bawah level pesan ulang
 analytics-card-desc-top-menu = Menu terlaris berdasarkan pendapatan dan jumlah.
 analytics-card-desc-tables = Perputaran meja dan tamu yang dilayani.
 analytics-card-desc-occupancy = Utilisasi meja sepanjang waktu.
-analytics-card-desc-waitstaff = Pelayan dengan performa terbaik berdasarkan penjualan.
+analytics-card-desc-waitstaff = Pelayan dengan performa terbaik berdasarkan jumlah meja yang ditangani.
 analytics-card-desc-voids = Item yang di-void atau dihapus dari pesanan.

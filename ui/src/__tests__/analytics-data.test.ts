@@ -840,12 +840,7 @@ describe('loaders — raw rows mapped to card shapes', () => {
       workspace: 'restaurant', granularity: 'daily', from: '2026-07-27', to: '2026-07-27', sessionToken: 's',
     });
     // 4 active tables, 2 occupied (the inactive 'cleaning' row is excluded)
-    expect(occ.total).toBe(4);
-    expect(occ.occupied).toBe(2);
     expect(occ.rate).toBe(50);
-    // Seats: occupied 4 + 4 = 8 of 4 + 4 + 2 + 6 = 16 total
-    expect(occ.seats_used).toBe(8);
-    expect(occ.seats_total).toBe(16);
     // Hourly curve: completed table orders normalized to % of the peak
     // hour (19:00 with 50 orders) on the heatmap's shared 0–4 level scale,
     // sorted ascending by hour
@@ -864,10 +859,7 @@ describe('loaders — raw rows mapped to card shapes', () => {
     const occ = await loadTableOccupancy({
       workspace: 'restaurant', granularity: 'daily', from: '2026-07-27', to: '2026-07-27', sessionToken: 's',
     });
-    expect(occ.total).toBe(0);
     expect(occ.rate).toBe(0);
-    expect(occ.seats_used).toBe(0);
-    expect(occ.seats_total).toBe(0);
     // The hourly activity query is independent of the floor plan snapshot
     expect(occ.peak_hour).toBe(19);
   });
