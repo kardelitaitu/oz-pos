@@ -140,6 +140,19 @@ export function bucketGranularity(g: Granularity, from: string, to: string): Gra
   return 'monthly';
 }
 
+/**
+ * Effective grid for the heatmap card's custom range. A range inside one
+ * calendar month renders the monthly calendar; a long range renders the
+ * range-derived yearly columns; everything in between keeps the dense 7×24
+ * weekly grid. Fixed granularities pass through unchanged.
+ */
+export function heatmapGranularityForRange(g: Granularity, from: string, to: string): Granularity {
+  if (g !== 'custom') return g;
+  if (from.slice(0, 7) === to.slice(0, 7)) return 'monthly';
+  if (spanDays(from, to) > 180) return 'yearly';
+  return 'weekly';
+}
+
 // ── Pure mapping helpers ────────────────────────────────────────────
 
 /**

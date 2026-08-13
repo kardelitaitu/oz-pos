@@ -60,6 +60,7 @@ import {
   alignPrevBuckets,
   alignPrevHourly,
   heatPeak,
+  heatmapGranularityForRange,
   intensityFromPct,
   loadAov,
   loadBasketSize,
@@ -143,6 +144,29 @@ describe('spanDays + bucketGranularity — custom-range roll-up', () => {
     expect(bucketGranularity('custom', '2026-01-01', '2026-06-29')).toBe('weekly');  // 180 days
     expect(bucketGranularity('custom', '2026-01-01', '2026-06-30')).toBe('monthly'); // 181 days
     expect(bucketGranularity('custom', '2026-01-01', '2026-12-31')).toBe('monthly'); // 365 days
+  });
+});
+
+describe('heatmapGranularityForRange — span-derived heatmap grid', () => {
+  it('passes fixed granularities through unchanged', () => {
+    for (const g of ['daily', 'weekly', 'monthly', 'yearly'] as const) {
+      expect(heatmapGranularityForRange(g, '2026-01-01', '2026-12-31')).toBe(g);
+    }
+  });
+
+  it('renders the monthly calendar for a range inside one calendar month', () => {
+    expect(heatmapGranularityForRange('custom', '2026-07-01', '2026-07-31')).toBe('monthly');
+    expect(heatmapGranularityForRange('custom', '2026-07-10', '2026-07-20')).toBe('monthly');
+  });
+
+  it('renders yearly columns for long ranges', () => {
+    expect(heatmapGranularityForRange('custom', '2026-01-01', '2026-06-30')).toBe('yearly'); // 181 days
+    expect(heatmapGranularityForRange('custom', '2026-01-01', '2026-12-31')).toBe('yearly'); // 365 days
+  });
+
+  it('keeps the weekly grid for medium cross-month ranges', () => {
+    expect(heatmapGranularityForRange('custom', '2026-01-01', '2026-02-01')).toBe('weekly'); // 32 days, spans months
+    expect(heatmapGranularityForRange('custom', '2026-01-01', '2026-06-29')).toBe('weekly'); // 180 days
   });
 });
 

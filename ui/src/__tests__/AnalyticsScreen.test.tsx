@@ -792,6 +792,34 @@ describe('AnalyticsScreen layout shell', () => {
     expect(heatmap()?.querySelectorAll('.analytics-heat-column').length).toBe(yearlyCols.length);
   });
 
+  it('renders the monthly calendar for a single-month custom range', async () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
+    await flushRecalc();
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Custom' }));
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-07-01' } });
+    fireEvent.change(screen.getByLabelText('To'), { target: { value: '2026-07-31' } });
+    await flushRecalc();
+
+    // A range inside one calendar month renders that month's calendar grid.
+    expect(document.querySelector('.analytics-heatmap--monthly')).toBeTruthy();
+  });
+
+  it('renders yearly columns for a long custom range', async () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
+    await flushRecalc();
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Custom' }));
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: '2025-01-01' } });
+    fireEvent.change(screen.getByLabelText('To'), { target: { value: '2025-12-31' } });
+    await flushRecalc();
+
+    // A long range renders one column per month (yearly grid).
+    expect(document.querySelector('.analytics-heatmap--yearly')).toBeTruthy();
+  });
+
   it('renders localized day and month labels in the heatmap', async () => {
     vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
@@ -1662,19 +1690,19 @@ describe('cardRange — range follows the card\'s effective granularity', () => 
 
 describe('monthCalendarGrid — monthly heatmap calendar layout', () => {
   it('day 1 does not always start on the first cell', () => {
-    const grid = monthCalendarGrid();
+    const grid = monthCalendarGrid('2026-07-10');
     expect(grid.leading).toBeGreaterThanOrEqual(0);
     expect(grid.leading).toBeLessThanOrEqual(6);
   });
 
-  it('has 28–31 day cells', () => {
-    const grid = monthCalendarGrid();
-    expect(grid.days).toBeGreaterThanOrEqual(28);
-    expect(grid.days).toBeLessThanOrEqual(31);
+  it('derives the day count from the queried month', () => {
+    expect(monthCalendarGrid('2026-07-10').days).toBe(31); // July
+    expect(monthCalendarGrid('2026-02-10').days).toBe(28); // Feb (non-leap)
+    expect(monthCalendarGrid('2026-04-10').days).toBe(30); // April
   });
 
   it('pads with leading/trailing empties so weeks are complete', () => {
-    const grid = monthCalendarGrid();
+    const grid = monthCalendarGrid('2026-07-10');
     expect((grid.leading + grid.days + grid.trailing) % 7).toBe(0);
     expect(grid.trailing).toBeGreaterThanOrEqual(0);
     expect(grid.trailing).toBeLessThan(7);

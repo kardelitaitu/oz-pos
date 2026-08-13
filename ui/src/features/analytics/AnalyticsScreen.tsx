@@ -19,6 +19,7 @@ import { analyticsDataCache, analyticsQueryKey, clearAnalyticsCache, cardQueryKe
 import {
   buildHeatmapCells,
   heatPeak,
+  heatmapGranularityForRange,
   loadHeatmapRows,
   rangeForGranularity,
   yearlyHeatmapColumns,
@@ -86,7 +87,7 @@ export function smartScale(
  * Effective granularity for a card after applying its per-card remap.
  * Cards default to respecting the global selector; a card with a
  * `granularityMap` entry for the current granularity overrides it (e.g.
- * the heatmap renders the 7×24 grid for custom ranges too).
+ * mapping `daily` to `weekly` when a card has no daily layout).
  */
 export function cardGranularity(
   card: { granularityMap?: Partial<Record<Granularity, Granularity>> },
@@ -107,8 +108,8 @@ export function cardRange(
   customTo: string,
 ): { from: string; to: string } {
   // A custom range is user-selected — never let a granularity remap
-  // replace it with a derived window (the heatmap remaps custom → weekly
-  // for bucketing but still queries the chosen dates).
+  // replace it with a derived window (a card that derives its grid from the
+  // custom span still queries the chosen dates).
   if (g === 'custom') return { from: customFrom, to: customTo };
   return rangeForGranularity(cardGranularity(card, g), customFrom, customTo);
 }
@@ -131,17 +132,19 @@ export function daysInCurrentMonth(): number {
 }
 
 /**
- * Calendar layout for the current month. `leading` counts the empty
- * cells before day 1 (Monday-first), `days` the day cells, and
- * `trailing` the empty cells after the last day so the grid always
- * completes whole weeks (leading + days + trailing ≡ 0 mod 7).
+ * Calendar layout for the month containing `from` (an ISO `YYYY-MM-DD`
+ * date). `leading` counts the empty cells before day 1 (Monday-first),
+ * `days` the day cells, and `trailing` the empty cells after the last day
+ * so the grid always completes whole weeks (leading + days + trailing ≡ 0
+ * mod 7). Derived from the queried range's month — never "now" — so a
+ * custom range inside a past or future month renders that month's calendar.
  */
-export function monthCalendarGrid(): { leading: number; days: number; trailing: number } {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const days = new Date(year, month + 1, 0).getDate();
-  const leading = (new Date(year, month, 1).getDay() + 6) % 7; // 0 = Monday
+export function monthCalendarGrid(from: string): { leading: number; days: number; trailing: number } {
+  const [year, month] = from.split('-').map(Number); // month is 1-based
+  // Day 0 of month index `month` (one past the 1-based month) rolls back to
+  // that month's last day, yielding its day count.
+  const days = new Date(year!, month!, 0).getDate();
+  const leading = (new Date(year!, month! - 1, 1).getDay() + 6) % 7; // 0 = Monday
   const trailing = (7 - ((leading + days) % 7)) % 7;
   return { leading, days, trailing };
 }
@@ -259,8 +262,9 @@ interface AnalyticsCard {
 }
 
 const ANALYTICS_CARDS: AnalyticsCard[] = [
-  // 2×1 wide heatmap — custom ranges still render the 7×24 grid.
-  { key: 'heatmap',   workspace: null,         titleKey: 'analytics-card-heatmap', title: 'Heat Map', descKey: 'analytics-card-desc-heatmap', size: 'wide', granularityMap: { custom: 'weekly' } },
+  // 2×1 wide heatmap — custom ranges derive their grid from the span
+  // (see heatmapGranularityForRange), not a fixed weekly remap.
+  { key: 'heatmap',   workspace: null,         titleKey: 'analytics-card-heatmap', title: 'Heat Map', descKey: 'analytics-card-desc-heatmap', size: 'wide' },
   // Shared (both retail and restaurant)
   { key: 'revenue',   workspace: null,         titleKey: 'analytics-card-revenue',    title: 'Revenue Overview', descKey: 'analytics-card-desc-revenue' },
   { key: 'aov',       workspace: null,         titleKey: 'analytics-card-aov',        title: 'Average Order Value', descKey: 'analytics-card-desc-aov' },
@@ -705,14 +709,14 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   );
 
   // Smart heatmap — bucket cells change with the selected granularity.
-  // Monthly renders one cell per day of the current month (28–31);
-  // yearly renders one column per month in the query range (4–5 Monday
-  // weeks each); other granularities are flat. Intensities come from real
-  // revenue rows via the TTL cache. The heatmap card remaps custom → weekly
-  // so custom ranges render the same 7×24 grid.
+  // Monthly renders one cell per day of the queried month (28–31); yearly
+  // renders one column per month in the query range (4–5 Monday weeks
+  // each); weekly renders the dense 7×24 grid. Intensities come from real
+  // revenue rows via the TTL cache. A custom range derives its grid from the
+  // span: a single calendar month → monthly, a long range → yearly columns.
   const heatmapCard = ANALYTICS_CARDS.find((c) => c.key === 'heatmap')!;
-  const heatmapGranularity = cardGranularity(heatmapCard, granularity);
   const heatmapRange = cardRange(heatmapCard, granularity, customFrom, customTo);
+  const heatmapGranularity = heatmapGranularityForRange(granularity, heatmapRange.from, heatmapRange.to);
   const heatmapQuery = useAnalyticsQuery(
     cardQueryKey('heatmap', workspaceView, heatmapGranularity, heatmapRange.from, heatmapRange.to),
     () => loadHeatmapRows({ workspace: workspaceView, granularity: heatmapGranularity, from: heatmapRange.from, to: heatmapRange.to, sessionToken }),
@@ -834,7 +838,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
       );
     }
     if (heatmapGranularity === 'monthly') {
-      const { leading, days, trailing } = monthCalendarGrid();
+      const { leading, days, trailing } = monthCalendarGrid(heatmapRange.from);
       const cells: JSX.Element[] = [];
       for (let i = 0; i < leading; i++) {
         cells.push(<div key={`lead-${i}`} className="analytics-heat-cell analytics-heat-cell--empty" />);
