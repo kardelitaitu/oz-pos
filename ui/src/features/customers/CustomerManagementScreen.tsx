@@ -411,7 +411,6 @@ export default function CustomerManagementScreen() {
             placeholder="Search by name, email, or phone…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            aria-label={l10n.getString('search-customers-aria')}
           />
         </Localized>
       </div>
@@ -540,7 +539,7 @@ export default function CustomerManagementScreen() {
                 <Localized id="customer-mgmt-col-phone"><th>Phone</th></Localized>
                 <Localized id="customer-mgmt-col-notes"><th>Notes</th></Localized>
                 <Localized id="customer-mgmt-col-actions" attrs={{ 'aria-label': true }}>
-                  <th aria-label={l10n.getString('actions-aria')}> </th>
+                  <th> </th>
                 </Localized>
               </tr>
             </thead>
@@ -570,7 +569,6 @@ export default function CustomerManagementScreen() {
                         type="button"
                         className="customer-mgmt-action-btn"
                         onClick={() => openHistory(customer)}
-                        aria-label={`View history for ${customer.name}`}
                       >
                         <Localized id="customer-mgmt-history"><span>History</span></Localized>
                       </button>
@@ -580,7 +578,6 @@ export default function CustomerManagementScreen() {
                         type="button"
                         className="customer-mgmt-action-btn"
                         onClick={() => openEdit(customer)}
-                        aria-label={`Edit ${customer.name}`}
                       >
                         <Localized id="customer-mgmt-edit"><span>Edit</span></Localized>
                       </button>
@@ -591,7 +588,6 @@ export default function CustomerManagementScreen() {
                         className="customer-mgmt-action-btn customer-mgmt-action-btn--danger"
                         onClick={() => requestDelete(customer)}
                         disabled={deleting !== null}
-                        aria-label={`Delete ${customer.name}`}
                       >
                         <Localized id="customer-mgmt-delete"><span>Delete</span></Localized>
                       </button>
