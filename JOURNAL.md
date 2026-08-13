@@ -4960,3 +4960,13 @@ Two regression pins:
 **Tests:** analytics-data 47/47 (+1) · AnalyticsScreen 66/66 (yearly count now computed via `mondayWeeksInMonth`) · full UI suite 292/292, 5115.
 
 **Risks / follow-ups:** the yearly heatmap's 12 columns are still generic current-year months — a multi-year custom range renders the current year's band structure with the range's data (pre-existing quirk, unchanged). The collaborator's `dev-mock/tauri-api.ts` change remains uncommitted.
+## 2026-08-13 — Yearly heatmap columns ignored the query range (TDD)
+
+**Problem:** the yearly heatmap always rendered the current year's 12 month columns (`HEAT_BUCKETS.monthly` + `mondayWeeksInMonth(currentYear, …)`), regardless of the query range. Three failures followed: (1) a past-year custom range (e.g. 2025) rendered the 2026 frame with 2025's data; (2) a multi-year range merged two Januaries into one column — `yearlyWeekIntensities` keyed cells by monthIdx (`0:0`), so Jan-2025 and Jan-2026 collided; (3) the default yearly view showed 12 columns while the trend/revenue cards showed the year-to-date months — two axes for the same selection.
+
+**Solution (TDD, Red→Green):** three failing tests first — (1) `yearlyWeekIntensities` with Jan-2025 AND Jan-2026 first-Monday weeks must produce `2025-01:0` and `2026-01:0` (watched both merge into `0:0`); (2) `yearlyHeatmapColumns('2025-11-01','2026-02-28')` → keys `2025-11..2026-02` with year-aware labels `11/25..02/26`, and single-year ranges keep month names with per-column Monday-week counts; (3) the screen test's yearly grid now derives its column/cell counts from the range. Green: cell keys carry `YYYY-MM:week`, and the yearly branch renders `yearlyHeatmapColumns(dateRange.from, dateRange.to)` — one column per month in the range, 4–5 Monday weeks each, matching the trend cards' yearly buckets exactly (month names on single-year, MM/YY on multi-year, same convention as `revenueLabel`). `mondayWeeksInMonth` moved from the component to analytics-data (its natural home beside `mondayFirst`); the three legacy tests pinning monthIdx keys were repinned to the new contract.
+
+**Commits:** (see below — fix + journal)
+**Tests:** analytics-data 50/50 (+3) · AnalyticsScreen 66/66 · full UI suite 292/292, 5118.
+
+**Risks / follow-ups:** `HEAT_BUCKETS.monthly/weekly/yearly` entries are now dead (only `daily` is live) — a cosmetic cleanup for a future slice. The monthly heatmap still shows the CURRENT month's calendar regardless of the range (same class of quirk, pre-existing; the default monthly range is the current month so it's invisible there). The collaborator's `dev-mock/tauri-api.ts` work is now committed upstream (`a49d719b`).
