@@ -23,6 +23,7 @@ export = Ekspor
 download = Unduh
 
 nav-pos = Terminal POS
+app-sidebar-subtitle = Point of Sale
 nav-dashboard = Dasbor
 nav-sales = Riwayat Penjualan
 nav-products = Produk

@@ -238,6 +238,7 @@ nav-purchase-orders = Purchase Orders
 nav-stock-transfers = Stock Transfers
 nav-custom-report = Custom Report
 nav-pos = POS
+app-sidebar-subtitle = Point of Sale
 nav-stock = Stock
 nav-reports = Reports
 nav-sidebar-collapse = Collapse sidebar

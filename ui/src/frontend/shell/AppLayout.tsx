@@ -165,7 +165,9 @@ export default function AppLayout({ route, onNavigate, children, enabledFeatures
                   <span className="app-sidebar-store-name">
                     {brandSettings.store_name || 'OZ-POS'}
                   </span>
-                  <span className="app-sidebar-subtitle">Point of Sale</span>
+                  <Localized id="app-sidebar-subtitle">
+                    <span className="app-sidebar-subtitle">Point of Sale</span>
+                  </Localized>
                 </div>
               </div>
             </Tooltip>

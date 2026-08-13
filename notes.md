@@ -1030,3 +1030,23 @@ consumer.
 
 - typecheck ✅ · i18n lint clean ✅ · parity 0 missing ✅ · dedupe clean ✅
 - SettingsContext + SettingsPage suites: 80/80 pass.
+
+# AppLayout sidebar subtitle i18n (2026-08-14)
+
+`AppLayout` rendered a raw hardcoded `Point of Sale` subtitle in the
+sidebar brand block. Added `app-sidebar-subtitle` to both shared bundles
+(en + id) and wrapped the span in `<Localized>`.
+
+Also swept the cross-cutting layers (frontend/shell, shared components,
+api, contexts, hooks, utils) for the standard issue classes — all clean:
+- FastPINOverlay/QRIS/PermissionDenied strings are nested
+  `<Localized attrs>` fallbacks; ErrorBoundary is localized via
+  `requiredLocalized`; the `'No session token'` api guard is a
+  dev-guard (not user-facing); hook guards are standard
+  "must be used within" throws.
+
+## Verification
+
+- Full suite: **296 files / 5214 tests pass, 0 unhandled errors**.
+- typecheck ✅ · i18n lint clean ✅ · parity 0 missing ✅
+- Shell layout + a11y suites: 49/49 pass.
