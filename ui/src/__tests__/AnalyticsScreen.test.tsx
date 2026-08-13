@@ -951,6 +951,38 @@ describe('AnalyticsScreen layout shell', () => {
     expect(rows[1]).toMatchObject({ category: 'Food', sales: '$3,000.00', orders: '25', share: '33' });
   });
 
+  it('exports the revenue trend CSV from the revenue card', async () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
+    await flushRecalc();
+
+    vi.mocked(downloadCsv).mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Export revenue as CSV' }));
+
+    expect(downloadCsv).toHaveBeenCalledTimes(1);
+    const [filename, columns, rows] = vi.mocked(downloadCsv).mock.calls[0]!;
+    expect(filename).toContain('revenue-');
+    expect(columns.map((c) => c.key)).toEqual(['period', 'value']);
+    expect(columns.map((c) => c.label)).toEqual(['Period', 'Revenue']);
+    expect(rows[0]).toMatchObject({ value: '$85,000.00' });
+  });
+
+  it('exports the AOV trend CSV from the AOV card', async () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
+    await flushRecalc();
+
+    vi.mocked(downloadCsv).mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Export average order value as CSV' }));
+
+    expect(downloadCsv).toHaveBeenCalledTimes(1);
+    const [filename, columns, rows] = vi.mocked(downloadCsv).mock.calls[0]!;
+    expect(filename).toContain('aov-');
+    expect(columns.map((c) => c.key)).toEqual(['period', 'value']);
+    expect(columns.map((c) => c.label)).toEqual(['Period', 'Average order value']);
+    expect(rows[0]).toMatchObject({ value: '$1,307.69' });
+  });
+
   it('keeps card visuals rendering as granularity changes', async () => {
     vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);

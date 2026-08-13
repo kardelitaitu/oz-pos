@@ -281,6 +281,26 @@ function exportCategoryCsv(
   );
 }
 
+/** Download a trend card's time-bucketed rows as CSV (period + value). */
+function exportTrendCsv(
+  cardKey: string,
+  valueLabel: string,
+  buckets: Bucket[],
+  from: string,
+  to: string,
+  getString: (id: string) => string,
+  fmtValue: (v: number) => string,
+) {
+  downloadCsv(
+    `${cardKey}-${from}-to-${to}.csv`,
+    [
+      { key: 'period', label: getString('analytics-export-col-period') },
+      { key: 'value', label: valueLabel },
+    ],
+    buckets.map((b) => ({ period: b.label, value: fmtValue(b.value) })),
+  );
+}
+
 /**
  * Small delta pill (▲/▼ %). The "vs previous period" suffix renders only
  * in compare mode — off-mode chips are in-period trends (first→last
@@ -466,7 +486,10 @@ function RevenueCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title
     <Visual className="analytics-card-visual--revenue">
       <div className="analytics-kpi-row">
         <Kpi value={short(total)} label={l10n.getString('analytics-card-total-revenue')} />
-        {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
+        <div className="analytics-kpi-actions">
+          {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
+          <ExportCsvButton ariaLabel={l10n.getString('analytics-export-revenue-aria')} onClick={() => exportTrendCsv('revenue', l10n.getString('analytics-export-col-revenue'), data, q.from, q.to, (id) => l10n.getString(id), fmt)} />
+        </div>
       </div>
       <div className="analytics-card-chart" role="img" aria-label={title}>
         <ReactEChartsCore echarts={echarts} option={option!} style={{ height: chartHeight('revenue', expanded) }} notMerge />
@@ -519,7 +542,10 @@ function AovCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: st
     <Visual>
       <div className="analytics-kpi-row">
         <Kpi value={fmt(avg)} label={l10n.getString('analytics-card-aov')} />
-        {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
+        <div className="analytics-kpi-actions">
+          {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
+          <ExportCsvButton ariaLabel={l10n.getString('analytics-export-aov-aria')} onClick={() => exportTrendCsv('aov', l10n.getString('analytics-export-col-aov'), data, q.from, q.to, (id) => l10n.getString(id), fmt)} />
+        </div>
       </div>
       <div className="analytics-card-chart" role="img" aria-label={title}>
         <ReactEChartsCore echarts={echarts} option={option!} style={{ height: chartHeight('aov', expanded) }} notMerge />
