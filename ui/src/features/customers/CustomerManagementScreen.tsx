@@ -548,7 +548,6 @@ export default function CustomerManagementScreen() {
             </thead>
             <tbody>{customers.map((customer) => (
                 <tr key={customer.id}>
-                  { }
                   <td>
                     <div className="customer-mgmt-cell-name">
                       <div className="customer-mgmt-avatar">
@@ -622,13 +621,12 @@ export default function CustomerManagementScreen() {
             </Localized>
           </label>
           <Localized id="customer-mgmt-name-placeholder" attrs={{ placeholder: true }}>
-            { }
             <input
               className="customer-mgmt-input"
               type="text"
               id="customer-field-name"
               value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              onChange={(e) => updateField('name', e.target.value)}
               placeholder="e.g. Jane Smith"
               autoComplete="off"
             />
@@ -643,7 +641,6 @@ export default function CustomerManagementScreen() {
             </Localized>
           </label>
           <Localized id="customer-mgmt-email-placeholder" attrs={{ placeholder: true }}>
-            { }
             <input
               className="customer-mgmt-input"
               type="email"
@@ -671,7 +668,6 @@ export default function CustomerManagementScreen() {
             </Localized>
           </label>
           <Localized id="customer-mgmt-phone-placeholder" attrs={{ placeholder: true }}>
-            { }
             <input
               className="customer-mgmt-input"
               type="tel"
@@ -699,7 +695,6 @@ export default function CustomerManagementScreen() {
             </Localized>
           </label>
           <Localized id="customer-mgmt-notes-placeholder" attrs={{ placeholder: true }}>
-            { }
             <textarea
               className="customer-mgmt-input customer-mgmt-textarea"
               id="customer-field-notes"
