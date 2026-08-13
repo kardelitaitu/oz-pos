@@ -55,3 +55,7 @@ bundles-item-price-field =
     .aria-label = Item { $number } unit price override
 bundles-item-remove-aria =
     .aria-label = Remove item { $number }
+bundles-error-invalid-price = Bundle price must be a whole, non-negative number
+bundles-error-invalid-item = Item quantities and prices must be whole numbers
+bundles-error-save = Failed to save bundle
+bundles-error-delete = Failed to delete bundle

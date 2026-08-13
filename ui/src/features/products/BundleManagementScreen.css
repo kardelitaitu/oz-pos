@@ -214,3 +214,22 @@
     transition: border-color 0.15s;
   }
 }
+
+/* Error surfaces (save validation / delete failure) */
+.bundle-mgmt-modal-error {
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-3);
+}
+
+.bundle-mgmt-error {
+  margin: var(--space-3) var(--space-5) 0;
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+}

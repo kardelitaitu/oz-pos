@@ -48,6 +48,8 @@ export default function BundleManagementScreen() {
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const { l10n } = useLocalization();
 
@@ -110,22 +112,34 @@ export default function BundleManagementScreen() {
 
   const handleSave = useCallback(async () => {
     setSaving(true);
+    setSaveError(null);
     try {
+      // BUND-05: prices are integer minor units — `parseInt('4.50')` would
+      // silently truncate to 4, so reject any non-integer input instead.
       const priceMinor = form.bundle_price_minor
-        ? parseInt(form.bundle_price_minor, 10)
+        ? Number(form.bundle_price_minor)
         : null;
-      if (priceMinor !== null && (Number.isNaN(priceMinor) || priceMinor < 0)) {
+      if (priceMinor !== null && (!Number.isInteger(priceMinor) || priceMinor < 0)) {
         setSaving(false);
+        setSaveError(l10n.getString('bundles-error-invalid-price'));
         return;
       }
 
       const items = form.items
         .filter((i) => i.sku.trim().length > 0)
-        .map((i) => ({
-          sku: i.sku.trim(),
-          qty: parseInt(i.qty, 10) || 1,
-          unit_price_minor: i.unitPriceMinor ? parseInt(i.unitPriceMinor, 10) || null : null,
-        }));
+        .map((i) => {
+          const qty = Number(i.qty);
+          const unitPrice = i.unitPriceMinor ? Number(i.unitPriceMinor) : null;
+          if (!Number.isInteger(qty) || qty < 1 ||
+              (unitPrice !== null && (!Number.isInteger(unitPrice) || unitPrice < 0))) {
+            throw new BundleValidationError();
+          }
+          return {
+            sku: i.sku.trim(),
+            qty,
+            unit_price_minor: unitPrice,
+          };
+        });
 
       if (editingId) {
         const existing = bundles.find((b) => b.bundle.id === editingId);
@@ -157,23 +171,29 @@ export default function BundleManagementScreen() {
       }
       setShowModal(false);
       await load();
-    } catch {
-      // Error handling.
+    } catch (err) {
+      if (err instanceof BundleValidationError) {
+        setSaveError(l10n.getString('bundles-error-invalid-item'));
+      } else {
+        setSaveError(l10n.getString('bundles-error-save'));
+      }
     } finally {
       setSaving(false);
     }
-  }, [form, editingId, bundles, load]);
+  }, [form, editingId, bundles, load, l10n]);
 
   const confirmDelete = useCallback(async (id: string) => {
     setDeleting(id);
+    setDeleteError(null);
     try {
       await deleteBundle(id);
       setDeleting(null);
       await load();
     } catch {
       setDeleting(null);
+      setDeleteError(l10n.getString('bundles-error-delete'));
     }
-  }, [load]);
+  }, [load, l10n]);
 
   const toggleActive = useCallback(async (b: BundleWithItems) => {
     await updateBundle({
@@ -193,6 +213,12 @@ export default function BundleManagementScreen() {
           <Button onClick={openCreate}>Add Bundle</Button>
         </Localized>
       </div>
+
+      {deleteError && (
+        <div className="bundle-mgmt-error" role="alert">
+          {deleteError}
+        </div>
+      )}
 
       {loading ? (
         <div className="bundle-mgmt-loading-skeleton" aria-hidden="true">
@@ -265,7 +291,7 @@ export default function BundleManagementScreen() {
                         type="button"
                         className={`bundle-mgmt-toggle ${b.bundle.active ? 'bundle-mgmt-toggle--on' : 'bundle-mgmt-toggle--off'}`}
                         onClick={() => toggleActive(b)}
-                        aria-label={b.bundle.active ? 'Deactivate bundle' : 'Activate bundle'}
+
                       >
                         <Localized id={b.bundle.active ? 'bundles-toggle-active' : 'bundles-toggle-inactive'}>
                           <span>{b.bundle.active ? 'Active' : 'Inactive'}</span>
@@ -279,7 +305,7 @@ export default function BundleManagementScreen() {
                         type="button"
                         className="bundle-mgmt-action-btn"
                         onClick={() => openEdit(b)}
-                        aria-label={`Edit ${b.bundle.name}`}
+
                       >
                         <Localized id="bundles-edit">
                           <span>Edit</span>
@@ -292,7 +318,7 @@ export default function BundleManagementScreen() {
                         className="bundle-mgmt-action-btn bundle-mgmt-action-btn--danger"
                         onClick={() => confirmDelete(b.bundle.id)}
                         disabled={deleting === b.bundle.id}
-                        aria-label={`Delete ${b.bundle.name}`}
+
                       >
                         <Localized id="bundles-delete">
                           <span>Delete</span>
@@ -318,6 +344,11 @@ export default function BundleManagementScreen() {
         cancelLabel={l10n.getString('bundles-cancel')}
         size="lg"
       >
+        {saveError && (
+          <div className="bundle-mgmt-modal-error" role="alert">
+            {saveError}
+          </div>
+        )}
         <label className="bundle-mgmt-field" htmlFor="bundle-field-sku">
           {l10n.getString('bundles-sku')}
           <Localized id="bundles-sku-placeholder" attrs={{ placeholder: true }}>
@@ -326,7 +357,7 @@ export default function BundleManagementScreen() {
               type="text"
               id="bundle-field-sku"
               value={form.bundle_sku}
-              onChange={(e) => setForm({ ...form, bundle_sku: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, bundle_sku: e.target.value }))}
               disabled={!!editingId}
               placeholder="e.g. GIFT-BOX"
             />
@@ -341,7 +372,7 @@ export default function BundleManagementScreen() {
               type="text"
               id="bundle-field-name"
               value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
               placeholder="e.g. Gift Box"
             />
           </Localized>
@@ -355,7 +386,7 @@ export default function BundleManagementScreen() {
               type="text"
               id="bundle-field-description"
               value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
               placeholder="Optional description"
             />
           </Localized>
@@ -370,7 +401,7 @@ export default function BundleManagementScreen() {
               id="bundle-field-price"
               min="0"
               value={form.bundle_price_minor}
-              onChange={(e) => setForm({ ...form, bundle_price_minor: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, bundle_price_minor: e.target.value }))}
               placeholder="Leave empty to use sum of items"
             />
           </Localized>
@@ -389,7 +420,7 @@ export default function BundleManagementScreen() {
                     value={item.sku}
                     onChange={(e) => updateItem(idx, 'sku', e.target.value)}
                     placeholder="SKU"
-                    aria-label={`Item ${idx + 1} SKU`}
+
                   />
                 </Localized>
                 <Localized id="bundles-item-qty-field" attrs={{ placeholder: true, 'aria-label': true }} vars={{ number: idx + 1 }}>
@@ -400,7 +431,7 @@ export default function BundleManagementScreen() {
                     value={item.qty}
                     onChange={(e) => updateItem(idx, 'qty', e.target.value)}
                     placeholder="Qty"
-                    aria-label={`Item ${idx + 1} quantity`}
+
                   />
                 </Localized>
                 <Localized id="bundles-item-price-field" attrs={{ placeholder: true, 'aria-label': true }} vars={{ number: idx + 1 }}>
@@ -411,7 +442,7 @@ export default function BundleManagementScreen() {
                     value={item.unitPriceMinor}
                     onChange={(e) => updateItem(idx, 'unitPriceMinor', e.target.value)}
                     placeholder="Price override"
-                    aria-label={`Item ${idx + 1} unit price override`}
+
                   />
                 </Localized>
                 {form.items.length > 1 && (
@@ -420,7 +451,7 @@ export default function BundleManagementScreen() {
                       type="button"
                       className="bundle-mgmt-item-remove"
                       onClick={() => removeItemRow(idx)}
-                      aria-label={`Remove item ${idx + 1}`}
+
                     >
                       &times;
                     </button>
@@ -437,3 +468,6 @@ export default function BundleManagementScreen() {
     </div>
   );
 }
+
+/** Thrown by handleSave when a bundle item has a fractional qty/price. */
+class BundleValidationError extends Error {}

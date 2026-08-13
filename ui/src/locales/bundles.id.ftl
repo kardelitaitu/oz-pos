@@ -53,5 +53,9 @@ bundles-item-price-field =
     .aria-label = Harga unit item { $number }
 bundles-item-remove-aria =
     .aria-label = Hapus item { $number }
+bundles-error-invalid-price = Harga bundel harus berupa bilangan bulat non-negatif
+bundles-error-invalid-item = Jumlah dan harga item harus berupa bilangan bulat
+bundles-error-save = Gagal menyimpan bundel
+bundles-error-delete = Gagal menghapus bundel
 
 # ── Exchange Rates ──
