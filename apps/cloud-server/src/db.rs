@@ -281,9 +281,9 @@ mod tests {
     fn windows_style_paths_are_detected() {
         // Windows drive-letter prefixes (forward or backslash).
         assert!(DbPool::looks_like_windows_path(
-            "C:/Users/Dika/AppData/Local/Temp/test.db"
+            "C:/Users/User/AppData/Local/Temp/test.db"
         ));
-        assert!(DbPool::looks_like_windows_path("C:\\Users\\Dika\\test.db"));
+        assert!(DbPool::looks_like_windows_path("C:\\Users\\User\\test.db"));
         assert!(DbPool::looks_like_windows_path("c:/data/db.sqlite"));
         // Bare drive letters and backslash separators.
         assert!(DbPool::looks_like_windows_path("C:relative.db"));
@@ -297,7 +297,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn connect_sqlite_rejects_windows_path_on_unix() {
-        let err = DbPool::connect_sqlite("C:/Users/Dika/AppData/Local/Temp/test.db")
+        let err = DbPool::connect_sqlite("C:/Users/User/AppData/Local/Temp/test.db")
             .expect_err("Windows-style path must be rejected on Unix");
         let msg = err.to_string();
         assert!(
