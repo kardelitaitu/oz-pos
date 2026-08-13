@@ -535,7 +535,7 @@ export default function ProductManagementScreen() {
                     type="text"
                     id="product-field-sku"
                     value={form.sku}
-                    onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                    onChange={(e) => setForm((prev) => ({ ...prev, sku: e.target.value }))}
                     disabled={!!editingSku}
                     placeholder="e.g. LATTE"
                   />
@@ -550,7 +550,7 @@ export default function ProductManagementScreen() {
                     type="text"
                     id="product-field-name"
                     value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
                     placeholder="e.g. Caffè Latte"
                   />
                 </Localized>
@@ -568,7 +568,7 @@ export default function ProductManagementScreen() {
                       step="1"
                       inputMode="numeric"
                       value={form.priceMinor}
-                      onChange={(e) => setForm({ ...form, priceMinor: e.target.value })}
+                      onChange={(e) => setForm((prev) => ({ ...prev, priceMinor: e.target.value }))}
                       placeholder="450"
                     />
                   </Localized>
@@ -582,7 +582,7 @@ export default function ProductManagementScreen() {
                     className="product-mgmt-input product-mgmt-select"
                     id="product-field-currency"
                     value={form.currency}
-                    onChange={(e) => setForm({ ...form, currency: e.target.value })}
+                    onChange={(e) => setForm((prev) => ({ ...prev, currency: e.target.value }))}
                   >
                     {currencies.map((c) => (
                       <option key={c.code} value={c.code}>{c.code} — {c.symbol}</option>
@@ -599,7 +599,7 @@ export default function ProductManagementScreen() {
                   className="product-mgmt-input product-mgmt-select"
                   id="product-field-category"
                   value={form.categoryId}
-                  onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+                  onChange={(e) => setForm((prev) => ({ ...prev, categoryId: e.target.value }))}
                 >
                   <Localized id="product-mgmt-no-category">
                     <option value="">— No category —</option>
@@ -618,7 +618,7 @@ export default function ProductManagementScreen() {
                     type="text"
                     id="product-field-barcode"
                     value={form.barcode}
-                    onChange={(e) => setForm({ ...form, barcode: e.target.value })}
+                    onChange={(e) => setForm((prev) => ({ ...prev, barcode: e.target.value }))}
                     placeholder="4901234567890"
                   />
                 </Localized>
@@ -633,7 +633,7 @@ export default function ProductManagementScreen() {
                   className="product-mgmt-input product-mgmt-select"
                   id="product-field-type"
                   value={form.productType}
-                  onChange={(e) => setForm({ ...form, productType: e.target.value })}
+                  onChange={(e) => setForm((prev) => ({ ...prev, productType: e.target.value }))}
                 >
                   <option value="retail">{requiredLocalized(l10n, 'product-type-retail')}</option>
                   <option value="restaurant">{requiredLocalized(l10n, 'product-type-restaurant')}</option>
@@ -683,7 +683,7 @@ export default function ProductManagementScreen() {
                       step="1"
                       inputMode="numeric"
                       value={form.initialStock}
-                      onChange={(e) => setForm({ ...form, initialStock: e.target.value })}
+                      onChange={(e) => setForm((prev) => ({ ...prev, initialStock: e.target.value }))}
                       placeholder="0"
                     />
                   </Localized>

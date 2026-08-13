@@ -511,7 +511,7 @@ function ProductCard({ product, onAdd, added }: ProductCardProps) {
           data-testid="product-card"
           onClick={handleAdd}
           disabled={!product.inStock}
-          aria-label={`${product.name} — ${formatMoney(product.price)}`}
+
         >
           {/* Row: name + category badge */}
           {isPriceRecent(product) && <span className="product-card-price-volatility" title="Price changed recently" />}
