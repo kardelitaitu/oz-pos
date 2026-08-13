@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { ReactLocalization, LocalizationProvider } from '@fluent/react';
@@ -525,5 +525,37 @@ describe('CategoryManagementScreen', () => {
     const deleteBtn = document.querySelector('.cat-mgmt-delete-btn');
     const label = (deleteBtn?.getAttribute('aria-label') ?? '').replace(/[\u2066-\u2069]/g, '');
     expect(label).toBe('Delete category Bakery');
+  });
+
+  it('navigates the icon radiogroup with arrow keys and a roving tabindex', async () => {
+    mockListCategories.mockResolvedValue([]);
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Add Category')).toBeDefined());
+    await userEvent.click(screen.getByText('Add Category').closest('button')!);
+    await waitFor(() => expect(screen.getByText('Cancel')).toBeDefined());
+
+    const group = screen.getByRole('radiogroup', { name: /pick an icon/i });
+    const radios = within(group).getAllByRole('radio');
+    expect(radios).toHaveLength(7);
+
+    // The default icon is randomized, so locate the checked one — it is the
+    // single tab stop (roving tabindex), all others are -1.
+    const selectedIdx = radios.findIndex((r) => r.getAttribute('aria-checked') === 'true');
+    expect(selectedIdx).toBeGreaterThanOrEqual(0);
+    radios.forEach((r, i) => {
+      expect(r).toHaveAttribute('tabindex', i === selectedIdx ? '0' : '-1');
+    });
+
+    // ArrowRight moves focus + selection to the next icon (wrapping).
+    radios[selectedIdx]!.focus();
+    await userEvent.keyboard('{ArrowRight}');
+    const nextIdx = (selectedIdx + 1) % radios.length;
+    expect(radios[nextIdx]!).toHaveAttribute('aria-checked', 'true');
+    expect(radios[nextIdx]!).toHaveFocus();
+
+    // ArrowLeft wraps back to the original selection.
+    await userEvent.keyboard('{ArrowLeft}');
+    expect(radios[selectedIdx]!).toHaveAttribute('aria-checked', 'true');
+    expect(radios[selectedIdx]!).toHaveFocus();
   });
 });
