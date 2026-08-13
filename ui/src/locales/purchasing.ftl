@@ -5,7 +5,6 @@ suppliers-add = Add Supplier
 suppliers-search =
     .placeholder = Search by name, code, or contact…
     .aria-label = Search suppliers
-suppliers-loading = Loading suppliers…
 
 suppliers-add-title = Add Supplier
 suppliers-edit-title = Edit Supplier

@@ -168,6 +168,25 @@ describe('PromotionManagementScreen', () => {
     });
   });
 
+  it('rejects fractional value input instead of truncating it', async () => {
+    mockListPromotions.mockResolvedValue([]);
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('No promotions yet.')).toBeTruthy();
+    });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByText('Add Promotion'));
+
+    const valueInput = await screen.findByLabelText('Value') as HTMLInputElement;
+    await user.type(valueInput, '12.5');
+
+    // Fractional keystrokes are ignored — the field must not silently
+    // truncate 12.5 to 12 via parseInt.
+    expect(valueInput.value).toBe('12');
+  });
+
   it('closes the add modal with Cancel', async () => {
     mockListPromotions.mockResolvedValue([]);
     renderScreen();

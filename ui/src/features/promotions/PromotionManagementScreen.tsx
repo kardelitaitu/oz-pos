@@ -325,7 +325,14 @@ export default function PromotionManagementScreen() {
                 <div className="promo-mgmt-field promo-mgmt-field--horizontal">
                   {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
                   <label htmlFor="promo-field-value"><Localized id="promotions-value"><span>Value</span></Localized></label>
-                  <input id="promo-field-value" type="number" value={form.value_minor} onChange={(e) => setForm((prev) => ({ ...prev, value_minor: parseInt(e.target.value) || 0 }))} aria-label={l10n.getString('promotions-field-value')} />
+                  <input id="promo-field-value" type="number" min={0} value={form.value_minor} onChange={(e) => {
+                    // Whole number only — ignore fractional in-progress input
+                    // instead of silently truncating it via parseInt.
+                    const v = Number(e.target.value);
+                    if (e.target.value === '' || (Number.isInteger(v) && v >= 0)) {
+                      setForm((prev) => ({ ...prev, value_minor: e.target.value === '' ? 0 : v }));
+                    }
+                  }} aria-label={l10n.getString('promotions-field-value')} />
                 </div>
 
                 {form.promo_type === 'buy_x_get_y' && (
@@ -333,7 +340,14 @@ export default function PromotionManagementScreen() {
                     <div className="promo-mgmt-field promo-mgmt-field--horizontal">
                       {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
                       <label htmlFor="promo-field-min-qty"><Localized id="promotions-min-qty"><span>Min Qty</span></Localized></label>
-                      <input id="promo-field-min-qty" type="number" value={form.min_qty ?? ''} onChange={(e) => setForm((prev) => ({ ...prev, min_qty: e.target.value ? parseInt(e.target.value) : null }))} aria-label={l10n.getString('promotions-field-min-qty')} />
+                      <input id="promo-field-min-qty" type="number" min={0} value={form.min_qty ?? ''} onChange={(e) => {
+                        // Whole number only — ignore fractional in-progress input
+                        // instead of silently truncating it via parseInt.
+                        const v = Number(e.target.value);
+                        if (e.target.value === '' || (Number.isInteger(v) && v >= 0)) {
+                          setForm((prev) => ({ ...prev, min_qty: e.target.value === '' ? null : v }));
+                        }
+                      }} aria-label={l10n.getString('promotions-field-min-qty')} />
                     </div>
                     <div className="promo-mgmt-field promo-mgmt-field--horizontal">
                       {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
@@ -348,7 +362,14 @@ export default function PromotionManagementScreen() {
                     <div className="promo-mgmt-field promo-mgmt-field--horizontal">
                       {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
                       <label htmlFor="promo-field-reward-qty"><Localized id="promotions-reward-qty"><span>Reward Qty</span></Localized></label>
-                      <input id="promo-field-reward-qty" type="number" value={form.reward_qty ?? ''} onChange={(e) => setForm((prev) => ({ ...prev, reward_qty: e.target.value ? parseInt(e.target.value) : null }))} aria-label={l10n.getString('promotions-field-reward-qty')} />
+                      <input id="promo-field-reward-qty" type="number" min={0} value={form.reward_qty ?? ''} onChange={(e) => {
+                        // Whole number only — ignore fractional in-progress input
+                        // instead of silently truncating it via parseInt.
+                        const v = Number(e.target.value);
+                        if (e.target.value === '' || (Number.isInteger(v) && v >= 0)) {
+                          setForm((prev) => ({ ...prev, reward_qty: e.target.value === '' ? null : v }));
+                        }
+                      }} aria-label={l10n.getString('promotions-field-reward-qty')} />
                     </div>
                   </>
                 )}
@@ -367,7 +388,14 @@ export default function PromotionManagementScreen() {
                 <div className="promo-mgmt-field promo-mgmt-field--horizontal">
                   {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
                   <label htmlFor="promo-field-min-order"><Localized id="promotions-min-order"><span>Min Order</span></Localized></label>
-                  <input id="promo-field-min-order" type="number" value={form.min_order_minor} onChange={(e) => setForm((prev) => ({ ...prev, min_order_minor: parseInt(e.target.value) || 0 }))} aria-label={l10n.getString('promotions-field-min-order')} />
+                  <input id="promo-field-min-order" type="number" min={0} value={form.min_order_minor} onChange={(e) => {
+                    // Whole number only — ignore fractional in-progress input
+                    // instead of silently truncating it via parseInt.
+                    const v = Number(e.target.value);
+                    if (e.target.value === '' || (Number.isInteger(v) && v >= 0)) {
+                      setForm((prev) => ({ ...prev, min_order_minor: e.target.value === '' ? 0 : v }));
+                    }
+                  }} aria-label={l10n.getString('promotions-field-min-order')} />
                 </div>
 
                 <div className="promo-mgmt-field promo-mgmt-field--horizontal">
