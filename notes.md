@@ -1214,3 +1214,24 @@ storageState-per-worker); perf-smoke budgets env-overridable with sane
 fallbacks; pageerror/perf logs intentional. playwright.config.ts clean
 (webServer auto-start, retain-on-failure trace, reducedMotion, forbidOnly
 on CI).
+
+# Release-pipeline version-drift fixes (2026-08-14)
+
+1. **openapi.rs stale version examples** — the served OpenAPI spec had
+   hardcoded version examples (one stale at 0.0.9 from an old release,
+   one at 0.0.25); bump-version.ps1 never touched this file. Both now use
+   `env!("CARGO_PKG_VERSION")` (already used for info.version), so drift
+   is impossible. Cloud-server 138/138 tests pass.
+2. **bump-version.ps1 AGENTS.md pattern mismatch** — the script updated
+   the root AGENTS.md version-lock line with a pattern that didn't match
+   its actual phrasing ("the current release ($v)"), silently leaving it
+   stale each bump (0.0.24 needed a manual catch-up). Pattern fixed and
+   verified against both AGENTS.md files; historical audit-stamp versions
+   (dated, in comments) intentionally untouched.
+
+Also verified the wider release surface: release.sh (version gate runs
+before tagging, changelog draft + canonical heading), release.yml
+(signing degrades gracefully when UPDATER_CERT/SignPath absent),
+bump-version.ps1 full file list (all present, lockfiles regenerated),
+updater tooling (synthetic versions only), mobile CI (version-agnostic),
+docs/releases/release-process.md consistent with scripts.
