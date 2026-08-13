@@ -249,6 +249,7 @@ analytics-card-waitstaff-total = Total covers
 analytics-card-error-load = Couldn't load this chart. Check your connection and refresh.
 analytics-empty-generic = No data in this period.
 analytics-empty-low-stock = All items are sufficiently stocked.
+analytics-empty-heatmap = No sales recorded in this range.
 analytics-toast-layout-saved = Layout saved
 analytics-toast-layout-reset = Layout reset to default
 analytics-toast-zoom-reset = Zoom reset to 100%

@@ -246,6 +246,7 @@ analytics-card-waitstaff-total = Total meja ditangani
 analytics-card-error-load = Tidak dapat memuat grafik ini. Periksa koneksi Anda lalu muat ulang.
 analytics-empty-generic = Tidak ada data pada periode ini.
 analytics-empty-low-stock = Semua item memiliki stok yang cukup.
+analytics-empty-heatmap = Tidak ada penjualan pada rentang ini.
 analytics-toast-layout-saved = Tata letak disimpan
 analytics-toast-layout-reset = Tata letak direset ke default
 analytics-toast-zoom-reset = Zoom direset ke 100%

@@ -677,6 +677,15 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   const heatmapIntensities = heatmapData
     ? buildHeatmapIntensities(heatmapGranularity, heatmapData)
     : new Map<string, number>();
+  // The grid renders zero-filled even for an empty range, so flag a truly
+  // empty query to show the same no-data placeholder as the other cards.
+  const heatmapEmpty = heatmapData
+    ? heatmapGranularity === 'monthly'
+      ? heatmapData.daily.length === 0
+      : heatmapGranularity === 'yearly'
+        ? heatmapData.weekly.length === 0
+        : heatmapData.hourly.length === 0
+    : false;
   const heatCell = (key: string, label: string, reactKey?: string) => (
     <div
       key={reactKey ?? key}
@@ -1419,6 +1428,10 @@ const [paletteOpen, setPaletteOpen] = useState(false);
                         <span className="analytics-card-error-text">
                           {l10nErrorMessage(heatmapQuery.error, l10n, 'analytics-card-error-load')}
                         </span>
+                      </div>
+                    ) : heatmapEmpty ? (
+                      <div className="analytics-card-empty" role="status">
+                        {l10n.getString('analytics-empty-heatmap')}
                       </div>
                     ) : (
                       <>

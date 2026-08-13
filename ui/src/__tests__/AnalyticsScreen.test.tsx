@@ -1177,13 +1177,16 @@ describe('AnalyticsScreen layout shell', () => {
     vi.useFakeTimers();
     mockGetLowStockAlerts.mockResolvedValueOnce([]);
     mockGetTopProducts.mockResolvedValueOnce([]);
+    mockGetHourlyHeatmap.mockResolvedValueOnce([]);
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
     await flushRecalc();
 
     // Low-stock card gets a specific reassuring message; the top-items
-    // card (empty) falls back to the generic no-data placeholder.
+    // card (empty) falls back to the generic no-data placeholder; the
+    // heatmap shows its own no-sales message instead of an all-zero grid.
     expect(screen.getByText('All items are sufficiently stocked.')).toBeTruthy();
     expect(screen.getByText('No data in this period.')).toBeTruthy();
+    expect(screen.getByText('No sales recorded in this range.')).toBeTruthy();
   });
 
   it('keeps card visuals rendering as granularity changes', async () => {
