@@ -110,6 +110,10 @@ database from scratch.
 
 ### Seed Data to Include
 
+> The authoritative final seed SQL is the `SEED DATA` section at the end of
+> `crates/oz-core/migrations/20260813_init.sql` (11 seed INSERTs). The sketch
+> below is illustrative only.
+
 ```sql
 -- ====================================================================
 -- SEED DATA
