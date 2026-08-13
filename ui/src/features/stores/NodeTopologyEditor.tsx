@@ -54,6 +54,7 @@ import {
 import { TopologyNodeCard } from './topologyNodeCard';
 import { TopologyShortcutsHelp } from './topologyShortcutsHelp';
 import { TopologyNodeFinder } from './topologyNodeFinder';
+import { TopologyMinimap } from './topologyMinimap';
 import type { TopologyOverlay } from './topologyBranchCompare';
 import { layoutGhosts, buildGhostWireStubs, compareFocusDimIds, GHOST_WIDTH, GHOST_HEIGHT } from './topologyBranchCompare';
 import { TopologyWireGroup } from './topologyWireGroup';
@@ -139,12 +140,6 @@ const ALIGN_ACTIONS: { mode: AlignMode; ariaId: string }[] = [
 
 /** Node types offered by the right-click canvas context menu. */
 const CONTEXT_ADD_TYPES: NodeType[] = ['store', 'workspace', 'warehouse', 'hardware'];
-
-/** Minimap overview widget geometry (bottom-left of the canvas). */
-const MINIMAP_W = 176;
-const MINIMAP_H = 120;
-const MINIMAP_PAD = 8;
-const MINIMAP_VIEWPORT_MIN = 8;
 
 /** Orthogonal elbow routing: from the source port, run horizontally to the
  *  midpoint, drop/rise to the target row, then run into the target port.
@@ -1379,33 +1374,20 @@ export default function NodeTopologyEditor({
     return { minX, minY, maxX, maxY };
   }, [nodes, selectedNodeIds]);
 
-  /** Content bounding box in canvas coords — the minimap's projection frame. */
-  const contentBounds = useMemo(() => {
-    if (nodes.length === 0) return null;
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-    for (const n of nodes) {
-      minX = Math.min(minX, n.x);
-      minY = Math.min(minY, n.y);
-      maxX = Math.max(maxX, n.x + NODE_WIDTH);
-      maxY = Math.max(maxY, n.y + NODE_HEIGHT);
-    }
-    return { minX, minY, maxX, maxY };
-  }, [nodes]);
+  /** Center the viewport on a canvas point — the minimap's recenter/Enter
+   *  action. Reads the live canvas size so the centering math uses the
+   *  current viewport dimensions. */
+  const centerViewportOn = useCallback((cx: number, cy: number) => {
+    const canvas = canvasRef.current;
+    const cw = canvas?.clientWidth ?? 0;
+    const ch = canvas?.clientHeight ?? 0;
+    setPan({ x: cw / 2 - cx * zoom, y: ch / 2 - cy * zoom });
+  }, [zoom, setPan]);
 
-  /** Uniform scale mapping canvas coords onto the fixed-size minimap. */
-  const minimapScale = useMemo(() => {
-    if (!contentBounds) return 1;
-    const cw = contentBounds.maxX - contentBounds.minX;
-    const ch = contentBounds.maxY - contentBounds.minY;
-    if (cw <= 0 || ch <= 0) return 1;
-    return Math.min(
-      (MINIMAP_W - MINIMAP_PAD * 2) / cw,
-      (MINIMAP_H - MINIMAP_PAD * 2) / ch,
-    );
-  }, [contentBounds]);
+  /** Nudge the viewport by a canvas-space delta — the minimap's arrows. */
+  const nudgeViewport = useCallback((dx: number, dy: number) => {
+    setPan((p) => ({ x: p.x + dx, y: p.y + dy }));
+  }, [setPan]);
 
   /** Select every node on the canvas (context menu action). */
   const selectAllNodes = useCallback(() => {
@@ -2822,7 +2804,6 @@ export default function NodeTopologyEditor({
     return () => {
       panCleanupRef.current?.();
       dragCleanupRef.current?.();
-      minimapDragCleanupRef.current?.();
       marqueeCleanupRef.current?.();
       bendDragCleanupRef.current?.();
       touchCleanupRef.current?.();
@@ -3841,71 +3822,6 @@ export default function NodeTopologyEditor({
     // mousemove.
   };
 
-  /** Minimap: a scaled overview of the whole diagram. Click or drag to
-   *  recenter the viewport on that canvas point; arrows nudge the view,
-   *  Enter centers on the content box. Drag arms document-level listeners
-   *  (cleanup ref, same pattern as node drag) so the map keeps panning
-   *  even when the pointer leaves the widget. */
-  const minimapRef = useRef<HTMLDivElement>(null);
-  const minimapDragCleanupRef = useRef<(() => void) | null>(null);
-
-  const recenterViewOn = (px: number, py: number) => {
-    if (!contentBounds) return;
-    const cx = contentBounds.minX + (px - MINIMAP_PAD) / minimapScale;
-    const cy = contentBounds.minY + (py - MINIMAP_PAD) / minimapScale;
-    const canvas = canvasRef.current;
-    const cw = canvas?.clientWidth ?? 0;
-    const ch = canvas?.clientHeight ?? 0;
-    setPan({ x: cw / 2 - cx * zoom, y: ch / 2 - cy * zoom });
-  };
-
-  const handleMinimapMouseDown = (e: React.MouseEvent) => {
-    if (e.button !== 0) return;
-    e.stopPropagation();
-    const rect = minimapRef.current?.getBoundingClientRect();
-    recenterViewOn(e.clientX - (rect?.left ?? 0), e.clientY - (rect?.top ?? 0));
-    minimapDragCleanupRef.current?.();
-    const handleMove = (ev: MouseEvent) => {
-      const r = minimapRef.current?.getBoundingClientRect();
-      recenterViewOn(ev.clientX - (r?.left ?? 0), ev.clientY - (r?.top ?? 0));
-    };
-    const handleUp = () => {
-      document.removeEventListener('mousemove', handleMove);
-      document.removeEventListener('mouseup', handleUp);
-      minimapDragCleanupRef.current = null;
-    };
-    document.addEventListener('mousemove', handleMove);
-    document.addEventListener('mouseup', handleUp);
-    minimapDragCleanupRef.current = () => {
-      document.removeEventListener('mousemove', handleMove);
-      document.removeEventListener('mouseup', handleUp);
-      minimapDragCleanupRef.current = null;
-    };
-  };
-
-  const handleMinimapKeyDown = (e: React.KeyboardEvent) => {
-    if (!contentBounds) return;
-    const canvas = canvasRef.current;
-    const cw = canvas?.clientWidth ?? 0;
-    const ch = canvas?.clientHeight ?? 0;
-    if (e.key === 'Enter') {
-      const cx = contentBounds.minX + (contentBounds.maxX - contentBounds.minX) / 2;
-      const cy = contentBounds.minY + (contentBounds.maxY - contentBounds.minY) / 2;
-      setPan({ x: cw / 2 - cx * zoom, y: ch / 2 - cy * zoom });
-      return;
-    }
-    const STEP = 40;
-    let dx = 0;
-    let dy = 0;
-    if (e.key === 'ArrowLeft') dx = -STEP;
-    else if (e.key === 'ArrowRight') dx = STEP;
-    else if (e.key === 'ArrowUp') dy = -STEP;
-    else if (e.key === 'ArrowDown') dy = STEP;
-    else return;
-    e.preventDefault();
-    setPan((p) => ({ x: p.x + dx, y: p.y + dy }));
-  };
-
   // Clear hoveredTarget when connection mode ends
   useEffect(() => {
     if (!connectingFromNodeId) {
@@ -4612,7 +4528,7 @@ export default function NodeTopologyEditor({
   const handleAddStockWireHint = (nodeId: string) => {
     setValidationPanelOpen(false);
     const node = nodeMap.get(nodeId);
-    if (node) recenterViewOn(node.x + NODE_WIDTH / 2, node.y + NODE_HEIGHT / 2);
+    if (node) centerViewportOn(node.x + NODE_WIDTH / 2, node.y + NODE_HEIGHT / 2);
     selectOnly(nodeId);
     setAddStockWireHintId(nodeId);
   };
@@ -4622,9 +4538,7 @@ export default function NodeTopologyEditor({
    *  invalid-location-connection, unknown-wire-endpoint) selects + centers
    *  the offending wire instead of leaving the user to hunt for it.
    *  Mirrors handleAddStockWireHint's close/center/select shape, but on
-   *  the wire model — the midpoint of the two endpoint node centers.
-   *  Plain function like handleAddStockWireHint: recenterViewOn is not
-   *  memoized, so a useCallback here would churn its deps every render. */
+   *  the wire model — the midpoint of the two endpoint node centers. */
   const handleJumpToWire = (wireId: string) => {
     setValidationPanelOpen(false);
     const wire = wires.find((w) => w.id === wireId);
@@ -4632,7 +4546,7 @@ export default function NodeTopologyEditor({
     const from = nodeMap.get(wire.fromNodeId);
     const to = nodeMap.get(wire.toNodeId);
     if (from && to) {
-      recenterViewOn((from.x + to.x) / 2 + NODE_WIDTH / 2, (from.y + to.y) / 2 + NODE_HEIGHT / 2);
+      centerViewportOn((from.x + to.x) / 2 + NODE_WIDTH / 2, (from.y + to.y) / 2 + NODE_HEIGHT / 2);
     }
     selectWire(wireId);
     // Keyboard parity (round 112): land focus on the wire's hitbox
@@ -6563,56 +6477,18 @@ export default function NodeTopologyEditor({
           {/* ── Canvas minimap — bottom-left overview; click/drag to
                  recenter, arrows nudge the view, Enter centers on the
                  content box ────────────────────────────────────── */}
-          {contentBounds && minimapVisible && (
-            <div
-              ref={minimapRef}
-              className="topology-minimap"
-              role="button"
-              tabIndex={0}
-              aria-label={l10n.getString('topology-minimap-aria')}
-              onMouseDown={handleMinimapMouseDown}
-              onKeyDown={handleMinimapKeyDown}
-            >
-              <svg width={MINIMAP_W} height={MINIMAP_H} aria-hidden="true">
-                {wires.map((w) => {
-                  const from = nodeMap.get(w.fromNodeId);
-                  const to = nodeMap.get(w.toNodeId);
-                  if (!from || !to) return null;
-                  return (
-                    <line
-                      key={w.id}
-                      className="topology-minimap-wire"
-                      x1={MINIMAP_PAD + (from.x + NODE_WIDTH / 2 - contentBounds.minX) * minimapScale}
-                      y1={MINIMAP_PAD + (from.y + NODE_HEIGHT / 2 - contentBounds.minY) * minimapScale}
-                      x2={MINIMAP_PAD + (to.x + NODE_WIDTH / 2 - contentBounds.minX) * minimapScale}
-                      y2={MINIMAP_PAD + (to.y + NODE_HEIGHT / 2 - contentBounds.minY) * minimapScale}
-                    />
-                  );
-                })}
-                {nodes.map((n) => (
-                  <rect
-                    key={n.id}
-                    className={`topology-minimap-node node-type-${n.type}`}
-                    x={MINIMAP_PAD + (n.x - contentBounds.minX) * minimapScale}
-                    y={MINIMAP_PAD + (n.y - contentBounds.minY) * minimapScale}
-                    width={Math.max(2, NODE_WIDTH * minimapScale)}
-                    height={Math.max(2, NODE_HEIGHT * minimapScale)}
-                    rx={2}
-                  />
-                ))}
-                <rect
-                  className="topology-minimap-viewport"
-                  // Screen(0) is the viewport's left/top edge, so the visible
-                  // canvas range is [−pan/zoom, (canvasW − pan)/zoom] — the
-                  // box origin is −pan/zoom (pan.x directly would put the box
-                  // on the wrong side of the map and ignore the zoom).
-                  x={MINIMAP_PAD + (-pan.x / zoom - contentBounds.minX) * minimapScale}
-                  y={MINIMAP_PAD + (-pan.y / zoom - contentBounds.minY) * minimapScale}
-                  width={Math.max(MINIMAP_VIEWPORT_MIN, ((canvasRef.current?.clientWidth ?? 0) / zoom) * minimapScale)}
-                  height={Math.max(MINIMAP_VIEWPORT_MIN, ((canvasRef.current?.clientHeight ?? 0) / zoom) * minimapScale)}
-                />
-              </svg>
-            </div>
+          {minimapVisible && (
+            <TopologyMinimap
+              nodes={nodes}
+              wires={wires}
+              nodeMap={nodeMap}
+              pan={pan}
+              zoom={zoom}
+              canvasWidth={canvasRef.current?.clientWidth ?? 0}
+              canvasHeight={canvasRef.current?.clientHeight ?? 0}
+              onCenter={centerViewportOn}
+              onNudge={nudgeViewport}
+            />
           )}
         </div>
 

@@ -135,12 +135,18 @@ NodeTopologyEditor). Fixed items are committed; the rest remain open.
 
 ### NodeTopologyEditor
 
-7. **Size (refactor opportunity, not a bug)** — the component is ~6,900
-   lines. Correction to the earlier note: only `CanvasCursorReadout` and
-   `ValidationIssuesLabel` are isolated `memo` pieces; the minimap, finder
-   overlay, and shortcuts popover are inline JSX with their handlers/state
-   interwoven into the main component, so extracting them is a substantial
-   refactor rather than a clean move. Deferred as its own planned effort.
+7. **Size (in progress: overlays extracted)** — the component is ~6,900
+   lines. The shortcuts help popover, node finder, and canvas minimap are
+   now extracted into `topologyShortcutsHelp.tsx`, `topologyNodeFinder.tsx`,
+   and `topologyMinimap.tsx` respectively (each behavior-preserving, with
+   541 topology tests green). The main component's remaining bulk is the
+   drag/undo/rename/simulate state machine, which is not trivially
+   separable. **Surfaced + fixed while extracting:** the validation-jump
+   actions (`handleAddStockWireHint` / `handleJumpToWire`) called the
+   minimap's `recenterViewOn` (which converts minimap PIXELS to canvas
+   coords) with CANVAS coords, so "jump and center" panned to a wildly
+   wrong spot. They now use `centerViewportOn`, which centers on the actual
+   node/wire canvas position.
 8. **Render-phase ref writes (assessed: intentional, leave as-is)** —
    `historyRef.current = history` (and similar mirrors, e.g. `panRef`,
    `nodesRef`, `pushHistoryRef`, `selectedNodeIdsRef`, `l10nRef`) assign
