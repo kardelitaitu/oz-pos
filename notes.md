@@ -1159,3 +1159,20 @@ and resolve the binary via `CBM_EXE` env override → PATH → standard Windows
 install location glob. Verified the indexer process actually spawns after a
 commit. All remaining hardcoded paths in `.githooks/` + `scripts/` cleared
 (the one `verify-docker-all.sh` path is a deliberate test fixture).
+
+# Machine-specific path sweep round 2 — scripts + tests (2026-08-14)
+
+Broad scan for `C:/Users/Dika|/mnt/c/...|Users\Dika` across all sh/py/mjs/
+ps1/bat/yml/json/toml/rs/ts/tsx. Remaining findings, both test fixtures
+where any Windows-style path satisfies the assertion:
+
+- `apps/cloud-server/src/db.rs` — Windows-path detection tests used
+  `C:/Users/Dika/AppData/Local/Temp/test.db` → neutral `C:/Users/User/...`
+  (also the backslash form). db tests 19/19 pass.
+- `scripts/verify-docker-all.sh` OZ_DB_PATH guard fixture → neutral.
+
+Verified clean: ps1 scripts (candidate-list fallbacks only), .bat scripts
+(`%~dp0..` + `wslpath` — generic), e2e tooling (platform-aware killByPort,
+idempotent cleanup, SIGINT/SIGTERM + finally), release-version self-test
+(0.0.24 fixtures are synthetic; real version comes from the tag arg),
+`verify-ci-docs-drift` (0 drift), version lock 0.0.25 everywhere.
