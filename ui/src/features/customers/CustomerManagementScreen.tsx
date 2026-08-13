@@ -96,6 +96,9 @@ export default function CustomerManagementScreen() {
   const { sessionToken: rawToken } = useWorkspace();
   const sessionToken = rawToken || '';
   const { addToast } = useToast();
+  // Currency/date/number formatting follows the active Fluent locale (matching
+  // the DashboardScreen pattern) instead of a hardcoded 'en-US'.
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
   const [customers, setCustomers] = useState<CustomerDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -785,11 +788,11 @@ export default function CustomerManagementScreen() {
                       <dl className="customer-mgmt-history-grid">
                         <div>
                           <dt>{requiredLocalized(l10n, 'customer-mgmt-history-points')}</dt>
-                          <dd>{history.loyalty.points.toLocaleString()}</dd>
+                          <dd>{history.loyalty.points.toLocaleString(numLocale)}</dd>
                         </div>
                         <div>
                           <dt>{requiredLocalized(l10n, 'customer-mgmt-history-lifetime')}</dt>
-                          <dd>{history.loyalty.lifetime_points.toLocaleString()}</dd>
+                          <dd>{history.loyalty.lifetime_points.toLocaleString(numLocale)}</dd>
                         </div>
                         <div>
                           <dt>{requiredLocalized(l10n, 'customer-mgmt-history-tier')}</dt>
@@ -816,11 +819,11 @@ export default function CustomerManagementScreen() {
                         {history.sales.map((sale) => (
                           <li key={sale.id} className="customer-mgmt-history-sale">
                             <div className="customer-mgmt-history-sale-meta">
-                              <span className="customer-mgmt-history-sale-date">{formatDate(sale.created_at)}</span>
+                              <span className="customer-mgmt-history-sale-date">{formatDate(sale.created_at, numLocale)}</span>
                               <span className="customer-mgmt-history-sale-status">{sale.status}</span>
                             </div>
                             <div className="customer-mgmt-history-sale-amount">
-                              {formatSaleTotal(sale)}
+                              {formatSaleTotal(sale, numLocale)}
                             </div>
                           </li>
                         ))}
@@ -837,23 +840,24 @@ export default function CustomerManagementScreen() {
   );
 }
 
-/** CUST-05: format a sale total from minor units + currency code. */
-function formatSaleTotal(sale: CustomerSaleSummary): string {
+/** CUST-05: format a sale total from minor units + currency code, using the
+ *  active Fluent locale so currency formatting matches the UI language. */
+function formatSaleTotal(sale: CustomerSaleSummary, locale: string): string {
   try {
     return formatMoney(
       { minor_units: sale.total_minor, currency: sale.currency },
-      'en-US',
+      locale,
     );
   } catch {
-    return sale.total_minor.toLocaleString();
+    return sale.total_minor.toLocaleString(locale);
   }
 }
 
-/** CUST-05: short readable date for the sales list. */
-function formatDate(iso: string): string {
+/** CUST-05: short readable date for the sales list, in the active locale. */
+function formatDate(iso: string, locale: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString('en-US', {
+  return d.toLocaleString(locale, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
