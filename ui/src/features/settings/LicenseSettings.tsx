@@ -162,6 +162,21 @@ export default function LicenseSettings() {
       if (status.payload) {
         const parsed: LicensePayload = JSON.parse(status.payload);
         setPayload(parsed);
+      } else if (status.tier) {
+        // Payload unavailable (expired/missing) but Rust still returns tier.
+        // Build a minimal payload so the tier row is visible.
+        setPayload({
+          tenant_id: '',
+          tier_key: status.tier,
+          status: status.status,
+          max_stores: 0,
+          max_pos_instances: 0,
+          allowed_types: [],
+          starts_at: '',
+          expires_at: '',
+          grace_until: '',
+          issued_at: '',
+        });
       }
     } catch (err) {
       setLoadError(l10nErrorMessage(err, l10nRef.current, 'settings-license-load-failed'));

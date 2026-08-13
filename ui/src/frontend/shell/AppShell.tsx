@@ -148,16 +148,16 @@ export default function AppShell() {
             setHasActiveLicense(true);
             if (licenseStatus.status === 'gracePeriod') {
               addToastRef.current({ type: 'warning', message: licenseStatus.message ?? 'License is in grace period.' });
-            } else if (!licenseStatus.is_active) {
+            } else if (!licenseStatus.isActive) {
               addToastRef.current({ type: 'warning', message: licenseStatus.message ?? 'License is inactive. Please renew from Settings.' });
             }
           } else {
             // ── Fresh install ──────────────────────────────────────────
             // Respect the license gate; show ActivationFlow if not active.
-            setHasActiveLicense(licenseStatus.is_active);
+            setHasActiveLicense(licenseStatus.isActive);
             if (licenseStatus.status === 'gracePeriod') {
               addToastRef.current({ type: 'warning', message: licenseStatus.message ?? 'License is in grace period.' });
-            } else if (!licenseStatus.is_active && licenseStatus.status !== 'missing') {
+            } else if (!licenseStatus.isActive && licenseStatus.status !== 'missing') {
               setLicenseError(licenseStatus.message);
             }
           }

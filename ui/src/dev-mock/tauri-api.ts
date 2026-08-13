@@ -1337,7 +1337,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
 
   'plugin:updater|check': () => null,
 
-  'get_license_status': () => ({ is_valid: true, license_type: 'Pro', expires_at: null, is_active: true, status: 'valid', payload: null, message: null }),
+  'get_license_status': () => ({ isActive: true, status: 'valid', tier: 'pro', payload: null, message: null }),
   'check_license_status': () => ({ tenantId: 'tenant-1', status: 'active', tier: 'Pro', active: true, expiresAt: null, graceUntil: null, maxStores: 5 }),
   'get_machine_id': () => 'mock-machine-id-001',
   'get_device_id': () => 'mock-device-id-001',

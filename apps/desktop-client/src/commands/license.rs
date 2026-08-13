@@ -493,12 +493,12 @@ pub async fn get_license_status(state: State<'_, AppState>) -> Result<LicenseSta
         } else {
             #[cfg(debug_assertions)]
             {
-                tracing::debug!("License expired in debug mode — returning Valid");
+                tracing::debug!("License expired in debug mode — returning Valid with payload");
                 Ok(LicenseStatusDto {
                     is_active: true,
                     status: LicenseVerificationStatus::Valid,
                     tier: Some(payload.tier_key),
-                    payload: None,
+                    payload: Some(p),
                     message: None,
                 })
             }
@@ -507,8 +507,8 @@ pub async fn get_license_status(state: State<'_, AppState>) -> Result<LicenseSta
                 return Ok(LicenseStatusDto {
                     is_active: false,
                     status: LicenseVerificationStatus::Expired,
-                    tier: None,
-                    payload: None,
+                    tier: Some(payload.tier_key),
+                    payload: Some(p),
                     message: Some(format!(
                         "License expired on {}. Grace period ended on {}.",
                         expires_at.format("%Y-%m-%d"),
@@ -521,11 +521,11 @@ pub async fn get_license_status(state: State<'_, AppState>) -> Result<LicenseSta
         // ── No stored payload/signature ─────────────────────
         #[cfg(debug_assertions)]
         {
-            tracing::debug!("No license payload found in debug mode — returning Valid");
+            tracing::debug!("No license payload found in debug mode — returning Valid (free tier)");
             Ok(LicenseStatusDto {
                 is_active: true,
                 status: LicenseVerificationStatus::Valid,
-                tier: None,
+                tier: Some("free".to_string()),
                 payload: None,
                 message: None,
             })

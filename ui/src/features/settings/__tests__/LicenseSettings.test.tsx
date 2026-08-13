@@ -122,7 +122,7 @@ function makePayload(overrides: Record<string, unknown> = {}) {
 }
 
 const VALID_LICENSE_STATUS = {
-  is_active: true,
+  isActive: true,
   status: 'valid' as const,
   tier: 'pro',
   payload: JSON.stringify(makePayload()),
@@ -229,7 +229,7 @@ describe('LicenseSettings', () => {
   describe('Not-activated state', () => {
     it('shows message when payload is null', async () => {
       vi.mocked(getLicenseStatus).mockResolvedValue({
-        is_active: false,
+        isActive: false,
         status: 'missing',
         tier: null,
         payload: null,
@@ -247,7 +247,7 @@ describe('LicenseSettings', () => {
 
     it('not-activated message has role="status"', async () => {
       vi.mocked(getLicenseStatus).mockResolvedValue({
-        is_active: false,
+        isActive: false,
         status: 'missing',
         tier: null,
         payload: null,
@@ -459,7 +459,7 @@ describe('LicenseSettings', () => {
   describe('JSON payload edge cases', () => {
     it('handles malformed JSON payload gracefully', async () => {
       vi.mocked(getLicenseStatus).mockResolvedValue({
-        is_active: true,
+        isActive: true,
         status: 'valid',
         tier: null,
         payload: '{ not valid json }',
@@ -474,7 +474,7 @@ describe('LicenseSettings', () => {
 
     it('handles empty string payload gracefully', async () => {
       vi.mocked(getLicenseStatus).mockResolvedValue({
-        is_active: true,
+        isActive: true,
         status: 'valid',
         tier: null,
         payload: '',
@@ -493,7 +493,7 @@ describe('LicenseSettings', () => {
 
     it('handles payload with unexpected shape (missing all fields)', async () => {
       vi.mocked(getLicenseStatus).mockResolvedValue({
-        is_active: true,
+        isActive: true,
         status: 'valid',
         tier: null,
         payload: '{}',

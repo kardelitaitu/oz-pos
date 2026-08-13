@@ -5,11 +5,15 @@ export type LicenseVerificationStatus = 'valid' | 'expired' | 'gracePeriod' | 'i
 
 /** License verification status returned by the backend (local, no network). */
 export interface LicenseStatusDto {
-  is_active: boolean;
+  /** Whether the license is currently active and usable. */
+  isActive: boolean;
+  /** Categorized verification status of the license. */
   status: LicenseVerificationStatus;
   /** Subscription tier — available immediately from local data. */
   tier: string | null;
+  /** Raw JSON payload of the signed license, if available. */
   payload: string | null;
+  /** Human-readable message explaining the status or providing error details. */
   message: string | null;
 }
 
