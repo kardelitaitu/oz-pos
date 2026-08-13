@@ -132,9 +132,13 @@ const EMPTY_FORM: FormData = {
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-function formatDate(iso: string): string {
+/** Short readable "last seen" / created timestamp in the active locale.
+ *  Uses toLocaleString (not toLocaleDateString) so the hour/minute options
+ *  are honored instead of silently ignored. */
+function formatDate(iso: string, locale: string): string {
   const d = new Date(iso);
-  return d.toLocaleDateString(undefined, {
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(locale, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -151,6 +155,8 @@ export default function TerminalManagementScreen() {
   const { session } = useAuth();
   const { sessionToken } = useWorkspace();
   const { addToast } = useToast();
+  // Timestamps follow the active Fluent locale (not the browser default).
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
   const [terminals, setTerminals] = useState<TerminalDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -562,13 +568,13 @@ export default function TerminalManagementScreen() {
                     )}
                   </td>
                   <td className="terminal-mgmt-cell-last-seen">
-                    {terminal.lastSeenAt ? formatDate(terminal.lastSeenAt) : (
+                    {terminal.lastSeenAt ? formatDate(terminal.lastSeenAt, numLocale) : (
                       <Localized id="terminal-never">
                         <span>Never</span>
                       </Localized>
                     )}
                   </td>
-                  <td className="terminal-mgmt-cell-created">{formatDate(terminal.createdAt)}</td>
+                  <td className="terminal-mgmt-cell-created">{formatDate(terminal.createdAt, numLocale)}</td>
                   <td>
                     <div className="terminal-mgmt-cell-actions">
                     <Localized id="terminal-edit-action" attrs={{ "aria-label": true }} vars={{ name: terminal.name }}>
