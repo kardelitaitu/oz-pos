@@ -1151,6 +1151,28 @@ describe('AnalyticsScreen layout shell', () => {
     ]);
   });
 
+  it('gives the waitstaff card a distinct export label from staff', async () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
+    await flushRecalc();
+
+    const select = screen.getByRole('combobox', { name: 'Select workspace type' });
+    fireEvent.change(select, { target: { value: 'restaurant' } });
+    await flushRecalc();
+
+    // Restaurant shows both the shared "Staff Performance" card and the
+    // restaurant-only "Top Waitstaff" — their export buttons must not share
+    // one accessible name.
+    expect(screen.getByRole('button', { name: 'Export staff data as CSV' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Export waitstaff as CSV' })).toBeTruthy();
+
+    vi.mocked(downloadCsv).mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Export waitstaff as CSV' }));
+    expect(downloadCsv).toHaveBeenCalledTimes(1);
+    const [filename] = vi.mocked(downloadCsv).mock.calls[0]!;
+    expect(filename).toContain('waitstaff-');
+  });
+
   it('shows empty states when a card has no data', async () => {
     vi.useFakeTimers();
     mockGetLowStockAlerts.mockResolvedValueOnce([]);

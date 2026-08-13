@@ -199,6 +199,7 @@ function staffCsvColumns(getString: (id: string) => string) {
 
 /** Download a staff card's rows as CSV, ranked like the on-screen list. */
 function exportStaffCsv(
+  cardKey: string,
   staff: StaffAnalyticsRow[],
   from: string,
   to: string,
@@ -207,7 +208,7 @@ function exportStaffCsv(
 ) {
   const ranked = [...staff].sort((a, b) => b.sale_total_minor - a.sale_total_minor);
   downloadCsv(
-    `staff-performance-${from}-to-${to}.csv`,
+    `${cardKey}-${from}-to-${to}.csv`,
     staffCsvColumns(getString),
     ranked.map((r) => ({
       display_name: r.display_name,
@@ -692,7 +693,7 @@ function StaffCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: 
         <Kpi value={short(totalSales)} label={l10n.getString('analytics-card-staff-sales')} />
         <div className="analytics-kpi-actions">
           {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
-          <ExportCsvButton ariaLabel={l10n.getString('analytics-export-csv-aria')} onClick={() => exportStaffCsv(staff, q.from, q.to, fmt, (id) => l10n.getString(id))} />
+          <ExportCsvButton ariaLabel={l10n.getString('analytics-export-csv-aria')} onClick={() => exportStaffCsv('staff-performance', staff, q.from, q.to, fmt, (id) => l10n.getString(id))} />
         </div>
       </div>
       <RankedList rows={rows} ariaLabel={title} limit={expanded ? undefined : 5} />
@@ -1248,7 +1249,7 @@ function WaitstaffCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
         <Kpi value={totalCovers.toLocaleString()} label={l10n.getString('analytics-card-waitstaff-total')} />
         <div className="analytics-kpi-actions">
           {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
-          <ExportCsvButton ariaLabel={l10n.getString('analytics-export-csv-aria')} onClick={() => exportStaffCsv(staff, q.from, q.to, fmt, (id) => l10n.getString(id))} />
+          <ExportCsvButton ariaLabel={l10n.getString('analytics-export-waitstaff-aria')} onClick={() => exportStaffCsv('waitstaff', staff, q.from, q.to, fmt, (id) => l10n.getString(id))} />
         </div>
       </div>
       <RankedList rows={rows} ariaLabel={title} limit={expanded ? undefined : 5} />

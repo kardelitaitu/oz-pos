@@ -50,6 +50,7 @@ analytics-deepdive-empty = Tidak ada data harian.
 # Export
 analytics-export-csv = CSV
 analytics-export-csv-aria = Ekspor data staf sebagai CSV
+analytics-export-waitstaff-aria = Ekspor waitstaff sebagai CSV
 analytics-export-top-items-aria = Ekspor item teratas sebagai CSV
 analytics-export-payments-aria = Ekspor pembayaran sebagai CSV
 analytics-export-category-aria = Ekspor kategori sebagai CSV

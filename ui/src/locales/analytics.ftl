@@ -50,6 +50,7 @@ analytics-deepdive-empty = No daily data available.
 # Export
 analytics-export-csv = CSV
 analytics-export-csv-aria = Export staff data as CSV
+analytics-export-waitstaff-aria = Export waitstaff as CSV
 analytics-export-top-items-aria = Export top items as CSV
 analytics-export-payments-aria = Export payments as CSV
 analytics-export-category-aria = Export categories as CSV
