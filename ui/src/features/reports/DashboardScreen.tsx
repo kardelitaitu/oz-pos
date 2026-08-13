@@ -134,7 +134,7 @@ export default function DashboardScreen() {
     } finally {
       setLoading(false);
     }
-  }, [sessionToken, from, to]);
+  }, [sessionToken, from, to, l10n]);
 
   useEffect(() => { loadData(); }, [loadData]);
 

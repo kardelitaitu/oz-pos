@@ -5,7 +5,7 @@
 //!         + inline custom date range
 //! Main:   smart card grid — cards adapt to retail vs restaurant
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
@@ -66,7 +66,7 @@ const SHORTCUTS: { keys: string; labelKey: string }[] = [
  * - expanding when nothing is open sets the new card (`null` → `cid`)
  * - expanding another card while one is open is ignored
  */
-export function nextExpandedKey(current: string | null, cid: string): string | null {
+export const nextExpandedKey = (current: string | null, cid: string): string | null => {
   if (current === cid) return null;
   if (current === null) return cid;
   return current;
@@ -77,11 +77,11 @@ export function nextExpandedKey(current: string | null, cid: string): string | n
  * overflowing either axis, capped at `max`. Returns 1 when the sizes
  * are unknown (e.g. layout not yet measured).
  */
-export function smartScale(
+export const smartScale = (
   available: { w: number; h: number },
   content: { w: number; h: number },
   max = 4,
-): number {
+): number => {
   if (available.w <= 0 || available.h <= 0 || content.w <= 0 || content.h <= 0) return 1;
   return Math.max(1, Math.min(max, Math.min(available.w / content.w, available.h / content.h)));
 }
@@ -92,10 +92,10 @@ export function smartScale(
  * `granularityMap` entry for the current granularity overrides it (e.g.
  * mapping `daily` to `weekly` when a card has no daily layout).
  */
-export function cardGranularity(
+export const cardGranularity = (
   card: { granularityMap?: Partial<Record<Granularity, Granularity>> },
   g: Granularity,
-): Granularity {
+): Granularity => {
   return card.granularityMap?.[g] ?? g;
 }
 
@@ -104,12 +104,12 @@ export function cardGranularity(
  * the per-card remap) so a card that remaps e.g. weekly → monthly also
  * gets the matching window instead of the global selector's window.
  */
-export function cardRange(
+export const cardRange = (
   card: { granularityMap?: Partial<Record<Granularity, Granularity>> },
   g: Granularity,
   customFrom: string,
   customTo: string,
-): { from: string; to: string } {
+): { from: string; to: string } => {
   // A custom range is user-selected — never let a granularity remap
   // replace it with a derived window (a card that derives its grid from the
   // custom span still queries the chosen dates).
@@ -129,7 +129,7 @@ function isoDay(d: Date): string {
 }
 
 /** Number of days in the current month (28–31). */
-export function daysInCurrentMonth(): number {
+export const daysInCurrentMonth = (): number => {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
 }
@@ -142,7 +142,7 @@ export function daysInCurrentMonth(): number {
  * mod 7). Derived from the queried range's month — never "now" — so a
  * custom range inside a past or future month renders that month's calendar.
  */
-export function monthCalendarGrid(from: string): { leading: number; days: number; trailing: number } {
+export const monthCalendarGrid = (from: string): { leading: number; days: number; trailing: number } => {
   const [year, month] = from.split('-').map(Number); // month is 1-based
   // Day 0 of month index `month` (one past the 1-based month) rolls back to
   // that month's last day, yielding its day count.
@@ -401,23 +401,9 @@ const [paletteOpen, setPaletteOpen] = useState(false);
     startRecalculating.current?.();
   }, [workspaceView, granularity, customFrom, customTo]);
 
-  const zoomIn = () => setZoomLevel((z) => Math.min(ZOOM_MAX, +(z + ZOOM_STEP).toFixed(2)));
-  const zoomOut = () => setZoomLevel((z) => Math.max(ZOOM_MIN, +(z - ZOOM_STEP).toFixed(2)));
-  const zoomReset = () => {
-    setZoomLevel(1);
-    showToast(l10n.getString('analytics-toast-zoom-reset'));
-  };
-
-  // Live refresh of the debug cache-metrics readout while it is open.
-  useEffect(() => {
-    if (!showCacheMetrics) return;
-    const id = setInterval(() => setMetricsTick((t) => t + 1), 1000);
-    return () => clearInterval(id);
-  }, [showCacheMetrics]);
-
   // Transient toast feedback — auto-dismisses per toast. Dismissal runs a
   // two-phase exit (fade out, then unmount) so a toast never snaps away.
-  const dismissToast = (id: number) => {
+  const dismissToast = useCallback((id: number) => {
     // Phase 1: mark exiting → the `--exiting` mirror keyframe runs.
     setToasts((t) => t.map((x) => (x.id === id ? { ...x, exiting: true } : x)));
     // Phase 2: unmount after the exit animation completes.
@@ -426,14 +412,28 @@ const [paletteOpen, setPaletteOpen] = useState(false);
       toastTimersRef.current.delete(id);
     }, animDuration(250));
     toastTimersRef.current.set(id, timer);
-  };
+  }, []);
 
-  const showToast = (message: string) => {
+  const showToast = useCallback((message: string) => {
     const id = ++toastId.current;
     setToasts((t) => [...t.slice(-2), { id, message }]);
     const timer = setTimeout(() => dismissToast(id), 2600);
     toastTimersRef.current.set(id, timer);
-  };
+  }, [dismissToast]);
+
+  const zoomIn = useCallback(() => setZoomLevel((z) => Math.min(ZOOM_MAX, +(z + ZOOM_STEP).toFixed(2))), []);
+  const zoomOut = useCallback(() => setZoomLevel((z) => Math.max(ZOOM_MIN, +(z - ZOOM_STEP).toFixed(2))), []);
+  const zoomReset = useCallback(() => {
+    setZoomLevel(1);
+    showToast(l10n.getString('analytics-toast-zoom-reset'));
+  }, [showToast, l10n]);
+
+  // Live refresh of the debug cache-metrics readout while it is open.
+  useEffect(() => {
+    if (!showCacheMetrics) return;
+    const id = setInterval(() => setMetricsTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [showCacheMetrics]);
 
   // Cancel any in-flight toast timers on unmount — never setState against
   // an unmounted component.
@@ -505,10 +505,10 @@ const [paletteOpen, setPaletteOpen] = useState(false);
     (c) => c.workspace === null || c.workspace === workspaceView,
   );
 
-  const cardId = (c: AnalyticsCard) => `${c.key}-${c.workspace ?? 'shared'}`;
+  const cardId = useCallback((c: AnalyticsCard) => `${c.key}-${c.workspace ?? 'shared'}`, []);
 
-  const orderStorageKey = `oz-analytics-card-order-${workspaceView}`;
-  const defaultOrder = ANALYTICS_CARDS.map(cardId);
+  const orderStorageKey = useMemo(() => `oz-analytics-card-order-${workspaceView}`, [workspaceView]);
+  const defaultOrder = useMemo(() => ANALYTICS_CARDS.map(cardId), [cardId]);
 
   // Load the saved card order per workspace; merge any new cards at the end
   useEffect(() => {
@@ -525,7 +525,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
       /* corrupt storage — fall back to default order */
     }
     setCardOrder(order);
-  }, [workspaceView]);
+  }, [workspaceView, defaultOrder, orderStorageKey]);
 
   const persistOrder = (order: string[]) => {
     setCardOrder(order);

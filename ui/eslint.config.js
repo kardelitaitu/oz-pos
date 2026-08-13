@@ -24,7 +24,22 @@ export default ts.config(
     rules: {
       'react-refresh/only-export-components': [
         'warn',
-        { allowConstantExport: true },
+        {
+          allowConstantExport: true,
+          // Pure utility exports that legitimately share a file with a
+          // component. They are stable across Fast Refresh, so the rule's
+          // component-only heuristic is a false positive for these names.
+          allowExportNames: [
+            'nextExpandedKey',
+            'smartScale',
+            'cardGranularity',
+            'cardRange',
+            'daysInCurrentMonth',
+            'monthCalendarGrid',
+            'isProductActive',
+            'RETAIL_COLUMN_ORDER',
+          ],
+        },
       ],
       '@typescript-eslint/no-unused-vars': [
         'error',

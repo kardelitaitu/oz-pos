@@ -85,6 +85,15 @@ const CHART_TEXT = '#94a3b8';
  *  fix for the chart's `useMemo` dependency array). */
 const NO_BUCKETS: Bucket[] = [];
 
+/** Stable empty hourly occupancy curve — the occupancy card's `hourly` fallback
+ *  so a fresh `[]` literal isn't recreated every render (same referential-
+ *  stability fix as {@link NO_BUCKETS}). */
+const NO_HOURLY: { hour: number; table_orders: number; pct: number; level: number }[] = [];
+
+/** Stable empty number list — the occupancy card's `prevPct` fallback (same
+ *  referential-stability fix as {@link NO_BUCKETS}). */
+const NO_NUMBERS: number[] = [];
+
 /**
  * Stock at or below this many units is flagged "critical" (vs merely
  * "low") in the low-stock card — the red severity tier that precedes a
@@ -579,7 +588,7 @@ function useCardDataCompare<T>(
   const cur = useCardData<T>(cardKey, q);
   const prevQ = useMemo(
     () => previousRange(q),
-    [q.workspace, q.granularity, q.from, q.to, q.sessionToken],
+    [q],
   );
   const prev = useCardData<T>(cardKey, prevQ, compare);
   return { data: cur.data, prev: prev.data, error: cur.error };
@@ -603,7 +612,7 @@ function RevenueCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title
   const { l10n } = useLocalization();
   const { fmt, short } = useMoney();
   const { data, prev, error } = useCardDataCompare<Bucket[]>('revenue', q, compare ?? false);
-  const prevData = prev ?? [];
+  const prevData = prev ?? NO_BUCKETS;
   const total = data ? data.reduce((s, d) => s + d.value, 0) : 0;
   const prevTotal = prevData.reduce((s, d) => s + d.value, 0);
   const peak = data && data.length ? data.reduce((a, b) => (b.value > a.value ? b : a)) : null;
@@ -761,7 +770,7 @@ function CustomersCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
         { value: retCount, name: l10n.getString('analytics-card-customers-returning'), itemStyle: { color: '#c7d2fe' } },
       ],
     }],
-  }) : null), [newCount, retCount, l10n]);
+  }) : null), [newCount, retCount, l10n, split]);
   if (error) return <CardError error={error} />;
   if (!split) return <CardLoading />;
   if (newCount + retCount === 0) return <CardEmpty message={l10n.getString('analytics-empty-generic')} />;
@@ -821,16 +830,19 @@ function PaymentsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; titl
   const { data: rows, prev: prevRows, error } = useCardDataCompare<PaymentMethodRow[]>('payments', q, compare ?? false);
   const total = rows ? rows.reduce((s, r) => s + r.total_minor, 0) : 0;
   const prevTotal = prevRows ? prevRows.reduce((s, r) => s + r.total_minor, 0) : 0;
-  // Largest-remainder rounding so the stacked bar always sums to 100.
-  const pctByMethod = rows ? largestRemainderPcts(rows.map((r) => r.total_minor), total) : [];
-  const segs = rows
-    ? rows.map((r, i) => ({
-        key: r.payment_method,
-        name: PAYMENT_NAMES[r.payment_method] ? l10n.getString(PAYMENT_NAMES[r.payment_method]!) : r.payment_method,
-        pct: pctByMethod[i] ?? 0,
-      }))
-    : [];
-  const pcts = segs.map((s) => s.pct);
+  // Largest-remainder rounding so the stacked bar always sums to 100. The
+  // segments + percentages are derived together so the chart's useMemo sees
+  // one stable pair (no fresh `[]` fallback each render).
+  const { segs, pcts } = useMemo(() => {
+    if (!rows) return { segs: [] as { key: string; name: string; pct: number }[], pcts: [] as number[] };
+    const pctByMethod = largestRemainderPcts(rows.map((r) => r.total_minor), total);
+    const segs = rows.map((r, i) => ({
+      key: r.payment_method,
+      name: PAYMENT_NAMES[r.payment_method] ? l10n.getString(PAYMENT_NAMES[r.payment_method]!) : r.payment_method,
+      pct: pctByMethod[i] ?? 0,
+    }));
+    return { segs, pcts: segs.map((s) => s.pct) };
+  }, [rows, total, l10n]);
   const topPct = pcts.length ? Math.max(...pcts) : 0;
   const topSeg = segs[pcts.indexOf(topPct)];
   const delta = compare ? periodDelta(total, prevTotal) : null;
@@ -957,8 +969,13 @@ function CategoryCard({ q, title, expanded, compare }: { q: AnalyticsQuery; titl
   const { l10n } = useLocalization();
   const { fmt } = useMoney();
   const { data: rows, prev: prevRows, error } = useCardDataCompare<CategoryBreakdownRow[]>('category', q, compare ?? false);
-  const names = rows ? rows.map((r) => r.category_name).slice(0, 8) : [];
-  const pcts = rows ? rows.map((r) => Math.round(r.percentage)).slice(0, 8) : [];
+  const { names, pcts } = useMemo(() => {
+    if (!rows) return { names: [] as string[], pcts: [] as number[] };
+    return {
+      names: rows.map((r) => r.category_name).slice(0, 8),
+      pcts: rows.map((r) => Math.round(r.percentage)).slice(0, 8),
+    };
+  }, [rows]);
   const topName = pcts.length ? names[pcts.indexOf(Math.max(...pcts))] : '';
   const total = rows ? rows.reduce((s, r) => s + r.total_minor, 0) : 0;
   const prevTotal = prevRows ? prevRows.reduce((s, r) => s + r.total_minor, 0) : 0;
@@ -995,8 +1012,8 @@ function CategoryCard({ q, title, expanded, compare }: { q: AnalyticsQuery; titl
 function BasketCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: string; expanded?: boolean | undefined; compare?: boolean | undefined }) {
   const { l10n } = useLocalization();
   const { data: basket, prev: prevBasket, error } = useCardDataCompare<BasketTrend>('basket', q, compare ?? false);
-  const data = basket ? basket.buckets : [];
-  const prevData = prevBasket ? prevBasket.buckets : [];
+  const data = basket ? basket.buckets : NO_BUCKETS;
+  const prevData = prevBasket ? prevBasket.buckets : NO_BUCKETS;
   const avg = basket ? basket.avg_line_count : 0;
   const orders = basket ? basket.sale_count : 0;
   const prevAvg = prevBasket ? prevBasket.avg_line_count : 0;
@@ -1155,8 +1172,8 @@ function LowStockCard({ q, title, expanded }: { q: AnalyticsQuery; title: string
 function TablesCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: string; expanded?: boolean | undefined; compare?: boolean | undefined }) {
   const { l10n } = useLocalization();
   const { data: raw, prev: prevRaw, error } = useCardDataCompare<Bucket[]>('tables', q, compare ?? false);
-  const data = raw ?? [];
-  const prevData = prevRaw ?? [];
+  const data = raw ?? NO_BUCKETS;
+  const prevData = prevRaw ?? NO_BUCKETS;
   const active = activeBuckets(data);
   const prevActive = activeBuckets(prevData);
   const avgTurn = active.length ? Math.round(active.reduce((s, d) => s + d.value, 0) / active.length) : 0;
@@ -1216,8 +1233,8 @@ function OccupancyCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
   // orders from the backend — nothing is demo-shaped anymore.
   const { data: occ, prev: prevOcc, error } = useCardDataCompare<TableOccupancy>('occupancy', q, compare ?? false);
   const rate = occ ? occ.rate : 0;
-  const hourly = occ ? occ.hourly : [];
-  const prevHourly = prevOcc ? prevOcc.hourly : [];
+  const hourly = occ ? occ.hourly : NO_HOURLY;
+  const prevHourly = prevOcc ? prevOcc.hourly : NO_HOURLY;
   const peak = occ ? occ.peak_hour : null;
   // The peak-hour bucket carries the raw order count for the meta line;
   // pct/level already share the heatmap's intensity scale.
@@ -1229,7 +1246,7 @@ function OccupancyCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
   const delta = compare ? periodDelta(totalOrders, prevOrders) : null;
   // Align the previous curve by hour — the backend only returns hours with
   // orders, so index alignment would misplot when the hour sets differ.
-  const prevPct = compare ? alignPrevHourly(hourly, prevHourly) : [];
+  const prevPct = compare ? alignPrevHourly(hourly, prevHourly) : NO_NUMBERS;
   const option = useMemo(() => ({
     grid: { left: 8, right: 8, top: 8, bottom: 0, containLabel: true },
     tooltip: { trigger: 'axis' as const, valueFormatter: (v: unknown) => `${v}%` },
@@ -1251,7 +1268,7 @@ function OccupancyCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
         itemStyle: { color: '#94a3b8' }, lineStyle: { width: 1.5, color: '#94a3b8', type: 'dashed' as const },
       }] : []),
     ],
-  }), [hourly, prevPct, compare, l10n]);
+  }), [hourly, prevPct, compare, l10n, prevHourly.length]);
   if (error) return <CardError error={error} />;
   if (!occ) return <CardLoading />;
   return (

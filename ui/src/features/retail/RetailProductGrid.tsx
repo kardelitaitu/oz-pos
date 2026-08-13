@@ -81,7 +81,7 @@ export interface RetailProductGridProps {
 // ── Column render helpers ──────────────────────────────────────────
 // `is_active` can be undefined in legacy/dev-mock DTOs — treat as active.
 
-const isProductActive = (p: ProductDto): boolean => p.is_active !== false;
+export const isProductActive = (p: ProductDto): boolean => p.is_active !== false;
 
 function cellValue(v: string | null | undefined): string {
   return v && v.trim() ? v : '—';
@@ -158,7 +158,7 @@ function ColumnToggleMenu({
 }
 
 /** Display order of toggleable columns (Cost is never a column — ADR #36 D4). */
-const RETAIL_COLUMN_ORDER: readonly RetailColumn[] = [
+export const RETAIL_COLUMN_ORDER: readonly RetailColumn[] = [
   'sku', 'barcode', 'category', 'brand', 'name', 'rack', 'stock', 'price', 'notes',
 ];
 
@@ -643,6 +643,3 @@ export default function RetailProductGrid({
     </div>
   );
 }
-
-// Re-export for callers that need the active-status semantics.
-export { isProductActive, RETAIL_COLUMN_ORDER };

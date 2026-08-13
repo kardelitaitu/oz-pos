@@ -2463,7 +2463,7 @@ export default function NodeTopologyEditor({
       setLiveAnnouncement(l10nRef.current.getString('topology-duplicate-announce'));
     }
     document.body.style.cursor = '';
-  }, [setHistory, setRedo]);
+  }, [setHistory, setRedo, selectMany]);
 
   /** Escape during an Alt+drag: discard the preview copies and the drag
    *  itself (originals stay selected, no history entry). When the drag was
@@ -2492,7 +2492,7 @@ export default function NodeTopologyEditor({
     setAlignmentGuide(null);
     setLiveAnnouncement(l10nRef.current.getString('topology-duplicate-cancel-announce'));
     dragCleanupRef.current?.();
-  }, [setHistory, setNodes, setWires]);
+  }, [setHistory, setNodes, setWires, cancelDrag]);
 
   /** Alt pressed MID-move (Figma semantics): the drag becomes a duplicate
    *  drag. The originals snap back to their pre-drag positions, fresh copies
@@ -3447,7 +3447,7 @@ export default function NodeTopologyEditor({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedNodeIds, selectedWireId, wires, pushHistory, popUndo, popRedo, confirmDelete, confirmDeleteMany, confirmPreset, pan, zoom, deleteNodes, relationshipPicker, cancelRelationshipPicker, selectAllNodes, duplicateSelection, copySelection, pasteClipboard, nodes, onRenameBranch, onRenameWorkspace, zoomToFit, zoomBy, resetView, snapEnabled, cancelDuplicateDrag, cancelNodeMove, convertDragToDuplicate, cancelBendDrag, finderOpen, clearSelection, setNodes, migrationOpen]);
+  }, [selectedNodeIds, selectedWireId, wires, pushHistory, popUndo, popRedo, confirmDelete, confirmDeleteMany, confirmPreset, pan, zoom, deleteNodes, relationshipPicker, cancelRelationshipPicker, selectAllNodes, duplicateSelection, copySelection, pasteClipboard, nodes, onRenameBranch, onRenameWorkspace, zoomToFit, zoomBy, resetView, snapEnabled, cancelDuplicateDrag, cancelNodeMove, convertDragToDuplicate, cancelBendDrag, finderOpen, clearSelection, setNodes, migrationOpen, cancelConnection, cancelMarquee, clearAll]);
 
   const executePresetLoad = useCallback(() => {
     if (confirmPreset) {
@@ -3496,7 +3496,7 @@ export default function NodeTopologyEditor({
       deleteNodes([confirmDelete]);
     }
     setConfirmDelete(null);
-  }, [confirmDelete, confirmDeleteMany, selectedWireId, connectingFromNodeId, connectingFromPort, wires, pushHistory, deleteNodes, setWires]);
+  }, [confirmDelete, confirmDeleteMany, selectedWireId, connectingFromNodeId, connectingFromPort, wires, pushHistory, deleteNodes, setWires, cancelConnection, clearWire]);
 
   /** End an in-flight node drag (release / document mouseup / touch up):
    *  commit any Alt-drag copies, clear the drag set and offsets, and drop
@@ -3565,7 +3565,7 @@ export default function NodeTopologyEditor({
         setHistory((prev) => prev.slice(0, -1));
       }
     }
-  }, [commitDuplicateDrag, endDrag, setNodes, setHistory]);
+  }, [commitDuplicateDrag, endDrag, setNodes, setHistory, draggingNodeIdsRef]);
 
   /** Arm a node drag (mouse mousedown or the touch gesture loop): set the
    *  dragging set, compute each node's grip offset from the pointer, and —
@@ -3692,7 +3692,7 @@ export default function NodeTopologyEditor({
         dragStartRef.current.set(id, { x: n.x, y: n.y });
       }
     }
-  }, [duplicateRefusal, addToast, l10n, finalizeNodeDrag, beginDrag, dismissPicker, setNodes, setWires]);
+  }, [duplicateRefusal, addToast, l10n, finalizeNodeDrag, beginDrag, dismissPicker, setNodes, setWires, clearWire]);
 
   const handleNodeMouseDown = useCallback((e: React.MouseEvent, nodeId: string) => {
     e.stopPropagation();
@@ -3718,7 +3718,7 @@ export default function NodeTopologyEditor({
       selection = new Set(currentSelection);
     }
     beginNodeDrag(e.clientX, e.clientY, selection, e.altKey, 'mouse');
-  }, [selectOnly, beginNodeDrag, dismissPicker]);
+  }, [selectOnly, beginNodeDrag, dismissPicker, addToSelection]);
 
   /** Apply one drag-move to the dragged group (mouse canvas mousemove and
    *  the touch gesture loop share this). Reads the dragging set and nodes
@@ -5043,7 +5043,7 @@ export default function NodeTopologyEditor({
       bendDragCleanupRef.current = null;
       bendDragRef.current = null;
     };
-  }, [clearSelection, pan, zoom, selectWire, canvasRef, setWires, setHistory]);
+  }, [pan, zoom, selectWire, canvasRef, setWires, setHistory]);
 
   /** Drag on a midpoint ghost: one gesture creates and positions a fresh
    *  bend. The insertion is DEFERRED to the first drag movement (the
