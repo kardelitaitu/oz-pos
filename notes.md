@@ -65,3 +65,70 @@ with ✅, so this file stays a live index rather than a stale backlog.
   `shared` partition.
 - **Likely fix:** validate cached values at the type boundary, and derive the
   partition from a structured key object rather than string splitting.
+
+---
+
+# Five-file deep audit (2026-08-13)
+
+Follow-up audit of the five files that previously carried eslint warnings
+(DashboardScreen, RetailProductGrid, AnalyticsCardContent, AnalyticsScreen,
+NodeTopologyEditor). Fixed items are committed; the rest remain open.
+
+## Fixed (committed)
+
+- ✅ **AnalyticsCardContent** — reuse `CRITICAL_STOCK_LEVEL` in the alert rows,
+  give the tables card a bad-tone delta in both modes, drop the refunds card's
+  unused `title`/`expanded` props, key ranked/alert rows by name+index, and
+  format the customers-card counts with the Fluent locale formatter.
+- ✅ **AnalyticsScreen** — add `setData` on drag start (Firefox), throttle the
+  scroll handler with rAF, and manage the card-menu focus/keyboard (focus first
+  item, Arrow/Home/End, restore focus on close).
+- ✅ **DashboardScreen** — remove the unreachable full-screen skeleton, build
+  ranges from local dates (not UTC), rename `today*` → `range*`, resolve the
+  donut fill from `--color-fg`, localize currency/compact formatting, the
+  heatmap tooltip, and CSV headers, and rename the `today-revenue`/`orders-today`
+  keys (copy now says "Revenue"/"Orders").
+- ✅ **RetailProductGrid** — keyboard add-to-cart on the name button, sortable
+  headers as real `<button>`s, `aria-hidden` sort glyph, `scope="col"` on the
+  non-sortable headers, and removal of dead out-of-stock guards/`aria-disabled`.
+- ✅ **NodeTopologyEditor** — debounce the per-frame viewport `localStorage`
+  write (250ms + unmount flush).
+
+> Correction: the NodeTopologyEditor `localStorage` **reads** are already
+> wrapped in try/catch with fallbacks; the earlier finding flagged them as
+> unguarded in error.
+
+## Still open
+
+### Dashboard
+
+1. **Eager loading** — `loadData` fetches all 8 datasets (daily/weekly/monthly
+   revenue, top products, low stock, category, heatmap, prev-daily) regardless
+   of the selected granularity; `getLowStockAlerts(10)` also ignores the date
+   range (same non-time-bounded snapshot as the analytics low-stock card).
+2. **`fmtDelta` edge case** — returns `+∞` / `−` when the previous period is
+   zero; these are math symbols and arguably fine, but not localized.
+
+### AnalyticsScreen
+
+3. **`menuAnchor` is fixed at open** — a window resize/scroll while the card
+   menu is open leaves it detached from its trigger.
+4. **Popover dismissal inconsistency** — the zoom/shortcuts/cache popovers close
+   only on Escape, while the card menu closes on outside-click too.
+
+### RetailProductGrid
+
+5. **Stock-threshold magic numbers** — `low_stock_threshold ?? 5` /
+   `high_stock_threshold ?? 10` duplicate the `5` in analytics'
+   `CRITICAL_STOCK_LEVEL`; no shared source of truth.
+6. **Minor** — `onWheel` ignores trackpad `deltaX` and never `preventDefault`s;
+   `cellValue` returns a hardcoded `—` em-dash.
+
+### NodeTopologyEditor
+
+7. **Size** — the component is ~6,900 lines; the minimap, finder overlay,
+   shortcuts popover, and HUD readouts are already isolated `memo` pieces and
+   would move out cleanly.
+8. **Render-phase ref writes** — `historyRef.current = history` (and similar
+   mirrors) assign during render, the same documented-but-impure pattern as
+   `startRecalculating` in the analytics screen.
