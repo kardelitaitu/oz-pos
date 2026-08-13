@@ -1,12 +1,33 @@
 #!/bin/bash
-export PATH="/mnt/c/Users/Dika/.cargo/bin:$PATH"
-
 
 # .githooks/pre-commit — auto-format Rust code before every commit.
 set -e
 
+# Locate rustup portably. The previous hardcoded WSL path
+# (/mnt/c/Users/.../.cargo/bin/rustup.exe) broke the hook under Git Bash
+# on Windows, where /mnt/c does not resolve. Prefer rustup on PATH, then
+# rustup.exe, then the standard Windows install location under /c/.
+RUSTUP=""
+if command -v rustup >/dev/null 2>&1; then
+    RUSTUP="rustup"
+elif command -v rustup.exe >/dev/null 2>&1; then
+    RUSTUP="rustup.exe"
+else
+    for d in /c/Users/*/.cargo/bin; do
+        if [ -x "$d/rustup.exe" ]; then
+            RUSTUP="$d/rustup.exe"
+            break
+        fi
+    done
+fi
+
+if [ -z "$RUSTUP" ]; then
+    echo "error: rustup not found — install Rust or add cargo's bin dir to PATH. Aborting commit." >&2
+    exit 1
+fi
+
 # Run cargo fmt, capturing output if it fails
-if ! /mnt/c/Users/Dika/.cargo/bin/rustup.exe run stable cargo fmt --all 2>/dev/null; then
+if ! "$RUSTUP" run stable cargo fmt --all 2>/dev/null; then
     echo "error: cargo fmt failed — aborting commit." >&2
     exit 1
 fi
