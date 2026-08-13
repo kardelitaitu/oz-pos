@@ -53,6 +53,7 @@ import {
 } from './topologyExport';
 import { TopologyNodeCard } from './topologyNodeCard';
 import { TopologyShortcutsHelp } from './topologyShortcutsHelp';
+import { TopologyNodeFinder } from './topologyNodeFinder';
 import type { TopologyOverlay } from './topologyBranchCompare';
 import { layoutGhosts, buildGhostWireStubs, compareFocusDimIds, GHOST_WIDTH, GHOST_HEIGHT } from './topologyBranchCompare';
 import { TopologyWireGroup } from './topologyWireGroup';
@@ -966,31 +967,16 @@ export default function NodeTopologyEditor({
     persistViewport();
   }, [persistViewport]);
 
-  /** Node finder (Ctrl+F): a quick-jump overlay. finderQuery drives the
-   *  filtered match list; finderIndex is the highlighted row (clamped to the
-   *  list at render). The input owns its own keydown (Esc closes, arrows
-   *  move, Enter jumps); while the overlay is open, a canvas-focus Escape
-   *  closes it too (see the keydown effect). */
+  /** Node finder (Ctrl+F) open state — owned here because the central
+   *  keydown handler opens it on Ctrl+F and closes it on a canvas-focus
+   *  Escape; the overlay's query/index/list and input keydown live in
+   *  `TopologyNodeFinder`. */
   const [finderOpen, setFinderOpen] = useState(false);
-  const [finderQuery, setFinderQuery] = useState('');
-  const [finderIndex, setFinderIndex] = useState(0);
-  const finderInputRef = useRef<HTMLInputElement>(null);
+  const closeFinder = useCallback(() => setFinderOpen(false), []);
   /** Latest zoom for ref-based math (finder centering) without re-arming
    *  document listeners. */
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
-
-  useEffect(() => {
-    if (finderOpen) finderInputRef.current?.focus();
-  }, [finderOpen]);
-
-  /** Nodes matching the finder query (name or subtitle, case-insensitive).
-   *  An empty query lists every node so Enter always has a target. */
-  const finderMatches = useMemo(() => {
-    const q = finderQuery.trim().toLowerCase();
-    if (!q) return nodes;
-    return nodes.filter((n) => n.name.toLowerCase().includes(q) || (n.subtitle ?? '').toLowerCase().includes(q));
-  }, [nodes, finderQuery]);
 
   /** Jump the viewport to a finder match: select it, center it at the
    *  current zoom, and close the overlay. */
@@ -3282,8 +3268,6 @@ export default function NodeTopologyEditor({
       // browser find intact inside text fields).
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         e.preventDefault();
-        setFinderQuery('');
-        setFinderIndex(0);
         setFinderOpen(true);
         return;
       }
@@ -6495,104 +6479,12 @@ export default function NodeTopologyEditor({
           </div>
 
           {/* ── Node finder (Ctrl+F) — quick jump overlay ─────── */}
-          {finderOpen && (() => {
-            const activeIndex = Math.min(finderIndex, Math.max(0, finderMatches.length - 1));
-            // The finder is a combobox pattern (filter input + option list):
-            // the input announces its active match via aria-activedescendant
-            // so a screen-reader user knows exactly what Enter will jump to.
-            // The empty-state option carries the "no matches" announcement.
-            const activeDescendant = finderMatches.length > 0
-              ? `topology-finder-option-${finderMatches[activeIndex]!.id}`
-              : finderQuery.trim() !== ''
-                ? 'topology-finder-empty'
-                : undefined;
-            return (
-              <div
-                className="topology-finder"
-                role="dialog"
-                aria-label={l10n.getString('topology-finder-aria')}
-                onMouseDown={(e) => e.stopPropagation()}
-              >
-                <input
-                  ref={finderInputRef}
-                  className="topology-finder-input"
-                  type="text"
-                  role="combobox"
-                  aria-expanded="true"
-                  aria-controls="topology-finder-listbox"
-                  aria-activedescendant={activeDescendant}
-                  value={finderQuery}
-                  placeholder={l10n.getString('topology-finder-placeholder')}
-                  aria-label={l10n.getString('topology-finder-aria')}
-                  onChange={(e) => {
-                    setFinderQuery(e.target.value);
-                    setFinderIndex(0);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setFinderOpen(false);
-                    } else if (e.key === 'ArrowDown') {
-                      e.preventDefault();
-                      setFinderIndex((i) => {
-                        if (finderMatches.length === 0) return 0;
-                        // Navigate from the VISIBLY-active row: the stored
-                        // index can sit past the end after the match list
-                        // shrinks (a node deleted while the finder is open),
-                        // and an un-clamped modulo would swallow exactly one
-                        // arrow press (the highlight would not move).
-                        const active = Math.min(i, finderMatches.length - 1);
-                        return (active + 1) % finderMatches.length;
-                      });
-                    } else if (e.key === 'ArrowUp') {
-                      e.preventDefault();
-                      setFinderIndex((i) => {
-                        if (finderMatches.length === 0) return 0;
-                        const active = Math.min(i, finderMatches.length - 1);
-                        return (active - 1 + finderMatches.length) % finderMatches.length;
-                      });
-                    } else if (e.key === 'Enter') {
-                      e.preventDefault();
-                      const match = finderMatches[Math.min(finderIndex, Math.max(0, finderMatches.length - 1))];
-                      if (match) jumpToFinderMatch(match);
-                    }
-                  }}
-                />
-                <ul
-                  id="topology-finder-listbox"
-                  className="topology-finder-list"
-                  role="listbox"
-                >
-                  {finderMatches.length === 0 ? (
-                    <li
-                      id="topology-finder-empty"
-                      className="topology-finder-empty"
-                      role="option"
-                      aria-selected="false"
-                    >
-                      {l10n.getString('topology-finder-no-matches')}
-                    </li>
-                  ) : finderMatches.map((n, i) => (
-                    <li
-                      key={n.id}
-                      id={`topology-finder-option-${n.id}`}
-                      role="option"
-                      aria-selected={i === activeIndex}
-                      className={`topology-finder-item ${i === activeIndex ? 'is-active' : ''}`}
-                      onMouseDown={(e) => {
-                        e.stopPropagation();
-                        jumpToFinderMatch(n);
-                      }}
-                    >
-                      <span className="topology-finder-item-name">{n.name}</span>
-                      <span className="topology-finder-item-sub">{n.subtitle}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })()}
+          <TopologyNodeFinder
+            open={finderOpen}
+            nodes={nodes}
+            onJump={jumpToFinderMatch}
+            onClose={closeFinder}
+          />
 
           {/* ── Canvas zoom controls — the floating bottom-right
                  cluster (standard canvas-tool pattern) ────────── */}
