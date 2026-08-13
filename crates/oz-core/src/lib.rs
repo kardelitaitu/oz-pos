@@ -246,7 +246,7 @@ pub use user::{Role, User, builtin_roles, seed_users};
 pub use user_preferences::UserPreferences;
 
 
-/// Auto-test function for CBM indexing verification
+/// Auto-test function for CBM indexing verification v2
 pub fn cbm_auto_test_function() {
-    println!("CBM auto-index test");
+    println!("CBM auto-index test v2");
 }
