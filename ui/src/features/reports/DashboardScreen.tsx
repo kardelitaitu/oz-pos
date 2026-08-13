@@ -69,21 +69,25 @@ function shiftDate(s: string, days: number): string {
 
 type Granularity = 'daily' | 'weekly' | 'monthly';
 
+// Sunday-first day keys, matching the backend `day_of_week` (0 = Sunday).
+const DAY_LABELS = ['day-sunday', 'day-monday', 'day-tuesday', 'day-wednesday', 'day-thursday', 'day-friday', 'day-saturday'];
+
 // ── Currency formatting ────────────────────────────────────────────
 
-function fmtCurrency(minor: number, currency: string): string {
+function fmtCurrency(minor: number, currency: string, locale = 'en'): string {
   const exp = minorUnitExponent(currency);
-  return new Intl.NumberFormat('en', { style: 'currency', currency,
+  return new Intl.NumberFormat(locale, { style: 'currency', currency,
     minimumFractionDigits: exp, maximumFractionDigits: exp,
   }).format(minor / 10 ** exp);
 }
 
-function fmtShort(minor: number, currency: string): string {
+function fmtShort(minor: number, currency: string, locale = 'en'): string {
+  // Compact notation follows the active Fluent locale (e.g. "Rp 2,5 jt" for
+  // id) instead of hardcoding English "M"/"K" suffixes.
   const exp = minorUnitExponent(currency);
-  const val = minor / 10 ** exp;
-  if (Math.abs(val) >= 1_000_000) return `${val < 0 ? '-' : ''}${(Math.abs(val) / 1_000_000).toFixed(1)}M`;
-  if (Math.abs(val) >= 1_000) return `${val < 0 ? '-' : ''}${(Math.abs(val) / 1_000).toFixed(1)}K`;
-  return fmtCurrency(minor, currency);
+  return new Intl.NumberFormat(locale, {
+    style: 'currency', currency, notation: 'compact', maximumFractionDigits: 1,
+  }).format(minor / 10 ** exp);
 }
 
 function fmtDelta(current: number, previous: number): string {
@@ -101,6 +105,9 @@ export default function DashboardScreen() {
   const { sessionToken: rawToken } = useWorkspace();
   const sessionToken = rawToken || '';
   const { currency } = useCurrency();
+  // Currency/number formatting follows the active Fluent locale (matching
+  // the analytics cards) instead of a hardcoded 'en'.
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
 
   const [granularity, setGranularity] = useState<Granularity>('daily');
   const [fromDraft, setFromDraft] = useState(daysAgo(29));
@@ -192,17 +199,17 @@ export default function DashboardScreen() {
   const revenueChartOption = useMemo(() => {
     const dates = revenueSeries.map((r) => r.date);
     return {
-      tooltip: { trigger: 'axis' as const, valueFormatter: (val: unknown) => fmtCurrency(Number(val), currency) },
+      tooltip: { trigger: 'axis' as const, valueFormatter: (val: unknown) => fmtCurrency(Number(val), currency, numLocale) },
       legend: { data: [l10n.getString('dashboard-chart-revenue'), l10n.getString('dashboard-chart-profit')], top: 0 },
       grid: { left: '3%', right: '4%', bottom: '3%', top: 40, containLabel: true },
       xAxis: { type: 'category' as const, data: dates, axisLabel: { rotate: granularity === 'monthly' ? 45 : 0 } },
-      yAxis: { type: 'value' as const, axisLabel: { formatter: (v: number) => fmtShort(v, currency) } },
+      yAxis: { type: 'value' as const, axisLabel: { formatter: (v: number) => fmtShort(v, currency, numLocale) } },
       series: [
         { name: l10n.getString('dashboard-chart-revenue'), type: 'line' as const, data: revenueSeries.map((r) => r.total), areaStyle: { opacity: 0.15 }, smooth: true, itemStyle: { color: '#5470c6' }, symbol: 'circle', symbolSize: 4 },
         { name: l10n.getString('dashboard-chart-profit'), type: 'line' as const, data: revenueSeries.map((r) => r.profit), areaStyle: { opacity: 0.08 }, smooth: true, itemStyle: { color: '#91cc75' }, symbol: 'circle', symbolSize: 4 },
       ],
     };
-  }, [revenueSeries, currency, granularity, l10n]);
+  }, [revenueSeries, currency, granularity, l10n, numLocale]);
 
   // ECharts renders to <canvas>, which cannot resolve CSS variables in a
   // fill — read the theme foreground color into a concrete value at render.
@@ -212,7 +219,7 @@ export default function DashboardScreen() {
     if (categoryBreakdown.length === 0) return null;
     const total = categoryBreakdown.reduce((s, c) => s + c.total_minor, 0);
     return {
-      tooltip: { trigger: 'item' as const, valueFormatter: (val: unknown) => fmtCurrency(Number(val), currency) },
+      tooltip: { trigger: 'item' as const, valueFormatter: (val: unknown) => fmtCurrency(Number(val), currency, numLocale) },
       legend: { orient: 'vertical' as const, right: 0, top: 'middle', textStyle: { fontSize: 11 } },
       series: [{
         name: l10n.getString('dashboard-chart-category'), type: 'pie' as const,
@@ -224,17 +231,17 @@ export default function DashboardScreen() {
         data: categoryBreakdown.map((c) => ({ value: c.total_minor, name: c.category_name })),
       }],
       graphic: total > 0 ? [{ type: 'text' as const, left: '24%', top: 'middle',
-        style: { text: fmtShort(total, currency), textAlign: 'center' as const, fill: fgColor, fontSize: 14, fontWeight: 'bold' } }] : undefined,
+        style: { text: fmtShort(total, currency, numLocale), textAlign: 'center' as const, fill: fgColor, fontSize: 14, fontWeight: 'bold' } }] : undefined,
     };
-  }, [categoryBreakdown, currency, l10n, fgColor]);
+  }, [categoryBreakdown, currency, l10n, fgColor, numLocale]);
 
   const heatmapOption = useMemo(() => {
     if (heatmap.length === 0) return null;
-    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const dayNames = DAY_LABELS.map((k) => l10n.getString(k));
     const hours = Array.from({ length: 24 }, (_, i) => `${i}:00`);
     const maxVal = Math.max(...heatmap.map((h) => h.sale_count), 1);
     return {
-      tooltip: { position: 'top' as const, formatter: (params: { value: [number, number, number] }) => `${dayNames[params.value[1]]} ${hours[params.value[0]]}: ${params.value[2]} orders` },
+      tooltip: { position: 'top' as const, formatter: (params: { value: [number, number, number] }) => l10n.getString('dashboard-heatmap-tooltip', { day: dayNames[params.value[1]] ?? '', hour: hours[params.value[0]] ?? '', count: String(params.value[2]) }) },
       grid: { left: 60, right: 20, bottom: 40, top: 10 },
       xAxis: { type: 'category' as const, data: hours, splitArea: { show: true }, axisLabel: { fontSize: 9, interval: 3 } },
       yAxis: { type: 'category' as const, data: dayNames, splitArea: { show: true } },
@@ -248,15 +255,15 @@ export default function DashboardScreen() {
     const names = topProducts.map((p) => p.name);
     const values = topProducts.map((p) => p.total_minor);
     return {
-      tooltip: { trigger: 'axis' as const, axisPointer: { type: 'shadow' as const }, valueFormatter: (val: unknown) => fmtCurrency(Number(val), currency) },
+      tooltip: { trigger: 'axis' as const, axisPointer: { type: 'shadow' as const }, valueFormatter: (val: unknown) => fmtCurrency(Number(val), currency, numLocale) },
       grid: { left: '3%', right: '4%', bottom: '3%', top: 0, containLabel: true },
-      xAxis: { type: 'value' as const, axisLabel: { formatter: (v: number) => fmtShort(v, currency) } },
+      xAxis: { type: 'value' as const, axisLabel: { formatter: (v: number) => fmtShort(v, currency, numLocale) } },
       yAxis: { type: 'category' as const, data: names.reverse(), axisLabel: { width: 120, overflow: 'truncate', fontSize: 10 } },
       series: [{ name: l10n.getString('dashboard-chart-top-products'), type: 'bar' as const, barMaxWidth: 28,
         data: values.reverse().map((v) => ({ value: v, itemStyle: { color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [{ offset: 0, color: '#5470c6' }, { offset: 1, color: '#91cc75' }]) } })),
       }],
     };
-  }, [topProducts, currency, l10n]);
+  }, [topProducts, currency, l10n, numLocale]);
 
   // ── Render ───────────────────────────────────────────────────────
 
@@ -280,8 +287,10 @@ export default function DashboardScreen() {
           {revenueSeries.length > 0 && (
             <button type="button" className="dashboard-export-btn"
               onClick={() => downloadCsv(`reports-dashboard-${from}-to-${to}.csv`,
-                [{ key: 'date', label: 'Date' }, { key: 'total', label: 'Revenue' },
-                 { key: 'profit', label: 'Gross Profit' }, { key: 'count', label: 'Orders' }],
+                [{ key: 'date', label: l10n.getString('dashboard-export-col-date') },
+                 { key: 'total', label: l10n.getString('dashboard-export-col-revenue') },
+                 { key: 'profit', label: l10n.getString('dashboard-export-col-profit') },
+                 { key: 'count', label: l10n.getString('dashboard-export-col-orders') }],
                 revenueSeries.map((r) => ({ ...r, total: String(r.total), profit: String(r.profit), count: String(r.count) })),
               )}
               aria-label={l10n.getString('dashboard-export-csv-aria')}>
@@ -318,8 +327,8 @@ export default function DashboardScreen() {
       {/* ── KPI Row ──────────────────────────────────── */}
       <div className="dashboard-kpi-row">
         <Card shadow="sm" className="dashboard-kpi">
-          <span className="dashboard-kpi-label"><Localized id="dashboard-today-revenue"><span>Revenue</span></Localized></span>
-          <span className="dashboard-kpi-value">{fmtCurrency(rangeKPIs.rangeRev, rangeKPIs.currency)}</span>
+          <span className="dashboard-kpi-label"><Localized id="dashboard-revenue"><span>Revenue</span></Localized></span>
+          <span className="dashboard-kpi-value">{fmtCurrency(rangeKPIs.rangeRev, rangeKPIs.currency, numLocale)}</span>
           <span className={`dashboard-kpi-delta${rangeKPIs.rangeRev >= rangeKPIs.prevRev ? '' : ' dashboard-kpi-delta--down'}`}>
             {rangeKPIs.prevRev > 0 ? fmtDelta(rangeKPIs.rangeRev, rangeKPIs.prevRev) : ''}
           </span>
@@ -327,14 +336,14 @@ export default function DashboardScreen() {
         <Card shadow="sm" className="dashboard-kpi">
           <span className="dashboard-kpi-label"><Localized id="dashboard-gross-profit"><span>Gross Profit</span></Localized></span>
           <span className={`dashboard-kpi-value${rangeKPIs.rangeProfit < 0 ? ' dashboard-kpi-negative' : ''}`}>
-            {fmtCurrency(rangeKPIs.rangeProfit, rangeKPIs.currency)}
+            {fmtCurrency(rangeKPIs.rangeProfit, rangeKPIs.currency, numLocale)}
           </span>
           <span className={`dashboard-kpi-delta${rangeKPIs.rangeProfit >= rangeKPIs.prevProfit ? '' : ' dashboard-kpi-delta--down'}`}>
             {rangeKPIs.prevProfit > 0 ? fmtDelta(rangeKPIs.rangeProfit, rangeKPIs.prevProfit) : ''}
           </span>
         </Card>
         <Card shadow="sm" className="dashboard-kpi">
-          <span className="dashboard-kpi-label"><Localized id="dashboard-orders-today"><span>Orders</span></Localized></span>
+          <span className="dashboard-kpi-label"><Localized id="dashboard-orders"><span>Orders</span></Localized></span>
           <span className="dashboard-kpi-value">{rangeKPIs.rangeOrders}</span>
           <span className={`dashboard-kpi-delta${rangeKPIs.rangeOrders >= rangeKPIs.prevOrders ? '' : ' dashboard-kpi-delta--down'}`}>
             {rangeKPIs.prevOrders > 0 ? fmtDelta(rangeKPIs.rangeOrders, rangeKPIs.prevOrders) : ''}

@@ -49,9 +49,9 @@ day-saturday = Sat
 
 # Dashboard
 dashboard-title = Dashboard
-dashboard-today-revenue = Today's Revenue
+dashboard-revenue = Revenue
 dashboard-gross-profit = Gross Profit
-dashboard-orders-today = Orders Today
+dashboard-orders = Orders
 dashboard-top-product = Top Product
 dashboard-low-stock-alerts = Low Stock Alerts
 dashboard-popularity-trend = Popularity Trend
@@ -83,6 +83,7 @@ dashboard-chart-heatmap-aria = .aria-label = Hourly sales heatmap by day of week
 dashboard-chart-top-products = Top 10 Products
 dashboard-chart-top-products-aria = .aria-label = Top 10 products by revenue
 dashboard-heatmap-empty = No heatmap data yet
+dashboard-heatmap-tooltip = { $day } { $hour }: { $count } orders
 
 # Dashboard — a11y
 dashboard-region-aria = Dashboard
@@ -175,3 +176,9 @@ dashboard-category-clear-aria = .aria-label = Clear category selection
 dashboard-back = Back
 dashboard-back-aria = .aria-label = Back to home
 dashboard-error-load = Failed to load dashboard data. Please try again.
+
+# Dashboard — CSV export columns
+dashboard-export-col-date = Date
+dashboard-export-col-revenue = Revenue
+dashboard-export-col-profit = Gross Profit
+dashboard-export-col-orders = Orders

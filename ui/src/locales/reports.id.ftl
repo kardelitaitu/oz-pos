@@ -1,7 +1,7 @@
 dashboard-title = Dasbor
-dashboard-today-revenue = Pendapatan Hari Ini
+dashboard-revenue = Pendapatan
 dashboard-gross-profit = Laba Kotor
-dashboard-orders-today = Pesanan Hari Ini
+dashboard-orders = Pesanan
 dashboard-top-product = Produk Terlaris
 dashboard-low-stock-alerts = Peringatan Stok Menipis
 dashboard-popularity-trend = Tren Popularitas
@@ -34,6 +34,7 @@ dashboard-chart-heatmap-aria = .aria-label = Heatmap penjualan per jam dan hari
 dashboard-chart-top-products = 10 Produk Teratas
 dashboard-chart-top-products-aria = .aria-label = 10 produk teratas berdasarkan pendapatan
 dashboard-heatmap-empty = Belum ada data heatmap
+dashboard-heatmap-tooltip = { $day } { $hour }: { $count } pesanan
 
 # Dashboard — a11y
 dashboard-region-aria = Dasbor
@@ -176,3 +177,9 @@ dashboard-category-clear-aria = .aria-label = Hapus pilihan kategori
 dashboard-back = Kembali
 dashboard-back-aria = .aria-label = Kembali ke beranda
 dashboard-error-load = Gagal memuat data dasbor. Silakan coba lagi.
+
+# Dashboard — CSV export columns
+dashboard-export-col-date = Tanggal
+dashboard-export-col-revenue = Pendapatan
+dashboard-export-col-profit = Laba Kotor
+dashboard-export-col-orders = Pesanan
