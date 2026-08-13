@@ -66,22 +66,22 @@ dashboard-filter-to = To
 dashboard-btn-apply = Apply
 
 # Dashboard — granularity toggle
-dashboard-granularity-aria = .aria-label = Time granularity
+dashboard-granularity-aria = Time granularity
 dashboard-granularity-daily = Daily
 dashboard-granularity-weekly = Weekly
 dashboard-granularity-monthly = Monthly
 
 # Dashboard — charts
 dashboard-chart-revenue = Revenue Trend
-dashboard-chart-revenue-aria = .aria-label = Revenue and profit trend chart
+dashboard-chart-revenue-aria = Revenue and profit trend chart
 dashboard-chart-profit = Profit
 dashboard-chart-category-breakdown = Category Breakdown
-dashboard-chart-category-aria = .aria-label = Sales breakdown by product category
+dashboard-chart-category-aria = Sales breakdown by product category
 dashboard-chart-category = Categories
 dashboard-chart-heatmap = Sales Heatmap
-dashboard-chart-heatmap-aria = .aria-label = Hourly sales heatmap by day of week
+dashboard-chart-heatmap-aria = Hourly sales heatmap by day of week
 dashboard-chart-top-products = Top 10 Products
-dashboard-chart-top-products-aria = .aria-label = Top 10 products by revenue
+dashboard-chart-top-products-aria = Top 10 products by revenue
 dashboard-heatmap-empty = No heatmap data yet
 dashboard-heatmap-tooltip = { $day } { $hour }: { $count } orders
 
@@ -171,10 +171,10 @@ custom-report-columns-selected = { $selected } / { $total } selected
 
 # Export
 dashboard-export-csv = CSV
-dashboard-export-csv-aria = .aria-label = Export dashboard data as CSV
-dashboard-category-clear-aria = .aria-label = Clear category selection
+dashboard-export-csv-aria = Export dashboard data as CSV
+dashboard-category-clear-aria = Clear category selection
 dashboard-back = Back
-dashboard-back-aria = .aria-label = Back to home
+dashboard-back-aria = Back to home
 dashboard-error-load = Failed to load dashboard data. Please try again.
 
 # Dashboard — CSV export columns

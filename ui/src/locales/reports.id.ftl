@@ -17,22 +17,22 @@ dashboard-filter-to = Hingga
 dashboard-btn-apply = Terapkan
 
 # Dashboard — granularity toggle
-dashboard-granularity-aria = .aria-label = Granularitas waktu
+dashboard-granularity-aria = Granularitas waktu
 dashboard-granularity-daily = Harian
 dashboard-granularity-weekly = Mingguan
 dashboard-granularity-monthly = Bulanan
 
 # Dashboard — charts
 dashboard-chart-revenue = Tren Pendapatan
-dashboard-chart-revenue-aria = .aria-label = Grafik tren pendapatan dan laba
+dashboard-chart-revenue-aria = Grafik tren pendapatan dan laba
 dashboard-chart-profit = Laba
 dashboard-chart-category-breakdown = Rincian Kategori
-dashboard-chart-category-aria = .aria-label = Rincian penjualan per kategori produk
+dashboard-chart-category-aria = Rincian penjualan per kategori produk
 dashboard-chart-category = Kategori
 dashboard-chart-heatmap = Heatmap Penjualan
-dashboard-chart-heatmap-aria = .aria-label = Heatmap penjualan per jam dan hari
+dashboard-chart-heatmap-aria = Heatmap penjualan per jam dan hari
 dashboard-chart-top-products = 10 Produk Teratas
-dashboard-chart-top-products-aria = .aria-label = 10 produk teratas berdasarkan pendapatan
+dashboard-chart-top-products-aria = 10 produk teratas berdasarkan pendapatan
 dashboard-heatmap-empty = Belum ada data heatmap
 dashboard-heatmap-tooltip = { $day } { $hour }: { $count } pesanan
 
@@ -172,10 +172,10 @@ custom-report-columns-selected = { $selected } / { $total } dipilih
 
 # Export
 dashboard-export-csv = CSV
-dashboard-export-csv-aria = .aria-label = Ekspor data dasbor sebagai CSV
-dashboard-category-clear-aria = .aria-label = Hapus pilihan kategori
+dashboard-export-csv-aria = Ekspor data dasbor sebagai CSV
+dashboard-category-clear-aria = Hapus pilihan kategori
 dashboard-back = Kembali
-dashboard-back-aria = .aria-label = Kembali ke beranda
+dashboard-back-aria = Kembali ke beranda
 dashboard-error-load = Gagal memuat data dasbor. Silakan coba lagi.
 
 # Dashboard — CSV export columns
