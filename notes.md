@@ -356,3 +356,34 @@ Audit of `CustomerManagementScreen.tsx` + `customers.ftl` / `customers.id.ftl`.
    (`PaymentModal` uses a separate `payment-search-customers-aria` key). Left in
    place to avoid touching the shared bundle in this pass.
 
+---
+
+# Terminal management audit (2026-08-13)
+
+Audit of `TerminalManagementScreen.tsx` + `terminals.ftl` / `terminals.id.ftl`.
+
+## Fixed (committed)
+
+- ✅ **Dead + hardcoded-English `aria-label` props** — the actions column header
+  (`aria-label={getString('actions-aria')}`) and the edit/delete buttons
+  (`aria-label={`Edit ${name}`}` etc.) were overridden by their `<Localized
+  attrs>` wrappers. Removed.
+- ✅ **`formatDate` ignored hour/minute** — it called `toLocaleDateString`, which
+  silently drops the `hour`/`minute` options, so "Last Seen" never showed a time.
+  Switched to `toLocaleString` with the active Fluent locale and an invalid-date
+  guard.
+- ✅ **Functional `setForm` updates** — the five form field handlers now use
+  `setForm((prev) => …)` instead of spreading `form` from the closure.
+- ✅ **Orphan FTL keys** — removed 11 never-read keys per locale
+  (`terminal-management-loading`, `terminal-secret`, `terminal-metadata`,
+  `-register/update/delete-success`, `-name-required`, `-device-id-required`,
+  `-modal-close`, `-loading-overrides`, `-delete-aria`).
+
+## Still open
+
+1. **Redundant label `aria-label`s** — the four modal field `<label>`s set an
+   `aria-label` (`terminal-field-*-aria`). For name/device-id this duplicates the
+   visible text; for secret/metadata it is a deliberate shorter accessible name
+   than the verbose visible label. Left as-is (intentional concise naming).
+
+
