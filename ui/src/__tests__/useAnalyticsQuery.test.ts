@@ -70,4 +70,33 @@ describe('useAnalyticsQuery', () => {
     expect(result.current).toEqual({ data: { warm: true }, status: 'ready', error: null });
     expect(fetcher).not.toHaveBeenCalled();
   });
+
+  it('drops and refetches a cached value that fails the shape guard', async () => {
+    const key = 'card:test:retail:daily';
+    analyticsDataCache.set(key, { wrong: 'shape' }); // not an array
+
+    const fetcher = vi.fn(() => ['fresh']);
+    const { result } = await renderHookInAct(() =>
+      useAnalyticsQuery<string[]>(key, fetcher, true, Array.isArray),
+    );
+
+    // The mismatched value is invalidated and refetched as a miss.
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(result.current).toEqual({ data: ['fresh'], status: 'ready', error: null });
+    // The cache now holds the refetched value, never the bad one.
+    expect(analyticsDataCache.get(key)).toEqual({ value: ['fresh'], fresh: true });
+  });
+
+  it('serves a cached value that passes the shape guard without refetching', async () => {
+    const key = 'card:test:retail:daily';
+    analyticsDataCache.set(key, ['warm']);
+
+    const fetcher = vi.fn(() => ['cold']);
+    const { result } = await renderHookInAct(() =>
+      useAnalyticsQuery<string[]>(key, fetcher, true, Array.isArray),
+    );
+
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(result.current).toEqual({ data: ['warm'], status: 'ready', error: null });
+  });
 });

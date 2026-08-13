@@ -45,9 +45,19 @@ interface CachedRead<T> {
 }
 
 /** Read the shared cache with the right payload type. */
-function readCached<T>(key: string): CachedRead<T> | undefined {
+function readCached<T>(
+  key: string,
+  validate?: (value: unknown) => boolean,
+): CachedRead<T> | undefined {
   const hit = analyticsDataCache.get(key);
   if (!hit) return undefined;
+  if (validate && !validate(hit.value)) {
+    // Shape mismatch — schema drift without a version bump, or a corrupt
+    // snapshot. Drop the entry so it can't be served again and treat the
+    // read as a miss so the hook refetches below.
+    analyticsDataCache.invalidate(key);
+    return undefined;
+  }
   return { data: hit.value as T, fresh: hit.fresh };
 }
 
@@ -65,11 +75,17 @@ function readCached<T>(key: string): CachedRead<T> | undefined {
  * returns `status: 'error'` on subsequent renders WITHOUT re-invoking
  * the fetcher. Only `clearAnalyticsErrors()` (refresh) or a new key
  * (workspace/granularity change) allows a retry.
+ *
+ * An optional `validate` guard checks a cached value's shape before it is
+ * served: a value that no longer matches (schema drift without a version
+ * bump, or a corrupt snapshot) is invalidated and refetched instead of
+ * being cast blindly into `T`.
  */
 export function useAnalyticsQuery<T>(
   key: string,
   fetcher: () => T | Promise<T>,
   enabled = true,
+  validate?: (value: unknown) => boolean,
 ): AnalyticsQueryResult<T> {
   const [, forceRender] = useState(0);
   const inflight = useRef<string | null>(null);
@@ -80,7 +96,7 @@ export function useAnalyticsQuery<T>(
     return { data: null, status: 'loading', error: null };
   }
 
-  const cached = readCached<T>(key);
+  const cached = readCached<T>(key, validate);
   if (cached) {
     // Stale-while-revalidate: a value past its TTL renders immediately
     // while a background refetch refreshes the cache for the next render.

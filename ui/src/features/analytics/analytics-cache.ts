@@ -396,6 +396,14 @@ export class TtlCache<T> {
 
 // ── Analytics query keys ─────────────────────────────────────────────
 
+/**
+ * Query-key prefix marking the canonical `card:<cardKey>:<workspace>:…`
+ * shape. `cardQueryKey` emits it and `cachePartition` recognizes it, so
+ * the key format lives in exactly one place instead of being re-derived
+ * from string indexes in two spots.
+ */
+const CARD_KEY_PREFIX = 'card';
+
 /** Canonical cache key for one card's payload (range optional). */
 export function cardQueryKey(
   cardKey: string,
@@ -404,7 +412,7 @@ export function cardQueryKey(
   from = '',
   to = '',
 ): string {
-  return `card:${cardKey}:${workspace}:${granularity}:${from}:${to}`;
+  return `${CARD_KEY_PREFIX}:${cardKey}:${workspace}:${granularity}:${from}:${to}`;
 }
 
 /**
@@ -443,10 +451,15 @@ function sessionStorageOrNull(): CachePersistence | null {
  * anything unusual.
  */
 function cachePartition(entryKey: string): string {
+  // The only key format produced today is `card:<cardKey>:<workspace>:…`
+  // (see `cardQueryKey`), so the workspace is always the third segment.
+  // Parse it explicitly: any other shape (a hand-rolled key, or a future
+  // format) routes to the `shared` snapshot instead of guessing a
+  // partition from an arbitrary segment index.
   const parts = entryKey.split(':');
-  // card:revenue:retail:daily:... | query:retail:daily:...
-  const workspace = parts[0] === 'card' ? parts[2] : parts[1];
-  return workspace && (workspace === 'retail' || workspace === 'restaurant') ? workspace : 'shared';
+  if (parts[0] !== CARD_KEY_PREFIX) return 'shared';
+  const workspace = parts[2];
+  return workspace === 'retail' || workspace === 'restaurant' ? workspace : 'shared';
 }
 
 /**

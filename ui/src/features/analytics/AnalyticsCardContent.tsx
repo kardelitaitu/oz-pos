@@ -24,6 +24,7 @@ import { cardQueryKey } from './analytics-cache';
 import type { MenuEngineeringRow } from '@/api/reports';
 import {
   CARD_LOADERS,
+  CARD_PAYLOAD_VALIDATORS,
   alignPrevBuckets,
   alignPrevHourly,
   periodDelta,
@@ -570,6 +571,7 @@ function useCardData<T>(
       return loader(q);
     },
     enabled,
+    CARD_PAYLOAD_VALIDATORS[cardKey],
   );
   return { data: result.data as T | null, error: result.error };
 }

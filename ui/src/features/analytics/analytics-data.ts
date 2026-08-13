@@ -819,6 +819,42 @@ export async function loadTableOccupancy(q: AnalyticsQuery): Promise<TableOccupa
 /** Everything the dashboard cards need, keyed by card key. */
 export type CardLoaderResult = unknown;
 
+/** True when `v` is a non-null object (a plain struct payload). */
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null;
+}
+
+/**
+ * Structural payload guards keyed by card key, colocated with
+ * `CARD_LOADERS` so a loader and its shape check can't drift apart. Each
+ * guard returns true for the shape its loader produces; `useCardData`
+ * passes the matching guard to `useAnalyticsQuery` so a cached value whose
+ * shape drifted (a schema change without a version bump, or a corrupt
+ * snapshot) is dropped and refetched instead of being cast blindly into
+ * the card's type. Guards are deliberately loose — they only check the
+ * container kind (array vs object) plus the fields each card dereferences —
+ * so real data always passes while gross corruption does not.
+ */
+export const CARD_PAYLOAD_VALIDATORS: Record<string, (v: unknown) => boolean> = {
+  heatmap: (v) => isRecord(v) && Array.isArray(v['daily']) && Array.isArray(v['hourly']) && Array.isArray(v['weekly']),
+  revenue: Array.isArray,
+  aov: (v) => isRecord(v) && Array.isArray(v['buckets']) && typeof v['total_minor'] === 'number' && typeof v['total_orders'] === 'number',
+  staff: Array.isArray,
+  customers: isRecord,
+  payments: Array.isArray,
+  discounts: isRecord,
+  refunds: isRecord,
+  'top-items': Array.isArray,
+  category: Array.isArray,
+  basket: (v) => isRecord(v) && Array.isArray(v['buckets']),
+  inventory: (v) => Array.isArray(v) && v.length === 2 && isRecord(v[0]) && Array.isArray(v[1]),
+  'low-stock': Array.isArray,
+  waitstaff: Array.isArray,
+  tables: Array.isArray,
+  voids: Array.isArray,
+  occupancy: (v) => isRecord(v) && Array.isArray(v['hourly']),
+};
+
 export const CARD_LOADERS: Record<string, (q: AnalyticsQuery) => Promise<CardLoaderResult>> = {
   heatmap: loadHeatmapRows,
   revenue: loadRevenue,

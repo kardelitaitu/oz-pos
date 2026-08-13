@@ -19,6 +19,7 @@ import Tooltip from '@/frontend/shell/Tooltip';
 import { AnalyticsCardContent, ExportCsvButton } from './AnalyticsCardContent';
 import { analyticsDataCache, clearAnalyticsCache, cardQueryKey } from './analytics-cache';
 import {
+  CARD_PAYLOAD_VALIDATORS,
   buildHeatmapCells,
   heatLow,
   heatPeak,
@@ -821,6 +822,8 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   const heatmapQuery = useAnalyticsQuery(
     cardQueryKey('heatmap', workspaceView, heatmapGranularity, heatmapRange.from, heatmapRange.to),
     () => loadHeatmapRows({ workspace: workspaceView, granularity: heatmapGranularity, from: heatmapRange.from, to: heatmapRange.to, sessionToken }),
+    true,
+    CARD_PAYLOAD_VALIDATORS['heatmap'],
   );
   const heatmapData = heatmapQuery.data;
   const heatCells = heatmapData

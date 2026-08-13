@@ -55,16 +55,18 @@ with ✅, so this file stays a live index rather than a stale backlog.
 - **Likely fix:** keep, or shift the write into a `useLayoutEffect`/effect
   while retaining the sync `get` for the no-flash hit.
 
-### 3. Unvalidated cache cast + fragile partition parsing
+### 3. ✅ Unvalidated cache cast + fragile partition parsing (fixed)
 
-- **Where:** `readCached` casts `unknown` → `T` with no shape check;
-  `cachePartition` derives the workspace from `entryKey.split(':')` indexes.
-- **Why deferred:** the version stamp guards schema drift at the persistence
-  layer, and the key format is internal. But a shape change without a version
-  bump would crash a card, and a key-format change silently misroutes to the
-  `shared` partition.
-- **Likely fix:** validate cached values at the type boundary, and derive the
-  partition from a structured key object rather than string splitting.
+- **`cachePartition`** no longer guesses a workspace from arbitrary segment
+  indexes (the stale `query:` branch is gone). It recognizes only the
+  `card:<cardKey>:<workspace>:…` shape, sharing its prefix constant with
+  `cardQueryKey`; anything else routes to the `shared` snapshot.
+- **Cached values are now shape-checked at the read boundary.**
+  `useAnalyticsQuery` accepts an optional `validate` guard; a cached value
+  that fails it is invalidated and refetched as a miss instead of being cast
+  blindly into `T`. `CARD_PAYLOAD_VALIDATORS` (colocated with
+  `CARD_LOADERS`) supplies a loose structural guard per card, and the heatmap
+  query passes its own.
 
 ---
 

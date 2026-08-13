@@ -388,6 +388,30 @@ describe('TtlCache sessionStorage persistence', () => {
     expect(sessionStorage.getItem(restaurantKey)).toBeNull();
     expect(analyticsDataCache.size).toBe(0);
   });
+
+  it('routes unknown-workspace and non-card keys to the shared partition, never guessing', () => {
+    clearAnalyticsCache();
+    const sharedKey = `${ANALYTICS_CACHE_STORAGE_KEY}-shared`;
+
+    // An unknown workspace falls back to `shared` (not a guessed segment).
+    analyticsDataCache.set('card:revenue:kitchen:daily', { a: 1 });
+    // A hand-rolled / legacy non-card key also lands in `shared`.
+    analyticsDataCache.set('query:retail:daily', { b: 2 });
+
+    const snap = JSON.parse(sessionStorage.getItem(sharedKey)!) as {
+      entries: Array<[string, unknown]>;
+    };
+    expect(snap.entries.map(([k]) => k)).toEqual(
+      expect.arrayContaining(['card:revenue:kitchen:daily', 'query:retail:daily']),
+    );
+
+    // Neither key created a retail/restaurant partition.
+    expect(sessionStorage.getItem(`${ANALYTICS_CACHE_STORAGE_KEY}-retail`)).toBeNull();
+    expect(sessionStorage.getItem(`${ANALYTICS_CACHE_STORAGE_KEY}-restaurant`)).toBeNull();
+
+    clearAnalyticsCache();
+    expect(sessionStorage.getItem(sharedKey)).toBeNull();
+  });
 });
 
 describe('analytics card query keys', () => {
