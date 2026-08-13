@@ -1074,3 +1074,29 @@ Also swept for the same bare-fragment-in-map pattern across
 - Full suite: **296 files / 5214 tests pass, 0 unhandled errors** — both
   key warnings gone from stderr.
 - typecheck ✅ · lint 0 errors ✅ · i18n lint clean ✅
+
+# Test-hygiene: act() warnings (2026-08-14)
+
+LocationPicker.test.tsx emitted 42 "not configured to support act(...)"
+warnings (2 per test). Root cause: `renderWithProviders` is an async
+helper (wraps render in `await act()`), but 22 of 24 call sites didn't
+`await` it — the component's load does two sequential awaits
+(listInventoryLocations → getWorkspaceLocations), and the second
+continuation settled after the act() flush, inside RTL waitFor's polling
+window where the act environment flag is deliberately disabled.
+
+Fix: `await` all 22 un-awaited `renderWithProviders(...)` calls in
+LocationPicker.test.tsx (the 2 that already awaited were correct). A
+global `IS_REACT_ACT_ENVIRONMENT = true` in test-setup was tried first
+but does not help — RTL's waitFor asyncWrapper explicitly sets the flag
+false during polling.
+
+Also fixed this round: TransactionLogScreen fragment key (previous
+commit) and the SalesReportScreen duplicate-key test fixture.
+
+## Verification
+
+- Full suite: **296 files / 5214 tests pass, 0 unhandled errors, 0 act()
+  warnings** (was 42). Remaining stderr is intentional error-path
+  logging + informational compliance messages.
+- typecheck ✅ · lint 0 errors ✅

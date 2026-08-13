@@ -55,7 +55,7 @@ describe('LocationPicker', () => {
   // ── Renders trigger with current value ──────────────────────────
 
   it('renders the currently selected location name', async () => {
-    renderWithProviders(
+    await renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
       inventoryFtl,
     );
@@ -69,7 +69,7 @@ describe('LocationPicker', () => {
 
   it('opens dropdown when trigger is clicked', async () => {
     const user = userEvent.setup();
-    renderWithProviders(
+    await renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
       inventoryFtl,
     );
@@ -92,7 +92,7 @@ describe('LocationPicker', () => {
 
   it('closes dropdown on outside click', async () => {
     const user = userEvent.setup();
-    renderWithProviders(
+    await renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
       inventoryFtl,
     );
@@ -118,7 +118,7 @@ describe('LocationPicker', () => {
 
   it('closes dropdown on Escape key', async () => {
     const user = userEvent.setup();
-    renderWithProviders(
+    await renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
       inventoryFtl,
     );
@@ -144,7 +144,7 @@ describe('LocationPicker', () => {
   it('calls onChange with new location when option is clicked', async () => {
     const user = userEvent.setup();
     const handleChange = vi.fn();
-    renderWithProviders(
+    await renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={handleChange} />,
       inventoryFtl,
     );
@@ -171,7 +171,7 @@ describe('LocationPicker', () => {
   it('does not call onChange when same location is clicked', async () => {
     const user = userEvent.setup();
     const handleChange = vi.fn();
-    renderWithProviders(
+    await renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={handleChange} />,
       inventoryFtl,
     );
@@ -197,7 +197,7 @@ describe('LocationPicker', () => {
 
   it('displays localized location type metadata in dropdown options', async () => {
     const user = userEvent.setup();
-    renderWithProviders(
+    await renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
       inventoryFtl,
     );
@@ -222,7 +222,7 @@ describe('LocationPicker', () => {
 
   it('renders Indonesian type labels from the id bundle', async () => {
     const user = userEvent.setup();
-    renderWithProviders(
+    await renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
       inventoryIdFtl,
     );
@@ -248,7 +248,7 @@ describe('LocationPicker', () => {
 
   it('marks active location with aria-selected', async () => {
     const user = userEvent.setup();
-    renderWithProviders(
+    await renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
       inventoryFtl,
     );
@@ -272,7 +272,7 @@ describe('LocationPicker', () => {
 
   it('renders nothing when locations fail to load', async () => {
     mockListLocations.mockResolvedValue([]);
-    renderWithProviders(
+    await renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
       inventoryFtl,
     );
@@ -348,7 +348,7 @@ describe('LocationPicker', () => {
   it('moves the highlighted option with ArrowDown and selects with Enter', async () => {
     const user = userEvent.setup();
     const handleChange = vi.fn();
-    renderWithProviders(
+    await renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={handleChange} />,
       inventoryFtl,
     );
@@ -379,7 +379,7 @@ describe('LocationPicker', () => {
   it('wraps ArrowUp and jumps with Home/End', async () => {
     const user = userEvent.setup();
     const handleChange = vi.fn();
-    renderWithProviders(
+    await renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={handleChange} />,
       inventoryFtl,
     );
@@ -419,7 +419,7 @@ describe('LocationPicker', () => {
 
   it('orders the dropdown selected-first, then by name', async () => {
     const user = userEvent.setup();
-    renderWithProviders(
+    await renderWithProviders(
       <LocationPicker value="loc-store" onChange={vi.fn()} />,
       inventoryFtl,
     );
@@ -459,7 +459,7 @@ describe('LocationPicker', () => {
       updated_at: '2026-01-01T00:00:00Z',
     }));
     mockListLocations.mockResolvedValue(manyLocations);
-    renderWithProviders(
+    await renderWithProviders(
       <LocationPicker value="loc-1" onChange={vi.fn()} />,
       inventoryFtl,
     );
@@ -500,7 +500,7 @@ describe('LocationPicker', () => {
       updated_at: '2026-01-01T00:00:00Z',
     }));
     mockListLocations.mockResolvedValue(manyLocations);
-    renderWithProviders(
+    await renderWithProviders(
       <LocationPicker value="loc-1" onChange={vi.fn()} />,
       inventoryFtl,
     );
@@ -534,7 +534,7 @@ describe('LocationPicker', () => {
       updated_at: '2026-01-01T00:00:00Z',
     }));
     mockListLocations.mockResolvedValue(manyLocations);
-    renderWithProviders(
+    await renderWithProviders(
       <LocationPicker value="loc-1" onChange={vi.fn()} />,
       inventoryFtl,
     );
@@ -565,7 +565,7 @@ describe('LocationPicker', () => {
 
   it('keeps the search hidden for small sets', async () => {
     const user = userEvent.setup();
-    renderWithProviders(
+    await renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
       inventoryFtl,
     );
@@ -617,7 +617,7 @@ describe('LocationPicker', () => {
 
   it('refetches locations when refreshKey is bumped (external invalidation)', async () => {
     const user = userEvent.setup();
-    renderWithProviders(<RefreshKeyHarness />, inventoryFtl);
+    await renderWithProviders(<RefreshKeyHarness />, inventoryFtl);
 
     await waitFor(() => {
       expect(screen.getByText('Warehouse A')).toBeInTheDocument();
@@ -654,7 +654,7 @@ describe('LocationPicker', () => {
       .mockReturnValueOnce(first)
       .mockReturnValueOnce(second);
 
-    renderWithProviders(<RefreshKeyHarness />, inventoryFtl);
+    await renderWithProviders(<RefreshKeyHarness />, inventoryFtl);
 
     // First load is in flight.
     await waitFor(() => {
@@ -698,7 +698,7 @@ describe('LocationPicker', () => {
       { location_id: 'loc-store', location_name: 'Store Front', is_primary: true, allow_negative_stock: false },
       { location_id: 'loc-transit', location_name: 'In Transit', is_primary: false, allow_negative_stock: true },
     ]);
-    renderWithProviders(
+    await renderWithProviders(
       <LocationPicker value="loc-store" onChange={vi.fn()} />,
       inventoryFtl,
     );
@@ -726,7 +726,7 @@ describe('LocationPicker', () => {
   it('falls back to the full active list when the workspace has no bindings', async () => {
     const user = userEvent.setup();
     // Default mockGetWorkspaceLocations resolves [] → full list fallback.
-    renderWithProviders(
+    await renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
       inventoryFtl,
     );
@@ -753,7 +753,7 @@ describe('LocationPicker', () => {
 
   it('restores focus to the trigger and closes on Escape', async () => {
     const user = userEvent.setup();
-    renderWithProviders(
+    await renderWithProviders(
       <LocationPicker value="loc-warehouse" onChange={vi.fn()} />,
       inventoryFtl,
     );
