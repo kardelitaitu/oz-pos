@@ -27,6 +27,8 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
   const { l10n } = useLocalization();
   const l10nRef = useRef(l10n);
   l10nRef.current = l10n;
+  // Date/number formatting follows the active Fluent locale.
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
   const { session } = useAuth();
   const { sessionToken } = useWorkspace();
   const { addToast } = useToast();
@@ -220,7 +222,7 @@ export default function ShiftBar({ onShiftChange }: ShiftBarProps) {
                     <span className="summary-item-type">
                       {l10n.getString(`inv-log-type-${tx.type}`) ?? tx.type.replace('-', ' ')}
                     </span>
-                    <span>{new Date(tx.created_at).toLocaleTimeString()}</span>
+                    <span>{new Date(tx.created_at).toLocaleTimeString(numLocale)}</span>
                   </li>
                 ))
               ) : (

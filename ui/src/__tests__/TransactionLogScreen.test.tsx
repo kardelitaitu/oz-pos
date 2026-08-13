@@ -34,7 +34,7 @@ vi.mock('@/contexts/WorkspaceContext', () => ({
 
 vi.mock('@fluent/react', () => ({
   useLocalization: () => ({
-    l10n: { getString: (id: string) => id },
+    l10n: { bundles: [], getString: (id: string) => id },
   }),
   Localized: ({ children }: { id: string; children: React.ReactNode }) => <>{children}</>,
 }));

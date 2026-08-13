@@ -32,6 +32,8 @@ export const StockAlertPanel = memo(function StockAlertPanel({
   const { l10n } = useLocalization();
   const l10nRef = useRef(l10n);
   l10nRef.current = l10n;
+  // Date formatting follows the active Fluent locale.
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
 
   const [alerts, setAlerts] = useState<StockAlertEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -102,7 +104,7 @@ export const StockAlertPanel = memo(function StockAlertPanel({
       if (diffMin < 60) return requiredLocalized(l10n, 'inv-alert-time-min', { min: diffMin });
       const diffHrs = Math.floor(diffMin / 60);
       if (diffHrs < 24) return requiredLocalized(l10n, 'inv-alert-time-hr', { hr: diffHrs });
-      return d.toLocaleDateString();
+      return d.toLocaleDateString(numLocale);
     } catch {
       return iso;
     }

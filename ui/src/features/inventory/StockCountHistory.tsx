@@ -27,6 +27,8 @@ export default function StockCountHistory() {
   const { l10n } = useLocalization();
   const l10nRef = useRef(l10n);
   l10nRef.current = l10n;
+  // Date formatting follows the active Fluent locale.
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
   const { addToast } = useToast();
   const { sessionToken: rawSessionToken } = useWorkspace();
   const sessionToken = rawSessionToken ?? '';
@@ -159,7 +161,7 @@ export default function StockCountHistory() {
                 <span className={`sc-badge sc-badge--${c.status}`}>
                   <Localized id={`sc-status-${c.status}`}>{c.status}</Localized>
                 </span>
-                <span className="sc-hist-item-date">{new Date(c.created_at).toLocaleDateString()}</span>
+                <span className="sc-hist-item-date">{new Date(c.created_at).toLocaleDateString(numLocale)}</span>
               </button>
             ))}
           </div>

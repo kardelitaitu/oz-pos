@@ -23,6 +23,8 @@ export default function StockCountsScreen() {
   const { l10n } = useLocalization();
   const l10nRef = useRef(l10n);
   l10nRef.current = l10n;
+  // Date formatting follows the active Fluent locale.
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
   const { addToast } = useToast();
   const { sessionToken: rawSessionToken } = useWorkspace();
   const sessionToken = rawSessionToken ?? '';
@@ -141,7 +143,7 @@ export default function StockCountsScreen() {
               </div>
               <div className="sc-card-meta">
                 <span className="sc-card-type">{typeLabel(c.count_type)}</span>
-                <span className="sc-card-date">{new Date(c.created_at).toLocaleDateString()}</span>
+                <span className="sc-card-date">{new Date(c.created_at).toLocaleDateString(numLocale)}</span>
               </div>
               {c.notes && <p className="sc-card-notes">{c.notes}</p>}
               <div className="sc-card-actions">

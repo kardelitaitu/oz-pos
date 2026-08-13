@@ -46,6 +46,8 @@ export default function StockCountDetail({ countId, onBack }: Props) {
   const { l10n } = useLocalization();
   const l10nRef = useRef(l10n);
   l10nRef.current = l10n;
+  // Date formatting follows the active Fluent locale.
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
   const { addToast } = useToast();
   const { sessionToken: rawSessionToken } = useWorkspace();
   const sessionToken = rawSessionToken ?? '';
@@ -242,7 +244,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
           <Localized id={`sc-status-${count.status}`}>{count.status}</Localized>
         </span>
         <span><Localized id={`sc-type-${count.count_type}`}>{count.count_type}</Localized></span>
-        <span>{new Date(count.created_at).toLocaleDateString()}</span>
+        <span>{new Date(count.created_at).toLocaleDateString(numLocale)}</span>
       </div>
 
       {count.notes && <p className="sc-detail-notes">{count.notes}</p>}

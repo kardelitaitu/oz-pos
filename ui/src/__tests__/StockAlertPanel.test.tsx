@@ -8,6 +8,7 @@ import { StockAlertPanel } from '@/features/inventory/StockAlertPanel';
 vi.mock('@fluent/react', () => ({
   useLocalization: () => ({
     l10n: {
+      bundles: [],
       getString: (id: string, vars?: Record<string, unknown>) => {
         if (id === 'inv-alert-badge-count' && vars) return `${vars['count']} active alerts`;
         return id;

@@ -20,6 +20,8 @@ export default function TransactionLogScreen() {
   const { l10n } = useLocalization();
   const l10nRef = useRef(l10n);
   l10nRef.current = l10n;
+  // Date formatting follows the active Fluent locale.
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
 
   const [transactions, setTransactions] = useState<InventoryTransaction[]>([]);
   const [locations, setLocations] = useState<InventoryLocation[]>([]);
@@ -235,7 +237,7 @@ export default function TransactionLogScreen() {
                     className="log-row-expandable"
                     onClick={() => handleRowClick(tx.id)}
                   >
-                    <td>{new Date(tx.created_at).toLocaleString()}</td>
+                    <td>{new Date(tx.created_at).toLocaleString(numLocale)}</td>
                     <td>
                       <span className={`badge badge-${tx.type}`}>
                         {l10n.getString(`inv-log-type-${tx.type}`) ?? tx.type.replace('-', ' ')}
