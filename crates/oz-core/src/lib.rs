@@ -245,6 +245,7 @@ pub use terminal_profile::TerminalProfile;
 pub use user::{Role, User, builtin_roles, seed_users};
 pub use user_preferences::UserPreferences;
 
+
 /// Auto-test function for CBM indexing verification
 pub fn cbm_auto_test_function() {
     println!("CBM auto-index test");
