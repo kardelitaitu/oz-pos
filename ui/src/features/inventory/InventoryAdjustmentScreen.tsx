@@ -122,8 +122,8 @@ export default function InventoryAdjustmentScreen() {
   const handleSubmit = useCallback(async () => {
     if (!selectedProduct) return;
 
-    const qty = parseInt(quantity, 10);
-    if (Number.isNaN(qty) || qty <= 0) {
+    const qty = Number(quantity);
+    if (!Number.isInteger(qty) || qty <= 0) {
       setError(l10n.getString('inv-error-qty-positive'));
       return;
     }
@@ -480,7 +480,7 @@ export default function InventoryAdjustmentScreen() {
               variant="primary"
               onClick={handleSubmit}
               loading={saving}
-              disabled={!quantity || parseInt(quantity, 10) <= 0 || !reason || (reason === 'other' && !customReason.trim())}
+              disabled={!quantity || !Number.isInteger(Number(quantity)) || Number(quantity) <= 0 || !reason || (reason === 'other' && !customReason.trim())}
             >
               {saving ? (
                 <Localized id="inv-adjusting">

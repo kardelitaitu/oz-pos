@@ -92,6 +92,11 @@ export default function StockCountDetail({ countId, onBack }: Props) {
 
   const handleAddLine = useCallback(async () => {
     if (!selectedSku || !expectedQty) return;
+    const expectedNum = Number(expectedQty);
+    if (!Number.isInteger(expectedNum) || expectedNum < 0) {
+      setError(l10nRef.current.getString('sc-error-qty-integer'));
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -100,7 +105,7 @@ export default function StockCountDetail({ countId, onBack }: Props) {
         countId,
         sku: selectedSku,
         productName: selectedName,
-        expectedQty: parseInt(expectedQty, 10),
+        expectedQty: Number(expectedQty),
       });
       setSelectedSku('');
       setSelectedName('');
@@ -342,7 +347,12 @@ export default function StockCountDetail({ countId, onBack }: Props) {
                     type="number"
                     className="sc-counted-input"
                     value={line.counted_qty ?? ''}
-                    onChange={(e) => handleRecordCount(line.id, parseInt(e.target.value) || 0)}
+                    onChange={(e) => {
+                      const v = e.target.value === '' ? 0 : Number(e.target.value);
+                      // Counted quantities are whole units; ignore fractional
+                      // in-progress input instead of silently truncating it.
+                      if (Number.isInteger(v) && v >= 0) handleRecordCount(line.id, v);
+                    }}
                     min="0"
                     aria-label={l10n.getString('sc-counted-aria', { sku: line.sku })}
                   />

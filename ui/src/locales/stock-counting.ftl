@@ -47,6 +47,7 @@ sc-hist-empty = No completed counts to display.
 sc-error-session = Session unavailable. Please sign in again.
 sc-error-load = Failed to load stock counts.
 sc-error-add-line = Failed to add line
+sc-error-qty-integer = Expected quantity must be a whole number
 sc-error-update-line = Failed to update line
 sc-error-remove-line = Failed to remove line
 sc-error-start-count = Failed to start count

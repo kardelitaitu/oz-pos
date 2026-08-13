@@ -47,6 +47,7 @@ sc-hist-empty = Tidak ada opname selesai untuk ditampilkan.
 sc-error-session = Sesi tidak tersedia. Silakan masuk lagi.
 sc-error-load = Gagal memuat stok opname.
 sc-error-add-line = Gagal menambah baris
+sc-error-qty-integer = Jumlah yang diharapkan harus berupa bilangan bulat
 sc-error-update-line = Gagal memperbarui baris
 sc-error-remove-line = Gagal menghapus baris
 sc-error-start-count = Gagal memulai opname

@@ -88,8 +88,8 @@ export default function ThresholdConfigScreen() {
 
     try {
       const locId = selectedLocationId === '' ? null : selectedLocationId;
-      const numVal = parseInt(thresholdVal, 10);
-      if (isNaN(numVal) || numVal < 0) {
+      const numVal = Number(thresholdVal);
+      if (!Number.isInteger(numVal) || numVal < 0) {
         addToast({ message: requiredLocalized(l10n, 'inv-threshold-error-qty'), type: 'error' });
         return;
       }
