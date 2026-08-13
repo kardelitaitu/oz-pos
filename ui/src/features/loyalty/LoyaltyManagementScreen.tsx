@@ -87,15 +87,20 @@ export default function LoyaltyManagementScreen() {
 
   const handleSaveTier = useCallback(async () => {
     if (!editingTier || !sessionToken) return;
-    const minPts = parseInt(tierForm.min_points, 10);
-    const ppu = parseInt(tierForm.points_per_unit, 10);
-    const mult = parseFloat(tierForm.earn_multiplier);
+    // min_points / points_per_unit are integers — reject empties and decimals
+    // (parseInt would silently truncate "10.5" → 10 and "" → NaN → 0).
+    const rawMin = tierForm.min_points.trim();
+    const rawPpu = tierForm.points_per_unit.trim();
+    const minPts = Number(rawMin);
+    const ppu = Number(rawPpu);
+    const mult = Number(tierForm.earn_multiplier.trim());
     const validColour = /^#[0-9a-fA-F]{6}$/.test(tierForm.colour);
     if (
-      Number.isNaN(minPts)
-      || Number.isNaN(ppu)
-      || Number.isNaN(mult)
+      rawMin === ''
+      || !Number.isInteger(minPts)
       || minPts < 0
+      || rawPpu === ''
+      || !Number.isInteger(ppu)
       || ppu <= 0
       || !Number.isFinite(mult)
       || mult <= 0

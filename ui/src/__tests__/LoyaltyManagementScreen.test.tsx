@@ -384,4 +384,34 @@ describe('LoyaltyManagementScreen', () => {
       expect(screen.getByText('Please fill in all fields correctly')).toBeInTheDocument();
     });
   });
+
+  it('rejects a non-integer min points instead of truncating it', async () => {
+    const user = userEvent.setup();
+    renderWithFluentSync(<LoyaltyManagementScreen />, loyaltyFtl, sharedFtl);
+    await waitFor(() => {
+      expect(screen.getByText('Tiers')).toBeInTheDocument();
+    });
+    await user.click(screen.getByText('Tiers'));
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Edit').length).toBeGreaterThan(0);
+    });
+    await user.click(screen.getAllByText('Edit')[0]!);
+    await waitFor(() => {
+      expect(screen.getByText('Save')).toBeInTheDocument();
+    });
+
+    // min_points is the second .loyalty-tier-input — enter a decimal.
+    const inputs = document.querySelectorAll('.loyalty-tier-input');
+    const minPointsInput = inputs[1] as HTMLInputElement;
+    await user.clear(minPointsInput);
+    await user.type(minPointsInput, '10.5');
+
+    await user.click(screen.getByText('Save'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Please fill in all fields correctly')).toBeInTheDocument();
+    });
+    expect(mockUpdateTier).not.toHaveBeenCalled();
+  });
 });
