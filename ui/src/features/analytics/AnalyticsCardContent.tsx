@@ -730,7 +730,7 @@ function InventoryCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
     <Visual>
       <div className="analytics-kpi-tiles">
         <Kpi value={turnover > 0 ? `${turnover.toFixed(1)}×` : '—'} label={l10n.getString('analytics-card-inventory-turnover')} />
-        <Kpi value={daysOfStock > 0 ? `${daysOfStock}d` : '—'} label={l10n.getString('analytics-card-inventory-days')} />
+        <Kpi value={daysOfStock > 0 ? l10n.getString('analytics-unit-days', { n: daysOfStock }) : '—'} label={l10n.getString('analytics-card-inventory-days')} />
         <Kpi value={String(skus)} label={l10n.getString('analytics-card-inventory-skus')} />
       </div>
       {delta !== null && <p className="analytics-card-insight"><DeltaChip value={delta} compare={compare === true} /></p>}
@@ -804,7 +804,7 @@ function TablesCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title:
   const delta = compare ? periodDelta(avgTurn, prevAvgTurn) : turnDelta(active);
   const option = useMemo(() => (data.length ? ({
     grid: { left: 8, right: 8, top: 12, bottom: 0, containLabel: true },
-    tooltip: { trigger: 'axis' as const, valueFormatter: (v: unknown) => `${v}m` },
+    tooltip: { trigger: 'axis' as const, valueFormatter: (v: unknown) => l10n.getString('analytics-unit-minutes', { n: String(v) }) },
     xAxis: {
       type: 'category' as const, data: data.map((d) => d.label),
       axisLabel: { fontSize: 9, color: CHART_TEXT }, axisLine: { show: false }, axisTick: { show: false },
@@ -828,14 +828,14 @@ function TablesCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title:
   return (
     <Visual>
       <div className="analytics-kpi-row">
-        <Kpi value={avgTurn > 0 ? `${avgTurn}m` : '—'} label={l10n.getString('analytics-card-tables-turn')} />
+        <Kpi value={avgTurn > 0 ? l10n.getString('analytics-unit-minutes', { n: String(avgTurn) }) : '—'} label={l10n.getString('analytics-card-tables-turn')} />
         {delta !== null && <DeltaChip value={delta} compare={compare === true} {...(compare ? { tone: 'bad' as const } : {})} />}
       </div>
       <div className="analytics-card-chart" role="img" aria-label={title}>
         <ReactEChartsCore echarts={echarts} option={option!} style={{ height: chartHeight('tables', expanded) }} notMerge />
       </div>
-      {peak && <p className="analytics-card-insight">{l10n.getString('analytics-card-peak', { label: peak.label, value: `${peak.value}m` })}</p>}
-      {low && <p className="analytics-card-insight">{l10n.getString('analytics-card-low', { label: low.label, value: `${low.value}m` })}</p>}
+      {peak && <p className="analytics-card-insight">{l10n.getString('analytics-card-peak', { label: peak.label, value: l10n.getString('analytics-unit-minutes', { n: String(peak.value) }) })}</p>}
+      {low && <p className="analytics-card-insight">{l10n.getString('analytics-card-low', { label: low.label, value: l10n.getString('analytics-unit-minutes', { n: String(low.value) }) })}</p>}
     </Visual>
   );
 }

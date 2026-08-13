@@ -56,11 +56,31 @@ analytics-workspace-select-aria = Pilih tipe workspace
 analytics-workspace-retail = Retail
 analytics-workspace-restaurant = Restoran
 analytics-granularity-aria = Granularitas waktu
-analytics-granularity-daily = Harian
 analytics-granularity-weekly = Mingguan
 analytics-granularity-monthly = Bulanan
 analytics-granularity-yearly = Tahunan
 analytics-granularity-custom = Kustom
+
+# Heatmap month abbreviations + tooltips
+analytics-month-jan = Jan
+analytics-month-feb = Feb
+analytics-month-mar = Mar
+analytics-month-apr = Apr
+analytics-month-may = Mei
+analytics-month-jun = Jun
+analytics-month-jul = Jul
+analytics-month-aug = Agu
+analytics-month-sep = Sep
+analytics-month-oct = Okt
+analytics-month-nov = Nov
+analytics-month-dec = Des
+analytics-heatmap-hour-tooltip = { $day } { $hour }:00
+analytics-heatmap-day-tooltip = Hari { $day }
+analytics-heatmap-week-tooltip = { $month } minggu { $week }
+
+# Unit suffixes (KPI values + chart tooltips)
+analytics-unit-minutes = { $n } mnt
+analytics-unit-days = { $n } hari
 analytics-custom-from = Dari
 analytics-custom-to = Hingga
 analytics-action-refresh-aria = Muat ulang data

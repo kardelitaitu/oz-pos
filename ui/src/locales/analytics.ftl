@@ -56,11 +56,34 @@ analytics-workspace-select-aria = Select workspace type
 analytics-workspace-retail = Retail
 analytics-workspace-restaurant = Restaurant
 analytics-granularity-aria = Time granularity
-analytics-granularity-daily = Daily
 analytics-granularity-weekly = Weekly
 analytics-granularity-monthly = Monthly
 analytics-granularity-yearly = Yearly
 analytics-granularity-custom = Custom
+
+# Heatmap month abbreviations + tooltips
+analytics-month-jan = Jan
+analytics-month-feb = Feb
+analytics-month-mar = Mar
+analytics-month-apr = Apr
+analytics-month-may = May
+analytics-month-jun = Jun
+analytics-month-jul = Jul
+analytics-month-aug = Aug
+analytics-month-sep = Sep
+analytics-month-oct = Oct
+analytics-month-nov = Nov
+analytics-month-dec = Dec
+analytics-heatmap-hour-tooltip = { $day } { $hour }:00
+analytics-heatmap-day-tooltip = Day { $day }
+analytics-heatmap-week-tooltip = { $month } week { $week }
+
+# Unit suffixes (KPI values + chart tooltips)
+analytics-unit-minutes = { $n } min
+analytics-unit-days = { $n } { $n ->
+    [one] day
+   *[other] days
+}
 analytics-custom-from = From
 analytics-custom-to = To
 analytics-action-refresh-aria = Refresh data

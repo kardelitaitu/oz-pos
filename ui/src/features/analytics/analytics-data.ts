@@ -120,6 +120,26 @@ export function rangeForGranularity(
   }
 }
 
+/** Inclusive number of days in [from, to]. */
+export function spanDays(from: string, to: string): number {
+  const fromMs = Date.parse(`${from}T00:00:00Z`);
+  const toMs = Date.parse(`${to}T00:00:00Z`);
+  return Math.round((toMs - fromMs) / 86_400_000) + 1;
+}
+
+/**
+ * Bucket granularity for a query. Fixed granularities pass through; a
+ * custom range rolls up by span so long ranges stay readable:
+ * ≤ 31 days → daily, 32–180 days → weekly, > 180 days → monthly.
+ */
+export function bucketGranularity(g: Granularity, from: string, to: string): Granularity {
+  if (g !== 'custom') return g;
+  const days = spanDays(from, to);
+  if (days <= 31) return 'daily';
+  if (days <= 180) return 'weekly';
+  return 'monthly';
+}
+
 // ── Pure mapping helpers ────────────────────────────────────────────
 
 /**
@@ -282,34 +302,40 @@ export function weeklyHourlyIntensities(rows: HourlyHeatmapRow[]): Map<string, n
 
 /** Daily revenue mapped to calendar days of the current month. */
 export function monthDayIntensities(rows: DailyRevenueRow[]): Map<string, number> {
-  return normalizeIntensities(
-    rows.map((r) => [String(new Date(`${r.date}T00:00:00`).getDate()), r.total_minor] as [string, number]),
-  );
+  // The backend emits one daily row per currency — sum per day so a
+  // multi-currency day shows its combined revenue, not one row overwriting
+  // the other (and skewing the peak normalization).
+  const byDay = new Map<string, number>();
+  for (const r of rows) {
+    const key = String(new Date(`${r.date}T00:00:00`).getDate());
+    byDay.set(key, (byDay.get(key) ?? 0) + r.total_minor);
+  }
+  return normalizeIntensities([...byDay.entries()]);
 }
 
 /** Weekly revenue mapped to (YYYY-MM, week-of-month) for the range-derived yearly grid. */
 export function yearlyWeekIntensities(rows: WeeklyRevenueRow[]): Map<string, number> {
-  return normalizeIntensities(
-    rows.map((r) => {
-      const d = new Date(`${r.week_start}T00:00:00`);
-      const month = d.getMonth();
-      // Ordinal of the week among the month's Monday weeks (0-based) — the
-      // same Monday-first structure as the trend cards' weekStartKey. The
-      // old day-of-month arithmetic capped at 3, silently merging the 5th
-      // Monday of a month into the 4th week's cell. The key carries the
-      // week_start's YYYY-MM so a multi-year range never merges two
-      // Januaries into one column.
-      let week = 0;
-      for (let day = 1; day <= d.getDate(); day++) {
-        if (mondayFirst(new Date(d.getFullYear(), month, day).getDay()) === 0) week += 1;
-      }
-      return [`${r.week_start.slice(0, 7)}:${week - 1}`, r.total_minor] as [string, number];
-    }),
-  );
+  // Sum per (YYYY-MM:week) cell first — the backend emits one weekly row
+  // per currency, and duplicate keys must combine like the revenue loader.
+  const byKey = new Map<string, number>();
+  for (const r of rows) {
+    const d = new Date(`${r.week_start}T00:00:00`);
+    const month = d.getMonth();
+    // Ordinal of the week among the month's Monday weeks (0-based) — the
+    // same Monday-first structure as the trend cards' weekStartKey. The
+    // old day-of-month arithmetic capped at 3, silently merging the 5th
+    // Monday of a month into the 4th week's cell. The key carries the
+    // week_start's YYYY-MM so a multi-year range never merges two
+    // Januaries into one column.
+    let week = 0;
+    for (let day = 1; day <= d.getDate(); day++) {
+      if (mondayFirst(new Date(d.getFullYear(), month, day).getDay()) === 0) week += 1;
+    }
+    const key = `${r.week_start.slice(0, 7)}:${week - 1}`;
+    byKey.set(key, (byKey.get(key) ?? 0) + r.total_minor);
+  }
+  return normalizeIntensities([...byKey.entries()]);
 }
-
-/** Short month names for the yearly heatmap's column headers. */
-const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** Number of Monday weeks in a month (4 or 5) — a yearly heatmap column's band count. */
 export function mondayWeeksInMonth(year: number, month: number): number {
@@ -325,8 +351,6 @@ export function mondayWeeksInMonth(year: number, month: number): number {
 export interface YearlyHeatmapColumn {
   /** YYYY-MM — matches the `yearlyWeekIntensities` cell keys. */
   key: string;
-  /** Column header: month name on single-year ranges, MM/YY when the range spans years. */
-  label: string;
   /** Monday-week count (4 or 5) — how many heat cells the column renders. */
   cells: number;
 }
@@ -334,20 +358,14 @@ export interface YearlyHeatmapColumn {
 /**
  * The yearly heatmap's columns: one per month in `[from, to]` — never the
  * current year's fixed 12 — so a past-year range renders that year's
- * months and a multi-year range renders every month with year-aware
- * labels, exactly like the trend cards' yearly buckets.
+ * months. The header label (localized month name, or MM/YY when the range
+ * spans years) is composed in the UI layer where l10n is available.
  */
 export function yearlyHeatmapColumns(from: string, to: string): YearlyHeatmapColumn[] {
-  const months = bucketKeys('monthly', from, to);
-  const multiYear = months.length > 0 && months[0]!.slice(0, 4) !== months[months.length - 1]!.slice(0, 4);
-  return months.map((ym) => {
-    const [y, m] = ym.split('-').map(Number);
-    return {
-      key: ym,
-      label: multiYear ? `${ym.slice(5)}/${ym.slice(2, 4)}` : MONTH_NAMES[m! - 1]!,
-      cells: mondayWeeksInMonth(y!, m! - 1),
-    };
-  });
+  return bucketKeys('monthly', from, to).map((ym) => ({
+    key: ym,
+    cells: mondayWeeksInMonth(Number(ym.slice(0, 4)), Number(ym.slice(5)) - 1),
+  }));
 }
 
 /** Per-cell intensities for the heatmap card at the given granularity. */
@@ -371,11 +389,11 @@ export function buildHeatmapIntensities(
 
 // ── Per-card loaders (raw API rows, no formatting) ──────────────────
 
-/** Raw revenue rows for the granularity's bucket size. */
-async function revenueRows(q: AnalyticsQuery): Promise<
+/** Raw revenue rows for a resolved bucket granularity. */
+async function revenueRows(g: Granularity, q: AnalyticsQuery): Promise<
   DailyRevenueRow[] | WeeklyRevenueRow[] | MonthlyRevenueRow[]
 > {
-  switch (q.granularity) {
+  switch (g) {
     case 'weekly':
       return getWeeklyRevenue(q.from, q.to, q.sessionToken);
     case 'monthly':
@@ -433,21 +451,23 @@ function bucketKeys(g: Granularity, from: string, to: string): string[] {
 
 /** Revenue per bucket (Revenue Overview card), zero-filled to the range. */
 export async function loadRevenue(q: AnalyticsQuery): Promise<Bucket[]> {
-  const rows = await revenueRows(q);
+  const g = bucketGranularity(q.granularity, q.from, q.to);
+  const rows = await revenueRows(g, q);
   // Sum per raw key — the backend can emit one row per (day, currency).
   const byKey = new Map<string, number>();
   for (const r of rows) {
     byKey.set(rowKey(r), (byKey.get(rowKey(r)) ?? 0) + r.total_minor);
   }
-  return bucketKeys(q.granularity, q.from, q.to).map((key) => ({
-    label: revenueLabel(q.granularity, key, rangeSpansYears(q)),
+  return bucketKeys(g, q.from, q.to).map((key) => ({
+    label: revenueLabel(g, key, rangeSpansYears(q)),
     value: byKey.get(key) ?? 0,
   }));
 }
 
 /** Average order value per bucket (AOV card), zero-filled to the range. */
 export async function loadAov(q: AnalyticsQuery): Promise<Bucket[]> {
-  const rows = await revenueRows(q);
+  const g = bucketGranularity(q.granularity, q.from, q.to);
+  const rows = await revenueRows(g, q);
   const byKey = new Map<string, { total: number; count: number }>();
   for (const r of rows) {
     const key = rowKey(r);
@@ -456,10 +476,10 @@ export async function loadAov(q: AnalyticsQuery): Promise<Bucket[]> {
     agg.count += r.sale_count;
     byKey.set(key, agg);
   }
-  return bucketKeys(q.granularity, q.from, q.to).map((key) => {
+  return bucketKeys(g, q.from, q.to).map((key) => {
     const agg = byKey.get(key);
     return {
-      label: revenueLabel(q.granularity, key, rangeSpansYears(q)),
+      label: revenueLabel(g, key, rangeSpansYears(q)),
       value: agg && agg.count > 0 ? Math.round(agg.total / agg.count) : 0,
     };
   });
@@ -538,22 +558,23 @@ function trendBucketKeys(g: Granularity, from: string, to: string): string[] {
  * turns in the range read 0, and the axis covers the whole range.
  */
 export async function loadTables(q: AnalyticsQuery): Promise<Bucket[]> {
+  const g = bucketGranularity(q.granularity, q.from, q.to);
   const rows = await getTableTurnover(q.from, q.to, q.sessionToken);
   const ordersByKey = new Map<string, number>();
   for (const r of rows) {
-    const key = trendKey(q.granularity, r.date);
+    const key = trendKey(g, r.date);
     ordersByKey.set(key, (ordersByKey.get(key) ?? 0) + r.table_orders);
   }
-  return trendBucketKeys(q.granularity, q.from, q.to).map((key) => {
+  return trendBucketKeys(g, q.from, q.to).map((key) => {
     const orders = ordersByKey.get(key) ?? 0;
     const bucketMinutes =
-      q.granularity === 'monthly' || q.granularity === 'yearly'
+      g === 'monthly' || g === 'yearly'
         ? monthDays(key) * 1440
-        : q.granularity === 'weekly'
+        : g === 'weekly'
           ? 7 * 1440
           : 1440;
     return {
-      label: revenueLabel(q.granularity, key, rangeSpansYears(q)),
+      label: revenueLabel(g, key, rangeSpansYears(q)),
       value: orders > 0 ? Math.round(bucketMinutes / orders) : 0,
     };
   });
@@ -582,20 +603,21 @@ export interface BasketTrend {
  * from the backend; weekly/monthly/yearly group them like `loadTables`.
  */
 export async function loadBasketSize(q: AnalyticsQuery): Promise<BasketTrend> {
+  const g = bucketGranularity(q.granularity, q.from, q.to);
   const rows = await getBasketSizeTrend(q.from, q.to, q.sessionToken);
   // Buckets without sales in the range read 0; the axis covers the range.
   const salesByKey = new Map<string, number>();
   const linesByKey = new Map<string, number>();
   for (const r of rows) {
-    const key = trendKey(q.granularity, r.date);
+    const key = trendKey(g, r.date);
     salesByKey.set(key, (salesByKey.get(key) ?? 0) + r.sale_count);
     linesByKey.set(key, (linesByKey.get(key) ?? 0) + r.sale_count * r.avg_line_count);
   }
-  const buckets: Bucket[] = trendBucketKeys(q.granularity, q.from, q.to).map((key) => {
+  const buckets: Bucket[] = trendBucketKeys(g, q.from, q.to).map((key) => {
     const sales = salesByKey.get(key) ?? 0;
     const lines = linesByKey.get(key) ?? 0;
     return {
-      label: revenueLabel(q.granularity, key, rangeSpansYears(q)),
+      label: revenueLabel(g, key, rangeSpansYears(q)),
       value: sales > 0 ? Math.round((lines / sales) * 10) / 10 : 0,
     };
   });
@@ -609,9 +631,9 @@ export async function loadBasketSize(q: AnalyticsQuery): Promise<BasketTrend> {
 }
 
 /**
- * Inventory turnover summary plus the units-sold trend line, zero-filled
- * across the queried dates so the chart axis covers the whole range (the
- * trend is a raw per-day line at every granularity).
+ * Inventory turnover summary plus the units-sold trend line, bucketed by
+ * the query's (possibly span-derived) granularity and zero-filled across
+ * the queried range so the chart axis covers the whole window.
  */
 export async function loadInventory(
   q: AnalyticsQuery,
@@ -620,10 +642,15 @@ export async function loadInventory(
     getInventoryTurnover(q.from, q.to, q.sessionToken, 'default'),
     getInventoryTrend(q.from, q.to, q.sessionToken),
   ]);
-  const unitsByDate = new Map(trend.map((t) => [t.date, t.units_sold]));
-  const filled = bucketKeys('daily', q.from, q.to).map((date) => ({
-    date,
-    units_sold: unitsByDate.get(date) ?? 0,
+  const g = bucketGranularity(q.granularity, q.from, q.to);
+  const unitsByKey = new Map<string, number>();
+  for (const t of trend) {
+    const key = trendKey(g, t.date);
+    unitsByKey.set(key, (unitsByKey.get(key) ?? 0) + t.units_sold);
+  }
+  const filled = trendBucketKeys(g, q.from, q.to).map((key) => ({
+    date: key,
+    units_sold: unitsByKey.get(key) ?? 0,
   }));
   return [turnover, filled];
 }

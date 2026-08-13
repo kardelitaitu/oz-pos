@@ -19,15 +19,22 @@ import './AnalyticsScreen.css';
 export type WorkspaceView = 'retail' | 'restaurant';
 export type Granularity = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom';
 
-const GRANULARITIES: Granularity[] = ['daily', 'weekly', 'monthly', 'yearly', 'custom'];
+// `daily` was removed from the selector: every card mapped it to `weekly`,
+// so the two buttons rendered identical data. A short custom range still
+// auto-buckets as daily (see bucketGranularity), but the selector no longer
+// offers daily as a global view.
+const GRANULARITIES: Granularity[] = ['weekly', 'monthly', 'yearly', 'custom'];
 
 const ZOOM_MIN = 0.6;
 const ZOOM_MAX = 1.6;
 const ZOOM_STEP = 0.2;
 
+/** localStorage key for the last-chosen workspace view (retail/restaurant). */
+const WORKSPACE_VIEW_STORAGE_KEY = 'oz-analytics-workspace-view';
+
 /** Keyboard shortcut metadata — drives both the handler and the help popover. */
 const SHORTCUTS: { keys: string; labelKey: string }[] = [
-  { keys: '1–5',    labelKey: 'analytics-shortcuts-granularity' },
+  { keys: '1–4',    labelKey: 'analytics-shortcuts-granularity' },
   { keys: 'R',      labelKey: 'analytics-shortcuts-refresh' },
   { keys: '+ / −',  labelKey: 'analytics-shortcuts-zoom' },
   { keys: '0',      labelKey: 'analytics-shortcuts-zoom-reset' },
@@ -59,6 +66,37 @@ export function smartScale(
 ): number {
   if (available.w <= 0 || available.h <= 0 || content.w <= 0 || content.h <= 0) return 1;
   return Math.max(1, Math.min(max, Math.min(available.w / content.w, available.h / content.h)));
+}
+
+/**
+ * Effective granularity for a card after applying its per-card remap.
+ * Cards default to respecting the global selector; a card with a
+ * `granularityMap` entry for the current granularity overrides it (e.g.
+ * the heatmap renders the 7×24 grid for custom ranges too).
+ */
+export function cardGranularity(
+  card: { granularityMap?: Partial<Record<Granularity, Granularity>> },
+  g: Granularity,
+): Granularity {
+  return card.granularityMap?.[g] ?? g;
+}
+
+/**
+ * Date range for a card, derived from its *effective* granularity (after
+ * the per-card remap) so a card that remaps e.g. weekly → monthly also
+ * gets the matching window instead of the global selector's window.
+ */
+export function cardRange(
+  card: { granularityMap?: Partial<Record<Granularity, Granularity>> },
+  g: Granularity,
+  customFrom: string,
+  customTo: string,
+): { from: string; to: string } {
+  // A custom range is user-selected — never let a granularity remap
+  // replace it with a derived window (the heatmap remaps custom → weekly
+  // for bucketing but still queries the chosen dates).
+  if (g === 'custom') return { from: customFrom, to: customTo };
+  return rangeForGranularity(cardGranularity(card, g), customFrom, customTo);
 }
 
 function isoToday(): string {
@@ -94,18 +132,13 @@ export function monthCalendarGrid(): { leading: number; days: number; trailing: 
   return { leading, days, trailing };
 }
 
-// Heatmap time buckets per granularity. Custom falls back to the daily
-// week view until a real range is selected.
-const HEAT_BUCKETS: Record<Exclude<Granularity, 'custom'>, string[]> = {
-  daily: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-  weekly: ['W1', 'W2', 'W3', 'W4'],
-  monthly: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-  yearly: ['Q1', 'Q2', 'Q3', 'Q4'],
-};
+// Fluent keys for the heatmap's Monday-first day-of-week abbreviations,
+// reused from reports.ftl (which already localizes them) so the analytics
+// grid and the reports heatmap share one set of day labels.
+const DAY_LABEL_KEYS = ['day-monday', 'day-tuesday', 'day-wednesday', 'day-thursday', 'day-friday', 'day-saturday', 'day-sunday'];
 
-function heatLabels(g: Granularity): string[] {
-  return g === 'custom' ? HEAT_BUCKETS.daily : HEAT_BUCKETS[g];
-}
+/** Month-name key suffixes (0-based month index → `analytics-month-*`). */
+const MONTH_LABEL_KEYS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 
 /**
  * Short, stable label for a cache key in the debug readout:
@@ -131,11 +164,15 @@ interface AnalyticsCard {
   descKey: string;
   /** `wide` = span 2 columns; `full` = span all columns; default = single */
   size?: 'wide' | 'full';
+  /** Optional per-card granularity remap: override specific global
+      granularities for this card (e.g. the heatmap maps daily → weekly).
+      Unmapped granularities follow the selector. */
+  granularityMap?: Partial<Record<Granularity, Granularity>>;
 }
 
 const ANALYTICS_CARDS: AnalyticsCard[] = [
-  // 2×1 wide heatmap
-  { key: 'heatmap',   workspace: null,         titleKey: 'analytics-card-heatmap', title: 'Heat Map', descKey: 'analytics-card-desc-heatmap', size: 'wide' },
+  // 2×1 wide heatmap — custom ranges still render the 7×24 grid.
+  { key: 'heatmap',   workspace: null,         titleKey: 'analytics-card-heatmap', title: 'Heat Map', descKey: 'analytics-card-desc-heatmap', size: 'wide', granularityMap: { custom: 'weekly' } },
   // Shared (both retail and restaurant)
   { key: 'revenue',   workspace: null,         titleKey: 'analytics-card-revenue',    title: 'Revenue Overview', descKey: 'analytics-card-desc-revenue' },
   { key: 'aov',       workspace: null,         titleKey: 'analytics-card-aov',        title: 'Average Order Value', descKey: 'analytics-card-desc-aov' },
@@ -149,7 +186,7 @@ const ANALYTICS_CARDS: AnalyticsCard[] = [
   { key: 'category',  workspace: 'retail',     titleKey: 'analytics-card-category',   title: 'Sales by Category', descKey: 'analytics-card-desc-category' },
   { key: 'basket',    workspace: 'retail',     titleKey: 'analytics-card-basket',     title: 'Average Basket Size', descKey: 'analytics-card-desc-basket' },
   { key: 'inventory', workspace: 'retail',     titleKey: 'analytics-card-inventory',  title: 'Stock Turnover', descKey: 'analytics-card-desc-inventory' },
-  { key: 'low-stock', workspace: 'retail',     titleKey: 'analytics-card-low-stock',  title: 'Low Stock Alerts', descKey: 'analytics-card-desc-low-stock' },
+  { key: 'low-stock', workspace: 'retail',     titleKey: 'analytics-card-low-stock',  title: 'Low Stock Alerts', descKey: 'analytics-card-desc-low-stock', size: 'wide' },
   // Restaurant-only
   { key: 'top-items', workspace: 'restaurant', titleKey: 'analytics-card-top-menu',   title: 'Top Menu Items', descKey: 'analytics-card-desc-top-menu' },
   { key: 'tables',    workspace: 'restaurant', titleKey: 'analytics-card-tables',     title: 'Table Turnover', descKey: 'analytics-card-desc-tables' },
@@ -167,10 +204,18 @@ export default function AnalyticsScreen() {
   const sessionToken = rawToken || '';
 
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>(() => {
-    // Default to the workspace type the user was last in, so the selector
-    // opens on the active workspace's view.
+    // Reopen on the last-chosen view across sessions; fall back to the
+    // workspace type the user was last in, then retail.
+    const saved = localStorage.getItem(WORKSPACE_VIEW_STORAGE_KEY);
+    if (saved === 'retail' || saved === 'restaurant') return saved;
     return activeInstance?.type_key === 'restaurant-pos' ? 'restaurant' : 'retail';
   });
+
+  // Keep the stored preference in sync — covers the selector, the command
+  // palette, and any future path that changes the view.
+  useEffect(() => {
+    localStorage.setItem(WORKSPACE_VIEW_STORAGE_KEY, workspaceView);
+  }, [workspaceView]);
 
   // Label the selector with the real workspace names ("Store POS" /
   // "Restaurant POS") from the workspace registry; fall back to the
@@ -184,7 +229,7 @@ export default function AnalyticsScreen() {
       view === 'retail' ? 'analytics-workspace-retail' : 'analytics-workspace-restaurant',
     );
   };
-  const [granularity, setGranularity] = useState<Granularity>('daily');
+  const [granularity, setGranularity] = useState<Granularity>('weekly');
   const [customFrom, setCustomFrom] = useState(isoToday());
   const [customTo, setCustomTo] = useState(isoToday());
   const [zoomLevel, setZoomLevel] = useState<number>(() => {
@@ -217,11 +262,9 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   const expandedBodyRef = useRef<HTMLDivElement | null>(null);
   const mainRef = useRef<HTMLElement | null>(null);
 
-  // Inclusive [from, to] window for the current granularity/custom range.
-  const dateRange = useMemo(
-    () => rangeForGranularity(granularity, customFrom, customTo),
-    [granularity, customFrom, customTo],
-  );
+  // Date ranges are derived per card from its effective granularity via
+  // cardRange, so a card that remaps granularity gets the matching window
+  // (custom ranges are always preserved verbatim).
 
   /**
    * Kick off a recalculation. `force` (refresh button / R key) always
@@ -293,7 +336,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
       if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;
       if (paletteOpen) return;
       const k = e.key;
-      if (k >= '1' && k <= '5') {
+      if (k >= '1' && k <= '4') {
         setGranularity(GRANULARITIES[Number(k) - 1]!);
       } else if (k === 'r' || k === 'R') {
         startRecalculating.current?.(true);
@@ -456,7 +499,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   const runPaletteItem = (item: PaletteItem) => {
     if (item.kind === 'workspace') {
       setWorkspaceView(item.value);
-      setGranularity('daily');
+      setGranularity('weekly');
       setExpandedKey(null);
     } else if (item.kind === 'granularity') {
       setGranularity(item.value);
@@ -545,14 +588,18 @@ const [paletteOpen, setPaletteOpen] = useState(false);
   // Smart heatmap — bucket cells change with the selected granularity.
   // Monthly renders one cell per day of the current month (28–31);
   // yearly renders one column per month in the query range (4–5 Monday
-  // weeks each); other granularities are flat.
-  // Intensities come from real revenue rows via the TTL cache.
+  // weeks each); other granularities are flat. Intensities come from real
+  // revenue rows via the TTL cache. The heatmap card remaps custom → weekly
+  // so custom ranges render the same 7×24 grid.
+  const heatmapCard = ANALYTICS_CARDS.find((c) => c.key === 'heatmap')!;
+  const heatmapGranularity = cardGranularity(heatmapCard, granularity);
+  const heatmapRange = cardRange(heatmapCard, granularity, customFrom, customTo);
   const heatmapQuery = useAnalyticsQuery(
-    cardQueryKey('heatmap', workspaceView, granularity, dateRange.from, dateRange.to),
-    () => loadHeatmapRows({ workspace: workspaceView, granularity, from: dateRange.from, to: dateRange.to, sessionToken }),
+    cardQueryKey('heatmap', workspaceView, heatmapGranularity, heatmapRange.from, heatmapRange.to),
+    () => loadHeatmapRows({ workspace: workspaceView, granularity: heatmapGranularity, from: heatmapRange.from, to: heatmapRange.to, sessionToken }),
   );
   const heatmapIntensities = heatmapQuery.data
-    ? buildHeatmapIntensities(granularity, heatmapQuery.data)
+    ? buildHeatmapIntensities(heatmapGranularity, heatmapQuery.data)
     : new Map<string, number>();
   const heatCell = (key: string, label: string, reactKey?: string) => (
     <div
@@ -567,7 +614,8 @@ const [paletteOpen, setPaletteOpen] = useState(false);
 
   const renderHeatmap = () => {
     const aria = l10n.getString('analytics-card-heatmap');
-    if (granularity === 'weekly') {
+    const dayLabels = DAY_LABEL_KEYS.map((k) => l10n.getString(k));
+    if (heatmapGranularity === 'weekly') {
       const rows: JSX.Element[] = [
         <div key="header" className="analytics-weekly-row">
           <span className="analytics-heat-label analytics-weekly-day" />
@@ -578,12 +626,16 @@ const [paletteOpen, setPaletteOpen] = useState(false);
           ))}
         </div>,
       ];
-      HEAT_BUCKETS.daily.forEach((day, di) => {
+      dayLabels.forEach((day, di) => {
         rows.push(
           <div key={day} className="analytics-weekly-row">
             <span className="analytics-heat-label analytics-weekly-day">{day}</span>
             {Array.from({ length: 24 }, (_, h) =>
-              heatCell(`${di}:${h}`, `${day} ${String(h).padStart(2, '0')}:00`, `${day}-${h}`),
+              heatCell(
+                `${di}:${h}`,
+                l10n.getString('analytics-heatmap-hour-tooltip', { day, hour: String(h).padStart(2, '0') }),
+                `${day}-${h}`,
+              ),
             )}
           </div>,
         );
@@ -594,7 +646,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
         </div>
       );
     }
-    if (granularity === 'monthly') {
+    if (heatmapGranularity === 'monthly') {
       const { leading, days, trailing } = monthCalendarGrid();
       const cells: JSX.Element[] = [];
       for (let i = 0; i < leading; i++) {
@@ -602,7 +654,12 @@ const [paletteOpen, setPaletteOpen] = useState(false);
       }
       for (let d = 1; d <= days; d++) {
         cells.push(
-          <div key={d} className="analytics-heat-cell" data-intensity={heatmapIntensities.get(String(d)) ?? 0} title={`Day ${d}`}>
+          <div
+            key={d}
+            className="analytics-heat-cell"
+            data-intensity={heatmapIntensities.get(String(d)) ?? 0}
+            title={l10n.getString('analytics-heatmap-day-tooltip', { day: String(d) })}
+          >
             <div className="analytics-heat-block" />
             <span className="analytics-heat-label">{d}</span>
           </div>,
@@ -614,7 +671,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
       return (
         <div className="analytics-heatmap analytics-heatmap--monthly" role="img" aria-label={aria}>
           <div className="analytics-monthly-header">
-            {HEAT_BUCKETS.daily.map((d) => (
+            {dayLabels.map((d) => (
               <span key={d} className="analytics-heat-label">{d}</span>
             ))}
           </div>
@@ -622,27 +679,41 @@ const [paletteOpen, setPaletteOpen] = useState(false);
         </div>
       );
     }
-    if (granularity === 'yearly') {
-      const columns = yearlyHeatmapColumns(dateRange.from, dateRange.to);
+    if (heatmapGranularity === 'yearly') {
+      const columns = yearlyHeatmapColumns(heatmapRange.from, heatmapRange.to);
+      const multiYear = columns.length > 0 && columns[0]!.key.slice(0, 4) !== columns[columns.length - 1]!.key.slice(0, 4);
       return (
         <div className="analytics-heatmap analytics-heatmap--yearly" role="img" aria-label={aria}>
-          {columns.map((col) => (
-            <div className="analytics-heat-column" key={col.key}>
-              <span className="analytics-heat-label">{col.label}</span>
-              {Array.from({ length: col.cells }, (_, week) => (
-                <div key={week} className="analytics-heat-cell" data-intensity={heatmapIntensities.get(`${col.key}:${week}`) ?? 0} title={`${col.label} W${week + 1}`}>
-                  <div className="analytics-heat-block" />
-                </div>
-              ))}
-            </div>
-          ))}
+          {columns.map((col) => {
+            const month = Number(col.key.slice(5));
+            const label = multiYear
+              ? `${col.key.slice(5)}/${col.key.slice(2, 4)}`
+              : l10n.getString(`analytics-month-${MONTH_LABEL_KEYS[month - 1]!}`);
+            return (
+              <div className="analytics-heat-column" key={col.key}>
+                <span className="analytics-heat-label">{label}</span>
+                {Array.from({ length: col.cells }, (_, week) => (
+                  <div
+                    key={week}
+                    className="analytics-heat-cell"
+                    data-intensity={heatmapIntensities.get(`${col.key}:${week}`) ?? 0}
+                    title={l10n.getString('analytics-heatmap-week-tooltip', { month: label, week: String(week + 1) })}
+                  >
+                    <div className="analytics-heat-block" />
+                  </div>
+                ))}
+              </div>
+            );
+          })}
         </div>
       );
     }
-    const labels = heatLabels(granularity);
+    // Defensive weekday strip for `daily`/`custom` buckets. Unreachable
+    // today — custom remaps to weekly and daily is no longer selectable —
+    // but it mirrors `buildHeatmapIntensities`'s flat weekday fallback.
     return (
       <div className="analytics-heatmap" role="img" aria-label={aria}>
-        {labels.map((label, i) => (
+        {dayLabels.map((label, i) => (
           <div key={label} className="analytics-heat-cell" data-intensity={heatmapIntensities.get(String(i)) ?? 0} title={label}>
             <div className="analytics-heat-block" />
             <span className="analytics-heat-label">{label}</span>
@@ -695,7 +766,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
             value={workspaceView}
             onChange={(e) => {
               setWorkspaceView(e.target.value as WorkspaceView);
-              setGranularity('daily');
+              setGranularity('weekly');
               setExpandedKey(null);
             }}
             aria-label={l10n.getString('analytics-workspace-select-aria')}
@@ -1099,6 +1170,8 @@ const [paletteOpen, setPaletteOpen] = useState(false);
         <div className="analytics-grid" style={{ zoom: zoomLevel }}>
           {orderedCards.map((card) => {
             const cid = cardId(card);
+            const cardG = cardGranularity(card, granularity);
+            const cardWindow = cardRange(card, granularity, customFrom, customTo);
             const isExpanded = expandedKey === cid;
             const isCollapsed = !isExpanded && (allCollapsed || collapsedCards.has(cid));
             const isDragging = dragId === cid;
@@ -1114,7 +1187,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
               role="button"
               tabIndex={0}
               draggable={!isExpanded}
-              aria-label={card.title}
+              aria-label={l10n.getString(card.titleKey)}
               onKeyDown={(e) => {
                 const idx = orderedCards.findIndex((c) => cardId(c) === cid);
                 if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
@@ -1286,10 +1359,10 @@ const [paletteOpen, setPaletteOpen] = useState(false);
                   ) : (
                     <AnalyticsCardContent
                       cardKey={card.key}
-                      granularity={granularity}
+                      granularity={cardG}
                       workspaceView={workspaceView}
-                      from={dateRange.from}
-                      to={dateRange.to}
+                      from={cardWindow.from}
+                      to={cardWindow.to}
                       sessionToken={sessionToken}
                       title={l10n.getString(card.titleKey)}
                       expanded={isExpanded}

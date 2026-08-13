@@ -8,6 +8,8 @@ import { useWorkspace } from '@/contexts/WorkspaceContext';
 import analyticsFtl from '@/locales/analytics.ftl?raw';
 import analyticsIdFtl from '@/locales/analytics.id.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
+import reportsFtl from '@/locales/reports.ftl?raw';
+import reportsIdFtl from '@/locales/reports.id.ftl?raw';
 
 // --- mocks ---
 
@@ -215,8 +217,8 @@ vi.mock('@/api/tables', () => ({
   listTablesScoped: () => mockListTablesScoped(),
 }));
 
-import AnalyticsScreen, { nextExpandedKey, daysInCurrentMonth, monthCalendarGrid, smartScale } from '@/features/analytics/AnalyticsScreen';
-import { yearlyHeatmapColumns } from '@/features/analytics/analytics-data';
+import AnalyticsScreen, { nextExpandedKey, daysInCurrentMonth, monthCalendarGrid, smartScale, cardGranularity, cardRange } from '@/features/analytics/AnalyticsScreen';
+import { yearlyHeatmapColumns, rangeForGranularity } from '@/features/analytics/analytics-data';
 import { analyticsDataCache, clearAnalyticsCache } from '@/features/analytics/analytics-cache';
 import { registerAnalyticsFeature } from '@/features/analytics/register';
 import { registerStaffFeature } from '@/features/staff/register';
@@ -255,7 +257,7 @@ describe('AnalyticsScreen layout shell', () => {
   };
 
   it('renders the three-area layout structure', () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     // Area 1 — header with back button and title
     expect(screen.getByRole('button', { name: 'Back to home' })).toBeTruthy();
@@ -264,7 +266,7 @@ describe('AnalyticsScreen layout shell', () => {
   });
 
   it('renders the workspace selector defaulting to Retail', () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     const select = screen.getByRole('combobox', { name: 'Select workspace type' });
     expect(select).toBeTruthy();
@@ -279,7 +281,7 @@ describe('AnalyticsScreen layout shell', () => {
         { instance_id: 'i-resto', type_key: 'restaurant-pos', store_id: 'default', store_name: 'Main Store', purpose_key: 'general', name: 'Restaurant POS', description: 'Table service', icon: 'restaurant', layout_mode: 'fullscreen', colour: null, is_default: false },
       ],
     });
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     const select = screen.getByRole('combobox', { name: 'Select workspace type' }) as HTMLSelectElement;
     const retailOption = select.querySelector('option[value="retail"]');
@@ -293,60 +295,59 @@ describe('AnalyticsScreen layout shell', () => {
       ...useWorkspace(),
       activeInstance: { instance_id: 'i-resto', type_key: 'restaurant-pos', store_id: 'default', store_name: 'Main Store', purpose_key: 'general', name: 'Restaurant POS', description: 'Table service', icon: 'restaurant', layout_mode: 'fullscreen', colour: null, is_default: false },
     });
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     const select = screen.getByRole('combobox', { name: 'Select workspace type' }) as HTMLSelectElement;
     expect(select.value).toBe('restaurant');
   });
 
-  it('renders all five granularity buttons with daily active by default', () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+  it('renders all four granularity buttons with weekly active by default', () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
-    const daily = screen.getByRole('radio', { name: 'Daily' });
     const weekly = screen.getByRole('radio', { name: 'Weekly' });
     const monthly = screen.getByRole('radio', { name: 'Monthly' });
     const yearly = screen.getByRole('radio', { name: 'Yearly' });
     const custom = screen.getByRole('radio', { name: 'Custom' });
 
-    expect(daily).toBeTruthy();
     expect(weekly).toBeTruthy();
     expect(monthly).toBeTruthy();
     expect(yearly).toBeTruthy();
     expect(custom).toBeTruthy();
-    expect(daily.getAttribute('aria-checked')).toBe('true');
+    expect(screen.queryByRole('radio', { name: 'Daily' })).toBeNull();
+    expect(weekly.getAttribute('aria-checked')).toBe('true');
   });
 
   it('activates a different granularity on click', async () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
+    const monthly = screen.getByRole('radio', { name: 'Monthly' });
+    await userEvent.click(monthly);
+    expect(monthly.getAttribute('aria-checked')).toBe('true');
+
+    // Weekly should no longer be active
     const weekly = screen.getByRole('radio', { name: 'Weekly' });
-    await userEvent.click(weekly);
-    expect(weekly.getAttribute('aria-checked')).toBe('true');
-
-    // Daily should no longer be active
-    const daily = screen.getByRole('radio', { name: 'Daily' });
-    expect(daily.getAttribute('aria-checked')).toBe('false');
+    expect(weekly.getAttribute('aria-checked')).toBe('false');
   });
 
-  it('switches workspace and resets granularity to daily', async () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+  it('switches workspace and resets granularity to weekly', async () => {
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
-    // Click weekly first
-    const weekly = screen.getByRole('radio', { name: 'Weekly' });
-    await userEvent.click(weekly);
-    expect(weekly.getAttribute('aria-checked')).toBe('true');
+    // Click monthly first
+    const monthly = screen.getByRole('radio', { name: 'Monthly' });
+    await userEvent.click(monthly);
+    expect(monthly.getAttribute('aria-checked')).toBe('true');
 
-    // Switch to restaurant — should reset to daily
+    // Switch to restaurant — should reset to weekly
     const select = screen.getByRole('combobox', { name: 'Select workspace type' });
     await userEvent.selectOptions(select, 'restaurant');
     expect((select as HTMLSelectElement).value).toBe('restaurant');
 
-    const daily = screen.getByRole('radio', { name: 'Daily' });
-    expect(daily.getAttribute('aria-checked')).toBe('true');
+    const weekly = screen.getByRole('radio', { name: 'Weekly' });
+    expect(weekly.getAttribute('aria-checked')).toBe('true');
   });
 
   it('back button calls goToWorkspacePicker', async () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     const backBtn = screen.getByRole('button', { name: 'Back to home' });
     await userEvent.click(backBtn);
@@ -354,7 +355,7 @@ describe('AnalyticsScreen layout shell', () => {
   });
 
   it('shows the custom date range popup when Custom granularity is selected', async () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     // Before clicking Custom, the date pickers should not be visible
     expect(screen.queryByLabelText('From')).toBeNull();
@@ -370,7 +371,7 @@ describe('AnalyticsScreen layout shell', () => {
   });
 
   it('renders refresh, zoom out, and zoom in action buttons', () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     expect(screen.getByRole('button', { name: 'Refresh data' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Zoom out' })).toBeTruthy();
@@ -378,7 +379,7 @@ describe('AnalyticsScreen layout shell', () => {
   });
 
   it('zooms the main grid in and out without affecting title or menu', async () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     const grid = document.querySelector('.analytics-grid') as HTMLElement;
     expect(grid.style.zoom).toBe('1');
@@ -394,7 +395,7 @@ describe('AnalyticsScreen layout shell', () => {
   });
 
   it('shows a zoom badge that opens a slider popover and resets zoom', () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     const grid = document.querySelector('.analytics-grid') as HTMLElement;
     const badge = screen.getByRole('button', { name: 'Zoom level' });
@@ -414,7 +415,7 @@ describe('AnalyticsScreen layout shell', () => {
   });
 
   it('disables zoom buttons at their limits', () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     const zoomOut = screen.getByRole('button', { name: 'Zoom out' }) as HTMLButtonElement;
     const zoomIn = screen.getByRole('button', { name: 'Zoom in' }) as HTMLButtonElement;
@@ -433,17 +434,17 @@ describe('AnalyticsScreen layout shell', () => {
   });
 
   it('shows the view status bar with card count and workspace', () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     expect(screen.getByText('13 cards')).toBeTruthy();
     // Status shows workspace · granularity (scoped to the status bar)
     const status = document.querySelector('.analytics-status');
     expect(status?.textContent).toContain('Retail');
-    expect(status?.textContent).toContain('Daily');
+    expect(status?.textContent).toContain('Weekly');
   });
 
   it('toggles the TTL cache metrics readout in the status bar', async () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     // The chip is present and shows a hit rate (or dash before reads).
     const chip = screen.getByRole('button', { name: 'TTL cache metrics' });
@@ -470,7 +471,7 @@ describe('AnalyticsScreen layout shell', () => {
     // Seed the shared cache with a query first.
     analyticsDataCache.set('card:revenue:retail:daily', { seed: true });
 
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     fireEvent.click(screen.getByRole('button', { name: 'TTL cache metrics' }));
     const popover = screen.getByRole('dialog', { name: 'TTL cache metrics' });
@@ -489,7 +490,7 @@ describe('AnalyticsScreen layout shell', () => {
   });
 
   it('opens the command palette with Ctrl+K and runs a filtered action', () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
     expect(screen.getByRole('dialog', { name: 'Quick actions' })).toBeTruthy();
@@ -504,7 +505,7 @@ describe('AnalyticsScreen layout shell', () => {
   });
 
   it('switches workspace from the command palette', () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
     fireEvent.change(screen.getByRole('textbox', { name: 'Search actions…' }), { target: { value: 'restaurant' } });
@@ -516,7 +517,7 @@ describe('AnalyticsScreen layout shell', () => {
   });
 
   it('closes the palette with Escape and keeps shortcuts dormant while open', () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
     expect(screen.getByRole('dialog', { name: 'Quick actions' })).toBeTruthy();
@@ -530,10 +531,10 @@ describe('AnalyticsScreen layout shell', () => {
   });
 
   it('handles keyboard shortcuts for granularity and escape', () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
-    // '3' selects Monthly
-    fireEvent.keyDown(window, { key: '3' });
+    // '2' selects Monthly (weekly=1, monthly=2, yearly=3, custom=4)
+    fireEvent.keyDown(window, { key: '2' });
     expect(screen.getByRole('radio', { name: 'Monthly' }).getAttribute('aria-checked')).toBe('true');
 
     // Escape closes the shortcuts popover if open
@@ -544,7 +545,7 @@ describe('AnalyticsScreen layout shell', () => {
   });
 
   it('ignores keyboard shortcuts while typing in an input', () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     fireEvent.click(screen.getByRole('radio', { name: 'Custom' }));
     const from = screen.getByLabelText('From') as HTMLInputElement;
@@ -555,7 +556,7 @@ describe('AnalyticsScreen layout shell', () => {
   });
 
   it('opens the shortcuts help popover and closes it', () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     expect(screen.queryByRole('dialog')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Keyboard shortcuts' }));
@@ -566,7 +567,7 @@ describe('AnalyticsScreen layout shell', () => {
   });
 
   it('shows a reset-layout button after reordering and restores defaults', () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     expect(screen.queryByRole('button', { name: 'Reset layout' })).toBeNull();
 
@@ -587,7 +588,7 @@ describe('AnalyticsScreen layout shell', () => {
   });
 
   it('moves a card up and down from its options menu', () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     const titles = () => [...document.querySelectorAll('.analytics-card-title')].map((t) => t.textContent);
     expect(titles()[0]).toBe('Heat Map');
@@ -605,7 +606,7 @@ describe('AnalyticsScreen layout shell', () => {
   });
 
   it('collapses a single card from its options menu', () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     expect(document.querySelectorAll('.analytics-card--collapsed').length).toBe(0);
 
@@ -619,7 +620,7 @@ describe('AnalyticsScreen layout shell', () => {
   });
 
   it('reorders cards by drag and persists the layout', () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     // First card is the wide Heat Map (spans 2 columns)
     const cards = () => [...document.querySelectorAll('.analytics-card')];
@@ -643,7 +644,7 @@ describe('AnalyticsScreen layout shell', () => {
   });
 
   it('applies quick range presets to the custom date pickers', () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     fireEvent.click(screen.getByRole('radio', { name: 'Custom' }));
     const from = screen.getByLabelText('From') as HTMLInputElement;
@@ -662,7 +663,7 @@ describe('AnalyticsScreen layout shell', () => {
   });
 
   it('collapses all card bodies with the toggle and restores them', () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     expect(document.querySelectorAll('.analytics-card--collapsed').length).toBe(0);
 
@@ -674,7 +675,7 @@ describe('AnalyticsScreen layout shell', () => {
   });
 
   it('shows the custom range in the status bar', () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     fireEvent.click(screen.getByRole('radio', { name: 'Custom' }));
 
@@ -686,7 +687,7 @@ describe('AnalyticsScreen layout shell', () => {
 
   it('shows a toast on actions and auto-dismisses it', () => {
     vi.useFakeTimers();
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     // Zoom in, then open the popover and reset — reset shows a toast
     fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
@@ -700,7 +701,7 @@ describe('AnalyticsScreen layout shell', () => {
   });
 
   it('shows a layout-saved toast when cards are reordered', () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     const cards = () => [...document.querySelectorAll('.analytics-card')];
     const heat = cards()[0]!;
@@ -714,7 +715,7 @@ describe('AnalyticsScreen layout shell', () => {
   });
 
   it('sits flush below the menu and fills as the main area scrolls', () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     // The bar is a sibling between the menu and the main area — directly
     // below the menu with no wrapper or gap between them.
@@ -733,7 +734,7 @@ describe('AnalyticsScreen layout shell', () => {
   });
 
   it('shows the scroll-to-top button after scrolling the main area', () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     const main = document.querySelector('.analytics-main') as HTMLElement;
     expect(screen.queryByRole('button', { name: 'Back to top' })).toBeNull();
@@ -751,7 +752,7 @@ describe('AnalyticsScreen layout shell', () => {
 
   it('renders a smart heatmap that changes buckets with granularity', async () => {
     vi.useFakeTimers();
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     const heatmap = () => document.querySelector('.analytics-heatmap');
     const cellCount = () => heatmap()?.querySelectorAll('.analytics-heat-cell').length ?? 0;
@@ -759,12 +760,7 @@ describe('AnalyticsScreen layout shell', () => {
     // Skip the initial recalculation skeleton instantly
     await flushRecalc();
 
-    // Default: daily → 7 weekday buckets
-    expect(cellCount()).toBe(7);
-
-    // Weekly → 7 day rows × 24 hour columns
-    fireEvent.click(screen.getByRole('radio', { name: 'Weekly' }));
-    await flushRecalc();
+    // Default: weekly → 7 day rows × 24 hour columns
     expect(cellCount()).toBe(168);
     expect(heatmap()?.querySelectorAll('.analytics-weekly-row').length).toBe(8); // header + 7 days
 
@@ -792,9 +788,26 @@ describe('AnalyticsScreen layout shell', () => {
     expect(heatmap()?.querySelectorAll('.analytics-heat-column').length).toBe(yearlyCols.length);
   });
 
+  it('renders localized day and month labels in the heatmap', async () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
+    await flushRecalc();
+
+    // Weekly grid: Monday-first day abbreviations come from reports.ftl,
+    // not hardcoded English.
+    expect(screen.getAllByText('Mon').length).toBeGreaterThan(0);
+
+    // Yearly: single-year ranges render the localized month abbreviation
+    // (analytics-month-*) for the current month's column header.
+    fireEvent.click(screen.getByRole('radio', { name: 'Yearly' }));
+    await flushRecalc();
+    const monthAbbr = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][new Date().getMonth()]!;
+    expect(screen.getAllByText(monthAbbr).length).toBeGreaterThan(0);
+  });
+
   it('renders designed content in the non-heatmap cards', async () => {
     vi.useFakeTimers();
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
     await flushRecalc();
 
     // Real-data cards load through the mock — only demo-only cards
@@ -859,7 +872,7 @@ describe('AnalyticsScreen layout shell', () => {
 
   it('keeps card visuals rendering as granularity changes', async () => {
     vi.useFakeTimers();
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
     await flushRecalc();
 
     for (const g of ['Weekly', 'Monthly', 'Yearly']) {
@@ -872,7 +885,7 @@ describe('AnalyticsScreen layout shell', () => {
 
   it('expands a card to fill the main area and restores it', async () => {
     vi.useFakeTimers();
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     // Skip the initial recalculation skeleton instantly
     await flushRecalc();
@@ -896,7 +909,7 @@ describe('AnalyticsScreen layout shell', () => {
 
   it('expands exactly one card — expanding another while one is open is ignored', async () => {
     vi.useFakeTimers();
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     // Skip the initial recalculation skeleton instantly
     await flushRecalc();
@@ -918,7 +931,7 @@ describe('AnalyticsScreen layout shell', () => {
 
   it('smart-expands every card — each one fills the grid and restores', async () => {
     vi.useFakeTimers();
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     // Skip the initial recalculation skeleton instantly
     await flushRecalc();
@@ -946,7 +959,7 @@ describe('AnalyticsScreen layout shell', () => {
 
   it('expands a ranked-list card to reveal the full list and taller charts', async () => {
     vi.useFakeTimers();
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
     await flushRecalc();
 
     // Staff card: the compact grid list caps at top 5
@@ -969,7 +982,7 @@ describe('AnalyticsScreen layout shell', () => {
 
   it('expands the low-stock card to reveal every alert row', async () => {
     vi.useFakeTimers();
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
     await flushRecalc();
 
     // Compact grid caps the alert list at five (six mock rows)
@@ -985,7 +998,7 @@ describe('AnalyticsScreen layout shell', () => {
 
   it('expands the refunds card to reveal the voided-items list', async () => {
     vi.useFakeTimers();
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
     await flushRecalc();
 
     // Refunds card pairs the KPI tiles with the ranked voided-items list
@@ -1003,7 +1016,7 @@ describe('AnalyticsScreen layout shell', () => {
 
   it('overlays the previous period on every card when compare mode is on', async () => {
     vi.useFakeTimers();
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
     await flushRecalc();
 
     // Compare off: no vs-previous-period chips anywhere
@@ -1028,42 +1041,43 @@ describe('AnalyticsScreen layout shell', () => {
 
   it('serves an identical query from the cache without a recalc skeleton', async () => {
     vi.useFakeTimers();
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
-    // First visit: cache miss → recalc skeleton
+    // First visit (weekly default): cache miss → recalc skeleton
     expect(document.querySelectorAll('.analytics-card-skeleton').length).toBeGreaterThan(0);
     await flushRecalc();
     expect(document.querySelectorAll('.analytics-card-skeleton').length).toBe(0);
 
-    // Switch to weekly: different query → skeleton again
-    fireEvent.click(screen.getByRole('radio', { name: 'Weekly' }));
+    // Switch to monthly: different query → skeleton again
+    fireEvent.click(screen.getByRole('radio', { name: 'Monthly' }));
     await flushRecalc();
 
-    // Switch back to daily within the TTL: fresh cache hit → no skeleton,
+    // Switch back to weekly within the TTL: fresh cache hit → no skeleton,
     // content renders instantly (identical query is not refetched)
-    fireEvent.click(screen.getByRole('radio', { name: 'Daily' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Weekly' }));
     expect(document.querySelectorAll('.analytics-card-skeleton').length).toBe(0);
     expect(screen.getByText('Total revenue')).toBeTruthy();
   });
 
   it('revalidates an identical query after the TTL expires (stale-while-revalidate)', async () => {
     vi.useFakeTimers();
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
     await flushRecalc();
 
-    const dailyCallsBefore = mockGetDailyRevenue.mock.calls.length;
+    // The default granularity is weekly, so the revenue card fetches weekly rows.
+    const weeklyCallsBefore = mockGetWeeklyRevenue.mock.calls.length;
 
-    // Let the daily query's 5-minute TTL lapse
+    // Let the weekly query's 5-minute TTL lapse
     act(() => {
       vi.advanceTimersByTime(5 * 60 * 1000 + 1000);
     });
 
-    // Switch away and back — the cached daily query is now stale. The
+    // Switch away and back — the cached weekly query is now stale. The
     // stale value renders instantly (no skeleton, no artificial delay)
     // while a background revalidation refreshes the cache.
-    fireEvent.click(screen.getByRole('radio', { name: 'Weekly' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Monthly' }));
     await flushRecalc();
-    fireEvent.click(screen.getByRole('radio', { name: 'Daily' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Weekly' }));
 
     // Stale content is served immediately — no waiting skeleton.
     expect(screen.getByText('Total revenue')).toBeTruthy();
@@ -1071,12 +1085,12 @@ describe('AnalyticsScreen layout shell', () => {
     await flushRecalc();
 
     // The background revalidation refetched the expired rows.
-    expect(mockGetDailyRevenue.mock.calls.length).toBeGreaterThan(dailyCallsBefore);
+    expect(mockGetWeeklyRevenue.mock.calls.length).toBeGreaterThan(weeklyCallsBefore);
   });
 
   it('refresh always refetches even when the query is cached', async () => {
     vi.useFakeTimers();
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
     await flushRecalc();
 
     // The daily query is fresh in the cache, but the refresh button
@@ -1088,7 +1102,7 @@ describe('AnalyticsScreen layout shell', () => {
   });
 
   it('renders the analytics card grid with workspace-appropriate titles', () => {
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     // Shared cards appear for retail
     expect(screen.getByText('Revenue Overview')).toBeTruthy();
@@ -1102,7 +1116,7 @@ describe('AnalyticsScreen layout shell', () => {
 
   it('switches card titles when workspace changes to restaurant', async () => {
     vi.useFakeTimers();
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
 
     // Retail defaults
     expect(screen.getByText('Top Products')).toBeTruthy();
@@ -1119,15 +1133,14 @@ describe('AnalyticsScreen layout shell', () => {
     expect(screen.getByText('Top Menu Items')).toBeTruthy();
     expect(screen.getByText('Table Turnover')).toBeTruthy();
 
-    // Tables card: average turn time derived from the table-turnover mock
-    // rows (20/30/25 turns → 72/48/58 min per day, avg 59m)
-    expect(screen.getByText('59m')).toBeTruthy();
+    // Tables card: daily remaps to weekly, so the three turn days (20/30/25
+    // = 75 orders) collapse into one Monday-week bucket → 7×1440 ÷ 75 ≈ 134 min.
+    expect(screen.getByText('134 min')).toBeTruthy();
 
-    // Zero-filled no-orders days must not read as the "lowest turn time" —
-    // a closed day is not a 0-minute day. The low comes from the active
-    // buckets (48m on 08-11), never the zero-filled 08-13.
-    expect(screen.queryByText('Low: 08-13 · 0m')).toBeNull();
-    expect(screen.getByText('Low: 08-11 · 48m')).toBeTruthy();
+    // With a single weekly bucket the zero-filled no-orders day can no
+    // longer surface as a spurious "lowest turn time" reading.
+    expect(screen.queryByText('Low: 08-13 · 0 min')).toBeNull();
+    expect(screen.getByText('Low: 08-10 · 134 min')).toBeTruthy();
 
     // Occupancy card renders its real hourly curve (peak derived from the
     // hourly-activity mock → 19:00) and the live rate from the tables
@@ -1215,6 +1228,59 @@ describe('nextExpandedKey — single-expansion invariant', () => {
   });
 });
 
+describe('cardGranularity — per-card granularity remap', () => {
+  const heatmap = { granularityMap: { custom: 'weekly' } as const };
+
+  it('passes through the global granularity when no remap exists', () => {
+    expect(cardGranularity({}, 'weekly')).toBe('weekly');
+    expect(cardGranularity({}, 'yearly')).toBe('yearly');
+  });
+
+  it('applies the remap only for the mapped granularity', () => {
+    expect(cardGranularity(heatmap, 'custom')).toBe('weekly');
+    expect(cardGranularity(heatmap, 'weekly')).toBe('weekly');
+    expect(cardGranularity(heatmap, 'monthly')).toBe('monthly');
+  });
+
+  it('does not mutate or leak the card remap across calls', () => {
+    expect(cardGranularity({ granularityMap: { custom: 'daily' } }, 'custom')).toBe('daily');
+    expect(cardGranularity({ granularityMap: { custom: 'daily' } }, 'yearly')).toBe('yearly');
+  });
+});
+
+describe('cardRange — range follows the card\'s effective granularity', () => {
+  it('derives the window from the remapped granularity, not the selector', () => {
+    // daily → monthly remap must yield the monthly window, not the daily one.
+    const card = { granularityMap: { daily: 'monthly' } as const };
+    const customFrom = '2020-01-01';
+    const customTo = '2020-01-31';
+    expect(cardRange(card, 'daily', customFrom, customTo)).toEqual(
+      rangeForGranularity('monthly', customFrom, customTo),
+    );
+    expect(cardRange(card, 'daily', customFrom, customTo)).not.toEqual(
+      rangeForGranularity('daily', customFrom, customTo),
+    );
+  });
+
+  it('passes the global window through when the card has no remap', () => {
+    const customFrom = '2020-01-01';
+    const customTo = '2020-01-31';
+    expect(cardRange({}, 'weekly', customFrom, customTo)).toEqual(
+      rangeForGranularity('weekly', customFrom, customTo),
+    );
+  });
+
+  it('keeps the user-picked custom window even when the card remaps custom', () => {
+    // The heatmap remaps custom → weekly for bucketing, but its range must
+    // stay the chosen dates, not collapse to the current Monday week.
+    const card = { granularityMap: { custom: 'weekly' } as const };
+    expect(cardRange(card, 'custom', '2020-01-01', '2020-01-31')).toEqual({
+      from: '2020-01-01',
+      to: '2020-01-31',
+    });
+  });
+});
+
 describe('monthCalendarGrid — monthly heatmap calendar layout', () => {
   it('day 1 does not always start on the first cell', () => {
     const grid = monthCalendarGrid();
@@ -1265,9 +1331,17 @@ describe('smartScale — expanded card fills the available area', () => {
 
 describe('AnalyticsScreen card error surface', () => {
   // Range-anchored row: the loaders zero-fill against the queried window,
-  // so a fixed date would be dropped (rendering a $0 card) once the daily
+  // so a fixed date would be dropped (rendering a $0 card) once the weekly
   // window widens to the current week.
-  const ORIGINAL_DAILY = (startDate?: string) => [dailyRevenueRow(startDate ?? '2026-07-27')];
+  const ORIGINAL_WEEKLY = (startDate?: string) => [{
+    week_start: startDate ?? '2026-07-21',
+    total_minor: 8500000,
+    currency: 'USD',
+    sale_count: 65,
+    cogs_minor: 3400000,
+    gross_profit_minor: 5100000,
+    gross_margin_percent: 60,
+  }];
 
   /** Fire any pending recalculation timer and flush the IPC microtasks. */
   const flushRecalc = async () => {
@@ -1279,9 +1353,9 @@ describe('AnalyticsScreen card error surface', () => {
   beforeEach(() => {
     localStorage.clear();
     clearAnalyticsCache();
-    mockGetDailyRevenue.mockReset();
-    mockGetDailyRevenue.mockImplementation((startDate?: string) =>
-      Promise.resolve(ORIGINAL_DAILY(startDate)),
+    mockGetWeeklyRevenue.mockReset();
+    mockGetWeeklyRevenue.mockImplementation((startDate?: string) =>
+      Promise.resolve(ORIGINAL_WEEKLY(startDate)),
     );
   });
 
@@ -1291,13 +1365,14 @@ describe('AnalyticsScreen card error surface', () => {
 
   it('shows a stable error card when an IPC query fails — no retry loop on re-render', async () => {
     vi.useFakeTimers();
-    mockGetDailyRevenue.mockRejectedValue(new Error('backend boom'));
+    mockGetWeeklyRevenue.mockRejectedValue(new Error('backend boom'));
 
-    const { rerender } = renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    const { rerender } = renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
     await flushRecalc();
 
-    // Revenue card + heatmap share getDailyRevenue, so both surface the
-    // localized user-safe copy (ERR-05) — never the raw backend message.
+    // Revenue + AOV share getWeeklyRevenue (daily remaps to weekly), so
+    // both surface the localized user-safe copy (ERR-05) — never the raw
+    // backend message.
     expect(screen.getAllByRole('alert').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/Couldn't load this chart/).length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText(/backend boom/)).toBeNull();
@@ -1305,37 +1380,37 @@ describe('AnalyticsScreen card error surface', () => {
     // The failure map suppresses re-invocation: re-render (e.g. a zoom
     // change or unrelated state update) must NOT refetch — this is the
     // infinite-retry-loop fix.
-    const callsAfterFirstRender = mockGetDailyRevenue.mock.calls.length;
+    const callsAfterFirstRender = mockGetWeeklyRevenue.mock.calls.length;
     expect(callsAfterFirstRender).toBeGreaterThan(0);
     await act(async () => {
       // Rerender with the same Fluent wrapper — a bare `rerender(<Screen />)`
       // would replace the root without the LocalizationProvider.
-      rerender(withFluent(<AnalyticsScreen />, analyticsFtl, sharedFtl));
+      rerender(withFluent(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl));
     });
     expect(screen.getAllByRole('alert').length).toBeGreaterThanOrEqual(1);
-    expect(mockGetDailyRevenue.mock.calls.length).toBe(callsAfterFirstRender);
+    expect(mockGetWeeklyRevenue.mock.calls.length).toBe(callsAfterFirstRender);
   });
 
   it('recovers after refresh clears the recorded failure', async () => {
     vi.useFakeTimers();
-    mockGetDailyRevenue.mockRejectedValue(new Error('backend boom'));
+    mockGetWeeklyRevenue.mockRejectedValue(new Error('backend boom'));
 
-    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
     await flushRecalc();
     expect(screen.getAllByRole('alert').length).toBeGreaterThanOrEqual(1);
 
     // Backend is healthy again — refresh wipes cache + failures and retries.
-    mockGetDailyRevenue.mockImplementation((startDate?: string) =>
-      Promise.resolve(ORIGINAL_DAILY(startDate)),
+    mockGetWeeklyRevenue.mockImplementation((startDate?: string) =>
+      Promise.resolve(ORIGINAL_WEEKLY(startDate)),
     );
     fireEvent.click(screen.getByRole('button', { name: 'Refresh data' }));
     await flushRecalc();
 
-    // The revenue KPI (1,250,000 minor = $12,500 → compact '$12.5K')
+    // The revenue KPI (8,500,000 minor = $85,000 → compact '$85.0K')
     // now renders data.
     expect(screen.queryByRole('alert')).toBeNull();
-    expect(mockGetDailyRevenue.mock.calls.length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText('$12.5K')).toBeTruthy();
+    expect(mockGetWeeklyRevenue.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('$85.0K')).toBeTruthy();
   });
 });
 
@@ -1349,12 +1424,20 @@ describe('AnalyticsScreen currency locale', () => {
   beforeEach(() => {
     localStorage.clear();
     clearAnalyticsCache();
-    // The error-surface describe resets the daily mock to a fixed-date row;
+    // The error-surface describe resets the weekly mock to a rejected row;
     // restore the range-anchored implementation (zero-fill drops rows that
     // fall outside the queried range, so a leaked fixed date renders $0).
-    mockGetDailyRevenue.mockReset();
-    mockGetDailyRevenue.mockImplementation((startDate?: string) =>
-      Promise.resolve([dailyRevenueRow(startDate ?? '2026-07-27')]),
+    mockGetWeeklyRevenue.mockReset();
+    mockGetWeeklyRevenue.mockImplementation((startDate?: string) =>
+      Promise.resolve([{
+        week_start: startDate ?? '2026-07-21',
+        total_minor: 8500000,
+        currency: 'USD',
+        sale_count: 65,
+        cogs_minor: 3400000,
+        gross_profit_minor: 5100000,
+        gross_margin_percent: 60,
+      }]),
     );
   });
 
@@ -1365,12 +1448,16 @@ describe('AnalyticsScreen currency locale', () => {
   it('formats currency with the active Fluent locale, not hardcoded English', async () => {
     vi.useFakeTimers();
     // Indonesian Fluent bundle → Intl.NumberFormat('id', …).
-    render(withFluentLocale('id', <AnalyticsScreen />, analyticsIdFtl));
+    render(withFluentLocale('id', <AnalyticsScreen />, analyticsIdFtl, reportsIdFtl));
     await flushRecalc();
 
-    // Revenue KPI + peak insight: 1,250,000 minor = US$12,500 → compact
-    // Indonesian form (US$12,5 rb) — proves the locale is not hardcoded.
-    expect(screen.getAllByText(/US\$12,5/).length).toBeGreaterThan(0);
+    // Revenue KPI + peak insight: 8,500,000 minor = US$85,000 → compact
+    // Indonesian form (US$85 rb) — proves the locale is not hardcoded.
+    expect(screen.getAllByText(/US\$85/).length).toBeGreaterThan(0);
+
+    // Card container accessible names are localized too (not the English
+    // `card.title` fallback) — the heatmap card reads "Peta Panas".
+    expect(screen.getByRole('button', { name: 'Peta Panas' })).toBeTruthy();
   });
 });
 

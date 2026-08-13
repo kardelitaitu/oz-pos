@@ -505,7 +505,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: var(--space-3) var(--space-4) 0;
+  padding: var(--space-3) 2% 0;
 }
 
 .analytics-card-actions {
@@ -605,14 +605,26 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-4) var(--space-4);
+  /* Horizontal gutters are a percentage of the card width so they scale
+     with the grid column span (1×1 vs 2×1) instead of staying fixed. */
+  padding: var(--space-4) 2%;
 }
 
-/* Expanded card content — scales to fill the available body area */
+/* Card content spans most of the body's content box (centered via
+   margin:auto) so the visual stretches wide without hugging the card's
+   rounded corners — the 90% leaves a small inset instead of the oversized
+   left/right padding the narrow, centered layout used to produce. */
 .analytics-card-content {
+  width: 90%;
   margin: auto;
   transform-origin: center;
   transition: transform 0.25s ease;
+}
+
+/* Expanded cards revert to auto width so smartScale can enlarge the
+   natural content to fill the taller body. */
+.analytics-card--expanded .analytics-card-content {
+  width: auto;
 }
 
 /* Content fades in when the skeleton clears */

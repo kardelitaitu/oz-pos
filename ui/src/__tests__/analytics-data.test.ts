@@ -74,6 +74,8 @@ import {
   seriesDelta,
   turnDelta,
   type AnalyticsQuery,
+  bucketGranularity,
+  spanDays,
   weekdayIntensities,
   yearlyHeatmapColumns,
   weeklyHourlyIntensities,
@@ -116,6 +118,29 @@ describe('rangeForGranularity — inclusive date windows', () => {
       from: '2026-08-03',
       to: '2026-08-17',
     });
+  });
+});
+
+describe('spanDays + bucketGranularity — custom-range roll-up', () => {
+  it('counts the range inclusively', () => {
+    expect(spanDays('2026-08-10', '2026-08-10')).toBe(1);
+    expect(spanDays('2026-08-10', '2026-08-13')).toBe(4);
+    expect(spanDays('2026-01-01', '2026-01-31')).toBe(31);
+  });
+
+  it('passes fixed granularities through unchanged', () => {
+    for (const g of ['daily', 'weekly', 'monthly', 'yearly'] as const) {
+      expect(bucketGranularity(g, '2026-01-01', '2026-12-31')).toBe(g);
+    }
+  });
+
+  it('rolls custom ranges up by span', () => {
+    expect(bucketGranularity('custom', '2026-08-10', '2026-08-16')).toBe('daily');   // 7 days
+    expect(bucketGranularity('custom', '2026-01-01', '2026-01-31')).toBe('daily');   // 31 days
+    expect(bucketGranularity('custom', '2026-01-01', '2026-02-01')).toBe('weekly');  // 32 days
+    expect(bucketGranularity('custom', '2026-01-01', '2026-06-29')).toBe('weekly');  // 180 days
+    expect(bucketGranularity('custom', '2026-01-01', '2026-06-30')).toBe('monthly'); // 181 days
+    expect(bucketGranularity('custom', '2026-01-01', '2026-12-31')).toBe('monthly'); // 365 days
   });
 });
 
@@ -331,6 +356,23 @@ describe('heatmap intensity builders', () => {
     expect(map.get('27')).toBe(4);
   });
 
+  it('monthDayIntensities sums multi-currency rows on the same day', () => {
+    // The backend emits one daily row per currency — the cell must show the
+    // COMBINED revenue, not one currency's row overwriting the other.
+    const row = (currency: string, total_minor: number) => ({
+      date: '2026-07-27',
+      total_minor,
+      currency,
+      sale_count: 1,
+      cogs_minor: 0,
+      gross_profit_minor: total_minor,
+      gross_margin_percent: 100,
+    });
+    const map = monthDayIntensities([row('USD', 100), row('IDR', 50)]);
+    expect(map.size).toBe(1);
+    expect(map.get('27')).toBe(4); // 150 = peak → level 4
+  });
+
   it('yearlyWeekIntensities keys are YYYY-MM:week with the Monday-ordinal band', () => {
     const map = yearlyWeekIntensities([
       { week_start: '2026-07-21', total_minor: 100, currency: 'USD', sale_count: 1, cogs_minor: 0, gross_profit_minor: 100, gross_margin_percent: 100 },
@@ -373,6 +415,21 @@ describe('heatmap intensity builders', () => {
     expect(map.has('2026-01:0')).toBe(true);
   });
 
+  it('yearlyWeekIntensities sums multi-currency rows on the same week', () => {
+    const row = (currency: string, total_minor: number) => ({
+      week_start: '2026-03-30',
+      total_minor,
+      currency,
+      sale_count: 1,
+      cogs_minor: 0,
+      gross_profit_minor: total_minor,
+      gross_margin_percent: 100,
+    });
+    const map = yearlyWeekIntensities([row('USD', 100), row('IDR', 50)]);
+    expect(map.size).toBe(1);
+    expect(map.get('2026-03:4')).toBe(4); // 150 = peak → level 4
+  });
+
   it('buildHeatmapIntensities dispatches by granularity', () => {
     const hourly = [{ day_of_week: 1, hour: 10, total_minor: 100, sale_count: 1 }];
     const daily = [{ date: '2026-07-27', total_minor: 100, currency: 'USD', sale_count: 1, cogs_minor: 0, gross_profit_minor: 100, gross_margin_percent: 100 }];
@@ -388,15 +445,13 @@ describe('heatmap intensity builders', () => {
 });
 
 describe('yearlyHeatmapColumns — range-derived yearly heatmap columns', () => {
-  it('enumerates the months in the range with year-aware labels', () => {
+  it('enumerates the months in the range', () => {
     const cols = yearlyHeatmapColumns('2025-11-01', '2026-02-28');
     expect(cols.map((c) => c.key)).toEqual(['2025-11', '2025-12', '2026-01', '2026-02']);
-    expect(cols.map((c) => c.label)).toEqual(['11/25', '12/25', '01/26', '02/26']);
   });
 
-  it('uses month names on single-year ranges and counts Monday weeks per column', () => {
+  it('counts Monday weeks per column', () => {
     const cols = yearlyHeatmapColumns('2026-03-01', '2026-04-30');
-    expect(cols.map((c) => c.label)).toEqual(['Mar', 'Apr']);
     expect(cols[0]!.cells).toBe(5); // March 2026 has five Mondays
     expect(cols[1]!.cells).toBe(4); // April 2026 has four
   });
@@ -645,6 +700,22 @@ describe('loaders — raw rows mapped to card shapes', () => {
       { date: '2026-07-29', units_sold: 18 },
     ]);
     expect(turnover.units_sold).toBe(0); // untouched turnover row
+  });
+
+  it('loadInventory rolls a custom range up to weekly buckets', async () => {
+    const { getInventoryTrend } = await import('@/api/reports');
+    (getInventoryTrend as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { date: '2026-07-06', units_sold: 10 }, // Monday
+      { date: '2026-07-08', units_sold: 20 }, // same week → sums into 07-06
+      { date: '2026-07-13', units_sold: 30 }, // next Monday
+    ]);
+    // 57-day span → weekly buckets (32–180 days).
+    const [, trend] = await loadInventory({
+      workspace: 'retail', granularity: 'custom', from: '2026-07-06', to: '2026-08-31', sessionToken: 's',
+    });
+    expect(trend.length).toBeGreaterThan(1);
+    expect(trend[0]).toEqual({ date: '2026-07-06', units_sold: 30 });
+    expect(trend[1]).toEqual({ date: '2026-07-13', units_sold: 30 });
   });
 
   it('loadHeatmapRows fetches the granularity-relevant sets', async () => {
