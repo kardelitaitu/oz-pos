@@ -190,7 +190,7 @@ vi.mock('@/api/tables', () => ({
   listTablesScoped: () => mockListTablesScoped(),
 }));
 
-import AnalyticsScreen, { nextExpandedKey, daysInCurrentMonth, monthCalendarGrid, smartScale } from '@/features/analytics/AnalyticsScreen';
+import AnalyticsScreen, { nextExpandedKey, daysInCurrentMonth, monthCalendarGrid, mondayWeeksInMonth, smartScale } from '@/features/analytics/AnalyticsScreen';
 import { analyticsDataCache, clearAnalyticsCache } from '@/features/analytics/analytics-cache';
 import { registerAnalyticsFeature } from '@/features/analytics/register';
 import { registerStaffFeature } from '@/features/staff/register';
@@ -725,10 +725,13 @@ describe('AnalyticsScreen layout shell', () => {
     expect(filled).toBeLessThanOrEqual(31);
     expect(total % 7).toBe(0); // complete calendar weeks
 
-    // Yearly → 12 month columns × 4 week rows = 48 cells
+    // Yearly → 12 month columns × the month's Monday weeks (4–5 rows):
+    // months with five Mondays gain a 5th band so weeks never merge.
     fireEvent.click(screen.getByRole('radio', { name: 'Yearly' }));
     await flushRecalc();
-    expect(cellCount()).toBe(48);
+    const year = new Date().getFullYear();
+    const yearlyCells = Array.from({ length: 12 }, (_, mi) => mondayWeeksInMonth(year, mi)).reduce((a, b) => a + b, 0);
+    expect(cellCount()).toBe(yearlyCells);
     expect(heatmap()?.querySelectorAll('.analytics-heat-column').length).toBe(12);
   });
 

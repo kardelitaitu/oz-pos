@@ -338,6 +338,23 @@ describe('heatmap intensity builders', () => {
     expect(map.get('6:2')).toBe(4);
   });
 
+  it('yearlyWeekIntensities keeps the 5th Monday of a month in its own band', () => {
+    // March 2026 has five Mondays (2, 9, 16, 23, 30): the 30th's week must
+    // land in `2:4`, never merged into the 23rd's `2:3` cell.
+    const row = (week_start: string) => ({
+      week_start,
+      total_minor: 100,
+      currency: 'USD',
+      sale_count: 1,
+      cogs_minor: 0,
+      gross_profit_minor: 100,
+      gross_margin_percent: 100,
+    });
+    const map = yearlyWeekIntensities([row('2026-03-23'), row('2026-03-30')]);
+    expect(map.has('2:3')).toBe(true);
+    expect(map.has('2:4')).toBe(true);
+  });
+
   it('buildHeatmapIntensities dispatches by granularity', () => {
     const hourly = [{ day_of_week: 1, hour: 10, total_minor: 100, sale_count: 1 }];
     const daily = [{ date: '2026-07-27', total_minor: 100, currency: 'USD', sale_count: 1, cogs_minor: 0, gross_profit_minor: 100, gross_margin_percent: 100 }];

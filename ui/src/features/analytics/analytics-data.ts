@@ -219,7 +219,9 @@ export function alignPrevBuckets(current: Bucket[], previous: Bucket[]): number[
 //   daily/custom: weekday index (0 = Mon … 6 = Sun)
 //   weekly:       `${dayIdx}:${hour}` (dayIdx 0 = Mon, hour 0–23)
 //   monthly:      day-of-month number (1…31)
-//   yearly:       `${monthIdx}:${weekIdx}` (month 0–11, week 0–3)
+//   yearly:       `${monthIdx}:${weekIdx}` (month 0–11, week 0–4 — the
+//                 band is the week's ordinal among the month's Mondays, so
+//                 a 5-Monday month uses band 4 and never merges weeks)
 //
 // Intensities are normalized 0–4 against the strongest cell in the set.
 
@@ -284,14 +286,21 @@ export function monthDayIntensities(rows: DailyRevenueRow[]): Map<string, number
   );
 }
 
-/** Weekly revenue mapped to (month, week-of-month) for the 12×4 yearly grid. */
+/** Weekly revenue mapped to (month, week-of-month) for the 12×(4–5) yearly grid. */
 export function yearlyWeekIntensities(rows: WeeklyRevenueRow[]): Map<string, number> {
   return normalizeIntensities(
     rows.map((r) => {
       const d = new Date(`${r.week_start}T00:00:00`);
       const month = d.getMonth();
-      const week = Math.min(3, Math.floor((d.getDate() - 1) / 7));
-      return [`${month}:${week}`, r.total_minor] as [string, number];
+      // Ordinal of the week among the month's Monday weeks (0-based) — the
+      // same Monday-first structure as the trend cards' weekStartKey. The
+      // old day-of-month arithmetic capped at 3, silently merging the 5th
+      // Monday of a month into the 4th week's cell.
+      let week = 0;
+      for (let day = 1; day <= d.getDate(); day++) {
+        if (mondayFirst(new Date(d.getFullYear(), month, day).getDay()) === 0) week += 1;
+      }
+      return [`${month}:${week - 1}`, r.total_minor] as [string, number];
     }),
   );
 }
