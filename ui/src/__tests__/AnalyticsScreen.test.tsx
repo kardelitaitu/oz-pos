@@ -181,14 +181,14 @@ vi.mock('@/api/reports', () => ({
   getLowStockAlerts: () => mockGetLowStockAlerts(),
   getCategoryBreakdown: () => mockGetCategoryBreakdown(),
   getMenuEngineering: () => mockGetMenuEngineering(),
-  getBasketSizeTrend: () => mockGetBasketSizeTrend(),
+  getBasketSizeTrend: (startDate: string, endDate: string, token: string) => mockGetBasketSizeTrend(startDate, endDate, token),
   getCustomerSplit: () => mockGetCustomerSplit(),
   getPaymentMethodBreakdown: () => mockGetPaymentMethodBreakdown(),
   getDiscountsSummary: () => mockGetDiscountsSummary(),
   getVoidedSalesSummary: () => mockGetVoidedSalesSummary(),
   getVoidedItems: () => mockGetVoidedItems(),
   getInventoryTurnover: () => mockGetInventoryTurnover(),
-  getInventoryTrend: () => mockGetInventoryTrend(),
+  getInventoryTrend: (startDate: string, endDate: string, token: string) => mockGetInventoryTrend(startDate, endDate, token),
   getTableTurnover: () => mockGetTableTurnover(),
   getHourlyOccupancy: () => mockGetHourlyOccupancy(),
 }));
@@ -1001,6 +1001,134 @@ describe('AnalyticsScreen layout shell', () => {
       period: expect.any(String),
       value: expect.stringMatching(/^\d+(\.\d+)?$/),
     });
+  });
+
+  it('exports the customer split CSV from the customers card', async () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
+    await flushRecalc();
+
+    vi.mocked(downloadCsv).mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Export customers as CSV' }));
+
+    expect(downloadCsv).toHaveBeenCalledTimes(1);
+    const [filename, columns, rows] = vi.mocked(downloadCsv).mock.calls[0]!;
+    expect(filename).toContain('customers-');
+    expect(columns.map((c) => c.key)).toEqual(['segment', 'customers', 'share']);
+    expect(columns.map((c) => c.label)).toEqual(['Segment', 'Customers', 'Share %']);
+    expect(rows).toEqual([
+      { segment: 'New', customers: '30', share: '30' },
+      { segment: 'Returning', customers: '70', share: '70' },
+    ]);
+  });
+
+  it('exports the discounts CSV from the discounts card', async () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
+    await flushRecalc();
+
+    vi.mocked(downloadCsv).mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Export discounts as CSV' }));
+
+    expect(downloadCsv).toHaveBeenCalledTimes(1);
+    const [filename, columns, rows] = vi.mocked(downloadCsv).mock.calls[0]!;
+    expect(filename).toContain('discounts-');
+    expect(columns.map((c) => c.key)).toEqual(['code', 'redemptions']);
+    expect(columns.map((c) => c.label)).toEqual(['Code', 'Redemptions']);
+    expect(rows).toEqual([
+      { code: 'WELCOME10', redemptions: '8' },
+      { code: 'HAPPYHOUR', redemptions: '4' },
+    ]);
+  });
+
+  it('exports the refunds CSV from the refunds card', async () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
+    await flushRecalc();
+
+    vi.mocked(downloadCsv).mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Export refunds as CSV' }));
+
+    expect(downloadCsv).toHaveBeenCalledTimes(1);
+    const [filename, columns, rows] = vi.mocked(downloadCsv).mock.calls[0]!;
+    expect(filename).toContain('refunds-');
+    expect(columns.map((c) => c.key)).toEqual(['name', 'qty']);
+    expect(columns.map((c) => c.label)).toEqual(['Name', 'Quantity']);
+    expect(rows).toEqual([
+      { name: 'Cold Brew', qty: '2' },
+      { name: 'Croissant', qty: '1' },
+    ]);
+  });
+
+  it('exports the low stock CSV from the low-stock card', async () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
+    await flushRecalc();
+
+    vi.mocked(downloadCsv).mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Export low stock as CSV' }));
+
+    expect(downloadCsv).toHaveBeenCalledTimes(1);
+    const [filename, columns, rows] = vi.mocked(downloadCsv).mock.calls[0]!;
+    expect(filename).toContain('low-stock-');
+    expect(columns.map((c) => c.key)).toEqual(['name', 'sku', 'stock', 'reorder', 'cost']);
+    expect(columns.map((c) => c.label)).toEqual(['Name', 'SKU', 'Current stock', 'Reorder', 'Restock cost']);
+    // Milk: current 3 vs threshold 10 → reorder 7 × $9.00 cost = $63.00.
+    expect(rows[0]).toMatchObject({ name: 'Milk', sku: 'SKU-LO1', stock: '3', reorder: '7', cost: '$63.00' });
+  });
+
+  it('exports the inventory trend CSV from the inventory card', async () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
+    await flushRecalc();
+
+    vi.mocked(downloadCsv).mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Export inventory as CSV' }));
+
+    expect(downloadCsv).toHaveBeenCalledTimes(1);
+    const [filename, columns, rows] = vi.mocked(downloadCsv).mock.calls[0]!;
+    expect(filename).toContain('inventory-');
+    expect(columns.map((c) => c.key)).toEqual(['period', 'value']);
+    expect(columns.map((c) => c.label)).toEqual(['Period', 'Units sold']);
+    expect(rows.length).toBe(1); // the two trend days collapse into one weekly bucket
+    expect(rows[0]).toMatchObject({ value: '33' });
+  });
+
+  it('exports the restaurant-only card CSVs (tables, occupancy, voids)', async () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
+    await flushRecalc();
+
+    const select = screen.getByRole('combobox', { name: 'Select workspace type' });
+    fireEvent.change(select, { target: { value: 'restaurant' } });
+    await flushRecalc();
+
+    vi.mocked(downloadCsv).mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Export table turnover as CSV' }));
+    expect(downloadCsv).toHaveBeenCalledTimes(1);
+    const [tablesFile, tablesCols, tablesRows] = vi.mocked(downloadCsv).mock.calls[0]!;
+    expect(tablesFile).toContain('tables-');
+    expect(tablesCols.map((c) => c.key)).toEqual(['period', 'value']);
+    expect(tablesCols.map((c) => c.label)).toEqual(['Period', 'Avg turn (min)']);
+    expect(tablesRows.length).toBe(1); // three turn days collapse into one weekly bucket
+    expect(tablesRows[0]).toMatchObject({ value: '134' });
+
+    vi.mocked(downloadCsv).mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Export occupancy as CSV' }));
+    expect(downloadCsv).toHaveBeenCalledTimes(1);
+    const [, occCols, occRows] = vi.mocked(downloadCsv).mock.calls[0]!;
+    expect(occCols.map((c) => c.key)).toEqual(['hour', 'orders', 'occupancy']);
+    expect(occCols.map((c) => c.label)).toEqual(['Hour', 'Orders', 'Occupancy %']);
+    expect(occRows[0]).toMatchObject({ hour: '08:00', orders: '6' });
+
+    vi.mocked(downloadCsv).mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Export voids as CSV' }));
+    expect(downloadCsv).toHaveBeenCalledTimes(1);
+    const [voidsFile, voidsCols, voidsRows] = vi.mocked(downloadCsv).mock.calls[0]!;
+    expect(voidsFile).toContain('voids-');
+    expect(voidsCols.map((c) => c.key)).toEqual(['name', 'qty']);
+    expect(voidsCols.map((c) => c.label)).toEqual(['Name', 'Quantity']);
+    expect(voidsRows[0]).toMatchObject({ name: 'Cold Brew', qty: '2' });
   });
 
   it('keeps card visuals rendering as granularity changes', async () => {

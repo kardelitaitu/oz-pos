@@ -301,6 +301,112 @@ function exportTrendCsv(
   );
 }
 
+/** Download the new-vs-returning customer split as CSV (two segments). */
+function exportCustomersCsv(
+  split: CustomerSplitRow,
+  from: string,
+  to: string,
+  getString: (id: string) => string,
+) {
+  const total = split.new_count + split.returning_count;
+  const share = (n: number) => (total > 0 ? String(Math.round((n / total) * 100)) : '0');
+  downloadCsv(
+    `customers-${from}-to-${to}.csv`,
+    [
+      { key: 'segment', label: getString('analytics-export-col-segment') },
+      { key: 'customers', label: getString('analytics-export-col-customers') },
+      { key: 'share', label: getString('analytics-export-col-share') },
+    ],
+    [
+      { segment: getString('analytics-card-customers-new'), customers: String(split.new_count), share: share(split.new_count) },
+      { segment: getString('analytics-card-customers-returning'), customers: String(split.returning_count), share: share(split.returning_count) },
+    ],
+  );
+}
+
+/** Download the discount-code redemption list as CSV. */
+function exportDiscountsCsv(
+  summary: DiscountsSummaryRow,
+  from: string,
+  to: string,
+  getString: (id: string) => string,
+) {
+  downloadCsv(
+    `discounts-${from}-to-${to}.csv`,
+    [
+      { key: 'code', label: getString('analytics-export-col-code') },
+      { key: 'redemptions', label: getString('analytics-export-col-redemptions') },
+    ],
+    summary.codes.map((c) => ({ code: c.label, redemptions: String(c.redeemed_count) })),
+  );
+}
+
+/** Download voided/refund item rows as CSV (name + quantity). */
+function exportVoidedItemsCsv(
+  cardKey: string,
+  items: VoidedItemRow[],
+  from: string,
+  to: string,
+  getString: (id: string) => string,
+) {
+  downloadCsv(
+    `${cardKey}-${from}-to-${to}.csv`,
+    [
+      { key: 'name', label: getString('analytics-export-col-name') },
+      { key: 'qty', label: getString('analytics-export-col-qty') },
+    ],
+    items.map((it) => ({ name: it.name, qty: String(it.qty) })),
+  );
+}
+
+/** Download the low-stock alert list as CSV (name, SKU, stock, reorder, cost). */
+function exportLowStockCsv(
+  alerts: LowStockAlert[],
+  from: string,
+  to: string,
+  fmt: (minor: number) => string,
+  getString: (id: string) => string,
+) {
+  downloadCsv(
+    `low-stock-${from}-to-${to}.csv`,
+    [
+      { key: 'name', label: getString('analytics-export-col-name') },
+      { key: 'sku', label: getString('analytics-export-col-sku') },
+      { key: 'stock', label: getString('analytics-export-col-stock') },
+      { key: 'reorder', label: getString('analytics-export-col-reorder') },
+      { key: 'cost', label: getString('analytics-export-col-restock-cost') },
+    ],
+    alerts.map((a) => {
+      const reorder = Math.max(0, a.threshold - a.current_qty);
+      return {
+        name: a.name,
+        sku: a.sku,
+        stock: String(a.current_qty),
+        reorder: String(reorder),
+        cost: fmt(reorder * a.cost_minor),
+      };
+    }),
+  );
+}
+
+/** Download the occupancy hourly curve as CSV (hour, orders, occupancy %). */
+function exportOccupancyCsv(
+  occ: TableOccupancy,
+  from: string,
+  to: string,
+  getString: (id: string) => string,
+) {
+  downloadCsv(
+    `occupancy-${from}-to-${to}.csv`,
+    [
+      { key: 'hour', label: getString('analytics-export-col-hour') },
+      { key: 'orders', label: getString('analytics-export-col-orders') },
+      { key: 'occupancy', label: getString('analytics-export-col-occupancy') },
+    ],
+    occ.hourly.map((h) => ({ hour: `${String(h.hour).padStart(2, '0')}:00`, orders: String(h.table_orders), occupancy: `${h.pct}%` })),
+  );
+}
+
 /**
  * Small delta pill (▲/▼ %). The "vs previous period" suffix renders only
  * in compare mode — off-mode chips are in-period trends (first→last
@@ -611,7 +717,10 @@ function CustomersCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
     <Visual className="analytics-card-visual--split">
       <div className="analytics-kpi-row">
         <Kpi value={String(total)} label={l10n.getString('analytics-card-customers-total')} />
-        {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
+        <div className="analytics-kpi-actions">
+          {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
+          <ExportCsvButton ariaLabel={l10n.getString('analytics-export-customers-aria')} onClick={() => exportCustomersCsv(split, q.from, q.to, (id) => l10n.getString(id))} />
+        </div>
       </div>
       <div className="analytics-card-chart analytics-card-chart--donut" role="img" aria-label={title}>
         <ReactEChartsCore echarts={echarts} option={option!} style={{ height: chartHeight('customers', expanded) }} notMerge />
@@ -702,7 +811,10 @@ function DiscountsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
     <Visual>
       <div className="analytics-kpi-row">
         <Kpi value={`${discountShare.toFixed(1)}%`} label={l10n.getString('analytics-card-discounts-share')} />
-        {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
+        <div className="analytics-kpi-actions">
+          {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
+          <ExportCsvButton ariaLabel={l10n.getString('analytics-export-discounts-aria')} onClick={() => exportDiscountsCsv(summary, q.from, q.to, (id) => l10n.getString(id))} />
+        </div>
       </div>
       <RankedList rows={rows} ariaLabel={title} limit={expanded ? undefined : 5} />
     </Visual>
@@ -727,7 +839,10 @@ function RefundsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title
         <Kpi value={String(summary.void_count)} label={l10n.getString('analytics-card-refunds-count')} tone="bad" />
         <Kpi value={fmt(summary.void_total_minor)} label={l10n.getString('analytics-card-refunds-amount')} tone="bad" />
       </div>
-      {delta !== null && <p className="analytics-card-insight"><DeltaChip value={delta} tone="bad" compare={compare === true} /></p>}
+      <div className="analytics-kpi-actions analytics-card-insight">
+        {delta !== null && <DeltaChip value={delta} tone="bad" compare={compare === true} />}
+        <ExportCsvButton ariaLabel={l10n.getString('analytics-export-refunds-aria')} onClick={() => exportVoidedItemsCsv('refunds', items, q.from, q.to, (id) => l10n.getString(id))} />
+      </div>
       <RankedList rows={rows} ariaLabel={title} limit={expanded ? undefined : 5} />
     </Visual>
   );
@@ -903,7 +1018,10 @@ function InventoryCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
         <Kpi value={daysOfStock > 0 ? l10n.getString('analytics-unit-days', { n: daysOfStock }) : '—'} label={l10n.getString('analytics-card-inventory-days')} />
         <Kpi value={String(skus)} label={l10n.getString('analytics-card-inventory-skus')} />
       </div>
-      {delta !== null && <p className="analytics-card-insight"><DeltaChip value={delta} compare={compare === true} /></p>}
+      <div className="analytics-kpi-actions analytics-card-insight">
+        {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
+        <ExportCsvButton ariaLabel={l10n.getString('analytics-export-inventory-aria')} onClick={() => exportTrendCsv('inventory', l10n.getString('analytics-export-col-units'), data, q.from, q.to, (id) => l10n.getString(id), (v) => String(v))} />
+      </div>
       <div className="analytics-card-chart" role="img" aria-label={title}>
         <ReactEChartsCore echarts={echarts} option={option!} style={{ height: chartHeight('inventory', expanded) }} notMerge />
       </div>
@@ -937,7 +1055,10 @@ function LowStockCard({ q, title, expanded, compare }: { q: AnalyticsQuery; titl
         <Kpi value={String(rows.length)} label={l10n.getString('analytics-card-low-stock-items')} />
         <Kpi value={String(criticalCount)} label={l10n.getString('analytics-card-low-stock-critical')} tone="bad" />
       </div>
-      {delta !== null && <p className="analytics-card-insight"><DeltaChip value={delta} tone="bad" compare={compare === true} /></p>}
+      <div className="analytics-kpi-actions analytics-card-insight">
+        {delta !== null && <DeltaChip value={delta} tone="bad" compare={compare === true} />}
+        <ExportCsvButton ariaLabel={l10n.getString('analytics-export-low-stock-aria')} onClick={() => exportLowStockCsv(alerts, q.from, q.to, fmt, (id) => l10n.getString(id))} />
+      </div>
       <ul className="analytics-alert-list" aria-label={title}>
         {shown.map((r) => {
           const critical = r.stock <= 5;
@@ -999,7 +1120,10 @@ function TablesCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title:
     <Visual>
       <div className="analytics-kpi-row">
         <Kpi value={avgTurn > 0 ? l10n.getString('analytics-unit-minutes', { n: String(avgTurn) }) : '—'} label={l10n.getString('analytics-card-tables-turn')} />
-        {delta !== null && <DeltaChip value={delta} compare={compare === true} {...(compare ? { tone: 'bad' as const } : {})} />}
+        <div className="analytics-kpi-actions">
+          {delta !== null && <DeltaChip value={delta} compare={compare === true} {...(compare ? { tone: 'bad' as const } : {})} />}
+          <ExportCsvButton ariaLabel={l10n.getString('analytics-export-tables-aria')} onClick={() => exportTrendCsv('tables', l10n.getString('analytics-export-col-turn'), data, q.from, q.to, (id) => l10n.getString(id), (v) => String(Math.round(v)))} />
+        </div>
       </div>
       <div className="analytics-card-chart" role="img" aria-label={title}>
         <ReactEChartsCore echarts={echarts} option={option!} style={{ height: chartHeight('tables', expanded) }} notMerge />
@@ -1072,7 +1196,10 @@ function OccupancyCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
             </span>
           )}
         </div>
-        {delta !== null && <p className="analytics-card-insight"><DeltaChip value={delta} compare={compare === true} /></p>}
+        <div className="analytics-kpi-actions analytics-card-insight">
+          {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
+          <ExportCsvButton ariaLabel={l10n.getString('analytics-export-occupancy-aria')} onClick={() => exportOccupancyCsv(occ, q.from, q.to, (id) => l10n.getString(id))} />
+        </div>
         <div className="analytics-card-chart" role="img" aria-label={l10n.getString('analytics-card-occupancy-hourly')}>
           <ReactEChartsCore echarts={echarts} option={option} style={{ height: chartHeight('occupancy', expanded) }} notMerge />
         </div>
@@ -1129,7 +1256,10 @@ function VoidsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: 
       <div className="analytics-kpi-tiles">
         <Kpi value={String(totalQty)} label={l10n.getString('analytics-card-voids-count')} tone="bad" />
       </div>
-      {delta !== null && <p className="analytics-card-insight"><DeltaChip value={delta} tone="bad" compare={compare === true} /></p>}
+      <div className="analytics-kpi-actions analytics-card-insight">
+        {delta !== null && <DeltaChip value={delta} tone="bad" compare={compare === true} />}
+        <ExportCsvButton ariaLabel={l10n.getString('analytics-export-voids-aria')} onClick={() => exportVoidedItemsCsv('voids', items, q.from, q.to, (id) => l10n.getString(id))} />
+      </div>
       <RankedList rows={rows} ariaLabel={title} limit={expanded ? undefined : 5} />
     </Visual>
   );
