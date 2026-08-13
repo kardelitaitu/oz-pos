@@ -233,8 +233,9 @@ export default function CategoryManagementScreen() {
   // ── Create modal state ──────────────────────────────────────────
   const [showModal, setShowModal] = useState(false);
   const [newName, setNewName] = useState('');
-  const [newColour, setNewColour] = useState(randomColour());
-  const [newIcon, setNewIcon] = useState(randomIcon());
+  // Lazy initializers so Math.random() runs once (not on every render).
+  const [newColour, setNewColour] = useState(() => randomColour());
+  const [newIcon, setNewIcon] = useState(() => randomIcon());
   const [saving, setSaving] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   // CAT-09: track that the operator has typed into the name field so the

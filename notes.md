@@ -386,4 +386,33 @@ Audit of `TerminalManagementScreen.tsx` + `terminals.ftl` / `terminals.id.ftl`.
    visible text; for secret/metadata it is a deliberate shorter accessible name
    than the verbose visible label. Left as-is (intentional concise naming).
 
+---
+
+# Category management audit (2026-08-13)
+
+Audit of `CategoryManagementScreen.tsx` + `products.ftl` / `settings.ftl`.
+
+## Fixed (committed)
+
+- ✅ **Icon/colour radiogroups keyboard access** — the four pickers (icon and
+  colour, in both create and edit modals) had every radio in the Tab order and
+  no arrow-key navigation. Added WAI-ARIA roving tabindex (only the checked
+  option is tabbable) and Arrow-key navigation that moves focus + selection,
+  via a shared `nextRadioValue` helper. Regression test for the icon picker.
+- ✅ **`useState(randomColour())` side effect** — the random colour/icon were
+  evaluated on every render (discarded) because the call was an argument rather
+  than a lazy initializer. Switched to `useState(() => randomColour())`.
+- ✅ **ID colour-swatch parity** — `category-colour-swatch-aria` in the
+  Indonesian bundle omitted the `{ $colour }` variable that the English bundle
+  interpolates; added it so both locales name the swatch's colour.
+
+## Still open
+
+1. **Icon `label` field is dead** — `ICON_OPTIONS`' `label` ("Food", "Generic ·",
+   …) is never rendered; the aria-label comes from the FTL ternary. The three
+   dot icons (dots-1/2/3) collapse to a single `categories-icon-generic` label,
+   so AT users can't tell them apart. Minor; needs a product call on distinct
+   labels.
+
+
 

@@ -540,7 +540,7 @@ data-mgmt-password-hide-aria = Sembunyikan kata sandi
 # ── Sales History ──
 category-colour-picker-aria = Pemilih warna
 category-colour-swatch-aria =
-    .aria-label = Contoh warna
+    .aria-label = Contoh warna { $colour }
 category-delete-aria =
     .aria-label = Hapus { $name }
 category-delete-dialog-aria = Dialog hapus kategori
