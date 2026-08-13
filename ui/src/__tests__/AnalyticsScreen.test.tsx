@@ -824,6 +824,23 @@ describe('AnalyticsScreen layout shell', () => {
     expect(screen.getByText(/Tue 11:00/)).toBeTruthy();
   });
 
+  it('shows revenue and order count in each heat cell tooltip', async () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
+    await flushRecalc();
+
+    // The busiest cell (Tue 11:00) carries its value in the hover title.
+    const peak = document.querySelector('.analytics-heat-cell--peak');
+    const title = peak?.getAttribute('title') ?? '';
+    expect(title).toContain('Tue 11:00');
+    expect(title).toContain('4 orders');
+    expect(title).toMatch(/\$/);
+
+    // A zero-activity cell keeps the label-only tooltip (no $0 / 0 orders noise).
+    const firstCell = document.querySelectorAll('.analytics-heat-cell')[0] as HTMLElement | undefined;
+    expect(firstCell?.getAttribute('title') ?? '').not.toContain('orders');
+  });
+
   it('renders designed content in the non-heatmap cards', async () => {
     vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);

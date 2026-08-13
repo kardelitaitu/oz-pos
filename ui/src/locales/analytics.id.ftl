@@ -123,6 +123,8 @@ analytics-heatmap-hour-tooltip = { $day } { $hour }:00
 analytics-heatmap-day-tooltip = Hari { $day }
 analytics-heatmap-week-tooltip = { $month } minggu { $week }
 analytics-heat-busiest = Tersibuk: { $label } · { $sales }
+analytics-heat-cell-orders = { $count } pesanan
+analytics-heat-cell-tooltip = { $label } · { $sales } · { $orders }
 
 # Unit suffixes (KPI values + chart tooltips)
 analytics-unit-minutes = { $n } mnt

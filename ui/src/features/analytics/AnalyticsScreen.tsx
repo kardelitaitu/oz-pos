@@ -772,6 +772,17 @@ const [paletteOpen, setPaletteOpen] = useState(false);
       })
     : null;
 
+  // Tooltip for a cell: the slot label alone when it has no activity, or the
+  // label plus its formatted revenue and order count once it has sales.
+  const heatCellTooltip = (label: string, cell?: HeatCell): string => {
+    if (!cell) return label;
+    return l10n.getString('analytics-heat-cell-tooltip', {
+      label,
+      sales: fmt(cell.minor),
+      orders: l10n.getString('analytics-heat-cell-orders', { count: cell.orders }),
+    });
+  };
+
   const heatCell = (key: string, label: string, opts?: { reactKey?: string; showLabel?: string }) => {
     const cell = heatCells.get(key);
     const isPeak = peakKey !== null && key === peakKey;
@@ -780,7 +791,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
         key={opts?.reactKey ?? key}
         className={`analytics-heat-cell${isPeak ? ' analytics-heat-cell--peak' : ''}`}
         data-intensity={cell?.level ?? 0}
-        title={label}
+        title={heatCellTooltip(label, cell)}
       >
         <div className="analytics-heat-block" />
         {opts?.showLabel !== undefined && <span className="analytics-heat-label">{opts.showLabel}</span>}
