@@ -24,12 +24,6 @@ Without this `core.hooksPath` set, all four gates are silently bypassed at commi
 
 For comprehensive local validation that mirrors the entire CI matrix (not just the pre-commit subset), see [`scripts/check.sh`](./scripts/check.sh). For the full first-time setup walkthrough (4 gates explained, chmod, verify hint), see [`.agents/skills/onboarding-guide/SKILL.md#first-time-setup`](./.agents/skills/onboarding-guide/SKILL.md#first-time-setup).
 
-## Codebase Knowledge Graph (graphify)
-
-`graphify` is **local-only** developer tooling for navigating unfamiliar code
-via a knowledge graph (`graphify-out/graph.json`). It is not part of this
-repository: its generated output and hooks are gitignored, and no graphify
-instructions ship here. Run `graphify --help` on a local machine to use it.
 
 ## Running UI CLI Tools on Windows (tsc / eslint)
 

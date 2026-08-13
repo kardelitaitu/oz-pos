@@ -1,9 +1,12 @@
 #!/bin/bash
+export PATH="/mnt/c/Users/Dika/.cargo/bin:$PATH"
+
+
 # .githooks/pre-commit — auto-format Rust code before every commit.
 set -e
 
 # Run cargo fmt, capturing output if it fails
-if ! cargo fmt --all 2>/dev/null; then
+if ! /mnt/c/Users/Dika/.cargo/bin/rustup.exe run stable cargo fmt --all 2>/dev/null; then
     echo "error: cargo fmt failed — aborting commit." >&2
     exit 1
 fi
@@ -32,7 +35,8 @@ if [ -n "$STAGED_RS" ]; then
         echo "$EXISTING_RS"
         git add $EXISTING_RS
     fi
-fi
+fi
+
 # ── i18n lint ──────────────────────────────────────────────────────────────
 # Runs the local i18n quality gate (mirrors `.github/workflows/ci.yml#ui
 # i18n quality gate`) on every commit so translation gaps and Fluent
