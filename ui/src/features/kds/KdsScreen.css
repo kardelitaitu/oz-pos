@@ -41,10 +41,11 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--space-3) var(--space-6);
+  padding: var(--space-4) var(--space-6);
   background: var(--kds-header-bg);
   border-bottom: 2px solid var(--kds-header-border);
   user-select: none;
+  gap: var(--space-4);
 }
 
 .kds-header-left {
@@ -56,13 +57,15 @@
 .kds-header-center {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
+  flex: 1;
+  justify-content: center;
 }
 
 .kds-header-right {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
   position: relative;
 }
 
@@ -71,12 +74,20 @@
   font-size: var(--text-2xl);
   font-weight: 700;
   letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 .kds-order-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.5rem;
+  padding: var(--space-1) var(--space-3);
   font-size: var(--text-lg);
-  font-weight: 600;
-  color: var(--kds-muted);
+  font-weight: 700;
+  color: var(--kds-text);
+  background: var(--kds-column-bg);
+  border-radius: var(--radius-2xl);
   user-select: none;
 }
 
@@ -84,14 +95,15 @@
 
 .kds-zone-chips {
   display: flex;
-  gap: var(--space-1_5);
+  gap: var(--space-2);
   align-items: center;
 }
 
 .kds-zone-chip {
   display: inline-flex;
   align-items: center;
-  padding: var(--space-1) var(--space-2_5);
+  min-height: 2rem;
+  padding: var(--space-1_5) var(--space-3);
   font-size: var(--text-sm);
   font-weight: 600;
   line-height: 1.4;
@@ -115,9 +127,10 @@
 }
 
 .kds-zone-chip--active {
-  color: var(--kds-text);
-  background: var(--color-accent-subtle);
+  color: var(--color-accent-fg);
+  background: var(--color-accent);
   border-color: var(--color-accent);
+  font-weight: 700;
 }
 
 /* ── Error banner (dismissible + retry) ────────────────────────── */
