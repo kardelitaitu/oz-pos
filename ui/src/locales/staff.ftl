@@ -2,7 +2,6 @@
 
 staff-title = Staff
 staff-add-button = Add Staff
-staff-loading = Loading staff…
 staff-empty = No staff members yet.
 staff-empty-cta = Add your first staff member
 staff-col-name = Name
@@ -23,14 +22,8 @@ staff-deactivate-aria =
 staff-restore = Restore
 staff-restore-aria =
     .aria-label = Reactivate { $name }
-staff-modal-add-aria =
-    .aria-label = Add staff member
-staff-modal-edit-aria =
-    .aria-label = Edit staff member
 staff-modal-add-title = Add Staff Member
 staff-modal-edit-title = Edit Staff Member
-staff-modal-close =
-    .aria-label = Close
 staff-field-username-label = Username *
 staff-username-placeholder =
     .placeholder = e.g. jane
@@ -59,7 +52,6 @@ staff-table-aria = Staff members
 staff-field-username-aria = Username
 staff-field-name-aria = Display Name
 staff-field-pin-aria = PIN
-staff-error-generic = { $message }
 staff-error-load = Failed to load staff data
 staff-retry = Retry
 
@@ -90,10 +82,7 @@ staff-assignment-all-workspaces = All workspaces
 staff-assignment-all-workspaces-short = All
 
 # ── Staff Login ──────────────────────────────────────────────────────────
-staff-login-title = OZ-POS
-staff-login-subtitle = Staff Login
 staff-login-step-username = Enter your username
-staff-login-step-pin = Enter your PIN
 staff-login-progress-aria = Login progress
 staff-login-username-placeholder =
     .placeholder = Username
@@ -112,7 +101,6 @@ staff-login-digit-aria =
     .aria-label = { $digit }
 staff-login-submit = Login
 staff-login-submitting = Logging in…
-staff-login-verifying = Verifying...
 staff-login-error-connection = Could not verify username. Check your connection.
 staff-login-back = ← Back
 staff-login-copyright = © 2026 OZ-POS. All rights reserved.

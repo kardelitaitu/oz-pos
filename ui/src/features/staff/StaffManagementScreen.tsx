@@ -756,7 +756,7 @@ export default function StaffManagementScreen() {
                         type="button"
                         className="staff-mgmt-action-btn"
                         onClick={() => openEdit(member)}
-                        aria-label={`Edit ${member.display_name}`}
+
                       >
                         <Localized id="staff-edit"><span>Edit</span></Localized>
                       </button>
@@ -766,7 +766,7 @@ export default function StaffManagementScreen() {
                         type="button"
                         className={`staff-mgmt-action-btn ${member.is_active ? 'staff-mgmt-action-btn--warn' : 'staff-mgmt-action-btn--restore'}`}
                         onClick={() => toggleActive(member)}
-                        aria-label={member.is_active ? `Deactivate ${member.display_name}` : `Reactivate ${member.display_name}`}
+
                       >
                         <Localized id={member.is_active ? 'staff-deactivate' : 'staff-restore'}>
                           <span>{member.is_active ? 'Deactivate' : 'Restore'}</span>
@@ -817,7 +817,7 @@ export default function StaffManagementScreen() {
               type="text"
               id="staff-field-username"
               value={form.username}
-              onChange={(e) => setForm({ ...form, username: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, username: e.target.value }))}
               placeholder="e.g. jane"
               disabled={isEditing}
               autoComplete="off"
@@ -839,7 +839,7 @@ export default function StaffManagementScreen() {
               type="text"
               id="staff-field-name"
               value={form.displayName}
-              onChange={(e) => setForm({ ...form, displayName: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, displayName: e.target.value }))}
               placeholder="e.g. Jane Smith"
               autoComplete="off"
               autoCorrect="off"
@@ -862,7 +862,7 @@ export default function StaffManagementScreen() {
                       type="password"
                       id="staff-field-pin"
                       value={form.pin}
-                      onChange={(e) => setForm({ ...form, pin: e.target.value })}
+                      onChange={(e) => setForm((prev) => ({ ...prev, pin: e.target.value }))}
                       placeholder={isEditing ? 'Leave blank to keep current' : 'Enter PIN'}
                       autoComplete="off"
                       autoCorrect="off"
@@ -884,7 +884,7 @@ export default function StaffManagementScreen() {
                       id="staff-field-role"
                       value={form.roleId}
                       disabled={editingIncomplete}
-                      onChange={(value) => setForm({ ...form, roleId: value })}
+                      onChange={(value) => setForm((prev) => ({ ...prev, roleId: value }))}
                       options={selectableRoles.map((r) => ({ value: r.id, label: `${r.name} — ${r.description}` }))}
                       placeholder={l10n.getString('staff-role-select-default')}
                       ariaLabel={l10n.getString('staff-field-role-label')}
@@ -934,7 +934,7 @@ export default function StaffManagementScreen() {
               type="date"
               id="staff-field-dob"
               value={form.dateOfBirth}
-              onChange={(e) => setForm({ ...form, dateOfBirth: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, dateOfBirth: e.target.value }))}
             />
           </label>
           {fieldErrors['dateOfBirth'] && (
@@ -950,7 +950,7 @@ export default function StaffManagementScreen() {
               type="tel"
               id="staff-field-phone"
               value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
               placeholder="+62 812 3456 7890"
             />
           </label>
@@ -966,7 +966,7 @@ export default function StaffManagementScreen() {
               className="staff-mgmt-input"
               id="staff-field-national-id-type"
               value={form.nationalIdType}
-              onChange={(e) => setForm({ ...form, nationalIdType: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, nationalIdType: e.target.value }))}
             >
               <option value="">{l10n.getString('staff-national-id-type-select')}</option>
               <option value="ssn">{l10n.getString('staff-national-id-type-ssn')}</option>
@@ -986,7 +986,7 @@ export default function StaffManagementScreen() {
               type="text"
               id="staff-field-national-id"
               value={form.nationalId}
-              onChange={(e) => setForm({ ...form, nationalId: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, nationalId: e.target.value }))}
               inputMode="numeric"
               autoComplete="off"
             />
@@ -1004,7 +1004,7 @@ export default function StaffManagementScreen() {
               type="email"
               id="staff-field-email"
               value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
               placeholder="name@example.com"
               autoComplete="off"
             />
@@ -1022,7 +1022,7 @@ export default function StaffManagementScreen() {
               type="text"
               id="staff-field-pay"
               value={form.monthlyTakeHome}
-              onChange={(e) => setForm({ ...form, monthlyTakeHome: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, monthlyTakeHome: e.target.value }))}
               inputMode="decimal"
               placeholder="5000000"
             />
@@ -1040,7 +1040,7 @@ export default function StaffManagementScreen() {
               type="text"
               id="staff-field-emergency-name"
               value={form.emergencyContactName}
-              onChange={(e) => setForm({ ...form, emergencyContactName: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, emergencyContactName: e.target.value }))}
               autoComplete="off"
             />
           </label>
@@ -1057,7 +1057,7 @@ export default function StaffManagementScreen() {
               type="tel"
               id="staff-field-emergency-phone"
               value={form.emergencyContactPhone}
-              onChange={(e) => setForm({ ...form, emergencyContactPhone: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, emergencyContactPhone: e.target.value }))}
               placeholder="+62 812 3456 7890"
             />
           </label>
@@ -1074,7 +1074,7 @@ export default function StaffManagementScreen() {
               type="text"
               id="staff-field-job-title"
               value={form.jobTitle}
-              onChange={(e) => setForm({ ...form, jobTitle: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, jobTitle: e.target.value }))}
             />
           </label>
 
@@ -1086,7 +1086,7 @@ export default function StaffManagementScreen() {
               className="staff-mgmt-input"
               id="staff-field-notes"
               value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
             />
           </label>
 
@@ -1099,7 +1099,7 @@ export default function StaffManagementScreen() {
               type="text"
               id="staff-field-address"
               value={form.address}
-              onChange={(e) => setForm({ ...form, address: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, address: e.target.value }))}
             />
           </label>
 
@@ -1112,7 +1112,7 @@ export default function StaffManagementScreen() {
               type="text"
               id="staff-field-tax-id"
               value={form.taxId}
-              onChange={(e) => setForm({ ...form, taxId: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, taxId: e.target.value }))}
             />
           </label>
 
@@ -1125,7 +1125,7 @@ export default function StaffManagementScreen() {
               type="date"
               id="staff-field-hire-date"
               value={form.hireDate}
-              onChange={(e) => setForm({ ...form, hireDate: e.target.value })}
+              onChange={(e) => setForm((prev) => ({ ...prev, hireDate: e.target.value }))}
             />
           </label>
         </fieldset>
@@ -1143,7 +1143,7 @@ export default function StaffManagementScreen() {
                 name="scopeMode"
                 value="global"
                 checked={form.scopeMode === 'global'}
-                onChange={() => setForm({ ...form, scopeMode: 'global' })}
+                onChange={() => setForm((prev) => ({ ...prev, scopeMode: 'global' }))}
                 aria-label={l10n.getString('staff-assignment-global')}
               />
               <Localized id="staff-assignment-global">
@@ -1157,7 +1157,7 @@ export default function StaffManagementScreen() {
                 name="scopeMode"
                 value="scoped"
                 checked={form.scopeMode === 'scoped'}
-                onChange={() => setForm({ ...form, scopeMode: 'scoped' })}
+                onChange={() => setForm((prev) => ({ ...prev, scopeMode: 'scoped' }))}
                 aria-label={l10n.getString('staff-assignment-scoped')}
               />
               <Localized id="staff-assignment-scoped">

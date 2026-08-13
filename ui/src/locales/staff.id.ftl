@@ -23,7 +23,6 @@ staff-login-submit = Masuk
 staff-login-submitting = Memasuki sistem…
 
 # Restaurant Menu
-staff-login-verifying = Memverifikasi…
 staff-login-error-connection = Tidak dapat memverifikasi nama pengguna. Periksa koneksi Anda.
 staff-login-back = ← Kembali
 staff-login-copyright = © 2026 OZ-POS. Seluruh hak cipta dilindungi.
@@ -33,7 +32,6 @@ staff-login-lockout = Terkunci. Coba lagi dalam { $seconds }d
 # ── Product Bundles ──
 staff-title = Staf
 staff-add-button = Tambah Staf
-staff-loading = Memuat staf…
 staff-empty = Belum ada anggota staf.
 staff-empty-cta = Tambah anggota staf pertama
 staff-col-name = Nama
@@ -88,7 +86,6 @@ staff-table-aria = Anggota staf
 staff-field-username-aria = Nama Pengguna
 staff-field-name-aria = Nama Tampilan
 staff-field-pin-aria = PIN
-staff-error-generic = { $message }
 staff-error-load = Gagal memuat data staf
 staff-retry = Coba lagi
 
@@ -109,9 +106,7 @@ staff-toast-deactivated = { $name } dinonaktifkan
 staff-toast-restored = { $name } diaktifkan kembali
 
 # ── Staff Login (remaining) ──
-staff-login-subtitle = Login Staf
 staff-login-step-username = Masukkan nama pengguna Anda
-staff-login-step-pin = Masukkan PIN Anda
 staff-login-progress-aria = Kemajuan login
 staff-login-username-placeholder =
     .placeholder = Nama Pengguna
