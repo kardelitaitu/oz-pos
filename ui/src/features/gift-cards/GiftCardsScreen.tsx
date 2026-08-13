@@ -165,6 +165,7 @@ export default function GiftCardsScreen() {
               <button
                 type="button"
                 className="gift-card-summary"
+                aria-expanded={expandedId === gc.card.id}
                 onClick={() => setExpandedId(expandedId === gc.card.id ? null : gc.card.id)}
               >
                 <div className="gift-card-summary-left">
