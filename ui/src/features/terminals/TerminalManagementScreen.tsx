@@ -542,7 +542,7 @@ export default function TerminalManagementScreen() {
                 <Localized id="terminal-last-seen"><th>Last Seen</th></Localized>
                 <Localized id="terminal-created"><th>Created</th></Localized>
                 <Localized id="terminal-col-actions" attrs={{ "aria-label": true }}>
-                  <th aria-label={l10n.getString('actions-aria')}> </th>
+                  <th> </th>
                 </Localized>
               </tr>
             </thead>
@@ -576,7 +576,6 @@ export default function TerminalManagementScreen() {
                         type="button"
                         className="terminal-mgmt-action-btn"
                         onClick={() => openEdit(terminal)}
-                        aria-label={`Edit ${terminal.name}`}
                       >
                         <Localized id="terminal-edit-action"><span>Edit</span></Localized>
                       </button>
@@ -586,7 +585,6 @@ export default function TerminalManagementScreen() {
                         type="button"
                         className="terminal-mgmt-action-btn terminal-mgmt-action-btn--danger"
                         onClick={() => openDelete(terminal)}
-                        aria-label={`Delete ${terminal.name}`}
                       >
                         <Localized id="terminal-delete-action"><span>Delete</span></Localized>
                       </button>
