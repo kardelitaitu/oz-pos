@@ -1151,6 +1151,19 @@ describe('AnalyticsScreen layout shell', () => {
     ]);
   });
 
+  it('shows empty states when a card has no data', async () => {
+    vi.useFakeTimers();
+    mockGetLowStockAlerts.mockResolvedValueOnce([]);
+    mockGetTopProducts.mockResolvedValueOnce([]);
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
+    await flushRecalc();
+
+    // Low-stock card gets a specific reassuring message; the top-items
+    // card (empty) falls back to the generic no-data placeholder.
+    expect(screen.getByText('All items are sufficiently stocked.')).toBeTruthy();
+    expect(screen.getByText('No data in this period.')).toBeTruthy();
+  });
+
   it('keeps card visuals rendering as granularity changes', async () => {
     vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);

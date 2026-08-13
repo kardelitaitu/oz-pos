@@ -1422,6 +1422,19 @@
   flex: 1;
 }
 
+/* Muted "no data" placeholder for cards whose query returned zero rows */
+.analytics-card-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 64px;
+  padding: var(--space-4);
+  color: var(--analytics-fg-muted);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
 /* Skeleton shimmer — one per card during recalculation */
 .analytics-card-skeleton {
   display: flex;

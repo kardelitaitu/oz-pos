@@ -145,6 +145,15 @@ function CardError({ error }: { error: unknown }) {
   );
 }
 
+/** Muted "no data" placeholder for a card whose query returned zero rows. */
+function CardEmpty({ message }: { message: string }) {
+  return (
+    <div className="analytics-card-empty" role="status">
+      {message}
+    </div>
+  );
+}
+
 /** Big KPI number with a small caption underneath. */
 function Kpi({ value, label, tone }: { value: string; label: string; tone?: 'good' | 'bad' }) {
   return (
@@ -668,6 +677,7 @@ function StaffCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: 
   const { data: staff, prev: prevStaff, error } = useCardDataCompare<StaffAnalyticsRow[]>('staff', q, compare ?? false);
   if (error) return <CardError error={error} />;
   if (!staff) return <CardLoading />;
+  if (staff.length === 0) return <CardEmpty message={l10n.getString('analytics-empty-generic')} />;
   const buildRows = (rows: StaffAnalyticsRow[]): RankRow[] => rows
     .slice()
     .sort((a, b) => b.sale_total_minor - a.sale_total_minor)
@@ -713,6 +723,7 @@ function CustomersCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
   }) : null), [newCount, retCount, l10n]);
   if (error) return <CardError error={error} />;
   if (!split) return <CardLoading />;
+  if (newCount + retCount === 0) return <CardEmpty message={l10n.getString('analytics-empty-generic')} />;
   return (
     <Visual className="analytics-card-visual--split">
       <div className="analytics-kpi-row">
@@ -776,6 +787,7 @@ function PaymentsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; titl
   }) : null), [segs, pcts, l10n]);
   if (error) return <CardError error={error} />;
   if (!rows) return <CardLoading />;
+  if (rows.length === 0) return <CardEmpty message={l10n.getString('analytics-empty-generic')} />;
   return (
     <Visual className="analytics-card-visual--split">
       <div className="analytics-kpi-row">
@@ -798,6 +810,7 @@ function DiscountsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
   const { data: summary, prev: prevSummary, error } = useCardDataCompare<DiscountsSummaryRow>('discounts', q, compare ?? false);
   if (error) return <CardError error={error} />;
   if (!summary) return <CardLoading />;
+  if (summary.codes.length === 0) return <CardEmpty message={l10n.getString('analytics-empty-generic')} />;
   const rows: RankRow[] = summary.codes.map((c) => ({
     name: c.label,
     value: c.redeemed_count,
@@ -828,6 +841,7 @@ function RefundsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title
   if (error) return <CardError error={error} />;
   if (!loaded) return <CardLoading />;
   const [summary, items] = loaded;
+  if (items.length === 0) return <CardEmpty message={l10n.getString('analytics-empty-generic')} />;
   const rows = rowDeltas(
     items.map((it) => ({ name: it.name, value: it.qty, display: `${it.qty}×` })),
     prevLoaded ? prevLoaded[1].map((it) => ({ name: it.name, value: it.qty, display: '' })) : null,
@@ -854,6 +868,7 @@ function TopItemsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; titl
   const { data: raw, prev: prevRaw, error } = useCardDataCompare<(TopProductRow | MenuEngineeringRow)[]>('top-items', q, compare ?? false);
   if (error) return <CardError error={error} />;
   if (!raw) return <CardLoading />;
+  if (raw.length === 0) return <CardEmpty message={l10n.getString('analytics-empty-generic')} />;
   const buildRows = (list: (TopProductRow | MenuEngineeringRow)[]): RankRow[] => list.map((r) => {
     if ('total_qty' in r) {
       return { name: r.name, value: r.total_minor, display: `${short(r.total_minor)} · ${r.total_qty}×` };
@@ -900,6 +915,7 @@ function CategoryCard({ q, title, expanded, compare }: { q: AnalyticsQuery; titl
   }) : null), [names, pcts]);
   if (error) return <CardError error={error} />;
   if (!rows) return <CardLoading />;
+  if (rows.length === 0) return <CardEmpty message={l10n.getString('analytics-empty-generic')} />;
   return (
     <Visual className="analytics-card-visual--split">
       <div className="analytics-kpi-row">
@@ -1035,6 +1051,7 @@ function LowStockCard({ q, title, expanded, compare }: { q: AnalyticsQuery; titl
   const { data: alerts, prev: prevAlerts, error } = useCardDataCompare<LowStockAlert[]>('low-stock', q, compare ?? false);
   if (error) return <CardError error={error} />;
   if (!alerts) return <CardLoading />;
+  if (alerts.length === 0) return <CardEmpty message={l10n.getString('analytics-empty-low-stock')} />;
   const build = (list: LowStockAlert[]) => list.map((a) => ({
     name: a.name,
     stock: a.current_qty,
@@ -1214,6 +1231,7 @@ function WaitstaffCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
   const { data: staff, prev: prevStaff, error } = useCardDataCompare<StaffAnalyticsRow[]>('waitstaff', q, compare ?? false);
   if (error) return <CardError error={error} />;
   if (!staff) return <CardLoading />;
+  if (staff.length === 0) return <CardEmpty message={l10n.getString('analytics-empty-generic')} />;
   const buildRows = (rows: StaffAnalyticsRow[]): RankRow[] => rows
     .slice()
     .sort((a, b) => b.sale_total_minor - a.sale_total_minor)
@@ -1244,6 +1262,7 @@ function VoidsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: 
   if (error) return <CardError error={error} />;
   if (!loaded) return <CardLoading />;
   const items = loaded[1];
+  if (items.length === 0) return <CardEmpty message={l10n.getString('analytics-empty-generic')} />;
   const rows = rowDeltas(
     items.map((it) => ({ name: it.name, value: it.qty, display: `${it.qty}×` })),
     prevLoaded ? prevLoaded[1].map((it) => ({ name: it.name, value: it.qty, display: '' })) : null,
