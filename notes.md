@@ -136,18 +136,19 @@ NodeTopologyEditor). Fixed items are committed; the rest remain open.
 ### NodeTopologyEditor
 
 7. **Size (in progress: overlays extracted)** — the component is ~6,900
-   lines. The shortcuts help popover, node finder, canvas minimap, and
-   relationship picker are now extracted into `topologyShortcutsHelp.tsx`,
-   `topologyNodeFinder.tsx`, `topologyMinimap.tsx`, and
-   `topologyRelationshipPicker.tsx` (each behavior-preserving, 541 topology
+   lines. The shortcuts help popover, node finder, canvas minimap,
+   relationship picker, and validation issues widget are now extracted into
+   `topologyShortcutsHelp.tsx`, `topologyNodeFinder.tsx`,
+   `topologyMinimap.tsx`, `topologyRelationshipPicker.tsx`, and
+   `topologyValidationWidget.tsx` (each behavior-preserving, 541 topology
    tests green, plus isolated overlay unit tests). The main component's
-   remaining bulk is the drag/undo/rename/simulate state machine and the
-   validation panel, which are not trivially separable. **Surfaced + fixed
-   while extracting:** the validation-jump actions (`handleAddStockWireHint`
-   / `handleJumpToWire`) called the minimap's `recenterViewOn` (which
-   converts minimap PIXELS to canvas coords) with CANVAS coords, so "jump
-   and center" panned to a wildly wrong spot. They now use
-   `centerViewportOn`, centering on the actual node/wire canvas position.
+   remaining bulk is the drag/undo/rename/simulate state machine, which is
+   not trivially separable. **Surfaced + fixed while extracting:** the
+   validation-jump actions (`handleAddStockWireHint` / `handleJumpToWire`)
+   called the minimap's `recenterViewOn` (which converts minimap PIXELS to
+   canvas coords) with CANVAS coords, so "jump and center" panned to a
+   wildly wrong spot. They now use `centerViewportOn`, centering on the
+   actual node/wire canvas position.
 8. **Render-phase ref writes (assessed: intentional, leave as-is)** —
    `historyRef.current = history` (and similar mirrors, e.g. `panRef`,
    `nodesRef`, `pushHistoryRef`, `selectedNodeIdsRef`, `l10nRef`) assign

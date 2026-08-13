@@ -56,6 +56,7 @@ import { TopologyShortcutsHelp } from './topologyShortcutsHelp';
 import { TopologyNodeFinder } from './topologyNodeFinder';
 import { TopologyMinimap } from './topologyMinimap';
 import { TopologyRelationshipPicker } from './topologyRelationshipPicker';
+import { TopologyValidationWidget } from './topologyValidationWidget';
 import type { TopologyOverlay } from './topologyBranchCompare';
 import { layoutGhosts, buildGhostWireStubs, compareFocusDimIds, GHOST_WIDTH, GHOST_HEIGHT } from './topologyBranchCompare';
 import { TopologyWireGroup } from './topologyWireGroup';
@@ -591,12 +592,6 @@ function isTopologyRevisionConflict(err: unknown): boolean {
     && (typed as { code?: string }).code === 'topology-revision-conflict';
 }
 
-/** Milliseconds the issues-count readout waits after the LAST validation
- *  change before animating to the new count. Long enough to absorb the
- *  flicker of a drag or connect gesture that temporarily changes the
- *  issue set, short enough to feel responsive. */
-const ISSUES_COUNT_SETTLE_MS = 300;
-
 /** True when the OS requests reduced motion (WCAG 2.3.3). The simulation
  *  pulse is JS-driven on a 30ms interval — CSS @media gates cannot stop
  *  the state churn — so the interval and the pulse position consult this
@@ -662,44 +657,6 @@ const CanvasCursorReadout = memo(function CanvasCursorReadout({ pan, zoom }: { p
   return (
     <span ref={elRef} className="canvas-hud-item canvas-hud-cursor">
       {pos ? `${pos.x}, ${pos.y}` : '—'}
-    </span>
-  );
-});
-
-/** Settled issues-count readout for the validation button. Receives the
- *  LIVE count on every validation recompute but only commits it (with a
- *  pop animation) once the value holds steady for
- *  [`ISSUES_COUNT_SETTLE_MS`] — a drag that flicks 1→2→1 never animates
- *  twice. Isolated as a memo component so the settle timer's re-renders
- *  are local to this label and never touch the canvas. */
-const ValidationIssuesLabel = memo(function ValidationIssuesLabel({ count }: { count: number }) {
-  const { l10n } = useLocalization();
-  const [displayCount, setDisplayCount] = useState(count);
-  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const prevCountRef = useRef(count);
-
-  useEffect(() => {
-    if (count === prevCountRef.current) return;
-    prevCountRef.current = count;
-    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
-    settleTimerRef.current = setTimeout(() => {
-      settleTimerRef.current = null;
-      setDisplayCount(count);
-    }, ISSUES_COUNT_SETTLE_MS);
-  }, [count]);
-
-  useEffect(
-    () => () => {
-      if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
-    },
-    [],
-  );
-
-  // Re-keying on the settled count remounts the span so the pop keyframe
-  // replays exactly when the readout settles on a new value.
-  return (
-    <span key={displayCount} className="topology-issues-label topology-issues-label-pop">
-      {l10n.getString('topology-validation-details', { count: displayCount })}
     </span>
   );
 });
@@ -4426,6 +4383,7 @@ export default function NodeTopologyEditor({
   /** Aggregated issue list for the validation panel: per-node problems
    *  first (actionable — clicking jumps to the node), then graph-level. */
   const [validationPanelOpen, setValidationPanelOpen] = useState(false);
+  const toggleValidationPanel = useCallback(() => setValidationPanelOpen((o) => !o), []);
   const nodeIssues = useMemo(() => {
     const out: Array<{ nodeId: string; nodeName: string; messageId: string; code: string }> = [];
     for (const [nodeId, errs] of liveValidation.byNode) {
@@ -4454,6 +4412,18 @@ export default function NodeTopologyEditor({
   const handleDismissNodeIssue = useCallback(
     (nodeId: string, messageId: string) => dismissIssue(issueKey(nodeId, messageId)),
     [dismissIssue],
+  );
+  const handleDismissGraphIssue = useCallback(
+    (messageId: string) => dismissIssue(graphIssueKey(messageId)),
+    [dismissIssue],
+  );
+  /** Select a node from the validation panel: close the panel and select it. */
+  const selectIssueNode = useCallback(
+    (nodeId: string) => {
+      setValidationPanelOpen(false);
+      selectOnly(nodeId);
+    },
+    [selectOnly],
   );
   /** Visible (non-dismissed) issues drive the button count, the panel, the
    *  banner, and the card notes — every surface reads the same filtered
@@ -5639,100 +5609,18 @@ export default function NodeTopologyEditor({
             </div>
           )}
           {totalIssues > 0 && (
-            <div className="topology-validation-widget">
-              <button
-                type="button"
-                className="topology-issues-btn"
-                aria-expanded={validationPanelOpen}
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={() => setValidationPanelOpen((o) => !o)}
-              >
-                <WarningIcon size={14} />
-                <ValidationIssuesLabel count={totalIssues} />
-              </button>
-              {validationPanelOpen && (
-                <div
-                  className="topology-validation-panel"
-                  role="dialog"
-                  aria-label={l10n.getString('topology-validation-panel-aria')}
-                  onMouseDown={(e) => e.stopPropagation()}
-                >
-                  {visibleNodeIssues.map((issue) => (
-                    <div key={`${issue.nodeId}-${issue.messageId}`} className="topology-validation-item">
-                      <button
-                        type="button"
-                        className="topology-validation-item-select"
-                        onClick={() => {
-                          setValidationPanelOpen(false);
-                          selectOnly(issue.nodeId);
-                        }}
-                      >
-                        <span className="topology-validation-item-node">{issue.nodeName}</span>
-                        <span className="topology-validation-item-msg">{l10n.getString(issue.messageId)}</span>
-                      </button>
-                      {issue.code === 'warehouse-missing-stock-routing' && (
-                        <button
-                          type="button"
-                          className="topology-validation-item-action"
-                          onClick={() => handleAddStockWireHint(issue.nodeId)}
-                        >
-                          <Localized id="topology-validation-add-stock-wire">Add stock wire</Localized>
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="topology-validation-item-dismiss"
-                        aria-label={l10n.getString('topology-validation-dismiss')}
-                        title={l10n.getString('topology-validation-dismiss')}
-                        onClick={() => dismissIssue(issueKey(issue.nodeId, issue.messageId))}
-                      >
-                        <CloseIcon size={12} />
-                      </button>
-                    </div>
-                  ))}
-                  {visibleGraphLevel.map((err) =>
-                    err.wireId ? (
-                      // Round 109 follow-up: wireId-only errors are
-                      // JUMPABLE — the row selects + centers the wire. The
-                      // key is wire-scoped so two errors of the same class
-                      // (e.g. duplicate-wire on two wires) stay distinct;
-                      // dismissal remains messageId-scoped as before.
-                      <div key={`${err.wireId}-${err.messageId}`} className="topology-validation-item">
-                        <button
-                          type="button"
-                          className="topology-validation-item-select"
-                          onClick={() => handleJumpToWire(err.wireId!)}
-                        >
-                          <span className="topology-validation-item-msg">{l10n.getString(err.messageId)}</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="topology-validation-item-dismiss"
-                          aria-label={l10n.getString('topology-validation-dismiss')}
-                          title={l10n.getString('topology-validation-dismiss')}
-                          onClick={() => dismissIssue(graphIssueKey(err.messageId))}
-                        >
-                          <CloseIcon size={12} />
-                        </button>
-                      </div>
-                    ) : (
-                      <div key={err.messageId} className="topology-validation-item topology-validation-item-static">
-                        <span className="topology-validation-item-msg">{l10n.getString(err.messageId)}</span>
-                        <button
-                          type="button"
-                          className="topology-validation-item-dismiss"
-                          aria-label={l10n.getString('topology-validation-dismiss')}
-                          title={l10n.getString('topology-validation-dismiss')}
-                          onClick={() => dismissIssue(graphIssueKey(err.messageId))}
-                        >
-                          <CloseIcon size={12} />
-                        </button>
-                      </div>
-                    ),
-                  )}
-                </div>
-              )}
-            </div>
+            <TopologyValidationWidget
+              totalIssues={totalIssues}
+              open={validationPanelOpen}
+              onToggle={toggleValidationPanel}
+              nodeIssues={visibleNodeIssues}
+              graphIssues={visibleGraphLevel}
+              onSelectNode={selectIssueNode}
+              onAddStockWire={handleAddStockWireHint}
+              onJumpToWire={handleJumpToWire}
+              onDismissNodeIssue={handleDismissNodeIssue}
+              onDismissGraphIssue={handleDismissGraphIssue}
+            />
           )}
           {marquee && (
             <div
