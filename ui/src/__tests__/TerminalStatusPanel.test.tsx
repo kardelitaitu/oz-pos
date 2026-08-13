@@ -11,6 +11,7 @@ const { mockListTerminals } = vi.hoisted(() => ({
 // returns the same reference on every render (avoids effect re-triggers).
 const { stableL10n } = vi.hoisted(() => ({
   stableL10n: {
+    bundles: [],
     getString: (key: string, args?: Record<string, unknown>) => {
       const lookup: Record<string, string> = {
         'terminal-status-never': 'Never',

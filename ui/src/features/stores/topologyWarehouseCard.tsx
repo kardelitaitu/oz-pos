@@ -51,8 +51,12 @@ export function WarehouseSettingsCard({ node, onChange, capacityLocked = false }
           disabled={capacityLocked}
           value={capacity ?? ''}
           onChange={(e) => {
-            const parsed = parseInt(e.target.value, 10);
-            onChange(node.id, { capacity: Number.isNaN(parsed) ? 0 : Math.max(0, parsed) });
+            // Whole number only — ignore fractional in-progress input
+            // instead of silently truncating it via parseInt.
+            const v = Number(e.target.value);
+            if (e.target.value === '' || (Number.isInteger(v) && v >= 0)) {
+              onChange(node.id, { capacity: e.target.value === '' ? 0 : v });
+            }
           }}
         />
         <span className="inspector-hint">
@@ -76,8 +80,12 @@ export function WarehouseSettingsCard({ node, onChange, capacityLocked = false }
           disabled={capacityLocked}
           value={lowStockThreshold ?? ''}
           onChange={(e) => {
-            const parsed = parseInt(e.target.value, 10);
-            onChange(node.id, { lowStockThreshold: Number.isNaN(parsed) ? 0 : Math.max(0, parsed) });
+            // Whole number only — ignore fractional in-progress input
+            // instead of silently truncating it via parseInt.
+            const v = Number(e.target.value);
+            if (e.target.value === '' || (Number.isInteger(v) && v >= 0)) {
+              onChange(node.id, { lowStockThreshold: e.target.value === '' ? 0 : v });
+            }
           }}
         />
         <span className="inspector-hint">
@@ -96,8 +104,12 @@ export function WarehouseSettingsCard({ node, onChange, capacityLocked = false }
           min={0}
           value={stock ?? ''}
           onChange={(e) => {
-            const parsed = parseInt(e.target.value, 10);
-            onChange(node.id, { stock: Number.isNaN(parsed) ? 0 : Math.max(0, parsed) });
+            // Whole number only — ignore fractional in-progress input
+            // instead of silently truncating it via parseInt.
+            const v = Number(e.target.value);
+            if (e.target.value === '' || (Number.isInteger(v) && v >= 0)) {
+              onChange(node.id, { stock: e.target.value === '' ? 0 : v });
+            }
           }}
         />
         <span className="inspector-hint">

@@ -14,7 +14,10 @@ function formatLastSeen(iso: string | null, l10n: ReturnType<typeof useLocalizat
   if (diff < 60_000) return l10n.getString('terminal-status-just-now');
   if (diff < 3_600_000) return l10n.getString('terminal-status-minutes-ago', { n: Math.floor(diff / 60_000) });
   if (diff < 86_400_000) return l10n.getString('terminal-status-hours-ago', { n: Math.floor(diff / 3_600_000) });
-  return new Date(iso).toLocaleDateString();
+  // Older than a day — render the date in the active Fluent locale
+  // (toLocaleDateString with no locale uses the browser default).
+  const locale = [...l10n.bundles][0]?.locales[0] ?? 'en-US';
+  return new Date(iso).toLocaleDateString(locale);
 }
 
 function isOnline(lastSeenAt: string | null): boolean {
