@@ -329,4 +329,33 @@ describe('TaxConfigurationScreen', () => {
     // No sales references → confirm stays enabled
     expect(within(confirm).getByRole('button', { name: /delete/i })).not.toBeDisabled();
   });
+
+  it('moves selection and focus with arrow keys in the tax type radiogroup', async () => {
+    renderWithFluentSync(<ToastProvider><TaxConfigurationScreen /></ToastProvider>, taxFtl);
+    await waitForTable();
+    await userEvent.click(screen.getByRole('button', { name: /add tax rate/i }));
+    const dialog = screen.getByRole('dialog');
+
+    const exclusive = within(dialog).getByRole('radio', { name: /exclusive/i });
+    const inclusive = within(dialog).getByRole('radio', { name: /inclusive/i });
+
+    // Default (new tax): Exclusive selected → roving tabindex points at it.
+    expect(exclusive).toHaveAttribute('aria-checked', 'true');
+    expect(inclusive).toHaveAttribute('aria-checked', 'false');
+    expect(exclusive).toHaveAttribute('tabindex', '0');
+    expect(inclusive).toHaveAttribute('tabindex', '-1');
+
+    // ArrowRight moves focus + selection to Inclusive.
+    exclusive.focus();
+    await userEvent.keyboard('{ArrowRight}');
+    expect(inclusive).toHaveAttribute('aria-checked', 'true');
+    expect(exclusive).toHaveAttribute('aria-checked', 'false');
+    expect(inclusive).toHaveFocus();
+
+    // ArrowLeft moves it back.
+    await userEvent.keyboard('{ArrowLeft}');
+    expect(exclusive).toHaveAttribute('aria-checked', 'true');
+    expect(inclusive).toHaveAttribute('aria-checked', 'false');
+    expect(exclusive).toHaveFocus();
+  });
 });

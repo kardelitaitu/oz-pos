@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, type KeyboardEvent } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useToast } from '@/frontend/shared/Toast';
 import {
@@ -64,6 +64,25 @@ export default function TaxConfigurationScreen() {
   const [loadingDeleteCounts, setLoadingDeleteCounts] = useState(false);
   // Guards against a stale counts response if the user switches rate mid-flight.
   const pendingDeleteIdRef = useRef<string | null>(null);
+
+  // Refs for the Inclusive/Exclusive radio options so arrow-key navigation can
+  // move focus to the newly-selected option (roving tabindex, WAI-ARIA radio).
+  const exclusiveRadioRef = useRef<HTMLButtonElement>(null);
+  const inclusiveRadioRef = useRef<HTMLButtonElement>(null);
+
+  // WAI-ARIA radiogroup: Arrow keys move focus AND selection; Tab leaves the
+  // group. `aria-checked` + `tabIndex` make the roving-tabindex contract work.
+  const handleTaxTypeKeyDown = useCallback((e: KeyboardEvent<HTMLElement>) => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      setForm((prev) => ({ ...prev, isInclusive: true }));
+      inclusiveRadioRef.current?.focus();
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      setForm((prev) => ({ ...prev, isInclusive: false }));
+      exclusiveRadioRef.current?.focus();
+    }
+  }, []);
 
   // ── Category tax rates state ────────────────────────────────────
   const [categories, setCategories] = useState<CategoryDto[]>([]);
@@ -514,10 +533,13 @@ export default function TaxConfigurationScreen() {
             <button
               type="button"
               role="radio"
+              ref={exclusiveRadioRef}
+              tabIndex={!form.isInclusive ? 0 : -1}
               aria-checked={!form.isInclusive}
               aria-label={l10n.getString('tax-config-type-exclusive-label')}
               className={`tax-config-toggle-btn ${!form.isInclusive ? 'tax-config-toggle-btn--active' : ''}`}
               onClick={() => setForm({ ...form, isInclusive: false })}
+              onKeyDown={handleTaxTypeKeyDown}
             >
               <Localized id="tax-config-type-exclusive-label">
                 <span>Exclusive</span>
@@ -529,10 +551,13 @@ export default function TaxConfigurationScreen() {
             <button
               type="button"
               role="radio"
+              ref={inclusiveRadioRef}
+              tabIndex={form.isInclusive ? 0 : -1}
               aria-checked={form.isInclusive}
               aria-label={l10n.getString('tax-config-type-inclusive-label')}
               className={`tax-config-toggle-btn ${form.isInclusive ? 'tax-config-toggle-btn--active' : ''}`}
               onClick={() => setForm({ ...form, isInclusive: true })}
+              onKeyDown={handleTaxTypeKeyDown}
             >
               <Localized id="tax-config-type-inclusive-label">
                 <span>Inclusive</span>
