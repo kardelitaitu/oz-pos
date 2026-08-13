@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithFluentSync } from '@/__tests__/test-utils/render';
 import { ToastProvider } from '@/frontend/shared/Toast';
@@ -357,5 +357,45 @@ describe('TaxConfigurationScreen', () => {
     expect(exclusive).toHaveAttribute('aria-checked', 'true');
     expect(inclusive).toHaveAttribute('aria-checked', 'false');
     expect(exclusive).toHaveFocus();
+  });
+
+  it('trims the name and keeps the rate an integer when saving', async () => {
+    renderWithFluentSync(<ToastProvider><TaxConfigurationScreen /></ToastProvider>, taxFtl);
+    await waitForTable();
+    await userEvent.click(screen.getByRole('button', { name: /add tax rate/i }));
+    const dialog = screen.getByRole('dialog');
+
+    const nameInput = within(dialog).getByRole('textbox', { name: /tax name/i });
+    fireEvent.change(nameInput, { target: { value: '  Sales Tax  ' } });
+    const rateInput = within(dialog).getByRole('spinbutton', { name: /rate/i });
+    fireEvent.change(rateInput, { target: { value: '825' } });
+
+    await userEvent.click(within(dialog).getByRole('button', { name: /save/i }));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('create_tax_rate_scoped', expect.objectContaining({
+        args: expect.objectContaining({ name: 'Sales Tax', rateBps: 825 }),
+      }));
+    });
+  });
+
+  it('rejects a non-integer rate instead of silently truncating it', async () => {
+    renderWithFluentSync(<ToastProvider><TaxConfigurationScreen /></ToastProvider>, taxFtl);
+    await waitForTable();
+    await userEvent.click(screen.getByRole('button', { name: /add tax rate/i }));
+    const dialog = screen.getByRole('dialog');
+
+    const nameInput = within(dialog).getByRole('textbox', { name: /tax name/i });
+    fireEvent.change(nameInput, { target: { value: 'Decimal Tax' } });
+    const rateInput = within(dialog).getByRole('spinbutton', { name: /rate/i });
+    fireEvent.change(rateInput, { target: { value: '825.5' } });
+
+    await userEvent.click(within(dialog).getByRole('button', { name: /save/i }));
+
+    // No create command should fire; the modal stays open for correction.
+    await waitFor(() => {
+      expect(invokeMock).not.toHaveBeenCalledWith('create_tax_rate_scoped', expect.anything());
+    });
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 });

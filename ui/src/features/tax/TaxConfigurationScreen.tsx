@@ -144,8 +144,11 @@ export default function TaxConfigurationScreen() {
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      const rateBps = parseInt(form.rateBps, 10);
-      if (Number.isNaN(rateBps) || rateBps < 0 || rateBps > MAX_RATE_BPS) {
+      // TAX-04: the rate is an integer in basis points — reject non-integers
+      // (e.g. "825.5") rather than silently truncating via parseInt.
+      const rawRate = form.rateBps.trim();
+      const rateBps = Number(rawRate);
+      if (rawRate === '' || !Number.isInteger(rateBps) || rateBps < 0 || rateBps > MAX_RATE_BPS) {
         addToast({
           message: l10n.getString('tax-config-rate-invalid', { max: String(MAX_RATE_BPS) }),
           type: 'error',
@@ -154,7 +157,7 @@ export default function TaxConfigurationScreen() {
       }
 
       const args = {
-        name: form.name,
+        name: form.name.trim(),
         rateBps,
         isDefault: form.isDefault,
         isInclusive: form.isInclusive,
