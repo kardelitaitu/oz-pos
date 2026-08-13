@@ -1050,3 +1050,27 @@ api, contexts, hooks, utils) for the standard issue classes — all clean:
 - Full suite: **296 files / 5214 tests pass, 0 unhandled errors**.
 - typecheck ✅ · i18n lint clean ✅ · parity 0 missing ✅
 - Shell layout + a11y suites: 49/49 pass.
+
+# React key-warning repairs (2026-08-14)
+
+Two genuine key-prop warnings surfaced in the full-suite stderr:
+
+1. **TransactionLogScreen** — the transaction rows were returned from
+   `.map()` inside a bare `<>...</>` fragment, so the key on the inner
+   `<tr>` never attached to the list element (React warned on every
+   render). Switched to `<Fragment key={tx.id}>` and removed the
+   redundant key from the `<tr>`.
+
+2. **SalesReportScreen.test.tsx fixture** — `renders gross profit and
+   margin per product` built both top products with the default
+   `product_id: 'prod-1'`, tripping React's duplicate-key warning.
+   Gave the second fixture a distinct `prod-2`.
+
+Also swept for the same bare-fragment-in-map pattern across
+`src/features` — TransactionLogScreen was the only instance.
+
+## Verification
+
+- Full suite: **296 files / 5214 tests pass, 0 unhandled errors** — both
+  key warnings gone from stderr.
+- typecheck ✅ · lint 0 errors ✅ · i18n lint clean ✅

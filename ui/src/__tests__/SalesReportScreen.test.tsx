@@ -554,8 +554,8 @@ describe('SalesReportScreen', () => {
   it('renders gross profit and margin per product', async () => {
     mockGetDailyRevenue.mockResolvedValue([buildDailyRevenue()]);
     mockGetTopProducts.mockResolvedValue([
-      buildTopProduct({ name: 'Latte', total_minor: 120000, cogs_minor: 40000, gross_profit_minor: 80000, gross_margin_percent: 66.7 }),
-      buildTopProduct({ name: 'Mocha', total_minor: 100000, cogs_minor: 130000, gross_profit_minor: -30000, gross_margin_percent: -30 }),
+      buildTopProduct({ product_id: 'prod-1', name: 'Latte', total_minor: 120000, cogs_minor: 40000, gross_profit_minor: 80000, gross_margin_percent: 66.7 }),
+      buildTopProduct({ product_id: 'prod-2', name: 'Mocha', total_minor: 100000, cogs_minor: 130000, gross_profit_minor: -30000, gross_margin_percent: -30 }),
     ]);
     mockGetHourlyHeatmap.mockResolvedValue([]);
     mockGetCategoryBreakdown.mockResolvedValue([]);
