@@ -561,3 +561,60 @@ export function scanAttributeOmissions(): AttributeOmissionHit[] {
   }
   return hits;
 }
+
+// ── Attribute-only messages consumed via getString (round 169) ────
+//
+// A message declared with ONLY attributes (`key =\n    .attr = value`)
+// has a null VALUE. `l10n.getString(id)` and `requiredLocalized` read the
+// message VALUE, so for such a message they return the raw id fallback
+// instead of any attribute text — the label silently renders as the
+// Fluent key id. This is the reverse of the round-166/167 gate (which
+// checks `<Localized attrs>` sites): here the message has no value, but
+// a value-reader consumes it. The scan finds every attribute-only
+// message id referenced by a `getString`/`requiredLocalized` string
+// literal in production `.tsx` code.
+
+export interface AttributeOnlyGetStringHit {
+  file: string;
+  line: number;
+  id: string;
+}
+
+/** Message ids in an FTL source that have no value but ≥1 attribute. */
+function attributeOnlyMessageIds(source: string): Set<string> {
+  const resource = new FluentResource(source);
+  const ids = new Set<string>();
+  for (const entry of resource.body) {
+    const id = entry?.id;
+    if (typeof id !== 'string') continue; // Junk entries
+    if (entry.value == null && Object.keys(entry.attributes ?? {}).length > 0) {
+      ids.add(id);
+    }
+  }
+  return ids;
+}
+
+/**
+ * Repo-wide scan: every attribute-only message id (in ANY locale
+ * bundle) referenced by a `getString`/`requiredLocalized` call in
+ * production `.tsx` code. One hit per id/file pair; programmatic ids
+ * (e.g. `getString(a.ariaId)`) are not statically readable and are
+ * skipped, matching the parity gate's documented limitation.
+ */
+export function scanAttributeOnlyGetString(): AttributeOnlyGetStringHit[] {
+  const attrOnly = new Set<string>();
+  for (const source of Object.values(loadLocaleSources())) {
+    for (const id of attributeOnlyMessageIds(source)) attrOnly.add(id);
+  }
+  const hits: AttributeOnlyGetStringHit[] = [];
+  for (const [path, source] of Object.entries(loadTsxSources())) {
+    for (const id of attrOnly) {
+      const re = new RegExp('\\b(?:getString|requiredLocalized)\\s*\\([^)]*["\']' + id + '["\']');
+      if (re.test(source)) {
+        const line = source.slice(0, source.indexOf(id)).split('\n').length;
+        hits.push({ file: path, line, id });
+      }
+    }
+  }
+  return hits;
+}

@@ -22,6 +22,7 @@ import {
   scanLocalizedVars,
   scanTranslationVars,
   scanAttributeOmissions,
+  scanAttributeOnlyGetString,
 } from '@/i18n/barePlaceholderScan';
 import { withFluentLocale } from '@/locales/test-utils';
 import sharedId from '@/locales/shared.id.ftl?raw';
@@ -537,5 +538,17 @@ describe('i18n translation-var drift scan (round 165)', () => {
 describe('i18n localized-attribute scan (rounds 166-167)', () => {
   it('finds no localized attribute missing or omitted by any translation', () => {
     expect(scanAttributeOmissions()).toEqual([]);
+  });
+});
+
+// Round 169: the reverse direction of the attribute gates. A message
+// declared with ONLY attributes has a null value; a `getString` /
+// `requiredLocalized` consumer reads the VALUE and so renders the raw
+// key id instead of any attribute text. This scans every attribute-only
+// message referenced by a value-reader in production code. Same gate,
+// fails closed.
+describe('i18n attribute-only getString scan (round 169)', () => {
+  it('finds no attribute-only message consumed via getString/requiredLocalized', () => {
+    expect(scanAttributeOnlyGetString()).toEqual([]);
   });
 });

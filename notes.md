@@ -244,3 +244,14 @@ Audit of the owner/admin reports dashboard (`DashboardScreen.tsx` +
    via `getString` (rendering the raw key id). `i18nStrayAttributeSyntax.test.ts`
    now guards the shared + reports bundles against the single-line form, and
    pins the update-banner keys as plain values in both locales.
+6. ✅ **Attribute-only-vs-getString sweep (round 169)** — audited every
+   locale bundle for attribute-only messages (no value, e.g.
+   `key =\n  .aria-label = …`) whose id is read by `getString` /
+   `requiredLocalized` (value readers → raw key id). Fixed 8 keys per locale
+   (`categories-name-aria`, `pos-cart-options-collapse/expand-aria`,
+   `product-mgmt-variants-aria`, `retail-cart-course/modifier-aria`,
+   `setup-step-aria`, `terminal-override-aria`) by converting them to plain
+   values, and removed the redundant overridden `placeholder` prop on the
+   `refund-reason/note-placeholder` inputs (correctly served by their
+   `<Localized attrs>` wrappers). Added `scanAttributeOnlyGetString()` to the
+   `barePlaceholderScan` gate so this class fails closed.

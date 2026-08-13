@@ -129,8 +129,7 @@ product-mgmt-table-aria = Katalog produk
 product-mgmt-actions-aria =
     .aria-label = Tindakan
 product-mgmt-variants = Varian
-product-mgmt-variants-aria =
-    .aria-label = Varian untuk { $name }
+product-mgmt-variants-aria = Varian untuk { $name }
 product-mgmt-modal-aria = { $mode ->
         [add] Tambah produk
        *[edit] Ubah produk
@@ -252,8 +251,7 @@ categories-error-name-required = Nama kategori wajib diisi
 categories-error-id-conflict = Kategori dengan ID ini sudah ada
 categories-error-colour-invalid = Pilih warna dari palet
 categories-preview = Pratinjau
-categories-name-aria =
-    .aria-label = Nama Kategori
+categories-name-aria = Nama Kategori
 categories-icon-picker-aria = Pilih ikon
 categories-colour-picker-aria = Pilih warna
 categories-icon-food = Makanan

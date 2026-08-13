@@ -207,10 +207,8 @@ pos-cart-course-btn--all = Kirim Semua
 
 # POS Cart Actions
 pos-cart-table-aria = Nomor meja
-pos-cart-options-collapse-aria =
-    .aria-label = Tutup opsi
-pos-cart-options-expand-aria =
-    .aria-label = Buka opsi
+pos-cart-options-collapse-aria = Tutup opsi
+pos-cart-options-expand-aria = Buka opsi
 pos-cart-discount-pct-aria = Persentase diskon
 pos-cart-discount-label-aria = Label diskon
 pos-cart-discount-remove-aria = Hapus diskon
@@ -816,10 +814,8 @@ retail-toast-failed-delete-held = Gagal menghapus pesanan ditahan
 retail-toast-failed-cart = Gagal membuat keranjang penjualan
 retail-toast-no-cart = Tidak ada keranjang penjualan aktif
 retail-override-btn = Ganti Harga
-retail-cart-course-aria =
-    .aria-label = Kursus untuk { $name }
-retail-cart-modifier-aria =
-    .aria-label = Modifikasi untuk { $name }
+retail-cart-course-aria = Kursus untuk { $name }
+retail-cart-modifier-aria = Modifikasi untuk { $name }
 retail-cart-modifier-btn = Modifikasi
 retail-override-aria = Ganti harga untuk { $name }
 retail-serial-placeholder = No. Seri

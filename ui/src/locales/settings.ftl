@@ -11,8 +11,7 @@ setup-step-hardware = Hardware
 setup-step-business-rules = Business Rules
 setup-step-data-cloud = Data & Cloud
 setup-step-review = Review
-setup-step-aria =
-    .aria-label = Step { $number }: { $label }
+setup-step-aria = Step { $number }: { $label }
 
 setup-progress-aria = Setup progress
 

@@ -120,8 +120,7 @@ product-mgmt-table-aria = Product catalog
 product-mgmt-actions-aria =
     .aria-label = Actions
 product-mgmt-variants = Variants
-product-mgmt-variants-aria =
-    .aria-label = Variants for { $name }
+product-mgmt-variants-aria = Variants for { $name }
 product-mgmt-modal-aria = { $mode ->
         [add] Add product
        *[edit] Edit product
@@ -241,8 +240,7 @@ categories-error-name-required = Category name is required
 categories-error-id-conflict = A category with this ID already exists
 categories-error-colour-invalid = Choose a colour from the palette
 categories-preview = Preview
-categories-name-aria =
-    .aria-label = Category Name
+categories-name-aria = Category Name
 categories-icon-picker-aria = Pick an icon
 categories-colour-picker-aria = Pick a colour
 categories-icon-food = Food
