@@ -900,6 +900,40 @@ describe('AnalyticsScreen layout shell', () => {
     });
   });
 
+  it('exports the top products CSV from the top-items card', async () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
+    await flushRecalc();
+
+    vi.mocked(downloadCsv).mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Export top items as CSV' }));
+
+    expect(downloadCsv).toHaveBeenCalledTimes(1);
+    const [filename, columns, rows] = vi.mocked(downloadCsv).mock.calls[0]!;
+    expect(filename).toContain('top-items-');
+    expect(columns.map((c) => c.key)).toEqual(['name', 'sku', 'units', 'revenue']);
+    expect(columns.map((c) => c.label)).toEqual(['Name', 'SKU', 'Units sold', 'Revenue']);
+    expect(rows[0]).toMatchObject({ name: 'Espresso', sku: 'SKU-001', units: '45', revenue: '$900.00' });
+    expect(rows[1]).toMatchObject({ name: 'Latte', sku: 'SKU-002', units: '38', revenue: '$950.00' });
+  });
+
+  it('exports the payment breakdown CSV from the payments card', async () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
+    await flushRecalc();
+
+    vi.mocked(downloadCsv).mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Export payments as CSV' }));
+
+    expect(downloadCsv).toHaveBeenCalledTimes(1);
+    const [filename, columns, rows] = vi.mocked(downloadCsv).mock.calls[0]!;
+    expect(filename).toContain('payments-');
+    expect(columns.map((c) => c.key)).toEqual(['method', 'sales', 'orders']);
+    expect(columns.map((c) => c.label)).toEqual(['Payment method', 'Total sales', 'Orders']);
+    expect(rows[0]).toMatchObject({ method: 'Cash', sales: '$6,000.00', orders: '30' });
+    expect(rows[1]).toMatchObject({ method: 'Card', sales: '$9,000.00', orders: '45' });
+  });
+
   it('keeps card visuals rendering as granularity changes', async () => {
     vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);

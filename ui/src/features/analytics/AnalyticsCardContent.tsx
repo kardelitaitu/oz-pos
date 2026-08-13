@@ -155,16 +155,16 @@ function Kpi({ value, label, tone }: { value: string; label: string; tone?: 'goo
   );
 }
 
-/** Small CSV export action used by the staff-data cards. */
-function ExportCsvButton({ onClick }: { onClick: () => void }) {
+/** Small CSV export action — aria label describes what the card exports. */
+function ExportCsvButton({ onClick, ariaLabel }: { onClick: () => void; ariaLabel: string }) {
   const { l10n } = useLocalization();
   return (
     <button
       type="button"
       className="analytics-export-btn"
       onClick={onClick}
-      aria-label={l10n.getString('analytics-export-csv-aria')}
-      title={l10n.getString('analytics-export-csv-aria')}
+      aria-label={ariaLabel}
+      title={ariaLabel}
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -207,6 +207,51 @@ function exportStaffCsv(
       sale_count: String(r.sale_count),
       sale_total: fmt(r.sale_total_minor),
       shift_sales: fmt(r.shift_sales_minor),
+    })),
+  );
+}
+
+/** Download a top-items card's rows as CSV (retail products / restaurant menu). */
+function exportTopItemsCsv(
+  raw: (TopProductRow | MenuEngineeringRow)[],
+  from: string,
+  to: string,
+  fmt: (minor: number) => string,
+  getString: (id: string) => string,
+) {
+  downloadCsv(
+    `top-items-${from}-to-${to}.csv`,
+    [
+      { key: 'name', label: getString('analytics-export-col-name') },
+      { key: 'sku', label: getString('analytics-export-col-sku') },
+      { key: 'units', label: getString('analytics-export-col-units') },
+      { key: 'revenue', label: getString('analytics-export-col-revenue') },
+    ],
+    raw.map((r) => ('total_qty' in r
+      ? { name: r.name, sku: r.sku, units: String(r.total_qty), revenue: fmt(r.total_minor) }
+      : { name: r.name, sku: r.sku, units: String(r.total_volume), revenue: fmt(r.total_revenue_minor) })),
+  );
+}
+
+/** Download the payment-method breakdown as CSV. */
+function exportPaymentsCsv(
+  rows: PaymentMethodRow[],
+  from: string,
+  to: string,
+  fmt: (minor: number) => string,
+  getString: (id: string) => string,
+) {
+  downloadCsv(
+    `payments-${from}-to-${to}.csv`,
+    [
+      { key: 'method', label: getString('analytics-export-col-method') },
+      { key: 'sales', label: getString('analytics-export-col-sales') },
+      { key: 'orders', label: getString('analytics-export-col-orders') },
+    ],
+    rows.map((r) => ({
+      method: PAYMENT_NAMES[r.payment_method] ? getString(PAYMENT_NAMES[r.payment_method]!) : r.payment_method,
+      sales: fmt(r.total_minor),
+      orders: String(r.sale_count),
     })),
   );
 }
@@ -480,7 +525,7 @@ function StaffCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: 
         <Kpi value={short(totalSales)} label={l10n.getString('analytics-card-staff-sales')} />
         <div className="analytics-kpi-actions">
           {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
-          <ExportCsvButton onClick={() => exportStaffCsv(staff, q.from, q.to, fmt, (id) => l10n.getString(id))} />
+          <ExportCsvButton ariaLabel={l10n.getString('analytics-export-csv-aria')} onClick={() => exportStaffCsv(staff, q.from, q.to, fmt, (id) => l10n.getString(id))} />
         </div>
       </div>
       <RankedList rows={rows} ariaLabel={title} limit={expanded ? undefined : 5} />
@@ -540,6 +585,7 @@ const PAYMENT_NAMES: Record<string, string> = {
 
 function PaymentsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: string; expanded?: boolean | undefined; compare?: boolean | undefined }) {
   const { l10n } = useLocalization();
+  const { fmt } = useMoney();
   const { data: rows, prev: prevRows, error } = useCardDataCompare<PaymentMethodRow[]>('payments', q, compare ?? false);
   const total = rows ? rows.reduce((s, r) => s + r.total_minor, 0) : 0;
   const prevTotal = prevRows ? prevRows.reduce((s, r) => s + r.total_minor, 0) : 0;
@@ -574,7 +620,10 @@ function PaymentsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; titl
     <Visual className="analytics-card-visual--split">
       <div className="analytics-kpi-row">
         {topSeg && <Kpi value={`${topSeg.name} · ${topPct}%`} label={l10n.getString('analytics-card-payments-top')} />}
-        {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
+        <div className="analytics-kpi-actions">
+          {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
+          <ExportCsvButton ariaLabel={l10n.getString('analytics-export-payments-aria')} onClick={() => exportPaymentsCsv(rows, q.from, q.to, fmt, (id) => l10n.getString(id))} />
+        </div>
       </div>
       <div className="analytics-card-chart" role="img" aria-label={title}>
         <ReactEChartsCore echarts={echarts} option={option!} style={{ height: chartHeight('payments', expanded) }} notMerge />
@@ -635,7 +684,7 @@ function RefundsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title
 
 function TopItemsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: string; expanded?: boolean | undefined; compare?: boolean | undefined }) {
   const { l10n } = useLocalization();
-  const { short } = useMoney();
+  const { short, fmt } = useMoney();
   const { data: raw, prev: prevRaw, error } = useCardDataCompare<(TopProductRow | MenuEngineeringRow)[]>('top-items', q, compare ?? false);
   if (error) return <CardError error={error} />;
   if (!raw) return <CardLoading />;
@@ -654,7 +703,10 @@ function TopItemsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; titl
     <Visual>
       <div className="analytics-kpi-row">
         {topName && <Kpi value={topName} label={l10n.getString('analytics-card-top-product')} />}
-        {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
+        <div className="analytics-kpi-actions">
+          {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
+          <ExportCsvButton ariaLabel={l10n.getString('analytics-export-top-items-aria')} onClick={() => exportTopItemsCsv(raw, q.from, q.to, fmt, (id) => l10n.getString(id))} />
+        </div>
       </div>
       <RankedList rows={rows} ariaLabel={title} limit={expanded ? undefined : 5} />
     </Visual>
@@ -993,7 +1045,7 @@ function WaitstaffCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
         <Kpi value={totalCovers.toLocaleString()} label={l10n.getString('analytics-card-waitstaff-total')} />
         <div className="analytics-kpi-actions">
           {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
-          <ExportCsvButton onClick={() => exportStaffCsv(staff, q.from, q.to, fmt, (id) => l10n.getString(id))} />
+          <ExportCsvButton ariaLabel={l10n.getString('analytics-export-csv-aria')} onClick={() => exportStaffCsv(staff, q.from, q.to, fmt, (id) => l10n.getString(id))} />
         </div>
       </div>
       <RankedList rows={rows} ariaLabel={title} limit={expanded ? undefined : 5} />
