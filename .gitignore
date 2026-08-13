@@ -8,6 +8,8 @@
 /apps/license-server/license-server.exe
 /ui/playwright-report
 /ui/test-results
+/ui/e2e-results
+/ui/.e2e-auth.json
 
 # Cargo workspaces have a single Cargo.lock at the workspace root, not
 # one per crate. OZ-POS ships binaries (oz-cli, and the Tauri app in
