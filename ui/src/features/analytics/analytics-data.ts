@@ -283,58 +283,120 @@ function mondayFirst(jsDay: number): number {
   return (jsDay + 6) % 7;
 }
 
+/** Aggregated raw revenue + order count for one heatmap cell key. */
+interface HeatTotals {
+  minor: number;
+  orders: number;
+}
+
+/** One heatmap cell's value: raw totals plus the normalized 0–4 level. */
+export interface HeatCell extends HeatTotals {
+  /** 0–4 heat level normalized against the strongest cell in the set. */
+  level: number;
+}
+
+/** The yearly heatmap's `YYYY-MM:week` cell key for a Monday week_start. */
+function yearlyWeekKey(weekStart: string): string {
+  const d = new Date(`${weekStart}T00:00:00`);
+  const month = d.getMonth();
+  // Ordinal of the week among the month's Monday weeks (0-based) — the same
+  // Monday-first structure as the trend cards' weekStartKey. The old
+  // day-of-month arithmetic capped at 3, silently merging the 5th Monday of
+  // a month into the 4th week's cell. The key carries the week_start's
+  // YYYY-MM so a multi-year range never merges two Januaries into one column.
+  let week = 0;
+  for (let day = 1; day <= d.getDate(); day++) {
+    if (mondayFirst(new Date(d.getFullYear(), month, day).getDay()) === 0) week += 1;
+  }
+  return `${weekStart.slice(0, 7)}:${week - 1}`;
+}
+
+/**
+ * Raw per-cell totals (revenue in minor units + order count) for the
+ * heatmap's fixed grid. The backend can emit one row per currency (daily /
+ * weekly) and one per day/hour (hourly), so every key sums rather than
+ * overwrites — the single aggregation rule behind the intensity levels, the
+ * busiest-time insight, and the per-cell tooltips.
+ */
+function heatTotals(
+  g: Granularity,
+  data: { daily?: DailyRevenueRow[]; hourly?: HourlyHeatmapRow[]; weekly?: WeeklyRevenueRow[] },
+): Map<string, HeatTotals> {
+  const totals = new Map<string, HeatTotals>();
+  const add = (key: string, minor: number, orders: number) => {
+    const t = totals.get(key) ?? { minor: 0, orders: 0 };
+    t.minor += minor;
+    t.orders += orders;
+    totals.set(key, t);
+  };
+  if (g === 'monthly') {
+    for (const r of data.daily ?? []) {
+      add(String(new Date(`${r.date}T00:00:00`).getDate()), r.total_minor, r.sale_count);
+    }
+  } else if (g === 'yearly') {
+    for (const r of data.weekly ?? []) {
+      add(yearlyWeekKey(r.week_start), r.total_minor, r.sale_count);
+    }
+  } else if (g === 'weekly') {
+    for (const r of data.hourly ?? []) {
+      add(`${mondayFirst(r.day_of_week)}:${r.hour}`, r.total_minor, r.sale_count);
+    }
+  } else {
+    // daily + custom: the 7-day weekday view aggregated from hourly rows.
+    for (const r of data.hourly ?? []) {
+      add(String(mondayFirst(r.day_of_week)), r.total_minor, r.sale_count);
+    }
+  }
+  return totals;
+}
+
+/** 0–4 levels for a raw totals map, max-normalized via `normalizeIntensities`. */
+function normalizeTotals(totals: Map<string, HeatTotals>): Map<string, number> {
+  return normalizeIntensities([...totals.entries()].map(([k, t]) => [k, t.minor] as [string, number]));
+}
+
+/** Per-cell values (totals + level) for the heatmap card at the given granularity. */
+export function buildHeatmapCells(
+  g: Granularity,
+  data: { daily?: DailyRevenueRow[]; hourly?: HourlyHeatmapRow[]; weekly?: WeeklyRevenueRow[] },
+): Map<string, HeatCell> {
+  const totals = heatTotals(g, data);
+  const levels = normalizeTotals(totals);
+  const cells = new Map<string, HeatCell>();
+  for (const [key, t] of totals) {
+    cells.set(key, { ...t, level: levels.get(key) ?? 0 });
+  }
+  return cells;
+}
+
+/** The strongest cell (highest revenue) — the heatmap's "busiest" slot. */
+export function heatPeak(cells: Map<string, HeatCell>): { key: string; cell: HeatCell } | null {
+  let best: { key: string; cell: HeatCell } | null = null;
+  for (const [key, cell] of cells) {
+    if (cell.minor <= 0) continue; // zero-activity cells never count as "busiest"
+    if (!best || cell.minor > best.cell.minor) best = { key, cell };
+  }
+  return best;
+}
+
 /** Hourly rows aggregated by day-of-week (daily/custom view). */
 export function weekdayIntensities(rows: HourlyHeatmapRow[]): Map<string, number> {
-  const byDay = new Map<string, number>();
-  for (const r of rows) {
-    const key = String(mondayFirst(r.day_of_week));
-    byDay.set(key, (byDay.get(key) ?? 0) + r.total_minor);
-  }
-  return normalizeIntensities([...byDay.entries()]);
+  return normalizeTotals(heatTotals('daily', { hourly: rows }));
 }
 
 /** Hourly rows mapped to the 7×24 weekly grid. */
 export function weeklyHourlyIntensities(rows: HourlyHeatmapRow[]): Map<string, number> {
-  return normalizeIntensities(
-    rows.map((r) => [`${mondayFirst(r.day_of_week)}:${r.hour}`, r.total_minor] as [string, number]),
-  );
+  return normalizeTotals(heatTotals('weekly', { hourly: rows }));
 }
 
 /** Daily revenue mapped to calendar days of the current month. */
 export function monthDayIntensities(rows: DailyRevenueRow[]): Map<string, number> {
-  // The backend emits one daily row per currency — sum per day so a
-  // multi-currency day shows its combined revenue, not one row overwriting
-  // the other (and skewing the peak normalization).
-  const byDay = new Map<string, number>();
-  for (const r of rows) {
-    const key = String(new Date(`${r.date}T00:00:00`).getDate());
-    byDay.set(key, (byDay.get(key) ?? 0) + r.total_minor);
-  }
-  return normalizeIntensities([...byDay.entries()]);
+  return normalizeTotals(heatTotals('monthly', { daily: rows }));
 }
 
 /** Weekly revenue mapped to (YYYY-MM, week-of-month) for the range-derived yearly grid. */
 export function yearlyWeekIntensities(rows: WeeklyRevenueRow[]): Map<string, number> {
-  // Sum per (YYYY-MM:week) cell first — the backend emits one weekly row
-  // per currency, and duplicate keys must combine like the revenue loader.
-  const byKey = new Map<string, number>();
-  for (const r of rows) {
-    const d = new Date(`${r.week_start}T00:00:00`);
-    const month = d.getMonth();
-    // Ordinal of the week among the month's Monday weeks (0-based) — the
-    // same Monday-first structure as the trend cards' weekStartKey. The
-    // old day-of-month arithmetic capped at 3, silently merging the 5th
-    // Monday of a month into the 4th week's cell. The key carries the
-    // week_start's YYYY-MM so a multi-year range never merges two
-    // Januaries into one column.
-    let week = 0;
-    for (let day = 1; day <= d.getDate(); day++) {
-      if (mondayFirst(new Date(d.getFullYear(), month, day).getDay()) === 0) week += 1;
-    }
-    const key = `${r.week_start.slice(0, 7)}:${week - 1}`;
-    byKey.set(key, (byKey.get(key) ?? 0) + r.total_minor);
-  }
-  return normalizeIntensities([...byKey.entries()]);
+  return normalizeTotals(heatTotals('yearly', { weekly: rows }));
 }
 
 /** Number of Monday weeks in a month (4 or 5) — a yearly heatmap column's band count. */
@@ -373,18 +435,7 @@ export function buildHeatmapIntensities(
   g: Granularity,
   data: { daily?: DailyRevenueRow[]; hourly?: HourlyHeatmapRow[]; weekly?: WeeklyRevenueRow[] },
 ): Map<string, number> {
-  switch (g) {
-    case 'weekly':
-      return weeklyHourlyIntensities(data.hourly ?? []);
-    case 'monthly':
-      return monthDayIntensities(data.daily ?? []);
-    case 'yearly':
-      return yearlyWeekIntensities(data.weekly ?? []);
-    default:
-      // daily + custom fall back to the 7-day weekday view, aggregated
-      // from the hourly heatmap when available.
-      return weekdayIntensities(data.hourly ?? []);
-  }
+  return normalizeTotals(heatTotals(g, data));
 }
 
 // ── Per-card loaders (raw API rows, no formatting) ──────────────────

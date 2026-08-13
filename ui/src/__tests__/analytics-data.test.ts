@@ -55,9 +55,11 @@ vi.mock('@/api/tables', () => ({
 }));
 
 import {
+  buildHeatmapCells,
   buildHeatmapIntensities,
   alignPrevBuckets,
   alignPrevHourly,
+  heatPeak,
   intensityFromPct,
   loadAov,
   loadBasketSize,
@@ -441,6 +443,47 @@ describe('heatmap intensity builders', () => {
     // daily + custom fall back to the weekday view from hourly rows.
     expect(buildHeatmapIntensities('daily', { hourly }).has('0')).toBe(true);
     expect(buildHeatmapIntensities('custom', { hourly }).has('0')).toBe(true);
+  });
+});
+
+describe('buildHeatmapCells — per-cell values for the heatmap card', () => {
+  const hourly = [
+    { day_of_week: 1, hour: 10, total_minor: 100, sale_count: 2 },
+    { day_of_week: 1, hour: 10, total_minor: 100, sale_count: 1 },
+    { day_of_week: 2, hour: 11, total_minor: 50, sale_count: 3 },
+  ];
+
+  it('sums duplicate keys and normalizes the level against the peak', () => {
+    const cells = buildHeatmapCells('weekly', { hourly });
+    // Monday 10:00 sums 100 + 100 = 200 (peak) → level 4; orders 2 + 1 = 3.
+    expect(cells.get('0:10')).toEqual({ minor: 200, orders: 3, level: 4 });
+    // Tuesday 11:00 = 50 → 25% of peak → level 1.
+    expect(cells.get('1:11')).toEqual({ minor: 50, orders: 3, level: 1 });
+  });
+
+  it('sums multi-currency daily rows into one monthly cell', () => {
+    const daily = [
+      { date: '2026-07-27', total_minor: 100, currency: 'USD', sale_count: 1, cogs_minor: 0, gross_profit_minor: 100, gross_margin_percent: 100 },
+      { date: '2026-07-27', total_minor: 50, currency: 'IDR', sale_count: 2, cogs_minor: 0, gross_profit_minor: 50, gross_margin_percent: 100 },
+    ];
+    const cells = buildHeatmapCells('monthly', { daily });
+    expect(cells.get('27')).toEqual({ minor: 150, orders: 3, level: 4 });
+  });
+
+  it('uses the yearly YYYY-MM:week key', () => {
+    const weekly = [{ week_start: '2026-07-21', total_minor: 100, currency: 'USD', sale_count: 1, cogs_minor: 0, gross_profit_minor: 100, gross_margin_percent: 100 }];
+    const cells = buildHeatmapCells('yearly', { weekly });
+    expect(cells.get('2026-07:2')).toEqual({ minor: 100, orders: 1, level: 4 });
+  });
+
+  it('heatPeak returns the strongest cell and ignores zero-activity cells', () => {
+    const cells = buildHeatmapCells('weekly', { hourly });
+    const peak = heatPeak(cells);
+    expect(peak?.key).toBe('0:10');
+    expect(peak?.cell.minor).toBe(200);
+
+    const empty = buildHeatmapCells('weekly', { hourly: [{ day_of_week: 1, hour: 10, total_minor: 0, sale_count: 0 }] });
+    expect(heatPeak(empty)).toBeNull();
   });
 });
 
