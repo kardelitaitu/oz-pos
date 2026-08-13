@@ -1,16 +1,7 @@
 # ui/src/locales/shifts.ftl — Shift management
 
 shift-title = Shift Management
-shift-open = Open Shift
-shift-close = Close Shift
 shift-opening-balance = Opening Balance
-shift-closing-balance = Closing Balance
-shift-expected-cash = Expected Cash
-shift-actual-cash = Actual Cash
-shift-difference = Difference
-shift-eod-report = End of Day Report
-shift-print-report = Print Report
-shift-loading = Loading shifts…
 shift-active-label = Active Shift
 shift-no-active-title = No active shift
 shift-no-active-sub = Open a shift to start tracking cashier sessions.
@@ -61,7 +52,6 @@ shift-recon-opening = Opening balance
 shift-recon-cash-sales = + Cash sales
 shift-recon-payouts = − Payouts
 shift-recon-expected = Expected cash
-shift-recon-payouts-returned = + Payouts returned
 shift-recon-opened = Shift opened
 shift-recon-sales = Sales this shift
 shift-close-counted-label = Counted cash in drawer (minor units)
@@ -91,7 +81,6 @@ shift-detail-other-sales = Other Sales
 shift-detail-voids = Voids
 shift-detail-refunds = Refunds
 shift-detail-notes = Notes
-shift-report-loading = Loading report…
 shift-report-payment-breakdown = Payment Breakdown
 shift-report-hourly-sales = Hourly Sales
 shift-report-transaction-summary = Transaction Summary
@@ -130,6 +119,7 @@ shift-field-payout-amount = Payout amount in minor units
 shift-field-payout-reason = Payout reason
 shift-field-closing-balance = Closing balance in minor units
 shift-field-notes = Shift notes
+shift-invalid-opening-balance = Opening balance must be a whole, non-negative number
 shift-invalid-balance = Please enter a valid closing balance
 shift-invalid-payout-amount = Please enter a valid payout amount
 

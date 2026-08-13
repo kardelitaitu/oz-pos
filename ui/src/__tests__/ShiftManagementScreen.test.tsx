@@ -181,6 +181,32 @@ describe('ShiftManagementScreen', () => {
     });
   });
 
+  it('rejects fractional opening balance instead of silently truncating it', async () => {
+    const user = userEvent.setup();
+    mockListShifts.mockResolvedValue([]);
+    mockGetActiveShift.mockResolvedValue(null);
+    renderWithFluentSync(<ToastProvider><ShiftManagementScreen /></ToastProvider>, shiftsFtl, sharedFtl);
+
+    await waitFor(() => {
+      expect(screen.getByText('Open Shift')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getAllByText('Open Shift')[0]!);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/opening balance/i)).toBeInTheDocument();
+    });
+    await user.type(screen.getByLabelText(/opening balance/i), '500.5');
+    await user.click(screen.getAllByText('Open Shift').at(-1)!.closest('button')!);
+
+    // The previous `parseInt('500.5', 10)` would have sent 500 silently;
+    // now the localized validation error surfaces and no open call fires.
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain('Opening balance must be a whole, non-negative number');
+    });
+    expect(mockOpenShift).not.toHaveBeenCalled();
+  });
+
   // ── Shift detail modal ───────────────────────────────────────
 
   it('opens detail modal when View button is clicked', async () => {

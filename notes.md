@@ -656,3 +656,33 @@ Audit of `StockTransfersScreen.tsx` + `stock-transfers.ftl` /
 2. **Create-line `productName`** — when typing a SKU that doesn't match a
   known product, the line name falls back to the raw SKU text; intentional
   for free-form entries.
+
+---
+
+# Shifts audit (2026-08-13)
+
+Audit of `ShiftManagementScreen.tsx` + `shifts.ftl` / `shifts.id.ftl`.
+
+## Fixed (committed)
+
+- ✅ **Strict-integer balances/payouts** — opening balance, closing balance,
+  and payout amount were silently truncated by `parseInt` (500.5 → 500).
+  Now `Number` + `Number.isInteger`: fractional opening balance is rejected
+  with a new `shift-invalid-opening-balance` message, closing balance and
+  payout keep their existing invalid messages, and the Apply/Close buttons
+  disable for fractional input. Regression test added.
+- ✅ **Locale-aware time/date** — `time()` and `dateTime()` passed `[]` as
+  the locale (browser default); now the active Fluent locale.
+- ✅ **Orphan FTL keys removed** — 11 never-read keys deleted from both
+  bundles: `shift-open`/`shift-close` (buttons use `shift-btn-*`),
+  `shift-closing-balance`, `shift-expected-cash`, `shift-actual-cash`,
+  `shift-difference`, `shift-eod-report`, `shift-print-report`,
+  `shift-loading`, `shift-recon-payouts-returned`, `shift-report-loading`.
+- ✅ Stray `{ }` JSX in the history table row removed.
+
+## Still open
+
+1. **Open-shift default** — an empty opening-balance field opens with 0;
+  intentional per SHIFT-03 but worth confirming the drawer-empty default.
+2. **`reason` fallback** — payout reason defaults to the raw English string
+  `'safe drop'` when blank; not localized (backend free-text field).
