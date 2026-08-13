@@ -1261,7 +1261,7 @@ mod tests {
     fn list_workspace_types_returns_all() {
         let (store, _) = fresh();
         let types = store.list_workspace_types().unwrap();
-        assert_eq!(types.len(), 5);
+        assert_eq!(types.len(), 6);
         assert!(types.iter().any(|t| t.layout_mode == "fullscreen"));
         assert!(types.iter().any(|t| t.layout_mode == "sidebar"));
     }

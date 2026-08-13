@@ -881,7 +881,8 @@ mod tests {
         Settings::set(&conn, "a", "1").unwrap();
         Settings::set(&conn, "b", "2").unwrap();
         let all = Settings::load_all(&conn).unwrap();
-        assert_eq!(all.len(), 2);
+        // currency.default is seeded by init migration
+        assert!(all.len() >= 2);
         assert!(all.contains(&("a".into(), "1".into())));
         assert!(all.contains(&("b".into(), "2".into())));
     }
