@@ -108,6 +108,9 @@ vi.mock('@tauri-apps/api/event', () => ({
     tauriListenHandler.fn = handler;
     return Promise.resolve(() => { tauriListenHandler.fn = null; });
   }),
+  once: vi.fn(() => Promise.resolve(() => {})),
+  emit: vi.fn(() => Promise.resolve()),
+  emitTo: vi.fn(() => Promise.resolve()),
 }));
 
 // ── WorkspaceContext mock ────────────────────────────────────────

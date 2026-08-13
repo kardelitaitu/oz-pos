@@ -984,3 +984,29 @@ Fluent terms.
 
 - typecheck ✅ · lint 0 errors ✅ · i18n lint clean ✅ · parity 0 missing ✅
 - KioskScreen 14/14, tables/setup suites 74/74 pass.
+
+# Test-hygiene repair: dev-mock emit (2026-08-14)
+
+The one remaining deferred item is now fixed. `src/dev-mock/tauri-api.ts`
+starts two `setInterval` timers at module load (KDS auto-generation +
+auto-progress) that `emit('kds:orders-changed', …)` on the event bridge
+module every few seconds. The vite alias maps `@tauri-apps/api/event` →
+`src/dev-mock/tauri-event.ts`, so when a test run outlives the mock's
+timers, the `emit` calls hit the test mock — which previously only stubbed
+`listen`, producing 4 unhandled errors per full run.
+
+Fix: added `once` / `emit` / `emitTo` no-op stubs to the event mock in
+- `src/test-setup.ts` (global)
+- `src/__tests__/SettingsContext.test.tsx`
+- `src/__tests__/WorkspaceSettingsModal.test.tsx`
+- `src/__tests__/WorkspaceSettingsModal.role-swap.test.tsx`
+- `src/features/settings/__tests__/FeatureToggleScreen.test.tsx`
+
+The per-file mocks override the global one, so each needed the same
+surface or a dev-mock timer firing inside that test would re-trigger the
+failure.
+
+## Verification
+
+- Full suite: **296 files / 5214 tests pass, 0 unhandled errors** (was
+  4 errors). NodeTopologyEditor 541/541 clean.
