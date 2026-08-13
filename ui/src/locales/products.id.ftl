@@ -217,6 +217,8 @@ variant-mgmt-delete-confirm-aria =
 variant-mgmt-error-load = Gagal memuat varian
 variant-mgmt-error-save = Gagal menyimpan varian
 variant-mgmt-error-delete = Gagal menghapus varian
+variant-mgmt-error-invalid-price = Harga varian harus berupa bilangan bulat non-negatif
+variant-mgmt-error-invalid-sort = Urutan harus berupa bilangan bulat non-negatif
 
 # ── Category Management ──
 categories-title = Kategori

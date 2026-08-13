@@ -208,6 +208,8 @@ variant-mgmt-delete-confirm-aria =
 variant-mgmt-error-load = Failed to load variants
 variant-mgmt-error-save = Failed to save variant
 variant-mgmt-error-delete = Failed to delete variant
+variant-mgmt-error-invalid-price = Variant price must be a whole, non-negative number
+variant-mgmt-error-invalid-sort = Sort order must be a whole, non-negative number
 
 # Category Management
 categories-title = Categories
