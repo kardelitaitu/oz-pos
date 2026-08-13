@@ -318,10 +318,23 @@ describe('periodDelta — % change vs the previous period', () => {
 });
 
 describe('shared intensity scale — pctOfPeak + intensityFromPct', () => {
-  it('pctOfPeak is percent of the strongest value with a floor of 1', () => {
+  it('pctOfPeak normalizes to the 95th-percentile baseline with a floor of 1', () => {
+    // Small sets (< ~20 values): the 95th percentile IS the max, so this
+    // matches the legacy max-normalized scale.
     expect(pctOfPeak([50, 25, 0])).toEqual([100, 50, 0]);
     // All-zero input stays flat at 0 (no NaN from a 0 denominator)
     expect(pctOfPeak([0, 0])).toEqual([0, 0]);
+  });
+
+  it('pctOfPeak caps an outlier at the 95th percentile so it does not wash out the scale', () => {
+    // 19 values from 10–46 plus one 20× outlier: the baseline is the 95th
+    // percentile (46), so the low cells keep their relative intensity and the
+    // outlier clamps to 100 instead of shrinking everything else to ~5%.
+    const values = [10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 1000];
+    const pcts = pctOfPeak(values);
+    expect(pcts[18]).toBe(100); // the baseline (46) is the peak
+    expect(pcts[19]).toBe(100); // the outlier clamps to 100
+    expect(pcts[0]).toBe(22);   // 10/46 → ~22% (vs ~1% under the raw max)
   });
 
   it('intensityFromPct bins percent-of-peak into the 0–4 heat levels', () => {
@@ -348,6 +361,14 @@ describe('shared intensity scale — pctOfPeak + intensityFromPct', () => {
     expect(map.get('b')).toBe(2);
     expect(map.get('c')).toBe(1);
     expect(map.get('d')).toBe(0);
+  });
+
+  it('normalizeIntensities shares the outlier-robust baseline', () => {
+    const values = [10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 1000];
+    const map = normalizeIntensities(values.map((v, i) => [`k${i}`, v] as [string, number]));
+    expect(map.get('k18')).toBe(4); // baseline → level 4
+    expect(map.get('k19')).toBe(4); // outlier clamps to level 4
+    expect(map.get('k0')).toBe(1);  // 22% → level 1
   });
 
   it('handles empty input without NaN', () => {

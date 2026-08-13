@@ -260,14 +260,29 @@ export function alignPrevBuckets(current: Bucket[], previous: Bucket[]): number[
 // Intensities are normalized 0–4 against the strongest cell in the set.
 
 /**
- * Percent-of-peak (0–100) with a shared `max` baseline — the single
- * normalization rule behind every intensity scale (heatmap cells and the
- * occupancy curve), so the same level of business always renders as the
- * same relative intensity.
+ * The `percentile`-th value (0–100) of a numeric array, nearest-rank. Used as
+ * the normalization baseline so a single outlier cannot wash out the rest of
+ * the scale. For datasets under ~20 values the 95th percentile IS the max,
+ * so small sets keep the exact legacy max-normalized behavior.
+ */
+function percentileValue(values: number[], percentile: number): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const rank = Math.max(1, Math.ceil((percentile / 100) * sorted.length));
+  return sorted[Math.min(sorted.length, rank) - 1]!;
+}
+
+/**
+ * Percent-of-peak (0–100) against a shared 95th-percentile baseline — the
+ * single normalization rule behind every intensity scale (heatmap cells and
+ * the occupancy curve), so the same level of business always renders as the
+ * same relative intensity. Capping the baseline at the 95th percentile keeps
+ * one outlier cell from washing out the rest of the grid; values above it
+ * clamp to 100.
  */
 export function pctOfPeak(values: number[]): number[] {
-  const max = Math.max(1, ...values);
-  return values.map((v) => Math.round((v / max) * 100));
+  const baseline = Math.max(1, percentileValue(values, 95));
+  return values.map((v) => Math.min(100, Math.round((v / baseline) * 100)));
 }
 
 /**
@@ -280,14 +295,11 @@ export function intensityFromPct(pct: number): number {
   return pct <= 0 ? 0 : Math.min(4, Math.floor((pct / 100) * 5));
 }
 
-/** Map `[key, value]` entries to 0–4 levels, max-normalized. */
+/** Map `[key, value]` entries to 0–4 levels, normalized to the shared peak baseline. */
 export function normalizeIntensities(entries: [string, number][]): Map<string, number> {
-  const max = Math.max(1, ...entries.map(([, v]) => v));
+  const pcts = pctOfPeak(entries.map(([, v]) => v));
   const map = new Map<string, number>();
-  for (const [key, v] of entries) {
-    // Same scale as the occupancy curve: level = ⌊percent-of-peak / 20⌋.
-    map.set(key, intensityFromPct(Math.round((v / max) * 100)));
-  }
+  entries.forEach(([key], i) => map.set(key, intensityFromPct(pcts[i]!)));
   return map;
 }
 
@@ -363,7 +375,7 @@ function heatTotals(
   return totals;
 }
 
-/** 0–4 levels for a raw totals map, max-normalized via `normalizeIntensities`. */
+/** 0–4 levels for a raw totals map, normalized via `normalizeIntensities`. */
 function normalizeTotals(totals: Map<string, HeatTotals>): Map<string, number> {
   return normalizeIntensities([...totals.entries()].map(([k, t]) => [k, t.minor] as [string, number]));
 }
