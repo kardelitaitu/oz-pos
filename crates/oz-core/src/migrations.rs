@@ -447,6 +447,18 @@ mod tests {
             "default workspace instance seeds must survive"
         );
 
+        // Navigation screens (workspace + type).
+        assert_eq!(
+            row_count(&conn, "SELECT COUNT(*) FROM workspace_screens"),
+            30,
+            "workspace screen seeds must survive"
+        );
+        assert_eq!(
+            row_count(&conn, "SELECT COUNT(*) FROM workspace_type_screens"),
+            36,
+            "workspace type screen seeds must survive"
+        );
+
         // Tenant subscription and inventory locations.
         assert_eq!(
             row_count(
@@ -496,6 +508,84 @@ mod tests {
             ),
             4,
             "trigger surface drifted"
+        );
+    }
+
+    /// Simulate the documented existing-dev-DB upgrade path. A pre-reset
+    /// database carries legacy `schema_migrations` rows (now absent from the
+    /// registry) and has already been seeded. Running the consolidated init
+    /// must ignore the old IDs, leave existing schema + seed rows untouched
+    /// (`IF NOT EXISTS` / `INSERT OR IGNORE`), and record only the init row.
+    #[test]
+    fn existing_db_with_legacy_rows_upgrades_idempotently() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        // A pre-reset DB would have a legacy tracking row the new registry no
+        // longer lists — the runner must ignore it, not error.
+        conn.execute(
+            "INSERT INTO schema_migrations (id, checksum) VALUES ('001_sales.sql', NULL)",
+            [],
+        )
+        .unwrap();
+
+        // User data that must survive the upgrade untouched.
+        conn.execute(
+            "INSERT INTO store_profiles (id, name) VALUES ('store-x', 'Store X')",
+            [],
+        )
+        .unwrap();
+
+        let tiers_before = row_count(&conn, "SELECT COUNT(*) FROM loyalty_tiers");
+        let screens_before = row_count(&conn, "SELECT COUNT(*) FROM workspace_screens");
+
+        // Boot the new code against the existing DB.
+        run(&mut conn).unwrap();
+
+        // The legacy row is ignored (still present) and the init is recorded
+        // exactly once — the two rows coexist.
+        let ids: Vec<String> = conn
+            .prepare("SELECT id FROM schema_migrations ORDER BY id")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        assert_eq!(
+            ids,
+            vec!["001_sales.sql".to_string(), "20260813_init.sql".to_string()]
+        );
+
+        // INSERT OR IGNORE means the re-run did not duplicate seed rows.
+        assert_eq!(
+            row_count(&conn, "SELECT COUNT(*) FROM loyalty_tiers"),
+            tiers_before,
+            "seed rows must not be duplicated on upgrade"
+        );
+        assert_eq!(
+            row_count(&conn, "SELECT COUNT(*) FROM workspace_screens"),
+            screens_before,
+            "screen seed rows must not be duplicated on upgrade"
+        );
+
+        // User data survived.
+        assert_eq!(
+            row_count(
+                &conn,
+                "SELECT COUNT(*) FROM store_profiles WHERE id = 'store-x'"
+            ),
+            1,
+            "user data must survive the upgrade"
+        );
+
+        // Schema surface is unchanged after the no-op re-run.
+        assert_eq!(
+            row_count(
+                &conn,
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'schema_migrations'"
+            ),
+            92,
+            "table surface must be unchanged after upgrade"
         );
     }
 

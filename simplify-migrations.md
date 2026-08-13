@@ -172,10 +172,10 @@ INSERT OR IGNORE INTO workspaces (id, key, name, description, icon) VALUES
 | Generate init SQL (schema + seed) | ✅ Done | 92 tables, 121 indexes, 4 triggers, 11 seed INSERTs |
 | Add IF NOT EXISTS | ✅ Done | All statements idempotent for existing DBs |
 | Add seed data | ✅ Done | 11 INSERT statements matching old migration state |
-| Add regression tests | ✅ Done | `seed_data_bootstraps_essential_rows` + `init_sql_creates_complete_schema_surface` (92 tables / 121 indexes / 4 triggers) |
+| Add regression tests | ✅ Done | `seed_data_bootstraps_essential_rows`, `init_sql_creates_complete_schema_surface` (92 tables / 121 indexes / 4 triggers), `existing_db_with_legacy_rows_upgrades_idempotently` |
 | Fix test adjustments | ✅ Done | 2 tests updated for seed data (workspace types count, load_all count) |
 | Verify cargo check | ✅ Done | Compiles clean |
-| Verify all tests pass | ✅ Done | `cargo test -p oz-core --lib` → **1771 passed, 0 failed** |
+| Verify all tests pass | ✅ Done | `cargo test -p oz-core --lib` → **1772 passed, 0 failed** |
 
 ### ✅ All Complete
 
@@ -187,7 +187,7 @@ INSERT OR IGNORE INTO workspaces (id, key, name, description, icon) VALUES
 | 4. Fix tenant_subscription columns | Used actual table columns (max_pos_instances, not max_terminals_per_store) | ✅ |
 | 5. Fix settings seed | Removed currency.default (not seeded on fresh DB by old migrations) | ✅ |
 | 6. Adjust test expectations | workspace_types count (5→6), load_all count (2→≥2) | ✅ |
-| 7. Run full test suite | **1771 passed, 0 failed** (two seed/surface regression tests added) | ✅ |
+| 7. Run full test suite | **1772 passed, 0 failed** (seed, schema-surface, and upgrade-path regression tests added) | ✅ |
 | 8. Verify cargo check | Compiles clean | ✅ |
 
 ---
