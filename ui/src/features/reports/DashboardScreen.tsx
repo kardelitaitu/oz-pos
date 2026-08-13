@@ -4,7 +4,7 @@
 //! revenue trend area chart + category donut → sales heatmap +
 //! top products bar → low stock alerts.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Localized, useLocalization } from '@fluent/react';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
@@ -69,6 +69,8 @@ function shiftDate(s: string, days: number): string {
 
 type Granularity = 'daily' | 'weekly' | 'monthly';
 
+const GRANULARITIES: Granularity[] = ['daily', 'weekly', 'monthly'];
+
 // Sunday-first day keys, matching the backend `day_of_week` (0 = Sunday).
 const DAY_LABELS = ['day-sunday', 'day-monday', 'day-tuesday', 'day-wednesday', 'day-thursday', 'day-friday', 'day-saturday'];
 
@@ -130,6 +132,28 @@ export default function DashboardScreen() {
   // Previous period for deltas
   const [prevDaily, setPrevDaily] = useState<DailyRevenueRow[]>([]);
 
+  // Refs to the granularity radio buttons so arrow-key navigation can move
+  // focus to the newly-checked option (roving tabindex per WAI-ARIA radio).
+  const radioRefs = useRef<Record<Granularity, HTMLButtonElement | null>>({
+    daily: null, weekly: null, monthly: null,
+  });
+
+  // WAI-ARIA radiogroup: Arrow keys move focus AND selection; Tab leaves the
+  // group. `aria-checked` + `tabIndex` make the roving-tabindex contract work.
+  const handleGranularityKeyDown = useCallback((e: KeyboardEvent<HTMLElement>) => {
+    const idx = GRANULARITIES.indexOf(granularity);
+    let next: Granularity | null = null;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      next = GRANULARITIES[(idx + 1) % GRANULARITIES.length]!;
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      next = GRANULARITIES[(idx - 1 + GRANULARITIES.length) % GRANULARITIES.length]!;
+    }
+    if (!next) return;
+    e.preventDefault();
+    setGranularity(next);
+    radioRefs.current[next]?.focus();
+  }, [granularity]);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -154,6 +178,7 @@ export default function DashboardScreen() {
       setTopProducts(top);
       setLowStock(stock);
       setCategoryBreakdown(cats);
+      setSelectedCategory(null);
       setHeatmap(heat);
       setPrevDaily(prev);
     } catch (e) {
@@ -211,12 +236,12 @@ export default function DashboardScreen() {
     };
   }, [revenueSeries, currency, granularity, l10n, numLocale]);
 
-  // ECharts renders to <canvas>, which cannot resolve CSS variables in a
-  // fill — read the theme foreground color into a concrete value at render.
-  const fgColor = getComputedStyle(document.documentElement).getPropertyValue('--color-fg').trim() || '#111';
-
   const categoryDonutOption = useMemo(() => {
     if (categoryBreakdown.length === 0) return null;
+    // ECharts renders to <canvas>, which cannot resolve CSS variables in a
+    // fill — read the theme foreground color into a concrete value here so it
+    // only re-reads when the donut inputs change (not on every render).
+    const fgColor = getComputedStyle(document.documentElement).getPropertyValue('--color-fg').trim() || '#111';
     const total = categoryBreakdown.reduce((s, c) => s + c.total_minor, 0);
     return {
       tooltip: { trigger: 'item' as const, valueFormatter: (val: unknown) => fmtCurrency(Number(val), currency, numLocale) },
@@ -233,7 +258,7 @@ export default function DashboardScreen() {
       graphic: total > 0 ? [{ type: 'text' as const, left: '24%', top: 'middle',
         style: { text: fmtShort(total, currency, numLocale), textAlign: 'center' as const, fill: fgColor, fontSize: 14, fontWeight: 'bold' } }] : undefined,
     };
-  }, [categoryBreakdown, currency, l10n, fgColor, numLocale]);
+  }, [categoryBreakdown, currency, l10n, numLocale]);
 
   const heatmapOption = useMemo(() => {
     if (heatmap.length === 0) return null;
@@ -252,15 +277,18 @@ export default function DashboardScreen() {
 
   const topProductsOption = useMemo(() => {
     if (topProducts.length === 0) return null;
-    const names = topProducts.map((p) => p.name);
-    const values = topProducts.map((p) => p.total_minor);
+    // Reverse once (instead of mutating inside the axis/series config) so
+    // the highest-revenue product renders at the top of the horizontal bar
+    // chart — ECharts draws category-axis items bottom-up.
+    const names = topProducts.map((p) => p.name).reverse();
+    const values = topProducts.map((p) => p.total_minor).reverse();
     return {
       tooltip: { trigger: 'axis' as const, axisPointer: { type: 'shadow' as const }, valueFormatter: (val: unknown) => fmtCurrency(Number(val), currency, numLocale) },
       grid: { left: '3%', right: '4%', bottom: '3%', top: 0, containLabel: true },
       xAxis: { type: 'value' as const, axisLabel: { formatter: (v: number) => fmtShort(v, currency, numLocale) } },
-      yAxis: { type: 'category' as const, data: names.reverse(), axisLabel: { width: 120, overflow: 'truncate', fontSize: 10 } },
+      yAxis: { type: 'category' as const, data: names, axisLabel: { width: 120, overflow: 'truncate', fontSize: 10 } },
       series: [{ name: l10n.getString('dashboard-chart-top-products'), type: 'bar' as const, barMaxWidth: 28,
-        data: values.reverse().map((v) => ({ value: v, itemStyle: { color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [{ offset: 0, color: '#5470c6' }, { offset: 1, color: '#91cc75' }]) } })),
+        data: values.map((v) => ({ value: v, itemStyle: { color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [{ offset: 0, color: '#5470c6' }, { offset: 1, color: '#91cc75' }]) } })),
       }],
     };
   }, [topProducts, currency, l10n, numLocale]);
@@ -313,10 +341,14 @@ export default function DashboardScreen() {
               <Localized id="dashboard-btn-apply"><span>Apply</span></Localized>
             </button>
           </div>
-          <div className="dashboard-granularity" role="radiogroup" aria-label={l10n.getString('dashboard-granularity-aria')}>
-            {(['daily', 'weekly', 'monthly'] as Granularity[]).map((g) => (
-              <button key={g} type="button" className={`dashboard-granularity-btn${granularity === g ? ' dashboard-granularity-btn--active' : ''}`}
-                onClick={() => setGranularity(g)} role="radio" aria-checked={granularity === g}>
+          <div className="dashboard-granularity" role="radiogroup"
+            aria-label={l10n.getString('dashboard-granularity-aria')}>
+            {GRANULARITIES.map((g) => (
+              <button key={g} type="button" ref={(el) => { radioRefs.current[g] = el; }}
+                className={`dashboard-granularity-btn${granularity === g ? ' dashboard-granularity-btn--active' : ''}`}
+                onClick={() => setGranularity(g)} onKeyDown={handleGranularityKeyDown}
+                role="radio" aria-checked={granularity === g}
+                tabIndex={granularity === g ? 0 : -1}>
                 <Localized id={`dashboard-granularity-${g}`}><span>{g}</span></Localized>
               </button>
             ))}

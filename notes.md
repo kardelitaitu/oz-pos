@@ -181,3 +181,62 @@ Audit of the workspace selection page (`WorkspaceHome.tsx` + CSS).
    "Selamat datang" to an English-locale user. Deliberate design flourish;
    needs a product call on whether the greeting should follow the active
    locale instead of cycling languages.
+
+---
+
+# Reports / Dashboard audit (2026-08-13)
+
+Audit of the owner/admin reports dashboard (`DashboardScreen.tsx` +
+`reports.ftl` / `reports.id.ftl`).
+
+## Fixed (committed)
+
+- ✅ **Broken `-aria` labels** — 8 keys per locale (`dashboard-granularity-aria`,
+  `dashboard-chart-revenue-aria`, `dashboard-chart-category-aria`,
+  `dashboard-chart-heatmap-aria`, `dashboard-chart-top-products-aria`,
+  `dashboard-export-csv-aria`, `dashboard-category-clear-aria`,
+  `dashboard-back-aria`) were written as `key = .aria-label = Text` on a single
+  line. Fluent parses that as a literal text VALUE equal to
+  `.aria-label = Text` (attributes need the indented multi-line form), so the
+  rendered `aria-label` literally included the `.aria-label = ` prefix.
+  Converted all 8 to plain values; added
+  `i18nStrayAttributeSyntax.test.ts` as a permanent regression guard.
+- ✅ **`getComputedStyle` during render** — the donut's `--color-fg` fill color
+  is now read inside the `categoryDonutOption` `useMemo` (only when the donut
+  inputs change) instead of on every render.
+- ✅ **Stale category selection** — `selectedCategory` is reset on reload so a
+  date-range change can't keep showing a category detail that no longer exists
+  in the new data.
+- ✅ **`.reverse()` mutation clarity** — top-products names/values are reversed
+  once at declaration instead of mutating inside the axis/series config.
+- ✅ **Granularity radiogroup** — added WAI-ARIA arrow-key navigation and a
+  roving tabindex (checked option is the single tab stop; Arrow keys move
+  focus + selection).
+
+## Still open
+
+### Dashboard
+
+1. **Eager loading** — `loadData` fetches all 8 datasets (daily/weekly/monthly
+   revenue, top products, low stock, category, heatmap, prev-daily) regardless
+   of the selected granularity; weekly/monthly are only needed when selected.
+   Making this lazy reintroduces a spinner flash on granularity switch (the
+   current eager fetch makes the switch instant), so it's a UX tradeoff.
+2. **Full-screen spinner flash on date-range change** — `setLoading(true)`
+   replaces the whole dashboard with a spinner instead of keeping stale data
+   visible while the new range loads.
+3. **`fmtDelta` `+∞` / `−`** — unlocalized math symbols for the
+   previous-period-is-zero case; currently unreachable because the KPI delta
+   guards on `prev > 0`.
+4. **Low-stock rows lack threshold context** — "2 left" doesn't say the item
+   is below its configured threshold.
+
+### Systemic i18n finding (needs a sweep)
+
+5. **`shared.ftl` + `shared.id.ftl` have the same broken single-line
+   `.aria-label =` syntax** — 55 keys each (`clear-aria`, `backspace-aria`,
+   `workspaces-aria`, `search-aria`, `actions-aria`, …). Every `aria-label`
+   consuming these keys app-wide currently renders the literal
+   `.aria-label = …` prefix. Mechanical fix (convert each to a plain value),
+   but cross-cutting — flagged here for a dedicated sweep rather than folded
+   into the dashboard work.
