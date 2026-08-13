@@ -120,31 +120,18 @@ jobs:
           # Allow codesign access to the keychain
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${{ secrets.KEYCHAIN_PASSWORD }}" build.keychain
 
-      # ── Configure Xcode project signing ────────────────────────
-      - name: Configure Xcode signing
-        run: |
-          cd apps/tablet-client
-          # Locate the generated Xcode project (use absolute path for consistency)
-          PROJ=$(find "$(pwd)/gen/apple" -name "*.xcodeproj" -maxdepth 2 | head -1)
-          if [ -z "$PROJ" ] || [ ! -d "$PROJ" ]; then
-            echo "::error::Xcode project not found"
-            ls -la gen/apple/ 2>/dev/null || echo "gen/apple/ not found"
-            exit 1
-          fi
-          echo "Configuring signing for: $PROJ"
-          # Set development team with manual signing (the cert was imported
-          # manually above, so auto-provisioning would conflict)
-          xcodebuild -project "$PROJ" \
-            DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}" \
-            PRODUCT_BUNDLE_IDENTIFIER="${{ secrets.APPLE_BUNDLE_ID }}" \
-            CODE_SIGN_STYLE="Manual" \
-            -showBuildSettings 2>&1 | head -20
-
       # ── Build iOS IPA ──────────────────────────────────────────
+      # Signing is configured via APPLE_DEVELOPMENT_TEAM (read by the
+      # tauri CLI at build time and synced into the generated Xcode
+      # project; see crates/tauri-cli/src/mobile/ios/mod.rs). The cert +
+      # provisioning profile were imported above, so manual signing with
+      # this team resolves without an extra xcodebuild step.
       - name: Build iOS release
         run: |
           cd apps/tablet-client
           cargo tauri ios build --release
+        env:
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_TEAM_ID }}
 
       # ── Locate IPA ─────────────────────────────────────────────
       - name: Find IPA output

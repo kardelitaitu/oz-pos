@@ -100,10 +100,12 @@ signed.
 | `APPLE_PROV_PROFILE_BASE64` | ✅ | base64-encoded provisioning profile |
 | `KEYCHAIN_PASSWORD` | ✅ | temporary build-keychain password (any value) |
 
-The workflow creates a throwaway keychain, imports the cert + profile, sets
-`DEVELOPMENT_TEAM` / `PRODUCT_BUNDLE_IDENTIFIER` with `CODE_SIGN_STYLE=Manual`,
-and builds a signed IPA. Apple signing is a hard requirement for a device
-installable IPA — missing secrets fail the job.
+The workflow creates a throwaway keychain, imports the cert + profile, and
+builds a signed IPA with `APPLE_DEVELOPMENT_TEAM` set (the tauri CLI reads
+it at build time and syncs it into the generated Xcode project — the CLI
+has no other signing flags; a bare `xcodebuild -showBuildSettings` step
+persists nothing and is intentionally omitted). Apple signing is a hard
+requirement for a device-installable IPA — missing secrets fail the job.
 
 ---
 
