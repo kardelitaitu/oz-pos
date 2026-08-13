@@ -1176,3 +1176,23 @@ Verified clean: ps1 scripts (candidate-list fallbacks only), .bat scripts
 idempotent cleanup, SIGINT/SIGTERM + finally), release-version self-test
 (0.0.24 fixtures are synthetic; real version comes from the tag arg),
 `verify-ci-docs-drift` (0 drift), version lock 0.0.25 everywhere.
+
+# restore-db.sh WAL-mode fix (2026-08-14)
+
+The app runs with `journal_mode=WAL` (set in oz-core migrations and
+cloud-server db.rs), which means committed writes may live entirely in the
+`-wal` sidecar. restore-db.sh had two defects:
+
+1. **Pre-restore safety backup used raw `cp`** — copied only the main file,
+   which can be a 4096-byte stub while WAL holds all committed data.
+   Verified: `cp` of a live WAL db yields 'no such table' when reopened;
+   `.backup` yields the full row set. The "safety" backup was unusable for
+   rollback. Now uses `sqlite3 .backup` (consistent snapshot incl. WAL) and
+   aborts on failure.
+2. **Stale `-wal`/`-shm` left after `mv`** — SQLite would replay the old
+   database's frames against the freshly restored main file on next open,
+   corrupting it. Now removed (content captured by the .backup above).
+
+Note: this machine lacks the `sqlite3` CLI binary (both backup scripts
+depend on it; POSIX-targeted) — the fix was verified via Python's identical
+sqlite3 backup API.
