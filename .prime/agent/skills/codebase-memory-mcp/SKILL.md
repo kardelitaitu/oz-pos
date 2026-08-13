@@ -1,112 +1,292 @@
 ---
-
 name: codebase-memory-mcp
 description: "Use the codebase knowledge graph for structural code queries. Triggers on: explore the codebase, understand the architecture, what functions exist, show me the structure, who calls this function, what does X call, trace the call chain, find callers of, show dependencies, impact analysis, dead code, unused functions, high fan-out, refactor candidates, code quality audit, graph query syntax, Cypher query examples, edge types, how to use search_graph."
-
 ---
 
-# Codebase Memory Instructions
+# Codebase Memory MCP
 
-The knowledge-graph MCP server (`codebase-memory-mcp`) is reached over stdio
-from the IPython kernel. Import the skill once, then call its tools with
-`await`:
+Local knowledge-graph server over stdio — no credentials, no HTTP. Import the
+module once, then `await` any tool directly:
+
+```python
+import codebase_memory_mcp
+```
+
+## Quick Start
 
 ```python
 import codebase_memory_mcp
 
-# 1. Verify the project is indexed
+# 1. Verify project is indexed
 projects = await codebase_memory_mcp.list_projects()
-print(projects)
 
-# 2. Discover available tools (server is the source of truth for names/args)
-for tool in await codebase_memory_mcp.list_tools():
-    print(tool["name"], "-", tool["description"])
+# 2. Search for a symbol
+results = await codebase_memory_mcp.search_graph(project="oz-pos", name_pattern=".*Money.*", limit=5)
 
-# 3. Search for a symbol pattern
-results = await codebase_memory_mcp.search_graph(name_pattern=".*ProcessOrder.*", limit=10)
-print(results)
+# 3. Read its source
+source = await codebase_memory_mcp.get_code_snippet(project="oz-pos", qualified_name="oz-pos.crates.oz-core.src.money.Money")
 
-# 4. Trace callers/callees
-trace = await codebase_memory_mcp.trace_path(function_name="ProcessOrder", direction="inbound", depth=3)
-print(trace)
+# 4. Trace callers
+trace = await codebase_memory_mcp.trace_path(project="oz-pos", function_name="Money", direction="inbound", depth=3)
 ```
 
-Notes:
-- Every tool is an `async` method — always `await`.
-- Results are already-parsed Python (a `dict` for structured output, otherwise a
-  string). No need to `json.loads` them.
-- If a tool name is not a valid Python identifier, use the escape hatch:
-  `await codebase_memory_mcp.call_tool("tool-name", {"arg": "value"})`.
-- No login or credentials are required: the server is local and runs over
-  stdio. If a call raises a binary-not-found error, set
-  `CODEBASE_MEMORY_MCP_BIN` or add the binary to PATH.
+> **Every tool is `async`** — always `await`. Results are parsed Python
+> (dict or string). No `json.loads` needed.
 
-# Quick Decision Matrix
+---
 
-| Question | Tool call |
-|-------|--------|
-Who calls X? | `await codebase_memory_mcp.trace_path(direction="inbound")`
-What does X call? | `await codebase_memory_mcp.trace_path(direction="outbound")`
-Full call context | `await codebase_memory_mcp.trace_path(direction="both")`
-Find by name pattern | `await codebase_memory_mcp.search_graph(name_pattern="...")`
-Dead code | `await codebase_memory_mcp.search_graph(max_degree=0, exclude_entry_points=true)`
-Cross-service edges| `await codebase_memory_mcp.query_graph` with Cypher
-Impact of local changes | `await codebase_memory_mcp.detect_changes()`
-Risk-classified trace| `await codebase_memory_mcp.trace_path(risk_labels=true)`
-Text search | `await codebase_memory_mcp.search_code(...)` or Grep
+## Tool Reference
 
-# Exploration Workflow
+### Project Management
 
-1. `await codebase_memory_mcp.list_projects()` — check if project is indexed
-2. `await codebase_memory_mcp.get_graph_schema()` — understand node/edge types
-3. `await codebase_memory_mcp.search_graph(label="Function", name_pattern=".*Pattern.*")` — find code
-4. `await codebase_memory_mcp.get_code_snippet(qualified_name="project.path.FuncName")` — read source
+| Tool | Purpose | Key Params |
+|------|---------|------------|
+| `list_projects` | List all indexed projects | — |
+| `index_status` | Node/edge counts + coverage report | `project` |
+| `index_repository` | (Re)index a repository | `repo_path`, `name`, `mode` |
+| `delete_project` | Remove a project from the index | `project` |
 
-# Tracing Workflow
+### Search & Discovery
 
-1. `await codebase_memory_mcp.search_graph(name_pattern=".*FuncName.*")` — discover exact name
-2. `await codebase_memory_mcp.trace_path(function_name="FuncName", direction="both", depth=3)` — trace
-3. `await codebase_memory_mcp.detect_changes()` — map git diff to affected symbols
+| Tool | Purpose | Key Params |
+|------|---------|------------|
+| `search_graph` | Find symbols by name, query, or semantic similarity | `project`, `name_pattern` / `query` / `semantic_query`, `label`, `limit`, `offset` |
+| `search_code` | Grep + graph enrichment (dedup into functions) | `project`, `pattern`, `limit`, `file_pattern`, `path_filter`, `mode` |
+| `get_code_snippet` | Read source for a symbol | `project`, `qualified_name` |
 
-# Evidence Tiers
+### Tracing & Impact
 
-- Scout (Tier 1): fast positive lookup with few graph calls and targeted source checks. Treat results as provisional; never make absence, exhaustive, dead-code, or complete-impact claims.
-- Verify (Tier 2, default): task-directed searches, relevant trace directions, exact snippets for material claims, and all relevant result pages.
-- Auditor (Tier 3): bounded-scope full verification with a current graph generation, complete relevant pagination, both call directions and broader relationships when material, plus explicit unresolved limitations.
-- Every tier: after candidate paths are known, call check_index_coverage once with every evidence path. For negative or exhaustive claims also include the relevant scopes. A clean result means no recorded gap, not proof of completeness. For partial, skipped, excluded, stale, pending, or unknown coverage, read/grep the reported ranges or scope before relying on the graph.
+| Tool | Purpose | Key Params |
+|------|---------|------------|
+| `trace_path` | Callers/callees, data flow, cross-service | `project`, `function_name`, `direction`, `depth`, `mode` |
+| `detect_changes` | Blast radius of git diff | `project`, `direction` |
+| `check_index_coverage` | Verify file is indexed (before claims) | `project`, `paths` / `scopes` |
 
-# Sessions and Subagents
+### Architecture & Analysis
 
-- At session start or after compaction, call list_projects/index_status before structural exploration, then choose Scout, Verify, or Auditor for the task.
-- Before delegating, query the graph and coverage in the parent. Pass the tier, exact project, generation/freshness, bounded scope, queries and pagination state, qualified symbols, paths, call-chain findings, coverage ranges/reasons, source fallback already performed, and unresolved questions to the child.
-- Runtimes such as Hermes isolate child context: put those graph findings in the context argument to delegate_task; do not assume the child inherits MCP access or the parent's conversation.
-- A child without MCP tools must not call or claim MCP access. It should work from the supplied evidence and use read/grep on exact source, especially every reported missed-coverage range.
+| Tool | Purpose | Key Params |
+|------|---------|------------|
+| `get_graph_schema` | Node labels + edge types | `project` |
+| `get_architecture` | High-level overview or deep analysis | `project`, `aspects` |
+| `query_graph` | Cypher queries for complex patterns | `project`, `query`, `graph` |
 
-# Quality Analysis
+### Advanced
 
-Dead code: `await codebase_memory_mcp.search_graph(max_degree=0, exclude_entry_points=true)`
-High fan-out: `await codebase_memory_mcp.search_graph(min_degree=10, relationship="CALLS", direction="outbound")`
-High fan-in: `await codebase_memory_mcp.search_graph(min_degree=10, relationship="CALLS", direction="inbound")`
+| Tool | Purpose | Key Params |
+|------|---------|------------|
+| `manage_adr` | Architecture Decision Records | `project`, `mode` |
+| `ingest_traces` | Enhance graph with runtime traces | `project` |
 
-# 15 MCP Tools (method calls on the module)
+---
 
-index_repository, index_status, list_projects, delete_project, search_graph, search_code, trace_path, detect_changes, query_graph, get_graph_schema, get_code_snippet, get_architecture, check_index_coverage, manage_adr, ingest_traces
+## Search Modes
 
-# Edge Types
+`search_graph` supports three independent modes (can combine):
 
-CALLS, HTTP_CALLS, ASYNC_CALLS, DATA_FLOWS, IMPORTS, DEFINES, DEFINES_METHOD, HANDLES, IMPLEMENTS, OVERRIDE, USAGE, CALL_REFERENCE, CONFIGURES, FILE_CHANGES_WITH, SIMILAR_TO, SEMANTICALLY_RELATED, CONTAINS_FILE, CONTAINS_FOLDER, CONTAINS_PACKAGE
+| Mode | When to use | Example |
+|------|-------------|---------|
+| `name_pattern` | Regex on symbol names | `".*ProcessOrder.*"` |
+| `query` | BM25 full-text (natural language) | `"update settings"` |
+| `semantic_query` | Vector cosine (vocabulary bridging) | `["send", "publish"]` |
 
-# Cypher Examples (for query_graph)
+**Pagination**: results cap at `limit` (default 50). Check `has_more` in
+response; re-call with `offset=offset+limit` until false. Narrow first via
+`label`, `file_pattern`, `min_degree`.
+
+---
+
+## Trace Modes
+
+| `direction` | What it traces |
+|-------------|----------------|
+| `inbound` | Who calls this function? |
+| `outbound` | What does this function call? |
+| `both` | Full call context |
+
+| `mode` | What it traces |
+|--------|----------------|
+| `calls` (default) | Callers/callees |
+| `data_flow` | Value propagation with args at each hop |
+| `cross_service` | Through HTTP/async Route nodes |
+
+**Pagination**: `truncated: true` + `next` cursor — pass `next` back.
+
+---
+
+## Architecture Aspects
+
+`get_architecture` accepts `aspects` list:
+
+- `overview` — counts, languages, packages, entry_points
+- `structure` — module organization
+- `dependencies` — external deps
+- `routes` — HTTP/async endpoints
+- `hotspots` — high-complexity functions
+- `boundaries` — module boundaries
+- `layers` — architectural layers
+- `clusters` — Leiden community detection (real seams)
+- `file_tree` — directory structure
+- `all` — everything above
+
+---
+
+## Graph Schema
+
+### Node Labels (19)
+
+`Function`, `Variable`, `Section`, `Field`, `Method`, `File`, `Module`,
+`Struct`, `Interface`, `Folder`, `Class`, `Type`, `Route`, `Enum`, `EnvVar`,
+`Package`, `Decorator`, `Branch`, `Project`
+
+### Edge Types (24)
+
+`CALLS`, `HTTP_CALLS`, `ASYNC_CALLS`, `DATA_FLOWS`, `IMPORTS`, `DEFINES`,
+`DEFINES_METHOD`, `HANDLES`, `IMPLEMENTS`, `OVERRIDE`, `USAGE`,
+`CALL_REFERENCE`, `CONFIGURES`, `FILE_CHANGES_WITH`, `SIMILAR_TO`,
+`SEMANTICALLY_RELATED`, `CONTAINS_FILE`, `CONTAINS_FOLDER`, `CONTAINS_PACKAGE`,
+`DEPENDS_ON`, `RAISES`, `THROWS`, `INHERITS`, `TESTS`, `TESTS_FILE`,
+`HAS_BRANCH`
+
+### Complexity Properties (on Function/Method nodes)
+
+`complexity` (cyclomatic), `cognitive`, `loop_count`, `loop_depth`,
+`transitive_loop_depth`, `linear_scan_in_loop`, `alloc_in_loop`,
+`recursion_in_loop`, `unguarded_recursion`, `recursive`, `param_count`,
+`max_access_depth`
+
+---
+
+## Cypher Examples
 
 ```python
-await codebase_memory_mcp.query_graph(query="MATCH (a)-[r:HTTP_CALLS]->(b) RETURN a.name, b.name, r.url_path, r.confidence LIMIT 20")
-await codebase_memory_mcp.query_graph(query="MATCH (f:Function) WHERE f.name =~ '.*Handler.*' RETURN f.name, f.file_path")
-await codebase_memory_mcp.query_graph(query="MATCH (a)-[r:CALLS]->(b) WHERE a.name = 'main' RETURN b.name")
+# Find HTTP routes
+await codebase_memory_mcp.query_graph(project="oz-pos",
+    query="MATCH (a)-[r:HTTP_CALLS]->(b) RETURN a.name, b.name, r.url_path LIMIT 20")
+
+# Find all handlers
+await codebase_memory_mcp.query_graph(project="oz-pos",
+    query="MATCH (f:Function) WHERE f.name =~ ".*Handler.*" RETURN f.name, f.file_path")
+
+# Find hot-path candidates (high complexity + scan in loop)
+await codebase_memory_mcp.query_graph(project="oz-pos",
+    query="MATCH (f:Function) WHERE f.transitive_loop_depth >= 3 OR f.linear_scan_in_loop >= 1 RETURN f.qualified_name, f.transitive_loop_depth, f.linear_scan_in_loop ORDER BY f.transitive_loop_depth DESC")
+
+# Query missed graph (files not fully indexed)
+await codebase_memory_mcp.query_graph(project="oz-pos", graph="missed",
+    query="MATCH (f:File) WHERE f.kind = \"parse_partial\" RETURN f.file_path, f.detail")
 ```
 
-# Gotchas
-- search_graph(relationship="HTTP_CALLS") filters nodes by degree — use query_graph with Cypher to see actual edges.
-- query_graph has a 100k row ceiling — add a Cypher LIMIT for broad queries or use search_graph pagination.
-- trace_path needs exact names — use search_graph(name_pattern=...) first.
-- direction="outbound" misses cross-service callers — use direction="both".
-- search_graph results default to 50 per page — check has_more and use offset.
+> **100k row ceiling** — always add `LIMIT` to Cypher or use `search_graph`
+> pagination.
+
+---
+
+## Quality Analysis Queries
+
+```python
+# Dead code (no callers, not entry points)
+await codebase_memory_mcp.search_graph(project="oz-pos", max_degree=0, exclude_entry_points=True)
+
+# High fan-out (calls many functions)
+await codebase_memory_mcp.search_graph(project="oz-pos", min_degree=10, relationship="CALLS", direction="outbound")
+
+# High fan-in (called by many)
+await codebase_memory_mcp.search_graph(project="oz-pos", min_degree=10, relationship="CALLS", direction="inbound")
+```
+
+---
+
+## Decision Matrix
+
+| Question | Tool |
+|----------|------|
+| Who calls X? | `trace_path(direction="inbound")` |
+| What does X call? | `trace_path(direction="outbound")` |
+| Full call context | `trace_path(direction="both")` |
+| Find by name pattern | `search_graph(name_pattern="...")` |
+| Find by description | `search_graph(query="...")` |
+| Find by concept | `search_graph(semantic_query=[...])` |
+| Read source code | `get_code_snippet(qualified_name="...")` |
+| Text search (grep) | `search_code(pattern="...")` |
+| Dead code | `search_graph(max_degree=0, exclude_entry_points=True)` |
+| Impact of changes | `detect_changes()` |
+| Architecture overview | `get_architecture(aspects=["overview"])` |
+| Module clusters | `get_architecture(aspects=["clusters"])` |
+| Hot-path analysis | `query_graph(query="...transitive_loop_depth...")` |
+| Coverage check | `check_index_coverage(paths=[...])` |
+| Cross-service edges | `query_graph(query="...CROSS_HTTP_CALLS...")` |
+
+---
+
+## Workflows
+
+### Explore unfamiliar code
+
+1. `list_projects()` → verify indexed
+2. `get_graph_schema()` → understand structure
+3. `get_architecture(aspects=["overview", "clusters"])` → high-level map
+4. `search_graph(label="Function", name_pattern=".*Pattern.*")` → find code
+5. `get_code_snippet(qualified_name="...")` → read source
+
+### Trace a call chain
+
+1. `search_graph(name_pattern=".*FuncName.*")` → exact qualified name
+2. `trace_path(function_name="FuncName", direction="both", depth=3)` → trace
+3. `get_code_snippet(qualified_name="...")` → verify source
+
+### Impact analysis before refactor
+
+1. `detect_changes()` → blast radius of current diff
+2. `trace_path(direction="inbound", depth=5)` → full caller tree
+3. `check_index_coverage(paths=[...])` → verify all paths indexed
+4. `search_code(pattern="...")` → text fallback for unindexed ranges
+
+### Code quality audit
+
+1. `search_graph(max_degree=0, exclude_entry_points=True)` → dead code
+2. `search_graph(min_degree=10, relationship="CALLS", direction="outbound")` → high fan-out
+3. `query_graph(query="...complexity >= 10...")` → high complexity
+4. `get_architecture(aspects=["hotspots"])` → bottleneck summary
+
+---
+
+## Evidence Tiers
+
+| Tier | Scope | When to use |
+|------|-------|-------------|
+| **Scout** | Fast positive lookup, few graph calls | Quick exploration, provisional findings |
+| **Verify** | Task-directed searches, all pages, snippets | Default for most tasks |
+| **Auditor** | Full verification, both directions, coverage check | Before major refactors, exhaustive claims |
+
+**Every tier**: after candidate paths are known, call `check_index_coverage`
+with every evidence path. For negative/exhaustive claims, also include scopes.
+A clean result = no recorded gap, not proof of completeness.
+
+---
+
+## Sessions & Subagents
+
+- **Session start**: call `list_projects()` / `index_status()` before exploration
+- **Before delegating**: query graph in parent; pass tier, project, scope,
+  symbols, paths, findings, and coverage to child
+- **Child without MCP**: must not claim MCP access; work from supplied evidence
+
+---
+
+## Gotchas
+
+1. **`search_graph(relationship=...)` filters nodes by degree** — use
+   `query_graph` with Cypher to see actual edges
+2. **`query_graph` 100k row ceiling** — add `LIMIT` or use `search_graph`
+   pagination
+3. **`trace_path` needs exact names** — use `search_graph(name_pattern=...)` first
+4. **`direction="outbound"` misses cross-service** — use `direction="both"`
+5. **`search_graph` defaults to 50/page** — check `has_more`, use `offset`
+6. **`get_code_snippet` is a read tool** — call `search_graph` first to get
+   the exact `qualified_name`
+7. **`search_code` truncation** — check `total_grep_matches` vs `limit`;
+   narrow with `file_pattern` / `path_filter`
+8. **Coverage is best-effort** — `indexed_no_recorded_gap` ≠ completeness
+   guarantee; grep flagged ranges before relying on graph
+9. **Binary resolution** — set `CODEBASE_MEMORY_MCP_BIN` if not on PATH;
+   version must match running MCP server
