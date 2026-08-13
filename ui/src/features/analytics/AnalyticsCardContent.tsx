@@ -18,6 +18,7 @@ import { CanvasRenderer } from 'echarts/renderers';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { minorUnitExponent } from '@/types/domain';
 import { l10nErrorMessage } from '@/utils/app-error';
+import { downloadCsv } from '@/utils/export-csv';
 import { useAnalyticsQuery } from './useAnalyticsQuery';
 import { cardQueryKey } from './analytics-cache';
 import type { MenuEngineeringRow } from '@/api/reports';
@@ -151,6 +152,62 @@ function Kpi({ value, label, tone }: { value: string; label: string; tone?: 'goo
       <span className={`analytics-kpi-value${tone ? ` analytics-kpi-value--${tone}` : ''}`}>{value}</span>
       <span className="analytics-kpi-label">{label}</span>
     </div>
+  );
+}
+
+/** Small CSV export action used by the staff-data cards. */
+function ExportCsvButton({ onClick }: { onClick: () => void }) {
+  const { l10n } = useLocalization();
+  return (
+    <button
+      type="button"
+      className="analytics-export-btn"
+      onClick={onClick}
+      aria-label={l10n.getString('analytics-export-csv-aria')}
+      title={l10n.getString('analytics-export-csv-aria')}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" aria-hidden="true">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+        <polyline points="7 10 12 15 17 10" />
+        <line x1="12" y1="15" x2="12" y2="3" />
+      </svg>
+      <span>{l10n.getString('analytics-export-csv')}</span>
+    </button>
+  );
+}
+
+/** Column labels for the staff-performance CSV (localized). */
+function staffCsvColumns(getString: (id: string) => string) {
+  return [
+    { key: 'display_name', label: getString('analytics-export-col-name') },
+    { key: 'shift_count', label: getString('analytics-export-col-shifts') },
+    { key: 'closed_shift_count', label: getString('analytics-export-col-closed') },
+    { key: 'sale_count', label: getString('analytics-export-col-orders') },
+    { key: 'sale_total', label: getString('analytics-export-col-sales') },
+    { key: 'shift_sales', label: getString('analytics-export-col-shift-sales') },
+  ];
+}
+
+/** Download a staff card's rows as CSV, ranked like the on-screen list. */
+function exportStaffCsv(
+  staff: StaffAnalyticsRow[],
+  from: string,
+  to: string,
+  fmt: (minor: number) => string,
+  getString: (id: string) => string,
+) {
+  const ranked = [...staff].sort((a, b) => b.sale_total_minor - a.sale_total_minor);
+  downloadCsv(
+    `staff-performance-${from}-to-${to}.csv`,
+    staffCsvColumns(getString),
+    ranked.map((r) => ({
+      display_name: r.display_name,
+      shift_count: String(r.shift_count),
+      closed_shift_count: String(r.closed_shift_count),
+      sale_count: String(r.sale_count),
+      sale_total: fmt(r.sale_total_minor),
+      shift_sales: fmt(r.shift_sales_minor),
+    })),
   );
 }
 
@@ -405,7 +462,7 @@ function AovCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: st
 
 function StaffCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: string; expanded?: boolean | undefined; compare?: boolean | undefined }) {
   const { l10n } = useLocalization();
-  const { short } = useMoney();
+  const { short, fmt } = useMoney();
   const { data: staff, prev: prevStaff, error } = useCardDataCompare<StaffAnalyticsRow[]>('staff', q, compare ?? false);
   if (error) return <CardError error={error} />;
   if (!staff) return <CardLoading />;
@@ -421,7 +478,10 @@ function StaffCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: 
     <Visual>
       <div className="analytics-kpi-row">
         <Kpi value={short(totalSales)} label={l10n.getString('analytics-card-staff-sales')} />
-        {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
+        <div className="analytics-kpi-actions">
+          {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
+          <ExportCsvButton onClick={() => exportStaffCsv(staff, q.from, q.to, fmt, (id) => l10n.getString(id))} />
+        </div>
       </div>
       <RankedList rows={rows} ariaLabel={title} limit={expanded ? undefined : 5} />
     </Visual>
@@ -913,7 +973,7 @@ function OccupancyCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
 
 function WaitstaffCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: string; expanded?: boolean | undefined; compare?: boolean | undefined }) {
   const { l10n } = useLocalization();
-  const { short } = useMoney();
+  const { short, fmt } = useMoney();
   const { data: staff, prev: prevStaff, error } = useCardDataCompare<StaffAnalyticsRow[]>('waitstaff', q, compare ?? false);
   if (error) return <CardError error={error} />;
   if (!staff) return <CardLoading />;
@@ -931,7 +991,10 @@ function WaitstaffCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
     <Visual>
       <div className="analytics-kpi-row">
         <Kpi value={totalCovers.toLocaleString()} label={l10n.getString('analytics-card-waitstaff-total')} />
-        {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
+        <div className="analytics-kpi-actions">
+          {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
+          <ExportCsvButton onClick={() => exportStaffCsv(staff, q.from, q.to, fmt, (id) => l10n.getString(id))} />
+        </div>
       </div>
       <RankedList rows={rows} ariaLabel={title} limit={expanded ? undefined : 5} />
     </Visual>

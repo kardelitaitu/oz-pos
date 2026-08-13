@@ -50,6 +50,12 @@ analytics-deepdive-empty = Tidak ada data harian.
 # Export
 analytics-export-csv = CSV
 analytics-export-csv-aria = Ekspor data staf sebagai CSV
+analytics-export-col-name = Nama
+analytics-export-col-shifts = Shift
+analytics-export-col-closed = Shift ditutup
+analytics-export-col-orders = Pesanan
+analytics-export-col-sales = Total penjualan
+analytics-export-col-shift-sales = Penjualan shift
 analytics-back = Kembali
 analytics-back-aria = Kembali ke beranda
 analytics-workspace-select-aria = Pilih tipe workspace

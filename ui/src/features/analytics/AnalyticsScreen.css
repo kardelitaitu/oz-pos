@@ -919,6 +919,35 @@
   margin-bottom: 6px;
 }
 
+/* Right-side actions (delta chip + CSV export) next to a KPI headline */
+.analytics-kpi-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Compact CSV export action on the staff-data cards */
+.analytics-export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--analytics-bg-subtle);
+  border-radius: 6px;
+  background: var(--analytics-bg-surface);
+  color: var(--analytics-fg-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.analytics-export-btn:hover {
+  background: var(--analytics-bg-hover);
+  color: var(--analytics-fg);
+  border-color: var(--analytics-border);
+}
+
 .analytics-kpi {
   display: flex;
   flex-direction: column;

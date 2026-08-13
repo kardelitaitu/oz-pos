@@ -10,6 +10,7 @@ import analyticsIdFtl from '@/locales/analytics.id.ftl?raw';
 import sharedFtl from '@/locales/shared.ftl?raw';
 import reportsFtl from '@/locales/reports.ftl?raw';
 import reportsIdFtl from '@/locales/reports.id.ftl?raw';
+import { downloadCsv } from '@/utils/export-csv';
 
 // --- mocks ---
 
@@ -34,6 +35,7 @@ vi.mock('echarts/core', () => ({
 vi.mock('echarts/charts', () => ({ BarChart: {}, LineChart: {}, PieChart: {}, HeatmapChart: {} }));
 vi.mock('echarts/components', () => ({ GridComponent: {}, TooltipComponent: {}, LegendComponent: {}, VisualMapComponent: {} }));
 vi.mock('echarts/renderers', () => ({ CanvasRenderer: {} }));
+vi.mock('@/utils/export-csv', () => ({ downloadCsv: vi.fn() }));
 
 const mockGoToPicker = vi.fn();
 vi.mock('@/hooks/useWorkspaceNav', () => ({
@@ -868,6 +870,34 @@ describe('AnalyticsScreen layout shell', () => {
     // Customers card: new-customer share insight; low-stock: critical tile
     expect(screen.getByText(/new customers/)).toBeTruthy();
     expect(screen.getByText('Critical items')).toBeTruthy();
+  });
+
+  it('exports the staff performance CSV from the staff card', async () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
+    await flushRecalc();
+
+    vi.mocked(downloadCsv).mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Export staff data as CSV' }));
+
+    expect(downloadCsv).toHaveBeenCalledTimes(1);
+    const [filename, columns, rows] = vi.mocked(downloadCsv).mock.calls[0]!;
+    expect(filename).toContain('staff-performance-');
+    expect(columns.map((c) => c.key)).toEqual([
+      'display_name', 'shift_count', 'closed_shift_count', 'sale_count', 'sale_total', 'shift_sales',
+    ]);
+    expect(columns.map((c) => c.label)).toEqual([
+      'Name', 'Shifts', 'Closed shifts', 'Orders', 'Total sales', 'Shift sales',
+    ]);
+    // Top-ranked staff row: Arya (600000 minor = $6,000.00), ranked by sales.
+    expect(rows[0]).toMatchObject({
+      display_name: 'Arya',
+      shift_count: '10',
+      closed_shift_count: '8',
+      sale_count: '40',
+      sale_total: '$6,000.00',
+      shift_sales: '$2,000.00',
+    });
   });
 
   it('keeps card visuals rendering as granularity changes', async () => {
