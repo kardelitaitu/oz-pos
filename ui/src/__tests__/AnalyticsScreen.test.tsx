@@ -809,6 +809,21 @@ describe('AnalyticsScreen layout shell', () => {
     expect(screen.getAllByText(monthAbbr).length).toBeGreaterThan(0);
   });
 
+  it('marks the busiest cell and renders a Busiest insight line', async () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
+    await flushRecalc();
+
+    // Tuesday 11:00 is the strongest mock slot (400000 minor) → level 4 + ring.
+    const peakCells = document.querySelectorAll('.analytics-heat-cell--peak');
+    expect(peakCells.length).toBe(1);
+    expect(peakCells[0]?.getAttribute('data-intensity')).toBe('4');
+
+    // The takeaway line names the slot; its value follows the active locale.
+    expect(screen.getByText(/Busiest:/)).toBeTruthy();
+    expect(screen.getByText(/Tue 11:00/)).toBeTruthy();
+  });
+
   it('renders designed content in the non-heatmap cards', async () => {
     vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);

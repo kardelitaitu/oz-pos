@@ -17,11 +17,13 @@ import { downloadCsv } from '@/utils/export-csv';
 import { AnalyticsCardContent, ExportCsvButton } from './AnalyticsCardContent';
 import { analyticsDataCache, analyticsQueryKey, clearAnalyticsCache, cardQueryKey } from './analytics-cache';
 import {
-  buildHeatmapIntensities,
+  buildHeatmapCells,
+  heatPeak,
   loadHeatmapRows,
   rangeForGranularity,
   yearlyHeatmapColumns,
   type DailyRevenueRow,
+  type HeatCell,
   type HourlyHeatmapRow,
   type WeeklyRevenueRow,
 } from './analytics-data';
@@ -716,9 +718,17 @@ const [paletteOpen, setPaletteOpen] = useState(false);
     () => loadHeatmapRows({ workspace: workspaceView, granularity: heatmapGranularity, from: heatmapRange.from, to: heatmapRange.to, sessionToken }),
   );
   const heatmapData = heatmapQuery.data;
-  const heatmapIntensities = heatmapData
-    ? buildHeatmapIntensities(heatmapGranularity, heatmapData)
-    : new Map<string, number>();
+  const heatCells = heatmapData
+    ? buildHeatmapCells(heatmapGranularity, heatmapData)
+    : new Map<string, HeatCell>();
+  const heatPeakCell = heatmapData ? heatPeak(heatCells) : null;
+  const peakKey = heatPeakCell?.key ?? null;
+  // Yearly columns are range-derived and shared by the grid and the peak label.
+  const heatmapColumns = heatmapGranularity === 'yearly'
+    ? yearlyHeatmapColumns(heatmapRange.from, heatmapRange.to)
+    : [];
+  const multiYear = heatmapColumns.length > 0
+    && heatmapColumns[0]!.key.slice(0, 4) !== heatmapColumns[heatmapColumns.length - 1]!.key.slice(0, 4);
   // The grid renders zero-filled even for an empty range, so flag a truly
   // empty query to show the same no-data placeholder as the other cards.
   const heatmapEmpty = heatmapData
@@ -728,16 +738,55 @@ const [paletteOpen, setPaletteOpen] = useState(false);
         ? heatmapData.weekly.length === 0
         : heatmapData.hourly.length === 0
     : false;
-  const heatCell = (key: string, label: string, reactKey?: string) => (
-    <div
-      key={reactKey ?? key}
-      className="analytics-heat-cell"
-      data-intensity={heatmapIntensities.get(key) ?? 0}
-      title={label}
-    >
-      <div className="analytics-heat-block" />
-    </div>
-  );
+
+  // Localized month header for a yearly column (abbrev, or MM/YY when the
+  // range spans calendar years) — shared by the grid and the busiest label.
+  const yearlyMonthLabel = (ym: string): string => {
+    const month = Number(ym.slice(5));
+    return multiYear
+      ? `${ym.slice(5)}/${ym.slice(2, 4)}`
+      : l10n.getString(`analytics-month-${MONTH_LABEL_KEYS[month - 1]!}`);
+  };
+
+  /** Localized label for a peak cell key at the card's effective granularity. */
+  const heatPeakLabel = (g: Granularity, key: string): string => {
+    if (g === 'weekly') {
+      const [dayIdx, hour] = key.split(':');
+      const dayKey = DAY_LABEL_KEYS[Number(dayIdx)];
+      const day = dayKey ? l10n.getString(dayKey) : '';
+      return l10n.getString('analytics-heatmap-hour-tooltip', { day, hour: String(Number(hour)).padStart(2, '0') });
+    }
+    if (g === 'monthly') {
+      return l10n.getString('analytics-heatmap-day-tooltip', { day: key });
+    }
+    // yearly: `${YYYY-MM}:${weekIdx}` → "{month} week {n}"
+    const [ym, week] = key.split(':');
+    return l10n.getString('analytics-heatmap-week-tooltip', { month: yearlyMonthLabel(ym ?? ''), week: String(Number(week) + 1) });
+  };
+
+  // The heatmap's takeaway, matching the other cards' Peak/Low insight lines.
+  const peakInsight = heatPeakCell
+    ? l10n.getString('analytics-heat-busiest', {
+        label: heatPeakLabel(heatmapGranularity, heatPeakCell.key),
+        sales: fmt(heatPeakCell.cell.minor),
+      })
+    : null;
+
+  const heatCell = (key: string, label: string, opts?: { reactKey?: string; showLabel?: string }) => {
+    const cell = heatCells.get(key);
+    const isPeak = peakKey !== null && key === peakKey;
+    return (
+      <div
+        key={opts?.reactKey ?? key}
+        className={`analytics-heat-cell${isPeak ? ' analytics-heat-cell--peak' : ''}`}
+        data-intensity={cell?.level ?? 0}
+        title={label}
+      >
+        <div className="analytics-heat-block" />
+        {opts?.showLabel !== undefined && <span className="analytics-heat-label">{opts.showLabel}</span>}
+      </div>
+    );
+  };
 
   const renderHeatmap = () => {
     const aria = l10n.getString('analytics-card-heatmap');
@@ -761,7 +810,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
               heatCell(
                 `${di}:${h}`,
                 l10n.getString('analytics-heatmap-hour-tooltip', { day, hour: String(h).padStart(2, '0') }),
-                `${day}-${h}`,
+                { reactKey: `${day}-${h}` },
               ),
             )}
           </div>,
@@ -781,15 +830,11 @@ const [paletteOpen, setPaletteOpen] = useState(false);
       }
       for (let d = 1; d <= days; d++) {
         cells.push(
-          <div
-            key={d}
-            className="analytics-heat-cell"
-            data-intensity={heatmapIntensities.get(String(d)) ?? 0}
-            title={l10n.getString('analytics-heatmap-day-tooltip', { day: String(d) })}
-          >
-            <div className="analytics-heat-block" />
-            <span className="analytics-heat-label">{d}</span>
-          </div>,
+          heatCell(
+            String(d),
+            l10n.getString('analytics-heatmap-day-tooltip', { day: String(d) }),
+            { showLabel: String(d) },
+          ),
         );
       }
       for (let i = 0; i < trailing; i++) {
@@ -807,28 +852,19 @@ const [paletteOpen, setPaletteOpen] = useState(false);
       );
     }
     if (heatmapGranularity === 'yearly') {
-      const columns = yearlyHeatmapColumns(heatmapRange.from, heatmapRange.to);
-      const multiYear = columns.length > 0 && columns[0]!.key.slice(0, 4) !== columns[columns.length - 1]!.key.slice(0, 4);
       return (
         <div className="analytics-heatmap analytics-heatmap--yearly" role="img" aria-label={aria}>
-          {columns.map((col) => {
-            const month = Number(col.key.slice(5));
-            const label = multiYear
-              ? `${col.key.slice(5)}/${col.key.slice(2, 4)}`
-              : l10n.getString(`analytics-month-${MONTH_LABEL_KEYS[month - 1]!}`);
+          {heatmapColumns.map((col) => {
+            const label = yearlyMonthLabel(col.key);
             return (
               <div className="analytics-heat-column" key={col.key}>
                 <span className="analytics-heat-label">{label}</span>
-                {Array.from({ length: col.cells }, (_, week) => (
-                  <div
-                    key={week}
-                    className="analytics-heat-cell"
-                    data-intensity={heatmapIntensities.get(`${col.key}:${week}`) ?? 0}
-                    title={l10n.getString('analytics-heatmap-week-tooltip', { month: label, week: String(week + 1) })}
-                  >
-                    <div className="analytics-heat-block" />
-                  </div>
-                ))}
+                {Array.from({ length: col.cells }, (_, week) =>
+                  heatCell(
+                    `${col.key}:${week}`,
+                    l10n.getString('analytics-heatmap-week-tooltip', { month: label, week: String(week + 1) }),
+                  ),
+                )}
               </div>
             );
           })}
@@ -840,12 +876,9 @@ const [paletteOpen, setPaletteOpen] = useState(false);
     // but it mirrors `buildHeatmapIntensities`'s flat weekday fallback.
     return (
       <div className="analytics-heatmap" role="img" aria-label={aria}>
-        {dayLabels.map((label, i) => (
-          <div key={label} className="analytics-heat-cell" data-intensity={heatmapIntensities.get(String(i)) ?? 0} title={label}>
-            <div className="analytics-heat-block" />
-            <span className="analytics-heat-label">{label}</span>
-          </div>
-        ))}
+        {dayLabels.map((label, i) =>
+          heatCell(String(i), label, { showLabel: label }),
+        )}
       </div>
     );
   };
@@ -1478,6 +1511,7 @@ const [paletteOpen, setPaletteOpen] = useState(false);
                     ) : (
                       <>
                         {renderHeatmap()}
+                        {peakInsight && <p className="analytics-card-insight">{peakInsight}</p>}
                         <div
                           className="analytics-heat-scale"
                           role="group"

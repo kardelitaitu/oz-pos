@@ -1384,6 +1384,12 @@
 .analytics-heat-cell[data-intensity="3"] .analytics-heat-block { background: var(--analytics-heat-3); }
 .analytics-heat-cell[data-intensity="4"] .analytics-heat-block { background: var(--analytics-heat-4); }
 
+/* Peak (busiest) cell — a dark ring marks the strongest slot */
+.analytics-heat-cell--peak .analytics-heat-block {
+  outline: 2px solid var(--analytics-fg-strong);
+  outline-offset: 1px;
+}
+
 /* Heatmap intensity scale legend */
 .analytics-heat-scale {
   display: flex;

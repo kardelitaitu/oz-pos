@@ -122,6 +122,7 @@ analytics-month-dec = Dec
 analytics-heatmap-hour-tooltip = { $day } { $hour }:00
 analytics-heatmap-day-tooltip = Day { $day }
 analytics-heatmap-week-tooltip = { $month } week { $week }
+analytics-heat-busiest = Busiest: { $label } · { $sales }
 
 # Unit suffixes (KPI values + chart tooltips)
 analytics-unit-minutes = { $n } min
