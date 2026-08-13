@@ -4,6 +4,7 @@ import { Localized, useLocalization } from '@fluent/react';
 import { requiredLocalized } from '@/frontend/shared';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import type { ProductDto } from '@/api/products';
+import { DEFAULT_LOW_STOCK_THRESHOLD, DEFAULT_HIGH_STOCK_THRESHOLD } from '@/types/domain';
 
 export interface EditProductModalProps {
   product: ProductDto | null;
@@ -25,8 +26,8 @@ export const EditProductModal: React.FC<EditProductModalProps> = ({
   const [name, setName] = useState('');
   const [priceMinor, setPriceMinor] = useState<number | ''>(0);
   const [stockQty, setStockQty] = useState<number | ''>(0);
-  const [lowThreshold, setLowThreshold] = useState<number | ''>(5);
-  const [highThreshold, setHighThreshold] = useState<number | ''>(10);
+  const [lowThreshold, setLowThreshold] = useState<number | ''>(DEFAULT_LOW_STOCK_THRESHOLD);
+  const [highThreshold, setHighThreshold] = useState<number | ''>(DEFAULT_HIGH_STOCK_THRESHOLD);
   // ADR #36: cost (edit/override), brand, rack, notes, unit, status.
   const [costMinor, setCostMinor] = useState<number | ''>(0);
   const [brand, setBrand] = useState('');
@@ -40,8 +41,8 @@ export const EditProductModal: React.FC<EditProductModalProps> = ({
       setName(product.name || '');
       setPriceMinor(product.price?.minor_units ?? 0);
       setStockQty(product.stock_qty ?? 0);
-      setLowThreshold(product.low_stock_threshold ?? 5);
-      setHighThreshold(product.high_stock_threshold ?? 10);
+      setLowThreshold(product.low_stock_threshold ?? DEFAULT_LOW_STOCK_THRESHOLD);
+      setHighThreshold(product.high_stock_threshold ?? DEFAULT_HIGH_STOCK_THRESHOLD);
       setCostMinor(product.cost_minor ?? 0);
       setBrand(product.brand ?? '');
       setRackLocation(product.rack_location ?? '');

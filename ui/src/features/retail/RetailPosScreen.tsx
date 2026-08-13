@@ -29,7 +29,7 @@ import { holdCartScoped, listHeldCartsScoped, getHeldCartScoped, deleteHeldCartS
 import { getStoreSettingsScoped, listCreditSales, settleCreditScoped, type StoreSettingsDto, type CreditSaleDto } from '@/api/settings';
 import { computeCartTax, type CartLineTaxInput } from '@/api/tax';
 import { recordMark } from '@/utils/perf-metrics';
-import { type CartId, type CartLine, type CourseId, type LineId, type ModifierSelection, type Money, type Product, type Sku } from '@/types/domain';
+import { DEFAULT_LOW_STOCK_THRESHOLD, type CartId, type CartLine, type CourseId, type LineId, type ModifierSelection, type Money, type Product, type Sku } from '@/types/domain';
 import { useSound } from '@/frontend/shared/useSound';
 import { useOptionalTheme } from '@/frontend/shell/ThemeProvider';
 import RetailFnBar from './RetailFnBar';
@@ -531,7 +531,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
   const lowStockCount = useMemo(
     () => products.filter((p) => {
       if (p.stock_qty == null || p.stock_qty <= 0) return false;
-      const threshold = p.low_stock_threshold ?? 5;
+      const threshold = p.low_stock_threshold ?? DEFAULT_LOW_STOCK_THRESHOLD;
       return p.stock_qty <= threshold;
     }).length,
     [products],
@@ -651,7 +651,7 @@ export default function RetailPosScreen({ onNavigate }: RetailPosScreenProps) {
     if (filterLowStock) {
       list = list.filter((p) => {
         if (p.stock_qty == null || p.stock_qty <= 0) return false;
-        const threshold = p.low_stock_threshold ?? 5;
+        const threshold = p.low_stock_threshold ?? DEFAULT_LOW_STOCK_THRESHOLD;
         return p.stock_qty <= threshold;
       });
     }

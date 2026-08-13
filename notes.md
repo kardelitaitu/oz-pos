@@ -118,11 +118,15 @@ NodeTopologyEditor). Fixed items are committed; the rest remain open.
 
 ### RetailProductGrid
 
-5. **Stock-threshold magic numbers** — `low_stock_threshold ?? 5` /
-   `high_stock_threshold ?? 10` duplicate the `5` in analytics'
-   `CRITICAL_STOCK_LEVEL`; no shared source of truth.
-6. **Minor** — `onWheel` ignores trackpad `deltaX` and never `preventDefault`s;
-   `cellValue` returns a hardcoded `—` em-dash.
+5. ✅ **Stock-threshold magic numbers fixed** — added
+   `DEFAULT_LOW_STOCK_THRESHOLD` (5) / `DEFAULT_HIGH_STOCK_THRESHOLD` (10) to
+   `types/domain.ts` and used them across `AddProductModal`, `EditProductModal`,
+   `RetailProductGrid`, and `RetailPosScreen`. (Analytics' `CRITICAL_STOCK_LEVEL`
+   stays its own "critical" severity tier — semantically distinct.)
+6. ✅ **Minor fixes** — the category bar's `onWheel` now maps both trackpad
+   `deltaX` and wheel `deltaY` to horizontal scroll and `preventDefault`s
+   (guarded by `cancelable`); `cellValue`'s `—` em-dash is a named
+   `EMPTY_CELL` constant.
 
 ### NodeTopologyEditor
 

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useLocalization, Localized } from '@fluent/react';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import type { ProductDto, CategoryDto } from '@/api/products';
+import { DEFAULT_LOW_STOCK_THRESHOLD, DEFAULT_HIGH_STOCK_THRESHOLD } from '@/types/domain';
 
 export interface AddProductModalProps {
   categories: CategoryDto[];
@@ -27,8 +28,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
   const [category, setCategory] = useState('');
   const [priceMinor, setPriceMinor] = useState<number | ''>(0);
   const [stockQty, setStockQty] = useState<number | ''>(10);
-  const [lowThreshold, setLowThreshold] = useState<number | ''>(5);
-  const [highThreshold, setHighThreshold] = useState<number | ''>(10);
+  const [lowThreshold, setLowThreshold] = useState<number | ''>(DEFAULT_LOW_STOCK_THRESHOLD);
+  const [highThreshold, setHighThreshold] = useState<number | ''>(DEFAULT_HIGH_STOCK_THRESHOLD);
   // ADR #36: cost, brand, rack, notes, unit (all optional at create time).
   const [costMinor, setCostMinor] = useState<number | ''>(0);
   const [brand, setBrand] = useState('');
@@ -47,8 +48,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({
       setCategory(categories[0]?.name || '');
       setPriceMinor(0);
       setStockQty(10);
-      setLowThreshold(5);
-      setHighThreshold(10);
+      setLowThreshold(DEFAULT_LOW_STOCK_THRESHOLD);
+      setHighThreshold(DEFAULT_HIGH_STOCK_THRESHOLD);
       setCostMinor(0);
       setBrand('');
       setRackLocation('');

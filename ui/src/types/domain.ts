@@ -19,6 +19,19 @@ export interface Money {
   readonly currency: string;
 }
 
+/**
+ * Default low-stock threshold (units) applied when a product has no explicit
+ * `low_stock_threshold`. Shared by the retail grid, POS screen, and the
+ * add/edit product modals so they never drift apart.
+ */
+export const DEFAULT_LOW_STOCK_THRESHOLD = 5;
+
+/**
+ * Default high-stock threshold (units) applied when a product has no explicit
+ * `high_stock_threshold`.
+ */
+export const DEFAULT_HIGH_STOCK_THRESHOLD = 10;
+
 /** Course identifier for restaurant order coursing. */
 export type CourseId = 'appetizer' | 'main' | 'dessert' | 'drinks';
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useCallback, memo, useState } from 'react';
 import { requiredLocalized } from '@/frontend/shared';
 import { useLocalization, Localized } from '@fluent/react';
-import { formatMoney, type Money, type Sku } from '@/types/domain';
+import { DEFAULT_LOW_STOCK_THRESHOLD, DEFAULT_HIGH_STOCK_THRESHOLD, formatMoney, type Money, type Sku } from '@/types/domain';
 import type { ProductDto, CategoryDto } from '@/api/products';
 import type { RetailColumn } from './hooks/useRetailColumnPrefs';
 import ScaleIndicator from './ScaleIndicator';
@@ -83,8 +83,11 @@ export interface RetailProductGridProps {
 
 export const isProductActive = (p: ProductDto): boolean => p.is_active !== false;
 
+/** Placeholder shown for an empty table cell (em-dash). */
+const EMPTY_CELL = '—';
+
 function cellValue(v: string | null | undefined): string {
-  return v && v.trim() ? v : '—';
+  return v && v.trim() ? v : EMPTY_CELL;
 }
 
 // ── Column toggle menu ─────────────────────────────────────────────
@@ -199,8 +202,8 @@ const ProductCard = memo(function ProductCard({ product, catHue, formatMoney, ha
   const handleAddRef = useRef(handleAdd);
   handleAddRef.current = handleAdd;
 
-  const lowThreshold = product.low_stock_threshold ?? 5;
-  const highThreshold = product.high_stock_threshold ?? 10;
+  const lowThreshold = product.low_stock_threshold ?? DEFAULT_LOW_STOCK_THRESHOLD;
+  const highThreshold = product.high_stock_threshold ?? DEFAULT_HIGH_STOCK_THRESHOLD;
   const stockLevel =
     product.stock_qty != null && product.stock_qty <= lowThreshold
       ? 'low'
@@ -425,8 +428,13 @@ export default function RetailProductGrid({
       <div
         className="retail-categories"
         onWheel={(e) => {
-          if (e.deltaY) {
-            e.currentTarget.scrollLeft += e.deltaY;
+          // Map both trackpad horizontal (deltaX) and wheel vertical (deltaY)
+          // scroll to horizontal scrolling, and stop the page from scrolling
+          // vertically underneath the category bar.
+          const delta = e.deltaX || e.deltaY;
+          if (delta) {
+            e.currentTarget.scrollLeft += delta;
+            if (e.cancelable) e.preventDefault();
           }
         }}
       >
