@@ -580,3 +580,46 @@ Audit of `src/features/inventory/` (11 screens) + `inventory.ftl` /
 3. **`ShiftBar` note field** — `inv-shift-notes-label` was orphan because
    the visible label isn't localized (the `<label>` renders raw English
    "Notes"); the placeholder is localized. Worth a visual check.
+
+---
+
+# Products audit (2026-08-13)
+
+Audit of `src/features/products/` (4 screens) + `products.ftl` /
+`bundles.ftl` / `*.id.ftl` bundles.
+
+## Fixed (committed)
+
+- ✅ **Bundles: strict integers + surfaced failures** — bundle price and
+  item qty/unit-price were silently truncated by `parseInt` (4.50 → 4);
+  now rejected with localized `bundles-error-invalid-*` messages. Save/delete
+  failures were swallowed by empty catch blocks; now surfaced inline
+  (`role="alert"`). 4 functional `setForm` updaters; 7 dead hardcoded
+  aria-labels removed; 4 new `bundles-error-*` keys.
+- ✅ **Variants: strict integers + surfaced failures** — `500.5` price
+  silently saved as 500; sort order truncated too. Now rejected with new
+  `variant-mgmt-error-invalid-*` keys. The previously-dead
+  `variant-mgmt-error-save`/`-delete` keys (empty catches!) are now wired to
+  inline alerts. 7 functional `setForm` updaters; 2 dead aria-labels removed.
+  Regression test for fractional-price rejection.
+- ✅ **Products/Lookup: functional `setForm`** — 8 handlers in
+  `ProductManagementScreen` converted; dead hardcoded aria-label on the
+  lookup card button removed.
+- ✅ **Orphan FTL keys removed** — 19 never-read keys deleted from both
+  bundles (`bundles-loading`/`-modal-aria`/`-close-aria`,
+  `categories-loading`, `product-lookup-add`/`-title`,
+  `product-mgmt-deleting`/`-field-name`/`-field-sku`/`-loading`,
+  `restaurant-sort-*` ×4, `variant-mgmt-close`/`-dialog-aria`/
+  `-delete-confirm-aria`/`-loading`/`-modal-close`).
+
+## Still open
+
+1. **`BundleManagementScreen` `toggleActive`** — update failures are still
+   silent (no toast/alert) and the toggle is optimistic; a failed toggle
+   leaves the UI showing the flipped state until the next load.
+2. **`ProductManagementScreen` delete confirm** — uses an inline `ConfirmDialog`
+   but the `product-mgmt-deleting` plural key was dead (never read), so the
+   deleting state renders nothing; harmless but dead code removed.
+3. **`formatVariantPrice`** — hardcodes `Intl.NumberFormat('en-US', ...)`
+   instead of the active Fluent locale; the domain `formatMoney` already
+   handles IDR minor-unit exponents, so this could reuse it.

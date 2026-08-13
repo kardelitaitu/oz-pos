@@ -2,7 +2,6 @@
 
 bundles-title = Product Bundles
 bundles-add = Add Bundle
-bundles-loading = Loading bundles…
 bundles-no-bundles = No bundles yet.
 bundles-name = Name
 bundles-sku = Bundle SKU
@@ -30,12 +29,6 @@ bundles-edit-aria =
     .aria-label = Edit { $name }
 bundles-delete-aria =
     .aria-label = Delete { $name }
-bundles-modal-aria = { $mode ->
-    [add] Add bundle
-   *[edit] Edit bundle
-}
-bundles-close-aria =
-    .aria-label = Close
 bundles-sku-placeholder =
     .placeholder = e.g. GIFT-BOX
 bundles-name-placeholder =

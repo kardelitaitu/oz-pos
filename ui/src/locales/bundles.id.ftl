@@ -1,6 +1,5 @@
 bundles-title = Bundel Produk
 bundles-add = Tambah Bundel
-bundles-loading = Memuat bundel…
 bundles-no-bundles = Belum ada bundel.
 bundles-name = Nama
 bundles-sku = SKU Bundel
@@ -28,12 +27,6 @@ bundles-edit-aria =
     .aria-label = Ubah { $name }
 bundles-delete-aria =
     .aria-label = Hapus { $name }
-bundles-modal-aria = { $mode ->
-    [add] Tambah bundel
-   *[edit] Ubah bundel
-}
-bundles-close-aria =
-    .aria-label = Tutup
 bundles-sku-placeholder =
     .placeholder = mis. GIFT-BOX
 bundles-name-placeholder =
