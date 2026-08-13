@@ -11,10 +11,34 @@
 export RAYON_NUM_THREADS="${RAYON_NUM_THREADS:-32}"
 export CBM_MEM_BUDGET_MB="${CBM_MEM_BUDGET_MB:-16384}"
 
-_CBM_EXE="C:/Users/Dika/AppData/Local/Programs/codebase-memory-mcp/codebase-memory-mcp.exe"
-_REPO_ROOT="C:/My Script/oz-pos"
+# Resolve the repo root from git itself (portable) rather than a
+# hardcoded machine path — the hook must work when the repo is cloned
+# anywhere or the machine differs.
+_REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -z "$_REPO_ROOT" ]; then
+    exit 0
+fi
 
-if [ -f "$_CBM_EXE" ]; then
+# Resolve the indexer binary: env override, then PATH, then the
+# standard Windows install location. Previous version hardcoded
+# C:/Users/<user>/... which silently disabled indexing on other machines.
+_CBM_EXE="${CBM_EXE:-}"
+if [ -z "$_CBM_EXE" ]; then
+    if command -v codebase-memory-mcp >/dev/null 2>&1; then
+        _CBM_EXE="$(command -v codebase-memory-mcp)"
+    elif command -v codebase-memory-mcp.exe >/dev/null 2>&1; then
+        _CBM_EXE="$(command -v codebase-memory-mcp.exe)"
+    else
+        for d in /c/Users/*/AppData/Local/Programs/codebase-memory-mcp; do
+            if [ -x "$d/codebase-memory-mcp.exe" ]; then
+                _CBM_EXE="$d/codebase-memory-mcp.exe"
+                break
+            fi
+        done
+    fi
+fi
+
+if [ -n "$_CBM_EXE" ]; then
     # Index the entire repo as a single unified project.
     # Root was previously broken by Windows 'nul' ghost device files (now deleted).
     # .cbmignore at the root excludes node_modules, target, dist, logs, binaries, etc.
