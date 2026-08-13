@@ -74,7 +74,7 @@ function Update-File {
 # 2. Update version strings in all codebase files
 Write-Host "`nUpdating version strings..." -ForegroundColor Cyan
 
-Update-File "AGENTS.md" "- **Version is locked at `$currentVersion`.** Never change the version number" "- **Version is locked at `$TargetVersion`.** Never change the version number"
+Update-File "AGENTS.md" "- **Version is locked at the current release (`$currentVersion`).** Never change the version number" "- **Version is locked at the current release (`$TargetVersion`).** Never change the version number"
 Update-File ".agents/AGENTS.md" "- **Version is locked at `$currentVersion`.** Never change the version number" "- **Version is locked at `$TargetVersion`.** Never change the version number"
 Update-File "Cargo.toml" "version = `"$currentVersion`"" "version = `"$TargetVersion`""
 Update-File "Dockerfile.server" "version = `"$currentVersion`"" "version = `"$TargetVersion`""

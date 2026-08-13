@@ -244,7 +244,7 @@ fn build_schemas() -> Value {
             "type": "object",
             "properties": {
                 "status": { "type": "string", "description": "Server status: 'ok' or 'degraded'", "example": "ok" },
-                "version": { "type": "string", "description": "Server version", "example": "0.0.9" },
+                "version": { "type": "string", "description": "Server version", "example": env!("CARGO_PKG_VERSION") },
                 "db": { "type": "string", "description": "Database backend type", "example": "sqlite" },
                 "uptime_seconds": { "type": "integer", "format": "int64", "description": "Seconds since server start" },
                 "db_connected": { "type": "boolean", "description": "Whether the database responded to a ping" },
@@ -530,7 +530,7 @@ fn build_paths() -> Value {
                 "description": "Lightweight health check returning status and version. Public — no authentication required. Simpler than /health (no DB ping).",
                 "operationId": "apiHealthCheck",
                 "responses": {
-                    "200": { "description": "Server is healthy", "content": { "application/json": { "schema": { "type": "object", "required": ["status", "version"], "properties": { "status": { "type": "string", "example": "ok" }, "version": { "type": "string", "example": "0.0.25" } } } } } }
+                    "200": { "description": "Server is healthy", "content": { "application/json": { "schema": { "type": "object", "required": ["status", "version"], "properties": { "status": { "type": "string", "example": "ok" },                 "version": { "type": "string", "example": env!("CARGO_PKG_VERSION") } } } } } }
                 }
             }
         },
