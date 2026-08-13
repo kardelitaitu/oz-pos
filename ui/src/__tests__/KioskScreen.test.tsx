@@ -234,4 +234,34 @@ describe('KioskScreen', () => {
       expect(screen.getByRole('button', { name: /back/i })).toBeInTheDocument();
     });
   });
+
+  it('shows a retry surface when the menu fails to load', async () => {
+    mockListProducts.mockRejectedValue(new Error('boom'));
+    mockListCategories.mockRejectedValue(new Error('boom'));
+    await renderKiosk(kioskFtl);
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to load the menu')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
+  });
+
+  it('recovers after retry when the menu load succeeds', async () => {
+    mockListProducts.mockRejectedValueOnce(new Error('boom'));
+    mockListCategories.mockRejectedValueOnce(new Error('boom'));
+    mockListProducts.mockResolvedValue(sampleProducts);
+    mockListCategories.mockResolvedValue(sampleCategories);
+    await renderKiosk(kioskFtl);
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to load the menu')).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /retry/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Indomie Goreng')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Failed to load the menu')).not.toBeInTheDocument();
+  });
 });

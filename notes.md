@@ -961,3 +961,26 @@ Fluent terms.
 ## Deferred (unchanged)
 
 - `src/dev-mock/tauri-api.ts` timer `emit` cleanup.
+
+# Kiosk audit (2026-08-14)
+
+- `KioskScreen` had three defects:
+  1. Product/category loads had **no `.catch`** — a failed load left the
+     screen hanging on an empty grid forever with no error surface. Added a
+     `loadMenu` callback with per-request rejection handling, a localized
+     error banner (`kiosk-load-error` / `kiosk-retry`) with a Retry button
+     that re-fetches and clears the error.
+  2. The payment toast was a **hardcoded English string**
+     (`'Payment processed! (simulated)'`) — now `kiosk-pay-success`.
+  3. The price-volatility hint had a **hardcoded English `title`** — now
+     `kiosk-price-volatility-title`.
+- New keys added to both kiosk bundles (en + id); parity 0 missing.
+- 2 regression tests: load-failure shows retry surface; retry recovers.
+- Also re-scanned tables/tax/setup/workspaces/customers/gift-cards/loyalty/
+  design for remaining issue classes (unhandled loads, hardcoded strings,
+  parseInt truncation, locale-less dates, setForm spreads) — all clean.
+
+## Verification
+
+- typecheck ✅ · lint 0 errors ✅ · i18n lint clean ✅ · parity 0 missing ✅
+- KioskScreen 14/14, tables/setup suites 74/74 pass.
