@@ -52,6 +52,7 @@ import {
   deleteTemplate,
 } from './topologyExport';
 import { TopologyNodeCard } from './topologyNodeCard';
+import { TopologyShortcutsHelp } from './topologyShortcutsHelp';
 import type { TopologyOverlay } from './topologyBranchCompare';
 import { layoutGhosts, buildGhostWireStubs, compareFocusDimIds, GHOST_WIDTH, GHOST_HEIGHT } from './topologyBranchCompare';
 import { TopologyWireGroup } from './topologyWireGroup';
@@ -120,31 +121,6 @@ function normalizeVisualPort(port: string | null | undefined, fallback: PortName
  *  immediately surface the unknown-wire-endpoint gate, so dropping it is
  *  the only sane resolution; the canvas invariant stays "every wire's
  *  endpoints exist". */
-
-/** Keyboard shortcuts listed in the header's help popover. `key` is the
- *  literal kbd text; `id` is the FTL description key (reuses existing
- *  topology strings where they already name the action). */
-const TOPOLOGY_SHORTCUTS: { id: string; key: string }[] = [
-  { id: 'topology-shortcuts-help', key: 'F1' },
-  { id: 'topology-shortcuts-pan', key: 'Space + Drag' },
-  { id: 'topology-shortcuts-duplicate-drag', key: 'Alt + Drag' },
-  { id: 'topology-shortcuts-additive-marquee', key: 'Shift + Drag' },
-  { id: 'topology-shortcuts-spawn', key: '1–4' },
-  { id: 'topology-shortcuts-select-all', key: 'Ctrl+A' },
-  { id: 'topology-shortcuts-duplicate', key: 'Ctrl+D' },
-  { id: 'topology-shortcuts-copy', key: 'Ctrl+C' },
-  { id: 'topology-shortcuts-paste', key: 'Ctrl+V' },
-  { id: 'topology-shortcuts-rename', key: 'F2' },
-  { id: 'topology-shortcuts-zoom-fit-100', key: 'Ctrl+0 / Ctrl+1' },
-  { id: 'topology-shortcuts-zoom-step', key: 'Ctrl++ / Ctrl+-' },
-  { id: 'topology-delete-selected', key: 'Del' },
-  { id: 'topology-undo', key: 'Ctrl+Z' },
-  { id: 'topology-redo', key: 'Ctrl+Y' },
-  { id: 'topology-shortcuts-nudge', key: '← ↑ ↓ →' },
-  { id: 'topology-shortcuts-esc', key: 'Esc' },
-  { id: 'topology-shortcuts-inspector', key: 'Ctrl+I' },
-  { id: 'topology-shortcuts-find', key: 'Ctrl+F' },
-];
 
 /** Alignment / distribution modes for the multi-select toolbar. */
 type AlignMode = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom' | 'dist-h' | 'dist-v';
@@ -1196,36 +1172,12 @@ export default function NodeTopologyEditor({
   const [confirmDeleteMany, setConfirmDeleteMany] = useState<string[] | null>(null);
   const [confirmPreset, setConfirmPreset] = useState<'retail' | 'restaurant' | null>(null);
 
-  /** Shortcuts help popover (header "?" button) — KDS pattern: Escape or an
-   *  outside click closes it. While open, Escape is stopPropagation'd so the
-   *  canvas's own Escape (deselect) does not also fire. */
+  /** Shortcuts help popover open state — owned here because the central
+   *  keydown handler toggles it on F1; the button/popover JSX and its
+   *  Escape + outside-click dismissal live in `TopologyShortcutsHelp`. */
   const [showShortcuts, setShowShortcuts] = useState(false);
-  const shortcutsBtnRef = useRef<HTMLButtonElement | null>(null);
-  const shortcutsRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!showShortcuts) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        setShowShortcuts(false);
-      }
-    };
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        shortcutsRef.current && !shortcutsRef.current.contains(e.target as Node) &&
-        shortcutsBtnRef.current && !shortcutsBtnRef.current.contains(e.target as Node)
-      ) {
-        setShowShortcuts(false);
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showShortcuts]);
+  const toggleShortcuts = useCallback(() => setShowShortcuts((p) => !p), []);
+  const closeShortcuts = useCallback(() => setShowShortcuts(false), []);
 
   /** Anchor for the relationship picker popover (focus + positioning). */
   const relationshipPickerRef = useRef<HTMLDivElement | null>(null);
@@ -5530,36 +5482,11 @@ export default function NodeTopologyEditor({
             );
           })()}
 
-          <button
-            ref={shortcutsBtnRef}
-            type="button"
-            className="topology-shortcuts-btn"
-            onClick={() => setShowShortcuts((p) => !p)}
-            aria-label={l10n.getString('topology-shortcuts-aria')}
-            aria-expanded={showShortcuts}
-            aria-controls="topology-shortcuts-popover"
-          >
-            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
-              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-            </svg>
-          </button>
-          {showShortcuts && (
-            <div
-              id="topology-shortcuts-popover"
-              ref={shortcutsRef}
-              className="topology-shortcuts-popover"
-              role="region"
-              aria-label={l10n.getString('topology-shortcuts-title')}
-            >
-              <div className="topology-shortcuts-title">{l10n.getString('topology-shortcuts-title')}</div>
-              {TOPOLOGY_SHORTCUTS.map((s) => (
-                <div key={s.id} className="topology-shortcuts-row">
-                  <span className="topology-shortcuts-desc">{l10n.getString(s.id)}</span>
-                  <kbd className="topology-shortcuts-key">{s.key}</kbd>
-                </div>
-              ))}
-            </div>
-          )}
+          <TopologyShortcutsHelp
+            open={showShortcuts}
+            onToggle={toggleShortcuts}
+            onClose={closeShortcuts}
+          />
         </div>
       </div>
 
