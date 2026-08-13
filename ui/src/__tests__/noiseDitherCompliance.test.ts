@@ -37,8 +37,6 @@ const KNOWN_NOISE_SELECTORS = [
   '.error-boundary__card',
   // Reusable utility class (recommended for NEW components)
   '.noise-dither',
-  // Emergency fallback card (ERR-02)
-  '.error-boundary__card',
   // Topology wire rename input + label pill (positioned absolute with
   // explicit z-index — the .noise-dither relative utility would fight
   // their anchoring, so they use the explicit ::after path).

@@ -158,6 +158,15 @@ const { invokeMock, defaultImpl } = vi.hoisted(() => {
         return { tier: 'pro', tenantId: 'tenant-1', status: 'active', active: true, expiresAt: null, maxStores: 5 };
       case 'pending_sync_count':
         return 0;
+      case 'get_device_id':
+        return 'device-1';
+      case 'list_terminals':
+      case 'list_terminals_scoped':
+        return [];
+      case 'offline_queue_status_summary':
+        return { pendingCount: 0, syncedCount: 0, failedCount: 0, conflictCount: 0, lastSyncedAt: null, oldestPendingAt: null };
+      case 'get_sync_plan':
+        return { ok: true, plan: 'free', status: 'free' };
       default:
         console.warn('UNHANDLED INVOKE COMMAND:', cmd);
         return null;

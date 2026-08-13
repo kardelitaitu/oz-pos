@@ -1100,3 +1100,33 @@ commit) and the SalesReportScreen duplicate-key test fixture.
   warnings** (was 42). Remaining stderr is intentional error-path
   logging + informational compliance messages.
 - typecheck ✅ · lint 0 errors ✅
+
+# Test-stderr cleanup round 2 (2026-08-14)
+
+Three more sources of stderr noise removed from the full-suite run:
+
+1. **`vi.hoisted()` placement warning** (loadingStateCompliance) — the
+   call lived inside a describe() body; vitest warns it will become an
+   error in a future version (it hoists before imports anyway). Moved to
+   module top level with a comment explaining why.
+
+2. **Noise-dither baseline drift** (noiseDitherCompliance) — the
+   informational "Selector count mismatch: parsed 111, baseline 112" was
+   a duplicate `.error-boundary__card` in KNOWN_NOISE_SELECTORS (left
+   over from a CI-fix commit that added it twice). Removed the duplicate;
+   baseline is now 111 unique and matches the parsed CSS exactly.
+
+3. **UNHANDLED INVOKE COMMAND** (SettingsToggleButtons) — SettingsContext
+   and SettingsPage issue `get_device_id`, `list_terminals`,
+   `offline_queue_status_summary`, and `get_sync_plan` during mount, but
+   the mock's defaultImpl didn't handle them (they settled as
+   async-after-assertion, tripping the warn branch). Added real DTO
+   shapes for all four.
+
+## Verification
+
+- Full suite: **296 files / 5214 tests pass** with **0 warnings** of every
+  class chased this round (act(), UNHANDLED INVOKE, vi.hoisted,
+  selector-count mismatch, duplicate keys). Remaining stderr is
+  intentional error-path logging (tests asserting failure surfaces).
+- typecheck ✅ · lint 0 errors ✅

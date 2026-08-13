@@ -77,14 +77,16 @@ describe('loading-state compliance — LoadingStatus wrapper (LOAD-05/06)', () =
 // Mount the real screens with a rejected IPC call and assert a Retry
 // affordance appears instead of the empty state (LOAD-02/08). These are
 // light mounts — the screens' own suites cover the happy paths.
-describe('loading-state compliance — error ≠ empty with Retry (LOAD-02/08)', () => {
-  const hoisted = vi.hoisted(() => ({
-    listSales: vi.fn(),
-    listStaffScoped: vi.fn(),
-    listKdsOrdersScoped: vi.fn(),
-    listProductsScoped: vi.fn(),
-  }));
+// vi.hoisted must stay at module top level (vitest hoists it before any
+// import runs; nested placement emits a future-breaking warning).
+const hoisted = vi.hoisted(() => ({
+  listSales: vi.fn(),
+  listStaffScoped: vi.fn(),
+  listKdsOrdersScoped: vi.fn(),
+  listProductsScoped: vi.fn(),
+}));
 
+describe('loading-state compliance — error ≠ empty with Retry (LOAD-02/08)', () => {
   beforeEach(() => {
     hoisted.listSales.mockRejectedValue(new Error('down'));
     hoisted.listStaffScoped.mockRejectedValue(new Error('down'));
