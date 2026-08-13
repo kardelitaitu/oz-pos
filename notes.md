@@ -231,12 +231,14 @@ Audit of the owner/admin reports dashboard (`DashboardScreen.tsx` +
 4. **Low-stock rows lack threshold context** — "2 left" doesn't say the item
    is below its configured threshold.
 
-### Systemic i18n finding (needs a sweep)
+### Systemic i18n finding
 
-5. **`shared.ftl` + `shared.id.ftl` have the same broken single-line
-   `.aria-label =` syntax** — 55 keys each (`clear-aria`, `backspace-aria`,
+5. ✅ **Swept** — `shared.ftl` + `shared.id.ftl` had the same broken
+   single-line `.aria-label =` syntax (55 keys each, e.g. `clear-aria`,
    `workspaces-aria`, `search-aria`, `actions-aria`, …). Every `aria-label`
-   consuming these keys app-wide currently renders the literal
-   `.aria-label = …` prefix. Mechanical fix (convert each to a plain value),
-   but cross-cutting — flagged here for a dedicated sweep rather than folded
-   into the dashboard work.
+   consuming them app-wide rendered the literal `.aria-label = …` prefix.
+   Converted all 55 per locale to plain values, plus three Indonesian
+   `update-banner-*-aria` keys that were declared attribute-only but read
+   via `getString` (rendering the raw key id). `i18nStrayAttributeSyntax.test.ts`
+   now guards the shared + reports bundles against the single-line form, and
+   pins the update-banner keys as plain values in both locales.
