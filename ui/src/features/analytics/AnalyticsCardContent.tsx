@@ -500,7 +500,7 @@ function RankedList({ rows, ariaLabel, limit }: { rows: RankRow[]; ariaLabel: st
     <ul className="analytics-rank-list" aria-label={ariaLabel}>
       {shown.map((r, i) => (
         <li
-          key={r.name}
+          key={`${r.name}-${i}`}
           className="analytics-rank-row"
           aria-label={r.delta !== undefined
             ? l10n.getString('analytics-rank-delta-aria', {
@@ -752,6 +752,7 @@ function StaffCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: 
 
 function CustomersCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title: string; expanded?: boolean | undefined; compare?: boolean | undefined }) {
   const { l10n } = useLocalization();
+  const { count } = useMoney();
   const { data: split, prev: prevSplit, error } = useCardDataCompare<CustomerSplitRow>('customers', q, compare ?? false);
   const newCount = split ? split.new_count : 0;
   const retCount = split ? split.returning_count : 0;
@@ -777,7 +778,7 @@ function CustomersCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
   return (
     <Visual className="analytics-card-visual--split">
       <div className="analytics-kpi-row">
-        <Kpi value={String(total)} label={l10n.getString('analytics-card-customers-total')} />
+        <Kpi value={count(total)} label={l10n.getString('analytics-card-customers-total')} />
         <div className="analytics-kpi-actions">
           {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
           <ExportCsvButton ariaLabel={l10n.getString('analytics-export-customers-aria')} onClick={() => exportCustomersCsv(split, q.from, q.to, (id) => l10n.getString(id))} />
@@ -787,8 +788,8 @@ function CustomersCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
         <ReactEChartsCore echarts={echarts} option={option!} style={{ height: chartHeight('customers', expanded) }} notMerge />
       </div>
       <Legend items={[
-        { name: l10n.getString('analytics-card-customers-new'), value: String(newCount), color: '#4f46e5' },
-        { name: l10n.getString('analytics-card-customers-returning'), value: String(retCount), color: '#c7d2fe' },
+        { name: l10n.getString('analytics-card-customers-new'), value: count(newCount), color: '#4f46e5' },
+        { name: l10n.getString('analytics-card-customers-returning'), value: count(retCount), color: '#c7d2fe' },
       ]} />
       <p className="analytics-card-insight">
         {l10n.getString('analytics-card-customers-new-share', { pct: String(newPct) })}
@@ -909,7 +910,7 @@ function DiscountsCard({ q, title, expanded, compare }: { q: AnalyticsQuery; tit
   );
 }
 
-function RefundsCard({ q, compare }: { q: AnalyticsQuery; title: string; expanded?: boolean | undefined; compare?: boolean | undefined }) {
+function RefundsCard({ q, compare }: { q: AnalyticsQuery; compare?: boolean | undefined }) {
   const { l10n } = useLocalization();
   const { fmt } = useMoney();
   const { data: summary, prev: prevSummary, error } = useCardDataCompare<VoidedSummaryRow>('refunds', q, compare ?? false);
@@ -1153,10 +1154,10 @@ function LowStockCard({ q, title, expanded }: { q: AnalyticsQuery; title: string
         <ExportCsvButton ariaLabel={l10n.getString('analytics-export-low-stock-aria')} onClick={() => exportLowStockCsv(alerts, q.from, q.to, fmt, (id) => l10n.getString(id))} />
       </div>
       <ul className="analytics-alert-list" aria-label={title}>
-        {shown.map((r) => {
-          const critical = r.stock <= 5;
+        {shown.map((r, i) => {
+          const critical = r.stock <= CRITICAL_STOCK_LEVEL;
           return (
-            <li key={r.name} className="analytics-alert-row">
+            <li key={`${r.name}-${i}`} className="analytics-alert-row">
               <span className={`analytics-alert-dot${critical ? ' analytics-alert-dot--critical' : ' analytics-alert-dot--warn'}`} />
               <span className="analytics-alert-name">{r.name}</span>
               <span className="analytics-alert-count">{r.stock} {l10n.getString('analytics-card-low-stock-left')}</span>
@@ -1214,7 +1215,7 @@ function TablesCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title:
       <div className="analytics-kpi-row">
         <Kpi value={avgTurn > 0 ? l10n.getString('analytics-unit-minutes', { n: String(avgTurn) }) : '—'} label={l10n.getString('analytics-card-tables-turn')} />
         <div className="analytics-kpi-actions">
-          {delta !== null && <DeltaChip value={delta} compare={compare === true} {...(compare ? { tone: 'bad' as const } : {})} />}
+          {delta !== null && <DeltaChip value={delta} tone="bad" compare={compare === true} />}
           <ExportCsvButton ariaLabel={l10n.getString('analytics-export-tables-aria')} onClick={() => exportTrendCsv('tables', l10n.getString('analytics-export-col-turn'), data, q.from, q.to, (id) => l10n.getString(id), (v) => String(Math.round(v)))} />
         </div>
       </div>
@@ -1403,7 +1404,7 @@ export function AnalyticsCardContent({
     case 'customers': return <CustomersCard q={q} title={title} expanded={expanded} compare={compare} />;
     case 'payments': return <PaymentsCard q={q} title={title} expanded={expanded} compare={compare} />;
     case 'discounts': return <DiscountsCard q={q} title={title} expanded={expanded} compare={compare} />;
-    case 'refunds': return <RefundsCard q={q} title={title} expanded={expanded} compare={compare} />;
+    case 'refunds': return <RefundsCard q={q} compare={compare} />;
     case 'top-items': return <TopItemsCard q={q} title={title} expanded={expanded} compare={compare} />;
     case 'category': return <CategoryCard q={q} title={title} expanded={expanded} compare={compare} />;
     case 'basket': return <BasketCard q={q} title={title} expanded={expanded} compare={compare} />;
