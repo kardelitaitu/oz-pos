@@ -209,18 +209,19 @@ const ProductCard = memo(function ProductCard({ product, catHue, formatMoney, ha
       : 'high';
 
   const handlePointerDown = useCallback(() => {
-    if (isOutOfStock) return;
+    // The button is `disabled` when out of stock, so pointer events only
+    // reach here for in-stock products.
     isLongPress.current = false;
     longPressTimer.current = setTimeout(() => {
       isLongPress.current = true;
       handleOpenQtyPickerRef.current(productRef.current);
     }, 400);
-  }, [isOutOfStock]);
+  }, []);
 
   const handlePointerUp = useCallback(() => {
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
-    if (!isLongPress.current && !isOutOfStock) handleAddRef.current(productRef.current);
-  }, [isOutOfStock]);
+    if (!isLongPress.current) handleAddRef.current(productRef.current);
+  }, []);
 
   const handlePointerLeave = useCallback(() => {
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
@@ -279,8 +280,15 @@ const ProductCard = memo(function ProductCard({ product, catHue, formatMoney, ha
             onPointerDown={handlePointerDown}
             onPointerUp={handlePointerUp}
             onPointerLeave={handlePointerLeave}
-            aria-label={`${product.name} ${formatMoney(product.price)}${isOutOfStock ? ` (${outOfStockLabel.toLowerCase()})` : ''}`}
-            aria-disabled={isOutOfStock}
+            onKeyDown={(e) => {
+              // The pointer handlers are touch/mouse-only; Enter/Space would
+              // otherwise leave the name button inert for keyboard users.
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleAddRef.current(productRef.current);
+              }
+            }}
+            aria-label={`${product.name} ${formatMoney(product.price)}${isOutOfStock ? ` (${outOfStockLabel})` : ''}`}
             disabled={isOutOfStock}
           >
             <span>{product.name}</span>
@@ -395,16 +403,20 @@ export default function RetailProductGrid({
   const renderHeader = (field: SortField, colClass: string, labelId: string, center = false, end = false) => (
     <th
       className={`${colClass} retail-col-sortable`}
-      onClick={() => actions.onSort(field)}
       role="columnheader"
+      scope="col"
       aria-sort={sortField === field ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
     >
-      <div className={`retail-th-content${center ? ' retail-th-content--center' : ''}${end ? ' retail-th-content--end' : ''}`}>
+      <button
+        type="button"
+        className={`retail-th-content${center ? ' retail-th-content--center' : ''}${end ? ' retail-th-content--end' : ''}`}
+        onClick={() => actions.onSort(field)}
+      >
         <span>{requiredLocalized(l10n, labelId)}</span>
-        <span className="retail-sort-icon">
+        <span className="retail-sort-icon" aria-hidden="true">
           {sortField === field ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
         </span>
-      </div>
+      </button>
     </th>
   );
 
@@ -572,15 +584,15 @@ export default function RetailProductGrid({
             <thead>
               <tr>
                 {visibleColumns.includes('sku') && renderHeader('sku', 'retail-col-sku', 'retail-col-sku')}
-                {visibleColumns.includes('barcode') && <th className="retail-col-barcode">{requiredLocalized(l10n, 'retail-col-barcode')}</th>}
-                {visibleColumns.includes('category') && <th className="retail-col-category">{requiredLocalized(l10n, 'retail-col-category')}</th>}
-                {visibleColumns.includes('brand') && <th className="retail-col-brand">{requiredLocalized(l10n, 'retail-col-brand')}</th>}
+                {visibleColumns.includes('barcode') && <th scope="col" className="retail-col-barcode">{requiredLocalized(l10n, 'retail-col-barcode')}</th>}
+                {visibleColumns.includes('category') && <th scope="col" className="retail-col-category">{requiredLocalized(l10n, 'retail-col-category')}</th>}
+                {visibleColumns.includes('brand') && <th scope="col" className="retail-col-brand">{requiredLocalized(l10n, 'retail-col-brand')}</th>}
                 {visibleColumns.includes('name') && renderHeader('name', 'retail-col-name', 'retail-col-name')}
-                {visibleColumns.includes('rack') && <th className="retail-col-rack">{requiredLocalized(l10n, 'retail-col-rack')}</th>}
+                {visibleColumns.includes('rack') && <th scope="col" className="retail-col-rack">{requiredLocalized(l10n, 'retail-col-rack')}</th>}
                 {visibleColumns.includes('stock') && renderHeader('stock', 'retail-col-stock', 'retail-col-stock', true)}
                 {visibleColumns.includes('price') && renderHeader('price', 'retail-col-price', 'retail-col-price', false, true)}
-                {visibleColumns.includes('notes') && <th className="retail-col-notes">{requiredLocalized(l10n, 'retail-col-notes')}</th>}
-                <th className="retail-col-action">{requiredLocalized(l10n, 'retail-col-action')}</th>
+                {visibleColumns.includes('notes') && <th scope="col" className="retail-col-notes">{requiredLocalized(l10n, 'retail-col-notes')}</th>}
+                <th scope="col" className="retail-col-action">{requiredLocalized(l10n, 'retail-col-action')}</th>
               </tr>
             </thead>
             <tbody>
