@@ -983,6 +983,26 @@ describe('AnalyticsScreen layout shell', () => {
     expect(rows[0]).toMatchObject({ value: '$1,307.69' });
   });
 
+  it('exports the basket size CSV from the basket card', async () => {
+    vi.useFakeTimers();
+    renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);
+    await flushRecalc();
+
+    vi.mocked(downloadCsv).mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Export basket size as CSV' }));
+
+    expect(downloadCsv).toHaveBeenCalledTimes(1);
+    const [filename, columns, rows] = vi.mocked(downloadCsv).mock.calls[0]!;
+    expect(filename).toContain('basket-');
+    expect(columns.map((c) => c.key)).toEqual(['period', 'value']);
+    expect(columns.map((c) => c.label)).toEqual(['Period', 'Avg items per order']);
+    expect(rows.length).toBe(1); // the 7 daily rows collapse into one weekly bucket
+    expect(rows[0]).toMatchObject({
+      period: expect.any(String),
+      value: expect.stringMatching(/^\d+(\.\d+)?$/),
+    });
+  });
+
   it('keeps card visuals rendering as granularity changes', async () => {
     vi.useFakeTimers();
     renderWithFluentSync(<AnalyticsScreen />, analyticsFtl, sharedFtl, reportsFtl);

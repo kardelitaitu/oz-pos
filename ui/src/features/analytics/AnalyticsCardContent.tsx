@@ -847,7 +847,10 @@ function BasketCard({ q, title, expanded, compare }: { q: AnalyticsQuery; title:
         <Kpi value={avg > 0 ? avg.toFixed(1) : '—'} label={l10n.getString('analytics-card-basket-items')} />
         <Kpi value={orders > 0 ? String(orders) : '—'} label={l10n.getString('analytics-card-basket-orders')} />
       </div>
-      {delta !== null && <p className="analytics-card-insight"><DeltaChip value={delta} compare={compare === true} /></p>}
+      <div className="analytics-kpi-actions analytics-card-insight">
+        {delta !== null && <DeltaChip value={delta} compare={compare === true} />}
+        <ExportCsvButton ariaLabel={l10n.getString('analytics-export-basket-aria')} onClick={() => exportTrendCsv('basket', l10n.getString('analytics-export-col-basket'), data, q.from, q.to, (id) => l10n.getString(id), (v) => v.toFixed(1))} />
+      </div>
       <div className="analytics-card-chart" role="img" aria-label={title}>
         <ReactEChartsCore echarts={echarts} option={option!} style={{ height: chartHeight('basket', expanded) }} notMerge />
       </div>
