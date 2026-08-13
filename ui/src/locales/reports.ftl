@@ -54,9 +54,6 @@ dashboard-gross-profit = Gross Profit
 dashboard-orders = Orders
 dashboard-top-product = Top Product
 dashboard-low-stock-alerts = Low Stock Alerts
-dashboard-popularity-trend = Popularity Trend
-dashboard-popularity-trend-aria = Popularity of the top category over the last 7 days
-dashboard-popularity-trend-empty = No popularity data yet
 dashboard-no-data = No data yet
 dashboard-stock-ok = All stock levels are healthy.
 

@@ -56,16 +56,18 @@ const HEATMAP_COLORS = [
 
 type ViewMode = 'daily' | 'weekly' | 'monthly';
 
-const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+// FTL ids for weekday labels (day-sunday … day-saturday in reports.ftl),
+// indexed by the heatmap's day_of_week column (0 = Sunday).
+const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
 type RevenueRow = DailyRevenueRow | WeeklyRevenueRow | MonthlyRevenueRow;
 
-function fmtCurrency(minor: number, currency: string): string {
+function fmtCurrency(minor: number, currency: string, locale = 'en'): string {
   // Exponent-driven: IDR/JPY = 0 decimals, KWD = 3, USD/EUR = 2 — the
   // shared minorUnitExponent map is the single source of truth (mirrors
   // the Rust Currency::minor_unit_exponent). No hardcoded /100 math.
   const exp = minorUnitExponent(currency);
-  return new Intl.NumberFormat('en', {
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency,
     minimumFractionDigits: exp,
@@ -86,6 +88,7 @@ function monthAgo(): string {
 /** Sales report screen — daily/weekly/monthly revenue charts, top products, hourly heatmap, and category breakdown with CSV export. */
 export default function SalesReportScreen() {
   const { l10n } = useLocalization();
+  const numLocale = [...l10n.bundles][0]?.locales[0] ?? 'en';
   const sessionToken = useContext(WorkspaceContext)?.sessionToken ?? '';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -428,7 +431,7 @@ export default function SalesReportScreen() {
                 onClick={() => setView(mode)}
                 role="radio"
                 aria-checked={view === mode}
-                aria-label={mode}
+                aria-label={l10n.getString(`sales-report-${mode}`)}
               >
                 <Localized id={`sales-report-${mode}`}>
                   {mode.charAt(0).toUpperCase() + mode.slice(1)}
@@ -487,7 +490,7 @@ export default function SalesReportScreen() {
             />
             <YAxis tick={{ fontSize: 12 }} />
             <Tooltip
-                  formatter={(value: unknown) => fmtCurrency(Number(value), currency)}
+                  formatter={(value: unknown) => fmtCurrency(Number(value), currency, numLocale)}
             />
             <Bar
               dataKey="total_minor"
@@ -501,14 +504,14 @@ export default function SalesReportScreen() {
           <span>
             <Localized id="sales-report-total-revenue">Total</Localized>:{' '}
             {multiCurrencyPeriod
-              ? revenueTotals.map((t) => fmtCurrency(t.total_minor, t.currency)).join(' · ')
-              : fmtCurrency(totalRevenue, currency)}
+              ? revenueTotals.map((t) => fmtCurrency(t.total_minor, t.currency, numLocale)).join(' · ')
+              : fmtCurrency(totalRevenue, currency, numLocale)}
             {revenueDelta !== null && (
               <span className={`comparison-delta ${revenueDelta >= 0 ? 'comparison-delta--positive' : 'comparison-delta--negative'}`}>
                 <span>{revenueDelta >= 0 ? '▲' : '▼'}</span>
                 <span>{Math.abs(revenueDelta).toFixed(1)}%</span>
                 <span style={{ fontWeight: 400, opacity: 0.6, fontSize: '0.85em' }}>
-                  vs {fmtCurrency(prevTotalRevenue, currency)}
+                  vs {fmtCurrency(prevTotalRevenue, currency, numLocale)}
                 </span>
               </span>
             )}
@@ -532,7 +535,7 @@ export default function SalesReportScreen() {
             return (
               <span>
                 <Localized id="sales-report-total-gross-profit">Gross Profit</Localized>:{' '}
-                {profitTotals.map((t) => fmtCurrency(t.gross_profit_minor, t.currency)).join(' · ')}
+                {profitTotals.map((t) => fmtCurrency(t.gross_profit_minor, t.currency, numLocale)).join(' · ')}
                 <span className={`comparison-delta ${profitTotals.every((t) => t.gross_profit_minor >= 0) ? 'comparison-delta--positive' : 'comparison-delta--negative'}`}>
                   <span>
                     {profitTotals.length === 1 && totalRevenue > 0
@@ -579,7 +582,7 @@ export default function SalesReportScreen() {
                   ))}
                 </Pie>
                 <Tooltip
-              formatter={(value: unknown) => fmtCurrency(Number(value), currency)}
+              formatter={(value: unknown) => fmtCurrency(Number(value), currency, numLocale)}
                 />
                 <Legend />
               </PieChart>
@@ -648,9 +651,9 @@ export default function SalesReportScreen() {
                   <span>{i + 1}</span>
                   <span>{p.name}</span>
                   <span>{p.total_qty}</span>
-                  <span>{fmtCurrency(p.total_minor, currency)}</span>
+                  <span>{fmtCurrency(p.total_minor, currency, numLocale)}</span>
                   <span className={p.gross_profit_minor < 0 ? 'sales-report-top-negative' : undefined}>
-                    {fmtCurrency(p.gross_profit_minor, currency)}
+                    {fmtCurrency(p.gross_profit_minor, currency, numLocale)}
                   </span>
                   <span>{`${p.gross_margin_percent.toFixed(1)}%`}</span>
                 </div>
@@ -825,7 +828,7 @@ export default function SalesReportScreen() {
             {heatmapGrid.map((row, day) => (
               <div key={day} className="sales-report-heatmap-row" role="row">
                 <div className="sales-report-heatmap-row-label">
-                  {DAY_NAMES[day]}
+                  {l10n.getString(`day-${DAY_KEYS[day]}`)}
                 </div>
                 {row.map((val, hour) => (
                   <div
@@ -846,8 +849,8 @@ export default function SalesReportScreen() {
                           : 'var(--color-bg-hover, #f3f4f6)',
                     }}
                     role="gridcell"
-                    aria-label={`${DAY_NAMES[day]} ${hour}:00 - ${fmtCurrency(val, currency)}`}
-                    title={`${DAY_NAMES[day]} ${hour}:00 - ${fmtCurrency(val, currency)}`}
+                    aria-label={`${l10n.getString(`day-${DAY_KEYS[day]}`)} ${hour}:00 - ${fmtCurrency(val, currency, numLocale)}`}
+                    title={`${l10n.getString(`day-${DAY_KEYS[day]}`)} ${hour}:00 - ${fmtCurrency(val, currency, numLocale)}`}
                   />
                 ))}
               </div>

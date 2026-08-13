@@ -42,6 +42,13 @@ heatmap-no-data = No data
 
 # Sales Report — a11y labels
 sales-report-region-aria = Sales Report
+day-sunday = Sun
+day-monday = Mon
+day-tuesday = Tue
+day-wednesday = Wed
+day-thursday = Thu
+day-friday = Fri
+day-saturday = Sat
 sales-report-start-aria = Start date
 sales-report-end-aria = End date
 sales-report-view-aria = View mode
@@ -335,9 +342,9 @@ describe('SalesReportScreen', () => {
     resolveDefaultData();
     renderScreen();
     await waitFor(() => {
-      expect(screen.getByRole('radio', { name: 'daily' })).toBeTruthy();
-      expect(screen.getByRole('radio', { name: 'weekly' })).toBeTruthy();
-      expect(screen.getByRole('radio', { name: 'monthly' })).toBeTruthy();
+      expect(screen.getByRole('radio', { name: /daily/i })).toBeTruthy();
+      expect(screen.getByRole('radio', { name: /weekly/i })).toBeTruthy();
+      expect(screen.getByRole('radio', { name: /monthly/i })).toBeTruthy();
     });
   });
 
@@ -345,9 +352,9 @@ describe('SalesReportScreen', () => {
     resolveDefaultData();
     renderScreen();
     await waitFor(() => {
-      expect(screen.getByRole('radio', { name: 'daily' }).getAttribute('aria-checked')).toBe('true');
-      expect(screen.getByRole('radio', { name: 'weekly' }).getAttribute('aria-checked')).toBe('false');
-      expect(screen.getByRole('radio', { name: 'monthly' }).getAttribute('aria-checked')).toBe('false');
+      expect(screen.getByRole('radio', { name: /daily/i }).getAttribute('aria-checked')).toBe('true');
+      expect(screen.getByRole('radio', { name: /weekly/i }).getAttribute('aria-checked')).toBe('false');
+      expect(screen.getByRole('radio', { name: /monthly/i }).getAttribute('aria-checked')).toBe('false');
     });
   });
 
@@ -409,7 +416,7 @@ describe('SalesReportScreen', () => {
     mockGetDailyRevenue.mockClear();
     mockGetWeeklyRevenue.mockClear();
 
-    await userEvent.setup().click(screen.getByRole('radio', { name: 'weekly' }));
+    await userEvent.setup().click(screen.getByRole('radio', { name: /weekly/i }));
 
     await waitFor(() => {
       // Gross profit = 500000 − 300000 = 200000 → $2,000.00
@@ -692,7 +699,7 @@ describe('SalesReportScreen', () => {
 
     mockGetCategoryPopularityTrend.mockClear();
     resolveDefaultData();
-    await userEvent.click(screen.getByRole('radio', { name: 'weekly' }));
+    await userEvent.click(screen.getByRole('radio', { name: /weekly/i }));
 
     await waitFor(() => {
       expect(mockGetCategoryPopularityTrend).toHaveBeenCalledWith(
@@ -811,11 +818,11 @@ describe('SalesReportScreen', () => {
     mockGetDailyRevenue.mockClear();
     mockGetWeeklyRevenue.mockClear();
 
-    await userEvent.click(screen.getByRole('radio', { name: 'weekly' }));
+    await userEvent.click(screen.getByRole('radio', { name: /weekly/i }));
 
     await waitFor(() => {
       expect(mockGetWeeklyRevenue).toHaveBeenCalled();
-      expect(screen.getByRole('radio', { name: 'weekly' }).getAttribute('aria-checked')).toBe('true');
+      expect(screen.getByRole('radio', { name: /weekly/i }).getAttribute('aria-checked')).toBe('true');
     });
   });
 
@@ -830,11 +837,11 @@ describe('SalesReportScreen', () => {
     mockGetDailyRevenue.mockClear();
     mockGetMonthlyRevenue.mockClear();
 
-    await userEvent.click(screen.getByRole('radio', { name: 'monthly' }));
+    await userEvent.click(screen.getByRole('radio', { name: /monthly/i }));
 
     await waitFor(() => {
       expect(mockGetMonthlyRevenue).toHaveBeenCalled();
-      expect(screen.getByRole('radio', { name: 'monthly' }).getAttribute('aria-checked')).toBe('true');
+      expect(screen.getByRole('radio', { name: /monthly/i }).getAttribute('aria-checked')).toBe('true');
     });
   });
 
