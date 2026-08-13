@@ -135,12 +135,23 @@ NodeTopologyEditor). Fixed items are committed; the rest remain open.
 
 ### NodeTopologyEditor
 
-7. **Size** — the component is ~6,900 lines; the minimap, finder overlay,
-   shortcuts popover, and HUD readouts are already isolated `memo` pieces and
-   would move out cleanly.
-8. **Render-phase ref writes** — `historyRef.current = history` (and similar
-   mirrors) assign during render, the same documented-but-impure pattern as
-   `startRecalculating` in the analytics screen.
+7. **Size (refactor opportunity, not a bug)** — the component is ~6,900
+   lines. Correction to the earlier note: only `CanvasCursorReadout` and
+   `ValidationIssuesLabel` are isolated `memo` pieces; the minimap, finder
+   overlay, and shortcuts popover are inline JSX with their handlers/state
+   interwoven into the main component, so extracting them is a substantial
+   refactor rather than a clean move. Deferred as its own planned effort.
+8. **Render-phase ref writes (assessed: intentional, leave as-is)** —
+   `historyRef.current = history` (and similar mirrors, e.g. `panRef`,
+   `nodesRef`, `pushHistoryRef`, `selectedNodeIdsRef`, `l10nRef`) assign
+   during render. This is the deliberate "latest ref" pattern: it lets
+   memoized drag/undo/rename handlers read the CURRENT value at call time
+   without taking the value as a `useCallback` dep (which would churn the
+   handler identity and defeat the card/wire memoization). Moving them to
+   `useEffect` would introduce stale-closure windows (a passive effect runs
+   after paint, so a pointermove between paint and effect would read stale
+   pan/nodes). Same documented-but-impure pattern as `startRecalculating`
+   and the cache write in the analytics screen; idempotent and deterministic.
 
 ---
 
