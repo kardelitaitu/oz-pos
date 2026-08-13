@@ -75,6 +75,7 @@ import {
   turnDelta,
   type AnalyticsQuery,
   weekdayIntensities,
+  yearlyHeatmapColumns,
   weeklyHourlyIntensities,
   monthDayIntensities,
   yearlyWeekIntensities,
@@ -330,12 +331,12 @@ describe('heatmap intensity builders', () => {
     expect(map.get('27')).toBe(4);
   });
 
-  it('yearlyWeekIntensities keys are month:week with week capped at 3', () => {
+  it('yearlyWeekIntensities keys are YYYY-MM:week with the Monday-ordinal band', () => {
     const map = yearlyWeekIntensities([
       { week_start: '2026-07-21', total_minor: 100, currency: 'USD', sale_count: 1, cogs_minor: 0, gross_profit_minor: 100, gross_margin_percent: 100 },
     ]);
-    // 2026-07-21 is day 21 → (21−1)/7 = 2 → week index 2 (0-based).
-    expect(map.get('6:2')).toBe(4);
+    // July 2026 Mondays are 6, 13, 20, 27 → the 21st's week is ordinal 3 → 2.
+    expect(map.get('2026-07:2')).toBe(4);
   });
 
   it('yearlyWeekIntensities keeps the 5th Monday of a month in its own band', () => {
@@ -351,8 +352,25 @@ describe('heatmap intensity builders', () => {
       gross_margin_percent: 100,
     });
     const map = yearlyWeekIntensities([row('2026-03-23'), row('2026-03-30')]);
-    expect(map.has('2:3')).toBe(true);
-    expect(map.has('2:4')).toBe(true);
+    expect(map.has('2026-03:3')).toBe(true);
+    expect(map.has('2026-03:4')).toBe(true);
+  });
+
+  it('yearlyWeekIntensities keys are YYYY-MM:week so multi-year ranges never collide', () => {
+    // January 2025's and January 2026's first Monday weeks must stay in
+    // separate cells — the old monthIdx key merged them into `0:0`.
+    const row = (week_start: string) => ({
+      week_start,
+      total_minor: 100,
+      currency: 'USD',
+      sale_count: 1,
+      cogs_minor: 0,
+      gross_profit_minor: 100,
+      gross_margin_percent: 100,
+    });
+    const map = yearlyWeekIntensities([row('2025-01-06'), row('2026-01-05')]);
+    expect(map.has('2025-01:0')).toBe(true);
+    expect(map.has('2026-01:0')).toBe(true);
   });
 
   it('buildHeatmapIntensities dispatches by granularity', () => {
@@ -362,10 +380,25 @@ describe('heatmap intensity builders', () => {
 
     expect(buildHeatmapIntensities('weekly', { hourly }).has('0:10')).toBe(true);
     expect(buildHeatmapIntensities('monthly', { daily }).has('27')).toBe(true);
-    expect(buildHeatmapIntensities('yearly', { weekly }).has('6:2')).toBe(true);
+    expect(buildHeatmapIntensities('yearly', { weekly }).has('2026-07:2')).toBe(true);
     // daily + custom fall back to the weekday view from hourly rows.
     expect(buildHeatmapIntensities('daily', { hourly }).has('0')).toBe(true);
     expect(buildHeatmapIntensities('custom', { hourly }).has('0')).toBe(true);
+  });
+});
+
+describe('yearlyHeatmapColumns — range-derived yearly heatmap columns', () => {
+  it('enumerates the months in the range with year-aware labels', () => {
+    const cols = yearlyHeatmapColumns('2025-11-01', '2026-02-28');
+    expect(cols.map((c) => c.key)).toEqual(['2025-11', '2025-12', '2026-01', '2026-02']);
+    expect(cols.map((c) => c.label)).toEqual(['11/25', '12/25', '01/26', '02/26']);
+  });
+
+  it('uses month names on single-year ranges and counts Monday weeks per column', () => {
+    const cols = yearlyHeatmapColumns('2026-03-01', '2026-04-30');
+    expect(cols.map((c) => c.label)).toEqual(['Mar', 'Apr']);
+    expect(cols[0]!.cells).toBe(5); // March 2026 has five Mondays
+    expect(cols[1]!.cells).toBe(4); // April 2026 has four
   });
 });
 

@@ -12,7 +12,7 @@ import { useWorkspaceNav } from '@/hooks/useWorkspaceNav';
 import { l10nErrorMessage } from '@/utils/app-error';
 import { AnalyticsCardContent } from './AnalyticsCardContent';
 import { analyticsDataCache, analyticsQueryKey, clearAnalyticsCache, cardQueryKey } from './analytics-cache';
-import { buildHeatmapIntensities, loadHeatmapRows, rangeForGranularity } from './analytics-data';
+import { buildHeatmapIntensities, loadHeatmapRows, rangeForGranularity, yearlyHeatmapColumns } from './analytics-data';
 import { clearAnalyticsErrors, useAnalyticsQuery } from './useAnalyticsQuery';
 import './AnalyticsScreen.css';
 
@@ -94,20 +94,6 @@ export function monthCalendarGrid(): { leading: number; days: number; trailing: 
   return { leading, days, trailing };
 }
 
-/**
- * Number of Monday weeks in a month (4 or 5) — the yearly heatmap's band
- * count per month column. Months with five Mondays get a 5th band so the
- * 5th week's revenue never merges into the 4th.
- */
-export function mondayWeeksInMonth(year: number, month: number): number {
-  const days = new Date(year, month + 1, 0).getDate();
-  let weeks = 0;
-  for (let day = 1; day <= days; day++) {
-    if (((new Date(year, month, day).getDay() + 6) % 7) === 0) weeks += 1;
-  }
-  return weeks;
-}
-
 // Heatmap time buckets per granularity. Custom falls back to the daily
 // week view until a real range is selected.
 const HEAT_BUCKETS: Record<Exclude<Granularity, 'custom'>, string[]> = {
@@ -177,10 +163,27 @@ const ANALYTICS_CARDS: AnalyticsCard[] = [
 export default function AnalyticsScreen() {
   const { l10n } = useLocalization();
   const { goToWorkspacePicker } = useWorkspaceNav();
-  const { sessionToken: rawToken } = useWorkspace();
+  const { sessionToken: rawToken, availableWorkspaces, activeInstance } = useWorkspace();
   const sessionToken = rawToken || '';
 
-  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('retail');
+  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>(() => {
+    // Default to the workspace type the user was last in, so the selector
+    // opens on the active workspace's view.
+    return activeInstance?.type_key === 'restaurant-pos' ? 'restaurant' : 'retail';
+  });
+
+  // Label the selector with the real workspace names ("Store POS" /
+  // "Restaurant POS") from the workspace registry; fall back to the
+  // localized type label when the registry hasn't loaded or the test
+  // stub has no instances.
+  const workspaceLabel = (view: WorkspaceView): string => {
+    const typeKey = view === 'retail' ? 'store-pos' : 'restaurant-pos';
+    const inst = availableWorkspaces.find((w) => w.type_key === typeKey);
+    if (inst?.name) return inst.name;
+    return l10n.getString(
+      view === 'retail' ? 'analytics-workspace-retail' : 'analytics-workspace-restaurant',
+    );
+  };
   const [granularity, setGranularity] = useState<Granularity>('daily');
   const [customFrom, setCustomFrom] = useState(isoToday());
   const [customTo, setCustomTo] = useState(isoToday());
@@ -541,8 +544,8 @@ const [paletteOpen, setPaletteOpen] = useState(false);
 
   // Smart heatmap — bucket cells change with the selected granularity.
   // Monthly renders one cell per day of the current month (28–31);
-  // yearly renders a 12-month × 4–5-week grid (one band per Monday week);
-  // other granularities are flat.
+  // yearly renders one column per month in the query range (4–5 Monday
+  // weeks each); other granularities are flat.
   // Intensities come from real revenue rows via the TTL cache.
   const heatmapQuery = useAnalyticsQuery(
     cardQueryKey('heatmap', workspaceView, granularity, dateRange.from, dateRange.to),
@@ -620,13 +623,14 @@ const [paletteOpen, setPaletteOpen] = useState(false);
       );
     }
     if (granularity === 'yearly') {
+      const columns = yearlyHeatmapColumns(dateRange.from, dateRange.to);
       return (
         <div className="analytics-heatmap analytics-heatmap--yearly" role="img" aria-label={aria}>
-          {HEAT_BUCKETS.monthly.map((month, mi) => (
-            <div className="analytics-heat-column" key={month}>
-              <span className="analytics-heat-label">{month}</span>
-              {Array.from({ length: mondayWeeksInMonth(new Date().getFullYear(), mi) }, (_, week) => (
-                <div key={week} className="analytics-heat-cell" data-intensity={heatmapIntensities.get(`${mi}:${week}`) ?? 0} title={`${month} W${week + 1}`}>
+          {columns.map((col) => (
+            <div className="analytics-heat-column" key={col.key}>
+              <span className="analytics-heat-label">{col.label}</span>
+              {Array.from({ length: col.cells }, (_, week) => (
+                <div key={week} className="analytics-heat-cell" data-intensity={heatmapIntensities.get(`${col.key}:${week}`) ?? 0} title={`${col.label} W${week + 1}`}>
                   <div className="analytics-heat-block" />
                 </div>
               ))}
@@ -696,8 +700,8 @@ const [paletteOpen, setPaletteOpen] = useState(false);
             }}
             aria-label={l10n.getString('analytics-workspace-select-aria')}
           >
-            <option value="retail">{l10n.getString('analytics-workspace-retail')}</option>
-            <option value="restaurant">{l10n.getString('analytics-workspace-restaurant')}</option>
+            <option value="retail">{workspaceLabel('retail')}</option>
+            <option value="restaurant">{workspaceLabel('restaurant')}</option>
           </select>
         </div>
 

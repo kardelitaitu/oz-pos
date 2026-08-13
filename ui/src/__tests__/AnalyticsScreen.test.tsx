@@ -190,7 +190,8 @@ vi.mock('@/api/tables', () => ({
   listTablesScoped: () => mockListTablesScoped(),
 }));
 
-import AnalyticsScreen, { nextExpandedKey, daysInCurrentMonth, monthCalendarGrid, mondayWeeksInMonth, smartScale } from '@/features/analytics/AnalyticsScreen';
+import AnalyticsScreen, { nextExpandedKey, daysInCurrentMonth, monthCalendarGrid, smartScale } from '@/features/analytics/AnalyticsScreen';
+import { yearlyHeatmapColumns } from '@/features/analytics/analytics-data';
 import { analyticsDataCache, clearAnalyticsCache } from '@/features/analytics/analytics-cache';
 import { registerAnalyticsFeature } from '@/features/analytics/register';
 import { registerStaffFeature } from '@/features/staff/register';
@@ -725,14 +726,17 @@ describe('AnalyticsScreen layout shell', () => {
     expect(filled).toBeLessThanOrEqual(31);
     expect(total % 7).toBe(0); // complete calendar weeks
 
-    // Yearly → 12 month columns × the month's Monday weeks (4–5 rows):
-    // months with five Mondays gain a 5th band so weeks never merge.
+    // Yearly → one column per month in the query range (Jan → today), each
+    // with the month's Monday weeks (4–5 rows): the frame follows the
+    // range, never the current year's full 12 columns.
     fireEvent.click(screen.getByRole('radio', { name: 'Yearly' }));
     await flushRecalc();
-    const year = new Date().getFullYear();
-    const yearlyCells = Array.from({ length: 12 }, (_, mi) => mondayWeeksInMonth(year, mi)).reduce((a, b) => a + b, 0);
+    const now = new Date();
+    const isoToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const yearlyCols = yearlyHeatmapColumns(`${now.getFullYear()}-01-01`, isoToday);
+    const yearlyCells = yearlyCols.reduce((a, c) => a + c.cells, 0);
     expect(cellCount()).toBe(yearlyCells);
-    expect(heatmap()?.querySelectorAll('.analytics-heat-column').length).toBe(12);
+    expect(heatmap()?.querySelectorAll('.analytics-heat-column').length).toBe(yearlyCols.length);
   });
 
   it('renders designed content in the non-heatmap cards', async () => {

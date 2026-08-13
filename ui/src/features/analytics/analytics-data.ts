@@ -219,9 +219,10 @@ export function alignPrevBuckets(current: Bucket[], previous: Bucket[]): number[
 //   daily/custom: weekday index (0 = Mon … 6 = Sun)
 //   weekly:       `${dayIdx}:${hour}` (dayIdx 0 = Mon, hour 0–23)
 //   monthly:      day-of-month number (1…31)
-//   yearly:       `${monthIdx}:${weekIdx}` (month 0–11, week 0–4 — the
-//                 band is the week's ordinal among the month's Mondays, so
-//                 a 5-Monday month uses band 4 and never merges weeks)
+//   yearly:       `${YYYY-MM}:${weekIdx}` — the key's month is the range's
+//                 actual month (multi-year ranges keep separate columns),
+//                 and weekIdx 0–4 is the week's ordinal among the month's
+//                 Mondays (5-Monday months use band 4, never merging weeks)
 //
 // Intensities are normalized 0–4 against the strongest cell in the set.
 
@@ -286,7 +287,7 @@ export function monthDayIntensities(rows: DailyRevenueRow[]): Map<string, number
   );
 }
 
-/** Weekly revenue mapped to (month, week-of-month) for the 12×(4–5) yearly grid. */
+/** Weekly revenue mapped to (YYYY-MM, week-of-month) for the range-derived yearly grid. */
 export function yearlyWeekIntensities(rows: WeeklyRevenueRow[]): Map<string, number> {
   return normalizeIntensities(
     rows.map((r) => {
@@ -295,14 +296,58 @@ export function yearlyWeekIntensities(rows: WeeklyRevenueRow[]): Map<string, num
       // Ordinal of the week among the month's Monday weeks (0-based) — the
       // same Monday-first structure as the trend cards' weekStartKey. The
       // old day-of-month arithmetic capped at 3, silently merging the 5th
-      // Monday of a month into the 4th week's cell.
+      // Monday of a month into the 4th week's cell. The key carries the
+      // week_start's YYYY-MM so a multi-year range never merges two
+      // Januaries into one column.
       let week = 0;
       for (let day = 1; day <= d.getDate(); day++) {
         if (mondayFirst(new Date(d.getFullYear(), month, day).getDay()) === 0) week += 1;
       }
-      return [`${month}:${week - 1}`, r.total_minor] as [string, number];
+      return [`${r.week_start.slice(0, 7)}:${week - 1}`, r.total_minor] as [string, number];
     }),
   );
+}
+
+/** Short month names for the yearly heatmap's column headers. */
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** Number of Monday weeks in a month (4 or 5) — a yearly heatmap column's band count. */
+export function mondayWeeksInMonth(year: number, month: number): number {
+  const days = new Date(year, month + 1, 0).getDate();
+  let weeks = 0;
+  for (let day = 1; day <= days; day++) {
+    if (mondayFirst(new Date(year, month, day).getDay()) === 0) weeks += 1;
+  }
+  return weeks;
+}
+
+/** One column of the yearly heatmap: a month in the query range. */
+export interface YearlyHeatmapColumn {
+  /** YYYY-MM — matches the `yearlyWeekIntensities` cell keys. */
+  key: string;
+  /** Column header: month name on single-year ranges, MM/YY when the range spans years. */
+  label: string;
+  /** Monday-week count (4 or 5) — how many heat cells the column renders. */
+  cells: number;
+}
+
+/**
+ * The yearly heatmap's columns: one per month in `[from, to]` — never the
+ * current year's fixed 12 — so a past-year range renders that year's
+ * months and a multi-year range renders every month with year-aware
+ * labels, exactly like the trend cards' yearly buckets.
+ */
+export function yearlyHeatmapColumns(from: string, to: string): YearlyHeatmapColumn[] {
+  const months = bucketKeys('monthly', from, to);
+  const multiYear = months.length > 0 && months[0]!.slice(0, 4) !== months[months.length - 1]!.slice(0, 4);
+  return months.map((ym) => {
+    const [y, m] = ym.split('-').map(Number);
+    return {
+      key: ym,
+      label: multiYear ? `${ym.slice(5)}/${ym.slice(2, 4)}` : MONTH_NAMES[m! - 1]!,
+      cells: mondayWeeksInMonth(y!, m! - 1),
+    };
+  });
 }
 
 /** Per-cell intensities for the heatmap card at the given granularity. */
