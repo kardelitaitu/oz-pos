@@ -71,6 +71,14 @@ type Granularity = 'daily' | 'weekly' | 'monthly';
 
 const GRANULARITIES: Granularity[] = ['daily', 'weekly', 'monthly'];
 
+/** Cached on-demand weekly/monthly revenue series, keyed by granularity + range. */
+interface GranularitySeries {
+  granularity: 'weekly' | 'monthly';
+  from: string;
+  to: string;
+  rows: WeeklyRevenueRow[] | MonthlyRevenueRow[];
+}
+
 // Sunday-first day keys, matching the backend `day_of_week` (0 = Sunday).
 const DAY_LABELS = ['day-sunday', 'day-monday', 'day-tuesday', 'day-wednesday', 'day-thursday', 'day-friday', 'day-saturday'];
 
@@ -117,12 +125,13 @@ export default function DashboardScreen() {
   const [from, setFrom] = useState(daysAgo(29));
   const [to, setTo] = useState(today());
   const [loading, setLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Current period
+  // Current period. `dailyRevenue` is always fetched (the KPIs and the default
+  // chart derive from it); weekly/monthly are fetched on demand by the series
+  // effect below, so the daily view doesn't pay for two unused aggregates.
   const [dailyRevenue, setDailyRevenue] = useState<DailyRevenueRow[]>([]);
-  const [weeklyRevenue, setWeeklyRevenue] = useState<WeeklyRevenueRow[]>([]);
-  const [monthlyRevenue, setMonthlyRevenue] = useState<MonthlyRevenueRow[]>([]);
   const [topProducts, setTopProducts] = useState<TopProductRow[]>([]);
   const [lowStock, setLowStock] = useState<LowStockAlert[]>([]);
   const [categoryBreakdown, setCategoryBreakdown] = useState<CategoryBreakdownRow[]>([]);
@@ -131,6 +140,11 @@ export default function DashboardScreen() {
 
   // Previous period for deltas
   const [prevDaily, setPrevDaily] = useState<DailyRevenueRow[]>([]);
+
+  // On-demand weekly/monthly revenue series cache.
+  const [series, setSeries] = useState<GranularitySeries | null>(null);
+  const [seriesLoading, setSeriesLoading] = useState(false);
+  const [seriesError, setSeriesError] = useState<string | null>(null);
 
   // Refs to the granularity radio buttons so arrow-key navigation can move
   // focus to the newly-checked option (roving tabindex per WAI-ARIA radio).
@@ -162,10 +176,8 @@ export default function DashboardScreen() {
       const prevFrom = shiftDate(from, -days);
       const prevTo = shiftDate(from, -1);
 
-      const [daily, weekly, monthly, top, stock, cats, heat, prev] = await Promise.all([
+      const [daily, top, stock, cats, heat, prev] = await Promise.all([
         getDailyRevenue(from, to, sessionToken),
-        getWeeklyRevenue(from, to, sessionToken),
-        getMonthlyRevenue(from, to, sessionToken),
         getTopProducts(from, to, 10, sessionToken, 'revenue'),
         getLowStockAlerts(10, sessionToken),
         getCategoryBreakdown(from, to, sessionToken),
@@ -173,14 +185,13 @@ export default function DashboardScreen() {
         getDailyRevenue(prevFrom, prevTo, sessionToken),
       ]);
       setDailyRevenue(daily);
-      setWeeklyRevenue(weekly);
-      setMonthlyRevenue(monthly);
       setTopProducts(top);
       setLowStock(stock);
       setCategoryBreakdown(cats);
       setSelectedCategory(null);
       setHeatmap(heat);
       setPrevDaily(prev);
+      setHasLoaded(true);
     } catch (e) {
       setError(l10nErrorMessage(e, l10n, 'dashboard-error-load'));
     } finally {
@@ -190,15 +201,51 @@ export default function DashboardScreen() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // Fetch the weekly/monthly revenue series on demand, only when that
+  // granularity is selected. The result is cached (keyed by granularity +
+  // range) so toggling back reuses it and a date-range change invalidates it.
+  useEffect(() => {
+    if (granularity === 'daily') return;
+    const fresh = series
+      && series.granularity === granularity
+      && series.from === from
+      && series.to === to;
+    if (fresh) return;
+
+    let cancelled = false;
+    setSeriesLoading(true);
+    setSeriesError(null);
+    const fetcher = granularity === 'weekly' ? getWeeklyRevenue : getMonthlyRevenue;
+    fetcher(from, to, sessionToken)
+      .then((rows) => {
+        if (cancelled) return;
+        setSeries({ granularity, from, to, rows });
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setSeriesError(l10nErrorMessage(e, l10n, 'dashboard-error-load'));
+      })
+      .finally(() => {
+        if (!cancelled) setSeriesLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [granularity, from, to, sessionToken, series, l10n]);
+
   // ── Revenue series for chart ─────────────────────────────────────
 
   const revenueSeries = useMemo(() => {
     switch (granularity) {
       case 'daily': return dailyRevenue.map((r) => ({ date: r.date, total: r.total_minor, profit: r.gross_profit_minor, count: r.sale_count }));
-      case 'weekly': return weeklyRevenue.map((r) => ({ date: r.week_start, total: r.total_minor, profit: r.gross_profit_minor, count: r.sale_count }));
-      case 'monthly': return monthlyRevenue.map((r) => ({ date: r.month, total: r.total_minor, profit: r.gross_profit_minor, count: r.sale_count }));
+      case 'weekly': {
+        const rows = series?.granularity === 'weekly' ? (series.rows as WeeklyRevenueRow[]) : [];
+        return rows.map((r) => ({ date: r.week_start, total: r.total_minor, profit: r.gross_profit_minor, count: r.sale_count }));
+      }
+      case 'monthly': {
+        const rows = series?.granularity === 'monthly' ? (series.rows as MonthlyRevenueRow[]) : [];
+        return rows.map((r) => ({ date: r.month, total: r.total_minor, profit: r.gross_profit_minor, count: r.sale_count }));
+      }
     }
-  }, [granularity, dailyRevenue, weeklyRevenue, monthlyRevenue]);
+  }, [granularity, dailyRevenue, series]);
 
   // ── KPI computed values with deltas ──────────────────────────────
 
@@ -295,8 +342,11 @@ export default function DashboardScreen() {
 
   // ── Render ───────────────────────────────────────────────────────
 
-  if (loading) return <div className="dashboard"><Spinner aria-label={l10n.getString('spinner-label')} /></div>;
-  if (error) return <div className="dashboard"><p className="dashboard-error">{error}</p></div>;
+  // The full-screen spinner/error replace the dashboard only on the very first
+  // load (no data yet). Once loaded, reloads keep stale data visible and show
+  // a lightweight in-flight indicator instead of flashing the whole screen.
+  if (!hasLoaded && loading) return <div className="dashboard"><Spinner aria-label={l10n.getString('spinner-label')} /></div>;
+  if (!hasLoaded && error) return <div className="dashboard"><p className="dashboard-error">{error}</p></div>;
 
   return (
     <div className="dashboard dashboard--fullscreen" role="region" aria-label={requiredLocalized(l10n, 'dashboard-region-aria')}>
@@ -308,6 +358,14 @@ export default function DashboardScreen() {
         </svg>
         <Localized id="dashboard-back"><span>Back</span></Localized>
       </button>
+      {loading && hasLoaded && (
+        <p className="dashboard-refreshing" role="status">
+          <Localized id="dashboard-refreshing"><span>Refreshing…</span></Localized>
+        </p>
+      )}
+      {error && hasLoaded && (
+        <p className="dashboard-error" role="alert">{error}</p>
+      )}
       {/* Header: title + date range + granularity */}
       <div className="dashboard-header">
         <div className="dashboard-header-top">
@@ -391,7 +449,11 @@ export default function DashboardScreen() {
       <div className="dashboard-chart-row">
         <Card shadow="sm" className="dashboard-chart-card">
           <Localized id="dashboard-chart-revenue"><h2 className="dashboard-section-title">Revenue Trend</h2></Localized>
-          {revenueSeries.length > 0 ? (
+          {granularity !== 'daily' && seriesLoading ? (
+            <div className="dashboard-chart-loading"><Spinner aria-label={l10n.getString('spinner-label')} /></div>
+          ) : granularity !== 'daily' && seriesError ? (
+            <p className="dashboard-error">{seriesError}</p>
+          ) : revenueSeries.length > 0 ? (
             <ReactEChartsCore echarts={echarts} option={revenueChartOption} style={{ height: 320 }} notMerge aria-label={l10n.getString('dashboard-chart-revenue-aria')} />
           ) : <p className="dashboard-no-data"><Localized id="dashboard-no-data"><span>No data yet</span></Localized></p>}
         </Card>

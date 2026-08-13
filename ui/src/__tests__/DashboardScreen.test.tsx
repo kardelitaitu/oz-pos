@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { FluentBundle, FluentResource } from '@fluent/bundle';
 import { ReactLocalization, LocalizationProvider } from '@fluent/react';
 import DashboardScreen from '@/features/reports/DashboardScreen';
@@ -357,5 +357,43 @@ describe('DashboardScreen', () => {
     await waitFor(() => {
       expect(screen.getByRole('region', { name: 'Dashboard' })).toBeTruthy();
     });
+  });
+
+  // ── Lazy granularity loading ─────────────────────────────────────
+  it('lazy-loads the weekly/monthly series only when that granularity is selected', async () => {
+    resolveAllWithDefaults();
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Revenue Trend')).toBeTruthy());
+
+    // The default daily view must not fetch the weekly/monthly aggregates.
+    expect(mockGetWeeklyRevenue).not.toHaveBeenCalled();
+    expect(mockGetMonthlyRevenue).not.toHaveBeenCalled();
+
+    const radios = screen.getAllByRole('radio');
+    fireEvent.click(radios[1]!); // Weekly
+    await waitFor(() => expect(mockGetWeeklyRevenue).toHaveBeenCalledTimes(1));
+    expect(mockGetMonthlyRevenue).not.toHaveBeenCalled();
+
+    fireEvent.click(radios[2]!); // Monthly
+    await waitFor(() => expect(mockGetMonthlyRevenue).toHaveBeenCalledTimes(1));
+  });
+
+  // ── No full-screen spinner on reload ─────────────────────────────
+  it('keeps the dashboard visible (no full-screen spinner) while reloading', async () => {
+    resolveAllWithDefaults();
+    renderScreen();
+    await waitFor(() => expect(screen.getByText('Revenue Trend')).toBeTruthy());
+
+    // Hold the next core load in flight to observe the non-blocking state.
+    mockGetDailyRevenue.mockImplementation(() => new Promise(() => {}));
+
+    fireEvent.change(screen.getByLabelText('dashboard-filter-from'), { target: { value: '2026-06-01' } });
+    fireEvent.click(screen.getByText('Apply'));
+
+    // The dashboard must stay rendered with a lightweight status — never
+    // replaced by the full-screen spinner.
+    await waitFor(() => expect(screen.getByText('Refreshing…')).toBeTruthy());
+    expect(screen.getByText('Revenue Trend')).toBeTruthy();
+    expect(screen.queryByTestId('spinner')).toBeNull();
   });
 });

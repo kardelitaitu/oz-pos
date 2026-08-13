@@ -217,14 +217,14 @@ Audit of the owner/admin reports dashboard (`DashboardScreen.tsx` +
 
 ### Dashboard
 
-1. **Eager loading** — `loadData` fetches all 8 datasets (daily/weekly/monthly
-   revenue, top products, low stock, category, heatmap, prev-daily) regardless
-   of the selected granularity; weekly/monthly are only needed when selected.
-   Making this lazy reintroduces a spinner flash on granularity switch (the
-   current eager fetch makes the switch instant), so it's a UX tradeoff.
-2. **Full-screen spinner flash on date-range change** — `setLoading(true)`
-   replaces the whole dashboard with a spinner instead of keeping stale data
-   visible while the new range loads.
+1. ✅ **Eager loading fixed** — `loadData` no longer fetches weekly/monthly
+   up front. Daily + prev-daily + top products + low stock + category + heatmap
+   load once; the weekly/monthly series is fetched on demand (cached keyed by
+   granularity + range) when that granularity is selected.
+2. ✅ **Full-screen spinner flash fixed** — the spinner/error replace the
+   dashboard only on the first load. Reloads keep stale data visible with a
+   `role="status"` "Refreshing…" indicator, and reload failures show an inline
+   `role="alert"` banner instead of wiping the screen.
 3. **`fmtDelta` `+∞` / `−`** — unlocalized math symbols for the
    previous-period-is-zero case; currently unreachable because the KPI delta
    guards on `prev > 0`.

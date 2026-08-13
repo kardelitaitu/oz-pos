@@ -177,6 +177,7 @@ dashboard-category-clear-aria = Hapus pilihan kategori
 dashboard-back = Kembali
 dashboard-back-aria = Kembali ke beranda
 dashboard-error-load = Gagal memuat data dasbor. Silakan coba lagi.
+dashboard-refreshing = Menyegarkan…
 
 # Dashboard — CSV export columns
 dashboard-export-col-date = Tanggal

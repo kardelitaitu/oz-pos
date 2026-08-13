@@ -176,6 +176,7 @@ dashboard-category-clear-aria = Clear category selection
 dashboard-back = Back
 dashboard-back-aria = Back to home
 dashboard-error-load = Failed to load dashboard data. Please try again.
+dashboard-refreshing = Refreshing…
 
 # Dashboard — CSV export columns
 dashboard-export-col-date = Date

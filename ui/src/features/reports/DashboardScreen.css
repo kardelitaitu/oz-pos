@@ -232,6 +232,25 @@
   font-weight: var(--font-weight-semibold);
 }
 
+/* ── In-flight refresh indicator (over stale data, not a full spinner) */
+
+.dashboard-refreshing {
+  align-self: flex-start;
+  margin: 0;
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--color-fg-secondary);
+  background: var(--color-bg-hover);
+  border-radius: var(--radius-sm);
+}
+
+.dashboard-chart-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 320px;
+}
+
 /* ── Error / No data ────────────────────────────────────────── */
 
 .dashboard-error {
