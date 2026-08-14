@@ -679,22 +679,33 @@ pub struct StockAdjustment {
 /// Adjust stock by SKU, mirroring the SQLite `adjust_stock` path: read the
 /// previous quantity, reject negative stock, and write the `stock_movements`
 /// ledger + `inventory` + `stock_summary` rows in one transaction.
+///
+/// The whole read-modify-write runs inside the transaction with the product
+/// row locked (`SELECT … FOR UPDATE`), so concurrent adjustments to the same
+/// SKU serialize instead of losing updates — SQLite's single-writer
+/// semantics made the read-outside-tx shape safe there, Postgres does not.
 pub async fn adjust_stock(pool: &Pool, sku: &str, delta: i64) -> Result<StockAdjustment, PgError> {
     let mut client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
+    let tx = client
+        .transaction()
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
 
-    let product_id: Option<String> = client
-        .query_opt("SELECT id FROM products WHERE sku = $1", &[&sku])
+    // Lock the product row first: every adjustment to this SKU contends on
+    // the same row lock, so the inventory read below always sees the latest
+    // committed quantity (and the `inventory` row, when missing, is created
+    // by the first locker before the second reads it).
+    let product_id: Option<String> = tx
+        .query_opt("SELECT id FROM products WHERE sku = $1 FOR UPDATE", &[&sku])
         .await
         .map_err(|e| PgError::Db(e.to_string()))?
         .map(|r| r.get(0));
     let product_id = match product_id {
         Some(id) => id,
-        None => {
-            return Err(PgError::NotFound);
-        }
+        None => return Err(PgError::NotFound),
     };
 
-    let previous_qty: i64 = client
+    let previous_qty: i64 = tx
         .query_opt(
             "SELECT qty FROM inventory WHERE product_id = $1",
             &[&product_id],
@@ -713,10 +724,6 @@ pub async fn adjust_stock(pool: &Pool, sku: &str, delta: i64) -> Result<StockAdj
             ))
         })?;
 
-    let tx = client
-        .transaction()
-        .await
-        .map_err(|e| PgError::Db(e.to_string()))?;
     let now = now_rfc3339();
     tx.execute(
         "INSERT INTO stock_movements (id, item_id, delta, reason, source_terminal_id, source_user_id, created_at)
@@ -1018,6 +1025,11 @@ pub async fn get_sale(pool: &Pool, id: &str) -> Result<Option<Sale>, PgError> {
 }
 
 /// Transition a sale's status, validating the state machine first.
+///
+/// The UPDATE is a compare-and-swap (`WHERE id = $1 AND status = $2`) so
+/// two concurrent transitions cannot both validate against the same stale
+/// status and double-apply (the loser re-reads and reports the current
+/// state).
 pub async fn update_sale_status(pool: &Pool, id: &str, to: SaleStatus) -> Result<Sale, PgError> {
     let client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
 
@@ -1039,13 +1051,31 @@ pub async fn update_sale_status(pool: &Pool, id: &str, to: SaleStatus) -> Result
         )));
     }
 
-    client
+    let now = now_rfc3339();
+    let updated = client
         .execute(
-            "UPDATE sales SET status = $1, updated_at = $2, version = version + 1 WHERE id = $3",
-            &[&to.as_stored_str(), &now_rfc3339(), &id],
+            "UPDATE sales SET status = $1, updated_at = $2, version = version + 1 \
+             WHERE id = $3 AND status = $4",
+            &[&to.as_stored_str(), &now, &id, &current_str],
         )
         .await
         .map_err(|e| PgError::Db(e.to_string()))?;
+
+    if updated == 0 {
+        // Lost the race to a concurrent transition — re-read to report the
+        // status we actually saw, rather than silently succeeding.
+        let now_str: Option<String> = client
+            .query_opt("SELECT status FROM sales WHERE id = $1", &[&id])
+            .await
+            .map_err(|e| PgError::Db(e.to_string()))?
+            .map(|r| r.get(0));
+        return match now_str {
+            None => Err(PgError::NotFound),
+            Some(s) => Err(PgError::Validation(format!(
+                "cannot transition from {s:?} to {to:?}"
+            ))),
+        };
+    }
 
     match get_sale(pool, id).await? {
         Some(sale) => Ok(sale),
@@ -1368,5 +1398,169 @@ mod tests {
                 .await
                 .unwrap();
         }
+    }
+
+    /// Concurrent `adjust_stock` calls must not lose updates: the whole
+    /// read-modify-write is serialized on the product-row lock, so N
+    /// adjustments of -1 land as N distinct movements and the final quantity
+    /// is exactly `start - N`. (The pre-fix code read `previous_qty` outside
+    /// the transaction, so every concurrent call saw the same starting value
+    /// and the last writer won.)
+    #[tokio::test]
+    async fn pg_integration_concurrent_adjust_stock() {
+        let url = std::env::var("OZ_TEST_PG_URL")
+            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+        let Some(pool) = test_pool(&url).await else {
+            eprintln!("PG concurrent adjust test skipped (Postgres unreachable at {url})");
+            return;
+        };
+
+        let tenant = unique_id("pg-race");
+        let sku = unique_id("PG-RACE");
+        let currency: Currency = "USD".parse().unwrap();
+        const ADJUSTMENTS: i64 = 20;
+
+        create_product(
+            &pool,
+            &tenant,
+            &sku,
+            "Race Stock",
+            Money {
+                minor_units: 100,
+                currency,
+            },
+            None,
+            None,
+            100,
+        )
+        .await
+        .expect("create_product");
+
+        // Fire all adjustments concurrently against the same SKU.
+        let mut set = tokio::task::JoinSet::new();
+        for _ in 0..ADJUSTMENTS {
+            let pool = pool.clone();
+            let sku = sku.clone();
+            set.spawn(async move { adjust_stock(&pool, &sku, -1).await });
+        }
+        let mut results = Vec::new();
+        while let Some(res) = set.join_next().await {
+            results.push(res.expect("task panicked"));
+        }
+        assert!(
+            results.iter().all(Result::is_ok),
+            "all adjustments must succeed, got {:?}",
+            results.iter().filter(|r| r.is_err()).count()
+        );
+
+        let fetched = get_product(&pool, &sku)
+            .await
+            .expect("get_product")
+            .expect("product must exist");
+        assert_eq!(
+            fetched.stock_qty,
+            Some(100 - ADJUSTMENTS),
+            "no adjustment may be lost under concurrency"
+        );
+
+        // Every adjustment wrote a ledger row (the ledger insert is inside
+        // the same serialized transaction).
+        let client = pool.get().await.unwrap();
+        let product_id: String = client
+            .query_one("SELECT id FROM products WHERE sku = $1", &[&sku])
+            .await
+            .unwrap()
+            .get(0);
+        let movements: i64 = client
+            .query_one(
+                "SELECT COUNT(*) FROM stock_movements WHERE item_id = $1",
+                &[&product_id],
+            )
+            .await
+            .unwrap()
+            .get(0);
+        assert_eq!(
+            movements,
+            ADJUSTMENTS + 1,
+            "initial-stock + each adjustment"
+        );
+
+        // Cleanup so the shared dev DB stays tidy.
+        let client = pool.get().await.unwrap();
+        client
+            .execute(
+                "DELETE FROM stock_movements WHERE item_id IN (SELECT id FROM products WHERE tenant_id = $1)",
+                &[&tenant],
+            )
+            .await
+            .unwrap();
+        client
+            .execute("DELETE FROM products WHERE tenant_id = $1", &[&tenant])
+            .await
+            .unwrap();
+    }
+
+    /// Two concurrent transitions of the same sale must not both validate
+    /// against the same stale status: exactly one wins, the loser re-reads
+    /// and reports the current state, and `version` bumps exactly once.
+    #[tokio::test]
+    async fn pg_integration_concurrent_sale_status_transition() {
+        let url = std::env::var("OZ_TEST_PG_URL")
+            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+        let Some(pool) = test_pool(&url).await else {
+            eprintln!("PG concurrent status test skipped (Postgres unreachable at {url})");
+            return;
+        };
+
+        let currency: Currency = "USD".parse().unwrap();
+        let mut sale = Sale::from_cart(&oz_core::Cart::new(currency)).expect("from_cart");
+        sale.line_count = 0;
+        sale.total = Money {
+            minor_units: 0,
+            currency,
+        };
+        sale.subtotal = Money {
+            minor_units: 0,
+            currency,
+        };
+        sale.lines = Vec::new();
+        create_sale(&pool, &sale).await.expect("create_sale");
+
+        let mut set = tokio::task::JoinSet::new();
+        for _ in 0..2 {
+            let pool = pool.clone();
+            let id = sale.id.clone();
+            set.spawn(async move { update_sale_status(&pool, &id, SaleStatus::Active).await });
+        }
+        let mut results = Vec::new();
+        while let Some(res) = set.join_next().await {
+            results.push(res.expect("task panicked"));
+        }
+
+        let successes = results.iter().filter(|r| r.is_ok()).count();
+        let failures = results.iter().filter(|r| r.is_err()).count();
+        assert_eq!(
+            successes, 1,
+            "exactly one concurrent transition may win (got {successes} ok / {failures} err)"
+        );
+        assert_eq!(failures, 1);
+        assert!(matches!(
+            results.iter().find(|r| r.is_err()),
+            Some(Err(PgError::Validation(_)))
+        ));
+
+        let final_sale = get_sale(&pool, &sale.id)
+            .await
+            .expect("get_sale")
+            .expect("sale must exist");
+        assert_eq!(final_sale.status, SaleStatus::Active);
+        assert_eq!(final_sale.version, 2, "version must bump exactly once");
+
+        // Cleanup.
+        let client = pool.get().await.unwrap();
+        client
+            .execute("DELETE FROM sales WHERE id = $1", &[&sale.id])
+            .await
+            .unwrap();
     }
 }

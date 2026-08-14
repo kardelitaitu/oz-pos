@@ -605,6 +605,57 @@ Lock to an explicit allowlist before serving the website:
 | The sync function is scaled beyond one instance | Move the rate limiter **and** the 5-min snapshot cache out of process memory into a shared store (Redis) — both are per-process today |
 | Schema changes ship | Adopt a Postgres migration tool (sqlx/refinery) so DDL is versioned, not ad-hoc `batch_execute` |
 | Cross-tenant isolation must be provable | Add Postgres Row-Level Security so a missed `WHERE tenant_id = ?` fails closed instead of leaking rows |
+| A second tenant brings the same product SKU or username | `products.sku` and `users.username` are globally `UNIQUE` today (fine for the single `default` tenant). First multi-tenant rollout must switch to `UNIQUE(tenant_id, sku)` / `UNIQUE(tenant_id, username)` and thread `tenant_id` through the by-SKU REST lookups — otherwise the second tenant's sync push fails with a 500 |
+
+---
+
+## 11.5 Post-Implementation Review (2026-08-15)
+
+Full review of the merged Phase 1 code (commits `8d565711` → `dd6a362c`): every
+REST handler, the sync store, prune, webhooks, the email/analytics port, the
+1.4 migration tool, the generated schema, and the plan doc's claims.
+
+### Fixed in this review
+
+| Finding | Fix | Test |
+|---------|-----|------|
+| `adjust_stock` read the previous quantity **outside** the transaction — concurrent adjustments to one SKU could lose updates (SQLite's single-writer semantics had masked it) | Whole read-modify-write moved inside the tx with the product row locked (`SELECT … FOR UPDATE`), serializing per-SKU adjustments | `pg_integration_concurrent_adjust_stock` — 20 concurrent `-1` adjustments must land as 20 ledger rows with final qty exactly `start − 20` |
+| `update_sale_status` validated against a stale status — two concurrent transitions could both pass the state-machine check and double-apply | Compare-and-swap `UPDATE … WHERE id = $1 AND status = $2`; the loser re-reads and reports the current state | `pg_integration_concurrent_sale_status_transition` — exactly one of two concurrent `Pending→Active` wins; `version` bumps exactly once |
+| `offline_queue` pulls filter `(tenant_id, created_at)` but no such index existed — every poll sorted the tenant's whole queue | Added `idx_offline_queue_tenant_created` to both schemas (regenerated `20260813_init.pg.sql` via the generator; index-surface guard bumped 121 → 122) | Existing `init_sql_creates_complete_schema_surface` guard |
+| Stale comment claimed "the oz-api router requires SQLite" on the PG branch | Rewritten: REST handlers dispatch on `state.pg`; the in-memory SQLite is a never-written fallback | — |
+
+### Verified clean (parity, no change needed)
+
+- Every data-touching REST handler dispatches on `state.pg`; the in-memory SQLite fallback is never written in production PG mode, and `/health` reads the real Postgres queue depth.
+- Analytics date math matches the SQLite engine: both interpret the stored UTC wall-clock; weekly grouping is Monday-first on both sides (`DATE(d, '-6 days', 'weekday 1')` ≡ `date_trunc('week', …)`).
+- Snapshot column parity (`price_updated_at` defaults to `''` in both schemas); `track_serial`/`is_active` 0/1 BIGINT reads consistent.
+- SMTP at rest: the PG loop decrypts via `oz_core::crypto` with the same static-key domain separation; plaintext legacy seeds degrade gracefully.
+- No `unwrap()`/`expect()` in production cloud-server code; every client-supplied id stays parameter-bound (hostile-id prune tests).
+- Migration tool: FK-topological copy order from `pg_constraint`, `ON CONFLICT DO NOTHING`, row-count + FNV-1a checksum verification, idempotent re-run verified live.
+- `db.rs` TLS enforcement (`sslmode=require` fail-closed) and startup secret checks intact.
+
+### Deferred (documented, not fixed)
+
+1. Global `UNIQUE(sku)` / `UNIQUE(username)` — see the new growth-path row above.
+2. Analytics scans use `created_at::date` (a cast, so `idx_sales_created_at` can't serve them). Fine for a background daily job; add `(status, (created_at::date))` if the bundle grows.
+3. Postgres Row-Level Security — already listed in the growth path; becomes mandatory with real multi-tenancy.
+
+### Test plan (what proves the port is right)
+
+| Area | Test | Backend |
+|------|------|---------|
+| REST round-trip (product/tax/user/plan/sale/terminal, oversell, state machine) | `pg_integration_rest_roundtrip` (oz-api) | live PG |
+| Concurrency (stock, status transitions) | the two `pg_integration_concurrent_*` tests | live PG |
+| Sync store push/pull/snapshot/plan | `pg_integration_sync_store_*` (cloud-server) | live PG |
+| Webhooks dedup, tenant resolution, plan writes | `pg_integration_webhooks_read_write_postgres` | live PG |
+| Prune retention batching + hostile-id-as-data | `pg_integration_prune_*` + unit tests | live PG + SQLite |
+| Email analytics bundle + settings | `pg_integration_email_loop_reads_postgres` | live PG |
+| SQLite → Postgres cutover | migration bin unit tests + live-PG integration incl. idempotent re-run | live PG |
+| CI gate | Postgres service container added to `ci.yml` (`rust-test-fast` + `rust-test-apps`) with `OZ_TEST_PG_URL`, so the skip-if-unreachable tests can no longer silently skip in CI | CI |
+
+All tests run with `OZ_TEST_PG_URL` set against one Postgres 16 and coexist
+(unique namespaces + cleanup); `cargo test -p oz-api` 138, `oz-cloud-server`
+158+2, `oz-core --lib` 1773, migration bin 5.
 
 ---
 
@@ -626,6 +677,9 @@ Lock to an explicit allowlist before serving the website:
 | POS breakage | No protocol change; redirect mode (421) catches stragglers |
 | PocketBase single-node | Holds only low-traffic auth data; migrate web_users to a hosted provider if it outgrows |
 | Sync conflicts | Version-based optimistic concurrency (existing) |
+| Lost stock updates under concurrency (read-outside-tx) | Fixed: `adjust_stock` locks the product row (`FOR UPDATE`) inside the tx; concurrent-adjust test proves no lost updates |
+| Double-applied sale status transitions under concurrency | Fixed: compare-and-swap `UPDATE … WHERE status = $current`; concurrent-transition test proves exactly one winner |
+| PG integration tests silently skip in CI | Fixed: Postgres service container + `OZ_TEST_PG_URL` in `ci.yml` (`rust-test-fast`, `rust-test-apps`) |
 
 ---
 

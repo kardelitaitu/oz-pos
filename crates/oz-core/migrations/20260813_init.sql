@@ -1188,6 +1188,8 @@ CREATE INDEX IF NOT EXISTS idx_offline_queue_status ON offline_queue(status);
 
 CREATE INDEX IF NOT EXISTS idx_offline_queue_tenant_status ON offline_queue(tenant_id, status);
 
+CREATE INDEX IF NOT EXISTS idx_offline_queue_tenant_created ON offline_queue(tenant_id, created_at);
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_idempotency_key ON payments(idempotency_key);
 
 CREATE INDEX IF NOT EXISTS idx_payments_sale_id ON payments(sale_id);

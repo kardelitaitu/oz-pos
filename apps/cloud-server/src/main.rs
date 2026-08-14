@@ -189,10 +189,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
         db::DbPool::Postgres(pg_pool) => {
             info!("running with PostgreSQL backend");
-            // For PostgreSQL, we use a PostgreSQL-compatible router.
-            // Currently, the oz-api router requires SQLite, so we fall
-            // back to SQLite for the API layer when PostgreSQL is the
-            // primary database. The sync transport layer can use PG.
+            // The oz-api REST handlers dispatch on `state.pg` (Some →
+            // Postgres data layer, None → the SQLite `Store` path), so the
+            // API layer reads/writes Postgres here. The in-memory SQLite is
+            // only a never-touched fallback for handlers that were never
+            // ported (health is PG-aware) — production data never lands in
+            // it.
             let conn = db::DbPool::connect_sqlite_in_memory()
                 .map_err(|e| format!("failed to create in-memory SQLite for API: {e}"))?;
             let state = CloudServerState {

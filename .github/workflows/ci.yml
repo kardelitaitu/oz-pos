@@ -101,6 +101,23 @@ jobs:
     name: Rust Test Fast (${{ matrix.shard }})
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    # Postgres for the cloud-server / oz-api PG integration tests
+    # (`OZ_TEST_PG_URL`). Without it those tests skip-if-unreachable and the
+    # Postgres data layer would never actually run in CI.
+    env:
+      OZ_TEST_PG_URL: postgres://postgres:postgres@localhost:5432/postgres
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     strategy:
       fail-fast: false
       matrix:
@@ -296,6 +313,22 @@ jobs:
   rust-test-apps:
     name: Rust Test Apps
     runs-on: ubuntu-latest
+    # Postgres for the cloud-server PG integration tests (same rationale as
+    # rust-test-fast).
+    env:
+      OZ_TEST_PG_URL: postgres://postgres:postgres@localhost:5432/postgres
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

@@ -509,7 +509,7 @@ mod tests {
                 &conn,
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'",
             ),
-            121,
+            122,
             "index surface drifted"
         );
         assert_eq!(
