@@ -32,6 +32,12 @@ pub struct CloudServerConfig {
     /// PostgreSQL instead of SQLite.
     pub database_url: Option<String>,
 
+    /// When `true` (`OZ_DB_REQUIRE_TLS=1`), a PostgreSQL `database_url` must
+    /// set `sslmode=require` — otherwise startup fails. This prevents the
+    /// rustls client from silently falling back to plaintext (`sslmode=prefer`
+    /// is the default when the URL omits it).
+    pub require_tls: bool,
+
     /// HTTP listen port (default: `3099`).
     pub port: u16,
 
@@ -112,10 +118,12 @@ impl CloudServerConfig {
 
         let database_url = std::env::var("DATABASE_URL").ok();
         let db_path = std::env::var("OZ_DB_PATH").unwrap_or_else(|_| "oz-pos.db".into());
+        let require_tls = env_bool("OZ_DB_REQUIRE_TLS");
 
         Ok(Self {
             db_path,
             database_url,
+            require_tls,
             port,
             admin_key,
             enforce_plans,

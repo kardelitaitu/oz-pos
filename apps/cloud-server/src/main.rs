@@ -353,6 +353,11 @@ pub fn build_router(
     };
     let api_router = oz_api::router(api_state);
 
+    // P8-3: Rate-limit token minting per client IP. This needs its own clone
+    // of the limiter because /api/v1/tokens runs BEFORE auth (it mints the
+    // JWT), so the per-tenant limiter has no claims to key on.
+    let token_rate_limiter = rate_limiter.clone();
+
     // Clone state for the health endpoint BEFORE SyncState::from consumes the original.
     let health_state = state.clone();
 
@@ -367,7 +372,12 @@ pub fn build_router(
     // P-2: Per-route-group concurrency limits prevent sync bursts
     // from starving the product/sales/health API routes.
     // API: 10 concurrent, sync: 40 concurrent.
-    let api_router = api_router.layer(ConcurrencyLimitLayer::new(10));
+    let api_router = api_router
+        .layer(ConcurrencyLimitLayer::new(10))
+        .layer(axum::middleware::from_fn(
+            crate::rate_limit::token_rate_limit_middleware,
+        ))
+        .layer(axum::Extension(token_rate_limiter));
     let sync_router = sync_router.layer(ConcurrencyLimitLayer::new(40));
 
     // OpenAPI documentation routes — Swagger UI + Scalar + raw OpenAPI JSON.
@@ -440,6 +450,7 @@ mod tests {
         config::CloudServerConfig {
             db_path: ":memory:".into(),
             database_url: None,
+            require_tls: false,
             port: 3099,
             admin_key: None,
             enforce_plans: false,
@@ -663,6 +674,32 @@ mod tests {
         let app = test_app();
         let req = with_auth("/api/sync/status", None);
         let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn token_mint_is_rate_limited_per_ip() {
+        let app = test_app();
+        let mint = |ip: &str| {
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/tokens")
+                .header("content-type", "application/json")
+                .header("x-forwarded-for", ip)
+                .body(Body::from(r#"{"label":"rate-limit-test"}"#))
+                .unwrap()
+        };
+
+        // Open dev mint (no admin key): 30 mints allowed per IP.
+        for i in 0..30 {
+            let resp = app.clone().oneshot(mint("203.0.113.10")).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::OK, "mint {i} should succeed");
+        }
+        // The 31st mint from the same IP is throttled.
+        let resp = app.clone().oneshot(mint("203.0.113.10")).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
+        // A different IP still has its own bucket.
+        let resp = app.oneshot(mint("203.0.113.11")).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
     }
 

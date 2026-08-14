@@ -25,7 +25,7 @@ use std::sync::Arc;
 use crate::config::CloudServerConfig;
 
 use tokio::sync::Mutex;
-use tracing::info;
+use tracing::{info, warn};
 
 /// A pooled database connection, either SQLite (behind a Mutex) or
 /// PostgreSQL (via deadpool).
@@ -52,7 +52,7 @@ impl DbPool {
         if let Some(ref url) = config.database_url
             && (url.starts_with("postgres://") || url.starts_with("postgresql://"))
         {
-            return Self::connect_postgres(url).await;
+            return Self::connect_postgres(url, config.require_tls).await;
         }
         Self::connect_sqlite(&config.db_path)
     }
@@ -117,16 +117,50 @@ impl DbPool {
     }
 
     /// Connect to a PostgreSQL database via connection URL.
-    pub async fn connect_postgres(url: &str) -> Result<Self, DbError> {
+    ///
+    /// When `require_tls` is set, the URL must specify `sslmode=require`;
+    /// otherwise startup fails rather than allowing a plaintext fallback.
+    pub async fn connect_postgres(url: &str, require_tls: bool) -> Result<Self, DbError> {
         use deadpool_postgres::{Manager, ManagerConfig, RecyclingMethod};
 
         let config = tokio_postgres::Config::from_str(url)
             .map_err(|e| DbError::Config(format!("invalid DATABASE_URL: {e}")))?;
 
+        if require_tls && config.get_ssl_mode() != tokio_postgres::config::SslMode::Require {
+            return Err(DbError::Config(
+                "OZ_DB_REQUIRE_TLS=1 requires DATABASE_URL to set `sslmode=require`; \
+                 refusing to connect with a plaintext fallback"
+                    .into(),
+            ));
+        }
+
         let mgr_config = ManagerConfig {
             recycling_method: RecyclingMethod::Fast,
         };
-        let manager = Manager::from_config(config, tokio_postgres::NoTls, mgr_config);
+        // TLS via rustls. tokio-postgres honours the connection string's
+        // `sslmode` (`disable` | `prefer` | `require`, default `prefer`), so a
+        // local plaintext Postgres keeps working while production sets
+        // `sslmode=require` for an encrypted connection. Roots come from the
+        // platform trust store (ca-certificates in the container image).
+        let mut roots = rustls::RootCertStore::empty();
+        let native = rustls_native_certs::load_native_certs();
+        if !native.errors.is_empty() {
+            warn!(
+                errors = ?native.errors,
+                "some native root certificates failed to load"
+            );
+        }
+        for cert in native.certs {
+            roots
+                .add(cert)
+                .map_err(|e| DbError::Config(format!("failed to add root certificate: {e}")))?;
+        }
+        let tls_config = rustls::ClientConfig::builder()
+            .with_root_certificates(roots)
+            .with_no_client_auth();
+        let tls = tokio_postgres_rustls::MakeRustlsConnect::new(tls_config);
+
+        let manager = Manager::from_config(config, tls, mgr_config);
 
         let pool = deadpool_postgres::Pool::builder(manager)
             .max_size(8)
@@ -322,7 +356,7 @@ mod tests {
 
     #[tokio::test]
     async fn postgres_url_parsing_rejects_bad_url() {
-        let result = DbPool::connect_postgres("not-a-url").await;
+        let result = DbPool::connect_postgres("not-a-url", false).await;
         // This should fail because Config::from_str will reject invalid URLs
         assert!(result.is_err());
     }
@@ -330,9 +364,37 @@ mod tests {
     #[tokio::test]
     async fn postgres_url_parsing_accepts_valid_url() {
         // This won't connect, but the URL parsing should succeed
-        let result = DbPool::connect_postgres("postgresql://localhost:5432/test").await;
+        let result = DbPool::connect_postgres("postgresql://localhost:5432/test", false).await;
         // Will fail at connection, not parsing
         let err = result.unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("Connection") || msg.contains("connection"),
+            "expected connection error, got: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn require_tls_rejects_url_without_sslmode_require() {
+        // No sslmode → defaults to `prefer`, which could fall back to
+        // plaintext, so the TLS requirement must fail before connecting.
+        let err = DbPool::connect_postgres("postgresql://localhost:5432/test", true)
+            .await
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("sslmode=require"),
+            "expected an sslmode=require error, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn require_tls_accepts_sslmode_require_and_fails_on_connection() {
+        // sslmode=require passes the check; it then fails because no server
+        // is listening — a Connection error, not a config error.
+        let err =
+            DbPool::connect_postgres("postgresql://localhost:5432/test?sslmode=require", true)
+                .await
+                .unwrap_err();
         let msg = err.to_string();
         assert!(
             msg.contains("Connection") || msg.contains("connection"),
@@ -436,7 +498,7 @@ mod tests {
     #[tokio::test]
     async fn pg_integration_connect_and_create_tables() {
         let url = "postgres://postgres:postgres@localhost:15432/postgres";
-        let pool = match DbPool::connect_postgres(url).await {
+        let pool = match DbPool::connect_postgres(url, false).await {
             Ok(p) => p,
             Err(e) => {
                 eprintln!("PG integration test skipped: {e}");
