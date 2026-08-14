@@ -102,6 +102,18 @@ pub fn should_send_scheduled(
     store: &Store<'_>,
     schedule: &ReportScheduleConfig,
 ) -> Result<bool, CoreError> {
+    let last_sent = store.get_setting(LAST_SENT_KEY)?;
+    should_send_scheduled_with_last_sent(schedule, last_sent)
+}
+
+/// Store-free variant of [`should_send_scheduled`] — same cadence +
+/// timezone + dedup logic, with the last-sent timestamp supplied by the
+/// caller. Lets the cloud server's Postgres report loop reuse this logic
+/// without a synchronous rusqlite `Store`.
+pub fn should_send_scheduled_with_last_sent(
+    schedule: &ReportScheduleConfig,
+    last_sent: Option<String>,
+) -> Result<bool, CoreError> {
     // Parse send time (HH:MM)
     let send_time =
         NaiveTime::parse_from_str(&schedule.send_at_time, "%H:%M").unwrap_or_else(|_| {
@@ -139,7 +151,7 @@ pub fn should_send_scheduled(
 
     // Deduplication: check last_sent_at
     let today = now_tz.format("%Y-%m-%d").to_string();
-    let last_sent = store.get_setting(LAST_SENT_KEY)?.unwrap_or_default();
+    let last_sent = last_sent.unwrap_or_default();
 
     // Extract date portion of last_sent ISO-8601 timestamp
     let last_date = last_sent.chars().take(10).collect::<String>();

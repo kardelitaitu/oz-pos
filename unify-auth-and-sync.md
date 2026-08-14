@@ -320,12 +320,17 @@ must survive the SQLite → Postgres move — they are not optional:
 | Mechanism | Today | Behavior |
 |-----------|-------|----------|
 | **Per-tenant rate limiter** (`rate_limit.rs`) | In-memory token bucket — DB-agnostic, already wired on both backends | push 100/min · pull 300/min · snapshot 50/min · status 300/min; token mint 30/min per IP; `429` + `Retry-After`; stale-bucket cleanup every 60 s |
-| **Retention / prune loop** (`prune.rs`) | Hourly — SQLite-specific, wired only on the SQLite branch today | archive `stock_movements` > 90 days (ledger rollup); delete `offline_queue` rows > 90 days regardless of status, in 500-row cursor batches; `incremental_vacuum(50)` per batch; `PRUNE_QUEUE_DELETED_TOTAL` counter |
+| **Retention / prune loop** (`prune.rs`) | Hourly, now on **both** backends — `offline_queue` retention ported to Postgres (`start_prune_loop_pg`); `archive_stock_movements` + `incremental_vacuum` remain SQLite-only | delete `offline_queue` rows > 90 days regardless of status, in 500-row cursor batches (SQLite: `incremental_vacuum(50)` per batch; PG: autovacuum reclaims space); `archive_stock_movements` ledger rollup (SQLite only); `PRUNE_QUEUE_DELETED_TOTAL` counter |
 
-Phase 1 must port the prune loop to Postgres — the batched DELETE is portable,
-`incremental_vacuum` becomes autovacuum/VACUUM — and re-wire it onto the
-Postgres branch, which today starts neither it nor the report-sender loop.
-The rate limiter stays as-is: in-memory, per-process, DB-agnostic.
+Phase 1.5 has ported the offline-queue retention half of the prune loop to
+Postgres (batched `DELETE ... id = ANY($1)`; `incremental_vacuum` becomes
+autovacuum) and re-wired it onto the Postgres branch, and the report-sender
+email loop now runs on Postgres too (`email_pg.rs` — settings + the full
+analytics bundle, reusing the shared scheduler/filter/builder logic from
+`oz_core`). Remaining on SQLite: the `archive_stock_movements` ledger rollup
+only (deliberate — Postgres reclaims space via autovacuum, and the stock
+rollup has no PG port). The rate limiter stays as-is: in-memory,
+per-process, DB-agnostic.
 
 ### Key Change: co-locate, don't merge
 
@@ -346,13 +351,47 @@ The rate limiter stays as-is: in-memory, per-process, DB-agnostic.
 
 | Step | Action |
 |------|--------|
-| 1.1 | Port the full 92-table migration set to Postgres DDL |
-| 1.2 | Make oz-api REST handlers run on Postgres (drop the in-memory SQLite fallback) |
-| 1.3 | Raise the pool above the 8-connection default (TLS via rustls is already wired) |
-| 1.4 | Migrate live sync data from SQLite to Postgres; verify row counts + checksums |
-| 1.5 | Re-wire the background loops (prune, report sender, rate-limit cleanup) onto Postgres — today the prune + report loops run only on the SQLite branch |
+| 1.1 | Port the full 92-table migration set to Postgres DDL — **done**: `scripts/generate-pg-migration.py` → `20260813_init.pg.sql` (type-mapped, FK-order topo-sorted, 4 triggers → plpgsql); applied + verified idempotent on Postgres 16 (92 tables, 121 indexes, 4 triggers) |
+| 1.2 | Make oz-api REST handlers run on Postgres (drop the in-memory SQLite fallback) — **done**: the sync function (`SyncStore`, via `SyncState.pg`), the REST surface (`crates/oz-api/src/pg.rs`, via `AppState.pg` — products, categories, tax_rates, users, plans, sales, terminals, token client-credentials), **and** the Stripe/Square webhook layer (dedup, `finalize_sale` enqueue, payment lookup, stripe-customer mapping, plan writes) all read/write Postgres on the cloud branch; the report-sender loop remains on SQLite |
+| 1.3 | Raise the pool above the 8-connection default — **done**: `OZ_DB_POOL_SIZE` (default 20); TLS via rustls already wired |
+| 1.4 | Migrate live sync data from SQLite to Postgres; verify row counts + checksums — **done**: `apps/cloud-server/src/bin/migrate_sqlite_to_pg.rs` copies the cloud surface (FK-topo-sorted from `pg_constraint`, `ON CONFLICT DO NOTHING` so re-runs are safe, per-table row-count + FNV-1a checksum verification); verified end-to-end + idempotent re-run against live Postgres |
+| 1.5 | Re-wire the background loops onto Postgres — **done**: prune (offline-queue retention) via `start_prune_loop_pg`, **and** the report-sender email loop via `email_pg::start_report_sender_loop_pg` (settings + analytics bundle on Postgres). Only the `archive_stock_movements` stock rollup remains SQLite-only (autovacuum supersedes it on PG). Rate-limit cleanup is DB-agnostic. |
 
-### Phase 2: Combine into one image (Week 2)
+#### Phase 1.2 — data-layer design (the remaining core)
+
+`Store` cannot be rewritten to Postgres: it is the SQLite data layer for the
+whole POS (desktop + tablet + cloud), a borrow-wrapper over
+`&rusqlite::Connection` with ~45 domain modules, and the cloud server is only
+one of its three consumers. Phase 1.2 therefore adds a **parallel async
+Postgres data layer** for the cloud server and leaves `Store` untouched:
+
+| Decision | Choice |
+|----------|--------|
+| Abstraction | `apps/cloud-server/src/sync_store.rs` — a `SyncStore` enum (`Sqlite` / `Postgres`) with one async surface over `deadpool_postgres::Pool` (no `blocking` feature; stay async). **Done** for the sync function. |
+| Surface | Only what the cloud server uses: `offline_queue` (push/pull/prune), `tenant_plans` (get/set), `processed_webhooks` (dedup), stripe/square webhook tables, products/tax_rates/users (snapshot **and** REST CRUD), sales (REST create/get/status), terminals + token client-credentials, SMTP + report schedule (email loop). **Implemented**: `offline_queue` push/pull + counts, `tenant_plans` get/set, products/categories/tax_rates/users/plans/sales/terminals/tokens REST, prune retention, webhook dedup + `finalize_sale` + stripe-customer mapping, **and** the email/report loop (`email_pg.rs` — SMTP config, report schedule, dedup key, store name, and the full 10-query analytics bundle on Postgres). |
+| SQL | Write Postgres SQL directly (`$1` params, `now() AT TIME ZONE 'UTC'`, `ON CONFLICT`); no dialect shim |
+| State | `SyncState` **and** `oz_api::AppState` hold `pg: Option<Pool>` (threaded through `build_router`); the Postgres branch passes `Some(pool)`, the SQLite branch `None`. `CloudServerState` also carries the pool so `/health` reports the real Postgres queue depth. |
+| REST (oz-api) | **done** — `crates/oz-api/src/pg.rs` implements the REST surface against `deadpool_postgres::Pool`; every handler dispatches on `AppState::pg` (Postgres path vs. the untouched SQLite `Store` path). The Postgres branch no longer serves the empty in-memory SQLite. |
+| Transactions | `tokio_postgres` `client.transaction()` for multi-row writes; `batch_execute` for the (already-done) migration |
+
+Port order (highest value/risk first): **sync function** (offline_queue + plan
+gating) — **done** → **prune loop, offline-queue retention** (1.5) — **done** →
+**REST handlers** (1.2 tail) — **done** → **webhook dedup + `finalize_sale`**
+— **done** (all webhook DB access is backend-aware; PG integration test
+covers dedup, payment lookup, enqueue, tenant resolution, and plan upgrade)
+→ **email loop** (1.5) — **done** (settings + analytics bundle on Postgres;
+`pg_integration_email_loop_reads_postgres` covers revenue, heatmap, category
+breakdown, low stock, and config round-trips) → **data migration** (1.4) —
+**done** (binary + `pg_integration_migrate_and_verify`). Each landed
+step has a skip-if-no-PG integration test (the established pattern) while the
+SQLite branch keeps its full coverage.
+
+### Phase 2: Combine into one image (Week 2) — complete
+
+Status: **done** — `Dockerfile.unified`, `apps/unified/supervisord.conf`,
+`apps/unified/Caddyfile`, `apps/unified/docker-entrypoint.sh`,
+`apps/unified/healthcheck.sh`. Sync runs on SQLite until Phase 1 lands
+(`DATABASE_URL` switches to Postgres with no packaging change).
 
 | Step | Action |
 |------|--------|
@@ -378,20 +417,26 @@ The rate limiter stays as-is: in-memory, per-process, DB-agnostic.
 
 | File | Change |
 |------|--------|
-| `crates/oz-core/migrations/` | Add Postgres DDL for the full schema |
-| `apps/cloud-server/src/db.rs` | Run full migrations on Postgres; drop the 2-table stub |
-| `apps/cloud-server/src/main.rs` | Wire oz-api to Postgres (drop the in-memory SQLite fallback) **and re-start the prune + report-sender loops on the Postgres branch** |
-| `apps/cloud-server/src/prune.rs` | Port the retention loop to Postgres (batched DELETE + autovacuum; keep `PRUNE_QUEUE_DELETED_TOTAL`) |
-| `apps/cloud-server/src/email.rs` | Port the report-sender loop off `rusqlite::Connection` onto the Postgres pool |
+| `crates/oz-core/migrations/` | **done** — `20260813_init.pg.sql` + `generate-pg-migration.py`; exposed as `oz_core::migrations::PG_INIT`. The generator now emits `ON CONFLICT DO NOTHING` on every seed INSERT, so re-applying `PG_INIT` on an existing volume is idempotent (verified live — cloud-server restarts work) |
+| `apps/cloud-server/src/db.rs` | **done** — `connect_postgres` applies `PG_INIT` (full schema) instead of the 2-table stub; pool sized via `OZ_DB_POOL_SIZE` |
+| `apps/cloud-server/src/main.rs` | **done** — the oz-api router receives the Postgres pool (`AppState.pg`), the prune loop starts on the Postgres branch (`start_prune_loop_pg`), the report-sender loop starts on the Postgres branch (`email_pg::start_report_sender_loop_pg`), and `/health` reports the real Postgres queue depth / `db: "postgres"` |
+| `crates/oz-api/src/pg.rs` | **done** — the REST Postgres data layer (products, categories, tax_rates, users, plans, sales, terminals, token client-credentials); `PgError` → HTTP mapping; `SUM(...)::bigint` cast for stock (Postgres `SUM(bigint)` returns `numeric`); skip-if-no-PG integration test |
+| `apps/cloud-server/src/webhooks.rs` | **done** — webhook dedup (`processed_webhooks` upsert + exists), payment → sale lookup, `finalize_sale` enqueue, stripe-customer mapping, and tenant-plan writes are backend-aware (`CloudServerState.pg`); PG integration test |
+| `apps/cloud-server/src/prune.rs` | **done** — offline-queue retention ported to Postgres (`start_prune_loop_pg`, batched `DELETE ... id = ANY($1)`, autovacuum, `PRUNE_QUEUE_DELETED_TOTAL`); `archive_stock_movements` rollup remains SQLite-only |
+| `apps/cloud-server/src/email.rs` | SQLite loop unchanged (desktop client path) |
+| `apps/cloud-server/src/email_pg.rs` | **done** — Postgres report-sender loop: `settings` read/write (SMTP config + schedule + dedup key + store name) and the full 10-query analytics bundle (`daily/weekly/monthly revenue`, `top_products`, `hourly_heatmap`, `category_breakdown`, `low_stock`, `active_stock_alerts`, `category_popularity`, `category_forecast`) against `deadpool_postgres::Pool`, reusing `oz_core`'s shared scheduler/filter/`ReportEmailBuilder`; `should_send_scheduled_with_last_sent` extracted in `oz-core` so the two loops share one cadence/dedup implementation; skip-if-no-PG integration test |
+| `apps/cloud-server/src/bin/migrate_sqlite_to_pg.rs` | **done** — Phase 1.4 cutover tool: copies the cloud surface from a SQLite file to Postgres (schema applied idempotently, rows via `ON CONFLICT DO NOTHING`), FK-topo-sorted copy order from `pg_constraint`, per-table row-count + FNV-1a checksum verification; `--dry-run`; unit tests + skip-if-no-PG integration test |
 | `apps/cloud-server/src/rate_limit.rs` | Unchanged — in-memory and DB-agnostic; limits preserved |
 
 ### Packaging (new)
 
 | File | Change |
 |------|--------|
-| `Dockerfile.unified` | Build both binaries into one image |
-| `apps/unified/supervisord.conf` | Run PocketBase + Rust under one supervisor |
-| `apps/unified/Caddyfile` | One port, path-routed to 8080 / 3099 |
+| `Dockerfile.unified` | **done** — build both binaries into one image |
+| `apps/unified/supervisord.conf` | **done** — run PocketBase + Rust under one supervisor |
+| `apps/unified/Caddyfile` | **done** — one port, path-routed to 8080 / 3099 |
+| `apps/unified/docker-entrypoint.sh` | **done** — volume ownership fix + exec supervisord |
+| `apps/unified/healthcheck.sh` | **done** — aggregate healthcheck (both functions + DB ping) |
 
 ### Go (license server) + Rust (POS app)
 
@@ -419,8 +464,9 @@ SMTP_HOST=... SMTP_PORT=587 SMTP_USERNAME=... SMTP_PASSWORD=...
 
 ```bash
 DATABASE_URL=postgres://user:pass@host:5432/ozpos?sslmode=require  # require = encrypted via rustls (disable/prefer for local dev)
-OZ_DB_REQUIRE_TLS=1              # fail startup if DATABASE_URL omits sslmode=require
-OZ_PRODUCTION=1                  # fail startup if OZ_API_SECRET or OZ_ADMIN_KEY are unset
+OZ_PRODUCTION=1                  # fail startup if OZ_API_SECRET/OZ_ADMIN_KEY unset; also implies OZ_DB_REQUIRE_TLS
+OZ_DB_REQUIRE_TLS=1              # fail startup if DATABASE_URL omits sslmode=require (implied by OZ_PRODUCTION=1)
+OZ_DB_POOL_SIZE=20               # max Postgres pool connections (positive integer; ignored for SQLite)
 OZ_API_SECRET=...                # HS256 JWT signing secret — required when OZ_PRODUCTION=1 (unset falls back to the hard-coded dev secret; JWTs become forgeable)
 OZ_ADMIN_KEY=...                 # gates POST /api/v1/tokens — required when OZ_PRODUCTION=1 (unset = open token mint, dev mode)
 OZ_ENFORCE_PLANS=1               # reject free-plan sync (403 plan_required)
@@ -517,9 +563,10 @@ Lock to an explicit allowlist before serving the website:
 ### Hardening
 
 - **Run Postgres with TLS** and a dedicated low-privilege role. The pool uses
-  rustls, and `OZ_DB_REQUIRE_TLS=1` fails startup if `DATABASE_URL` omits
-  `sslmode=require` (no silent plaintext fallback). The dedicated
-  low-privilege role is still to be added.
+  rustls, and `sslmode=require` is enforced at startup — via
+  `OZ_DB_REQUIRE_TLS=1`, or automatically under `OZ_PRODUCTION=1` — so there
+  is no silent plaintext fallback. The dedicated low-privilege role is still
+  to be added.
 - **Fail startup in prod if `OZ_API_SECRET` or `OZ_ADMIN_KEY` is unset.**
   `OZ_PRODUCTION=1` enforces both at startup — without it the JWT secret
   falls back to the hard-coded `oz-pos-dev-secret-change-in-production`
@@ -565,12 +612,12 @@ Lock to an explicit allowlist before serving the website:
 
 | Risk | Mitigation |
 |------|------------|
-| Postgres path is a 2-table stub today | Phase 1 completes it before traffic moves |
-| Prune/report loops are SQLite-only (`incremental_vacuum`, `rusqlite::Connection`) | Ported + re-wired in Phase 1 (step 1.5) before cutover; retention counter confirms aging |
+| Postgres path was a 2-table stub | **Resolved** — full 92-table schema + sync function + prune retention + REST handlers + webhooks + the report-sender email loop + the 1.4 migration tool all run on Postgres; the only remaining SQLite surface is the `archive_stock_movements` stock rollup (deliberate — autovacuum supersedes it) |
+| Prune/report loops are SQLite-only (`incremental_vacuum`, `rusqlite::Connection`) | Offline-queue retention is ported + re-wired on Postgres (step 1.5) and the report-sender loop runs on Postgres (`email_pg`); only the `archive_stock_movements` rollup remains SQLite-only (autovacuum supersedes it on PG); retention counter confirms aging |
 | In-memory rate limiter is per-process | Fine for one node; move to a shared store (Redis) only if the sync function is scaled out |
 | Snapshot cache is also in-memory | Same — Redis/shared store on scale-out |
 | Dev-secret fallback / open token mint in prod | Fail startup if `OZ_API_SECRET` / `OZ_ADMIN_KEY` unset |
-| Postgres pool was `NoTls` | Now rustls; `OZ_DB_REQUIRE_TLS=1` fails startup unless `DATABASE_URL` sets `sslmode=require` |
+| Postgres pool was `NoTls` | Now rustls; startup fails unless `DATABASE_URL` sets `sslmode=require` (`OZ_DB_REQUIRE_TLS=1` or `OZ_PRODUCTION=1`) |
 | `api_key` stored plaintext | Done: bcrypt + SHA-256 lookup; legacy rows migrated lazily |
 | PocketBase SQLite has no backup | litestream / nightly `VACUUM INTO` + restore drill |
 | Data loss during SQLite → Postgres | Back up SQLite, verify row counts + checksums, replay window |
@@ -599,13 +646,13 @@ Lock to an explicit allowlist before serving the website:
 |-----------|---------------|
 | One deployment | One Northflank service, one image, one public URL |
 | Two functions | PocketBase (auth) + Rust (sync) both healthy in the one container |
-| Sync on Postgres | All sync/REST reads and writes hit Postgres; SQLite fallback gone |
+| Sync on Postgres | Sync, prune, REST, webhook, and email/report reads/writes hit Postgres; the in-memory SQLite REST fallback is gone — the only remaining SQLite surface is the `archive_stock_movements` rollup (deliberate; autovacuum supersedes it) |
 | License works | activate/renew/status behave as today |
 | Sync works | POS pushes/pulls via the unchanged contract |
 | Webhooks work | Stripe/Square update plans and enqueue `finalize_sale` |
 | One identity | JWT `tenant_id` scopes every sync row to the canonical tenant |
 | No data loss | Row counts + checksums match after the SQLite → Postgres migration |
-| Anti-spike loops survive | Rate limits still return `429`; hourly prune ages `offline_queue`/`stock_movements` on Postgres and the retention counter increments |
+| Anti-spike loops survive | Rate limits still return `429`; the hourly prune ages `offline_queue` on Postgres and the retention counter increments; the report-sender loop runs on Postgres; the `stock_movements` rollup remains SQLite-only (deliberate) |
 | Secrets enforced | `OZ_PRODUCTION=1` fails startup unless `OZ_API_SECRET` and `OZ_ADMIN_KEY` are set (no dev fallback / open mint) |
 | Backups verified | A restore drill recovers both Postgres and PocketBase SQLite to a known point |
 | Alerts fire | A flatlined retention counter or growing queue depth pages a human |

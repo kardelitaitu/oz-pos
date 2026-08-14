@@ -24,6 +24,7 @@
 mod config;
 mod db;
 mod email;
+mod email_pg;
 mod metrics;
 mod openapi;
 mod prune;
@@ -210,6 +211,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             // Phase 1.5: P-1 offline-queue retention on Postgres (the SQLite
             // prune loop does not run on this branch).
             prune::start_prune_loop_pg(pg_pool.clone());
+
+            // Phase 1.5: scheduled report sender on Postgres (the SQLite
+            // loop reads the same settings/analytics surface via rusqlite).
+            email_pg::start_report_sender_loop_pg(pg_pool.clone());
 
             let app = build_router(state, rate_limiter, &config, Some(pg_pool.clone()));
             serve(app, config).await?;
