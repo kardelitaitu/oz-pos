@@ -857,8 +857,45 @@ queries that break under them, not a wholesale tenant API.
 | CI gate | Postgres service container added to `ci.yml` (`rust-test-fast` + `rust-test-apps`) with `OZ_TEST_PG_URL`, so the skip-if-unreachable tests can no longer silently skip in CI | CI |
 
 All tests run with `OZ_TEST_PG_URL` set against one Postgres 16 and coexist
-(unique namespaces + cleanup); `cargo test -p oz-api` 138, `oz-cloud-server`
-158+2, `oz-core --lib` 1773, migration bin 5.
+(unique namespaces + cleanup); `cargo test -p oz-api` 154, `oz-cloud-server`
+162, `oz-core --lib` 1773, migration bin 5.
+
+### Implementation audit (2026-08-15): claims vs. code
+
+Re-read the whole plan and checked every load-bearing claim against the
+implementation. **Verified present and tested:** `OZ_PRODUCTION=1` startup
+secret enforcement (+ `production_requires_both_secrets`), `OZ_PRODUCTION`
+→ `OZ_DB_REQUIRE_TLS` implication, `sslmode=require` fail-closed,
+`/api/v1/tokens` rate limit (30/min/IP), license `api_key` bcrypt + SHA-256
+lookup with lazy legacy migration, the license 5/IP/hr activate limiter
+(SQLite-persisted), the plan gate (`OZ_ENFORCE_PLANS` → 403
+`plan_required`), redirect mode (`OZ_REDIRECT_ONLY` → 421), the per-tenant
+5-min snapshot cache (tenant-keyed, adaptive TTL), the `/health` +
+`/metrics` endpoints (incl. `PRUNE_QUEUE_DELETED_TOTAL`), Stripe/Square
+signature verification tests, the unified packaging files, and SIGTERM
+handling in supervisord.
+
+**Gaps found (the improvement list below).** All are either small code
+items with tests, or documented deployment items — nothing contradicts the
+plan's design.
+
+### Next improvements (2026-08-15 audit) — prioritized, with tests
+
+| # | Improvement | Why | Tests to add |
+|---|-------------|-----|-------------|
+| 1 | **CORS allowlist** — replace `allow_origin(Any)` in `oz-api` with an env-configured list (`OZ_CORS_ORIGINS`, defaulting to the §11 origins + `http://localhost:4321`); `Any` stays only when the env explicitly says so | The doc requires an explicit allowlist before the website ships; today every origin gets `access-control-allow-origin: *` | allowed origin → CORS headers present; disallowed origin → no `access-control-allow-origin`; preflight (`OPTIONS`) still 200 for allowed origins; dev default keeps localhost working |
+| 2 | **Security headers middleware** on the oz-api + cloud routers: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Strict-Transport-Security` (production only), `Content-Security-Policy: default-src 'self'` | §11 lists all four; none are set today | a sample route (health) returns all four headers; HSTS absent in dev, present when `OZ_PRODUCTION=1` |
+| 3 | **Analytics expression index** — `CREATE INDEX idx_sales_status_created_date ON sales (status, (created_at::date))` in both schemas (generator + guard bump 122 → 123) | Deferred item 2 in §11.5: the report queries filter `status = 'completed'` + `created_at::date BETWEEN …`; the cast defeats `idx_sales_created_at` today | index exists in both schemas (surface guard); the email PG analytics test still green (proves the queries use it without changing results) |
+| 4 | **`sent_reports` retention** — prune claims older than 90 days (same horizon as `offline_queue`), either in the report loop or a small sweep | The dedup table grows one row per (tenant, period) forever; old claims are only useful while a crash-recovery retry window could still collide | live-PG: seed a 91-day-old claim + a fresh claim → sweep deletes only the old one; tenant isolation (deletes only that tenant's rows) |
+| 5 | **Desktop tenant-foreign-row startup check** — `Store::check_tenant_integrity()` counting `products`/`users` rows with `tenant_id != 'default'`, wired into desktop/tablet startup (fail loudly) | §11.5's desktop audit recommends exactly this instead of sprinkling 40+ `WHERE tenant_id` clauses; today only `PRAGMA integrity_check` (page corruption) exists | clean DB → `Ok`; seeded foreign-tenant product → `Err` naming the table; seeded foreign-tenant user → `Err`; zero-rows fast path |
+| 6 | **RLS deployment cutover** — runnable SQL script (restricted non-owner app role, `FORCE ROW LEVEL SECURITY`, per-request `SET LOCAL oz.tenant_id`) + wire the cloud request transactions to set the GUC | The last enforcement item; schema-side RLS is shipped + proven (`pg_integration_rls_fails_closed`), but the owner still bypasses it | extend `pg_integration_rls_fails_closed` (or a new test) to assert the FORCED policy blocks the owner too when the GUC is unset |
+| 7 | **License server** — throttle `/status` (share the persisted 5/IP/hr bucket) and remove/flag the legacy body-`api_key` fallback | Both are documented gaps (§11): `/status` is unthrottled; the body fallback leaks the secret into access logs | Go tests: 6th `/status` call in an hour → 429; a body-`api_key` request after the fallback removal → 401 with a header-only hint |
+| 8 | **Doc hygiene** — §12 risk row still says "92-table schema" (→ 93), and the §11.5 test matrix lacks the RLS, per-tenant email, settings-endpoint, and `sent_reports` rows | Keep the plan doc truthful | — |
+| 9 | **Operations checklist (deploy-time)** — Postgres PITR + PocketBase litestream/nightly `VACUUM INTO` + a restore drill; alerting on retention flatline, queue depth, webhook 5xx, token-mint rate; metrics for rate-limit 429s and webhook 5xx | §11 reliability table items are all still paper | a `docs/operations/` runbook entry; the metrics additions get a smoke test that the endpoint renders the new counters |
+
+Items 1–5 + 8 are self-contained code/doc slices with tests (each ~1 commit).
+Item 6 is the big remaining enforcement step (deployment + request wiring).
+Items 7 and 9 touch the Go license server / ops runbook respectively.
 
 ---
 
@@ -866,7 +903,7 @@ All tests run with `OZ_TEST_PG_URL` set against one Postgres 16 and coexist
 
 | Risk | Mitigation |
 |------|------------|
-| Postgres path was a 2-table stub | **Resolved** — full 92-table schema + sync function + prune retention + REST handlers + webhooks + the report-sender email loop + the 1.4 migration tool all run on Postgres; the only remaining SQLite surface is the `archive_stock_movements` stock rollup (deliberate — autovacuum supersedes it) |
+| Postgres path was a 2-table stub | **Resolved** — full 93-table schema + sync function + prune retention + REST handlers + webhooks + the report-sender email loop + the 1.4 migration tool all run on Postgres; the only remaining SQLite surface is the `archive_stock_movements` stock rollup (deliberate — autovacuum supersedes it) |
 | Prune/report loops are SQLite-only (`incremental_vacuum`, `rusqlite::Connection`) | Offline-queue retention is ported + re-wired on Postgres (step 1.5) and the report-sender loop runs on Postgres (`email_pg`); only the `archive_stock_movements` rollup remains SQLite-only (autovacuum supersedes it on PG); retention counter confirms aging |
 | In-memory rate limiter is per-process | Fine for one node; move to a shared store (Redis) only if the sync function is scaled out |
 | Snapshot cache is also in-memory | Same — Redis/shared store on scale-out |
