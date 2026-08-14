@@ -47,12 +47,14 @@ pub mod routes;
 use std::sync::Arc;
 
 use axum::{
-    Router, middleware,
+    Router,
+    http::HeaderValue,
+    middleware,
     routing::{get, patch, post, put},
 };
 use rusqlite::Connection;
 use tokio::sync::Mutex;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::info;
 
@@ -84,6 +86,64 @@ pub struct AppState {
 
     /// HTTP listen port (default: `3099`).
     pub port: u16,
+
+    /// CORS allowlist (origins that may call this API). An empty list
+    /// denies every cross-origin request (fail closed); `"*"` allows any
+    /// origin (explicit dev opt-in). Defaults to the documented allowlist
+    /// in `unify-auth-and-sync.md` §11; overridable via `OZ_CORS_ORIGINS`.
+    pub cors_origins: Vec<String>,
+}
+
+/// Default CORS allowlist — the documented origins in `unify-auth-and-sync.md`
+/// §11: the website (global + Indonesia), the website dev server, and the
+/// Tauri POS app.
+pub const DEFAULT_CORS_ORIGINS: [&str; 4] = [
+    "https://oz-pos.com",
+    "https://id.oz-pos.com",
+    "http://localhost:4321",
+    "tauri://localhost",
+];
+
+/// Parse `OZ_CORS_ORIGINS` (comma-separated) into an origin list.
+///
+/// - unset / absent → the documented [`DEFAULT_CORS_ORIGINS`] allowlist
+/// - `"*"` → allow-all (explicit opt-in for local dev with arbitrary ports)
+/// - blank → empty list (deny every cross-origin request — fail closed)
+/// - otherwise → trimmed, de-duplicated non-empty entries
+pub fn parse_cors_origins(env: Option<String>) -> Vec<String> {
+    let mut origins: Vec<String> = match env {
+        Some(v) if v.trim() == "*" => vec!["*".to_string()],
+        Some(v) => v
+            .split(',')
+            .map(|o| o.trim().to_string())
+            .filter(|o| !o.is_empty())
+            .collect(),
+        None => DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
+    };
+    origins.dedup();
+    origins
+}
+
+/// Build the CORS layer from an origin allowlist.
+///
+/// `"*"` → any origin (explicit dev opt-in); otherwise only listed origins
+/// are echoed back; an empty list denies every cross-origin request.
+pub fn build_cors(origins: &[String]) -> CorsLayer {
+    let cors = CorsLayer::new().allow_methods(Any).allow_headers(Any);
+    if origins.iter().any(|o| o == "*") {
+        return cors.allow_origin(Any);
+    }
+    let values: Vec<HeaderValue> = origins
+        .iter()
+        .filter_map(|o| o.parse::<HeaderValue>().ok())
+        .collect();
+    cors.allow_origin(AllowOrigin::list(values))
+}
+
+/// Resolve the CORS origins from `OZ_CORS_ORIGINS` (see [`parse_cors_origins`]).
+/// Convenience for `serve()` and the cloud server's router.
+pub fn cors_origins_from_env() -> Vec<String> {
+    parse_cors_origins(std::env::var("OZ_CORS_ORIGINS").ok())
 }
 
 impl AppState {
@@ -98,6 +158,7 @@ impl AppState {
             api_secret: String::new(),
             db_path: ":memory:".into(),
             port: 3099,
+            cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
         }
     }
 }
@@ -116,10 +177,7 @@ impl AppState {
 /// - `GET /api/v1/products/:sku`
 /// - `GET /api/v1/categories`
 pub fn router(state: AppState) -> Router {
-    let cors = CorsLayer::new()
-        .allow_methods(Any)
-        .allow_headers(Any)
-        .allow_origin(Any);
+    let cors = build_cors(&state.cors_origins);
 
     let public = Router::new()
         .route("/api/v1/health", get(routes::health::health))
@@ -208,6 +266,7 @@ pub async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .ok()
             .and_then(|p| p.parse().ok())
             .unwrap_or(3099),
+        cors_origins: cors_origins_from_env(),
     };
 
     let port = state.port;
@@ -267,6 +326,7 @@ mod tests {
             api_secret: String::new(),
             db_path: ":memory:".into(),
             port: 3099,
+            cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
         };
         router(state)
     }
@@ -891,6 +951,7 @@ mod tests {
             api_secret: String::new(),
             db_path: ":memory:".into(),
             port: 3099,
+            cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
         };
         router(state)
     }
@@ -1205,11 +1266,42 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 
+    // ── CORS allowlist (unify-auth-and-sync.md §11) ─────────────────
+
+    #[test]
+    fn parse_cors_origins_defaults_to_documented_allowlist() {
+        assert_eq!(
+            parse_cors_origins(None),
+            DEFAULT_CORS_ORIGINS
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn parse_cors_origins_parses_comma_list() {
+        assert_eq!(
+            parse_cors_origins(Some(" https://a.com ,https://b.com ".into())),
+            vec!["https://a.com".to_string(), "https://b.com".to_string()]
+        );
+    }
+
+    #[test]
+    fn parse_cors_origins_star_means_allow_all() {
+        assert_eq!(parse_cors_origins(Some("*".into())), vec!["*".to_string()]);
+    }
+
+    #[test]
+    fn parse_cors_origins_blank_denies_all() {
+        assert!(parse_cors_origins(Some(" ".into())).is_empty());
+    }
+
     #[tokio::test]
-    async fn cors_headers_present_on_health() {
+    async fn cors_allowed_origin_is_echoed() {
         let req = Request::builder()
             .uri("/api/v1/health")
-            .header("Origin", "http://example.com")
+            .header("Origin", "https://oz-pos.com")
             .body(Body::empty())
             .unwrap();
         let resp = test_app().oneshot(req).await.unwrap();
@@ -1218,19 +1310,57 @@ mod tests {
             .headers()
             .get("access-control-allow-origin")
             .map(|v| v.to_str().unwrap());
-        assert_eq!(allow_origin, Some("*"));
+        assert_eq!(allow_origin, Some("https://oz-pos.com"));
     }
 
     #[tokio::test]
-    async fn cors_preflight_returns_ok() {
+    async fn cors_disallowed_origin_gets_no_header() {
+        let req = Request::builder()
+            .uri("/api/v1/health")
+            .header("Origin", "http://evil.example")
+            .body(Body::empty())
+            .unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK, "request still served");
+        assert!(
+            resp.headers().get("access-control-allow-origin").is_none(),
+            "disallowed origin must not receive CORS headers"
+        );
+    }
+
+    #[tokio::test]
+    async fn cors_preflight_allowed_origin_returns_allow_header() {
         let req = Request::builder()
             .method("OPTIONS")
             .uri("/api/v1/products")
-            .header("Origin", "http://example.com")
+            .header("Origin", "https://oz-pos.com")
             .header("Access-Control-Request-Method", "GET")
             .body(Body::empty())
             .unwrap();
         let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(
+            resp.headers()
+                .get("access-control-allow-origin")
+                .map(|v| v.to_str().unwrap()),
+            Some("https://oz-pos.com")
+        );
+    }
+
+    #[tokio::test]
+    async fn cors_preflight_disallowed_origin_gets_no_allow_header() {
+        let req = Request::builder()
+            .method("OPTIONS")
+            .uri("/api/v1/products")
+            .header("Origin", "http://evil.example")
+            .header("Access-Control-Request-Method", "GET")
+            .body(Body::empty())
+            .unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(
+            resp.headers().get("access-control-allow-origin").is_none(),
+            "preflight from a disallowed origin must not be authorized"
+        );
     }
 }

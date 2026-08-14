@@ -158,6 +158,7 @@ pub async fn create_token_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::DEFAULT_CORS_ORIGINS;
     use axum::body::to_bytes;
     use axum::http::StatusCode;
     use axum::response::IntoResponse;
@@ -172,6 +173,7 @@ mod tests {
             api_secret: String::new(),
             db_path: ":memory:".into(),
             port: 3099,
+            cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
         }
     }
 

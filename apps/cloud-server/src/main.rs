@@ -44,7 +44,6 @@ use serde::Serialize;
 use tokio::sync::Mutex;
 use tower::limit::ConcurrencyLimitLayer;
 use tower_http::compression::CompressionLayer;
-use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 
 use crate::rate_limit::{RateLimiterState, start_rate_limit_cleanup};
@@ -389,10 +388,10 @@ pub fn build_router(
     config: &config::CloudServerConfig,
     pg: Option<deadpool_postgres::Pool>,
 ) -> Router {
-    let cors = CorsLayer::new()
-        .allow_methods(Any)
-        .allow_headers(Any)
-        .allow_origin(Any);
+    // CORS allowlist shared with the oz-api router (unify-auth-and-sync.md
+    // §11): documented defaults, overridable via OZ_CORS_ORIGINS.
+    let cors_origins = oz_api::cors_origins_from_env();
+    let cors = oz_api::build_cors(&cors_origins);
 
     // Build the oz-api router (products, categories, sales, health, tokens).
     let api_state = oz_api::AppState {
@@ -406,6 +405,7 @@ pub fn build_router(
         api_secret: config.api_secret.clone().unwrap_or_default(),
         db_path: config.db_path.clone(),
         port: config.port,
+        cors_origins: cors_origins.clone(),
     };
     let api_router = oz_api::router(api_state);
 
@@ -810,12 +810,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn cors_headers_present() {
+    async fn cors_allowed_origin_echoed() {
         let app = test_app();
         let req = Request::builder()
             .uri("/api/sync/status")
             .header("Authorization", format!("Bearer {}", test_token(None)))
-            .header("Origin", "http://example.com")
+            .header("Origin", "tauri://localhost")
             .body(Body::empty())
             .unwrap();
         let resp = app.oneshot(req).await.unwrap();
@@ -823,7 +823,23 @@ mod tests {
             .headers()
             .get("access-control-allow-origin")
             .map(|v| v.to_str().unwrap());
-        assert_eq!(allow_origin, Some("*"));
+        assert_eq!(allow_origin, Some("tauri://localhost"));
+    }
+
+    #[tokio::test]
+    async fn cors_disallowed_origin_gets_no_header() {
+        let app = test_app();
+        let req = Request::builder()
+            .uri("/api/sync/status")
+            .header("Authorization", format!("Bearer {}", test_token(None)))
+            .header("Origin", "http://evil.example")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert!(
+            resp.headers().get("access-control-allow-origin").is_none(),
+            "disallowed origin must not receive CORS headers"
+        );
     }
 
     #[tokio::test]

@@ -161,6 +161,7 @@ pub async fn set_tenant_plan_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::DEFAULT_CORS_ORIGINS;
     use crate::router;
     use axum::{
         body::Body,
@@ -180,6 +181,7 @@ mod tests {
             api_secret: String::new(),
             db_path: ":memory:".into(),
             port: 3099,
+            cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
         };
         router(state)
     }
@@ -328,6 +330,7 @@ mod tests {
             api_secret: String::new(),
             db_path: ":memory:".into(),
             port: 3099,
+            cors_origins: DEFAULT_CORS_ORIGINS.iter().map(|s| s.to_string()).collect(),
         };
         let app = router(state);
 
