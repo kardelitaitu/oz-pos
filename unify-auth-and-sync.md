@@ -652,11 +652,77 @@ tenant-blind surface, audited table by table.
 | Webhook payment → sale lookup | ✅ scoped | Returns `(sale_id, tenant_id)` by joining the sale; the `finalize_sale` enqueue now runs under the sale's owner tenant (verified in the PG webhook test) |
 | Webhook `finalize_sale` enqueue | ✅ scoped | Tenant flows from the sale row — no more hardcoded `'default'` |
 | `sales` table | ✅ has `tenant_id` (default `'default'`) | Stamped by REST `create_sale` from the JWT claims; `payments` needs no tenant column (it joins through `sales.id`) |
-| Report-sender email loop (`email_pg.rs`) | ⚠️ tenant-blind (aggregation) but row-safe | Every SKU-keyed product join (daily/weekly/monthly COGS, top products, category breakdown, popularity trend, `product_activity`) now resolves within the sale's tenant (`ON p.sku = sl.sku AND p.tenant_id = s.tenant_id`; `product_activity` gained a `tenant_id` column). `pg_integration_email_loop_reads_postgres` proves a shared SKU across two tenants keeps its own COGS. Still to do: per-tenant `report_schedule`/`smtp_config`/`recipients` and tenant-filtered aggregation (the bundle aggregates all tenants today; `tenant_id` only labels metadata) |
+| Report-sender email loop (`email_pg.rs`) | ⚠️ tenant-blind (aggregation) but row-safe | Every SKU-keyed product join (daily/weekly/monthly COGS, top products, category breakdown, popularity trend, `product_activity`) now resolves within the sale's tenant (`ON p.sku = sl.sku AND p.tenant_id = s.tenant_id`; `product_activity` gained a `tenant_id` column). `pg_integration_email_loop_reads_postgres` proves a shared SKU across two tenants keeps its own COGS. Per-tenant scheduling/aggregation is designed below (§11.5 "Per-tenant report scheduling") — not yet implemented |
 | Desktop `Store` (oz-core, SQLite) | ✅ single-tenant by construction | `create_sale` + the payment-completion paths now stamp `tenant_id = 'default'` explicitly (same identity contract as the cloud REST path, asserted in `create_sale_persists_header`). The app never sets another tenant, so unscoped by-SKU/username queries are fine; if a desktop DB ever holds foreign tenants, the Store must add `WHERE tenant_id = 'default'` to those queries (`db/products.rs` lines ~536-1207) |
 | Health endpoint queue depth | ✅ global by design | Aggregate ops metric — correct as-is |
 
 **Recommended Phase-4 order:** (1) ~~`sales.tenant_id` + REST/webhook threading~~ — **done** → (2) per-tenant report settings + tenant-scoped analytics → (3) RLS as the enforcement backstop.
+
+### Per-tenant report scheduling (design, 2026-08-15)
+
+Today the report-sender loop runs once per server, reads single-global
+`settings` rows, and aggregates every tenant into one report. This design
+makes each tenant get its own report on its own schedule to its own
+recipients, aggregated from its own rows — without breaking the existing
+single-tenant behaviour.
+
+**1. Tenant-scoped settings keys.** Settings stay in the single `settings`
+table; the key carries the tenant as a **suffix**: `smtp_config:{tenant}`,
+`report_schedule:{tenant}`, `last_report_sent_at:{tenant}`, `store.name:{tenant}`.
+The bare keys (`smtp_config`, …) remain the canonical location for
+`default`, so a read falls back `{base}:{tenant}` → bare `{base}`, and
+`default`'s existing rows keep working untouched. Suffix (not prefix)
+because it is a plain PK lookup — no `LIKE` scan — and it leaves the
+legacy reads byte-identical. Recipients already live inside
+`ReportScheduleConfig`, so no new settings surface is needed. There is no
+settings REST endpoint yet — provisioning scoped keys is the first job of
+the admin tooling / migration script (the same 1.4 tool can carry them).
+
+**2. Tenant enumeration.** There is no `tenants` table; derive the active
+set from data (cheap, no schema change, and a tenant exists the moment it
+has a plan, a terminal, or queue activity):
+
+```sql
+SELECT tenant_id FROM tenant_plans
+UNION SELECT DISTINCT tenant_id FROM offline_queue
+UNION SELECT DISTINCT tenant_id FROM sync_terminals;
+```
+
+Growth path: when signup/provisioning lands (the website), introduce a
+`tenants` table and enumerate from it, keeping the union as an orphan
+fallback. `default` is always processed first so the current behaviour is
+a byte-identical special case.
+
+**3. The loop.** One background task; each cycle: enumerate tenants → for
+each, read its scoped settings → if `enabled` and due (reuse the existing
+tenant-agnostic `should_send_scheduled_with_last_sent` with its scoped
+`last_report_sent_at`) → generate its bundle → send → stamp the scoped
+last-sent. **Failure isolation:** per-tenant errors are logged and the
+cycle continues; only a DB-level failure aborts. Tenants process
+sequentially in `tenant_id` order for deterministic log output.
+
+**4. Tenant-scoped aggregation.** `export_analytics_bundle_pg` already
+takes `tenant_id` (today it only labels metadata) — thread it into every
+sub-query (`AND s.tenant_id = $n` on sales-driven queries,
+`AND p.tenant_id = $n` on product-driven ones). The joins already resolve
+within the sale's tenant (previous work); the `WHERE` filter is what
+isolates the aggregation itself.
+
+**5. Concurrency & scale-out.** Single instance needs nothing extra
+(sequential per-tenant work in one task). Multiple instances must not
+send the same tenant's report twice: wrap each tenant's send in a
+`pg_advisory_xact_lock(hashtext(tenant_id))` so the other instance skips
+it. Note the pre-existing at-most-once gap (stamp happens after a
+successful send; a crash between send and stamp can duplicate) — fixing
+it properly needs a `sent_reports (tenant_id, period, report_id)` table,
+which is future hardening, not part of this change.
+
+**6. Rollout.** No data migration: existing bare keys are `default`'s
+config. A second tenant is enabled purely by provisioning its scoped
+keys. Tests: extend `pg_integration_email_loop_reads_postgres` to seed a
+second tenant's scoped settings + rows and assert each tenant receives
+only its own bundle (the shared-SKU COGS test already proves the row
+isolation half); unit-test the key-scoping fallback.
 
 ### Test plan (what proves the port is right)
 
