@@ -618,7 +618,8 @@ CREATE TABLE IF NOT EXISTS "sales" (
     deduction_locations TEXT,
     pending_expires_at  TEXT,
     payment_reference   TEXT,
-    captured_at         TEXT
+    captured_at         TEXT,
+    tenant_id           TEXT NOT NULL DEFAULT 'default'
 );
 
 CREATE TABLE IF NOT EXISTS setting_updated (

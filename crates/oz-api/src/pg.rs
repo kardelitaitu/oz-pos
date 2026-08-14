@@ -826,8 +826,8 @@ pub async fn create_sale(pool: &Pool, tenant_id: &str, sale: &Sale) -> Result<()
     tx.execute(
         "INSERT INTO sales (id, total_minor, currency, line_count, status, payment_method, tendered_minor,
                             discount_percent, discount_label, user_id, created_at, updated_at,
-                            subtotal_minor, tax_total_minor, customer_id, version)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 1)",
+                            subtotal_minor, tax_total_minor, customer_id, version, tenant_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 1, $16)",
         &[
             &sale.id,
             &sale.total.minor_units,
@@ -844,6 +844,7 @@ pub async fn create_sale(pool: &Pool, tenant_id: &str, sale: &Sale) -> Result<()
             &sale.subtotal.minor_units,
             &sale.tax_total.minor_units,
             &sale.customer_id,
+            &tenant_id,
         ],
     )
     .await

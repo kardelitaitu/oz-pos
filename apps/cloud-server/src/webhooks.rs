@@ -449,13 +449,13 @@ async fn stripe_webhook_handler(
         )
     })?;
 
-    // 7. Look up the sale by gateway_reference
-    let sale_id = lookup_sale_by_gateway_reference(&state, &payment_id).await?;
+    // 7. Look up the sale (and its owner tenant) by gateway_reference
+    let (sale_id, tenant_id) = lookup_sale_by_gateway_reference(&state, &payment_id).await?;
 
-    // 8. Queue a finalize_sale action
-    enqueue_finalize_sale(&state, &sale_id).await?;
+    // 8. Queue a finalize_sale action under the sale's tenant
+    enqueue_finalize_sale(&state, &sale_id, &tenant_id).await?;
 
-    tracing::info!(payment_id, sale_id, event_type = %event.r#type, "stripe webhook processed");
+    tracing::info!(payment_id, sale_id, tenant_id, event_type = %event.r#type, "stripe webhook processed");
     record_event_processed(&state, &event.id, "stripe", Some(&event.r#type)).await;
 
     Ok(axum::Json(serde_json::json!({
@@ -540,13 +540,13 @@ async fn square_webhook_handler(
     // Square uses payment IDs (not pi_xxx prefix). Use the data.id directly.
     let payment_id = event.data.id.clone();
 
-    // 7. Look up the sale by gateway_reference
-    let sale_id = lookup_sale_by_gateway_reference(&state, &payment_id).await?;
+    // 7. Look up the sale (and its owner tenant) by gateway_reference
+    let (sale_id, tenant_id) = lookup_sale_by_gateway_reference(&state, &payment_id).await?;
 
-    // 8. Queue a finalize_sale action
-    enqueue_finalize_sale(&state, &sale_id).await?;
+    // 8. Queue a finalize_sale action under the sale's tenant
+    enqueue_finalize_sale(&state, &sale_id, &tenant_id).await?;
 
-    tracing::info!(payment_id, sale_id, event_type = %event.r#type, "square webhook processed");
+    tracing::info!(payment_id, sale_id, tenant_id, event_type = %event.r#type, "square webhook processed");
     record_event_processed(&state, &event.event_id, "square", Some(&event.r#type)).await;
 
     Ok(axum::Json(serde_json::json!({
@@ -632,8 +632,10 @@ async fn record_event_processed(
 async fn lookup_sale_by_gateway_reference(
     state: &CloudServerState,
     gateway_ref: &str,
-) -> Result<String, (StatusCode, String)> {
-    let sale_id: Option<String> = if let Some(pool) = &state.pg {
+) -> Result<(String, String), (StatusCode, String)> {
+    // Returns `(sale_id, tenant_id)` so the caller can enqueue the
+    // finalize action under the sale's owner.
+    let row: Option<(String, String)> = if let Some(pool) = &state.pg {
         let Ok(client) = pool.get().await else {
             return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -642,24 +644,24 @@ async fn lookup_sale_by_gateway_reference(
         };
         client
             .query_opt(
-                "SELECT sale_id FROM payments WHERE gateway_reference = $1 LIMIT 1",
+                "SELECT p.sale_id, s.tenant_id FROM payments p\n                 JOIN sales s ON p.sale_id = s.id\n                 WHERE p.gateway_reference = $1 LIMIT 1",
                 &[&gateway_ref],
             )
             .await
             .ok()
             .flatten()
-            .map(|r| r.get::<_, String>(0))
+            .map(|r| (r.get::<_, String>(0), r.get::<_, String>(1)))
     } else {
         let conn = state.db.lock().await;
         conn.query_row(
-            "SELECT sale_id FROM payments WHERE gateway_reference = ?1 LIMIT 1",
+            "SELECT p.sale_id, s.tenant_id FROM payments p\n             JOIN sales s ON p.sale_id = s.id\n             WHERE p.gateway_reference = ?1 LIMIT 1",
             params![gateway_ref],
-            |row| row.get(0),
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
         )
         .ok()
     };
 
-    sale_id.ok_or_else(|| {
+    row.ok_or_else(|| {
         (
             StatusCode::NOT_FOUND,
             format!("no sale found for gateway reference: {gateway_ref}"),
@@ -672,6 +674,7 @@ async fn lookup_sale_by_gateway_reference(
 async fn enqueue_finalize_sale(
     state: &CloudServerState,
     sale_id: &str,
+    tenant_id: &str,
 ) -> Result<(), (StatusCode, String)> {
     let id = uuid::Uuid::now_v7().to_string();
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
@@ -691,8 +694,8 @@ async fn enqueue_finalize_sale(
         client
             .execute(
                 "INSERT INTO offline_queue (id, action, payload, status, created_at, tenant_id)
-                 VALUES ($1, $2, $3, 'pending', $4, 'default')",
-                &[&id, &"finalize_sale", &payload, &now],
+                 VALUES ($1, $2, $3, 'pending', $4, $5)",
+                &[&id, &"finalize_sale", &payload, &now, &tenant_id],
             )
             .await
             .map_err(|e| {
@@ -707,8 +710,8 @@ async fn enqueue_finalize_sale(
     let conn = state.db.lock().await;
     conn.execute(
         "INSERT INTO offline_queue (id, action, payload, status, created_at, tenant_id)
-         VALUES (?1, ?2, ?3, 'pending', ?4, 'default')",
-        params![id, "finalize_sale", payload, now],
+         VALUES (?1, ?2, ?3, 'pending', ?4, ?5)",
+        params![id, "finalize_sale", payload, now, tenant_id],
     )
     .map_err(|e| {
         (
@@ -934,10 +937,14 @@ mod tests {
             let conn = state.db.lock().await;
             seed_payment(&conn, "pi_test_123", "sale-001");
         }
-        let sale_id = lookup_sale_by_gateway_reference(&state, "pi_test_123")
+        let (sale_id, tenant_id) = lookup_sale_by_gateway_reference(&state, "pi_test_123")
             .await
             .unwrap();
         assert_eq!(sale_id, "sale-001");
+        assert_eq!(
+            tenant_id, "default",
+            "unscoped seeded sale belongs to default"
+        );
     }
 
     #[tokio::test]
@@ -1368,9 +1375,9 @@ mod tests {
             let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
             client
                 .execute(
-                    "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at)
-                     VALUES ($1, 700, 'USD', 1, 'pending', $2, $2)",
-                    &[&sale_id, &now],
+                    "INSERT INTO sales (id, total_minor, currency, line_count, status, created_at, updated_at, tenant_id)
+                     VALUES ($1, 700, 'USD', 1, 'pending', $2, $2, $3)",
+                    &[&sale_id, &now, &tenant],
                 )
                 .await
                 .unwrap();
@@ -1388,29 +1395,34 @@ mod tests {
                 .await
                 .unwrap();
         }
-        let found = lookup_sale_by_gateway_reference(&state, &gateway_ref)
+        let (found, found_tenant) = lookup_sale_by_gateway_reference(&state, &gateway_ref)
             .await
             .expect("sale must resolve via gateway reference");
         assert_eq!(found, sale_id);
+        assert_eq!(found_tenant, tenant, "lookup must return the sale's tenant");
         assert!(matches!(
             lookup_sale_by_gateway_reference(&state, "pi_missing").await,
             Err((StatusCode::NOT_FOUND, _))
         ));
 
-        enqueue_finalize_sale(&state, &sale_id)
+        enqueue_finalize_sale(&state, &sale_id, &tenant)
             .await
             .expect("enqueue_finalize_sale");
         {
             let client = pool.get().await.unwrap();
-            let count: i64 = client
-                .query_one(
-                    "SELECT COUNT(*) FROM offline_queue WHERE action = 'finalize_sale' AND payload LIKE $1",
+            let row = client
+                .query_opt(
+                    "SELECT tenant_id FROM offline_queue WHERE action = 'finalize_sale' AND payload LIKE $1",
                     &[&format!("%{sale_id}%")],
                 )
                 .await
-                .unwrap()
-                .get(0);
-            assert_eq!(count, 1, "one finalize_sale must be enqueued on Postgres");
+                .unwrap();
+            let row = row.expect("one finalize_sale must be enqueued on Postgres");
+            let queued_tenant: String = row.get(0);
+            assert_eq!(
+                queued_tenant, tenant,
+                "finalize_sale must be enqueued under the sale's tenant"
+            );
         }
 
         // ── Tenant resolution (metadata → mapping) ──

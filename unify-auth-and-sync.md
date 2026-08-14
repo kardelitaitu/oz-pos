@@ -636,9 +636,27 @@ REST handler, the sync store, prune, webhooks, the email/analytics port, the
 
 ### Deferred (documented, not fixed)
 
-1. ~~Global `UNIQUE(sku)` / `UNIQUE(username)`~~ — **done** in this pass (per-tenant constraints + composite FKs + tenant-scoped REST lookups + isolation test). What remains for full multi-tenancy is app-level: the desktop `Store` methods and the report-sender email loop still operate tenant-unaware (fine for the single `default` tenant today).
+1. ~~Global `UNIQUE(sku)` / `UNIQUE(username)`~~ — **done** in this pass (per-tenant constraints + composite FKs + tenant-scoped REST lookups + isolation test).
 2. Analytics scans use `created_at::date` (a cast, so `idx_sales_created_at` can't serve them). Fine for a background daily job; add `(status, (created_at::date))` if the bundle grows.
-3. Postgres Row-Level Security — already listed in the growth path; becomes mandatory with real multi-tenancy.
+3. Postgres Row-Level Security — already listed in the growth path; becomes the enforcement backstop when real multi-tenancy goes live.
+
+### Multi-tenant readiness audit (2026-08-15)
+
+Per-tenant uniqueness is in place; this is the remaining tenant-aware vs
+tenant-blind surface, audited table by table.
+
+| Surface | Status | Notes for the first real second tenant |
+|---------|--------|----------------------------------------|
+| `sync_api` handlers + `sync_store` (push/pull/snapshot/plan) | ✅ scoped | Tenant always resolved from JWT claims; per-tenant snapshot cache + rate limiter |
+| `oz-api` REST (`pg.rs`) — products list/get/create/stock, tax rates, users, plans, terminals | ✅ scoped | Sale cost-freeze is tenant-scoped; `get_sale` / `update_sale_status` are by sale id (globally unique UUID — acceptable) |
+| Webhook payment → sale lookup | ✅ scoped | Returns `(sale_id, tenant_id)` by joining the sale; the `finalize_sale` enqueue now runs under the sale's owner tenant (verified in the PG webhook test) |
+| Webhook `finalize_sale` enqueue | ✅ scoped | Tenant flows from the sale row — no more hardcoded `'default'` |
+| `sales` table | ✅ has `tenant_id` (default `'default'`) | Stamped by REST `create_sale` from the JWT claims; `payments` needs no tenant column (it joins through `sales.id`) |
+| Report-sender email loop (`email_pg.rs`) | ⚠️ tenant-blind | All analytics queries read every tenant and the settings are single-global. Needs per-tenant `report_schedule`/`smtp_config`/`recipients` + tenant-scoped SQL; also the `JOIN products ON sl.sku = p.sku` in COGS/popularity becomes cross-tenant ambiguous once a second tenant shares an SKU — must join on `(tenant_id, sku)` |
+| Desktop `Store` (oz-core, SQLite) | ✅ single-tenant by construction | The desktop/tablet app never sets `tenant_id` (defaults to `'default'`); unscoped queries are fine there, but the schema now permits other tenants' rows, so a scoped client could see them. If a desktop DB ever holds foreign tenants, the Store must add `WHERE tenant_id = 'default'` to its by-SKU/username queries (`db/products.rs` lines ~536-1207) |
+| Health endpoint queue depth | ✅ global by design | Aggregate ops metric — correct as-is |
+
+**Recommended Phase-4 order:** (1) ~~`sales.tenant_id` + REST/webhook threading~~ — **done** → (2) per-tenant report settings + tenant-scoped analytics → (3) RLS as the enforcement backstop.
 
 ### Test plan (what proves the port is right)
 
