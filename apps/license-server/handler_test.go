@@ -55,6 +55,7 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 		&core.EmailField{Name: "email", Required: true},
 		&core.TextField{Name: "phone", Required: true},
 		&core.TextField{Name: "api_key", Required: true},
+		&core.TextField{Name: "api_key_lookup"},
 		&core.SelectField{Name: "status", Required: true, Values: []string{"active", "suspended", "revoked"}},
 	)
 	tenants.CreateRule = types.Pointer("")
@@ -166,7 +167,15 @@ func seedTenant(t *testing.T, app *tests.TestApp, tenantID, apiKey, status strin
 	// (which lowercases incoming requests before searching by email).
 	rec.Set("email", strings.ToLower(tenantID+"@example.com"))
 	rec.Set("phone", "-")
-	rec.Set("api_key", apiKey)
+	// The handler verifies against a bcrypt hash; seed the hashed form so the
+	// presented plaintext apiKey authenticates (matching production at-rest
+	// storage).
+	hash, lookup, err := hashAPIKey(apiKey)
+	if err != nil {
+		t.Fatalf("failed to hash api_key in seedTenant: %v", err)
+	}
+	rec.Set("api_key", hash)
+	rec.Set("api_key_lookup", lookup)
 	rec.Set("status", status)
 	if err := app.Save(rec); err != nil {
 		t.Fatalf("failed to seed tenant %q: %v", tenantID, err)
@@ -225,6 +234,7 @@ func createMinimalCollections(t *testing.T, app *tests.TestApp, skip map[string]
 			&core.EmailField{Name: "email", Required: true},
 			&core.TextField{Name: "phone", Required: true},
 			&core.TextField{Name: "api_key", Required: true},
+			&core.TextField{Name: "api_key_lookup"},
 			&core.SelectField{Name: "status", Required: true, Values: []string{"active", "suspended", "revoked"}},
 		)
 		tenants.CreateRule = types.Pointer("")
@@ -1623,12 +1633,13 @@ func TestActivateHandler_SameTenantKeyReuse(t *testing.T) {
 	if _, ok := resp["signature"]; !ok {
 		t.Error("expected signature in response")
 	}
-	// api_key is included because keyStatus was "activated" — caller
-	// proved they know both a key already bound to this tenant AND
-	// the matching api_key. Without the api_key match this branch
-	// is gated by the H1 fix in activate.go and returns 401.
-	if _, ok := resp["api_key"]; !ok {
-		t.Error("expected api_key in response on key reuse by same tenant")
+	// api_key is NOT re-emitted on same-tenant key reuse: the stored value
+	// is now a one-way bcrypt hash, and this caller already presented the
+	// correct key — so there is no rotation and no re-emit. A caller who
+	// lost the key reaches the same branch without a valid api_key and
+	// receives a freshly rotated key instead.
+	if _, ok := resp["api_key"]; ok {
+		t.Error("api_key must NOT be re-emitted when the caller already proved they hold it (write-only secret)")
 	}
 }
 
@@ -2925,9 +2936,9 @@ func TestActivateHandler_Lifecycle(t *testing.T) {
 		if tenant.GetString("status") != "active" {
 			t.Errorf("tenant status should be active")
 		}
-		if tenant.GetString("api_key") != apiKey {
-			t.Errorf("tenant api_key mismatch: DB has %q, response gave %q",
-				tenant.GetString("api_key"), apiKey)
+		// The stored value is a bcrypt hash, not the plaintext key.
+		if !verifyAPIKey(tenant.GetString("api_key"), apiKey) {
+			t.Errorf("stored api_key hash does not verify against the issued key %q", apiKey)
 		}
 
 		// Verify the persisted phone matches the request (not the old "-" placeholder).
@@ -2994,10 +3005,13 @@ func TestActivateHandler_Lifecycle(t *testing.T) {
 		if _, ok := resp["signature"]; !ok {
 			t.Error("expected signature on reuse")
 		}
-		// On key reuse, api_key is re-emitted (caller proved they know
-		// the key bound to this tenant).
-		if v, ok := resp["api_key"]; !ok || v.(string) != apiKey {
-			t.Error("expected api_key to be re-emitted on key reuse")
+		// On key reuse, api_key is NOT re-emitted: the stored value is a
+		// one-way bcrypt hash, and this caller already presented the
+		// correct key. (A caller without a valid key gets a freshly
+		// rotated key instead — verified in the no-api_key sub-request
+		// below.)
+		if _, ok := resp["api_key"]; ok {
+			t.Error("api_key must NOT be re-emitted on key reuse when the caller already holds it")
 		}
 		if v, ok := resp["tenant_id"]; !ok || v.(string) != tenantID {
 			t.Errorf("expected tenant_id=%q on reuse, got %v", tenantID, resp["tenant_id"])
@@ -3042,6 +3056,14 @@ func TestActivateHandler_Lifecycle(t *testing.T) {
 		}
 		if _, ok := resp2["signed_payload"]; !ok {
 			t.Error("expected signed_payload on reuse without api_key")
+		}
+		// Losing the api_key triggers a rotation: the server can't re-emit
+		// the bcrypt hash, so it issues a fresh key to restore renew/status
+		// access. The new key must differ from the original.
+		if v, ok := resp2["api_key"]; !ok {
+			t.Error("expected a rotated api_key on reuse without api_key")
+		} else if s := v.(string); s == apiKey || !strings.HasPrefix(s, "oz_") {
+			t.Errorf("expected a fresh rotated api_key, got %q", s)
 		}
 	})
 

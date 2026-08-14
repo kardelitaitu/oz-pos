@@ -526,10 +526,13 @@ Lock to an explicit allowlist before serving the website:
   (forgeable JWTs) and the token mint opens to anyone.
 - **Rate-limit `/api/v1/tokens`** — done: 30/min per client IP (keyed on
   `X-Forwarded-For`/`X-Real-IP`). License `/status` is still unthrottled.
-- **Hash the tenant `api_key` at rest** (bcrypt/argon2). It is currently
-  stored and compared in plaintext on the `tenants` collection — a DB leak
-  exposes persistent identity secrets. Also drop the legacy body-`api_key`
-  fallback (it leaks the secret into CDN/access logs).
+- **Hash the tenant `api_key` at rest** — done: `tenants.api_key` now stores a
+  bcrypt hash and `tenants.api_key_lookup` (hidden, uniquely indexed) stores a
+  hex SHA-256 for O(1) lookup. `/renew` + `/status` resolve via
+  `findTenantByAPIKey`; legacy plaintext rows are lazily migrated on their
+  first successful auth. A re-activation without the key rotates it (the key
+  is write-only). The legacy body-`api_key` fallback is still a deprecation
+  item (it leaks the secret into CDN/access logs).
 - **Keep the license server's 5/IP/hr activate/renew limiter** — it persists
   state to SQLite so restarts don't reset brute-force state.
 - Store `OZ_API_SECRET`, `OZ_ADMIN_KEY`, and `OZ_LICENSE_PRIVATE_KEY` in
@@ -568,7 +571,7 @@ Lock to an explicit allowlist before serving the website:
 | Snapshot cache is also in-memory | Same — Redis/shared store on scale-out |
 | Dev-secret fallback / open token mint in prod | Fail startup if `OZ_API_SECRET` / `OZ_ADMIN_KEY` unset |
 | Postgres pool was `NoTls` | Now rustls; `OZ_DB_REQUIRE_TLS=1` fails startup unless `DATABASE_URL` sets `sslmode=require` |
-| `api_key` stored plaintext | Hash at rest (bcrypt/argon2) or accept the documented risk |
+| `api_key` stored plaintext | Done: bcrypt + SHA-256 lookup; legacy rows migrated lazily |
 | PocketBase SQLite has no backup | litestream / nightly `VACUUM INTO` + restore drill |
 | Data loss during SQLite → Postgres | Back up SQLite, verify row counts + checksums, replay window |
 | Two databases drift | JWT `tenant_id` is the single identity; webhooks mirror plan state; reconcile if a cross-DB query appears |

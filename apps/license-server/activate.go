@@ -110,6 +110,10 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 
 		// ── Find or Create tenant record by Email ─────────────────
 		var isNewTenant bool
+		// Plaintext api_key to return in the response, if any. The stored
+		// value is a bcrypt hash, so the plaintext is only ever available
+		// here — at the moment it is minted (or rotated).
+		var issuedAPIKey string
 		tenant, err := app.FindFirstRecordByData("tenants", "email", req.Email)
 		if err != nil {
 			// Tenant not found by email. Before creating one, check
@@ -164,7 +168,16 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			// Falls back to "-" when empty so the required field
 			// constraint on the tenants collection is satisfied.
 			tenant.Set("phone", strDefault(req.Phone, "-"))
-			tenant.Set("api_key", generateAPIKey())
+			issuedAPIKey = generateAPIKey()
+			apiKeyHash, apiKeyLookup, hashErr := hashAPIKey(issuedAPIKey)
+			if hashErr != nil {
+				log.Printf("Failed to hash api_key: %v", hashErr)
+				return e.JSON(http.StatusInternalServerError, map[string]any{
+					"error": "failed to create tenant",
+				})
+			}
+			tenant.Set("api_key", apiKeyHash)
+			tenant.Set("api_key_lookup", apiKeyLookup)
 			tenant.Set("status", "active")
 			if saveErr := app.Save(tenant); saveErr != nil {
 				log.Printf("Failed to save tenant: %v", saveErr)
@@ -302,7 +315,33 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 					"signed_payload": subRecord.GetString("signed_payload"),
 					"signature":      subRecord.GetString("signature"),
 					"tenant_id":      tenant.Id,
-					"api_key":        tenant.GetString("api_key"),
+				}
+
+				// The stored api_key is a one-way bcrypt hash and can never
+				// be re-emitted. A caller who proved they hold the current
+				// key (email + key bound to this tenant AND a matching
+				// api_key) needs no re-emit. A caller who reached this branch
+				// on email + key alone (e.g. a reinstall that lost the key)
+				// gets a freshly rotated key so renew/status access is still
+				// recoverable without storing plaintext at rest.
+				if !verifyAPIKey(tenant.GetString("api_key"), req.APIKey) {
+					newAPIKey := generateAPIKey()
+					apiKeyHash, apiKeyLookup, hashErr := hashAPIKey(newAPIKey)
+					if hashErr != nil {
+						log.Printf("Re-activation api_key rotation failed for tenant %q: %v", tenant.Id, hashErr)
+						return e.JSON(http.StatusInternalServerError, map[string]any{
+							"error": "failed to rotate api_key",
+						})
+					}
+					tenant.Set("api_key", apiKeyHash)
+					tenant.Set("api_key_lookup", apiKeyLookup)
+					if saveErr := app.Save(tenant); saveErr != nil {
+						log.Printf("Re-activation api_key rotation save failed for tenant %q: %v", tenant.Id, saveErr)
+						return e.JSON(http.StatusInternalServerError, map[string]any{
+							"error": "failed to rotate api_key",
+						})
+					}
+					resp["api_key"] = newAPIKey
 				}
 
 				// Clear any accumulated failure tracking for this key
@@ -329,7 +368,7 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			// The caller must prove they are the registered tenant admin
 			// by presenting the api_key that was issued on first activation.
 			if keyStatus == "unused" || keyStatus == "" {
-				if tenant.GetString("api_key") != req.APIKey {
+				if !verifyAPIKey(tenant.GetString("api_key"), req.APIKey) {
 					return e.JSON(http.StatusUnauthorized, map[string]any{
 						"error": "api_key required (or mismatched) — caller is not the registered administrator of this tenant",
 					})
@@ -495,14 +534,14 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			"signature":      signature,
 			"tenant_id":      tenantID,
 		}
-		// api_key is included only for:
-		//   - newly created tenants (so the POS can persist it)
-		//   - re-activation of an already-activated key (caller proved
-		//     knowledge of the key bound to this tenant)
-		// It is intentionally omitted for existing tenants activating
-		// a new key — the caller already proved they hold it (H1 audit).
-		if isNewTenant || keyStatus == "activated" {
-			resp["api_key"] = tenant.GetString("api_key")
+		// api_key is included only for newly created tenants (so the POS can
+		// persist it). The stored value is a bcrypt hash, so the plaintext
+		// issuedAPIKey captured at mint time is returned here. Re-activation
+		// of an already-activated key is handled earlier (rotation). Existing
+		// tenants activating a new key already proved they hold the key, so
+		// nothing is re-emitted (H1 audit).
+		if isNewTenant {
+			resp["api_key"] = issuedAPIKey
 		}
 		return e.JSON(http.StatusOK, resp)
 	}

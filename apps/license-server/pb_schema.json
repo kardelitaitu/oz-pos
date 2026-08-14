@@ -218,12 +218,27 @@
         "primaryKey": false
       },
       {
-        "help": "",
-        "hidden": false,
+        "help": "Bcrypt hash of the tenant API key (the plaintext is never stored).",
+        "hidden": true,
         "id": "text5908105184",
         "name": "api_key",
         "presentable": false,
         "required": true,
+        "system": false,
+        "type": "text",
+        "autogeneratePattern": "",
+        "max": 0,
+        "min": 0,
+        "pattern": "",
+        "primaryKey": false
+      },
+      {
+        "help": "Hex SHA-256 lookup hash of the api_key for O(1) tenant resolution (the bcrypt hash is salted and not indexable).",
+        "hidden": true,
+        "id": "text8071130512",
+        "name": "api_key_lookup",
+        "presentable": false,
+        "required": false,
         "system": false,
         "type": "text",
         "autogeneratePattern": "",
@@ -271,7 +286,8 @@
     ],
     "indexes": [
       "CREATE UNIQUE INDEX idx_tenants_email ON tenants (email)",
-      "CREATE UNIQUE INDEX idx_tenants_api_key ON tenants (api_key)"
+      "CREATE UNIQUE INDEX idx_tenants_api_key ON tenants (api_key)",
+      "CREATE UNIQUE INDEX idx_tenants_api_key_lookup ON tenants (api_key_lookup) WHERE api_key_lookup IS NOT NULL AND api_key_lookup != ''"
     ]
   },
   {

@@ -46,7 +46,10 @@ func handleStatus(app core.App) func(e *core.RequestEvent) error {
 		}
 
 		// ── Look up tenant by api_key (uniquely indexed) ─────────
-		tenant, err := app.FindFirstRecordByData("tenants", "api_key", apiKey)
+		// The stored key is a bcrypt hash; findTenantByAPIKey resolves the
+		// tenant via the indexed SHA-256 lookup and verifies with bcrypt
+		// (lazily migrating legacy plaintext rows).
+		tenant, err := findTenantByAPIKey(app, apiKey)
 		if err != nil || tenant.GetString("status") != "active" {
 			if err != nil {
 				log.Printf("/status: unknown api_key (tenant lookup failed): %v", err)

@@ -62,7 +62,10 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 		}
 
 		// ── Authenticate tenant by api_key ────────────────────────
-		tenant, err := app.FindFirstRecordByData("tenants", "api_key", req.APIKey)
+		// The stored key is a bcrypt hash; findTenantByAPIKey resolves the
+		// tenant via the indexed SHA-256 lookup and verifies with bcrypt
+		// (lazily migrating legacy plaintext rows).
+		tenant, err := findTenantByAPIKey(app, req.APIKey)
 		if err != nil || tenant.GetString("status") != "active" {
 			return e.JSON(http.StatusUnauthorized, map[string]any{
 				"error": "invalid api_key or tenant is not active",
