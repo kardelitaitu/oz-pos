@@ -454,6 +454,7 @@ mod tests {
             port: 3099,
             admin_key: None,
             enforce_plans: false,
+            production: false,
             log_format: config::LogFormat::Plain,
             redirect_only: false,
             sync_redirect_url: None,

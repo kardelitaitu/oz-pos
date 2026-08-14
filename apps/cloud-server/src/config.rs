@@ -50,6 +50,11 @@ pub struct CloudServerConfig {
     /// rejected with `403 plan_required`.
     pub enforce_plans: bool,
 
+    /// When `true` (`OZ_PRODUCTION=1`), startup fails unless `OZ_API_SECRET`
+    /// and `OZ_ADMIN_KEY` are both set — no dev-secret JWT fallback and no
+    /// open token mint in production.
+    pub production: bool,
+
     /// Log output format.
     pub log_format: LogFormat,
 
@@ -86,6 +91,8 @@ impl CloudServerConfig {
     /// * `OZ_API_PORT` must parse as a valid `u16`.
     /// * `OZ_ADMIN_KEY` is treated as unset when empty (Docker passes `""`
     ///   for absent host variables).
+    /// * `OZ_PRODUCTION=1` requires `OZ_API_SECRET` and `OZ_ADMIN_KEY` to be
+    ///   set (no dev-secret fallback / open token mint).
     ///
     /// # Errors
     ///
@@ -110,15 +117,21 @@ impl CloudServerConfig {
         };
 
         let enforce_plans = env_bool("OZ_ENFORCE_PLANS");
+        let production = env_bool("OZ_PRODUCTION");
 
         // An empty string must not enable key gating: `docker compose`
         // passes `OZ_ADMIN_KEY` through as `""` when the host variable
         // is absent.
         let admin_key = std::env::var("OZ_ADMIN_KEY").ok().filter(|k| !k.is_empty());
+        let api_secret = std::env::var("OZ_API_SECRET")
+            .ok()
+            .filter(|s| !s.is_empty());
 
         let database_url = std::env::var("DATABASE_URL").ok();
         let db_path = std::env::var("OZ_DB_PATH").unwrap_or_else(|_| "oz-pos.db".into());
         let require_tls = env_bool("OZ_DB_REQUIRE_TLS");
+
+        validate_production(production, api_secret.as_deref(), admin_key.as_deref())?;
 
         Ok(Self {
             db_path,
@@ -133,7 +146,8 @@ impl CloudServerConfig {
             stripe_webhook_secret: std::env::var("STRIPE_WEBHOOK_SECRET").ok(),
             square_webhook_signature_key: std::env::var("SQUARE_WEBHOOK_SIGNATURE_KEY").ok(),
             square_webhook_url: std::env::var("SQUARE_WEBHOOK_URL").ok(),
-            api_secret: std::env::var("OZ_API_SECRET").ok(),
+            production,
+            api_secret,
         })
     }
 }
@@ -146,6 +160,30 @@ fn env_bool(name: &str) -> bool {
     std::env::var(name)
         .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "on" | "ON"))
         .unwrap_or(false)
+}
+
+/// Validate production-mode requirements.
+///
+/// When `production` is enabled, the JWT signing secret and admin key must
+/// both be configured so the server never falls back to the hard-coded dev
+/// secret or an open token mint.
+fn validate_production(
+    production: bool,
+    api_secret: Option<&str>,
+    admin_key: Option<&str>,
+) -> Result<(), String> {
+    if !production {
+        return Ok(());
+    }
+    if api_secret.is_none() {
+        return Err(
+            "OZ_PRODUCTION=1 requires OZ_API_SECRET to be set (no dev-secret fallback)".into(),
+        );
+    }
+    if admin_key.is_none() {
+        return Err("OZ_PRODUCTION=1 requires OZ_ADMIN_KEY to be set (no open token mint)".into());
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -208,5 +246,17 @@ mod tests {
             },
             LogFormat::Plain
         );
+    }
+
+    #[test]
+    fn production_requires_both_secrets() {
+        assert!(validate_production(true, None, Some("admin")).is_err());
+        assert!(validate_production(true, Some("secret"), None).is_err());
+        assert!(validate_production(true, Some("secret"), Some("admin")).is_ok());
+    }
+
+    #[test]
+    fn dev_mode_allows_missing_secrets() {
+        assert!(validate_production(false, None, None).is_ok());
     }
 }

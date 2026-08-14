@@ -420,8 +420,9 @@ SMTP_HOST=... SMTP_PORT=587 SMTP_USERNAME=... SMTP_PASSWORD=...
 ```bash
 DATABASE_URL=postgres://user:pass@host:5432/ozpos?sslmode=require  # require = encrypted via rustls (disable/prefer for local dev)
 OZ_DB_REQUIRE_TLS=1              # fail startup if DATABASE_URL omits sslmode=require
-OZ_API_SECRET=...                # HS256 JWT signing secret — REQUIRED in prod (unset falls back to the hard-coded dev secret; JWTs become forgeable)
-OZ_ADMIN_KEY=...                 # gates POST /api/v1/tokens — REQUIRED in prod (unset = open token mint, dev mode)
+OZ_PRODUCTION=1                  # fail startup if OZ_API_SECRET or OZ_ADMIN_KEY are unset
+OZ_API_SECRET=...                # HS256 JWT signing secret — required when OZ_PRODUCTION=1 (unset falls back to the hard-coded dev secret; JWTs become forgeable)
+OZ_ADMIN_KEY=...                 # gates POST /api/v1/tokens — required when OZ_PRODUCTION=1 (unset = open token mint, dev mode)
 OZ_ENFORCE_PLANS=1               # reject free-plan sync (403 plan_required)
 STRIPE_WEBHOOK_SECRET=whsec_...
 SQUARE_WEBHOOK_SIGNATURE_KEY=...
@@ -520,9 +521,9 @@ Lock to an explicit allowlist before serving the website:
   `sslmode=require` (no silent plaintext fallback). The dedicated
   low-privilege role is still to be added.
 - **Fail startup in prod if `OZ_API_SECRET` or `OZ_ADMIN_KEY` is unset.**
-  Both fall back to insecure dev behavior today: the JWT secret becomes the
-  hard-coded `oz-pos-dev-secret-change-in-production` (forgeable JWTs) and the
-  token mint opens to anyone.
+  `OZ_PRODUCTION=1` enforces both at startup — without it the JWT secret
+  falls back to the hard-coded `oz-pos-dev-secret-change-in-production`
+  (forgeable JWTs) and the token mint opens to anyone.
 - **Rate-limit `/api/v1/tokens`** — done: 30/min per client IP (keyed on
   `X-Forwarded-For`/`X-Real-IP`). License `/status` is still unthrottled.
 - **Hash the tenant `api_key` at rest** (bcrypt/argon2). It is currently
@@ -602,6 +603,6 @@ Lock to an explicit allowlist before serving the website:
 | One identity | JWT `tenant_id` scopes every sync row to the canonical tenant |
 | No data loss | Row counts + checksums match after the SQLite → Postgres migration |
 | Anti-spike loops survive | Rate limits still return `429`; hourly prune ages `offline_queue`/`stock_movements` on Postgres and the retention counter increments |
-| Secrets enforced | Startup fails (no silent dev fallback) if `OZ_API_SECRET` / `OZ_ADMIN_KEY` are unset in prod |
+| Secrets enforced | `OZ_PRODUCTION=1` fails startup unless `OZ_API_SECRET` and `OZ_ADMIN_KEY` are set (no dev fallback / open mint) |
 | Backups verified | A restore drill recovers both Postgres and PocketBase SQLite to a known point |
 | Alerts fire | A flatlined retention counter or growing queue depth pages a human |
