@@ -74,7 +74,7 @@
 │    /api/sync/push|pull|snapshot|status                   │
 │    /api/v1/tokens (HS256 JWT mint)                       │
 │    /api/webhooks/stripe|square                           │
-│    REST API + plan gating + rate limiting                │
+│    REST API + plan gating + rate limiting + prune        │
 │    DB: Postgres (managed addon — futureproof)            │
 │                                                          │
 │  Identity: HS256 JWT (tenant_id + terminal_id)           │
@@ -312,6 +312,21 @@ axum: snapshot_handler
     └── Return { products: [...], tax_rates: [...], users: [...] }
 ```
 
+### Anti-spike & retention (must be preserved)
+
+The sync function carries two DB-protection loops that are load-bearing and
+must survive the SQLite → Postgres move — they are not optional:
+
+| Mechanism | Today | Behavior |
+|-----------|-------|----------|
+| **Per-tenant rate limiter** (`rate_limit.rs`) | In-memory token bucket — DB-agnostic, already wired on both backends | push 100/min · pull 300/min · snapshot 50/min · status 300/min; `429` + `Retry-After`; stale-bucket cleanup every 60 s |
+| **Retention / prune loop** (`prune.rs`) | Hourly — SQLite-specific, wired only on the SQLite branch today | archive `stock_movements` > 90 days (ledger rollup); delete `offline_queue` rows > 90 days regardless of status, in 500-row cursor batches; `incremental_vacuum(50)` per batch; `PRUNE_QUEUE_DELETED_TOTAL` counter |
+
+Phase 1 must port the prune loop to Postgres — the batched DELETE is portable,
+`incremental_vacuum` becomes autovacuum/VACUUM — and re-wire it onto the
+Postgres branch, which today starts neither it nor the report-sender loop.
+The rate limiter stays as-is: in-memory, per-process, DB-agnostic.
+
 ### Key Change: co-locate, don't merge
 
 | Aspect | Change |
@@ -335,6 +350,7 @@ axum: snapshot_handler
 | 1.2 | Make oz-api REST handlers run on Postgres (drop the in-memory SQLite fallback) |
 | 1.3 | Enable DB TLS and raise the pool above the 8-connection default |
 | 1.4 | Migrate live sync data from SQLite to Postgres; verify row counts + checksums |
+| 1.5 | Re-wire the background loops (prune, report sender, rate-limit cleanup) onto Postgres — today the prune + report loops run only on the SQLite branch |
 
 ### Phase 2: Combine into one image (Week 2)
 
@@ -364,7 +380,10 @@ axum: snapshot_handler
 |------|--------|
 | `crates/oz-core/migrations/` | Add Postgres DDL for the full schema |
 | `apps/cloud-server/src/db.rs` | Run full migrations on Postgres; drop the 2-table stub |
-| `apps/cloud-server/src/main.rs` | Wire oz-api to Postgres (drop the in-memory SQLite fallback) |
+| `apps/cloud-server/src/main.rs` | Wire oz-api to Postgres (drop the in-memory SQLite fallback) **and re-start the prune + report-sender loops on the Postgres branch** |
+| `apps/cloud-server/src/prune.rs` | Port the retention loop to Postgres (batched DELETE + autovacuum; keep `PRUNE_QUEUE_DELETED_TOTAL`) |
+| `apps/cloud-server/src/email.rs` | Port the report-sender loop off `rusqlite::Connection` onto the Postgres pool |
+| `apps/cloud-server/src/rate_limit.rs` | Unchanged — in-memory and DB-agnostic; limits preserved |
 
 ### Packaging (new)
 
@@ -437,7 +456,7 @@ through the HS256 JWT, never directly.
 | `/api/v1/tokens` | POST | Mint HS256 JWT (`X-Admin-Key` / client credentials / dev) |
 | `/api/webhooks/stripe` | POST | Subscription → plan; payment → `finalize_sale` |
 | `/api/webhooks/square` | POST | Payment → `finalize_sale` |
-| `/health` · `/metrics` | GET | Health + Prometheus metrics |
+| `/health` · `/metrics` | GET | Health + Prometheus metrics (incl. retention counter) |
 
 ---
 
@@ -509,6 +528,8 @@ Lock to an explicit allowlist before serving the website:
 | Risk | Mitigation |
 |------|------------|
 | Postgres path is a 2-table stub today | Phase 1 completes it before traffic moves |
+| Prune/report loops are SQLite-only (`incremental_vacuum`, `rusqlite::Connection`) | Ported + re-wired in Phase 1 (step 1.5) before cutover; retention counter confirms aging |
+| In-memory rate limiter is per-process | Fine for one node; move to a shared store (Redis) only if the sync function is scaled out |
 | Data loss during SQLite → Postgres | Back up SQLite, verify row counts + checksums, replay window |
 | Two databases drift | JWT `tenant_id` is the single identity; webhooks mirror plan state; reconcile if a cross-DB query appears |
 | Supervisor / reverse proxy failure | Aggregate healthcheck; keep the two processes independently restartable |
@@ -541,3 +562,4 @@ Lock to an explicit allowlist before serving the website:
 | Webhooks work | Stripe/Square update plans and enqueue `finalize_sale` |
 | One identity | JWT `tenant_id` scopes every sync row to the canonical tenant |
 | No data loss | Row counts + checksums match after the SQLite → Postgres migration |
+| Anti-spike loops survive | Rate limits still return `429`; hourly prune ages `offline_queue`/`stock_movements` on Postgres and the retention counter increments |
