@@ -3,6 +3,7 @@ pub mod health;
 pub mod plans;
 pub mod products;
 pub mod sales;
+pub mod settings;
 pub mod tax_rates;
 pub mod terminals;
 pub mod tokens;

@@ -674,9 +674,15 @@ The bare keys (`smtp_config`, …) remain the canonical location for
 `default`'s existing rows keep working untouched. Suffix (not prefix)
 because it is a plain PK lookup — no `LIKE` scan — and it leaves the
 legacy reads byte-identical. Recipients already live inside
-`ReportScheduleConfig`, so no new settings surface is needed. There is no
-settings REST endpoint yet — provisioning scoped keys is the first job of
-the admin tooling / migration script (the same 1.4 tool can carry them).
+`ReportScheduleConfig`, so no new settings surface is needed. Provisioning
+is now covered by the admin-gated settings endpoint (`GET/PUT
+/api/v1/settings`, `X-Admin-Key` like token minting): PUT validates the
+SMTP/schedule JSON against the loop's types, encrypts the SMTP password
+at rest, always writes the scoped `{base}:{tenant}` keys, and treats an
+explicit `null` as "delete the override" (falling back to the bare key);
+GET returns the effective per-tenant view with the bare-key fallback
+applied — a second tenant is enabled purely by provisioning its scoped
+keys through the endpoint, with no data migration.
 
 **2. Tenant enumeration.** There is no `tenants` table; derive the active
 set from data (cheap, no schema change, and a tenant exists the moment it
@@ -752,6 +758,19 @@ isolation half); unit-test the key-scoping fallback.
   key wins + bare-key fallback after deleting the scoped row, enumeration
   order, and the no-SMTP loop decision paths (already-sent tenant
   short-circuits before SMTP; unknown tenant skipped cleanly).
+- Provisioning: `crates/oz-api/src/routes/settings.rs` ships the
+  admin-gated `GET/PUT /api/v1/settings` endpoint (registered in
+  `oz-api`'s public router, `X-Admin-Key` like token minting). PUT
+  validates `SmtpConfig`/`ReportScheduleConfig`, encrypts the SMTP
+  password at rest (`encrypt_smtp_at_rest`), writes scoped suffix keys on
+  SQLite and Postgres, and maps explicit `null` → delete override via a
+  `deserialize_with` helper (plain `Option<Option<T>>` cannot distinguish
+  null from absent — serde collapses both to `None`). GET resolves the
+  effective view with the same scoped-first/bare-fallback order the loop
+  uses. Tests: admin gating, typed round-trip, at-rest encryption (raw
+  row inspected), per-tenant isolation, bare-key fallback (legacy bare
+  row seeded directly), null-delete, validation rejects, and a live-PG
+  provision round-trip (`pg_integration_settings_provision_per_tenant`).
 
 ### Desktop Store tenant-scoping audit (2026-08-15)
 

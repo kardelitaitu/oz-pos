@@ -131,6 +131,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/v1/tenants/{tenant_id}/plan",
             put(routes::plans::set_tenant_plan_handler),
+        )
+        .route(
+            "/api/v1/settings",
+            get(routes::settings::get_settings_handler).put(routes::settings::put_settings_handler),
         );
 
     let protected = Router::new()

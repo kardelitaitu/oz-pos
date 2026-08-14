@@ -39,6 +39,42 @@ use crate::routes::terminals::RegisteredTerminal;
 /// Default inventory location UUID (must match the port schema's default).
 const CANONICAL_DEFAULT_LOCATION_UUID: &str = "01926b3a-0000-7000-8000-000000000001";
 
+// ── Settings ────────────────────────────────────────────────────────────
+
+/// Read a raw `settings` value from Postgres (`None` when absent).
+pub async fn get_setting_pg(pool: &Pool, key: &str) -> Result<Option<String>, String> {
+    let client = pool.get().await.map_err(|e| e.to_string())?;
+    let row = client
+        .query_opt("SELECT value FROM settings WHERE key = $1", &[&key])
+        .await
+        .map_err(|e| format!("DB error: {e}"))?;
+    Ok(row.map(|r| r.get(0)))
+}
+
+/// Upsert a `settings` value into Postgres (same shape the cloud report
+/// loop uses, so keys written here are read verbatim by `email_pg`).
+pub async fn set_setting_pg(pool: &Pool, key: &str, value: &str) -> Result<(), String> {
+    let client = pool.get().await.map_err(|e| e.to_string())?;
+    client
+        .execute(
+            "INSERT INTO settings (key, value, updated_at)
+             VALUES ($1, $2, to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'))
+             ON CONFLICT (key) DO UPDATE
+               SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at",
+            &[&key, &value],
+        )
+        .await
+        .map_err(|e| format!("DB error: {e}"))?;
+    Ok(())
+}
+
+/// Scoped settings key — suffix form (`{base}:{tenant}`), matching
+/// `email_pg`'s per-tenant keys so the admin endpoint provisions exactly
+/// what the report loop reads.
+pub fn scoped_setting_key(base: &str, tenant: &str) -> String {
+    format!("{base}:{tenant}")
+}
+
 /// Error from the Postgres REST data layer, mapped to HTTP statuses the same
 /// way the SQLite `Store` errors were.
 #[derive(Debug)]
