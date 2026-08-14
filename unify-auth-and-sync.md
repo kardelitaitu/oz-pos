@@ -636,7 +636,7 @@ REST handler, the sync store, prune, webhooks, the email/analytics port, the
 
 ### Deferred (documented, not fixed)
 
-1. ~~Global `UNIQUE(sku)` / `UNIQUE(username)`~~ — **done** in this pass (per-tenant constraints + composite FKs + tenant-scoped REST lookups + isolation test).
+1. ~~Global `UNIQUE(sku)` / `UNIQUE(username)`~~ — **done** in this pass (per-tenant constraints + composite FKs + tenant-scoped REST lookups + isolation test). The email-loop COGS/popularity joins were also hardened to `(tenant_id, sku)` so shared SKUs cannot cross tenants at the row level.
 2. Analytics scans use `created_at::date` (a cast, so `idx_sales_created_at` can't serve them). Fine for a background daily job; add `(status, (created_at::date))` if the bundle grows.
 3. Postgres Row-Level Security — already listed in the growth path; becomes the enforcement backstop when real multi-tenancy goes live.
 
@@ -652,7 +652,7 @@ tenant-blind surface, audited table by table.
 | Webhook payment → sale lookup | ✅ scoped | Returns `(sale_id, tenant_id)` by joining the sale; the `finalize_sale` enqueue now runs under the sale's owner tenant (verified in the PG webhook test) |
 | Webhook `finalize_sale` enqueue | ✅ scoped | Tenant flows from the sale row — no more hardcoded `'default'` |
 | `sales` table | ✅ has `tenant_id` (default `'default'`) | Stamped by REST `create_sale` from the JWT claims; `payments` needs no tenant column (it joins through `sales.id`) |
-| Report-sender email loop (`email_pg.rs`) | ⚠️ tenant-blind | All analytics queries read every tenant and the settings are single-global. Needs per-tenant `report_schedule`/`smtp_config`/`recipients` + tenant-scoped SQL; also the `JOIN products ON sl.sku = p.sku` in COGS/popularity becomes cross-tenant ambiguous once a second tenant shares an SKU — must join on `(tenant_id, sku)` |
+| Report-sender email loop (`email_pg.rs`) | ⚠️ tenant-blind (aggregation) but row-safe | Every SKU-keyed product join (daily/weekly/monthly COGS, top products, category breakdown, popularity trend, `product_activity`) now resolves within the sale's tenant (`ON p.sku = sl.sku AND p.tenant_id = s.tenant_id`; `product_activity` gained a `tenant_id` column). `pg_integration_email_loop_reads_postgres` proves a shared SKU across two tenants keeps its own COGS. Still to do: per-tenant `report_schedule`/`smtp_config`/`recipients` and tenant-filtered aggregation (the bundle aggregates all tenants today; `tenant_id` only labels metadata) |
 | Desktop `Store` (oz-core, SQLite) | ✅ single-tenant by construction | `create_sale` + the payment-completion paths now stamp `tenant_id = 'default'` explicitly (same identity contract as the cloud REST path, asserted in `create_sale_persists_header`). The app never sets another tenant, so unscoped by-SKU/username queries are fine; if a desktop DB ever holds foreign tenants, the Store must add `WHERE tenant_id = 'default'` to those queries (`db/products.rs` lines ~536-1207) |
 | Health endpoint queue depth | ✅ global by design | Aggregate ops metric — correct as-is |
 

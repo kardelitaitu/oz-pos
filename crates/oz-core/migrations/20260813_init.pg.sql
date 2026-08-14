@@ -128,7 +128,8 @@ CREATE TABLE IF NOT EXISTS product_activity (
     id         TEXT PRIMARY KEY,
     sku        TEXT NOT NULL,
     event_type TEXT NOT NULL CHECK (event_type IN ('search', 'edit')),
-    created_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
+    created_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
+    tenant_id  TEXT NOT NULL DEFAULT 'default'
 );
 
 

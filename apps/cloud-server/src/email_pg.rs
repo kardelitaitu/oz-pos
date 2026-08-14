@@ -303,7 +303,7 @@ async fn daily_revenue_pg(
                     (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty)::bigint, 0)
                      FROM sale_lines sl2
                      JOIN sales s2 ON sl2.sale_id = s2.id
-                     LEFT JOIN products p2 ON sl2.sku = p2.sku
+                     LEFT JOIN products p2 ON p2.sku = sl2.sku AND p2.tenant_id = s2.tenant_id
                      WHERE s2.status = 'completed'
                        AND s2.currency = d.currency
                        AND s2.created_at::date = d.date::date) AS cogs_minor
@@ -355,7 +355,7 @@ async fn weekly_revenue_pg(
                     (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty)::bigint, 0)
                      FROM sale_lines sl2
                      JOIN sales s2 ON sl2.sale_id = s2.id
-                     LEFT JOIN products p2 ON sl2.sku = p2.sku
+                     LEFT JOIN products p2 ON p2.sku = sl2.sku AND p2.tenant_id = s2.tenant_id
                      WHERE s2.status = 'completed'
                        AND s2.currency = d.currency
                        AND to_char(date_trunc('week', s2.created_at::date)::date, 'YYYY-MM-DD') = d.week_start::date::text) AS cogs_minor
@@ -406,7 +406,7 @@ async fn monthly_revenue_pg(
                     (SELECT COALESCE(SUM(COALESCE(sl2.cost_minor, p2.cost_minor, 0) * sl2.qty)::bigint, 0)
                      FROM sale_lines sl2
                      JOIN sales s2 ON sl2.sale_id = s2.id
-                     LEFT JOIN products p2 ON sl2.sku = p2.sku
+                     LEFT JOIN products p2 ON p2.sku = sl2.sku AND p2.tenant_id = s2.tenant_id
                      WHERE s2.status = 'completed'
                        AND s2.currency = d.currency
                        AND LEFT(s2.created_at, 7) = d.month::text) AS cogs_minor
@@ -466,7 +466,7 @@ async fn top_products_pg(
                 (SUM(sl.line_minor) - SUM(COALESCE(sl.cost_minor, p.cost_minor, 0) * sl.qty))::bigint AS gross_profit_minor
          FROM sale_lines sl
          JOIN sales s ON sl.sale_id = s.id
-         JOIN products p ON sl.sku = p.sku
+         JOIN products p ON p.sku = sl.sku AND p.tenant_id = s.tenant_id
          WHERE s.status = 'completed' AND s.created_at::date BETWEEN $1 AND $2
          GROUP BY p.id
          ORDER BY {order_clause}, p.sku
@@ -552,7 +552,7 @@ async fn category_breakdown_pg(
                     COUNT(DISTINCT s.id) AS sale_count
              FROM sale_lines sl
              JOIN sales s ON sl.sale_id = s.id
-             JOIN products p ON sl.sku = p.sku
+             JOIN products p ON p.sku = sl.sku AND p.tenant_id = s.tenant_id
              LEFT JOIN categories c ON p.category_id = c.id
              WHERE s.status = 'completed' AND s.created_at::date BETWEEN $1 AND $2
              GROUP BY p.category_id, c.name
@@ -864,7 +864,7 @@ async fn category_popularity_trend_pg(
                     SUM(sl.qty)::bigint AS units, COUNT(DISTINCT sl.sale_id) AS txns
              FROM sale_lines sl
              JOIN sales s ON sl.sale_id = s.id
-             JOIN products p ON sl.sku = p.sku
+             JOIN products p ON p.sku = sl.sku AND p.tenant_id = s.tenant_id
              WHERE s.status = 'completed' AND s.created_at::date BETWEEN $1 AND $2
              GROUP BY {s_period}, p.category_id"
         );
@@ -887,7 +887,7 @@ async fn category_popularity_trend_pg(
         let sql = format!(
             "SELECT {a_period} AS period_start, p.category_id, a.event_type, COUNT(*) AS cnt
              FROM product_activity a
-             JOIN products p ON a.sku = p.sku
+             JOIN products p ON p.sku = a.sku AND p.tenant_id = a.tenant_id
              WHERE a.created_at::date BETWEEN $1 AND $2
              GROUP BY {a_period}, p.category_id, a.event_type"
         );
@@ -1255,12 +1255,98 @@ mod tests {
         );
         assert_eq!(get_setting_pg(&pool, LAST_SENT_KEY).await.unwrap(), None);
 
+        // ── Shared SKU across tenants: joins must resolve within each
+        //    sale's tenant, never cross into the other tenant's product ──
+        let product_b_id = format!("{ns}-product-b");
+        let sale_b_id = format!("{ns}-sale-b");
+        let sale_b_line_id = format!("{ns}-line-b");
+        let now_b = "2026-01-16T09:00:00.000Z";
+        {
+            let mut client = pool.get().await.unwrap();
+            let tx = client.transaction().await.unwrap();
+            // Same SKU as tenant A's product, but owned by tenant-b with a
+            // very different cost (9999 vs 2000) — if the COGS/popularity
+            // joins were sku-only, A's rows would pick up B's cost.
+            tx.execute(
+                "INSERT INTO products (id, sku, name, price_minor, currency, category_id, barcode, \
+                 created_at, updated_at, price_updated_at, track_serial, product_type, version, \
+                 cost_minor, brand, rack_location, notes, unit, is_active, default_supplier_id, tenant_id)
+                 VALUES ($1, $2, 'Tenant B Cold Brew', 5000, 'USD', NULL, NULL, $3, $3, $3, 0, 'retail', 1, 9999, NULL, NULL, NULL, NULL, 1, NULL, 'tenant-b')",
+                &[&product_b_id, &sku, &now_b],
+            )
+            .await
+            .unwrap();
+            tx.execute(
+                "INSERT INTO sales (id, total_minor, currency, line_count, status, payment_method, tendered_minor, \
+                 discount_percent, discount_label, user_id, created_at, updated_at, subtotal_minor, \
+                 tax_total_minor, customer_id, version, tenant_id)
+                 VALUES ($1, 5000, 'USD', 1, 'completed', 'cash', 5000, 0, NULL, NULL, $2, $2, 5000, 0, NULL, 1, 'tenant-b')",
+                &[&sale_b_id, &now_b],
+            )
+            .await
+            .unwrap();
+            tx.execute(
+                "INSERT INTO sale_lines (id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position, \
+                 tax_minor, tax_rate_id, serial_number, store_id, course, modifiers_json, tax_breakdown_json, cost_minor)
+                 VALUES ($1, $2, $3, 1, 5000, 5000, 'USD', 1, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL)",
+                &[&sale_b_line_id, &sale_b_id, &sku],
+            )
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+        }
+
+        let config2 = ExportConfig {
+            start_date: "2026-01-01".into(),
+            end_date: "2026-01-31".into(),
+            top_product_limit: 25,
+            low_stock_threshold: 10,
+        };
+        let bundle2 = export_analytics_bundle_pg(&pool, config2, "default", &format!("{ns} Store"))
+            .await
+            .unwrap();
+
+        // A's day keeps A's cost; B's day resolves B's cost (9999) via the
+        // sale's tenant, proving the COGS join is tenant-scoped.
+        assert_eq!(bundle2.daily_revenue.len(), 2);
+        let a_day = bundle2
+            .daily_revenue
+            .iter()
+            .find(|r| r.date == "2026-01-15")
+            .expect("tenant A day");
+        assert_eq!((a_day.total_minor, a_day.cogs_minor), (5000, 2000));
+        let b_day = bundle2
+            .daily_revenue
+            .iter()
+            .find(|r| r.date == "2026-01-16")
+            .expect("tenant B day");
+        assert_eq!((b_day.total_minor, b_day.cogs_minor), (5000, 9999));
+
+        // Top products: one row per tenant's product — A's row must carry
+        // A's COGS, never B's, despite the shared SKU.
+        assert_eq!(bundle2.top_products.len(), 2);
+        let a_top = bundle2
+            .top_products
+            .iter()
+            .find(|t| t.product_id == product_id)
+            .expect("tenant A product row");
+        assert_eq!(a_top.cogs_minor, 2000, "A's COGS must use A's product cost");
+        let b_top = bundle2
+            .top_products
+            .iter()
+            .find(|t| t.product_id == product_b_id)
+            .expect("tenant B product row");
+        assert_eq!(b_top.cogs_minor, 9999);
+
         // ── Cleanup (keys are namespaced; delete the seeded rows) ─────
         let client = pool.get().await.unwrap();
         for (sql, id) in [
             ("DELETE FROM sale_lines WHERE id = $1", &sale_line_id),
             ("DELETE FROM sales WHERE id = $1", &sale_id),
             ("DELETE FROM products WHERE id = $1", &product_id),
+            ("DELETE FROM sale_lines WHERE id = $1", &sale_b_line_id),
+            ("DELETE FROM sales WHERE id = $1", &sale_b_id),
+            ("DELETE FROM products WHERE id = $1", &product_b_id),
             ("DELETE FROM categories WHERE id = $1", &category_id),
         ] {
             client.execute(sql, &[&id]).await.unwrap();

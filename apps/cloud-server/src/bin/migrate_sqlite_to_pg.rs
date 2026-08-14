@@ -749,28 +749,31 @@ mod tests {
             .unwrap();
         }
 
-        // Clean any prior namespaced rows, then run the migration.
+        // Clean any rows left by previous (possibly crashed) runs of this
+        // test, then run the migration.
         {
             let client = pool.get().await.unwrap();
             client
                 .execute(
-                    "DELETE FROM tenant_plans WHERE tenant_id LIKE $1",
-                    &[&format!("{ns}-%")],
+                    "DELETE FROM tenant_plans WHERE tenant_id LIKE 'pg-migrate-test-%'",
+                    &[],
                 )
                 .await
                 .unwrap();
             client
                 .execute(
-                    "DELETE FROM settings WHERE key LIKE $1",
-                    &[&format!("{ns}-%")],
+                    "DELETE FROM settings WHERE key LIKE 'pg-migrate-test-%'",
+                    &[],
                 )
                 .await
                 .unwrap();
         }
 
-        // Direct call: connect + copy + verify (bypasses env parsing).
+        // Direct call: connect + copy (bypasses env parsing). The built-in
+        // whole-table verification is not asserted — parallel test binaries
+        // share this DB — so the definitive check below is namespaced.
         let conn = Connection::open(&path2).unwrap();
-        let (_copied, _tables, failures) = copy_and_verify(
+        let (_copied, _tables, _failures) = copy_and_verify(
             &pool,
             &conn,
             &["tenant_plans".to_string(), "settings".to_string()],
@@ -779,7 +782,26 @@ mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(failures, 0);
+
+        // Namespaced verification: every seeded row made it with an
+        // identical checksum (tenant_id / key is the first column).
+        let ns_prefix = format!("{ns}-");
+        for table in ["tenant_plans", "settings"] {
+            let columns = sqlite_columns(&conn, table).unwrap();
+            let src = read_sqlite_rows(&conn, table).unwrap();
+            let mut pg = read_pg_rows(&pool, table, &columns).await.unwrap();
+            pg.retain(|r| matches!(&r.cells[0], Cell::Text(t) if t.starts_with(&ns_prefix)));
+            assert_eq!(pg.len(), src.len(), "{table} row count");
+            let src_sum: u64 = src
+                .iter()
+                .map(|r| fnv1a(&r.checksum_fragment()))
+                .fold(0u64, |acc, h| acc ^ h);
+            let pg_sum: u64 = pg
+                .iter()
+                .map(|r| fnv1a(&r.checksum_fragment()))
+                .fold(0u64, |acc, h| acc ^ h);
+            assert_eq!(pg_sum, src_sum, "{table} checksum");
+        }
 
         // Verify the migrated values round-trip.
         let client = pool.get().await.unwrap();
@@ -929,9 +951,13 @@ mod tests {
             tx.commit().unwrap();
         }
 
-        // Migrate the three tables and verify counts + checksums at volume.
+        // Migrate the three tables at volume. `copy_and_verify`'s built-in
+        // whole-table verification is not asserted here: the shared dev DB
+        // is written by parallel test binaries (webhooks, email), so a
+        // concurrent row can legitimately appear mid-verify. The definitive
+        // check below compares only this run's namespaced rows.
         let conn = Connection::open(&path).unwrap();
-        let (copied, tables, failures) = copy_and_verify(
+        let (copied, tables, _failures) = copy_and_verify(
             &pool,
             &conn,
             &[
@@ -944,9 +970,29 @@ mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(failures, 0, "volume migration verification failed");
         assert_eq!(tables, 3);
         assert_eq!(copied, 10_400, "10k queue + 300 products + 100 settings");
+
+        // Namespaced verification: every row this test seeded made it to
+        // Postgres with an identical checksum (ids/keys all carry the ns
+        // prefix as their first column).
+        let ns_prefix = format!("{ns}-");
+        for table in ["offline_queue", "products", "settings"] {
+            let columns = sqlite_columns(&conn, table).unwrap();
+            let src = read_sqlite_rows(&conn, table).unwrap();
+            let mut pg = read_pg_rows(&pool, table, &columns).await.unwrap();
+            pg.retain(|r| matches!(&r.cells[0], Cell::Text(t) if t.starts_with(&ns_prefix)));
+            assert_eq!(pg.len(), src.len(), "{table} row count");
+            let src_sum: u64 = src
+                .iter()
+                .map(|r| fnv1a(&r.checksum_fragment()))
+                .fold(0u64, |acc, h| acc ^ h);
+            let pg_sum: u64 = pg
+                .iter()
+                .map(|r| fnv1a(&r.checksum_fragment()))
+                .fold(0u64, |acc, h| acc ^ h);
+            assert_eq!(pg_sum, src_sum, "{table} checksum");
+        }
 
         // Exact row counts on the destination, then spot-check values.
         let client = pool.get().await.unwrap();

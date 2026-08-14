@@ -375,7 +375,8 @@ CREATE TABLE IF NOT EXISTS product_activity (
     id         TEXT PRIMARY KEY,
     sku        TEXT NOT NULL,
     event_type TEXT NOT NULL CHECK (event_type IN ('search', 'edit')),
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    tenant_id  TEXT NOT NULL DEFAULT 'default'
 );
 
 CREATE TABLE IF NOT EXISTS product_bundles (
