@@ -488,12 +488,14 @@ mod tests {
 
     /// Integration test: connect to a real PostgreSQL instance.
     ///
-    /// Requires the  Docker container (port 15432).
-    /// Skipped when the container is not reachable.
+    /// Uses `OZ_TEST_PG_URL` (set by CI's Postgres service), falling back
+    /// to the local dev container on port 15432. Skipped when Postgres is
+    /// not reachable.
     #[tokio::test]
     async fn pg_integration_connect_and_create_tables() {
-        let url = "postgres://postgres:postgres@localhost:15432/postgres";
-        let pool = match DbPool::connect_postgres(url, false, 20).await {
+        let url = std::env::var("OZ_TEST_PG_URL")
+            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+        let pool = match DbPool::connect_postgres(&url, false, 20).await {
             Ok(p) => p,
             Err(e) => {
                 eprintln!("PG integration test skipped: {e}");
@@ -550,5 +552,155 @@ mod tests {
             trigger_count >= 4,
             "expected the 4 rewritten triggers, found {trigger_count}"
         );
+    }
+
+    /// Integration test: Row-Level Security fails closed for non-owner roles.
+    ///
+    /// The schema enables RLS on every tenant-scoped table (see
+    /// `scripts/generate-pg-migration.py`) with a `tenant_isolation` policy
+    /// keyed on the `oz.tenant_id` session GUC. The table owner — today's app
+    /// role — bypasses RLS, so this test proves the guarantee for a real
+    /// non-owner role:
+    ///
+    /// * without `oz.tenant_id` set, reads see nothing and writes are
+    ///   rejected (a missed `WHERE tenant_id = ?` fails closed);
+    /// * with it set, only that tenant's rows are visible and writable, and
+    ///   writing a row for another tenant is rejected by the WITH CHECK.
+    ///
+    /// Privileges are granted in full so RLS alone is the barrier. The probe
+    /// runs on a dedicated connection (`SET ROLE` never touches the shared
+    /// pool), rows are namespaced per process for shared dev databases, and
+    /// the test skips when Postgres is unreachable.
+    #[tokio::test]
+    async fn pg_integration_rls_fails_closed() {
+        let url = std::env::var("OZ_TEST_PG_URL")
+            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+        let pool = match DbPool::connect_postgres(&url, false, 20).await {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("PG integration test skipped: {e}");
+                return;
+            }
+        };
+        let client = pool.pg_client().await.expect("pg_client should succeed");
+
+        // Namespace every row/role for this run so a shared dev database
+        // (or a crashed previous run) can't interfere.
+        let ns = format!("rls-{}", std::process::id());
+        let alpha = format!("{ns}-alpha");
+        let beta = format!("{ns}-beta");
+        let sku = format!("{ns}-sku");
+
+        // Set up the non-owner role (idempotent) and clear prior rows. The
+        // owner bypasses RLS, so the cleanup is unconditional.
+        client
+            .batch_execute(&format!(
+                "DROP ROLE IF EXISTS oz_rls_probe;
+                 CREATE ROLE oz_rls_probe;
+                 GRANT USAGE ON SCHEMA public TO oz_rls_probe;
+                 GRANT SELECT, INSERT, UPDATE, DELETE ON products TO oz_rls_probe;
+                 DELETE FROM products WHERE tenant_id LIKE '{ns}%';"
+            ))
+            .await
+            .expect("probe role setup should succeed");
+
+        // Seed two tenants that share one SKU (the natural-key collision RLS
+        // must keep apart), with different prices to tell them apart.
+        client
+            .execute(
+                "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+                 VALUES ($1, $2, 'Alpha', 1000, 'USD', $3)",
+                &[&format!("{ns}-p-a"), &sku, &alpha],
+            )
+            .await
+            .expect("seed alpha product should succeed");
+        client
+            .execute(
+                "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+                 VALUES ($1, $2, 'Beta', 9000, 'USD', $3)",
+                &[&format!("{ns}-p-b"), &sku, &beta],
+            )
+            .await
+            .expect("seed beta product should succeed");
+
+        // A dedicated connection for the probe role — SET ROLE must never
+        // leak onto a pooled connection another test might reuse.
+        let (probe, conn) = tokio_postgres::connect(&url, tokio_postgres::NoTls)
+            .await
+            .expect("dedicated probe connection should succeed");
+        tokio::spawn(async move {
+            let _ = conn.await;
+        });
+        probe
+            .execute("SET ROLE oz_rls_probe", &[])
+            .await
+            .expect("SET ROLE should succeed");
+
+        // 1. Without the GUC: RLS fails closed — nothing visible, writes
+        //    rejected. Privileges are granted, so RLS alone is the barrier.
+        let visible: i64 = probe
+            .query_one("SELECT COUNT(*) FROM products", &[])
+            .await
+            .expect("count should succeed")
+            .get(0);
+        assert_eq!(
+            visible, 0,
+            "RLS must hide every row when oz.tenant_id is unset"
+        );
+
+        let insert_err = probe
+            .execute(
+                "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+                 VALUES ($1, $2, 'Intruder', 500, 'USD', $3)",
+                &[&format!("{ns}-p-x"), &sku, &alpha],
+            )
+            .await
+            .expect_err("RLS must reject the write when oz.tenant_id is unset");
+        assert!(
+            insert_err.to_string().contains("row-level security"),
+            "expected an RLS violation, got: {insert_err}"
+        );
+
+        // 2. With the GUC set: only that tenant's row is visible, and the
+        //    shared SKU resolves to the right tenant's price.
+        probe
+            .execute("SELECT set_config('oz.tenant_id', $1, false)", &[&alpha])
+            .await
+            .expect("set_config should succeed");
+        let visible: i64 = probe
+            .query_one("SELECT COUNT(*) FROM products", &[])
+            .await
+            .expect("count should succeed")
+            .get(0);
+        assert_eq!(visible, 1, "only the alpha row must be visible");
+        let price: i64 = probe
+            .query_one("SELECT price_minor FROM products WHERE sku = $1", &[&sku])
+            .await
+            .expect("sku lookup should succeed")
+            .get(0);
+        assert_eq!(price, 1000, "the visible row must be alpha's (shared SKU)");
+
+        // 3. Writing a row for the *other* tenant is rejected by WITH CHECK.
+        let wrong_tenant = probe
+            .execute(
+                "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+                 VALUES ($1, $2, 'Intruder', 500, 'USD', $3)",
+                &[&format!("{ns}-p-y"), &sku, &beta],
+            )
+            .await
+            .expect_err("RLS must reject writing another tenant's row");
+        assert!(
+            wrong_tenant.to_string().contains("row-level security"),
+            "expected an RLS violation, got: {wrong_tenant}"
+        );
+
+        // 4. An UPDATE on the visible row succeeds (normal app workflow).
+        probe
+            .execute(
+                "UPDATE products SET name = 'Alpha2' WHERE id = $1",
+                &[&format!("{ns}-p-a")],
+            )
+            .await
+            .expect("update of the visible row should succeed");
     }
 }

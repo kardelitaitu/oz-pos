@@ -604,7 +604,7 @@ Lock to an explicit allowlist before serving the website:
 | A feature needs a cross-DB join (e.g. plan gate must read the license tier directly) | Merge the auth collections into Postgres; retire PocketBase SQLite |
 | The sync function is scaled beyond one instance | Move the rate limiter **and** the 5-min snapshot cache out of process memory into a shared store (Redis) — both are per-process today |
 | Schema changes ship | Adopt a Postgres migration tool (sqlx/refinery) so DDL is versioned, not ad-hoc `batch_execute` |
-| Cross-tenant isolation must be provable | Add Postgres Row-Level Security so a missed `WHERE tenant_id = ?` fails closed instead of leaking rows |
+| Cross-tenant isolation must be provable | Done (schema-side): the generated PG migration now `ENABLE ROW LEVEL SECURITY` on all 14 tenant-scoped tables with a `tenant_isolation` policy keyed on the `oz.tenant_id` session GUC — a missed `WHERE tenant_id = ?` fails closed instead of leaking rows. `pg_integration_rls_fails_closed` proves it for a real non-owner role. Remaining deployment step: restricted app role + `FORCE ROW LEVEL SECURITY` + `SET LOCAL oz.tenant_id` as the first statement of every request transaction (owner today, so nothing changes until then) |
 | A second tenant brings the same product SKU or username | Done: `UNIQUE (tenant_id, sku)` / `UNIQUE (tenant_id, username)` in both schemas, the four `products(sku)` child FKs (`bundle_items`, `product_bundles`, `product_taxes`, `product_variants`) reworked to composite `(tenant_id, sku)` FKs, and the by-SKU REST lookups (list/get/adjust stock, sale cost-freeze) tenant-scoped from the JWT claims. `pg_integration_tenant_sku_isolation` proves two tenants can share a SKU/username without seeing or mutating each other's rows. The desktop snapshot upserts (`ON CONFLICT (tenant_id, sku)` etc.) keep working single-tenant |
 
 ---
@@ -638,7 +638,7 @@ REST handler, the sync store, prune, webhooks, the email/analytics port, the
 
 1. ~~Global `UNIQUE(sku)` / `UNIQUE(username)`~~ — **done** in this pass (per-tenant constraints + composite FKs + tenant-scoped REST lookups + isolation test). The email-loop COGS/popularity joins were also hardened to `(tenant_id, sku)` so shared SKUs cannot cross tenants at the row level.
 2. Analytics scans use `created_at::date` (a cast, so `idx_sales_created_at` can't serve them). Fine for a background daily job; add `(status, (created_at::date))` if the bundle grows.
-3. Postgres Row-Level Security — already listed in the growth path; becomes the enforcement backstop when real multi-tenancy goes live.
+3. ~~Postgres Row-Level Security~~ — **shipped (schema-side)** in the follow-up hardening: the generator now appends an RLS appendix to the PG migration (`ENABLE ROW LEVEL SECURITY` + `tenant_isolation` policy on all 14 tenant-scoped tables, keyed on `current_setting('oz.tenant_id', true)` — unset ⇒ NULL ⇒ no rows). `pg_integration_rls_fails_closed` connects a real non-owner role on a dedicated connection and asserts: no GUC ⇒ zero rows visible and INSERT rejected ("row-level security"); GUC set ⇒ only that tenant's row visible, a shared SKU resolves to the right price, a cross-tenant INSERT is rejected, and UPDATE on the visible row succeeds. The table owner still bypasses RLS, so the deployment cutover — restricted app role, `FORCE ROW LEVEL SECURITY`, `SET LOCAL oz.tenant_id` per request transaction — is what turns this into active enforcement; it is documented in the generator header. Also fixed while there: the `db.rs` PG integration tests hardcoded port 15432 and silently skipped in CI — they now read `OZ_TEST_PG_URL` like every other PG test.
 
 ### Multi-tenant readiness audit (2026-08-15)
 
@@ -656,7 +656,7 @@ tenant-blind surface, audited table by table.
 | Desktop `Store` (oz-core, SQLite) | ✅ single-tenant by construction | `create_sale` + the payment-completion paths stamp `tenant_id = 'default'` explicitly (asserted in `create_sale_persists_header`). The unscoped by-SKU/username queries are fine while each POS keeps its own DB file; the full inventory of what a shared-data rollout must scope is in §11.5 "Desktop Store tenant-scoping audit" (recommendation: a startup integrity check + the ~10 SKU/username-keyed statements, not a wholesale tenant API) |
 | Health endpoint queue depth | ✅ global by design | Aggregate ops metric — correct as-is |
 
-**Recommended Phase-4 order:** (1) ~~`sales.tenant_id` + REST/webhook threading~~ — **done** → (2) per-tenant report settings + tenant-scoped analytics → (3) RLS as the enforcement backstop.
+**Recommended Phase-4 order:** (1) ~~`sales.tenant_id` + REST/webhook threading~~ — **done** → (2) per-tenant report settings + tenant-scoped analytics → (3) ~~RLS~~ — schema-side shipped with a fail-closed test; only the deployment cutover (non-owner app role + `FORCE` + per-request `SET LOCAL oz.tenant_id`) remains.
 
 ### Per-tenant report scheduling (design, 2026-08-15)
 

@@ -38,6 +38,51 @@ from collections import defaultdict, deque
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# ── Row-Level Security: tenant isolation (PG-only appendix) ───────────────
+#
+# Every table carrying a tenant_id column gets RLS enabled with one
+# `tenant_isolation` policy keyed on the `oz.tenant_id` session GUC.
+#
+# Behaviour:
+#   * The table owner (today's app role) bypasses RLS, so nothing changes
+#     until the deployment splits the app role from the owner (see
+#     unify-auth-and-sync.md §11.5). FORCE ROW LEVEL SECURITY is deliberately
+#     NOT set here — with no GUC in place it would break every query.
+#   * Any NON-owner role is isolated immediately: without `oz.tenant_id`
+#     set, current_setting(..., true) is NULL and the policy matches no
+#     rows — reads return nothing and writes are rejected, so a missed
+#     `WHERE tenant_id = ?` fails CLOSED instead of leaking.
+#   * Cutover to enforcement: create a restricted app role, GRANT on the
+#     tenant tables, set FORCE ROW LEVEL SECURITY, and have the app run
+#     `SET LOCAL oz.tenant_id = <jwt tenant>` as the first statement of
+#     every request transaction (reset on connection return).
+RLS_SQL = """-- ── Row-Level Security: tenant isolation (PG-only) ─────────────────────
+-- See the appendix source in scripts/generate-pg-migration.py.
+DO $$
+DECLARE
+    t text;
+BEGIN
+    FOREACH t IN ARRAY ARRAY['bundle_items','offline_queue','product_activity',
+                            'product_bundles','product_taxes','product_variants',
+                            'products','sales','stripe_customers','sync_terminals',
+                            'tax_rates','tenant_plans','tenant_subscription','users']
+    LOOP
+        EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_policies
+            WHERE schemaname = 'public' AND tablename = t AND policyname = 'tenant_isolation'
+        ) THEN
+            EXECUTE format(
+                'CREATE POLICY tenant_isolation ON %I
+                 USING (tenant_id = current_setting(''oz.tenant_id'', true))
+                 WITH CHECK (tenant_id = current_setting(''oz.tenant_id'', true))',
+                t
+            );
+        END IF;
+    END LOOP;
+END $$;
+"""
 SRC = ROOT / "crates/oz-core/migrations/20260813_init.sql"
 DST = ROOT / "crates/oz-core/migrations/20260813_init.pg.sql"
 
@@ -220,6 +265,7 @@ def main() -> None:
         out.extend([idx, ""])
     for seed in seeds:
         out.extend([seed, ""])
+    out.extend([RLS_SQL, ""])
 
     # Match the sibling init.sql line endings (CRLF).
     body = "\n".join(out)

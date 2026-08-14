@@ -1769,3 +1769,30 @@ VALUES ('01926b3a-0000-7000-8000-000000000002',
         'transit',
         'System-managed pseudo-location for in-flight stock between source and destination during a transfer.')
 ON CONFLICT DO NOTHING;
+
+-- ── Row-Level Security: tenant isolation (PG-only) ─────────────────────
+-- See the appendix source in scripts/generate-pg-migration.py.
+DO $$
+DECLARE
+    t text;
+BEGIN
+    FOREACH t IN ARRAY ARRAY['bundle_items','offline_queue','product_activity',
+                            'product_bundles','product_taxes','product_variants',
+                            'products','sales','stripe_customers','sync_terminals',
+                            'tax_rates','tenant_plans','tenant_subscription','users']
+    LOOP
+        EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_policies
+            WHERE schemaname = 'public' AND tablename = t AND policyname = 'tenant_isolation'
+        ) THEN
+            EXECUTE format(
+                'CREATE POLICY tenant_isolation ON %I
+                 USING (tenant_id = current_setting(''oz.tenant_id'', true))
+                 WITH CHECK (tenant_id = current_setting(''oz.tenant_id'', true))',
+                t
+            );
+        END IF;
+    END LOOP;
+END $$;
+
