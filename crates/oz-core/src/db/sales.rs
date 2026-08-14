@@ -603,8 +603,8 @@ impl Store<'_> {
                                  tendered_minor, discount_percent, discount_label, user_id,
                                  created_at, updated_at, subtotal_minor, tax_total_minor,
                                  customer_id, deduction_locations, version,
-                                 pending_expires_at)
-             VALUES (?1, ?2, ?3, ?4, 'pending', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1, ?16)",
+                                 pending_expires_at, tenant_id)
+             VALUES (?1, ?2, ?3, ?4, 'pending', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1, ?16, 'default')",
             rusqlite::params![
                 sale.id, sale.total.minor_units, cur_str, sale.line_count,
                 sale.payment_method, sale.tendered_minor,
@@ -963,8 +963,8 @@ impl Store<'_> {
                                  tendered_minor, discount_percent, discount_label, user_id,
                                  created_at, updated_at, subtotal_minor, tax_total_minor,
                                  customer_id, deduction_locations, version,
-                                 pending_expires_at)
-             VALUES (?1, ?2, ?3, ?4, 'pending', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1, ?16)",
+                                 pending_expires_at, tenant_id)
+             VALUES (?1, ?2, ?3, ?4, 'pending', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1, ?16, 'default')",
             rusqlite::params![
                 sale.id, sale.total.minor_units, cur_str, sale.line_count,
                 sale.payment_method, sale.tendered_minor,
@@ -1265,8 +1265,8 @@ impl Store<'_> {
         tx.execute(
             "INSERT INTO sales (id, total_minor, currency, line_count, status, payment_method, tendered_minor,
                                 discount_percent, discount_label, user_id, created_at, updated_at,
-                                subtotal_minor, tax_total_minor, customer_id, version)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1)",
+                                subtotal_minor, tax_total_minor, customer_id, version, tenant_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1, 'default')",
             params![
                 sale.id, sale.total.minor_units, cur_str, sale.line_count,
                 status_str, sale.payment_method, sale.tendered_minor,
@@ -2224,6 +2224,17 @@ mod tests {
         assert_eq!(loaded.status, SaleStatus::Pending);
         assert_eq!(loaded.total.minor_units, 1150);
         assert_eq!(loaded.line_count, 2);
+
+        // The desktop Store stamps the same identity contract as the cloud
+        // REST path: every sale belongs to the `default` tenant.
+        let tenant: String = conn
+            .query_row(
+                "SELECT tenant_id FROM sales WHERE id = ?1",
+                [&sale.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(tenant, "default");
     }
 
     #[test]
