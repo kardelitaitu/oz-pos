@@ -1,6 +1,8 @@
 # Unify Auth & Sync to Northflank
 
-> Merge the license server and cloud server into a single PocketBase-based backend on Northflank.
+> Co-locate the license (auth) server and cloud (sync) server into one
+> Northflank deployment: one Docker image running both functions, two
+> databases coupled by the HS256 JWT identity, sync data on Postgres.
 
 ---
 
@@ -54,156 +56,82 @@
 
 ---
 
-## 2. Target State (Single PocketBase Server)
+## 2. Target State (One Deployment, Two Functions)
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│   Unified Server (PocketBase + Go hooks)                     │
-│   Northflank (single service)                                │
-│                                                              │
-│   ┌──────────────────────────────────────────────────────┐   │
-│   │   PocketBase Core                                    │   │
-│   │   - Built-in user auth (email/password, OTP, OAuth)  │   │
-│   │   - Built-in admin UI                                │   │
-│   │   - Built-in REST API (per collection)               │   │
-│   │   - Built-in SMTP                                    │   │
-│   │   - SQLite database                                  │   │
-│   └──────────────────────────────────────────────────────┘   │
-│                                                              │
-│   ┌──────────────────────────────────────────────────────┐   │
-│   │   Custom Go Hooks (existing license server code)     │   │
-│   │   - POST /api/v1/license/activate                    │   │
-│   │   - POST /api/v1/license/renew                       │   │
-│   │   - POST /api/v1/license/status                      │   │
-│   │   - RSA signing of subscription payloads             │   │
-│   └──────────────────────────────────────────────────────┘   │
-│                                                              │
-│   ┌──────────────────────────────────────────────────────┐   │
-│   │   New Go Hooks (sync endpoints, ported from Rust)    │   │
-│   │   - POST /api/sync/push                              │   │
-│   │   - POST /api/sync/pull                              │   │
-│   │   - GET  /api/sync/status                            │   │
-│   │   - GET  /api/sync/snapshot                          │   │
-│   │   - POST /api/v1/tokens (JWT minting)                │   │
-│   └──────────────────────────────────────────────────────┘   │
-│                                                              │
-│   Collections:                                               │
-│   - users (PocketBase built-in)                              │
-│   - license_keys                                             │
-│   - tenants                                                  │
-│   - subscriptions                                            │
-│   - tenant_machines                                          │
-│   - sync_queue (new)                                         │
-│   - products (new)                                           │
-│   - orders (new)                                             │
-│   - ... (other POS data)                                     │
-└──────────────────────────────────────────────────────────────┘
-            │
-            │  Single database, single auth, single deployment
-            │
-     ┌──────┴──────┐
-     ▼             ▼
- POS App        Website
- (JWT from      (PocketBase
-  /api/v1/tokens)  auth API)
+┌──────────────────────────────────────────────────────────┐
+│  One Northflank service, one Docker image                │
+│  caddy (single port, path routing)                       │
+│                                                          │
+│  Auth function (PocketBase + Go hooks — kept)            │
+│    /api/v1/license/activate|renew|status                 │
+│    RSA-2048 subscription signing                         │
+│    web_users auth (future website)                       │
+│    admin UI /_/                                          │
+│    DB: PocketBase SQLite (low traffic)                   │
+│                                                          │
+│  Sync function (Rust axum — kept)                        │
+│    /api/sync/push|pull|snapshot|status                   │
+│    /api/v1/tokens (HS256 JWT mint)                       │
+│    /api/webhooks/stripe|square                           │
+│    REST API + plan gating + rate limiting                │
+│    DB: Postgres (managed addon — futureproof)            │
+│                                                          │
+│  Identity: HS256 JWT (tenant_id + terminal_id)           │
+└──────────────────────────────────────────────────────────┘
 ```
 
-### Benefits
+### What this buys
 
 | Benefit | Detail |
 |---------|--------|
-| **Single database** | License, subscription, sync data all in one place |
-| **Single auth** | PocketBase users for website, API keys for POS — same database |
-| **Single deployment** | One Northflank service, one database volume |
-| **Shared tenant state** | "Free tier → no sync" enforced in one place |
-| **Consistent data** | License and sync queries hit the same database |
-| **Easier scaling** | One service to scale, one database to backup |
+| **One deploy** | One image, one Northflank service, one reverse proxy |
+| **No rewrite** | Both mature codebases are kept; only packaging + the Postgres path change |
+| **Futureproof sync** | Sync data on Postgres (pooling, replicas, backups) — the part that scales |
+| **Cheap auth** | License + website users stay on PocketBase/SQLite (low traffic, bounded) |
+| **One identity** | The HS256 JWT's `tenant_id` is the single contract between the two functions |
+
+### Honest constraints
+
+- Two databases, not one. They are coupled by the JWT `tenant_id` (and the
+  Stripe/Square webhooks mirror plan state into the sync DB), not by a shared
+  table. If cross-database queries become necessary, that is the signal to
+  merge auth data into Postgres.
+- PocketBase remains single-node SQLite; it holds only low-traffic data.
 
 ---
 
-## 3. Unified Collections Schema
+## 3. Data Layout (Two Databases)
 
-### Existing Collections (Keep)
+### Auth DB — PocketBase SQLite (unchanged)
 
-```sql
--- PocketBase built-in (already exists)
--- users: id, email, password, verified, created, updated
-
--- From license server (already exists)
-license_keys:    id, key, tier_key, status, expires_at, activated_at,
-                 activated_by, revoked_at, notes, created, updated
-
-tenants:         id, email, phone, api_key, status, created, updated
-
-subscriptions:   id, tenant_id, tier_key, status, starts_at, expires_at,
-                 grace_until, signed_payload, signature, created, updated
-
-tenant_machines: id, tenant_id, first_seen_at, last_seen_at,
-                 machine_id, revoked_at
+```
+license_keys, tenants, subscriptions, tenant_machines
+web_users (future website — per website-plan.md)
 ```
 
-### New Collections (Add)
+### Sync DB — Postgres (the cloud server's 92 tables, unchanged)
 
-```sql
--- Sync queue: pending offline items from POS apps
-sync_queue (
-    id          TEXT PRIMARY KEY,
-    tenant_id   TEXT NOT NULL,         -- → tenants.id
-    terminal_id TEXT NOT NULL,         -- which POS terminal
-    table_name  TEXT NOT NULL,         -- e.g. "products", "orders"
-    operation   TEXT NOT NULL,         -- "insert", "update", "delete"
-    record_id   TEXT NOT NULL,         -- affected row ID
-    payload     TEXT NOT NULL,         -- JSON diff/patch
-    status      TEXT NOT NULL DEFAULT 'pending',  -- pending/synced/failed
-    created_at  TEXT NOT NULL,
-    synced_at   TEXT NULL,
-    FOREIGN KEY (tenant_id) REFERENCES tenants(id)
-)
-
--- Terminal registration (from cloud server)
-terminals (
-    id          TEXT PRIMARY KEY,
-    tenant_id   TEXT NOT NULL,
-    name        TEXT NOT NULL,         -- "Register 1", "Kitchen Display"
-    device_type TEXT NOT NULL,         -- "desktop", "tablet"
-    api_key     TEXT NOT NULL UNIQUE,  -- per-terminal JWT signing key
-    status      TEXT NOT NULL DEFAULT 'active',
-    created_at  TEXT NOT NULL,
-    last_seen   TEXT NULL,
-    FOREIGN KEY (tenant_id) REFERENCES tenants(id)
-)
-
--- Product catalog (synced from POS)
-products (
-    id          TEXT PRIMARY KEY,
-    tenant_id   TEXT NOT NULL,
-    name        TEXT NOT NULL,
-    sku         TEXT,
-    price       INTEGER NOT NULL,     -- minor units (i64)
-    category    TEXT,
-    stock       INTEGER DEFAULT 0,
-    status      TEXT NOT NULL DEFAULT 'active',
-    version     INTEGER NOT NULL DEFAULT 1,  -- optimistic concurrency
-    updated_at  TEXT NOT NULL,
-    FOREIGN KEY (tenant_id) REFERENCES tenants(id)
-)
-
--- Orders (synced from POS)
-orders (
-    id          TEXT PRIMARY KEY,
-    tenant_id   TEXT NOT NULL,
-    terminal_id TEXT NOT NULL,
-    customer_id TEXT,
-    total       INTEGER NOT NULL,     -- minor units
-    status      TEXT NOT NULL DEFAULT 'open',
-    created_at  TEXT NOT NULL,
-    updated_at  TEXT NOT NULL,
-    FOREIGN KEY (tenant_id) REFERENCES tenants(id)
-)
-
--- Add tier_key to tenants for fast plan checks
--- (already exists in tenants table from license server)
 ```
+offline_queue, products, tax_rates, users, terminals,
+tenant_plans, tenant_subscription, stripe_customers,
+processed_webhooks, payments, sales, sale_lines, …
+```
+
+### Identity contract
+
+PocketBase `tenants.id` is the canonical tenant ID. The sync server's JWT mint
+embeds it as the `tenant_id` claim, and every sync/REST row is scoped by that
+string. The two databases never need to share a table — they share the
+identifier.
+
+### Plan gating (explicit coupling)
+
+The sync function enforces "free → no sync" from its own `tenant_plans`,
+updated by the Stripe/Square webhooks. The license server's `subscriptions`
+remains the source of truth for the signed payload and tier key. These are
+kept in step operationally today; unifying them into one table is a later,
+optional step, not a prerequisite for one deploy.
 
 ---
 
@@ -303,27 +231,20 @@ Do **not** collapse the two credentials into one:
 The merge should therefore:
 
 1. Keep `api_key` on `tenants` for `/api/v1/license/*` (identity + activation).
-2. Keep the HS256 JWT mint (`POST /api/v1/tokens`) and `auth_middleware` for
-   `/api/sync/*` and the REST API (session), ported to Go against PocketBase.
-3. Share one tenant record so both credentials resolve to the same tenant —
-   that shared record is the actual unification; the two credential types
-   coexist on top of it.
-
-### Future: website users (separate concern, not yet built)
-
-A merchant-facing website would add PocketBase's built-in `users` collection
-(email/password or OTP) as a *third* client type. That is independent of the
-POS credentials above, out of scope for this merge, and does not replace or
-link to the tenant `api_key`.
+2. Keep the HS256 JWT mint (`POST /api/v1/tokens`) and its auth middleware in
+   the Rust sync server (session) — unchanged.
+3. Use the JWT's `tenant_id` as the single identity contract: PocketBase
+   `tenants.id` is the canonical ID, the JWT carries it, and the sync DB
+   scopes rows by it. The two credentials coexist without one shared table.
 
 ---
 
-## 5. Sync Protocol (Migrated to PocketBase)
+## 5. Sync Protocol (Unchanged)
 
 The Rust cloud server exposes four sync endpoints, all behind the oz-api JWT
 (`auth_middleware`), per-tenant rate limiting, and optional plan gating
-(`OZ_ENFORCE_PLANS`). The migration to PocketBase must preserve these exact
-contracts rather than redesign them.
+(`OZ_ENFORCE_PLANS`). The sync engine stays in the Rust server exactly as-is —
+the POS client does not change. Only its database and its deployment move.
 
 | Endpoint | Method | Contract |
 |----------|--------|----------|
@@ -391,169 +312,148 @@ axum: snapshot_handler
     └── Return { products: [...], tax_rates: [...], users: [...] }
 ```
 
-### Key Change: PocketBase as Source of Truth
+### Key Change: co-locate, don't merge
 
-| Before (Cloud Server, actual) | After (PocketBase) |
-|-------------------------------|--------------------|
-| SQLite tables (`offline_queue`, `products`, `tax_rates`, `users`, `terminals`, `tenant_plans`, …) | PocketBase collections |
-| HS256 JWT minted by `POST /api/v1/tokens` (oz-api), gated by `OZ_ADMIN_KEY` | Same JWT minting (Go hook or PocketBase auth), same client contract |
-| axum handlers in Rust | Go hooks, semantics preserved |
-| Tenant identity = loose `tenant_id` string column (no `tenants` table) | Unified `tenants` collection |
-| Stripe/Square webhooks in Rust (plan gating + `finalize_sale`) | Ported to Go hooks (or left in the Rust server until cutover) |
+| Aspect | Change |
+|--------|--------|
+| Sync handlers | Unchanged (Rust) |
+| License handlers | Unchanged (Go/PocketBase) |
+| Sync database | SQLite → Postgres (managed addon) |
+| License database | PocketBase SQLite (unchanged) |
+| Deployment | Two Northflank services → one image, one service |
+| Identity | HS256 JWT `tenant_id` (already the contract) |
 
 ---
 
 ## 6. Migration Plan
 
-### Phase 1: Add Sync Collections to PocketBase (Week 1)
+### Phase 1: Finish the Postgres backend (Weeks 1-2)
 
 | Step | Action |
 |------|--------|
-| 1.1 | Add `sync_queue`, `terminals`, `products`, `orders` collections to `pb_schema.json` |
-| 1.2 | Add Go hooks for sync push/pull endpoints |
-| 1.3 | Test sync with existing POS app (backward compatible) |
-| 1.4 | Deploy to Northflank (replace license server) |
+| 1.1 | Port the full 92-table migration set to Postgres DDL |
+| 1.2 | Make oz-api REST handlers run on Postgres (drop the in-memory SQLite fallback) |
+| 1.3 | Enable DB TLS and raise the pool above the 8-connection default |
+| 1.4 | Migrate live sync data from SQLite to Postgres; verify row counts + checksums |
 
-### Phase 2: Migrate POS App Auth (Week 2)
-
-| Step | Action |
-|------|--------|
-| 2.1 | Update `sync_client.rs` to use PocketBase auth endpoints |
-| 2.2 | Change token storage: API key → PocketBase JWT |
-| 2.3 | Add token refresh logic (call `/auth-refresh` before expiry) |
-| 2.4 | Keep backward compatibility: support old JWT during transition |
-
-### Phase 3: Migrate Cloud Server Data (Week 3)
+### Phase 2: Combine into one image (Week 2)
 
 | Step | Action |
 |------|--------|
-| 3.1 | Export data from cloud server SQLite |
-| 3.2 | Import into PocketBase collections |
-| 3.3 | Verify data integrity |
-| 3.4 | Update cloud server env vars to point to new PocketBase |
+| 2.1 | Multi-stage Dockerfile building both binaries (unify libc) |
+| 2.2 | Supervisor entrypoint running PocketBase (8080) + Rust (3099) |
+| 2.3 | caddy reverse proxy on one port with path routing |
+| 2.4 | One volume (pb_data + sync data), one aggregate healthcheck |
 
-### Phase 4: Decommission Cloud Server (Week 4)
+### Phase 3: Deploy one service (Week 3)
 
 | Step | Action |
 |------|--------|
-| 4.1 | Stop cloud server on Northflank |
-| 4.2 | Remove cloud server deployment |
-| 4.3 | Update POS app default server URL |
-| 4.4 | Monitor for issues |
+| 3.1 | Provision the managed Postgres addon on Northflank |
+| 3.2 | Deploy the combined image; blue-green beside the two old services |
+| 3.3 | Point the POS at the single URL; keep redirect mode (421) for stragglers |
+| 3.4 | Decommission the two old Northflank services |
 
 ---
 
 ## 7. Code Changes Required
 
-### Rust (POS App)
+### Rust (cloud server — Postgres path)
 
 | File | Change |
 |------|--------|
-| `crates/oz-core/src/sync_client.rs` | Point at the unified server URL — no protocol change needed if the four contracts (push/pull/status/snapshot) are preserved |
-| `crates/oz-core/src/sync_client.rs` | Decide auth: keep HS256 JWT minting via `POST /api/v1/tokens`, or switch to a PocketBase-issued token |
-| `platform/startup/src/rate_sync.rs` | Update server URL defaults |
+| `crates/oz-core/migrations/` | Add Postgres DDL for the full schema |
+| `apps/cloud-server/src/db.rs` | Run full migrations on Postgres; drop the 2-table stub |
+| `apps/cloud-server/src/main.rs` | Wire oz-api to Postgres (drop the in-memory SQLite fallback) |
 
-### Go (License Server → Unified Server)
-
-| File | Change |
-|------|--------|
-| `apps/license-server/main.go` | Add sync route handlers |
-| `apps/license-server/pb_schema.json` | Add sync collections |
-| `apps/license-server/sync_push.go` | New: push handler (insert into offline-queue collection) |
-| `apps/license-server/sync_pull.go` | New: pull handler (cursor-paginated queue replay) |
-| `apps/license-server/sync_snapshot.go` | New: snapshot handler (products / tax rates / users) |
-| `apps/license-server/sync_status.go` | New: status handler (health + heartbeat interval) |
-| `apps/license-server/sync_auth.go` | New: JWT verification for sync |
-
-### TypeScript (Website)
+### Packaging (new)
 
 | File | Change |
 |------|--------|
-| `website/src/components/AuthForm.tsx` | Point to unified PocketBase URL |
-| `website/src/pages/[locale]/account.astro` | Query license + subscription from same DB |
+| `Dockerfile.unified` | Build both binaries into one image |
+| `apps/unified/supervisord.conf` | Run PocketBase + Rust under one supervisor |
+| `apps/unified/Caddyfile` | One port, path-routed to 8080 / 3099 |
+
+### Go (license server) + Rust (POS app)
+
+| File | Change |
+|------|--------|
+| `apps/license-server/*` | Unchanged (kept as the auth function) |
+| `crates/oz-core/src/sync_client.rs` | Unchanged — same endpoints + token mint |
+| `platform/startup/src/rate_sync.rs` | Point server URL defaults at the single service URL |
 
 ---
 
 ## 8. Environment Variables
 
-### Unified Server (Northflank)
+### Auth function (PocketBase)
 
 ```bash
-# PocketBase
 PB_DATA_DIR=/data/pb_data
-PB_URL=https://license.oz-pos.com
-
-# RSA signing (existing)
-OZ_LICENSE_PRIVATE_KEY-----BEGIN RSA PRIVATE KEY-----...
-
-# Paddle (new)
-PADDLE_VENDOR_ID=12345
-PADDLE_CLIENT_TOKEN=xxxxx
-PADDLE_WEBHOOK_SECRET=xxxxx
-
-# SMTP (for email verification)
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USERNAME=noreply@oz-pos.com
-SMTP_PASSWORD=xxxxx
-
-# Sync config
-OZ_SYNC_MAX_ITEMS_PER_PUSH=100
-OZ_SYNC_SNAPSHOT_CACHE_TTL=300
-
-# Rate limiting
-OZ_RATE_LIMIT_WINDOW=60
-OZ_RATE_LIMIT_MAX=100
+PB_URL=https://api.oz-pos.com
+OZ_LICENSE_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----..."
+# SMTP for web_users email (future website)
+SMTP_HOST=... SMTP_PORT=587 SMTP_USERNAME=... SMTP_PASSWORD=...
 ```
+
+### Sync function (Rust)
+
+```bash
+DATABASE_URL=postgres://user:pass@host:5432/ozpos
+OZ_API_SECRET=...                # HS256 JWT signing secret
+OZ_ADMIN_KEY=...                 # gates POST /api/v1/tokens
+OZ_ENFORCE_PLANS=1               # reject free-plan sync (403 plan_required)
+STRIPE_WEBHOOK_SECRET=whsec_...
+SQUARE_WEBHOOK_SIGNATURE_KEY=...
+SQUARE_WEBHOOK_URL=https://.../api/webhooks/square
+OZ_API_PORT=3099
+RUST_LOG=info
+```
+
+The two functions share one volume and one secret store; they communicate only
+through the HS256 JWT, never directly.
 
 ---
 
-## 9. API Endpoints (Unified)
+## 9. API Endpoints (One Deployment)
 
-### License Endpoints (Existing)
-
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/api/v1/license/activate` | POST | Activate license key |
-| `/api/v1/license/renew` | POST | Renew subscription |
-| `/api/v1/license/status` | POST | Check license status |
-
-### Sync Endpoints (Ported from Cloud Server)
+### Auth function (PocketBase — kept)
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/api/sync/push` | POST | Accept `OfflineQueueItem`s, insert with existing IDs, return per-item outcomes |
+| `/api/v1/license/activate` | POST | Activate a key, issue the tenant `api_key`, sign the subscription |
+| `/api/v1/license/renew` | POST | Renew a subscription |
+| `/api/v1/license/status` | POST | Check status / revoke a machine (Bearer `api_key`) |
+| `/api/collections/web_users/auth-*` | POST | Website auth (future, per website-plan.md) |
+
+### Sync function (Rust — kept)
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/sync/push` | POST | Accept `OfflineQueueItem`s, insert with existing IDs, per-item outcomes |
 | `/api/sync/pull` | POST | Replay `offline_queue` changes since a timestamp, cursor-paginated |
 | `/api/sync/snapshot` | GET | Reference-data baseline (products, tax rates, users) |
 | `/api/sync/status` | GET | Health, version, pending queue depth, heartbeat interval |
-| `/api/v1/tokens` | POST | Mint HS256 JWT (gated by `OZ_ADMIN_KEY` when set) |
-
-### Auth Endpoints (PocketBase Built-in)
-
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/api/collections/users/auth-with-password` | POST | Website login |
-| `/api/collections/users/auth-with-otp` | POST | Website OTP login |
-| `/api/collections/users/auth-refresh` | POST | Refresh website session |
-| `/api/collections/tenants/auth-with-api-key` | POST | POS app login |
-
-### Paddle Webhook (New)
-
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/api/v1/paddle/webhook` | POST | Handle Paddle payment events |
+| `/api/v1/tokens` | POST | Mint HS256 JWT (`X-Admin-Key` / client credentials / dev) |
+| `/api/webhooks/stripe` | POST | Subscription → plan; payment → `finalize_sale` |
+| `/api/webhooks/square` | POST | Payment → `finalize_sale` |
+| `/health` · `/metrics` | GET | Health + Prometheus metrics |
 
 ---
 
 ## 10. Backward Compatibility
 
-### Transition Period (4 weeks)
+### Transition Period (~3 weeks)
 
 | Client | Before | During Transition | After |
 |--------|--------|-------------------|-------|
-| POS App v0.0.25 | Old cloud server JWT | Both JWTs accepted | PocketBase JWT only |
-| Website | N/A | PocketBase auth | PocketBase auth |
-| License Server | Go hooks only | Go hooks + sync | Unified server |
+| POS App | Two URLs (license + sync) | One URL (reverse proxy), old services still up | One URL |
+| Sync | Rust (SQLite) | Rust (Postgres, in parallel) | Rust (Postgres) |
+| License | Go/PocketBase | Go/PocketBase | Go/PocketBase |
+
+No protocol changes: the POS keeps the same HS256 JWT mint and the same
+push/pull/snapshot/status calls. The existing redirect mode
+(`OZ_REDIRECT_ONLY` + `OZ_SYNC_REDIRECT_URL`, HTTP 421) covers stragglers.
 
 ### Version Detection
 
@@ -575,7 +475,7 @@ fn detect_server_version(base_url: &str) -> ServerVersion {
 
 ### CORS Configuration
 
-The unified server must allow cross-origin requests from:
+Lock to an explicit allowlist before serving the website:
 
 | Origin | Purpose |
 |--------|---------|
@@ -583,17 +483,6 @@ The unified server must allow cross-origin requests from:
 | `https://id.oz-pos.com` | Website (Indonesia) |
 | `http://localhost:4321` | Website (dev) |
 | `tauri://localhost` | POS app (Tauri) |
-
-```go
-// In main.go — CORS layer
-cors := cors.New(cors.Options{
-    AllowedOrigins:   []string{"https://oz-pos.com", "https://id.oz-pos.com", "http://localhost:4321"},
-    AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-    AllowedHeaders:   []string{"Authorization", "Content-Type", "X-Admin-Key"},
-    AllowCredentials: true,
-    MaxAge:           3600,
-})
-```
 
 ### Security Headers
 
@@ -604,20 +493,14 @@ cors := cors.New(cors.Options{
 | `Strict-Transport-Security` | `max-age=31536000` | Force HTTPS |
 | `Content-Security-Policy` | `default-src 'self'` | Restrict resources |
 
-### PocketBase Admin UI
+### Hardening
 
-PocketBase has a built-in admin UI at `/_/` (e.g. `https://license.oz-pos.com/_/`).
-Access should be restricted:
-
-```go
-// In main.go — disable admin UI in production
-app.OnBeforeServe().Bind(func(e *core.ServeEvent) error {
-    e.App.Settings().DisableSignUp = true  // disable public registration
-    return nil
-})
-```
-
-Or restrict via IP allowlist on Northflank.
+- Run Postgres with TLS and a dedicated low-privilege role.
+- Store `OZ_API_SECRET`, `OZ_ADMIN_KEY`, and `OZ_LICENSE_PRIVATE_KEY` in
+  Northflank secrets, never in the image.
+- Lock down PocketBase's `/_/` admin UI (`DisableSignUp` + IP allowlist).
+- The reverse proxy is the single public entry point; both app ports stay
+  internal to the container.
 
 ---
 
@@ -625,10 +508,12 @@ Or restrict via IP allowlist on Northflank.
 
 | Risk | Mitigation |
 |------|------------|
-| Data loss during migration | Export backup before migration, verify checksums |
-| Downtime during switchover | Blue-green deploy: new server runs alongside old for 1 week |
-| POS app breaks with new auth | Keep old auth endpoint alive during transition |
-| PocketBase performance | SQLite handles ~100 concurrent users fine for this scale |
+| Postgres path is a 2-table stub today | Phase 1 completes it before traffic moves |
+| Data loss during SQLite → Postgres | Back up SQLite, verify row counts + checksums, replay window |
+| Two databases drift | JWT `tenant_id` is the single identity; webhooks mirror plan state; reconcile if a cross-DB query appears |
+| Supervisor / reverse proxy failure | Aggregate healthcheck; keep the two processes independently restartable |
+| POS breakage | No protocol change; redirect mode (421) catches stragglers |
+| PocketBase single-node | Holds only low-traffic auth data; migrate web_users to a hosted provider if it outgrows |
 | Sync conflicts | Version-based optimistic concurrency (existing) |
 
 ---
@@ -637,11 +522,10 @@ Or restrict via IP allowlist on Northflank.
 
 | Phase | Duration | Deliverables |
 |-------|----------|--------------|
-| **Phase 1**: Add sync to PocketBase | 1 week | Sync collections + Go hooks + deploy |
-| **Phase 2**: Migrate POS app auth | 1 week | Rust changes + token refresh |
-| **Phase 3**: Migrate data | 1 week | Data export/import + verification |
-| **Phase 4**: Decommission old server | 1 week | Cleanup + monitoring |
-| **Total** | ~4 weeks | Fully unified backend |
+| **Phase 1**: Finish Postgres backend | 1-2 weeks | Full schema + oz-api on Postgres + data migration |
+| **Phase 2**: Combine into one image | 1 week | Dockerfile + supervisor + reverse proxy |
+| **Phase 3**: Deploy one service | 1 week | Northflank service + Postgres addon + cutover |
+| **Total** | ~3-4 weeks | One deployment, two functions |
 
 ---
 
@@ -649,10 +533,11 @@ Or restrict via IP allowlist on Northflank.
 
 | Criterion | How to Verify |
 |-----------|---------------|
-| Single database | All data in one PocketBase instance |
-| Single auth | Same credentials work on website + POS app |
-| Sync works | POS app pushes/pulls data successfully |
-| License works | Activation, renewal, validation all pass |
-| Website auth works | Login, register, account page functional |
-| No data loss | Migration checksums match |
-| Performance | Sync latency < 500ms for 100 items |
+| One deployment | One Northflank service, one image, one public URL |
+| Two functions | PocketBase (auth) + Rust (sync) both healthy in the one container |
+| Sync on Postgres | All sync/REST reads and writes hit Postgres; SQLite fallback gone |
+| License works | activate/renew/status behave as today |
+| Sync works | POS pushes/pulls via the unchanged contract |
+| Webhooks work | Stripe/Square update plans and enqueue `finalize_sale` |
+| One identity | JWT `tenant_id` scopes every sync row to the canonical tenant |
+| No data loss | Row counts + checksums match after the SQLite → Postgres migration |
