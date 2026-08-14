@@ -38,9 +38,10 @@ use std::env;
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use bytes::BytesMut;
 use deadpool_postgres::{Manager, ManagerConfig, Pool, RecyclingMethod};
 use rusqlite::Connection;
-use tokio_postgres::types::ToSql;
+use tokio_postgres::types::{IsNull, ToSql, Type};
 
 /// Default copy surface — the tables the cloud server reads/writes on the
 /// Postgres branch (superset so custom `--tables` is only ever a
@@ -114,6 +115,37 @@ impl Row {
             }
         }
         out
+    }
+}
+
+/// A NULL that binds to any Postgres parameter type.
+///
+/// `Option<i64>::accepts` is false for a TEXT-typed parameter, so the
+/// previous typed-null binding made any row with a NULL in a TEXT column
+/// (e.g. a NULL `category_id` on `products`) fail with "error serializing
+/// parameter N" before reaching the server.
+#[derive(Debug)]
+struct WildcardNull;
+
+impl ToSql for WildcardNull {
+    fn to_sql(
+        &self,
+        _ty: &Type,
+        _out: &mut BytesMut,
+    ) -> Result<IsNull, Box<dyn std::error::Error + Sync + Send>> {
+        Ok(IsNull::Yes)
+    }
+
+    fn accepts(_ty: &Type) -> bool {
+        true
+    }
+
+    fn to_sql_checked(
+        &self,
+        ty: &Type,
+        out: &mut BytesMut,
+    ) -> Result<IsNull, Box<dyn std::error::Error + Sync + Send>> {
+        self.to_sql(ty, out)
     }
 }
 
@@ -200,14 +232,16 @@ async fn insert_pg_batch(
     );
 
     for row in rows {
-        // Bind every cell: NULLs as a typed null (int8-null casts cleanly to
-        // any column), values with their natural type.
+        // Bind every cell: NULLs as a wildcard null (a typed int8 null fails
+        // client-side with "error serializing parameter N" when Postgres
+        // infers a TEXT parameter, e.g. a NULL `category_id` on products),
+        // values with their natural type.
         let params: Vec<Box<dyn ToSql + Sync>> = row
             .cells
             .iter()
             .map(|cell| -> Box<dyn ToSql + Sync> {
                 match cell {
-                    Cell::Null => Box::new(None::<i64>),
+                    Cell::Null => Box::new(WildcardNull),
                     Cell::Int(i) => Box::new(*i),
                     Cell::Real(f) => Box::new(*f),
                     Cell::Text(t) => Box::new(t.clone()),
@@ -457,14 +491,39 @@ async fn run() -> Result<(), String> {
     let pool = connect_postgres(&args.pg).await?;
 
     // 3. Resolve the copy order (FK-safe) and per-table columns.
-    let edges = pg_fk_edges(&pool).await?;
-    let order = topo_sort(&args.tables, &edges);
-
     println!("source: {}", args.sqlite.display());
     println!("target: postgres (schema applied via PG_INIT)");
-    println!("tables: {} (FK-ordered)", order.len());
     if args.dry_run {
         println!("dry-run: verifying only (no writes)\n");
+    }
+
+    let (total_copied, order_len, failures) =
+        copy_and_verify(&pool, &conn, &args.tables, args.batch, args.dry_run).await?;
+
+    println!(
+        "\n{} rows copied across {} tables ({} failures)",
+        total_copied, order_len, failures
+    );
+    if failures > 0 {
+        return Err(format!("{failures} table(s) failed verification"));
+    }
+    Ok(())
+}
+
+/// Copy the given tables from SQLite to Postgres (FK-topological order) and
+/// verify every table by row count + content checksum. Returns
+/// `(rows copied, tables processed, failed tables)`.
+async fn copy_and_verify(
+    pool: &Pool,
+    conn: &Connection,
+    tables: &[String],
+    batch: usize,
+    dry_run: bool,
+) -> Result<(usize, usize, usize), String> {
+    let edges = pg_fk_edges(pool).await?;
+    let order = topo_sort(tables, &edges);
+    if !dry_run {
+        println!("tables: {} (FK-ordered)", order.len());
     }
 
     let mut total_copied = 0usize;
@@ -472,7 +531,7 @@ async fn run() -> Result<(), String> {
 
     for table in &order {
         // Skip tables absent on either side.
-        let sqlite_cols = match sqlite_columns(&conn, table) {
+        let sqlite_cols = match sqlite_columns(conn, table) {
             Ok(c) if !c.is_empty() => c,
             Ok(_) => {
                 println!("  {table:<24} skipped (empty on source)");
@@ -513,19 +572,19 @@ async fn run() -> Result<(), String> {
         }
 
         // 4. Read source rows.
-        let src_rows = read_sqlite_rows(&conn, table)?;
+        let src_rows = read_sqlite_rows(conn, table)?;
 
         // 5. Write (unless dry-run), in batches.
-        if !args.dry_run {
+        if !dry_run {
             let client = pool.get().await.map_err(|e| e.to_string())?;
-            for chunk in src_rows.chunks(args.batch) {
+            for chunk in src_rows.chunks(batch) {
                 insert_pg_batch(&client, table, &pg_cols, chunk).await?;
             }
         }
         total_copied += src_rows.len();
 
         // 6. Verify: row count + checksum on both sides.
-        let pg_rows = read_pg_rows(&pool, table, &pg_cols).await?;
+        let pg_rows = read_pg_rows(pool, table, &pg_cols).await?;
         let src_checksum: u64 = src_rows
             .iter()
             .map(|r| fnv1a(&r.checksum_fragment()))
@@ -555,16 +614,7 @@ async fn run() -> Result<(), String> {
         );
     }
 
-    println!(
-        "\n{} rows copied across {} tables ({} failures)",
-        total_copied,
-        order.len(),
-        failures
-    );
-    if failures > 0 {
-        return Err(format!("{failures} table(s) failed verification"));
-    }
-    Ok(())
+    Ok((total_copied, order.len(), failures))
 }
 
 #[cfg(test)]
@@ -718,59 +768,18 @@ mod tests {
                 .unwrap();
         }
 
-        let args = Args {
-            sqlite: path2.clone(),
-            pg: url.clone(),
-            tables: vec!["tenant_plans".into(), "settings".into()],
-            batch: 500,
-            dry_run: false,
-        };
-
         // Direct call: connect + copy + verify (bypasses env parsing).
-        let edges = pg_fk_edges(&pool).await.unwrap();
-        let order = topo_sort(&args.tables, &edges);
-        let conn = Connection::open(&args.sqlite).unwrap();
-        for table in &order {
-            let sqlite_cols = sqlite_columns(&conn, table).unwrap();
-            let pg_cols: Vec<String> = {
-                let client = pool.get().await.unwrap();
-                let col_list = sqlite_cols
-                    .iter()
-                    .map(|c| format!("'{c}'"))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                let rows = client
-                    .query(
-                        &format!(
-                            "SELECT column_name FROM information_schema.columns \
-                             WHERE table_name = $1 AND column_name IN ({col_list}) \
-                             ORDER BY ordinal_position"
-                        ),
-                        &[&table.as_str()],
-                    )
-                    .await
-                    .unwrap();
-                rows.iter().map(|r| r.get::<_, String>(0)).collect()
-            };
-            let src_rows = read_sqlite_rows(&conn, table).unwrap();
-            let client = pool.get().await.unwrap();
-            for chunk in src_rows.chunks(args.batch) {
-                insert_pg_batch(&client, table, &pg_cols, chunk)
-                    .await
-                    .unwrap();
-            }
-            let pg_rows = read_pg_rows(&pool, table, &pg_cols).await.unwrap();
-            let src_sum: u64 = src_rows
-                .iter()
-                .map(|r| fnv1a(&r.checksum_fragment()))
-                .fold(0u64, |acc, h| acc ^ h);
-            let pg_sum: u64 = pg_rows
-                .iter()
-                .map(|r| fnv1a(&r.checksum_fragment()))
-                .fold(0u64, |acc, h| acc ^ h);
-            assert_eq!(pg_rows.len(), src_rows.len(), "{table} row count");
-            assert_eq!(pg_sum, src_sum, "{table} checksum");
-        }
+        let conn = Connection::open(&path2).unwrap();
+        let (_copied, _tables, failures) = copy_and_verify(
+            &pool,
+            &conn,
+            &["tenant_plans".to_string(), "settings".to_string()],
+            500,
+            false,
+        )
+        .await
+        .unwrap();
+        assert_eq!(failures, 0);
 
         // Verify the migrated values round-trip.
         let client = pool.get().await.unwrap();
@@ -794,6 +803,201 @@ mod tests {
         client
             .execute(
                 "DELETE FROM tenant_plans WHERE tenant_id LIKE $1",
+                &[&format!("{ns}-%")],
+            )
+            .await
+            .unwrap();
+        client
+            .execute(
+                "DELETE FROM settings WHERE key LIKE $1",
+                &[&format!("{ns}-%")],
+            )
+            .await
+            .unwrap();
+    }
+
+    /// Volume test: migrate a SQLite DB seeded with the **real** schema
+    /// (`oz_core::migrations::run`) and 10k+ rows across several tables, then
+    /// assert every row made it with an identical checksum. Exercises the
+    /// copy batching and the checksum path at the volume the cutover will
+    /// actually see. Skips when Postgres is unreachable.
+    #[tokio::test]
+    async fn pg_integration_migrate_large_db() {
+        let url = std::env::var("OZ_TEST_PG_URL")
+            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+        let pool = match connect_postgres(&url).await {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("PG migration volume test skipped: {e}");
+                return;
+            }
+        };
+
+        let ns = format!("pg-migrate-vol-{}", uuid::Uuid::now_v7());
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("oz-pos.db");
+
+        // Clean any rows left by previous runs of this test (a crashed run
+        // keeps its rows, and `copy_and_verify` compares whole tables), then
+        // seed the source DB.
+        {
+            let client = pool.get().await.unwrap();
+            client
+                .execute(
+                    "DELETE FROM offline_queue WHERE tenant_id LIKE 'pg-migrate-vol-%'",
+                    &[],
+                )
+                .await
+                .unwrap();
+            client
+                .execute(
+                    "DELETE FROM products WHERE tenant_id LIKE 'pg-migrate-vol-%'",
+                    &[],
+                )
+                .await
+                .unwrap();
+            client
+                .execute(
+                    "DELETE FROM settings WHERE key LIKE 'pg-migrate-vol-%'",
+                    &[],
+                )
+                .await
+                .unwrap();
+        }
+
+        {
+            let mut conn = Connection::open(&path).unwrap();
+            oz_core::migrations::run(&mut conn).unwrap();
+
+            let now = "2026-03-01T00:00:00Z";
+            let tenant = format!("{ns}-default");
+            let tx = conn.transaction().unwrap();
+            {
+                let mut stmt = tx
+                    .prepare(
+                        "INSERT INTO offline_queue \
+                         (id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id, priority) \
+                         VALUES (?1, 'complete_sale', ?2, 'pending', 0, NULL, ?3, NULL, ?4, 1)",
+                    )
+                    .unwrap();
+                for i in 0..10_000 {
+                    stmt.execute(rusqlite::params![
+                        format!("{ns}-q{i:05}"),
+                        format!(r#"{{"total":{i}}}"#),
+                        now,
+                        tenant,
+                    ])
+                    .unwrap();
+                }
+            }
+            {
+                let mut stmt = tx
+                    .prepare(
+                        "INSERT INTO products \
+                         (id, sku, name, price_minor, currency, created_at, updated_at, price_updated_at, \
+                          track_serial, product_type, version, cost_minor, store_id, tenant_id, \
+                          brand, rack_location, notes, unit, is_active, default_supplier_id, popularity_score) \
+                         VALUES (?1, ?2, ?3, ?4, 'USD', ?5, ?5, '', 0, 'retail', 1, 0, NULL, ?6, \
+                                 NULL, NULL, NULL, NULL, 1, NULL, 0.0)",
+                    )
+                    .unwrap();
+                for i in 0..300 {
+                    stmt.execute(rusqlite::params![
+                        format!("{ns}-p{i:04}"),
+                        format!("{ns}-SKU-{i:04}"),
+                        format!("Volume Product {i}"),
+                        100 + i as i64,
+                        now,
+                        tenant,
+                    ])
+                    .unwrap();
+                }
+            }
+            {
+                let mut stmt = tx
+                    .prepare("INSERT INTO settings (key, value, updated_at) VALUES (?1, ?2, ?3)")
+                    .unwrap();
+                for i in 0..100 {
+                    stmt.execute(rusqlite::params![
+                        format!("{ns}-key-{i}"),
+                        format!("value-{i}"),
+                        now
+                    ])
+                    .unwrap();
+                }
+            }
+            tx.commit().unwrap();
+        }
+
+        // Migrate the three tables and verify counts + checksums at volume.
+        let conn = Connection::open(&path).unwrap();
+        let (copied, tables, failures) = copy_and_verify(
+            &pool,
+            &conn,
+            &[
+                "offline_queue".to_string(),
+                "products".to_string(),
+                "settings".to_string(),
+            ],
+            500,
+            false,
+        )
+        .await
+        .unwrap();
+        assert_eq!(failures, 0, "volume migration verification failed");
+        assert_eq!(tables, 3);
+        assert_eq!(copied, 10_400, "10k queue + 300 products + 100 settings");
+
+        // Exact row counts on the destination, then spot-check values.
+        let client = pool.get().await.unwrap();
+        let queue_rows: i64 = client
+            .query_one(
+                "SELECT COUNT(*) FROM offline_queue WHERE tenant_id = $1",
+                &[&format!("{ns}-default")],
+            )
+            .await
+            .unwrap()
+            .get(0);
+        assert_eq!(queue_rows, 10_000);
+        let product_rows: i64 = client
+            .query_one(
+                "SELECT COUNT(*) FROM products WHERE tenant_id = $1",
+                &[&format!("{ns}-default")],
+            )
+            .await
+            .unwrap()
+            .get(0);
+        assert_eq!(product_rows, 300);
+        let payload: String = client
+            .query_one(
+                "SELECT payload FROM offline_queue WHERE id = $1",
+                &[&format!("{ns}-q09999")],
+            )
+            .await
+            .unwrap()
+            .get(0);
+        assert_eq!(payload, r#"{"total":9999}"#);
+        let price: i64 = client
+            .query_one(
+                "SELECT price_minor FROM products WHERE sku = $1",
+                &[&format!("{ns}-SKU-0299")],
+            )
+            .await
+            .unwrap()
+            .get(0);
+        assert_eq!(price, 100 + 299);
+
+        // Cleanup.
+        client
+            .execute(
+                "DELETE FROM offline_queue WHERE tenant_id LIKE $1",
+                &[&format!("{ns}-%")],
+            )
+            .await
+            .unwrap();
+        client
+            .execute(
+                "DELETE FROM products WHERE tenant_id LIKE $1",
                 &[&format!("{ns}-%")],
             )
             .await
