@@ -6,9 +6,17 @@
 //! covers the exact surface the loop touches:
 //!
 //! - the `settings` table (`smtp_config`, `report_schedule`,
-//!   `last_report_sent_at`, `store.name`)
+//!   `last_report_sent_at`, `store.name`) — read per tenant via scoped
+//!   `{key}:{tenant}` keys with bare-key fallback (see §11.5 of
+//!   `unify-auth-and-sync.md`)
 //! - the analytics bundle (`export_analytics_bundle_pg`) — the ten report
-//!   queries ported from `oz_core::db::reports` / `oz_core::db::popularity`
+//!   queries ported from `oz_core::db::reports` / `oz_core::db::popularity`,
+//!   every one tenant-filtered (`AND s.tenant_id = $n` / `AND p.tenant_id = $n`)
+//!
+//! The loop walks the active tenants (union of `tenant_plans` /
+//! `offline_queue` / `sync_terminals`, plus `default` always, processed
+//! first) and serializes each tenant's cycle across instances with a
+//! session advisory lock keyed on the tenant id.
 //!
 //! The pure-Rust scheduling / filtering / formatting logic is reused from
 //! `oz_core` (`should_send_scheduled_with_last_sent`,
@@ -64,23 +72,67 @@ pub fn start_report_sender_loop_pg(pool: Pool) {
     });
 }
 
-/// Try to send a scheduled report — the Postgres mirror of
-/// [`crate::email::try_send_scheduled`]: read config, check the schedule
-/// (cadence + timezone + dedup via the shared scheduler), generate the
-/// filtered report, send, and record the send timestamp.
+/// Try to send the scheduled reports for every active tenant — the Postgres
+/// mirror of [`crate::email::try_send_scheduled`] walked per tenant. Each
+/// cycle: enumerate tenants, then for each one read its scoped settings,
+/// check the schedule (cadence + timezone + dedup via the shared scheduler),
+/// generate its tenant-filtered report, send, and record the send timestamp.
+/// Per-tenant errors are logged and the cycle continues; only a DB-level
+/// failure (e.g. enumeration) aborts the cycle.
 async fn try_send_scheduled_pg(pool: &Pool) -> Result<(), String> {
-    // Scope 1: Read SMTP + schedule config, check schedule.
-    let smtp_config = match get_smtp_config_pg(pool).await? {
+    for tenant in active_tenants_pg(pool).await? {
+        if let Err(e) = try_send_scheduled_for_tenant_pg(pool, &tenant).await {
+            error!("Report sender error for tenant {tenant}: {e}");
+        }
+    }
+    Ok(())
+}
+
+/// Try to send one tenant's scheduled report, serialized across instances
+/// by a session advisory lock keyed on the tenant id.
+///
+/// `pg_try_advisory_lock` returns `false` when another instance is already
+/// inside this tenant's cycle, so a second instance skips the tenant
+/// entirely — two instances can never both send the same tenant's report.
+/// The lock lives on its own dedicated connection for the whole cycle
+/// (every helper below uses independent pooled connections, so a
+/// transaction-scoped lock would not guard them); it is released on every
+/// exit path and, worst case, dies with the connection when deadpool
+/// recycles it.
+async fn try_send_scheduled_for_tenant_pg(pool: &Pool, tenant: &str) -> Result<(), String> {
+    let lock_conn = pool.get().await.map_err(|e| e.to_string())?;
+    let acquired: bool = lock_conn
+        .query_one("SELECT pg_try_advisory_lock(hashtext($1))", &[&tenant])
+        .await
+        .map_err(|e| format!("DB error: {e}"))?
+        .get(0);
+    if !acquired {
+        // Another instance is handling this tenant's cycle this round.
+        return Ok(());
+    }
+    let result = try_send_scheduled_tenant_inner_pg(pool, tenant).await;
+    let _ = lock_conn
+        .execute("SELECT pg_advisory_unlock(hashtext($1))", &[&tenant])
+        .await;
+    result
+}
+
+/// The un-serialized per-tenant send cycle: scoped settings → due check →
+/// tenant-filtered report → send → scoped last-sent stamp.
+async fn try_send_scheduled_tenant_inner_pg(pool: &Pool, tenant: &str) -> Result<(), String> {
+    // Scope 1: Read the tenant's SMTP + schedule config (scoped keys with
+    // bare-key fallback), check the schedule.
+    let smtp_config = match get_smtp_config_pg(pool, tenant).await? {
         Some(c) => c,
         None => return Ok(()),
     };
 
-    let schedule = match get_report_schedule_pg(pool).await? {
+    let schedule = match get_report_schedule_pg(pool, tenant).await? {
         Some(s) if s.enabled => s,
         _ => return Ok(()),
     };
 
-    let last_sent = get_setting_pg(pool, LAST_SENT_KEY).await?;
+    let last_sent = get_setting_scoped_pg(pool, LAST_SENT_KEY, tenant).await?;
     let should_send = should_send_scheduled_with_last_sent(&schedule, last_sent)
         .map_err(|e| format!("Schedule check failed: {e}"))?;
 
@@ -88,25 +140,58 @@ async fn try_send_scheduled_pg(pool: &Pool) -> Result<(), String> {
         return Ok(());
     }
 
-    // Scope 2: Generate the filtered report from Postgres.
-    let store_name = get_store_name_pg(pool).await?;
-    let report = generate_filtered_report_email_pg(pool, &schedule, &store_name).await?;
+    // Scope 2: Generate the tenant-filtered report from Postgres.
+    let store_name = get_store_name_pg(pool, tenant).await?;
+    let report = generate_filtered_report_email_pg(pool, &schedule, &store_name, tenant).await?;
 
     let recipients = schedule.recipients.clone();
     send_email(&smtp_config, &report, &recipients).await?;
 
-    // Record the successful send for dedup.
+    // Record the successful send for dedup under the tenant's scoped key.
     let now = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
-    set_setting_pg(pool, LAST_SENT_KEY, &now).await?;
+    set_setting_scoped_pg(pool, LAST_SENT_KEY, &now, tenant).await?;
 
     info!(
-        "Scheduled report sent to {} recipients (cadence: {}, types: {:?})",
+        "Scheduled report sent to {} recipients (tenant: {tenant}, cadence: {}, types: {:?})",
         recipients.len(),
         schedule.cadence,
         schedule.report_types,
     );
 
     Ok(())
+}
+
+/// Enumerate the tenants this loop must serve: the union of every
+/// tenant-scoped table that can identify an active tenant, plus `default`
+/// always (so a fresh deployment whose config lives in bare keys still
+/// sends). `default` sorts first, the rest alphabetically, for
+/// deterministic log output.
+async fn active_tenants_pg(pool: &Pool) -> Result<Vec<String>, String> {
+    let client = pool.get().await.map_err(|e| e.to_string())?;
+    let rows = client
+        .query(
+            "SELECT tenant_id FROM tenant_plans
+             UNION SELECT tenant_id FROM offline_queue
+             UNION SELECT tenant_id FROM sync_terminals",
+            &[],
+        )
+        .await
+        .map_err(|e| format!("DB error: {e}"))?;
+    let mut tenants: Vec<String> = rows
+        .iter()
+        .map(|r| r.get::<_, String>(0))
+        .filter(|t| !t.is_empty())
+        .collect();
+    if !tenants.iter().any(|t| t == "default") {
+        tenants.push("default".into());
+    }
+    tenants.sort_by(|a, b| {
+        (a != "default")
+            .cmp(&(b != "default"))
+            .then_with(|| a.cmp(b))
+    });
+    tenants.dedup();
+    Ok(tenants)
 }
 
 // ── Settings helpers ───────────────────────────────────────────────
@@ -137,10 +222,41 @@ async fn set_setting_pg(pool: &Pool, key: &str, value: &str) -> Result<(), Strin
     Ok(())
 }
 
-/// Load the SMTP config from the settings table, decrypting the password
-/// transparently (mirrors `oz_core`'s `Store::get_smtp_config`).
-async fn get_smtp_config_pg(pool: &Pool) -> Result<Option<SmtpConfig>, String> {
-    let raw = match get_setting_pg(pool, SMTP_CONFIG_SETTINGS_KEY).await? {
+/// Scoped settings key — suffix form (`{base}:{tenant}`), a plain PK
+/// lookup that leaves the legacy bare keys untouched.
+fn scoped_key(base: &str, tenant: &str) -> String {
+    format!("{base}:{tenant}")
+}
+
+/// Read a scoped settings value with bare-key fallback: `{key}:{tenant}`
+/// first, then the legacy bare `{key}` (canonical for `default`, so
+/// existing deployments keep working byte-identically).
+async fn get_setting_scoped_pg(
+    pool: &Pool,
+    key: &str,
+    tenant: &str,
+) -> Result<Option<String>, String> {
+    if let Some(v) = get_setting_pg(pool, &scoped_key(key, tenant)).await? {
+        return Ok(Some(v));
+    }
+    get_setting_pg(pool, key).await
+}
+
+/// Upsert a scoped settings value (writes `{key}:{tenant}`).
+async fn set_setting_scoped_pg(
+    pool: &Pool,
+    key: &str,
+    value: &str,
+    tenant: &str,
+) -> Result<(), String> {
+    set_setting_pg(pool, &scoped_key(key, tenant), value).await
+}
+
+/// Load the tenant's SMTP config from the settings table (scoped key with
+/// bare-key fallback), decrypting the password transparently (mirrors
+/// `oz_core`'s `Store::get_smtp_config`).
+async fn get_smtp_config_pg(pool: &Pool, tenant: &str) -> Result<Option<SmtpConfig>, String> {
+    let raw = match get_setting_scoped_pg(pool, SMTP_CONFIG_SETTINGS_KEY, tenant).await? {
         Some(v) => v,
         None => return Ok(None),
     };
@@ -154,9 +270,13 @@ async fn get_smtp_config_pg(pool: &Pool) -> Result<Option<SmtpConfig>, String> {
     Ok(Some(config))
 }
 
-/// Load the report schedule configuration from the settings table.
-async fn get_report_schedule_pg(pool: &Pool) -> Result<Option<ReportScheduleConfig>, String> {
-    let raw = match get_setting_pg(pool, REPORT_SCHEDULE_SETTINGS_KEY).await? {
+/// Load the tenant's report schedule configuration from the settings table
+/// (scoped key with bare-key fallback).
+async fn get_report_schedule_pg(
+    pool: &Pool,
+    tenant: &str,
+) -> Result<Option<ReportScheduleConfig>, String> {
+    let raw = match get_setting_scoped_pg(pool, REPORT_SCHEDULE_SETTINGS_KEY, tenant).await? {
         Some(v) => v,
         None => return Ok(None),
     };
@@ -165,9 +285,10 @@ async fn get_report_schedule_pg(pool: &Pool) -> Result<Option<ReportScheduleConf
     Ok(Some(config))
 }
 
-/// Read the store name from settings, falling back to a default.
-async fn get_store_name_pg(pool: &Pool) -> Result<String, String> {
-    Ok(get_setting_pg(pool, "store.name")
+/// Read the tenant's store name from settings (scoped key with bare-key
+/// fallback), falling back to a default.
+async fn get_store_name_pg(pool: &Pool, tenant: &str) -> Result<String, String> {
+    Ok(get_setting_scoped_pg(pool, "store.name", tenant)
         .await?
         .unwrap_or_else(|| "OZ-POS Store".to_string()))
 }
@@ -180,6 +301,7 @@ async fn generate_filtered_report_email_pg(
     pool: &Pool,
     schedule: &ReportScheduleConfig,
     store_name: &str,
+    tenant: &str,
 ) -> Result<oz_core::export::email_report::ReportEmail, String> {
     let lookback_start = Utc::now()
         .checked_sub_signed(chrono::Duration::days(schedule.lookback_days as i64))
@@ -195,7 +317,7 @@ async fn generate_filtered_report_email_pg(
             end_date: end.clone(),
             ..ExportConfig::default()
         },
-        "",
+        tenant,
         store_name,
     )
     .await?;
@@ -222,31 +344,48 @@ pub async fn export_analytics_bundle_pg(
     tenant_id: &str,
     store_name: &str,
 ) -> Result<AnalyticsBundle, String> {
-    let daily_revenue = daily_revenue_pg(pool, &config.start_date, &config.end_date).await?;
-    let weekly_revenue = weekly_revenue_pg(pool, &config.start_date, &config.end_date).await?;
-    let monthly_revenue = monthly_revenue_pg(pool, &config.start_date, &config.end_date).await?;
+    let daily_revenue =
+        daily_revenue_pg(pool, &config.start_date, &config.end_date, tenant_id).await?;
+    let weekly_revenue =
+        weekly_revenue_pg(pool, &config.start_date, &config.end_date, tenant_id).await?;
+    let monthly_revenue =
+        monthly_revenue_pg(pool, &config.start_date, &config.end_date, tenant_id).await?;
     let top_products = top_products_pg(
         pool,
         &config.start_date,
         &config.end_date,
         config.top_product_limit,
         "revenue",
+        tenant_id,
     )
     .await?;
-    let hourly_heatmap = hourly_heatmap_pg(pool, &config.start_date, &config.end_date).await?;
+    let hourly_heatmap =
+        hourly_heatmap_pg(pool, &config.start_date, &config.end_date, tenant_id).await?;
     let category_breakdown =
-        category_breakdown_pg(pool, &config.start_date, &config.end_date).await?;
+        category_breakdown_pg(pool, &config.start_date, &config.end_date, tenant_id).await?;
     let low_stock_alerts = low_stock_alerts_at_location_pg(
         pool,
         oz_core::inventory::CANONICAL_DEFAULT_LOCATION_UUID,
         config.low_stock_threshold,
+        tenant_id,
     )
     .await?;
-    let active_stock_alerts =
-        active_stock_alerts_pg(pool, oz_core::inventory::CANONICAL_DEFAULT_LOCATION_UUID).await?;
-    let category_popularity = category_popularity_pg(pool, 3).await?;
-    let category_forecast =
-        category_forecast_pg(pool, &config.start_date, &config.end_date, "weekly", 10).await?;
+    let active_stock_alerts = active_stock_alerts_pg(
+        pool,
+        oz_core::inventory::CANONICAL_DEFAULT_LOCATION_UUID,
+        tenant_id,
+    )
+    .await?;
+    let category_popularity = category_popularity_pg(pool, 3, tenant_id).await?;
+    let category_forecast = category_forecast_pg(
+        pool,
+        &config.start_date,
+        &config.end_date,
+        "weekly",
+        10,
+        tenant_id,
+    )
+    .await?;
 
     let exported_at = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
 
@@ -293,6 +432,7 @@ async fn daily_revenue_pg(
     pool: &Pool,
     start_date: &str,
     end_date: &str,
+    tenant: &str,
 ) -> Result<Vec<DailyRevenueRow>, String> {
     let client = pool.get().await.map_err(|e| e.to_string())?;
     let start = parse_date(start_date)?;
@@ -305,6 +445,7 @@ async fn daily_revenue_pg(
                      JOIN sales s2 ON sl2.sale_id = s2.id
                      LEFT JOIN products p2 ON p2.sku = sl2.sku AND p2.tenant_id = s2.tenant_id
                      WHERE s2.status = 'completed'
+                       AND s2.tenant_id = $3
                        AND s2.currency = d.currency
                        AND s2.created_at::date = d.date::date) AS cogs_minor
              FROM (SELECT to_char(s.created_at::date, 'YYYY-MM-DD') AS date,
@@ -313,10 +454,11 @@ async fn daily_revenue_pg(
                           COUNT(*) AS sale_count
                    FROM sales s
                    WHERE s.status = 'completed'
+                     AND s.tenant_id = $3
                      AND s.created_at::date BETWEEN $1 AND $2
                    GROUP BY to_char(s.created_at::date, 'YYYY-MM-DD'), s.currency) d
              ORDER BY date ASC",
-            &[&start, &end],
+            &[&start, &end, &tenant],
         )
         .await
         .map_err(|e| format!("DB error: {e:?}"))?;
@@ -345,6 +487,7 @@ async fn weekly_revenue_pg(
     pool: &Pool,
     start_date: &str,
     end_date: &str,
+    tenant: &str,
 ) -> Result<Vec<WeeklyRevenueRow>, String> {
     let client = pool.get().await.map_err(|e| e.to_string())?;
     let start = parse_date(start_date)?;
@@ -357,6 +500,7 @@ async fn weekly_revenue_pg(
                      JOIN sales s2 ON sl2.sale_id = s2.id
                      LEFT JOIN products p2 ON p2.sku = sl2.sku AND p2.tenant_id = s2.tenant_id
                      WHERE s2.status = 'completed'
+                       AND s2.tenant_id = $3
                        AND s2.currency = d.currency
                        AND to_char(date_trunc('week', s2.created_at::date)::date, 'YYYY-MM-DD') = d.week_start::date::text) AS cogs_minor
              FROM (SELECT to_char(date_trunc('week', s.created_at::date)::date, 'YYYY-MM-DD') AS week_start,
@@ -364,10 +508,11 @@ async fn weekly_revenue_pg(
                           COUNT(*) AS sale_count
                    FROM sales s
                    WHERE s.status = 'completed'
+                     AND s.tenant_id = $3
                      AND s.created_at::date BETWEEN $1 AND $2
                    GROUP BY to_char(date_trunc('week', s.created_at::date)::date, 'YYYY-MM-DD'), s.currency) d
              ORDER BY week_start ASC",
-            &[&start, &end],
+            &[&start, &end, &tenant],
         )
         .await
         .map_err(|e| format!("DB error: {e}"))?;
@@ -396,6 +541,7 @@ async fn monthly_revenue_pg(
     pool: &Pool,
     start_date: &str,
     end_date: &str,
+    tenant: &str,
 ) -> Result<Vec<MonthlyRevenueRow>, String> {
     let client = pool.get().await.map_err(|e| e.to_string())?;
     let start = parse_date(start_date)?;
@@ -408,6 +554,7 @@ async fn monthly_revenue_pg(
                      JOIN sales s2 ON sl2.sale_id = s2.id
                      LEFT JOIN products p2 ON p2.sku = sl2.sku AND p2.tenant_id = s2.tenant_id
                      WHERE s2.status = 'completed'
+                       AND s2.tenant_id = $3
                        AND s2.currency = d.currency
                        AND LEFT(s2.created_at, 7) = d.month::text) AS cogs_minor
              FROM (SELECT LEFT(s.created_at, 7) AS month,
@@ -415,10 +562,11 @@ async fn monthly_revenue_pg(
                           COUNT(*) AS sale_count
                    FROM sales s
                    WHERE s.status = 'completed'
+                     AND s.tenant_id = $3
                      AND s.created_at::date BETWEEN $1 AND $2
                    GROUP BY LEFT(s.created_at, 7), s.currency) d
              ORDER BY month ASC",
-            &[&start, &end],
+            &[&start, &end, &tenant],
         )
         .await
         .map_err(|e| format!("DB error: {e}"))?;
@@ -449,6 +597,7 @@ async fn top_products_pg(
     end_date: &str,
     limit: i64,
     order_by: &str,
+    tenant: &str,
 ) -> Result<Vec<TopProductRow>, String> {
     let order_clause = if order_by == "profit" {
         "gross_profit_minor DESC"
@@ -467,13 +616,15 @@ async fn top_products_pg(
          FROM sale_lines sl
          JOIN sales s ON sl.sale_id = s.id
          JOIN products p ON p.sku = sl.sku AND p.tenant_id = s.tenant_id
-         WHERE s.status = 'completed' AND s.created_at::date BETWEEN $1 AND $2
+         WHERE s.status = 'completed'
+           AND s.tenant_id = $4
+           AND s.created_at::date BETWEEN $1 AND $2
          GROUP BY p.id
          ORDER BY {order_clause}, p.sku
          LIMIT $3"
     );
     let rows = client
-        .query(&sql, &[&start, &end, &limit])
+        .query(&sql, &[&start, &end, &limit, &tenant])
         .await
         .map_err(|e| format!("DB error: {e}"))?;
 
@@ -505,6 +656,7 @@ async fn hourly_heatmap_pg(
     pool: &Pool,
     start_date: &str,
     end_date: &str,
+    tenant: &str,
 ) -> Result<Vec<HourlyHeatmapRow>, String> {
     let client = pool.get().await.map_err(|e| e.to_string())?;
     let start = parse_date(start_date)?;
@@ -516,10 +668,12 @@ async fn hourly_heatmap_pg(
                     SUM(total_minor)::bigint AS total_minor,
                     COUNT(*) AS sale_count
              FROM sales
-             WHERE status = 'completed' AND created_at::date BETWEEN $1 AND $2
+             WHERE status = 'completed'
+               AND tenant_id = $3
+               AND created_at::date BETWEEN $1 AND $2
              GROUP BY day_of_week, hour
              ORDER BY day_of_week, hour",
-            &[&start, &end],
+            &[&start, &end, &tenant],
         )
         .await
         .map_err(|e| format!("DB error: {e}"))?;
@@ -541,6 +695,7 @@ async fn category_breakdown_pg(
     pool: &Pool,
     start_date: &str,
     end_date: &str,
+    tenant: &str,
 ) -> Result<Vec<CategoryBreakdownRow>, String> {
     let client = pool.get().await.map_err(|e| e.to_string())?;
     let start = parse_date(start_date)?;
@@ -554,10 +709,12 @@ async fn category_breakdown_pg(
              JOIN sales s ON sl.sale_id = s.id
              JOIN products p ON p.sku = sl.sku AND p.tenant_id = s.tenant_id
              LEFT JOIN categories c ON p.category_id = c.id
-             WHERE s.status = 'completed' AND s.created_at::date BETWEEN $1 AND $2
+             WHERE s.status = 'completed'
+               AND s.tenant_id = $3
+               AND s.created_at::date BETWEEN $1 AND $2
              GROUP BY p.category_id, c.name
              ORDER BY total_minor DESC",
-            &[&start, &end],
+            &[&start, &end, &tenant],
         )
         .await
         .map_err(|e| format!("DB error: {e}"))?;
@@ -588,6 +745,7 @@ async fn low_stock_alerts_at_location_pg(
     pool: &Pool,
     location_id: &str,
     default_threshold: i64,
+    tenant: &str,
 ) -> Result<Vec<LowStockAlert>, String> {
     let client = pool.get().await.map_err(|e| e.to_string())?;
     let rows = client
@@ -609,15 +767,16 @@ async fn low_stock_alerts_at_location_pg(
              FROM products p
              LEFT JOIN stock_summary ss
                 ON ss.item_id = p.id AND ss.location_id = $1
-             WHERE COALESCE(ss.qty, 0) <= $2
-                OR (SELECT 1 FROM stock_thresholds st
-                    WHERE st.product_id = p.id
-                      AND (st.location_id = $1 OR st.location_id IS NULL)
-                      AND st.enabled = 1
-                      AND COALESCE(ss.qty, 0) <= st.threshold
-                    LIMIT 1) = 1
+             WHERE p.tenant_id = $3
+               AND (COALESCE(ss.qty, 0) <= $2
+                    OR (SELECT 1 FROM stock_thresholds st
+                        WHERE st.product_id = p.id
+                          AND (st.location_id = $1 OR st.location_id IS NULL)
+                          AND st.enabled = 1
+                          AND COALESCE(ss.qty, 0) <= st.threshold
+                        LIMIT 1) = 1)
              ORDER BY current_qty ASC",
-            &[&location_id, &default_threshold],
+            &[&location_id, &default_threshold, &tenant],
         )
         .await
         .map_err(|e| format!("DB error: {e}"))?;
@@ -642,6 +801,7 @@ async fn low_stock_alerts_at_location_pg(
 async fn active_stock_alerts_pg(
     pool: &Pool,
     location_id: &str,
+    tenant: &str,
 ) -> Result<Vec<StockAlertEvent>, String> {
     let client = pool.get().await.map_err(|e| e.to_string())?;
     let rows = client
@@ -654,9 +814,11 @@ async fn active_stock_alerts_pg(
                     COALESCE(p.name, '') AS product_name
              FROM stock_alert_events sae
              LEFT JOIN products p ON sae.product_id = p.id
-             WHERE sae.location_id = $1 AND sae.status IN ('active', 'acknowledged')
+             WHERE sae.location_id = $1
+               AND p.tenant_id = $2
+               AND sae.status IN ('active', 'acknowledged')
              ORDER BY sae.triggered_at DESC",
-            &[&location_id],
+            &[&location_id, &tenant],
         )
         .await
         .map_err(|e| format!("DB error: {e}"))?;
@@ -687,11 +849,15 @@ async fn active_stock_alerts_pg(
 async fn category_popularity_pg(
     pool: &Pool,
     top_per_category: i64,
+    tenant: &str,
 ) -> Result<Vec<CategoryPopularityRow>, String> {
     let client = pool.get().await.map_err(|e| e.to_string())?;
 
     let catalog_mean: f64 = client
-        .query_one("SELECT AVG(popularity_score)::float8 FROM products", &[])
+        .query_one(
+            "SELECT AVG(popularity_score)::float8 FROM products WHERE tenant_id = $1",
+            &[&tenant],
+        )
         .await
         .map(|r| r.get::<_, Option<f64>>(0).unwrap_or(0.0))
         .unwrap_or(0.0);
@@ -705,8 +871,9 @@ async fn category_popularity_pg(
                 "SELECT p.category_id, c.name, COUNT(*) AS cnt, AVG(p.popularity_score)::float8 AS mean
                  FROM products p
                  LEFT JOIN categories c ON p.category_id = c.id
+                 WHERE p.tenant_id = $1
                  GROUP BY p.category_id, c.name",
-                &[],
+                &[&tenant],
             )
             .await
             .map_err(|e| format!("DB error: {e}"))?;
@@ -742,8 +909,9 @@ async fn category_popularity_pg(
             .query(
                 "SELECT p.category_id, p.sku, p.name, p.popularity_score
                  FROM products p
+                 WHERE p.tenant_id = $1
                  ORDER BY p.category_id, p.popularity_score DESC, p.sku ASC",
-                &[],
+                &[&tenant],
             )
             .await
             .map_err(|e| format!("DB error: {e}"))?;
@@ -802,6 +970,7 @@ async fn category_popularity_trend_pg(
     end_date: &str,
     granularity: &str,
     top_categories: i64,
+    tenant: &str,
 ) -> Result<Vec<CategoryTrendPoint>, String> {
     let client = pool.get().await.map_err(|e| e.to_string())?;
     let start = parse_date(start_date)?;
@@ -829,10 +998,11 @@ async fn category_popularity_trend_pg(
                 "SELECT p.category_id, c.name
                  FROM products p
                  LEFT JOIN categories c ON p.category_id = c.id
+                 WHERE p.tenant_id = $2
                  GROUP BY p.category_id, c.name
                  ORDER BY AVG(p.popularity_score) DESC, p.category_id ASC
                  LIMIT $1",
-                &[&top_categories.max(1)],
+                &[&top_categories.max(1), &tenant],
             )
             .await
             .map_err(|e| format!("DB error: {e}"))?;
@@ -865,11 +1035,13 @@ async fn category_popularity_trend_pg(
              FROM sale_lines sl
              JOIN sales s ON sl.sale_id = s.id
              JOIN products p ON p.sku = sl.sku AND p.tenant_id = s.tenant_id
-             WHERE s.status = 'completed' AND s.created_at::date BETWEEN $1 AND $2
+             WHERE s.status = 'completed'
+               AND s.tenant_id = $3
+               AND s.created_at::date BETWEEN $1 AND $2
              GROUP BY {s_period}, p.category_id"
         );
         let rows = client
-            .query(&sql, &[&start, &end])
+            .query(&sql, &[&start, &end, &tenant])
             .await
             .map_err(|e| format!("DB error: {e}"))?;
         for row in rows {
@@ -888,11 +1060,12 @@ async fn category_popularity_trend_pg(
             "SELECT {a_period} AS period_start, p.category_id, a.event_type, COUNT(*) AS cnt
              FROM product_activity a
              JOIN products p ON p.sku = a.sku AND p.tenant_id = a.tenant_id
-             WHERE a.created_at::date BETWEEN $1 AND $2
+             WHERE a.tenant_id = $3
+               AND a.created_at::date BETWEEN $1 AND $2
              GROUP BY {a_period}, p.category_id, a.event_type"
         );
         let rows = client
-            .query(&sql, &[&start, &end])
+            .query(&sql, &[&start, &end, &tenant])
             .await
             .map_err(|e| format!("DB error: {e}"))?;
         for row in rows {
@@ -909,7 +1082,7 @@ async fn category_popularity_trend_pg(
         }
     }
 
-    let (ms, mq, me) = category_means_pg(pool, "")
+    let (ms, mq, me) = category_means_pg(pool, "", tenant)
         .await?
         .unwrap_or((0.0, 0.0, 0.0));
     let mut points: Vec<CategoryTrendPoint> = Vec::new();
@@ -917,7 +1090,9 @@ async fn category_popularity_trend_pg(
         if !rank.contains_key(&cat) {
             continue;
         }
-        let (ms, mq, me) = category_means_pg(pool, &cat).await?.unwrap_or((ms, mq, me));
+        let (ms, mq, me) = category_means_pg(pool, &cat, tenant)
+            .await?
+            .unwrap_or((ms, mq, me));
         let score = score_from_raw(
             units as f64,
             units as f64,
@@ -955,8 +1130,12 @@ async fn category_popularity_trend_pg(
 
 /// Read the cached smoothing means for a category from the settings table
 /// (falls back to `None` — the SQLite path defaults to `(0,0,0)`).
-async fn category_means_pg(pool: &Pool, category: &str) -> Result<Option<(f64, f64, f64)>, String> {
-    let raw = match get_setting_pg(pool, "popularity.category_means").await? {
+async fn category_means_pg(
+    pool: &Pool,
+    category: &str,
+    tenant: &str,
+) -> Result<Option<(f64, f64, f64)>, String> {
+    let raw = match get_setting_scoped_pg(pool, "popularity.category_means", tenant).await? {
         Some(v) => v,
         None => return Ok(None),
     };
@@ -984,12 +1163,19 @@ async fn category_forecast_pg(
     end_date: &str,
     granularity: &str,
     top_categories: i64,
+    tenant: &str,
 ) -> Result<Vec<CategoryForecastRow>, String> {
     const MAX_SERIES_POINTS: usize = 14;
 
-    let points =
-        category_popularity_trend_pg(pool, start_date, end_date, granularity, top_categories)
-            .await?;
+    let points = category_popularity_trend_pg(
+        pool,
+        start_date,
+        end_date,
+        granularity,
+        top_categories,
+        tenant,
+    )
+    .await?;
     let mut groups: std::collections::HashMap<
         String,
         (Option<String>, Vec<(chrono::NaiveDate, f64)>),
@@ -1225,7 +1411,7 @@ mod tests {
         )
         .await
         .unwrap();
-        let loaded = get_smtp_config_pg(&pool).await.unwrap().unwrap();
+        let loaded = get_smtp_config_pg(&pool, "default").await.unwrap().unwrap();
         assert_eq!(loaded.host, "smtp.test.com");
         assert_eq!(loaded.password, Some("pw".into()));
 
@@ -1245,12 +1431,15 @@ mod tests {
         )
         .await
         .unwrap();
-        let loaded = get_report_schedule_pg(&pool).await.unwrap().unwrap();
+        let loaded = get_report_schedule_pg(&pool, "default")
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(loaded.cadence, "daily");
         assert_eq!(loaded.recipients, vec!["a@b.c".to_string()]);
 
         assert_eq!(
-            get_store_name_pg(&pool).await.unwrap(),
+            get_store_name_pg(&pool, "default").await.unwrap(),
             format!("{ns} Store")
         );
         assert_eq!(get_setting_pg(&pool, LAST_SENT_KEY).await.unwrap(), None);
@@ -1296,47 +1485,153 @@ mod tests {
             tx.commit().await.unwrap();
         }
 
+        // ── Tenant-filtered aggregation: each tenant's bundle sees ONLY its
+        //    own sales, even when both tenants' sales sit in the same window
+        //    and share a SKU (previously tenant_id only labelled metadata) ──
         let config2 = ExportConfig {
             start_date: "2026-01-01".into(),
             end_date: "2026-01-31".into(),
             top_product_limit: 25,
             low_stock_threshold: 10,
         };
-        let bundle2 = export_analytics_bundle_pg(&pool, config2, "default", &format!("{ns} Store"))
+        let bundle_default =
+            export_analytics_bundle_pg(&pool, config2.clone(), "default", &format!("{ns} Store"))
+                .await
+                .unwrap();
+        assert_eq!(
+            bundle_default.daily_revenue.len(),
+            1,
+            "default must not see tenant-b's sale in its aggregation"
+        );
+        assert_eq!(
+            (
+                bundle_default.daily_revenue[0].total_minor,
+                bundle_default.daily_revenue[0].cogs_minor
+            ),
+            (5000, 2000)
+        );
+        assert_eq!(bundle_default.top_products.len(), 1);
+        assert_eq!(bundle_default.top_products[0].cogs_minor, 2000);
+
+        let bundle_b = export_analytics_bundle_pg(&pool, config2, "tenant-b", "Tenant B Store")
             .await
             .unwrap();
+        assert_eq!(
+            bundle_b.daily_revenue.len(),
+            1,
+            "tenant-b must not see default's sale in its aggregation"
+        );
+        // B's day resolves B's product cost (9999) via the sale's tenant —
+        // the join AND the WHERE filter both stay inside the tenant.
+        assert_eq!(
+            (
+                bundle_b.daily_revenue[0].total_minor,
+                bundle_b.daily_revenue[0].cogs_minor
+            ),
+            (5000, 9999)
+        );
+        assert_eq!(bundle_b.top_products.len(), 1);
+        assert_eq!(bundle_b.top_products[0].cogs_minor, 9999);
 
-        // A's day keeps A's cost; B's day resolves B's cost (9999) via the
-        // sale's tenant, proving the COGS join is tenant-scoped.
-        assert_eq!(bundle2.daily_revenue.len(), 2);
-        let a_day = bundle2
-            .daily_revenue
-            .iter()
-            .find(|r| r.date == "2026-01-15")
-            .expect("tenant A day");
-        assert_eq!((a_day.total_minor, a_day.cogs_minor), (5000, 2000));
-        let b_day = bundle2
-            .daily_revenue
-            .iter()
-            .find(|r| r.date == "2026-01-16")
-            .expect("tenant B day");
-        assert_eq!((b_day.total_minor, b_day.cogs_minor), (5000, 9999));
+        // ── Per-tenant scoped settings (suffix keys, bare-key fallback) ──
+        set_setting_scoped_pg(&pool, "store.name", &format!("{ns} B Store"), "tenant-b")
+            .await
+            .unwrap();
+        assert_eq!(
+            get_store_name_pg(&pool, "tenant-b").await.unwrap(),
+            format!("{ns} B Store"),
+            "scoped key must win for tenant-b"
+        );
+        assert_eq!(
+            get_store_name_pg(&pool, "default").await.unwrap(),
+            format!("{ns} Store"),
+            "default must keep reading the bare key"
+        );
+        // Remove the scoped key: the read falls back to the bare key.
+        {
+            let client = pool.get().await.unwrap();
+            client
+                .execute(
+                    "DELETE FROM settings WHERE key = $1",
+                    &[&scoped_key("store.name", "tenant-b")],
+                )
+                .await
+                .unwrap();
+        }
+        assert_eq!(
+            get_store_name_pg(&pool, "tenant-b").await.unwrap(),
+            format!("{ns} Store"),
+            "missing scoped key must fall back to the bare key"
+        );
 
-        // Top products: one row per tenant's product — A's row must carry
-        // A's COGS, never B's, despite the shared SKU.
-        assert_eq!(bundle2.top_products.len(), 2);
-        let a_top = bundle2
-            .top_products
-            .iter()
-            .find(|t| t.product_id == product_id)
-            .expect("tenant A product row");
-        assert_eq!(a_top.cogs_minor, 2000, "A's COGS must use A's product cost");
-        let b_top = bundle2
-            .top_products
-            .iter()
-            .find(|t| t.product_id == product_b_id)
-            .expect("tenant B product row");
-        assert_eq!(b_top.cogs_minor, 9999);
+        // ── Loop decision paths (no SMTP involved) ──────────────────────
+        // Tenant enumeration: `default` first, then the data-derived set
+        // (offline_queue carries tenant-b).
+        {
+            let client = pool.get().await.unwrap();
+            client
+                .execute(
+                    "INSERT INTO offline_queue (id, action, payload, tenant_id)
+                     VALUES ($1, 'test', '{}', 'tenant-b')",
+                    &[&format!("{ns}-queue")],
+                )
+                .await
+                .unwrap();
+        }
+        assert_eq!(
+            active_tenants_pg(&pool).await.unwrap(),
+            vec!["default".to_string(), "tenant-b".to_string()],
+            "default sorts first, then the data-derived tenants"
+        );
+
+        // Tenant-b has scoped SMTP + schedule + a future last-sent → not
+        // due → the cycle returns Ok without attempting SMTP. `send_at_time`
+        // is set 5 minutes ahead so the time-of-day gate is deterministic
+        // regardless of when the suite runs.
+        let send_at = (Utc::now() + chrono::Duration::minutes(5))
+            .format("%H:%M")
+            .to_string();
+        let schedule_b = ReportScheduleConfig {
+            enabled: true,
+            cadence: "daily".into(),
+            report_types: vec!["daily_revenue".into()],
+            recipients: vec!["b@b.c".into()],
+            send_at_time: send_at,
+            timezone: "UTC".into(),
+            lookback_days: 7,
+        };
+        set_setting_scoped_pg(
+            &pool,
+            SMTP_CONFIG_SETTINGS_KEY,
+            &serde_json::to_string(&smtp).unwrap(),
+            "tenant-b",
+        )
+        .await
+        .unwrap();
+        set_setting_scoped_pg(
+            &pool,
+            REPORT_SCHEDULE_SETTINGS_KEY,
+            &serde_json::to_string(&schedule_b).unwrap(),
+            "tenant-b",
+        )
+        .await
+        .unwrap();
+        set_setting_scoped_pg(
+            &pool,
+            LAST_SENT_KEY,
+            &"2099-01-01T00:00:00Z".to_string(),
+            "tenant-b",
+        )
+        .await
+        .unwrap();
+        try_send_scheduled_for_tenant_pg(&pool, "tenant-b")
+            .await
+            .expect("already-sent tenant must short-circuit before SMTP");
+
+        // A tenant with no scoped or bare config is skipped, not errored.
+        try_send_scheduled_for_tenant_pg(&pool, "no-such-tenant")
+            .await
+            .expect("tenant without config must be skipped cleanly");
 
         // ── Cleanup (keys are namespaced; delete the seeded rows) ─────
         let client = pool.get().await.unwrap();
@@ -1353,8 +1648,17 @@ mod tests {
         }
         client
             .execute(
-                "DELETE FROM settings WHERE key IN ('store.name', 'smtp_config', 'report_schedule', 'last_report_sent_at')",
+                "DELETE FROM settings WHERE key IN ('store.name', 'smtp_config', 'report_schedule', \
+                 'last_report_sent_at', 'store.name:tenant-b', 'smtp_config:tenant-b', \
+                 'report_schedule:tenant-b', 'last_report_sent_at:tenant-b')",
                 &[],
+            )
+            .await
+            .unwrap();
+        client
+            .execute(
+                "DELETE FROM offline_queue WHERE id = $1",
+                &[&format!("{ns}-queue")],
             )
             .await
             .unwrap();

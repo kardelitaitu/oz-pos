@@ -652,13 +652,13 @@ tenant-blind surface, audited table by table.
 | Webhook payment → sale lookup | ✅ scoped | Returns `(sale_id, tenant_id)` by joining the sale; the `finalize_sale` enqueue now runs under the sale's owner tenant (verified in the PG webhook test) |
 | Webhook `finalize_sale` enqueue | ✅ scoped | Tenant flows from the sale row — no more hardcoded `'default'` |
 | `sales` table | ✅ has `tenant_id` (default `'default'`) | Stamped by REST `create_sale` from the JWT claims; `payments` needs no tenant column (it joins through `sales.id`) |
-| Report-sender email loop (`email_pg.rs`) | ⚠️ tenant-blind (aggregation) but row-safe | Every SKU-keyed product join (daily/weekly/monthly COGS, top products, category breakdown, popularity trend, `product_activity`) now resolves within the sale's tenant (`ON p.sku = sl.sku AND p.tenant_id = s.tenant_id`; `product_activity` gained a `tenant_id` column). `pg_integration_email_loop_reads_postgres` proves a shared SKU across two tenants keeps its own COGS. Per-tenant scheduling/aggregation is designed below (§11.5 "Per-tenant report scheduling") — not yet implemented |
+| Report-sender email loop (`email_pg.rs`) | ✅ per-tenant | Every SKU-keyed product join resolves within the sale's tenant, and the loop now walks tenants: scoped settings keys (`{key}:{tenant}` with bare-key fallback), data-derived tenant enumeration (`default` first), a per-tenant advisory lock so a second instance skips instead of double-sending, and tenant-filtered aggregation (`AND s.tenant_id = $n` / `AND p.tenant_id = $n` in every sub-query). `pg_integration_email_loop_reads_postgres` asserts each tenant's bundle contains only its own sales and its own COGS (shared SKU), the scoped-key fallback, enumeration order, and the no-SMTP loop decision paths — see §11.5 "Per-tenant report scheduling" |
 | Desktop `Store` (oz-core, SQLite) | ✅ single-tenant by construction | `create_sale` + the payment-completion paths stamp `tenant_id = 'default'` explicitly (asserted in `create_sale_persists_header`). The unscoped by-SKU/username queries are fine while each POS keeps its own DB file; the full inventory of what a shared-data rollout must scope is in §11.5 "Desktop Store tenant-scoping audit" (recommendation: a startup integrity check + the ~10 SKU/username-keyed statements, not a wholesale tenant API) |
 | Health endpoint queue depth | ✅ global by design | Aggregate ops metric — correct as-is |
 
-**Recommended Phase-4 order:** (1) ~~`sales.tenant_id` + REST/webhook threading~~ — **done** → (2) per-tenant report settings + tenant-scoped analytics → (3) ~~RLS~~ — schema-side shipped with a fail-closed test; only the deployment cutover (non-owner app role + `FORCE` + per-request `SET LOCAL oz.tenant_id`) remains.
+**Recommended Phase-4 order:** (1) ~~`sales.tenant_id` + REST/webhook threading~~ — **done** → (2) ~~per-tenant report settings + tenant-scoped analytics~~ — **done** (implemented below) → (3) ~~RLS~~ — schema-side shipped with a fail-closed test; only the deployment cutover (non-owner app role + `FORCE` + per-request `SET LOCAL oz.tenant_id`) remains.
 
-### Per-tenant report scheduling (design, 2026-08-15)
+### Per-tenant report scheduling (implemented 2026-08-15)
 
 Today the report-sender loop runs once per server, reads single-global
 `settings` rows, and aggregates every tenant into one report. This design
@@ -723,6 +723,35 @@ keys. Tests: extend `pg_integration_email_loop_reads_postgres` to seed a
 second tenant's scoped settings + rows and assert each tenant receives
 only its own bundle (the shared-SKU COGS test already proves the row
 isolation half); unit-test the key-scoping fallback.
+
+**✅ Implemented (2026-08-15), all six points landed in `email_pg.rs`:**
+
+- Settings: `get_setting_scoped_pg` / `set_setting_scoped_pg` +
+  `scoped_key` (suffix form); `get_smtp_config_pg` /
+  `get_report_schedule_pg` / `get_store_name_pg` / `category_means_pg`
+  all take the tenant and read scoped-first with bare-key fallback.
+- Enumeration: `active_tenants_pg` = `tenant_plans ∪ offline_queue ∪
+  sync_terminals` + always `default`, sorted `default`-first.
+- Loop: `try_send_scheduled_pg` walks tenants sequentially; per-tenant
+  errors are logged and the cycle continues.
+- Aggregation: `tenant_id` is threaded into every analytics sub-query
+  (`daily/weekly/monthly revenue` incl. their COGS subqueries,
+  `top_products`, `hourly_heatmap`, `category_breakdown`, both stock
+  alert queries, `category_popularity`'s three queries, and the
+  popularity-trend sales + activity queries).
+- Concurrency: **one deviation from the design** — the design said
+  `pg_advisory_xact_lock`, but the cycle's helpers each use independent
+  pooled connections, so a transaction-scoped lock would guard nothing.
+  `try_send_scheduled_for_tenant_pg` instead holds a **session**
+  `pg_try_advisory_lock(hashtext(tenant_id))` on one dedicated
+  connection for the whole read-due → send → stamp cycle; a second
+  instance gets `false` and skips the tenant. Released on every exit
+  path; worst case it dies with the connection on recycle.
+- Tests (all in `pg_integration_email_loop_reads_postgres`): per-tenant
+  bundle isolation (each tenant sees only its own sales and COGS), scoped
+  key wins + bare-key fallback after deleting the scoped row, enumeration
+  order, and the no-SMTP loop decision paths (already-sent tenant
+  short-circuits before SMTP; unknown tenant skipped cleanly).
 
 ### Desktop Store tenant-scoping audit (2026-08-15)
 
