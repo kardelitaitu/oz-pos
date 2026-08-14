@@ -501,7 +501,7 @@ mod tests {
                 &conn,
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'schema_migrations'",
             ),
-            92,
+            93,
             "table surface drifted"
         );
         assert_eq!(
@@ -595,7 +595,7 @@ mod tests {
                 &conn,
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'schema_migrations'"
             ),
-            92,
+            93,
             "table surface must be unchanged after upgrade"
         );
     }

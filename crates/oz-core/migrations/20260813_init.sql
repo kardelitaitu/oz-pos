@@ -638,6 +638,20 @@ CREATE TABLE IF NOT EXISTS settings (
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
+-- Cloud report-send dedup (sent_reports): one row per (tenant, period),
+-- claimed BEFORE the email is sent so a crash between a successful send
+-- and the last_report_sent_at stamp can never produce a duplicate. The
+-- claim is released only when the send definitively fails (allowing a
+-- retry); on success it stays, and a restart or multi-instance race sees
+-- the (tenant_id, period) conflict and skips the period.
+CREATE TABLE IF NOT EXISTS sent_reports (
+    tenant_id TEXT NOT NULL,
+    period    TEXT NOT NULL,          -- scheduled slot: YYYY-MM-DD (daily/weekly) or YYYY-MM (monthly)
+    report_id TEXT NOT NULL,          -- UUID of the send attempt that claimed the period
+    sent_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (tenant_id, period)
+);
+
 CREATE TABLE IF NOT EXISTS shifts (
     id                    TEXT PRIMARY KEY,
     user_id               TEXT NOT NULL REFERENCES users(id),

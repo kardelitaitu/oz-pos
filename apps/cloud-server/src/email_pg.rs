@@ -31,7 +31,7 @@
 
 use std::time::Duration;
 
-use chrono::{NaiveDate, SecondsFormat, Utc};
+use chrono::{Datelike, NaiveDate, SecondsFormat, Utc};
 use deadpool_postgres::Pool;
 use tracing::{error, info};
 
@@ -44,7 +44,8 @@ use oz_core::db::reports::{
 };
 use oz_core::export::email_report::{ReportEmailBuilder, SMTP_CONFIG_SETTINGS_KEY, SmtpConfig};
 use oz_core::export::email_sender::{
-    LAST_SENT_KEY, filter_analytics_bundle, should_send_scheduled_with_last_sent,
+    LAST_SENT_KEY, filter_analytics_bundle, resolve_now_in_timezone,
+    should_send_scheduled_with_last_sent,
 };
 use oz_core::export::{
     AnalyticsBundle, ExportConfig, ExportMetadata, REPORT_SCHEDULE_SETTINGS_KEY,
@@ -116,9 +117,12 @@ async fn try_send_scheduled_for_tenant_pg(pool: &Pool, tenant: &str) -> Result<(
         .await;
     result
 }
-
 /// The un-serialized per-tenant send cycle: scoped settings → due check →
-/// tenant-filtered report → send → scoped last-sent stamp.
+/// claim the period → tenant-filtered report → send → scoped last-sent
+/// stamp. The `sent_reports` claim is what makes send at-most-once: it is
+/// committed BEFORE the email is sent, so a crash between a successful
+/// send and the last-sent stamp (or a racing second instance) is recovered
+/// by the next cycle seeing the claim and skipping.
 async fn try_send_scheduled_tenant_inner_pg(pool: &Pool, tenant: &str) -> Result<(), String> {
     // Scope 1: Read the tenant's SMTP + schedule config (scoped keys with
     // bare-key fallback), check the schedule.
@@ -140,25 +144,49 @@ async fn try_send_scheduled_tenant_inner_pg(pool: &Pool, tenant: &str) -> Result
         return Ok(());
     }
 
-    // Scope 2: Generate the tenant-filtered report from Postgres.
-    let store_name = get_store_name_pg(pool, tenant).await?;
-    let report = generate_filtered_report_email_pg(pool, &schedule, &store_name, tenant).await?;
+    // Scope 2: Claim the scheduled slot BEFORE generating or sending. If a
+    // previous attempt already claimed it — a crash after a successful
+    // send but before the stamp, or another instance racing — skip, so a
+    // report can never be sent twice for the same period.
+    let period = period_for_schedule(&schedule, resolve_now_in_timezone(&schedule.timezone));
+    let report_id = uuid::Uuid::now_v7().to_string();
+    if !claim_period_pg(pool, tenant, &period, &report_id).await? {
+        info!(tenant, period, "report period already claimed; skipping");
+        return Ok(());
+    }
 
-    let recipients = schedule.recipients.clone();
-    send_email(&smtp_config, &report, &recipients).await?;
+    // Scope 3: Generate, send, stamp. Any failure releases the claim so
+    // the period retries next cycle; a claim that survives (success, or a
+    // crash anywhere after this line) is exactly what prevents duplicates.
+    let result: Result<(), String> = async {
+        let store_name = get_store_name_pg(pool, tenant).await?;
+        let report =
+            generate_filtered_report_email_pg(pool, &schedule, &store_name, tenant).await?;
+        let recipients = schedule.recipients.clone();
+        send_email(&smtp_config, &report, &recipients).await?;
+        let now = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
+        set_setting_scoped_pg(pool, LAST_SENT_KEY, &now, tenant).await?;
+        Ok(())
+    }
+    .await;
 
-    // Record the successful send for dedup under the tenant's scoped key.
-    let now = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
-    set_setting_scoped_pg(pool, LAST_SENT_KEY, &now, tenant).await?;
-
-    info!(
-        "Scheduled report sent to {} recipients (tenant: {tenant}, cadence: {}, types: {:?})",
-        recipients.len(),
-        schedule.cadence,
-        schedule.report_types,
-    );
-
-    Ok(())
+    match result {
+        Ok(()) => {
+            info!(
+                "Scheduled report sent to {} recipients (tenant: {tenant}, cadence: {}, types: {:?}, period: {period})",
+                schedule.recipients.len(),
+                schedule.cadence,
+                schedule.report_types,
+            );
+            Ok(())
+        }
+        Err(e) => {
+            if let Err(release_err) = release_period_pg(pool, tenant, &period).await {
+                error!(tenant, period, error = %release_err, "releasing failed-report claim errored");
+            }
+            Err(e)
+        }
+    }
 }
 
 /// Enumerate the tenants this loop must serve: the union of every
@@ -192,6 +220,70 @@ async fn active_tenants_pg(pool: &Pool) -> Result<Vec<String>, String> {
     });
     tenants.dedup();
     Ok(tenants)
+}
+
+// ── Send dedup (sent_reports) ─────────────────────────────────────
+
+/// The dedup key for a scheduled slot — the calendar bucket the report
+/// belongs to, derived from the cadence in the schedule's timezone so a
+/// crash + retry (or a second instance) always computes the same key:
+/// daily → `YYYY-MM-DD`, weekly → the Monday of the week (`YYYY-MM-DD`),
+/// monthly → `YYYY-MM`.
+fn period_for_schedule(
+    schedule: &ReportScheduleConfig,
+    now_tz: chrono::DateTime<chrono::FixedOffset>,
+) -> String {
+    match schedule.cadence.as_str() {
+        "monthly" => now_tz.format("%Y-%m").to_string(),
+        "weekly" => {
+            // Monday-start week (same shape as the analytics weekly
+            // grouping), so the claim key is stable within the week.
+            let days_back = now_tz.weekday().num_days_from_monday() as i64;
+            (now_tz - chrono::Duration::days(days_back))
+                .format("%Y-%m-%d")
+                .to_string()
+        }
+        _ => now_tz.format("%Y-%m-%d").to_string(),
+    }
+}
+
+/// Claim the `(tenant, period)` slot before sending. Returns `true` when
+/// this attempt is the first to claim it (proceed), `false` when it was
+/// already claimed (skip — a crash-recovery restart or another instance
+/// already sent / attempted it).
+async fn claim_period_pg(
+    pool: &Pool,
+    tenant: &str,
+    period: &str,
+    report_id: &str,
+) -> Result<bool, String> {
+    let client = pool.get().await.map_err(|e| e.to_string())?;
+    let n = client
+        .execute(
+            "INSERT INTO sent_reports (tenant_id, period, report_id)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (tenant_id, period) DO NOTHING",
+            &[&tenant, &period, &report_id],
+        )
+        .await
+        .map_err(|e| format!("DB error: {e}"))?;
+    Ok(n > 0)
+}
+
+/// Release a claim because the send definitively failed, allowing the
+/// period to retry on the next cycle. A send that actually succeeded but
+/// whose SMTP response was lost is the unavoidable at-least-once boundary
+/// of email delivery.
+async fn release_period_pg(pool: &Pool, tenant: &str, period: &str) -> Result<(), String> {
+    let client = pool.get().await.map_err(|e| e.to_string())?;
+    client
+        .execute(
+            "DELETE FROM sent_reports WHERE tenant_id = $1 AND period = $2",
+            &[&tenant, &period],
+        )
+        .await
+        .map_err(|e| format!("DB error: {e}"))?;
+    Ok(())
 }
 
 // ── Settings helpers ───────────────────────────────────────────────
@@ -1660,6 +1752,188 @@ mod tests {
                 "DELETE FROM offline_queue WHERE id = $1",
                 &[&format!("{ns}-queue")],
             )
+            .await
+            .unwrap();
+    }
+
+    // ── sent_reports dedup (at-most-once send) ─────────────────────
+
+    /// The dedup key must be stable per cadence: daily/weekly → the day
+    /// (weekly on its Monday), monthly → the month — so a crash + retry
+    /// always recomputes the same key for the same scheduled slot.
+    #[test]
+    fn period_for_schedule_buckets_by_cadence() {
+        // 2026-01-15 is a Thursday; the Monday of that week is 2026-01-12.
+        let now_tz = chrono::DateTime::parse_from_rfc3339("2026-01-15T09:00:00+00:00").unwrap();
+        let base = || ReportScheduleConfig {
+            enabled: true,
+            cadence: "daily".into(),
+            report_types: vec!["daily_revenue".into()],
+            recipients: vec!["a@b.c".into()],
+            send_at_time: "08:00".into(),
+            timezone: "UTC".into(),
+            lookback_days: 7,
+        };
+
+        let mut daily = base();
+        daily.cadence = "daily".into();
+        assert_eq!(period_for_schedule(&daily, now_tz), "2026-01-15");
+
+        let mut weekly = base();
+        weekly.cadence = "weekly".into();
+        assert_eq!(period_for_schedule(&weekly, now_tz), "2026-01-12");
+
+        let mut monthly = base();
+        monthly.cadence = "monthly".into();
+        assert_eq!(period_for_schedule(&monthly, now_tz), "2026-01");
+    }
+
+    /// Claim/release semantics against a live Postgres: the first claim
+    /// wins, a second claim for the same period loses (that is the
+    /// crash-recovery dedup), a different period is independent, and
+    /// releasing a failed claim lets the period retry.
+    #[tokio::test]
+    async fn pg_integration_sent_reports_claim_release() {
+        let url = std::env::var("OZ_TEST_PG_URL")
+            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+        let pool = match crate::db::DbPool::connect_postgres(&url, false, 20).await {
+            Ok(crate::db::DbPool::Postgres(pool)) => pool,
+            Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+            Err(e) => {
+                eprintln!("PG sent_reports integration test skipped: {e}");
+                return;
+            }
+        };
+        let tenant = format!("pg-sr-test-{}", uuid::Uuid::now_v7());
+        let period = "2026-01-15";
+        {
+            let client = pool.get().await.unwrap();
+            client
+                .execute("DELETE FROM sent_reports WHERE tenant_id = $1", &[&tenant])
+                .await
+                .unwrap();
+        }
+
+        // First claim wins.
+        assert!(
+            claim_period_pg(&pool, &tenant, period, "id-1")
+                .await
+                .unwrap()
+        );
+        // The same period is already claimed — a restart or racing
+        // instance must skip it.
+        assert!(
+            !claim_period_pg(&pool, &tenant, period, "id-2")
+                .await
+                .unwrap()
+        );
+        // A different period is independent.
+        assert!(
+            claim_period_pg(&pool, &tenant, "2026-01-16", "id-3")
+                .await
+                .unwrap()
+        );
+        // Releasing a failed claim lets the period retry.
+        release_period_pg(&pool, &tenant, period).await.unwrap();
+        assert!(
+            claim_period_pg(&pool, &tenant, period, "id-4")
+                .await
+                .unwrap()
+        );
+
+        let client = pool.get().await.unwrap();
+        client
+            .execute("DELETE FROM sent_reports WHERE tenant_id = $1", &[&tenant])
+            .await
+            .unwrap();
+    }
+
+    /// The loop must skip an already-claimed period BEFORE sending: with a
+    /// due schedule (send_at_time = now) and the period pre-claimed, the
+    /// inner cycle returns Ok without ever attempting SMTP — proving a
+    /// crash after a successful send can never re-send the report.
+    #[tokio::test]
+    async fn pg_integration_sent_reports_skips_claimed_period_before_smtp() {
+        let url = std::env::var("OZ_TEST_PG_URL")
+            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+        let pool = match crate::db::DbPool::connect_postgres(&url, false, 20).await {
+            Ok(crate::db::DbPool::Postgres(pool)) => pool,
+            Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+            Err(e) => {
+                eprintln!("PG sent_reports integration test skipped: {e}");
+                return;
+            }
+        };
+        let ns = format!("pg-sr-skip-{}", uuid::Uuid::now_v7());
+        let tenant = format!("{ns}-t");
+        let now = Utc::now();
+        // A due schedule: send_at_time is the current minute, so the
+        // scheduler's 2-minute time-of-day gate passes deterministically.
+        let schedule = ReportScheduleConfig {
+            enabled: true,
+            cadence: "daily".into(),
+            report_types: vec!["daily_revenue".into()],
+            recipients: vec!["x@y.z".into()],
+            send_at_time: now.format("%H:%M").to_string(),
+            timezone: "UTC".into(),
+            lookback_days: 7,
+        };
+        let period = period_for_schedule(&schedule, resolve_now_in_timezone(&schedule.timezone));
+        {
+            let client = pool.get().await.unwrap();
+            client
+                .execute("DELETE FROM sent_reports WHERE tenant_id = $1", &[&tenant])
+                .await
+                .unwrap();
+            // Scoped SMTP + schedule, no last-sent, and the period already
+            // claimed (as if a crashed earlier attempt had sent it).
+            for (key, value) in [
+                (
+                    scoped_key(SMTP_CONFIG_SETTINGS_KEY, &tenant),
+                    serde_json::to_string(&SmtpConfig {
+                        host: "smtp.invalid".into(),
+                        port: 25,
+                        username: None,
+                        password: None,
+                        from: "r@x.yz".into(),
+                        use_tls: false,
+                    })
+                    .unwrap(),
+                ),
+                (
+                    scoped_key(REPORT_SCHEDULE_SETTINGS_KEY, &tenant),
+                    serde_json::to_string(&schedule).unwrap(),
+                ),
+            ] {
+                set_setting_pg(&pool, &key, &value).await.unwrap();
+            }
+            claim_period_pg(&pool, &tenant, &period, "crashed-attempt")
+                .await
+                .unwrap();
+        }
+
+        // If the dedup fails, this would attempt SMTP to smtp.invalid and
+        // return Err — Ok proves the skip happened before any send.
+        try_send_scheduled_tenant_inner_pg(&pool, &tenant)
+            .await
+            .expect("already-claimed period must skip before SMTP");
+
+        // Cleanup.
+        let client = pool.get().await.unwrap();
+        for (sql, key) in [
+            (
+                "DELETE FROM settings WHERE key = $1",
+                scoped_key(SMTP_CONFIG_SETTINGS_KEY, &tenant),
+            ),
+            (
+                "DELETE FROM settings WHERE key = $1",
+                scoped_key(REPORT_SCHEDULE_SETTINGS_KEY, &tenant),
+            ),
+        ] {
+            client.execute(sql, &[&key]).await.unwrap();
+        }
+        client
+            .execute("DELETE FROM sent_reports WHERE tenant_id = $1", &[&tenant])
             .await
             .unwrap();
     }

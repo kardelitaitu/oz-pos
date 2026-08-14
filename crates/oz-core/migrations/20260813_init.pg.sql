@@ -191,6 +191,21 @@ CREATE TABLE IF NOT EXISTS settings (
     updated_at TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
 );
 
+-- Cloud report-send dedup (sent_reports): one row per (tenant, period),
+-- claimed BEFORE the email is sent so a crash between a successful send
+-- and the last_report_sent_at stamp can never produce a duplicate. The
+-- claim is released only when the send definitively fails (allowing a
+-- retry); on success it stays, and a restart or multi-instance race sees
+-- the (tenant_id, period) conflict and skips the period.
+
+CREATE TABLE IF NOT EXISTS sent_reports (
+    tenant_id TEXT NOT NULL,
+    period    TEXT NOT NULL,          -- scheduled slot: YYYY-MM-DD (daily/weekly) or YYYY-MM (monthly)
+    report_id TEXT NOT NULL,          -- UUID of the send attempt that claimed the period
+    sent_at   TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
+    PRIMARY KEY (tenant_id, period)
+);
+
 
 CREATE TABLE IF NOT EXISTS "stock_counts" (
     id           TEXT PRIMARY KEY,
@@ -1778,8 +1793,9 @@ DECLARE
 BEGIN
     FOREACH t IN ARRAY ARRAY['bundle_items','offline_queue','product_activity',
                             'product_bundles','product_taxes','product_variants',
-                            'products','sales','stripe_customers','sync_terminals',
-                            'tax_rates','tenant_plans','tenant_subscription','users']
+                            'products','sales','sent_reports','stripe_customers',
+                            'sync_terminals','tax_rates','tenant_plans',
+                            'tenant_subscription','users']
     LOOP
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
         IF NOT EXISTS (

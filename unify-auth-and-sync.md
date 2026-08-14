@@ -110,7 +110,7 @@ license_keys, tenants, subscriptions, tenant_machines
 web_users (future website — per website-plan.md)
 ```
 
-### Sync DB — Postgres (the cloud server's 92 tables, unchanged)
+### Sync DB — Postgres (the cloud server's 93 tables, unchanged)
 
 ```
 offline_queue, products, tax_rates, users, terminals,
@@ -718,10 +718,16 @@ isolates the aggregation itself.
 (sequential per-tenant work in one task). Multiple instances must not
 send the same tenant's report twice: wrap each tenant's send in a
 `pg_advisory_xact_lock(hashtext(tenant_id))` so the other instance skips
-it. Note the pre-existing at-most-once gap (stamp happens after a
-successful send; a crash between send and stamp can duplicate) — fixing
-it properly needs a `sent_reports (tenant_id, period, report_id)` table,
-which is future hardening, not part of this change.
+it. The at-most-once gap (a crash between a successful send and the
+last-sent stamp could duplicate) is closed by the `sent_reports
+(tenant_id, period, report_id)` table — **implemented**: the period
+(daily/weekly/monthly calendar bucket in the schedule's timezone) is
+claimed with `INSERT … ON CONFLICT (tenant_id, period) DO NOTHING`
+BEFORE generating or sending; a second claim loses and the cycle skips,
+so a crash-recovery restart or a racing instance can never re-send the
+same period. The claim is released only when the send definitively
+fails (allowing a retry); a send that succeeded but whose SMTP response
+was lost is the unavoidable at-least-once boundary of email delivery.
 
 **6. Rollout.** No data migration: existing bare keys are `default`'s
 config. A second tenant is enabled purely by provisioning its scoped
@@ -758,6 +764,20 @@ isolation half); unit-test the key-scoping fallback.
   key wins + bare-key fallback after deleting the scoped row, enumeration
   order, and the no-SMTP loop decision paths (already-sent tenant
   short-circuits before SMTP; unknown tenant skipped cleanly).
+- At-most-once send: the new `sent_reports (tenant_id, period,
+  report_id)` table (93rd table, both schemas; RLS-enrolled via the
+  generator) is claimed before the email is sent
+  (`claim_period_pg` — `ON CONFLICT DO NOTHING`), so a crash between a
+  successful send and the last-sent stamp — or a racing instance — is
+  recovered by the next cycle seeing the claim and skipping; the claim
+  is released only on an observed send failure
+  (`release_period_pg`). `period_for_schedule` buckets by cadence in
+  the schedule's timezone (`YYYY-MM-DD` daily, Monday `YYYY-MM-DD`
+  weekly, `YYYY-MM` monthly), reusing the now-public
+  `resolve_now_in_timezone`. Tests: cadence bucketing unit test,
+  live-PG claim-wins/second-claim-loses/release-retries, and a due
+  schedule with a pre-claimed period that returns Ok without ever
+  attempting SMTP.
 - Provisioning: `crates/oz-api/src/routes/settings.rs` ships the
   admin-gated `GET/PUT /api/v1/settings` endpoint (registered in
   `oz-api`'s public router, `X-Admin-Key` like token minting). PUT

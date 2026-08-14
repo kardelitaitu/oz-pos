@@ -239,7 +239,9 @@ pub fn generate_filtered_report_email(
 /// Resolve the current date-time in the given IANA timezone name.
 ///
 /// Falls back to UTC if the timezone name is unrecognised or parsing fails.
-fn resolve_now_in_timezone(tz_name: &str) -> chrono::DateTime<chrono::FixedOffset> {
+/// Resolve the current instant in a named IANA timezone (falling back to
+/// UTC when the name is unknown).
+pub fn resolve_now_in_timezone(tz_name: &str) -> chrono::DateTime<chrono::FixedOffset> {
     // Try well-known timezone abbreviations and IANA names.
     // For a full implementation, use the `chrono-tz` crate.
     // This function handles the most common cases.
