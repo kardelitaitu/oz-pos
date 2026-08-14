@@ -653,7 +653,7 @@ tenant-blind surface, audited table by table.
 | Webhook `finalize_sale` enqueue | ✅ scoped | Tenant flows from the sale row — no more hardcoded `'default'` |
 | `sales` table | ✅ has `tenant_id` (default `'default'`) | Stamped by REST `create_sale` from the JWT claims; `payments` needs no tenant column (it joins through `sales.id`) |
 | Report-sender email loop (`email_pg.rs`) | ⚠️ tenant-blind (aggregation) but row-safe | Every SKU-keyed product join (daily/weekly/monthly COGS, top products, category breakdown, popularity trend, `product_activity`) now resolves within the sale's tenant (`ON p.sku = sl.sku AND p.tenant_id = s.tenant_id`; `product_activity` gained a `tenant_id` column). `pg_integration_email_loop_reads_postgres` proves a shared SKU across two tenants keeps its own COGS. Per-tenant scheduling/aggregation is designed below (§11.5 "Per-tenant report scheduling") — not yet implemented |
-| Desktop `Store` (oz-core, SQLite) | ✅ single-tenant by construction | `create_sale` + the payment-completion paths now stamp `tenant_id = 'default'` explicitly (same identity contract as the cloud REST path, asserted in `create_sale_persists_header`). The app never sets another tenant, so unscoped by-SKU/username queries are fine; if a desktop DB ever holds foreign tenants, the Store must add `WHERE tenant_id = 'default'` to those queries (`db/products.rs` lines ~536-1207) |
+| Desktop `Store` (oz-core, SQLite) | ✅ single-tenant by construction | `create_sale` + the payment-completion paths stamp `tenant_id = 'default'` explicitly (asserted in `create_sale_persists_header`). The unscoped by-SKU/username queries are fine while each POS keeps its own DB file; the full inventory of what a shared-data rollout must scope is in §11.5 "Desktop Store tenant-scoping audit" (recommendation: a startup integrity check + the ~10 SKU/username-keyed statements, not a wholesale tenant API) |
 | Health endpoint queue depth | ✅ global by design | Aggregate ops metric — correct as-is |
 
 **Recommended Phase-4 order:** (1) ~~`sales.tenant_id` + REST/webhook threading~~ — **done** → (2) per-tenant report settings + tenant-scoped analytics → (3) RLS as the enforcement backstop.
@@ -723,6 +723,56 @@ keys. Tests: extend `pg_integration_email_loop_reads_postgres` to seed a
 second tenant's scoped settings + rows and assert each tenant receives
 only its own bundle (the shared-SKU COGS test already proves the row
 isolation half); unit-test the key-scoping fallback.
+
+### Desktop Store tenant-scoping audit (2026-08-15)
+
+Per-tenant `UNIQUE (tenant_id, sku)` / `UNIQUE (tenant_id, username)` is
+live in the schema, so the desktop `Store`'s unscoped queries are now the
+only place a bare SKU/username lookup can multi-match. This is the
+inventory of what a real multi-tenant rollout must scope.
+
+**The surface (oz-core, SQLite `Store`):**
+
+| Bucket | Where | Statements |
+|--------|-------|------------|
+| SKU-keyed product reads/writes | `db/products.rs` | get by sku (672), by barcode (685), duplicate check (649), partial update (536), `track_serial` update (698), delete (717), id-by-sku (915); category cleanup (845) |
+| id-keyed product reads | `db/products.rs` | sku-by-id (929), `product_type`-by-id (943), list queries (173–290, 1103) |
+| Cross-file SKU lookups/joins | `db/sales.rs` (cost freeze 129, line validate 738/789), `inventory.rs`, `refunds.rs`, `kds.rs`, `stock_counts.rs`, `stock_transfers.rs`, `shifts.rs`, `settings.rs` | ~76 sku-keyed statements across 10 files; most are `WHERE sku = ?` reads, a handful are test literals |
+| Username-keyed user reads/writes | `db/staff.rs` | list (157), by id (178), by username (282), create (349, 721…), update (407, 438), delete (457) |
+| Lists & aggregations | `db/products.rs`, `db/staff.rs`, `db/reports.rs`, `db/popularity.rs`, `db/analytics.rs` | whole-table scans — safe only because the desktop DB is single-tenant by construction |
+| Already tenant-aware | `sync_client.rs` | snapshot upserts conflict on `(tenant_id, sku)` / `(tenant_id, username)` |
+
+**What actually breaks if a desktop DB ever holds a foreign-tenant row:**
+
+1. **SKU/username-keyed single-row reads and writes** — with per-tenant
+   uniqueness, `WHERE sku = ?` can return one row per tenant; `query_row`
+   errors on multi-match and writes hit the wrong row. This is the small,
+   must-fix set: products.rs 536/649/672/685/698/717/915 + sales.rs
+   129/738/789 + staff.rs 282, each gaining `AND tenant_id = 'default'`
+   (or a tenant parameter).
+2. **Cross-file SKU joins** (stock, refunds, KDS, reports) — same
+   multi-match ambiguity; scope by `(tenant_id, sku)` when touched.
+3. **id-keyed reads** (929, 943, staff 178, 407/438/457) — UUIDs are
+   globally unique so nothing breaks, but a cross-tenant id lookup is a
+   leak vector; add the filter for defense-in-depth.
+4. **Lists & aggregations** — only a leak if foreign rows exist; no
+   change needed while each POS keeps its own DB file.
+
+**Recommended approach (not sprinkling 40+ `WHERE tenant_id` clauses):**
+
+- **Scope by construction**: the desktop/tablet app keeps one DB file per
+  store, so foreign rows should never exist. Add a cheap startup
+  integrity check (`SELECT COUNT(*) FROM products WHERE tenant_id !=
+  'default'`) that fails loudly if they appear, instead of rewriting the
+  whole Store.
+- **Fix the must-break set** (bucket 1, ~10 statements) when multi-tenancy
+  actually ships.
+- **Defer** id-keyed defense-in-depth and the aggregation surface until
+  the Store is ever pointed at shared data — today the cloud syncs
+  reference data *into* the local DB rather than reading from it.
+
+This mirrors how the cloud side was handled: per-tenant constraints + the
+queries that break under them, not a wholesale tenant API.
 
 ### Test plan (what proves the port is right)
 
