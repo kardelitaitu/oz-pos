@@ -40,7 +40,7 @@ pub static SYNC_ANCHOR_EXPIRED_TOTAL: LazyLock<Counter> = LazyLock::new(|| {
 
 /// Total number of offline_queue rows that failed to decode during a pull
 /// (SYNC-10). A non-zero count indicates schema drift between the server
-/// and the `row_to_item` converter — the client receives a 5xx rather than
+/// and the sync-store row decoder — the client receives a 5xx rather than
 /// a silently truncated page, so this is an operator-visible failure signal.
 pub static SYNC_PULL_ROW_DECODE_FAILURES_TOTAL: LazyLock<Counter> = LazyLock::new(|| {
     let c = Counter::new(

@@ -52,7 +52,7 @@ impl DbPool {
         if let Some(ref url) = config.database_url
             && (url.starts_with("postgres://") || url.starts_with("postgresql://"))
         {
-            return Self::connect_postgres(url, config.require_tls).await;
+            return Self::connect_postgres(url, config.require_tls, config.db_pool_size).await;
         }
         Self::connect_sqlite(&config.db_path)
     }
@@ -120,7 +120,12 @@ impl DbPool {
     ///
     /// When `require_tls` is set, the URL must specify `sslmode=require`;
     /// otherwise startup fails rather than allowing a plaintext fallback.
-    pub async fn connect_postgres(url: &str, require_tls: bool) -> Result<Self, DbError> {
+    /// `pool_size` bounds the deadpool connection pool (max open connections).
+    pub async fn connect_postgres(
+        url: &str,
+        require_tls: bool,
+        pool_size: usize,
+    ) -> Result<Self, DbError> {
         use deadpool_postgres::{Manager, ManagerConfig, RecyclingMethod};
 
         let config = tokio_postgres::Config::from_str(url)
@@ -163,7 +168,7 @@ impl DbPool {
         let manager = Manager::from_config(config, tls, mgr_config);
 
         let pool = deadpool_postgres::Pool::builder(manager)
-            .max_size(8)
+            .max_size(pool_size)
             .build()
             .map_err(|e| DbError::Pool(e.to_string()))?;
 
@@ -178,31 +183,18 @@ impl DbPool {
             .await
             .map_err(|e| DbError::Connection(e.to_string()))?;
 
-        // Create the offline_queue table if not exists (PG-compatible DDL)
+        // Apply the full schema — the Postgres port of the SQLite init
+        // migration (92 tables, indexes, triggers, seed rows). `batch_execute`
+        // sends the whole script as one simple-query message, which Postgres
+        // executes in a single implicit transaction, so the migration is
+        // atomic as well as idempotent (`IF NOT EXISTS` / `ON CONFLICT DO
+        // NOTHING` / `CREATE OR REPLACE`).
         client
-            .batch_execute(
-                "CREATE TABLE IF NOT EXISTS offline_queue (
-                    id TEXT PRIMARY KEY,
-                    action TEXT NOT NULL,
-                    payload TEXT NOT NULL,
-                    status TEXT NOT NULL DEFAULT 'pending',
-                    retry_count INTEGER NOT NULL DEFAULT 0,
-                    last_error TEXT,
-                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                    synced_at TIMESTAMPTZ,
-                    priority INTEGER NOT NULL DEFAULT 1
-                );
-                CREATE TABLE IF NOT EXISTS processed_webhooks (
-                    event_id TEXT PRIMARY KEY,
-                    provider TEXT NOT NULL,
-                    received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                    event_type TEXT
-                );",
-            )
+            .batch_execute(oz_core::migrations::PG_INIT)
             .await
             .map_err(|e| DbError::Migration(e.to_string()))?;
 
-        info!("PostgreSQL database connected and tables initialised");
+        info!("PostgreSQL database connected and full schema applied");
         Ok(Self::Postgres(pool))
     }
 
@@ -278,6 +270,7 @@ pub enum DbError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
     fn sqlite_in_memory_creates_db() {
@@ -356,7 +349,7 @@ mod tests {
 
     #[tokio::test]
     async fn postgres_url_parsing_rejects_bad_url() {
-        let result = DbPool::connect_postgres("not-a-url", false).await;
+        let result = DbPool::connect_postgres("not-a-url", false, 20).await;
         // This should fail because Config::from_str will reject invalid URLs
         assert!(result.is_err());
     }
@@ -364,7 +357,7 @@ mod tests {
     #[tokio::test]
     async fn postgres_url_parsing_accepts_valid_url() {
         // This won't connect, but the URL parsing should succeed
-        let result = DbPool::connect_postgres("postgresql://localhost:5432/test", false).await;
+        let result = DbPool::connect_postgres("postgresql://localhost:5432/test", false, 20).await;
         // Will fail at connection, not parsing
         let err = result.unwrap_err();
         let msg = err.to_string();
@@ -378,7 +371,7 @@ mod tests {
     async fn require_tls_rejects_url_without_sslmode_require() {
         // No sslmode → defaults to `prefer`, which could fall back to
         // plaintext, so the TLS requirement must fail before connecting.
-        let err = DbPool::connect_postgres("postgresql://localhost:5432/test", true)
+        let err = DbPool::connect_postgres("postgresql://localhost:5432/test", true, 20)
             .await
             .unwrap_err();
         assert!(
@@ -392,7 +385,7 @@ mod tests {
         // sslmode=require passes the check; it then fails because no server
         // is listening — a Connection error, not a config error.
         let err =
-            DbPool::connect_postgres("postgresql://localhost:5432/test?sslmode=require", true)
+            DbPool::connect_postgres("postgresql://localhost:5432/test?sslmode=require", true, 20)
                 .await
                 .unwrap_err();
         let msg = err.to_string();
@@ -407,6 +400,7 @@ mod tests {
     static ENV_LOCK: std::sync::LazyLock<tokio::sync::Mutex<()>> =
         std::sync::LazyLock::new(|| tokio::sync::Mutex::new(()));
 
+    #[serial]
     #[tokio::test]
     async fn from_env_defaults_to_sqlite() {
         let _guard = ENV_LOCK.lock().await;
@@ -423,6 +417,7 @@ mod tests {
         unsafe { std::env::remove_var("OZ_DB_PATH") };
     }
 
+    #[serial]
     #[tokio::test]
     async fn from_env_detects_postgres_url() {
         let _guard = ENV_LOCK.lock().await;
@@ -498,7 +493,7 @@ mod tests {
     #[tokio::test]
     async fn pg_integration_connect_and_create_tables() {
         let url = "postgres://postgres:postgres@localhost:15432/postgres";
-        let pool = match DbPool::connect_postgres(url, false).await {
+        let pool = match DbPool::connect_postgres(url, false, 20).await {
             Ok(p) => p,
             Err(e) => {
                 eprintln!("PG integration test skipped: {e}");
@@ -526,5 +521,34 @@ mod tests {
             .expect("offline_queue query should succeed");
         let count: i64 = row.get(0);
         assert!(count >= 0, "offline_queue table should exist");
+
+        // The full Postgres migration (not the old 2-table stub) must have
+        // applied: 92 base tables and the 4 rewritten triggers. `>=` tolerates
+        // a shared dev database with extra objects.
+        let table_count: i64 = client
+            .query_one(
+                "SELECT COUNT(*) FROM information_schema.tables
+                 WHERE table_schema = 'public' AND table_type = 'BASE TABLE'",
+                &[],
+            )
+            .await
+            .expect("information_schema query should succeed")
+            .get(0);
+        assert!(
+            table_count >= 92,
+            "expected the full 92-table schema, found {table_count} tables"
+        );
+        let trigger_count: i64 = client
+            .query_one(
+                "SELECT COUNT(*) FROM pg_trigger WHERE NOT tgisinternal",
+                &[],
+            )
+            .await
+            .expect("pg_trigger query should succeed")
+            .get(0);
+        assert!(
+            trigger_count >= 4,
+            "expected the 4 rewritten triggers, found {trigger_count}"
+        );
     }
 }

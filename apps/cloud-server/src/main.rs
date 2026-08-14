@@ -31,6 +31,7 @@ mod rate_limit;
 mod redirect;
 mod shutdown;
 mod sync_api;
+mod sync_store;
 mod webhooks;
 
 use std::sync::Arc;
@@ -55,6 +56,10 @@ use crate::sync_api::{SyncState, sync_router};
 pub struct CloudServerState {
     /// Database connection wrapped for axum's `State` extractor.
     pub db: Arc<Mutex<Connection>>,
+    /// Optional Postgres pool (Phase 1.2). `Some` on the Postgres branch;
+    /// the health handler reads the sync queue from it instead of the
+    /// (empty, in-memory) SQLite fallback.
+    pub pg: Option<deadpool_postgres::Pool>,
     /// Instant captured at startup for uptime calculation.
     pub started_at: Instant,
     /// P5-3: Stripe webhook signing secret (loaded from `STRIPE_WEBHOOK_SECRET` env var).
@@ -162,6 +167,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             info!("running with SQLite backend");
             let state = CloudServerState {
                 db: conn.clone(),
+                pg: None,
                 started_at: Instant::now(),
                 stripe_webhook_secret: config.stripe_webhook_secret.clone(),
                 square_webhook_signature_key: config.square_webhook_signature_key.clone(),
@@ -177,10 +183,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             let rate_limiter = RateLimiterState::new();
             start_rate_limit_cleanup(rate_limiter.clone());
 
-            let app = build_router(state, rate_limiter, &config);
+            let app = build_router(state, rate_limiter, &config, None);
             serve(app, config).await?;
         }
-        db::DbPool::Postgres(_pg_pool) => {
+        db::DbPool::Postgres(pg_pool) => {
             info!("running with PostgreSQL backend");
             // For PostgreSQL, we use a PostgreSQL-compatible router.
             // Currently, the oz-api router requires SQLite, so we fall
@@ -190,6 +196,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 .map_err(|e| format!("failed to create in-memory SQLite for API: {e}"))?;
             let state = CloudServerState {
                 db: conn.sqlite_conn(),
+                pg: Some(pg_pool.clone()),
                 started_at: Instant::now(),
                 stripe_webhook_secret: config.stripe_webhook_secret.clone(),
                 square_webhook_signature_key: config.square_webhook_signature_key.clone(),
@@ -200,7 +207,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             let rate_limiter = RateLimiterState::new();
             start_rate_limit_cleanup(rate_limiter.clone());
 
-            let app = build_router(state, rate_limiter, &config);
+            // Phase 1.5: P-1 offline-queue retention on Postgres (the SQLite
+            // prune loop does not run on this branch).
+            prune::start_prune_loop_pg(pg_pool.clone());
+
+            let app = build_router(state, rate_limiter, &config, Some(pg_pool.clone()));
             serve(app, config).await?;
         }
     }
@@ -283,33 +294,63 @@ async fn health_handler(
 ) -> Json<HealthResponse> {
     let uptime = state.started_at.elapsed().as_secs();
 
-    // P8-3: all DB queries in a single lock acquisition.
-    let (db_connected, db_latency_us, sync_queue_depth, last_sync_at) = {
-        let db_start = std::time::Instant::now();
-        let conn = state.db.lock().await;
+    // P8-3: all DB queries in a single lock acquisition. On the Postgres
+    // branch the queue depth / last-sync are read from the real database
+    // (the in-memory SQLite fallback is empty by design).
+    let (db_connected, db_latency_us, sync_queue_depth, last_sync_at, db_kind) =
+        if let Some(pool) = &state.pg {
+            let db_start = std::time::Instant::now();
+            let (connected, depth, last) = match pool.get().await {
+                Ok(client) => {
+                    let depth = client
+                        .query_one(
+                            "SELECT COUNT(*) FROM offline_queue WHERE status = 'pending'",
+                            &[],
+                        )
+                        .await
+                        .map(|r| r.get::<_, i64>(0))
+                        .unwrap_or(0);
+                    let last = client
+                        .query_one(
+                            "SELECT MAX(synced_at) FROM offline_queue \
+                             WHERE synced_at IS NOT NULL",
+                            &[],
+                        )
+                        .await
+                        .map(|r| r.get::<_, Option<String>>(0))
+                        .unwrap_or(None);
+                    (true, depth, last)
+                }
+                Err(_) => (false, 0, None),
+            };
+            let latency = db_start.elapsed().as_micros() as u64;
+            (connected, latency, depth, last, "postgres")
+        } else {
+            let db_start = std::time::Instant::now();
+            let conn = state.db.lock().await;
 
-        let ping_result = conn.query_row("SELECT 1", [], |_| Ok(()));
-        let latency = db_start.elapsed().as_micros() as u64;
-        let connected = ping_result.is_ok();
+            let ping_result = conn.query_row("SELECT 1", [], |_| Ok(()));
+            let latency = db_start.elapsed().as_micros() as u64;
+            let connected = ping_result.is_ok();
 
-        let depth = conn
-            .query_row(
-                "SELECT COUNT(*) FROM offline_queue WHERE status = 'pending'",
-                [],
-                |row| row.get::<_, i64>(0),
-            )
-            .unwrap_or(0);
+            let depth = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM offline_queue WHERE status = 'pending'",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap_or(0);
 
-        let last = conn
-            .query_row(
-                "SELECT MAX(synced_at) FROM offline_queue WHERE synced_at IS NOT NULL",
-                [],
-                |row| row.get::<_, Option<String>>(0),
-            )
-            .unwrap_or(None);
+            let last = conn
+                .query_row(
+                    "SELECT MAX(synced_at) FROM offline_queue WHERE synced_at IS NOT NULL",
+                    [],
+                    |row| row.get::<_, Option<String>>(0),
+                )
+                .unwrap_or(None);
 
-        (connected, latency, depth, last)
-    };
+            (connected, latency, depth, last, "sqlite")
+        };
 
     // P8-3: record health check Prometheus metrics.
     crate::metrics::HEALTH_CHECKS_TOTAL.inc();
@@ -321,7 +362,7 @@ async fn health_handler(
     Json(HealthResponse {
         status: if db_connected { "ok" } else { "degraded" },
         version: env!("CARGO_PKG_VERSION"),
-        db: "sqlite".into(),
+        db: db_kind.into(),
         uptime_seconds: uptime,
         db_connected,
         db_latency_us,
@@ -331,10 +372,15 @@ async fn health_handler(
 }
 
 /// Build the combined router: REST API + sync endpoints + rate limiting.
+///
+/// `pg` is the optional Postgres pool for the sync data layer (Phase 1.2).
+/// When set, push/pull/status/snapshot/plan read and write Postgres; when
+/// `None`, the sync function keeps using the shared SQLite connection.
 pub fn build_router(
     state: CloudServerState,
     rate_limiter: RateLimiterState,
     config: &config::CloudServerConfig,
+    pg: Option<deadpool_postgres::Pool>,
 ) -> Router {
     let cors = CorsLayer::new()
         .allow_methods(Any)
@@ -344,6 +390,9 @@ pub fn build_router(
     // Build the oz-api router (products, categories, sales, health, tokens).
     let api_state = oz_api::AppState {
         db: state.db.clone(),
+        // Phase 1.2: the REST handlers read/write Postgres on the cloud
+        // branch instead of the in-memory SQLite fallback.
+        pg: pg.clone(),
         // ADR sync-auth-hardening P2: gate token minting with the admin key
         // when configured; open in dev mode when unset.
         admin_key: config.admin_key.clone(),
@@ -363,7 +412,8 @@ pub fn build_router(
 
     // Build the sync router (push/pull endpoints) from sync_api module.
     // P8-1: Share the same RateLimiterState with the cleanup task.
-    let sync_state = SyncState::from_with_rate_limiter(state.clone(), rate_limiter);
+    let mut sync_state = SyncState::from_with_rate_limiter(state.clone(), rate_limiter);
+    sync_state.pg = pg;
     let sync_router = sync_router(sync_state, config.enforce_plans);
 
     // Build the webhook router (unauthenticated — HMAC signature verification).
@@ -451,6 +501,7 @@ mod tests {
             db_path: ":memory:".into(),
             database_url: None,
             require_tls: false,
+            db_pool_size: 20,
             port: 3099,
             admin_key: None,
             enforce_plans: false,
@@ -474,13 +525,19 @@ mod tests {
     fn test_app() -> Router {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
+            pg: None,
             started_at: Instant::now(),
             stripe_webhook_secret: None,
             square_webhook_signature_key: None,
             square_webhook_url: None,
         };
         let config = test_config();
-        build_router(state, crate::rate_limit::RateLimiterState::new(), &config)
+        build_router(
+            state,
+            crate::rate_limit::RateLimiterState::new(),
+            &config,
+            None,
+        )
     }
 
     /// Create a test JWT token.
@@ -582,6 +639,7 @@ mod tests {
     async fn cloud_health_reports_queue_depth() {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
+            pg: None,
             started_at: Instant::now(),
             stripe_webhook_secret: None,
             square_webhook_signature_key: None,
@@ -591,6 +649,7 @@ mod tests {
             state.clone(),
             crate::rate_limit::RateLimiterState::new(),
             &test_config(),
+            None,
         );
 
         // Seed some pending queue items
@@ -622,6 +681,7 @@ mod tests {
     async fn cloud_health_reports_last_sync_at() {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
+            pg: None,
             started_at: Instant::now(),
             stripe_webhook_secret: None,
             square_webhook_signature_key: None,
@@ -631,6 +691,7 @@ mod tests {
             state.clone(),
             crate::rate_limit::RateLimiterState::new(),
             &test_config(),
+            None,
         );
 
         // Seed some items with various synced_at times
@@ -708,13 +769,14 @@ mod tests {
     async fn sync_push_and_pull_roundtrip() {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
+            pg: None,
             started_at: Instant::now(),
             stripe_webhook_secret: None,
             square_webhook_signature_key: None,
             square_webhook_url: None,
         };
         let rate_limiter = crate::rate_limit::RateLimiterState::new();
-        let app = build_router(state.clone(), rate_limiter, &test_config());
+        let app = build_router(state.clone(), rate_limiter, &test_config(), None);
 
         // Seed an item directly with tenant_id
         {
@@ -780,13 +842,14 @@ mod tests {
     async fn multi_tenant_tenant_a_push_invisible_to_tenant_b() {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
+            pg: None,
             started_at: Instant::now(),
             stripe_webhook_secret: None,
             square_webhook_signature_key: None,
             square_webhook_url: None,
         };
         let rate_limiter = crate::rate_limit::RateLimiterState::new();
-        let app = build_router(state.clone(), rate_limiter, &test_config());
+        let app = build_router(state.clone(), rate_limiter, &test_config(), None);
 
         // Tenant A pushes two items (real UUID ids — push_handler rejects
         // non-UUID ids; see round 121)
@@ -828,13 +891,14 @@ mod tests {
     async fn multi_tenant_bidirectional_isolation() {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
+            pg: None,
             started_at: Instant::now(),
             stripe_webhook_secret: None,
             square_webhook_signature_key: None,
             square_webhook_url: None,
         };
         let rate_limiter = crate::rate_limit::RateLimiterState::new();
-        let app = build_router(state.clone(), rate_limiter, &test_config());
+        let app = build_router(state.clone(), rate_limiter, &test_config(), None);
 
         // Tenant A pushes one item (real UUID id)
         let id_a = uuid::Uuid::now_v7().to_string();
@@ -883,13 +947,14 @@ mod tests {
     async fn multi_tenant_status_scoped_per_tenant() {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
+            pg: None,
             started_at: Instant::now(),
             stripe_webhook_secret: None,
             square_webhook_signature_key: None,
             square_webhook_url: None,
         };
         let rate_limiter = crate::rate_limit::RateLimiterState::new();
-        let app = build_router(state.clone(), rate_limiter, &test_config());
+        let app = build_router(state.clone(), rate_limiter, &test_config(), None);
 
         // Tenant A pushes 3 items (real UUID ids)
         let a_ids: Vec<String> = (0..3).map(|_| uuid::Uuid::now_v7().to_string()).collect();
@@ -936,13 +1001,14 @@ mod tests {
     async fn multi_tenant_default_tenant_isolation() {
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
+            pg: None,
             started_at: Instant::now(),
             stripe_webhook_secret: None,
             square_webhook_signature_key: None,
             square_webhook_url: None,
         };
         let rate_limiter = crate::rate_limit::RateLimiterState::new();
-        let app = build_router(state.clone(), rate_limiter, &test_config());
+        let app = build_router(state.clone(), rate_limiter, &test_config(), None);
 
         // Push items as default tenant (real UUID id)
         let def_id = uuid::Uuid::now_v7().to_string();
@@ -983,6 +1049,7 @@ mod tests {
         let secret = "whsec_lifecycle_test";
         let state = CloudServerState {
             db: Arc::new(Mutex::new(fresh_db())),
+            pg: None,
             started_at: Instant::now(),
             stripe_webhook_secret: Some(secret.to_string()),
             square_webhook_signature_key: None,
@@ -992,7 +1059,7 @@ mod tests {
         config.enforce_plans = true;
         config.stripe_webhook_secret = Some(secret.to_string());
         let rate_limiter = crate::rate_limit::RateLimiterState::new();
-        let app = build_router(state.clone(), rate_limiter, &config);
+        let app = build_router(state.clone(), rate_limiter, &config, None);
 
         let tenant = "lifecycle-tenant";
         let sale_id = uuid::Uuid::now_v7().to_string();

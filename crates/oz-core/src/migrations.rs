@@ -29,6 +29,16 @@ pub const ALL: &[Migration] = &[Migration {
     sql: include_str!("../migrations/20260813_init.sql"),
 }];
 
+/// Postgres DDL for the full schema, parallel to the SQLite `init.sql`.
+///
+/// Generated from `20260813_init.sql` by
+/// `scripts/generate-pg-migration.py` (types mapped, foreign-key table
+/// order topologically sorted, SQLite triggers rewritten as plpgsql). The
+/// cloud server's `DbPool::connect_postgres` applies this instead of the
+/// SQLite registry; it is idempotent (`IF NOT EXISTS`, `ON CONFLICT DO
+/// NOTHING`, `CREATE OR REPLACE`).
+pub const PG_INIT: &str = include_str!("../migrations/20260813_init.pg.sql");
+
 /// Apply every unapplied migration and configure runtime PRAGMAs.
 ///
 /// After migrations, sets WAL journal mode + busy_timeout for better
@@ -476,7 +486,8 @@ mod tests {
     }
 
     /// Pin the consolidated schema surface: 92 tables, 121 indexes, 4
-    /// triggers. A count assertion catches a table/index/trigger silently
+    /// triggers. (The generated `*.pg.sql` Postgres port is excluded — see
+    /// [`pg_init_declares_same_table_surface_as_sqlite`].) A count assertion catches a table/index/trigger silently
     /// dropping out of `init.sql` — something a name-list check misses when a
     /// name changes.
     #[test]
@@ -1225,6 +1236,33 @@ mod tests {
     }
 
     #[test]
+    fn pg_init_declares_same_table_surface_as_sqlite() {
+        // The Postgres port must cover every table in the SQLite init and
+        // must not leak SQLite-only dialect through the generator.
+        fn table_count(sql: &str) -> usize {
+            sql.matches("CREATE TABLE IF NOT EXISTS").count()
+        }
+        let sqlite = include_str!("../migrations/20260813_init.sql");
+        assert_eq!(
+            table_count(PG_INIT),
+            table_count(sqlite),
+            "Postgres DDL table count drifted from the SQLite init — regenerate scripts/generate-pg-migration.py"
+        );
+        for leftover in [
+            "strftime",
+            "AUTOINCREMENT",
+            "PRAGMA",
+            "INSERT OR IGNORE",
+            ") STRICT",
+        ] {
+            assert!(
+                !PG_INIT.contains(leftover),
+                "Postgres DDL still contains SQLite dialect: {leftover:?}"
+            );
+        }
+    }
+
+    #[test]
     fn migration_registry_matches_filesystem() {
         // DB-01: the registry is the source of truth. Every `.sql` file under
         // crates/oz-core/migrations/ must have EXACTLY ONE registry entry,
@@ -1232,12 +1270,16 @@ mod tests {
         // file that is never registered (or a registered entry whose file
         // was deleted) silently changes what fresh installs vs upgrades
         // produce, so this must fail at test time.
+        //
+        // `*.pg.sql` files are the generated Postgres ports of the SQLite
+        // registry and are applied separately by the cloud server, so they
+        // are not registry entries and are excluded here.
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
         let mut files: Vec<String> = std::fs::read_dir(&dir)
             .expect("migrations directory must exist")
             .filter_map(|e| e.ok())
             .map(|e| e.file_name().to_string_lossy().into_owned())
-            .filter(|n| n.ends_with(".sql"))
+            .filter(|n| n.ends_with(".sql") && !n.ends_with(".pg.sql"))
             .collect();
         files.sort();
 

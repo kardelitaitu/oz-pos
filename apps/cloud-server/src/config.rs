@@ -32,11 +32,16 @@ pub struct CloudServerConfig {
     /// PostgreSQL instead of SQLite.
     pub database_url: Option<String>,
 
-    /// When `true` (`OZ_DB_REQUIRE_TLS=1`), a PostgreSQL `database_url` must
-    /// set `sslmode=require` — otherwise startup fails. This prevents the
-    /// rustls client from silently falling back to plaintext (`sslmode=prefer`
-    /// is the default when the URL omits it).
+    /// When `true` (`OZ_DB_REQUIRE_TLS=1`, or implied by `OZ_PRODUCTION=1`),
+    /// a PostgreSQL `database_url` must set `sslmode=require` — otherwise
+    /// startup fails. This prevents the rustls client from silently falling
+    /// back to plaintext (`sslmode=prefer` is the default when the URL omits
+    /// it).
     pub require_tls: bool,
+
+    /// Maximum number of connections in the PostgreSQL pool
+    /// (`OZ_DB_POOL_SIZE`, default: `20`). Ignored for SQLite.
+    pub db_pool_size: usize,
 
     /// HTTP listen port (default: `3099`).
     pub port: u16,
@@ -52,7 +57,7 @@ pub struct CloudServerConfig {
 
     /// When `true` (`OZ_PRODUCTION=1`), startup fails unless `OZ_API_SECRET`
     /// and `OZ_ADMIN_KEY` are both set — no dev-secret JWT fallback and no
-    /// open token mint in production.
+    /// open token mint in production. Also implies [`CloudServerConfig::require_tls`].
     pub production: bool,
 
     /// Log output format.
@@ -129,7 +134,8 @@ impl CloudServerConfig {
 
         let database_url = std::env::var("DATABASE_URL").ok();
         let db_path = std::env::var("OZ_DB_PATH").unwrap_or_else(|_| "oz-pos.db".into());
-        let require_tls = env_bool("OZ_DB_REQUIRE_TLS");
+        let require_tls = resolve_require_tls(env_bool("OZ_DB_REQUIRE_TLS"), production);
+        let db_pool_size = env_usize("OZ_DB_POOL_SIZE", 20);
 
         validate_production(production, api_secret.as_deref(), admin_key.as_deref())?;
 
@@ -137,6 +143,7 @@ impl CloudServerConfig {
             db_path,
             database_url,
             require_tls,
+            db_pool_size,
             port,
             admin_key,
             enforce_plans,
@@ -160,6 +167,26 @@ fn env_bool(name: &str) -> bool {
     std::env::var(name)
         .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "on" | "ON"))
         .unwrap_or(false)
+}
+
+/// Parse a positive integer environment variable.
+///
+/// Returns `default` when the variable is unset, empty, or not a positive
+/// integer — the pool must always have at least one connection.
+fn env_usize(name: &str, default: usize) -> usize {
+    parse_usize(std::env::var(name).as_deref().unwrap_or(""), default)
+}
+
+/// Parse a positive integer from a string, falling back to `default`.
+///
+/// Extracted as a pure helper so the parsing rules are unit-testable
+/// without environment mutation.
+fn parse_usize(s: &str, default: usize) -> usize {
+    s.trim()
+        .parse::<usize>()
+        .ok()
+        .filter(|n| *n > 0)
+        .unwrap_or(default)
 }
 
 /// Validate production-mode requirements.
@@ -186,9 +213,18 @@ fn validate_production(
     Ok(())
 }
 
+/// Resolve whether the Postgres connection must use TLS.
+///
+/// `OZ_PRODUCTION=1` implies TLS even when `OZ_DB_REQUIRE_TLS` is unset, so a
+/// single production flag enforces the encrypted-connection requirement.
+fn resolve_require_tls(flag: bool, production: bool) -> bool {
+    flag || production
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
     fn env_bool_true_values() {
@@ -258,5 +294,96 @@ mod tests {
     #[test]
     fn dev_mode_allows_missing_secrets() {
         assert!(validate_production(false, None, None).is_ok());
+    }
+
+    #[test]
+    fn production_implies_require_tls() {
+        assert!(resolve_require_tls(false, true));
+        assert!(resolve_require_tls(true, false));
+        assert!(!resolve_require_tls(false, false));
+    }
+
+    #[test]
+    fn parse_usize_accepts_positive_values() {
+        assert_eq!(parse_usize("32", 20), 32);
+        assert_eq!(parse_usize(" 8 ", 20), 8);
+    }
+
+    #[test]
+    fn parse_usize_falls_back_on_invalid_values() {
+        assert_eq!(parse_usize("0", 20), 20);
+        assert_eq!(parse_usize("-1", 20), 20);
+        assert_eq!(parse_usize("abc", 20), 20);
+        assert_eq!(parse_usize("", 20), 20);
+    }
+
+    /// Run `f` with the given environment variables temporarily set/removed,
+    /// restoring their original values afterwards. Callers must be `#[serial]`
+    /// because `std::env::set_var` is process-global (and unsafe in Rust 2024).
+    fn with_env(vars: &[(&str, Option<&str>)], f: impl FnOnce()) {
+        let saved: Vec<(&str, Option<String>)> = vars
+            .iter()
+            .map(|(name, _)| (*name, std::env::var(name).ok()))
+            .collect();
+        for (name, value) in vars {
+            // SAFETY: `#[serial]` runs env-mutating tests one at a time; the
+            // saved values are restored before this function returns.
+            match value {
+                Some(v) => unsafe { std::env::set_var(name, v) },
+                None => unsafe { std::env::remove_var(name) },
+            }
+        }
+        f();
+        for (name, original) in saved {
+            match original {
+                Some(v) => unsafe { std::env::set_var(name, v) },
+                None => unsafe { std::env::remove_var(name) },
+            }
+        }
+    }
+
+    /// The startup config gate — the first thing `main()` does before serving
+    /// — must fail when `OZ_PRODUCTION=1` but a required secret is missing, so
+    /// the process exits instead of falling back to the dev secret.
+    #[serial]
+    #[test]
+    fn production_mode_fails_startup_without_api_secret() {
+        with_env(
+            &[
+                ("OZ_PRODUCTION", Some("1")),
+                ("OZ_API_SECRET", None),
+                ("OZ_ADMIN_KEY", Some("test-admin-key")),
+                ("OZ_REDIRECT_ONLY", None),
+            ],
+            || {
+                let err = CloudServerConfig::from_env()
+                    .expect_err("production boot without OZ_API_SECRET must fail");
+                assert!(
+                    err.contains("OZ_PRODUCTION=1 requires OZ_API_SECRET"),
+                    "expected a clear OZ_API_SECRET error, got: {err}"
+                );
+            },
+        );
+    }
+
+    #[serial]
+    #[test]
+    fn production_mode_fails_startup_without_admin_key() {
+        with_env(
+            &[
+                ("OZ_PRODUCTION", Some("1")),
+                ("OZ_API_SECRET", Some("test-secret")),
+                ("OZ_ADMIN_KEY", None),
+                ("OZ_REDIRECT_ONLY", None),
+            ],
+            || {
+                let err = CloudServerConfig::from_env()
+                    .expect_err("production boot without OZ_ADMIN_KEY must fail");
+                assert!(
+                    err.contains("OZ_PRODUCTION=1 requires OZ_ADMIN_KEY"),
+                    "expected a clear OZ_ADMIN_KEY error, got: {err}"
+                );
+            },
+        );
     }
 }

@@ -14,7 +14,7 @@ use axum::{
     middleware,
     routing::{get, post},
 };
-use rusqlite::{Connection, params};
+use rusqlite::Connection;
 use tokio::sync::Mutex;
 
 use oz_api::auth::{ApiTokenClaims, auth_middleware};
@@ -32,6 +32,10 @@ type SnapshotCache = Arc<Mutex<std::collections::HashMap<String, CacheEntry>>>;
 #[derive(Clone)]
 pub struct SyncState {
     pub db: Arc<Mutex<Connection>>,
+    /// Postgres pool for the sync data layer (Phase 1.2). `None` keeps the
+    /// SQLite backend; `Some` routes push/pull/status/snapshot/plan through
+    /// Postgres while the REST API continues to use the SQLite connection.
+    pub pg: Option<deadpool_postgres::Pool>,
     /// Snapshot cache: keyed by tenant_id, stores (generated_at, JSON bytes).
     /// P-3 Step 4: in-memory cache with 5-minute TTL.
     pub snapshot_cache: SnapshotCache,
@@ -48,8 +52,20 @@ impl SyncState {
     ) -> Self {
         Self {
             db: state.db,
+            pg: None,
             snapshot_cache: Arc::new(Mutex::new(std::collections::HashMap::new())),
             rate_limiter,
+        }
+    }
+
+    /// Build the sync data backend for this state (Phase 1.2).
+    ///
+    /// Cheap to call: it clones the already-shared SQLite `Arc` or Postgres
+    /// pool, so handlers can obtain a backend without holding state locks.
+    fn store(&self) -> crate::sync_store::SyncStore {
+        match &self.pg {
+            Some(pool) => crate::sync_store::SyncStore::postgres(pool.clone()),
+            None => crate::sync_store::SyncStore::sqlite(self.db.clone()),
         }
     }
 }
@@ -67,7 +83,7 @@ impl From<super::CloudServerState> for SyncState {
 /// Middleware order (axum: first `.layer()` = outermost, runs FIRST):
 ///
 ///   `.layer(axum::Extension(rate_limiter.clone()))` — makes RateLimiterState available
-///   `.layer(axum::Extension(db.clone()))`             — makes the DB available to plan_middleware
+///   `.layer(axum::Extension(store))`                  — makes the SyncStore available to plan_middleware
 ///   `.layer(axum::Extension(enforce_plans))`          — plan gate on/off
 ///   `.layer(middleware::from_fn(auth_middleware))`        ← outermost (injects ApiTokenClaims)
 ///   `.layer(middleware::from_fn(plan_middleware))`        ← reads claims, gates free tenants
@@ -84,7 +100,7 @@ pub fn sync_router(state: SyncState, enforce_plans: bool) -> Router {
 /// tests and by [`sync_router`], which reads `OZ_ENFORCE_PLANS`).
 pub fn sync_router_with_plan_enforcement(state: SyncState, enforce_plans: bool) -> Router {
     let rate_limiter = state.rate_limiter.clone();
-    let db = state.db.clone();
+    let store = state.store();
     Router::new()
         .route("/api/sync/push", post(push_handler))
         .route("/api/sync/pull", post(pull_handler))
@@ -95,7 +111,7 @@ pub fn sync_router_with_plan_enforcement(state: SyncState, enforce_plans: bool) 
         .layer(middleware::from_fn(plan_middleware))
         .layer(middleware::from_fn(auth_middleware))
         .layer(axum::Extension(rate_limiter))
-        .layer(axum::Extension(db))
+        .layer(axum::Extension(store))
         .layer(axum::Extension(enforce_plans))
 }
 
@@ -105,7 +121,7 @@ pub fn sync_router_with_plan_enforcement(state: SyncState, enforce_plans: bool) 
 /// claims are available, before the handler.
 pub async fn plan_middleware(
     Extension(enforce_plans): Extension<bool>,
-    Extension(db): Extension<Arc<Mutex<Connection>>>,
+    Extension(store): Extension<crate::sync_store::SyncStore>,
     request: Request,
     next: middleware::Next,
 ) -> Result<axum::response::Response, axum::response::Response> {
@@ -122,18 +138,13 @@ pub async fn plan_middleware(
         .and_then(|claims| claims.tenant_id.as_deref())
         .unwrap_or("default");
 
-    let plan = {
-        let conn = db.lock().await;
-        oz_core::Store::new(&conn)
-            .get_tenant_plan(tenant_id)
-            .map_err(|_| {
-                (
-                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                    axum::Json(serde_json::json!({ "error": "internal" })),
-                )
-                    .into_response()
-            })?
-    };
+    let plan = store.get_tenant_plan(tenant_id).await.map_err(|_| {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            axum::Json(serde_json::json!({ "error": "internal" })),
+        )
+            .into_response()
+    })?;
 
     if plan.unwrap_or(TenantPlan::Free) == TenantPlan::Free {
         return Err((
@@ -157,22 +168,21 @@ async fn push_handler(
     axum::Json(items): axum::Json<Vec<oz_core::offline::OfflineQueueItem>>,
 ) -> Result<axum::Json<PushResponse>, (axum::http::StatusCode, String)> {
     let start = std::time::Instant::now();
-    use oz_core::offline::OfflineQueueStatus;
 
     // Tenant isolation: use the tenant_id from the JWT claims, not the
     // incoming JSON body, to prevent tenant spoofing.
     let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
 
-    let db_start = std::time::Instant::now();
-    let conn = state.db.lock().await;
-    metrics::DB_CONTENTION_SECONDS
-        .with_label_values(&["push"])
-        .observe(db_start.elapsed().as_secs_f64());
-    let mut results = Vec::with_capacity(items.len());
-
     // Estimate batch size for metrics.
     let batch_bytes = serde_json::to_vec(&items).map(|v| v.len()).unwrap_or(0) as f64;
     metrics::SYNC_BATCH_SIZE_BYTES.observe(batch_bytes);
+
+    // Phase 1.2: the per-item INSERT goes through the sync store, so the
+    // SQLite and Postgres backends share one code path. `db_start` now
+    // measures backend access for the batch (mutex lock / pool acquisition).
+    let store = state.store();
+    let db_start = std::time::Instant::now();
+    let mut results = Vec::with_capacity(items.len());
 
     for item in &items {
         // Defense-in-depth (round 119): ids are client-supplied strings that
@@ -188,36 +198,42 @@ async fn push_handler(
             });
             continue;
         }
-        match conn.execute(
-            "INSERT INTO offline_queue (id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-            params![
-                item.id, item.action, item.payload,
-                OfflineQueueStatus::Pending.as_stored_str(),
-                item.retry_count, item.last_error, item.created_at, item.synced_at,
-                tenant_id,
-            ],
-        ) {
-            Ok(_) => {
-                metrics::SYNC_PUSHES_TOTAL.with_label_values(&["accepted"]).inc();
-                results.push(PushOutcome::Accepted)
+        match store.push_item(item, tenant_id).await {
+            Ok(PushOutcome::Accepted) => {
+                metrics::SYNC_PUSHES_TOTAL
+                    .with_label_values(&["accepted"])
+                    .inc();
+                results.push(PushOutcome::Accepted);
+            }
+            Ok(PushOutcome::Rejected { reason }) => {
+                let label = if reason.starts_with("duplicate id:") {
+                    "conflict"
+                } else {
+                    "rejected"
+                };
+                metrics::SYNC_PUSHES_TOTAL.with_label_values(&[label]).inc();
+                results.push(PushOutcome::Rejected { reason });
+            }
+            Ok(PushOutcome::Conflict(conflict_item)) => {
+                // The store never resolves conflicts, but the match must be
+                // exhaustive over the wire type.
+                metrics::SYNC_PUSHES_TOTAL
+                    .with_label_values(&["conflict"])
+                    .inc();
+                results.push(PushOutcome::Conflict(conflict_item));
             }
             Err(e) => {
-                if e.to_string().contains("UNIQUE") {
-                    metrics::SYNC_PUSHES_TOTAL.with_label_values(&["conflict"]).inc();
-                    results.push(PushOutcome::Rejected {
-                        reason: format!("duplicate id: {}", item.id),
-                    });
-                } else {
-                    metrics::SYNC_PUSHES_TOTAL.with_label_values(&["rejected"]).inc();
-                    results.push(PushOutcome::Rejected {
-                        reason: format!("database error: {e}"),
-                    });
-                }
+                metrics::SYNC_PUSHES_TOTAL
+                    .with_label_values(&["rejected"])
+                    .inc();
+                return Err((axum::http::StatusCode::INTERNAL_SERVER_ERROR, e));
             }
         }
     }
 
+    metrics::DB_CONTENTION_SECONDS
+        .with_label_values(&["push"])
+        .observe(db_start.elapsed().as_secs_f64());
     metrics::SYNC_PUSH_DURATION_MS.observe(start.elapsed().as_secs_f64() * 1000.0);
     Ok(axum::Json(PushResponse { results }))
 }
@@ -236,11 +252,10 @@ async fn pull_handler(
 ) -> Result<axum::Json<PullResponse>, (axum::http::StatusCode, String)> {
     let start = std::time::Instant::now();
     let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
+    // Phase 1.2: anchor check + paginated pull go through the sync store,
+    // so the SQLite and Postgres backends share one code path.
+    let store = state.store();
     let db_start = std::time::Instant::now();
-    let conn = state.db.lock().await;
-    metrics::DB_CONTENTION_SECONDS
-        .with_label_values(&["pull"])
-        .observe(db_start.elapsed().as_secs_f64());
 
     // P-1 retention: if the client's anchor (`since`) is older than the
     // oldest retained row, the requested data has been pruned. Skip this
@@ -248,16 +263,8 @@ async fn pull_handler(
     if req.cursor.is_none()
         && let Some(ref since) = req.since
     {
-        let oldest: Option<String> = conn
-            .query_row(
-                "SELECT MIN(created_at) FROM offline_queue WHERE tenant_id = ?1",
-                params![tenant_id],
-                |row| row.get(0),
-            )
-            .ok()
-            .flatten();
-        if let Some(ref oldest_ts) = oldest
-            && since < oldest_ts
+        if let Some(oldest_ts) = store.oldest_created_at(tenant_id).await
+            && since.as_str() < oldest_ts.as_str()
         {
             metrics::SYNC_ANCHOR_EXPIRED_TOTAL.inc();
             return Err((
@@ -285,66 +292,17 @@ async fn pull_handler(
 
     // Build paginated query. Fetch one extra row (501) to detect more pages.
     let limit = 501i64;
-    let mut items: Vec<oz_core::offline::OfflineQueueItem> = if let (Some(ts), Some(cid)) =
-        (&cursor_ts, &cursor_id)
-    {
-        let mut stmt = conn
-            .prepare(
-                "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id, priority
-                 FROM offline_queue
-                 WHERE tenant_id = ?1 AND created_at >= ?2 AND (created_at > ?3 OR (created_at = ?3 AND id > ?4))
-                 ORDER BY created_at ASC, id ASC
-                 LIMIT ?5",
-            )
-            .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-        let rows = stmt
-            .query_map(
-                params![
-                    tenant_id,
-                    req.since.as_deref().unwrap_or(""),
-                    ts,
-                    cid,
-                    limit
-                ],
-                row_to_item,
-            )
-            .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-        collect_pull_rows(rows, tenant_id)?
-    } else if let Some(ref since) = req.since {
-        let mut stmt = conn
-            .prepare(
-                "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id, priority
-                 FROM offline_queue
-                 WHERE created_at >= ?1 AND tenant_id = ?2
-                 ORDER BY created_at ASC, id ASC
-                 LIMIT ?3",
-            )
-            .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-        let rows = stmt
-            .query_map(params![since, tenant_id, limit], row_to_item)
-            .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-        collect_pull_rows(rows, tenant_id)?
-    } else {
-        let mut stmt = conn
-            .prepare(
-                "SELECT id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id, priority
-                 FROM offline_queue
-                 WHERE tenant_id = ?1
-                 ORDER BY created_at ASC, id ASC
-                 LIMIT ?2",
-            )
-            .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-        let rows = stmt
-            .query_map(params![tenant_id, limit], row_to_item)
-            .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-        collect_pull_rows(rows, tenant_id)?
+    let cursor = match (&cursor_ts, &cursor_id) {
+        (Some(ts), Some(cid)) => Some((ts.as_str(), cid.as_str())),
+        _ => None,
     };
+    let mut items: Vec<oz_core::offline::OfflineQueueItem> = store
+        .pull_items(tenant_id, req.since.as_deref(), cursor, limit)
+        .await
+        .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    metrics::DB_CONTENTION_SECONDS
+        .with_label_values(&["pull"])
+        .observe(db_start.elapsed().as_secs_f64());
 
     // P-3: Detect if there are more pages (501st row exists).
     // RUST-07: the pagination cursor is derived from the last *kept* row.
@@ -405,75 +363,23 @@ async fn snapshot_handler(
         }
     }
 
+    // Phase 1.2: reference-data queries go through the sync store so the
+    // SQLite and Postgres backends share one code path.
+    let store = state.store();
     let db_start = std::time::Instant::now();
-    let conn = state.db.lock().await;
-    metrics::DB_CONTENTION_SECONDS
-        .with_label_values(&["snapshot"])
-        .observe(db_start.elapsed().as_secs_f64());
 
     // Query products — scoped to the requesting tenant.
     //
     // SYNC-10: row decode failures fail the whole snapshot (5xx) rather than
     // being silently dropped — a truncated reference-data baseline must never
     // look like a complete one.
-    let products: Vec<serde_json::Value> = match (|| -> Result<_, String> {
-        let mut stmt = conn
-            .prepare(
-                "SELECT id, sku, name, price_minor, currency, category_id, barcode, created_at, updated_at, price_updated_at, track_serial, store_id, brand, rack_location, notes, unit, is_active
-                 FROM products WHERE tenant_id = ?1"
-            )
-            .map_err(|e| e.to_string())?;
-        stmt.query_map(params![tenant_id], |row| {
-            Ok(serde_json::json!({
-                "id": row.get::<_, String>("id")?,
-                "sku": row.get::<_, String>("sku")?,
-                "name": row.get::<_, String>("name")?,
-                "price_minor": row.get::<_, i64>("price_minor")?,
-                "currency": row.get::<_, String>("currency")?,
-                "category_id": row.get::<_, Option<String>>("category_id")?,
-                "barcode": row.get::<_, Option<String>>("barcode")?,
-                "created_at": row.get::<_, String>("created_at")?,
-                "updated_at": row.get::<_, String>("updated_at")?,
-                "price_updated_at": row.get::<_, String>("price_updated_at")?,
-                "track_serial": row.get::<_, bool>("track_serial")?,
-                "store_id": row.get::<_, Option<String>>("store_id")?,
-                "brand": row.get::<_, Option<String>>("brand")?,
-                "rack_location": row.get::<_, Option<String>>("rack_location")?,
-                "notes": row.get::<_, Option<String>>("notes")?,
-                "unit": row.get::<_, Option<String>>("unit")?,
-                "is_active": row.get::<_, bool>("is_active")?
-            }))
-        })
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("product row decode failed: {e}"))
-    })() {
+    let products: Vec<serde_json::Value> = match store.snapshot_products(tenant_id).await {
         Ok(v) => v,
         Err(e) => return Err(error_json(&e)),
     };
 
     // Query tax rates — scoped to the requesting tenant.
-    let tax_rates: Vec<serde_json::Value> = match (|| -> Result<_, String> {
-        let mut stmt = conn
-            .prepare(
-                "SELECT id, name, rate_bps, is_default, is_inclusive, created_at, updated_at FROM tax_rates WHERE tenant_id = ?1"
-            )
-            .map_err(|e| e.to_string())?;
-        stmt.query_map(params![tenant_id], |row| {
-            Ok(serde_json::json!({
-                "id": row.get::<_, String>("id")?,
-                "name": row.get::<_, String>("name")?,
-                "rate_bps": row.get::<_, i64>("rate_bps")?,
-                "is_default": row.get::<_, bool>("is_default")?,
-                "is_inclusive": row.get::<_, bool>("is_inclusive")?,
-                "created_at": row.get::<_, Option<String>>("created_at")?,
-                "updated_at": row.get::<_, Option<String>>("updated_at")?
-            }))
-        })
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("tax rate row decode failed: {e}"))
-    })() {
+    let tax_rates: Vec<serde_json::Value> = match store.snapshot_tax_rates(tenant_id).await {
         Ok(v) => v,
         Err(e) => return Err(error_json(&e)),
     };
@@ -485,30 +391,14 @@ async fn snapshot_handler(
     // clients only receive the minimum non-secret user metadata. User
     // credentials are provisioned through a separate, tightly authorized
     // identity-management flow, never the snapshot.
-    let users: Vec<serde_json::Value> = match (|| -> Result<_, String> {
-        let mut stmt = conn
-            .prepare(
-                "SELECT id, username, display_name, role_id, is_active, created_at, updated_at FROM users WHERE tenant_id = ?1"
-            )
-            .map_err(|e| e.to_string())?;
-        stmt.query_map(params![tenant_id], |row| {
-            Ok(serde_json::json!({
-                "id": row.get::<_, String>("id")?,
-                "username": row.get::<_, String>("username")?,
-                "display_name": row.get::<_, String>("display_name")?,
-                "role_id": row.get::<_, String>("role_id")?,
-                "is_active": row.get::<_, bool>("is_active")?,
-                "created_at": row.get::<_, Option<String>>("created_at")?,
-                "updated_at": row.get::<_, Option<String>>("updated_at")?
-            }))
-        })
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("user row decode failed: {e}"))
-    })() {
+    let users: Vec<serde_json::Value> = match store.snapshot_users(tenant_id).await {
         Ok(v) => v,
         Err(e) => return Err(error_json(&e)),
     };
+
+    metrics::DB_CONTENTION_SECONDS
+        .with_label_values(&["snapshot"])
+        .observe(db_start.elapsed().as_secs_f64());
 
     let snapshot = serde_json::json!({
         "products": products,
@@ -536,24 +426,11 @@ async fn status_handler(
     Extension(claims): Extension<ApiTokenClaims>,
 ) -> axum::Json<SyncStatusResponse> {
     let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
-    let (pending_count, total_tenants) = {
-        let conn = state.db.lock().await;
-        let pending = conn
-            .query_row(
-                "SELECT COUNT(*) FROM offline_queue WHERE status = 'pending' AND tenant_id = ?1",
-                params![tenant_id],
-                |row| row.get::<_, i64>(0),
-            )
-            .unwrap_or(0);
-        let tenants = conn
-            .query_row(
-                "SELECT COUNT(DISTINCT tenant_id) FROM offline_queue",
-                [],
-                |row| row.get::<_, i64>(0),
-            )
-            .unwrap_or(0);
-        (pending, tenants)
-    };
+    let store = state.store();
+    let (pending_count, total_tenants) = (
+        store.pending_count(tenant_id).await,
+        store.distinct_tenant_count().await,
+    );
 
     // P-3: Tiered heartbeat — server tells client how often to poll.
     // < 1000 tenants → 120s, 1000-5000 → 300s, 5000+ → max(300, 10k/count*60).
@@ -582,56 +459,6 @@ pub struct SyncStatusResponse {
     pub pending_count: i64,
     /// Recommended heartbeat interval in seconds (P-3 tiered heartbeat).
     pub heartbeat_interval_secs: u64,
-}
-
-/// Collect `query_map` rows into a `Vec`, failing loudly (SYNC-10).
-///
-/// Previously `rows.filter_map(|r| r.ok()).collect()` silently dropped any
-/// row that failed to decode — a schema mismatch could return an apparently
-/// complete page that omitted changes, and cursors advanced past the gap.
-/// Now a decode failure is logged, counted via the
-/// `sync_pull_row_decode_failures_total` metric, and returned as a 5xx so
-/// the client never mistakes a truncated page for the full set of changes.
-fn collect_pull_rows(
-    rows: impl Iterator<Item = rusqlite::Result<oz_core::offline::OfflineQueueItem>>,
-    tenant_id: &str,
-) -> Result<Vec<oz_core::offline::OfflineQueueItem>, (axum::http::StatusCode, String)> {
-    let mut items = Vec::with_capacity(rows.size_hint().0);
-    for row in rows {
-        match row {
-            Ok(item) => items.push(item),
-            Err(e) => {
-                metrics::SYNC_PULL_ROW_DECODE_FAILURES_TOTAL.inc();
-                tracing::error!(tenant_id, error = %e, "pull: row decode failed — returning 500");
-                return Err((
-                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("offline_queue row decode failed: {e}"),
-                ));
-            }
-        }
-    }
-    Ok(items)
-}
-
-/// Convert a SQLite row to an `OfflineQueueItem`.
-fn row_to_item(row: &rusqlite::Row) -> rusqlite::Result<oz_core::offline::OfflineQueueItem> {
-    let status_str: String = row.get("status")?;
-    Ok(oz_core::offline::OfflineQueueItem {
-        id: row.get("id")?,
-        action: row.get("action")?,
-        payload: row.get("payload")?,
-        status: oz_core::offline::OfflineQueueStatus::from_stored_str(&status_str)
-            .unwrap_or(oz_core::offline::OfflineQueueStatus::Pending),
-        retry_count: row.get("retry_count")?,
-        last_error: row.get("last_error")?,
-        created_at: row.get("created_at")?,
-        synced_at: row.get("synced_at")?,
-        tenant_id: row.get("tenant_id")?,
-        priority: row
-            .get::<_, i32>("priority")
-            .map(oz_core::offline::SyncPriority::from)
-            .unwrap_or(oz_core::offline::SyncPriority::Normal),
-    })
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────
@@ -687,6 +514,7 @@ mod tests {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
             rate_limiter: RateLimiterState::new(),
+            pg: None,
         };
         sync_router(state, false)
     }
@@ -702,6 +530,7 @@ mod tests {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
             rate_limiter: RateLimiterState::new(),
+            pg: None,
         };
         sync_router_with_plan_enforcement(state, enforce)
     }
@@ -718,6 +547,7 @@ mod tests {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
             rate_limiter: RateLimiterState::new(),
+            pg: None,
         };
         {
             let conn = state.db.lock().await;
@@ -807,6 +637,7 @@ mod tests {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
             rate_limiter: RateLimiterState::new(),
+            pg: None,
         };
         let app = test_router_with_state(state.clone());
 
@@ -863,6 +694,7 @@ mod tests {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
             rate_limiter: RateLimiterState::new(),
+            pg: None,
         };
         let app = test_router_with_state(state.clone());
 
@@ -893,6 +725,7 @@ mod tests {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
             rate_limiter: RateLimiterState::new(),
+            pg: None,
         };
         let app = test_router_with_state(state.clone());
 
@@ -964,11 +797,12 @@ mod tests {
         // SYNC-10: a row that fails to decode must fail the whole pull
         // (5xx) rather than being silently dropped. Seed a row whose
         // retry_count is non-numeric (SQLite stores it as TEXT despite the
-        // INTEGER affinity) so row_to_item's `get::<_, i64>` fails.
+        // INTEGER affinity) so the SQLite row decoder's `get::<_, i64>` fails.
         let state = SyncState {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
             rate_limiter: RateLimiterState::new(),
+            pg: None,
         };
         let app = test_router_with_state(state.clone());
 
@@ -997,6 +831,7 @@ mod tests {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
             rate_limiter: RateLimiterState::new(),
+            pg: None,
         };
         let app = test_router_with_state(state.clone());
 
@@ -1099,6 +934,7 @@ mod tests {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
             rate_limiter: RateLimiterState::new(),
+            pg: None,
         };
         let app = test_router_with_state(state.clone());
 
@@ -1138,6 +974,7 @@ mod tests {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
             rate_limiter: RateLimiterState::new(),
+            pg: None,
         };
         let app = test_router_with_state(state.clone());
 
@@ -1179,6 +1016,7 @@ mod tests {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
             rate_limiter: RateLimiterState::new(),
+            pg: None,
         };
         let app = test_router_with_state(state.clone());
 
@@ -1251,6 +1089,7 @@ mod tests {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
             rate_limiter: RateLimiterState::new(),
+            pg: None,
         };
         let app = test_router_with_state(state.clone());
 
@@ -1284,6 +1123,7 @@ mod tests {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
             rate_limiter: RateLimiterState::new(),
+            pg: None,
         };
         let app = test_router_with_state(state.clone());
 
@@ -1321,6 +1161,7 @@ mod tests {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
             rate_limiter: RateLimiterState::new(),
+            pg: None,
         };
         let app = test_router_with_state(state.clone());
 
@@ -1380,6 +1221,7 @@ mod tests {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
             rate_limiter: RateLimiterState::new(),
+            pg: None,
         };
         let app = test_router_with_state(state.clone());
 
@@ -1423,6 +1265,7 @@ mod tests {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
             rate_limiter: RateLimiterState::new(),
+            pg: None,
         };
         let app = test_router_with_state(state.clone());
 
@@ -1570,6 +1413,7 @@ mod tests {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
             rate_limiter: RateLimiterState::new(),
+            pg: None,
         };
         let app = test_router_with_state(state.clone());
 
@@ -1607,6 +1451,7 @@ mod tests {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
             rate_limiter: RateLimiterState::new(),
+            pg: None,
         };
         let app = test_router_with_state(state.clone());
 
@@ -1642,6 +1487,7 @@ mod tests {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
             rate_limiter: RateLimiterState::new(),
+            pg: None,
         };
         let app = test_router_with_state(state);
 
@@ -1694,6 +1540,7 @@ mod tests {
             db: Arc::new(Mutex::new(fresh_db())),
             snapshot_cache: Arc::new(Mutex::new(HashMap::new())),
             rate_limiter: RateLimiterState::new(),
+            pg: None,
         }
     }
 

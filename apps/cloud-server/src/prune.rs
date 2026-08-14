@@ -16,6 +16,17 @@ use rusqlite::Connection;
 use tokio::sync::Mutex;
 use tracing::{error, info};
 
+/// The retention horizon for sync data (P-1): 90 days.
+const RETENTION_DAYS: i64 = 90;
+/// Rows deleted per batch, so neither backend holds a long DELETE transaction.
+const PRUNE_BATCH_SIZE: i64 = 500;
+
+/// ISO-8601 cutoff timestamp (seconds precision) for the retention horizon.
+fn retention_cutoff() -> String {
+    let cutoff = chrono::Utc::now() - chrono::Duration::days(RETENTION_DAYS);
+    cutoff.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+}
+
 /// Start the background prune loop on a shared database connection.
 ///
 /// Spawns a `tokio` task that runs every hour. Each cycle:
@@ -65,8 +76,7 @@ async fn run_prune_cycle(db: &Arc<Mutex<Connection>>) {
         // on large tables and lets incremental_vacuum reclaim space
         // between batches.
         let mut queue_deleted: usize = 0;
-        let cutoff = chrono::Utc::now() - chrono::Duration::days(90);
-        let cutoff_str = cutoff.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let cutoff_str = retention_cutoff();
         loop {
             // Select up to 500 old IDs in a stable order.
             let mut stmt = match conn.prepare(
@@ -140,6 +150,89 @@ async fn run_prune_cycle(db: &Arc<Mutex<Connection>>) {
         Err(e) => {
             error!(error = %e, "prune spawn_blocking panicked");
         }
+    }
+}
+
+/// Start the background prune loop on a Postgres pool (Phase 1.5).
+///
+/// The Postgres loop only applies P-1 offline-queue retention. The
+/// `archive_stock_movements` rollup and SQLite's `incremental_vacuum` are
+/// SQLite-specific: Postgres reclaims space via autovacuum, and the stock
+/// movement rollup has no Postgres port yet (tracked in the plan).
+pub fn start_prune_loop_pg(pool: deadpool_postgres::Pool) {
+    tokio::spawn(async move {
+        info!("prune loop (Postgres) started (interval = 1 hour)");
+
+        // Run immediately on startup so old data doesn't accumulate.
+        run_prune_cycle_pg(&pool).await;
+
+        let mut interval = tokio::time::interval(Duration::from_secs(3600));
+        interval.tick().await;
+
+        loop {
+            interval.tick().await;
+            run_prune_cycle_pg(&pool).await;
+        }
+    });
+}
+
+/// Execute a single Postgres prune cycle: delete `offline_queue` rows older
+/// than the 90-day horizon in cursor-based batches (P-1 Retention).
+async fn run_prune_cycle_pg(pool: &deadpool_postgres::Pool) {
+    let cutoff = retention_cutoff();
+    let mut queue_deleted: usize = 0;
+
+    loop {
+        let client = match pool.get().await {
+            Ok(c) => c,
+            Err(e) => {
+                error!(error = %e, "prune (pg): failed to acquire connection");
+                break;
+            }
+        };
+
+        // Select up to 500 old IDs in a stable order.
+        let ids: Vec<String> = match client
+            .query(
+                "SELECT id FROM offline_queue WHERE created_at < $1 ORDER BY id LIMIT $2",
+                &[&cutoff, &PRUNE_BATCH_SIZE],
+            )
+            .await
+        {
+            Ok(rows) => rows.iter().map(|r| r.get(0)).collect(),
+            Err(e) => {
+                error!(error = %e, "prune (pg): failed to select batch");
+                break;
+            }
+        };
+
+        if ids.is_empty() {
+            break;
+        }
+
+        // Delete the batch. ids are bound as a text array parameter — never
+        // interpolated — because they originate from client pushes and must
+        // always be treated as data, never SQL.
+        let deleted = match client
+            .execute("DELETE FROM offline_queue WHERE id = ANY($1)", &[&ids])
+            .await
+        {
+            Ok(count) => count,
+            Err(e) => {
+                error!(error = %e, "prune (pg): batch delete failed");
+                break;
+            }
+        };
+
+        queue_deleted += deleted as usize;
+        metrics::PRUNE_QUEUE_DELETED_TOTAL.inc_by(deleted as f64);
+    }
+
+    if queue_deleted > 0 {
+        info!(
+            queue_deleted = queue_deleted,
+            "prune cycle (Postgres) completed"
+        );
     }
 }
 #[cfg(test)]
@@ -253,5 +346,71 @@ mod tests {
             2,
             "the prune must record the two deleted rows on the retention counter"
         );
+    }
+
+    /// Integration test: the Postgres prune cycle applies P-1 offline-queue
+    /// retention — old rows (any status) are deleted, recent rows survive.
+    /// Skips when no reachable Postgres is configured, so the suite stays
+    /// green on machines without one.
+    #[tokio::test]
+    async fn pg_integration_prune_ages_out_old_rows() {
+        let url = std::env::var("OZ_TEST_PG_URL")
+            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+
+        let pool = match crate::db::DbPool::connect_postgres(&url, false, 20).await {
+            Ok(crate::db::DbPool::Postgres(pool)) => pool,
+            Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+            Err(e) => {
+                eprintln!("PG prune integration test skipped: {e}");
+                return;
+            }
+        };
+
+        let tenant = format!("pg-prune-test-{}", uuid::Uuid::now_v7());
+        let recent = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        {
+            let client = pool.get().await.unwrap();
+            client
+                .execute(
+                    "INSERT INTO offline_queue (id, action, payload, status, retry_count, last_error, created_at, synced_at, tenant_id, priority)
+                     VALUES
+                     ($1, 'act', '{}', 'pending', 0, NULL, '2025-01-01T00:00:00Z', NULL, $4, 1),
+                     ($2, 'act', '{}', 'synced', 0, NULL, '2025-01-02T00:00:00Z', '2025-01-03T00:00:00Z', $4, 1),
+                     ($3, 'act', '{}', 'pending', 0, NULL, $5, NULL, $4, 1)",
+                    &[
+                        &format!("old-pending-{tenant}"),
+                        &format!("old-synced-{tenant}"),
+                        &format!("recent-{tenant}"),
+                        &tenant,
+                        &recent,
+                    ],
+                )
+                .await
+                .unwrap();
+        }
+
+        super::run_prune_cycle_pg(&pool).await;
+
+        {
+            let client = pool.get().await.unwrap();
+            let rows = client
+                .query(
+                    "SELECT id FROM offline_queue WHERE tenant_id = $1 ORDER BY id",
+                    &[&tenant],
+                )
+                .await
+                .unwrap();
+            let ids: Vec<String> = rows.iter().map(|r| r.get(0)).collect();
+            assert_eq!(
+                ids,
+                vec![format!("recent-{tenant}")],
+                "old pending and old synced rows must be pruned; the recent row survives"
+            );
+
+            client
+                .execute("DELETE FROM offline_queue WHERE tenant_id = $1", &[&tenant])
+                .await
+                .unwrap();
+        }
     }
 }
