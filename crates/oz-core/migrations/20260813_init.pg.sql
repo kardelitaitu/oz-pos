@@ -384,14 +384,14 @@ CREATE TABLE IF NOT EXISTS modifiers (
 
 CREATE TABLE IF NOT EXISTS users (
     id          TEXT PRIMARY KEY,
-    username    TEXT NOT NULL UNIQUE,
+    username    TEXT NOT NULL,
     pin_hash    TEXT NOT NULL,                 -- bcrypt or argon2 hash
     display_name TEXT NOT NULL,
     role_id     TEXT NOT NULL REFERENCES roles(id),
     is_active   BIGINT NOT NULL DEFAULT 1,
     created_at  TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
     updated_at  TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
-, tenant_id TEXT NOT NULL DEFAULT 'default', date_of_birth TEXT, phone TEXT, national_id_type TEXT, national_id TEXT, email TEXT, monthly_take_home_minor BIGINT, emergency_contact_name TEXT, emergency_contact_phone TEXT, job_title TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', address TEXT, language TEXT, avatar TEXT, tax_id TEXT, national_id_expires_at TEXT, emergency_contact_relationship TEXT, hire_date TEXT, national_id_hash TEXT);
+, tenant_id TEXT NOT NULL DEFAULT 'default', date_of_birth TEXT, phone TEXT, national_id_type TEXT, national_id TEXT, email TEXT, monthly_take_home_minor BIGINT, emergency_contact_name TEXT, emergency_contact_phone TEXT, job_title TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', address TEXT, language TEXT, avatar TEXT, tax_id TEXT, national_id_expires_at TEXT, emergency_contact_relationship TEXT, hire_date TEXT, national_id_hash TEXT, UNIQUE (tenant_id, username));
 
 
 CREATE TABLE IF NOT EXISTS "stock_adjustments" (
@@ -449,7 +449,7 @@ CREATE TABLE IF NOT EXISTS terminals (
 
 CREATE TABLE IF NOT EXISTS "products" (
     id          TEXT PRIMARY KEY,
-    sku         TEXT NOT NULL UNIQUE,
+    sku         TEXT NOT NULL,
     name        TEXT NOT NULL,
     price_minor BIGINT NOT NULL CHECK (price_minor >= 0),
     currency    TEXT NOT NULL,
@@ -465,7 +465,7 @@ CREATE TABLE IF NOT EXISTS "products" (
     store_id    TEXT REFERENCES store_profiles(id) ON DELETE SET NULL ON UPDATE CASCADE,
     tenant_id   TEXT NOT NULL DEFAULT 'default',
     kitchen_zone TEXT
-, brand TEXT, rack_location TEXT, notes TEXT, unit TEXT, is_active BIGINT NOT NULL DEFAULT 1, default_supplier_id TEXT REFERENCES suppliers(id), popularity_score DOUBLE PRECISION NOT NULL DEFAULT 0);
+, brand TEXT, rack_location TEXT, notes TEXT, unit TEXT, is_active BIGINT NOT NULL DEFAULT 1, default_supplier_id TEXT REFERENCES suppliers(id), popularity_score DOUBLE PRECISION NOT NULL DEFAULT 0, UNIQUE (tenant_id, sku));
 
 
 CREATE TABLE IF NOT EXISTS category_taxes (
@@ -732,7 +732,8 @@ CREATE TABLE IF NOT EXISTS inventory (
 
 CREATE TABLE IF NOT EXISTS product_bundles (
     id          TEXT PRIMARY KEY,
-    bundle_sku  TEXT NOT NULL UNIQUE REFERENCES products(sku),
+    bundle_sku  TEXT NOT NULL UNIQUE,
+    tenant_id   TEXT NOT NULL DEFAULT 'default',
     name        TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     -- The bundle's own price in minor units (overrides the sum of components if set)
@@ -741,7 +742,8 @@ CREATE TABLE IF NOT EXISTS product_bundles (
     currency    TEXT NOT NULL DEFAULT 'USD',
     active      BIGINT NOT NULL DEFAULT 1,
     created_at  TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
-    updated_at  TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
+    updated_at  TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
+    FOREIGN KEY (tenant_id, bundle_sku) REFERENCES products(tenant_id, sku)
 );
 
 
@@ -765,16 +767,19 @@ CREATE TABLE IF NOT EXISTS product_recipes (
 
 
 CREATE TABLE IF NOT EXISTS product_taxes (
-    product_sku  TEXT NOT NULL REFERENCES products(sku) ON DELETE CASCADE,
+    product_sku  TEXT NOT NULL,
+    tenant_id    TEXT NOT NULL DEFAULT 'default',
     tax_rate_id  TEXT NOT NULL REFERENCES tax_rates(id) ON DELETE CASCADE,
     created_at   TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
-    PRIMARY KEY (product_sku, tax_rate_id)
+    PRIMARY KEY (product_sku, tax_rate_id),
+    FOREIGN KEY (tenant_id, product_sku) REFERENCES products(tenant_id, sku) ON DELETE CASCADE
 );
 
 
 CREATE TABLE IF NOT EXISTS product_variants (
     id              TEXT PRIMARY KEY,
-    parent_sku      TEXT NOT NULL REFERENCES products(sku) ON DELETE CASCADE,
+    parent_sku      TEXT NOT NULL,
+    tenant_id       TEXT NOT NULL DEFAULT 'default',
     name            TEXT NOT NULL,
     sku             TEXT NOT NULL UNIQUE,
     price_minor     BIGINT,           -- NULL means use parent price
@@ -783,7 +788,8 @@ CREATE TABLE IF NOT EXISTS product_variants (
     sort_order      BIGINT NOT NULL DEFAULT 0,
     is_active       BIGINT NOT NULL DEFAULT 1,
     created_at      TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
-    updated_at      TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
+    updated_at      TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')),
+    FOREIGN KEY (tenant_id, parent_sku) REFERENCES products(tenant_id, sku) ON DELETE CASCADE
 );
 
 
@@ -1026,10 +1032,12 @@ CREATE TABLE IF NOT EXISTS stock_transfer_lines (
 CREATE TABLE IF NOT EXISTS bundle_items (
     id          TEXT PRIMARY KEY,
     bundle_id   TEXT NOT NULL REFERENCES product_bundles(id),
-    sku         TEXT NOT NULL REFERENCES products(sku),
+    sku         TEXT NOT NULL,
+    tenant_id   TEXT NOT NULL DEFAULT 'default',
     qty         BIGINT NOT NULL DEFAULT 1,
     -- Override the component's individual price (empty = use product's price)
-    unit_price_minor BIGINT
+    unit_price_minor BIGINT,
+    FOREIGN KEY (tenant_id, sku) REFERENCES products(tenant_id, sku)
 );
 
 

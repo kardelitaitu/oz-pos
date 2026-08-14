@@ -5,7 +5,7 @@
 //! `GET /api/v1/sales/{id}` — get sale detail with line items.
 
 use axum::{
-    Json,
+    Extension, Json,
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
@@ -16,6 +16,7 @@ use oz_core::db::Store;
 use oz_core::{Cart, CartLine, CoreError, Money, Sale, SaleStatus, Sku};
 
 use crate::AppState;
+use crate::auth::ApiTokenClaims;
 
 // ── Error mapping ─────────────────────────────────────────────────────
 
@@ -89,6 +90,7 @@ pub struct SaleStatusResponse {
 /// header + lines in a single transaction. Returns 201 with the full sale.
 pub async fn create_sale(
     State(state): State<AppState>,
+    Extension(claims): Extension<ApiTokenClaims>,
     Json(body): Json<CreateSaleRequest>,
 ) -> Response {
     if body.lines.is_empty() {
@@ -126,7 +128,8 @@ pub async fn create_sale(
     };
 
     if let Some(pool) = &state.pg {
-        return match crate::pg::create_sale(pool, &sale).await {
+        let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
+        return match crate::pg::create_sale(pool, tenant_id, &sale).await {
             Ok(()) => (StatusCode::CREATED, Json(sale)).into_response(),
             Err(e) => e.into_response(),
         };

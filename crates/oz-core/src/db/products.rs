@@ -1150,7 +1150,7 @@ impl Store<'_> {
                                    created_at, updated_at, price_updated_at, track_serial,
                                    product_type, version)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8, ?8, 0, ?9, 1)
-             ON CONFLICT(sku) DO NOTHING",
+             ON CONFLICT (tenant_id, sku) DO NOTHING",
             params![
                 id,
                 sku.trim(),

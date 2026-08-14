@@ -89,10 +89,15 @@ pub struct PatchStockResponse {
 
 // ── Handlers ──────────────────────────────────────────────────────────
 
-/// List all products, ordered by name, with category name and stock.
-pub async fn list_products(State(state): State<AppState>) -> Response {
+/// List the authenticated tenant's products, ordered by name, with category
+/// name and stock.
+pub async fn list_products(
+    State(state): State<AppState>,
+    Extension(claims): Extension<ApiTokenClaims>,
+) -> Response {
     if let Some(pool) = &state.pg {
-        return match crate::pg::list_products(pool).await {
+        let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
+        return match crate::pg::list_products(pool, tenant_id).await {
             Ok(products) => Json(products).into_response(),
             Err(e) => e.into_response(),
         };
@@ -109,9 +114,14 @@ pub async fn list_products(State(state): State<AppState>) -> Response {
 /// Get a single product by SKU, including category name and stock.
 ///
 /// Returns JSON `null` when the product is not found.
-pub async fn get_product(State(state): State<AppState>, Path(sku): Path<String>) -> Response {
+pub async fn get_product(
+    State(state): State<AppState>,
+    Extension(claims): Extension<ApiTokenClaims>,
+    Path(sku): Path<String>,
+) -> Response {
     if let Some(pool) = &state.pg {
-        return match crate::pg::get_product(pool, &sku).await {
+        let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
+        return match crate::pg::get_product(pool, tenant_id, &sku).await {
             Ok(Some(p)) => Json(Some(p)).into_response(),
             Ok(None) => Json(None as Option<ProductWithDetails>).into_response(),
             Err(e) => e.into_response(),
@@ -215,11 +225,13 @@ pub async fn create_product(
 #[allow(deprecated)]
 pub async fn patch_stock(
     State(state): State<AppState>,
+    Extension(claims): Extension<ApiTokenClaims>,
     Path(sku): Path<String>,
     Json(body): Json<PatchStockRequest>,
 ) -> Response {
     if let Some(pool) = &state.pg {
-        return match crate::pg::adjust_stock(pool, &sku, body.delta).await {
+        let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
+        return match crate::pg::adjust_stock(pool, tenant_id, &sku, body.delta).await {
             Ok(adj) => {
                 let response = PatchStockResponse {
                     sku,

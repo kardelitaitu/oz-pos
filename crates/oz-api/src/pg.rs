@@ -521,21 +521,35 @@ fn pg_row_to_product_with_details(
     })
 }
 
-/// List all products, ordered by name, with category name and stock.
-pub async fn list_products(pool: &Pool) -> Result<Vec<ProductWithDetails>, PgError> {
+/// List a tenant's products, ordered by name, with category name and stock.
+pub async fn list_products(
+    pool: &Pool,
+    tenant_id: &str,
+) -> Result<Vec<ProductWithDetails>, PgError> {
     let client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
     let rows = client
-        .query(&format!("{PRODUCT_SELECT} ORDER BY p.name"), &[])
+        .query(
+            &format!("{PRODUCT_SELECT} WHERE p.tenant_id = $1 ORDER BY p.name"),
+            &[&tenant_id],
+        )
         .await
         .map_err(|e| PgError::Db(e.to_string()))?;
     rows.iter().map(pg_row_to_product_with_details).collect()
 }
 
-/// Get a single product by SKU, including category name and stock.
-pub async fn get_product(pool: &Pool, sku: &str) -> Result<Option<ProductWithDetails>, PgError> {
+/// Get a single product by SKU (tenant-scoped), including category name and
+/// stock. SKUs are unique per tenant, so the lookup must be scoped.
+pub async fn get_product(
+    pool: &Pool,
+    tenant_id: &str,
+    sku: &str,
+) -> Result<Option<ProductWithDetails>, PgError> {
     let client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
     let row = client
-        .query_opt(&format!("{PRODUCT_SELECT} WHERE p.sku = $1"), &[&sku])
+        .query_opt(
+            &format!("{PRODUCT_SELECT} WHERE p.tenant_id = $1 AND p.sku = $2"),
+            &[&tenant_id, &sku],
+        )
         .await
         .map_err(|e| PgError::Db(e.to_string()))?;
     row.map(|r| pg_row_to_product_with_details(&r)).transpose()
@@ -684,7 +698,12 @@ pub struct StockAdjustment {
 /// row locked (`SELECT … FOR UPDATE`), so concurrent adjustments to the same
 /// SKU serialize instead of losing updates — SQLite's single-writer
 /// semantics made the read-outside-tx shape safe there, Postgres does not.
-pub async fn adjust_stock(pool: &Pool, sku: &str, delta: i64) -> Result<StockAdjustment, PgError> {
+pub async fn adjust_stock(
+    pool: &Pool,
+    tenant_id: &str,
+    sku: &str,
+    delta: i64,
+) -> Result<StockAdjustment, PgError> {
     let mut client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
     let tx = client
         .transaction()
@@ -696,7 +715,10 @@ pub async fn adjust_stock(pool: &Pool, sku: &str, delta: i64) -> Result<StockAdj
     // committed quantity (and the `inventory` row, when missing, is created
     // by the first locker before the second reads it).
     let product_id: Option<String> = tx
-        .query_opt("SELECT id FROM products WHERE sku = $1 FOR UPDATE", &[&sku])
+        .query_opt(
+            "SELECT id FROM products WHERE tenant_id = $1 AND sku = $2 FOR UPDATE",
+            &[&tenant_id, &sku],
+        )
         .await
         .map_err(|e| PgError::Db(e.to_string()))?
         .map(|r| r.get(0));
@@ -758,8 +780,9 @@ pub async fn adjust_stock(pool: &Pool, sku: &str, delta: i64) -> Result<StockAdj
 
 /// Persist a sale header + lines in one transaction, mirroring the SQLite
 /// `Store::create_sale` (including the same negative-value rejections and
-/// the frozen `cost_minor` snapshot on each line).
-pub async fn create_sale(pool: &Pool, sale: &Sale) -> Result<(), PgError> {
+/// the frozen `cost_minor` snapshot on each line). The per-line cost freeze
+/// looks the product up within `tenant_id` (SKUs are unique per tenant).
+pub async fn create_sale(pool: &Pool, tenant_id: &str, sale: &Sale) -> Result<(), PgError> {
     for line in &sale.lines {
         if line.qty < 0 {
             return Err(PgError::Validation(format!(
@@ -831,8 +854,8 @@ pub async fn create_sale(pool: &Pool, sale: &Sale) -> Result<(), PgError> {
         // Freeze the product cost at write time (ADR #36 reporting).
         let cost_minor: Option<i64> = tx
             .query_opt(
-                "SELECT cost_minor FROM products WHERE sku = $1",
-                &[&line.sku],
+                "SELECT cost_minor FROM products WHERE tenant_id = $1 AND sku = $2",
+                &[&tenant_id, &line.sku],
             )
             .await
             .map_err(|e| PgError::Db(e.to_string()))?
@@ -1153,27 +1176,29 @@ mod tests {
         assert_eq!(created.product.sku.as_str(), sku);
         assert!(created.product.is_active);
 
-        let listed = list_products(&pool).await.expect("list_products");
+        let listed = list_products(&pool, &tenant).await.expect("list_products");
         assert!(
             listed.iter().any(|p| p.product.sku.as_str() == sku),
             "created product must appear in the listing"
         );
 
-        let fetched = get_product(&pool, &sku)
+        let fetched = get_product(&pool, &tenant, &sku)
             .await
             .expect("get_product")
             .expect("product must exist");
         assert_eq!(fetched.stock_qty, Some(10));
         assert_eq!(fetched.product.name, "PG Espresso");
 
-        let adj = adjust_stock(&pool, &sku, -4).await.expect("adjust_stock");
+        let adj = adjust_stock(&pool, &tenant, &sku, -4)
+            .await
+            .expect("adjust_stock");
         assert_eq!((adj.previous_qty, adj.new_qty), (10, 6));
         assert!(matches!(
-            adjust_stock(&pool, &sku, -100).await,
+            adjust_stock(&pool, &tenant, &sku, -100).await,
             Err(PgError::Validation(_))
         ));
         assert!(matches!(
-            adjust_stock(&pool, &unique_id("PG-SKU"), 1).await,
+            adjust_stock(&pool, &tenant, &unique_id("PG-SKU"), 1).await,
             Err(PgError::NotFound)
         ));
 
@@ -1282,7 +1307,9 @@ mod tests {
             course: None,
             modifiers_json: None,
         }];
-        create_sale(&pool, &sale).await.expect("create_sale");
+        create_sale(&pool, &tenant, &sale)
+            .await
+            .expect("create_sale");
 
         let fetched_sale = get_sale(&pool, &sale.id)
             .await
@@ -1441,7 +1468,8 @@ mod tests {
         for _ in 0..ADJUSTMENTS {
             let pool = pool.clone();
             let sku = sku.clone();
-            set.spawn(async move { adjust_stock(&pool, &sku, -1).await });
+            let tenant = tenant.clone();
+            set.spawn(async move { adjust_stock(&pool, &tenant, &sku, -1).await });
         }
         let mut results = Vec::new();
         while let Some(res) = set.join_next().await {
@@ -1453,7 +1481,7 @@ mod tests {
             results.iter().filter(|r| r.is_err()).count()
         );
 
-        let fetched = get_product(&pool, &sku)
+        let fetched = get_product(&pool, &tenant, &sku)
             .await
             .expect("get_product")
             .expect("product must exist");
@@ -1524,7 +1552,9 @@ mod tests {
             currency,
         };
         sale.lines = Vec::new();
-        create_sale(&pool, &sale).await.expect("create_sale");
+        create_sale(&pool, "default", &sale)
+            .await
+            .expect("create_sale");
 
         let mut set = tokio::task::JoinSet::new();
         for _ in 0..2 {
@@ -1560,6 +1590,169 @@ mod tests {
         let client = pool.get().await.unwrap();
         client
             .execute("DELETE FROM sales WHERE id = $1", &[&sale.id])
+            .await
+            .unwrap();
+    }
+
+    /// Two tenants can hold the same product SKU and the same username; each
+    /// tenant only ever sees and mutates its own rows. This is the contract
+    /// the per-tenant `UNIQUE (tenant_id, sku)` / `UNIQUE (tenant_id,
+    /// username)` constraints (and the tenant-scoped REST lookups) guarantee.
+    #[tokio::test]
+    async fn pg_integration_tenant_sku_isolation() {
+        let url = std::env::var("OZ_TEST_PG_URL")
+            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+        let Some(pool) = test_pool(&url).await else {
+            eprintln!("PG tenant-isolation test skipped (Postgres unreachable at {url})");
+            return;
+        };
+
+        let tenant_a = unique_id("pg-iso-a");
+        let tenant_b = unique_id("pg-iso-b");
+        let currency: Currency = "USD".parse().unwrap();
+        let shared_sku = "SHARED-SKU";
+
+        // Both tenants create the SAME sku — previously a global-UNIQUE
+        // conflict, now legal per tenant.
+        let a = create_product(
+            &pool,
+            &tenant_a,
+            shared_sku,
+            "Tenant A Product",
+            Money {
+                minor_units: 100,
+                currency,
+            },
+            None,
+            None,
+            10,
+        )
+        .await
+        .expect("create_product tenant A");
+        let b = create_product(
+            &pool,
+            &tenant_b,
+            shared_sku,
+            "Tenant B Product",
+            Money {
+                minor_units: 200,
+                currency,
+            },
+            None,
+            None,
+            20,
+        )
+        .await
+        .expect("create_product tenant B");
+        assert_eq!(a.product.name, "Tenant A Product");
+        assert_eq!(b.product.name, "Tenant B Product");
+
+        // Each tenant's by-SKU lookup returns only its own row.
+        let a_view = get_product(&pool, &tenant_a, shared_sku)
+            .await
+            .expect("get_product A")
+            .expect("A must see its product");
+        let b_view = get_product(&pool, &tenant_b, shared_sku)
+            .await
+            .expect("get_product B")
+            .expect("B must see its product");
+        assert_eq!(a_view.product.name, "Tenant A Product");
+        assert_eq!(a_view.stock_qty, Some(10));
+        assert_eq!(b_view.product.name, "Tenant B Product");
+        assert_eq!(b_view.stock_qty, Some(20));
+
+        // Listings are tenant-scoped too.
+        let a_list = list_products(&pool, &tenant_a).await.expect("list A");
+        let b_list = list_products(&pool, &tenant_b).await.expect("list B");
+        assert_eq!(a_list.len(), 1);
+        assert_eq!(b_list.len(), 1);
+        assert_eq!(a_list[0].product.name, "Tenant A Product");
+        assert_eq!(b_list[0].product.name, "Tenant B Product");
+
+        // Stock adjustments are tenant-scoped: adjusting A's stock must not
+        // change B's quantity for the same SKU.
+        adjust_stock(&pool, &tenant_a, shared_sku, -2)
+            .await
+            .expect("adjust A");
+        let a_after = get_product(&pool, &tenant_a, shared_sku)
+            .await
+            .unwrap()
+            .unwrap();
+        let b_after = get_product(&pool, &tenant_b, shared_sku)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(a_after.stock_qty, Some(8));
+        assert_eq!(b_after.stock_qty, Some(20), "B's stock must be untouched");
+
+        // A duplicate sku within ONE tenant is still a conflict.
+        assert!(matches!(
+            create_product(
+                &pool,
+                &tenant_a,
+                shared_sku,
+                "Duplicate",
+                Money {
+                    minor_units: 1,
+                    currency,
+                },
+                None,
+                None,
+                0,
+            )
+            .await,
+            Err(PgError::Conflict)
+        ));
+
+        // Same username in both tenants is legal; duplicate in one is not.
+        {
+            let client = pool.get().await.unwrap();
+            let role_id = unique_id("pg-iso-role");
+            client
+                .execute(
+                    "INSERT INTO roles (id, name, permissions) VALUES ($1, $2, '[]')",
+                    &[&role_id, &role_id],
+                )
+                .await
+                .unwrap();
+            let username = format!("shared-user-{}", uuid::Uuid::now_v7());
+            create_user(&pool, &tenant_a, &username, "h", "A User", &role_id)
+                .await
+                .expect("create_user A");
+            create_user(&pool, &tenant_b, &username, "h", "B User", &role_id)
+                .await
+                .expect("create_user B");
+            assert!(matches!(
+                create_user(&pool, &tenant_a, &username, "h", "A Dup", &role_id).await,
+                Err(PgError::Conflict)
+            ));
+            client
+                .execute(
+                    "DELETE FROM users WHERE tenant_id IN ($1, $2)",
+                    &[&tenant_a, &tenant_b],
+                )
+                .await
+                .unwrap();
+            client
+                .execute("DELETE FROM roles WHERE id = $1", &[&role_id])
+                .await
+                .unwrap();
+        }
+
+        // Cleanup.
+        let client = pool.get().await.unwrap();
+        client
+            .execute(
+                "DELETE FROM stock_movements WHERE item_id IN (SELECT id FROM products WHERE tenant_id IN ($1, $2))",
+                &[&tenant_a, &tenant_b],
+            )
+            .await
+            .unwrap();
+        client
+            .execute(
+                "DELETE FROM products WHERE tenant_id IN ($1, $2)",
+                &[&tenant_a, &tenant_b],
+            )
             .await
             .unwrap();
     }

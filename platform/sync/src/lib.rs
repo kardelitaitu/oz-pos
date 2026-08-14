@@ -1644,7 +1644,7 @@ pub(crate) fn import_snapshot(
                                        price_updated_at, track_serial, store_id)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7,
                          COALESCE(?8, ?11), COALESCE(?9, ?11), COALESCE(?10, ?11), ?12, ?13)
-                 ON CONFLICT(sku) DO UPDATE SET
+                 ON CONFLICT (tenant_id, sku) DO UPDATE SET
                      name            = excluded.name,
                      price_minor     = excluded.price_minor,
                      currency        = excluded.currency,
@@ -1724,7 +1724,7 @@ pub(crate) fn import_snapshot(
                 "INSERT INTO users (id, username, pin_hash, display_name, role_id,
                                     is_active, created_at, updated_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, COALESCE(?7, ?9), COALESCE(?8, ?9))
-                 ON CONFLICT(username) DO UPDATE SET
+                 ON CONFLICT (tenant_id, username) DO UPDATE SET
                      display_name = excluded.display_name,
                      role_id      = excluded.role_id,
                      is_active    = excluded.is_active,

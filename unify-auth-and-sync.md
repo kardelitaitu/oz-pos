@@ -605,7 +605,7 @@ Lock to an explicit allowlist before serving the website:
 | The sync function is scaled beyond one instance | Move the rate limiter **and** the 5-min snapshot cache out of process memory into a shared store (Redis) — both are per-process today |
 | Schema changes ship | Adopt a Postgres migration tool (sqlx/refinery) so DDL is versioned, not ad-hoc `batch_execute` |
 | Cross-tenant isolation must be provable | Add Postgres Row-Level Security so a missed `WHERE tenant_id = ?` fails closed instead of leaking rows |
-| A second tenant brings the same product SKU or username | `products.sku` and `users.username` are globally `UNIQUE` today (fine for the single `default` tenant). First multi-tenant rollout must switch to `UNIQUE(tenant_id, sku)` / `UNIQUE(tenant_id, username)` and thread `tenant_id` through the by-SKU REST lookups — otherwise the second tenant's sync push fails with a 500 |
+| A second tenant brings the same product SKU or username | Done: `UNIQUE (tenant_id, sku)` / `UNIQUE (tenant_id, username)` in both schemas, the four `products(sku)` child FKs (`bundle_items`, `product_bundles`, `product_taxes`, `product_variants`) reworked to composite `(tenant_id, sku)` FKs, and the by-SKU REST lookups (list/get/adjust stock, sale cost-freeze) tenant-scoped from the JWT claims. `pg_integration_tenant_sku_isolation` proves two tenants can share a SKU/username without seeing or mutating each other's rows. The desktop snapshot upserts (`ON CONFLICT (tenant_id, sku)` etc.) keep working single-tenant |
 
 ---
 
@@ -636,7 +636,7 @@ REST handler, the sync store, prune, webhooks, the email/analytics port, the
 
 ### Deferred (documented, not fixed)
 
-1. Global `UNIQUE(sku)` / `UNIQUE(username)` — see the new growth-path row above.
+1. ~~Global `UNIQUE(sku)` / `UNIQUE(username)`~~ — **done** in this pass (per-tenant constraints + composite FKs + tenant-scoped REST lookups + isolation test). What remains for full multi-tenancy is app-level: the desktop `Store` methods and the report-sender email loop still operate tenant-unaware (fine for the single `default` tenant today).
 2. Analytics scans use `created_at::date` (a cast, so `idx_sales_created_at` can't serve them). Fine for a background daily job; add `(status, (created_at::date))` if the bundle grows.
 3. Postgres Row-Level Security — already listed in the growth path; becomes mandatory with real multi-tenancy.
 
@@ -646,6 +646,7 @@ REST handler, the sync store, prune, webhooks, the email/analytics port, the
 |------|------|---------|
 | REST round-trip (product/tax/user/plan/sale/terminal, oversell, state machine) | `pg_integration_rest_roundtrip` (oz-api) | live PG |
 | Concurrency (stock, status transitions) | the two `pg_integration_concurrent_*` tests | live PG |
+| Multi-tenant isolation (shared SKU/username across tenants) | `pg_integration_tenant_sku_isolation` | live PG |
 | Sync store push/pull/snapshot/plan | `pg_integration_sync_store_*` (cloud-server) | live PG |
 | Webhooks dedup, tenant resolution, plan writes | `pg_integration_webhooks_read_write_postgres` | live PG |
 | Prune retention batching + hostile-id-as-data | `pg_integration_prune_*` + unit tests | live PG + SQLite |
