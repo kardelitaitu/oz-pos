@@ -464,6 +464,9 @@ pub fn build_router(
         ))
         .layer(CompressionLayer::new().gzip(true))
         .layer(cors)
+        .layer(axum::middleware::from_fn(
+            oz_api::security_headers_middleware,
+        ))
 } // ── Tests ─────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

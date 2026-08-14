@@ -146,6 +146,41 @@ pub fn cors_origins_from_env() -> Vec<String> {
     parse_cors_origins(std::env::var("OZ_CORS_ORIGINS").ok())
 }
 
+/// The `Strict-Transport-Security` value — only in production (browsers
+/// ignore HSTS over plain HTTP, but keeping it out of dev avoids surprises
+/// with local HTTP servers). Pure so tests need no env mutation.
+pub fn security_header_value(production: bool) -> Option<&'static str> {
+    production.then_some("max-age=31536000")
+}
+
+/// Security headers applied to every response (unify-auth-and-sync.md §11):
+/// `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+/// `Content-Security-Policy: default-src 'self'`, and — when
+/// `OZ_PRODUCTION=1` — `Strict-Transport-Security: max-age=31536000`.
+pub async fn security_headers_middleware(
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let mut response = next.run(request).await;
+    let production = std::env::var("OZ_PRODUCTION")
+        .map(|v| matches!(v.as_str(), "1" | "true" | "on" | "yes"))
+        .unwrap_or(false);
+    let headers = response.headers_mut();
+    headers.insert(
+        "X-Content-Type-Options",
+        HeaderValue::from_static("nosniff"),
+    );
+    headers.insert("X-Frame-Options", HeaderValue::from_static("DENY"));
+    headers.insert(
+        "Content-Security-Policy",
+        HeaderValue::from_static("default-src 'self'"),
+    );
+    if let Some(v) = security_header_value(production) {
+        headers.insert("Strict-Transport-Security", HeaderValue::from_static(v));
+    }
+    response
+}
+
 impl AppState {
     /// Create an AppState suitable for tests with an in-memory database.
     /// Uses sensible defaults for all non-db fields.
@@ -231,6 +266,7 @@ pub fn router(state: AppState) -> Router {
         .merge(protected)
         .with_state(state)
         .layer(cors)
+        .layer(middleware::from_fn(security_headers_middleware))
         .layer(TraceLayer::new_for_http())
 }
 
@@ -1264,6 +1300,39 @@ mod tests {
         let req = Request::builder().uri("/").body(Body::empty()).unwrap();
         let resp = test_app().oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    // ── Security headers (unify-auth-and-sync.md §11) ───────────────
+
+    #[test]
+    fn security_header_hsts_only_in_production() {
+        assert_eq!(security_header_value(true), Some("max-age=31536000"));
+        assert_eq!(security_header_value(false), None);
+    }
+
+    #[tokio::test]
+    async fn security_headers_present_on_health() {
+        let resp = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            resp.headers()["x-content-type-options"],
+            "nosniff",
+            "X-Content-Type-Options must prevent MIME sniffing"
+        );
+        assert_eq!(resp.headers()["x-frame-options"], "DENY");
+        assert_eq!(
+            resp.headers()["content-security-policy"],
+            "default-src 'self'"
+        );
+        // HSTS is production-gated; the default test env is dev.
+        assert!(resp.headers().get("strict-transport-security").is_none());
     }
 
     // ── CORS allowlist (unify-auth-and-sync.md §11) ─────────────────
