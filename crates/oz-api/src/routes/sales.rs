@@ -125,6 +125,13 @@ pub async fn create_sale(
         }
     };
 
+    if let Some(pool) = &state.pg {
+        return match crate::pg::create_sale(pool, &sale).await {
+            Ok(()) => (StatusCode::CREATED, Json(sale)).into_response(),
+            Err(e) => e.into_response(),
+        };
+    }
+
     let db = state.db.lock().await;
     let store = Store::new(&db);
 
@@ -138,6 +145,13 @@ pub async fn create_sale(
 ///
 /// Returns JSON `null` when the sale is not found.
 pub async fn get_sale(State(state): State<AppState>, Path(id): Path<String>) -> Response {
+    if let Some(pool) = &state.pg {
+        return match crate::pg::get_sale(pool, &id).await {
+            Ok(Some(sale)) => Json(Some(sale)).into_response(),
+            Ok(None) => Json(None as Option<Sale>).into_response(),
+            Err(e) => e.into_response(),
+        };
+    }
     let db = state.db.lock().await;
     let store = Store::new(&db);
 
@@ -158,6 +172,25 @@ pub async fn update_sale_status(
     Path(id): Path<String>,
     Json(body): Json<UpdateSaleStatusRequest>,
 ) -> Response {
+    if let Some(pool) = &state.pg {
+        return match crate::pg::update_sale_status(pool, &id, body.status).await {
+            Ok(sale) => {
+                let resp = SaleStatusResponse {
+                    id: sale.id,
+                    status: sale.status,
+                    updated_at: sale.updated_at,
+                };
+                Json(resp).into_response()
+            }
+            Err(crate::pg::PgError::Validation(message)) => (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({"error": message})),
+            )
+                .into_response(),
+            Err(e) => e.into_response(),
+        };
+    }
+
     let db = state.db.lock().await;
     let store = Store::new(&db);
 

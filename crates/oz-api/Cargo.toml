@@ -21,6 +21,11 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
+foundation = { workspace = true }
+# Phase 1.2 (unify-auth-and-sync.md): the cloud server's Postgres branch
+# passes a pool through `AppState` so REST handlers can read/write Postgres.
+tokio-postgres = { version = "0.7" }
+deadpool-postgres = { version = "0.14" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

@@ -123,6 +123,35 @@ pub async fn register_terminal_handler(
     let secret_hash = hash_secret(&device_secret);
     let label = body.label.unwrap_or_default();
 
+    if let Some(pool) = &state.pg {
+        return match crate::pg::register_terminal(
+            pool,
+            &terminal_id,
+            &secret_hash,
+            &label,
+            body.tenant_id.as_deref(),
+        )
+        .await
+        {
+            Ok(()) => {
+                tracing::info!(terminal_id, "registered sync terminal");
+                Json(RegisterTerminalResponse {
+                    terminal_id,
+                    device_secret,
+                })
+                .into_response()
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "registering sync terminal failed");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": "terminal registration failed"})),
+                )
+                    .into_response()
+            }
+        };
+    }
+
     let db = state.db.lock().await;
     let result = db.execute(
         "INSERT INTO sync_terminals (terminal_id, secret_hash, label, tenant_id)

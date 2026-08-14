@@ -39,6 +39,8 @@ next: None | perf: Arc<Mutex<Connection>> is the standard axum+rusqlite pattern;
 
 /// JWT auth middleware and token generation.
 pub mod auth;
+/// Postgres data layer for the REST handlers (Phase 1.2).
+pub mod pg;
 /// Axum route handlers (health, tokens, products, categories, sales).
 pub mod routes;
 
@@ -64,6 +66,11 @@ pub struct AppState {
     /// Shared SQLite connection (mutex-guarded for axum handler safety).
     pub db: Arc<Mutex<Connection>>,
 
+    /// Optional Postgres pool (Phase 1.2). When set, backend-aware REST
+    /// handlers read/write Postgres; when `None` (dev, tests, SQLite branch)
+    /// they keep using the SQLite connection. Only the cloud server sets it.
+    pub pg: Option<deadpool_postgres::Pool>,
+
     /// Admin key that gates `POST /api/v1/tokens` (ADR sync-auth-hardening
     /// P2). `None` = dev mode, the token endpoint stays open.
     pub admin_key: Option<String>,
@@ -86,6 +93,7 @@ impl AppState {
     pub fn test(conn: rusqlite::Connection) -> Self {
         Self {
             db: Arc::new(Mutex::new(conn)),
+            pg: None,
             admin_key: None,
             api_secret: String::new(),
             db_path: ":memory:".into(),
@@ -188,6 +196,7 @@ pub async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .filter(|key| !key.trim().is_empty());
     let state = AppState {
         db: Arc::new(Mutex::new(conn)),
+        pg: None,
         admin_key,
         api_secret: std::env::var("OZ_API_SECRET").ok().unwrap_or_default(),
         db_path: db_path.clone(),
@@ -249,6 +258,7 @@ mod tests {
         .unwrap();
         let state = AppState {
             db: Arc::new(Mutex::new(conn)),
+            pg: None,
             admin_key: None,
             api_secret: String::new(),
             db_path: ":memory:".into(),
@@ -872,6 +882,7 @@ mod tests {
         oz_core::db::Store::new(&conn).seed_default_roles().unwrap();
         let state = AppState {
             db: Arc::new(Mutex::new(conn)),
+            pg: None,
             admin_key: None,
             api_secret: String::new(),
             db_path: ":memory:".into(),

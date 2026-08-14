@@ -26,6 +26,12 @@ fn store_error_response(e: CoreError) -> Response {
 
 /// List all categories, ordered by name.
 pub async fn list_categories(State(state): State<AppState>) -> Response {
+    if let Some(pool) = &state.pg {
+        return match crate::pg::list_categories(pool).await {
+            Ok(categories) => Json(categories).into_response(),
+            Err(e) => e.into_response(),
+        };
+    }
     let db = state.db.lock().await;
     let store = Store::new(&db);
 

@@ -4205,6 +4205,8 @@ version = "0.0.25"
 dependencies = [
  "axum 0.8.9",
  "chrono",
+ "deadpool-postgres",
+ "foundation",
  "hex",
  "http-body-util",
  "jsonwebtoken",
@@ -4215,6 +4217,7 @@ dependencies = [
  "sha2 0.10.9",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-postgres",
  "tower 0.5.3",
  "tower-http",
  "tracing",

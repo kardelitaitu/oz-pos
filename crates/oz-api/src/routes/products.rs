@@ -91,6 +91,12 @@ pub struct PatchStockResponse {
 
 /// List all products, ordered by name, with category name and stock.
 pub async fn list_products(State(state): State<AppState>) -> Response {
+    if let Some(pool) = &state.pg {
+        return match crate::pg::list_products(pool).await {
+            Ok(products) => Json(products).into_response(),
+            Err(e) => e.into_response(),
+        };
+    }
     let db = state.db.lock().await;
     let store = Store::new(&db);
 
@@ -104,6 +110,13 @@ pub async fn list_products(State(state): State<AppState>) -> Response {
 ///
 /// Returns JSON `null` when the product is not found.
 pub async fn get_product(State(state): State<AppState>, Path(sku): Path<String>) -> Response {
+    if let Some(pool) = &state.pg {
+        return match crate::pg::get_product(pool, &sku).await {
+            Ok(Some(p)) => Json(Some(p)).into_response(),
+            Ok(None) => Json(None as Option<ProductWithDetails>).into_response(),
+            Err(e) => e.into_response(),
+        };
+    }
     let db = state.db.lock().await;
     let store = Store::new(&db);
 
@@ -129,6 +142,24 @@ pub async fn create_product(
 ) -> Response {
     let initial_stock = body.initial_stock.unwrap_or(0);
     let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
+
+    if let Some(pool) = &state.pg {
+        return match crate::pg::create_product(
+            pool,
+            tenant_id,
+            &body.sku,
+            &body.name,
+            body.price,
+            body.category_id.as_deref(),
+            body.barcode.as_deref(),
+            initial_stock,
+        )
+        .await
+        {
+            Ok(detail) => (StatusCode::CREATED, Json(detail)).into_response(),
+            Err(e) => e.into_response(),
+        };
+    }
 
     let db = state.db.lock().await;
     let store = Store::new(&db);
@@ -187,6 +218,32 @@ pub async fn patch_stock(
     Path(sku): Path<String>,
     Json(body): Json<PatchStockRequest>,
 ) -> Response {
+    if let Some(pool) = &state.pg {
+        return match crate::pg::adjust_stock(pool, &sku, body.delta).await {
+            Ok(adj) => {
+                let response = PatchStockResponse {
+                    sku,
+                    previous_qty: adj.previous_qty,
+                    new_qty: adj.new_qty,
+                };
+                Json(response).into_response()
+            }
+            Err(crate::pg::PgError::Validation(_)) => {
+                // Oversell or overflow -> 422 with details.
+                (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    Json(serde_json::json!({
+                        "error": "adjustment would cause negative stock",
+                        "previous_qty": null,
+                        "delta": body.delta,
+                    })),
+                )
+                    .into_response()
+            }
+            Err(e) => e.into_response(),
+        };
+    }
+
     let db = state.db.lock().await;
     let store = Store::new(&db);
 

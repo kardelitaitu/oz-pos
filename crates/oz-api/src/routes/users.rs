@@ -73,6 +73,22 @@ pub async fn create_user(
 ) -> Response {
     let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
 
+    if let Some(pool) = &state.pg {
+        return match crate::pg::create_user(
+            pool,
+            tenant_id,
+            &body.username,
+            &body.pin_hash,
+            &body.display_name,
+            &body.role_id,
+        )
+        .await
+        {
+            Ok(user) => (StatusCode::CREATED, Json(user)).into_response(),
+            Err(e) => e.into_response(),
+        };
+    }
+
     let db = state.db.lock().await;
     let store = Store::new(&db);
 

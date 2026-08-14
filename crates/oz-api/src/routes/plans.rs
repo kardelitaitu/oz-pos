@@ -41,18 +41,33 @@ pub async fn get_my_plan_handler(
 ) -> Response {
     let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
 
-    let db = state.db.lock().await;
-    let store = Store::new(&db);
-    let plan = match store.get_tenant_plan(tenant_id) {
-        Ok(Some(plan)) => plan,
-        Ok(None) => TenantPlan::Free,
-        Err(e) => {
-            tracing::error!(error = %e, tenant_id, "reading tenant plan failed");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": "plan_read_failed"})),
-            )
-                .into_response();
+    let plan = if let Some(pool) = &state.pg {
+        match crate::pg::get_tenant_plan(pool, tenant_id).await {
+            Ok(Some(plan)) => plan,
+            Ok(None) => TenantPlan::Free,
+            Err(e) => {
+                tracing::error!(error = %e, tenant_id, "reading tenant plan failed");
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": "plan_read_failed"})),
+                )
+                    .into_response();
+            }
+        }
+    } else {
+        let db = state.db.lock().await;
+        let store = Store::new(&db);
+        match store.get_tenant_plan(tenant_id) {
+            Ok(Some(plan)) => plan,
+            Ok(None) => TenantPlan::Free,
+            Err(e) => {
+                tracing::error!(error = %e, tenant_id, "reading tenant plan failed");
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": "plan_read_failed"})),
+                )
+                    .into_response();
+            }
         }
     };
 
@@ -100,6 +115,27 @@ pub async fn set_tenant_plan_handler(
         }
     };
 
+    if let Some(pool) = &state.pg {
+        return match crate::pg::set_tenant_plan(pool, &tenant_id, plan).await {
+            Ok(()) => (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "tenant_id": tenant_id,
+                    "plan": plan.as_db_str(),
+                })),
+            )
+                .into_response(),
+            Err(e) => {
+                tracing::error!(error = %e, tenant_id = %tenant_id, "setting tenant plan failed");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": "plan_update_failed"})),
+                )
+                    .into_response()
+            }
+        };
+    }
+
     let db = state.db.lock().await;
     let store = Store::new(&db);
     match store.set_tenant_plan(&tenant_id, plan) {
@@ -139,6 +175,7 @@ mod tests {
         let conn = oz_core::migrations::fresh_db();
         let state = AppState {
             db: Arc::new(Mutex::new(conn)),
+            pg: None,
             admin_key: None,
             api_secret: String::new(),
             db_path: ":memory:".into(),
@@ -286,6 +323,7 @@ mod tests {
         let conn = oz_core::migrations::fresh_db();
         let state = AppState {
             db: Arc::new(Mutex::new(conn)),
+            pg: None,
             admin_key: Some("super-secret".to_string()),
             api_secret: String::new(),
             db_path: ":memory:".into(),

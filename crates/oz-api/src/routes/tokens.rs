@@ -79,10 +79,20 @@ pub async fn create_token_handler(
     if let (Some(client_id), Some(client_secret)) =
         (body.client_id.as_deref(), body.client_secret.as_deref())
     {
-        let db = state.db.lock().await;
-        let verified =
-            crate::routes::terminals::verify_terminal_credentials(&db, client_id, client_secret);
-        drop(db);
+        let verified = if let Some(pool) = &state.pg {
+            crate::pg::verify_terminal_credentials(pool, client_id, client_secret)
+                .await
+                .map_err(|e| e.to_string())
+        } else {
+            let db = state.db.lock().await;
+            let verified = crate::routes::terminals::verify_terminal_credentials(
+                &db,
+                client_id,
+                client_secret,
+            );
+            drop(db);
+            verified.map_err(|e| e.to_string())
+        };
         return match verified {
             Ok(Some(terminal)) => {
                 match crate::auth::create_token_scoped(
@@ -157,6 +167,7 @@ mod tests {
     fn state_with_admin_key(key: Option<&str>) -> AppState {
         AppState {
             db: Arc::new(Mutex::new(oz_core::migrations::fresh_db())),
+            pg: None,
             admin_key: key.map(|s| s.to_owned()),
             api_secret: String::new(),
             db_path: ":memory:".into(),
