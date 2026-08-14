@@ -419,8 +419,8 @@ SMTP_HOST=... SMTP_PORT=587 SMTP_USERNAME=... SMTP_PASSWORD=...
 
 ```bash
 DATABASE_URL=postgres://user:pass@host:5432/ozpos
-OZ_API_SECRET=...                # HS256 JWT signing secret
-OZ_ADMIN_KEY=...                 # gates POST /api/v1/tokens
+OZ_API_SECRET=...                # HS256 JWT signing secret — REQUIRED in prod (unset falls back to the hard-coded dev secret; JWTs become forgeable)
+OZ_ADMIN_KEY=...                 # gates POST /api/v1/tokens — REQUIRED in prod (unset = open token mint, dev mode)
 OZ_ENFORCE_PLANS=1               # reject free-plan sync (403 plan_required)
 STRIPE_WEBHOOK_SECRET=whsec_...
 SQUARE_WEBHOOK_SIGNATURE_KEY=...
@@ -490,7 +490,7 @@ fn detect_server_version(base_url: &str) -> ServerVersion {
 
 ---
 
-## 11. CORS & Security
+## 11. Security, Reliability & Growth
 
 ### CORS Configuration
 
@@ -514,12 +514,43 @@ Lock to an explicit allowlist before serving the website:
 
 ### Hardening
 
-- Run Postgres with TLS and a dedicated low-privilege role.
+- **Run Postgres with TLS** and a dedicated low-privilege role. Today the pool
+  is `tokio_postgres::NoTls` — Phase 1 step 1.3 must switch it to TLS.
+- **Fail startup in prod if `OZ_API_SECRET` or `OZ_ADMIN_KEY` is unset.**
+  Both fall back to insecure dev behavior today: the JWT secret becomes the
+  hard-coded `oz-pos-dev-secret-change-in-production` (forgeable JWTs) and the
+  token mint opens to anyone.
+- **Rate-limit `/api/v1/tokens`** (and license `/status`): the cloud rate
+  limiter covers only `/api/sync/*` today, so token minting is unthrottled.
+- **Hash the tenant `api_key` at rest** (bcrypt/argon2). It is currently
+  stored and compared in plaintext on the `tenants` collection — a DB leak
+  exposes persistent identity secrets. Also drop the legacy body-`api_key`
+  fallback (it leaks the secret into CDN/access logs).
+- **Keep the license server's 5/IP/hr activate/renew limiter** — it persists
+  state to SQLite so restarts don't reset brute-force state.
 - Store `OZ_API_SECRET`, `OZ_ADMIN_KEY`, and `OZ_LICENSE_PRIVATE_KEY` in
   Northflank secrets, never in the image.
 - Lock down PocketBase's `/_/` admin UI (`DisableSignUp` + IP allowlist).
 - The reverse proxy is the single public entry point; both app ports stay
   internal to the container.
+
+### Reliability & operations
+
+| Area | Requirement |
+|------|-------------|
+| Backups | Managed Postgres PITR **and** the PocketBase SQLite file (litestream or nightly `VACUUM INTO`); define RPO/RTO and run a restore drill |
+| Aggregate healthcheck | Must check both processes, DB connectivity, and pending queue depth — not just "port is open" |
+| Restart policy | Supervisor restarts each function independently; forward SIGTERM for graceful shutdown during rolling deploys |
+| Alerting | Thresholds on: retention counter flatline, `offline_queue` depth, webhook 5xx, and token-mint rate |
+
+### Growth path
+
+| When | Action |
+|------|--------|
+| A feature needs a cross-DB join (e.g. plan gate must read the license tier directly) | Merge the auth collections into Postgres; retire PocketBase SQLite |
+| The sync function is scaled beyond one instance | Move the rate limiter **and** the 5-min snapshot cache out of process memory into a shared store (Redis) — both are per-process today |
+| Schema changes ship | Adopt a Postgres migration tool (sqlx/refinery) so DDL is versioned, not ad-hoc `batch_execute` |
+| Cross-tenant isolation must be provable | Add Postgres Row-Level Security so a missed `WHERE tenant_id = ?` fails closed instead of leaking rows |
 
 ---
 
@@ -530,6 +561,11 @@ Lock to an explicit allowlist before serving the website:
 | Postgres path is a 2-table stub today | Phase 1 completes it before traffic moves |
 | Prune/report loops are SQLite-only (`incremental_vacuum`, `rusqlite::Connection`) | Ported + re-wired in Phase 1 (step 1.5) before cutover; retention counter confirms aging |
 | In-memory rate limiter is per-process | Fine for one node; move to a shared store (Redis) only if the sync function is scaled out |
+| Snapshot cache is also in-memory | Same — Redis/shared store on scale-out |
+| Dev-secret fallback / open token mint in prod | Fail startup if `OZ_API_SECRET` / `OZ_ADMIN_KEY` unset |
+| Postgres pool is `NoTls` | Switch to TLS in step 1.3 |
+| `api_key` stored plaintext | Hash at rest (bcrypt/argon2) or accept the documented risk |
+| PocketBase SQLite has no backup | litestream / nightly `VACUUM INTO` + restore drill |
 | Data loss during SQLite → Postgres | Back up SQLite, verify row counts + checksums, replay window |
 | Two databases drift | JWT `tenant_id` is the single identity; webhooks mirror plan state; reconcile if a cross-DB query appears |
 | Supervisor / reverse proxy failure | Aggregate healthcheck; keep the two processes independently restartable |
@@ -563,3 +599,6 @@ Lock to an explicit allowlist before serving the website:
 | One identity | JWT `tenant_id` scopes every sync row to the canonical tenant |
 | No data loss | Row counts + checksums match after the SQLite → Postgres migration |
 | Anti-spike loops survive | Rate limits still return `429`; hourly prune ages `offline_queue`/`stock_movements` on Postgres and the retention counter increments |
+| Secrets enforced | Startup fails (no silent dev fallback) if `OZ_API_SECRET` / `OZ_ADMIN_KEY` are unset in prod |
+| Backups verified | A restore drill recovers both Postgres and PocketBase SQLite to a known point |
+| Alerts fire | A flatlined retention counter or growing queue depth pages a human |
