@@ -272,16 +272,20 @@ data is exposed:
    layer opens every transaction with `SET LOCAL oz.tenant_id`.
 2. **Cutover (must be run):** as the DB owner, run
    `psql "$DATABASE_URL" -f scripts/rls-cutover.sql` — it creates the
-   restricted `oz_app` role, grants DML, and `FORCE ROW LEVEL SECURITY`s the
-   15 tables so the table-owner bypass no longer applies. Then enable login
-   on the role and **point `DATABASE_URL` at `oz_app`** **and set
+   restricted `oz_app` role, grants DML (including the non-RLS webhook
+   tables `processed_webhooks` / `payments`), creates the
+   `oz_webhook_resolver` role (NOLOGIN BYPASSRLS — used by the webhook
+   handlers for their pre-tenant resolution reads via tx-scoped `SET LOCAL
+   ROLE`, so it never needs a password), and `FORCE ROW LEVEL SECURITY`s
+   the 15 tables so the table-owner bypass no longer applies. Then enable
+   login on the role and **point `DATABASE_URL` at `oz_app`** **and set
    `OZ_APPLY_SCHEMA=0`** — without it, startup re-applies `PG_INIT` (full
    DDL) and fails with `permission denied for schema public`, because
    `oz_app` only has DML grants. The schema is applied once by the
    migration tool as the owner; the app then boots without touching DDL.
    From then on, a missed `WHERE tenant_id = ?` returns zero rows instead
    of leaking. Reversible: `ALTER TABLE ... NO FORCE ROW LEVEL SECURITY`
-   on all 15 + `DROP ROLE oz_app`.
+   on all 15 + `DROP ROLE oz_app` + `DROP ROLE oz_webhook_resolver`.
 
 ### 6.4 Rate limits (self-protection — do not weaken)
 

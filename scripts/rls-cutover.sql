@@ -30,11 +30,16 @@
 --     this in `apps/cloud-server/src/sync_store.rs`); the local setting
 --     auto-resets when the transaction ends, so a pooled connection can never
 --     leak one tenant's GUC to the next borrower.
---   * Server-side, signature-authenticated paths that are NOT tenant-
---     authenticated (Stripe/Square webhooks) do not set the GUC; their
---     `stripe_customers` mapping lookup is the tenant *resolution* step, so
---     it is inherently pre-tenant. Webhook plan updates write through the
---     SQLite store (dual-write), which is not RLS-protected.
+--   * Signature-authenticated webhook paths (Stripe/Square) are not tenant-
+--     authenticated: the tenant is *resolved* from the data (the
+--     `stripe_customers` mapping, or the `payments -> sales` join) before
+--     any tenant-scoped write. The two resolution reads therefore run in a
+--     transaction scoped to the dedicated `oz_webhook_resolver` role
+--     (BYPASSRLS, step 2c) — a non-owner could not read those rows without
+--     the GUC, and the tenant is not known until the read returns. Every
+--     write after resolution (mapping upsert, `finalize_sale` enqueue, plan
+--     update) runs as `oz_app` with `SET LOCAL oz.tenant_id`, so RLS still
+--     guards those writes.
 --   * `SELECT COUNT(DISTINCT tenant_id) FROM offline_queue` (the /status
 --     global counter) intentionally runs without the GUC and reads 0 under
 --     enforcement — it is an operator-facing aggregate, not tenant data.
@@ -50,6 +55,7 @@
 --
 --     ALTER TABLE ... NO FORCE ROW LEVEL SECURITY  (all 15 tables)
 --     DROP ROLE oz_app;
+--     DROP ROLE oz_webhook_resolver;
 
 -- 1. Restricted app role (idempotent; NOLOGIN by default — the operator
 --    enables login and sets a strong password afterwards):
@@ -94,6 +100,44 @@ DECLARE
 BEGIN
     FOREACH t IN ARRAY ARRAY['sale_lines','inventory','stock_movements',
                             'stock_summary','categories','roles']
+    LOOP
+        EXECUTE format(
+            'GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO oz_app', t
+        );
+    END LOOP;
+END $$;
+
+-- 2c. Webhook resolution role. The webhook handlers are signature-
+--     authenticated but NOT tenant-authenticated: they resolve the tenant
+--     from the data (stripe_customers mapping, payments->sales join) before
+--     any tenant-scoped write. As a non-owner, oz_app cannot read those
+--     rows without the tenant GUC — and the whole point of the lookup is to
+--     learn the tenant. The handlers therefore wrap the two resolution reads
+--     in a transaction scoped to this role (`SET LOCAL ROLE
+--     oz_webhook_resolver`, which auto-resets on commit). BYPASSRLS is
+--     NOLOGIN and reachable only via membership (granted to oz_app below),
+--     so it cannot be used interactively; the exposure is bounded to the
+--     signature-verified webhook code path.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'oz_webhook_resolver') THEN
+        CREATE ROLE oz_webhook_resolver NOLOGIN BYPASSRLS;
+    END IF;
+END $$;
+GRANT USAGE ON SCHEMA public TO oz_webhook_resolver;
+GRANT SELECT ON stripe_customers, sales, payments TO oz_webhook_resolver;
+GRANT oz_webhook_resolver TO oz_app;
+
+-- 2d. The non-RLS tables the webhook path touches after resolution.
+--     `processed_webhooks` (dedup) has no tenant_id column and `payments`
+--     joins through sales.id — neither is RLS-enforced, but oz_app still
+--     needs DML so dedup reads/records and the payment lookup work under
+--     the restricted role.
+DO $$
+DECLARE
+    t text;
+BEGIN
+    FOREACH t IN ARRAY ARRAY['processed_webhooks','payments']
     LOOP
         EXECUTE format(
             'GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO oz_app', t
