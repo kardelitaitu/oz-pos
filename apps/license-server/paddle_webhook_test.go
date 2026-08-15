@@ -716,3 +716,154 @@ func TestActivate_ManualKeyExistingTenantStillRequiresAPIKey(t *testing.T) {
 		t.Fatalf("expected 401 (api_key required for manual keys), got %d: %s", rec.Code, rec.Body.String())
 	}
 }
+
+// ── Remaining lifecycle + robustness paths ─────────────────────────
+
+// sendPaddleEvent signs and delivers a raw webhook body to the router.
+func sendPaddleEvent(t *testing.T, se *core.ServeEvent, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	header := signPaddle("test-webhook-secret", body, time.Now().Unix())
+	req := httptest.NewRequest(http.MethodPost, paddleWebhookPath, strings.NewReader(body))
+	req.Header.Set(paddleSignatureHeader, header)
+	rec := httptest.NewRecorder()
+	mux, err := se.Router.BuildMux()
+	if err != nil {
+		t.Fatalf("BuildMux failed: %v", err)
+	}
+	mux.ServeHTTP(rec, req)
+	return rec
+}
+
+// subEventBody renders a minimal subscription.<event_type> payload.
+func subEventBody(eventType, eventID, subID, status string) string {
+	return fmt.Sprintf(`{
+  "event_id": %q,
+  "event_type": %q,
+  "data": {
+    "id": %q,
+    "status": %q,
+    "customer_id": "cus_lc_001",
+    "items": [{"price": {"id": "pri_test_pro", "product_id": "pro_test"}, "quantity": 1}]
+  }
+}`, eventID, eventType, subID, status)
+}
+
+func TestPaddleWebhook_SubscriptionPaused_GracePeriod(t *testing.T) {
+	resetPaddleDedup()
+	setPaddleEnv(t)
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	provisionForEvents(t, app, se, "sub_pause_001")
+
+	rec := sendPaddleEvent(t, se, subEventBody("subscription.paused", "evt_pause_001", "sub_pause_001", "paused"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	subRec, err := app.FindFirstRecordByData("subscriptions", "paddle_sub_id", "sub_pause_001")
+	if err != nil {
+		t.Fatalf("subscription not found: %v", err)
+	}
+	if subRec.GetString("status") != "grace_period" {
+		t.Errorf("expected paused -> grace_period, got %q", subRec.GetString("status"))
+	}
+}
+
+func TestPaddleWebhook_SubscriptionResumed_BackToActive(t *testing.T) {
+	resetPaddleDedup()
+	setPaddleEnv(t)
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	provisionForEvents(t, app, se, "sub_res_001")
+	// Pause first, then resume.
+	sendPaddleEvent(t, se, subEventBody("subscription.paused", "evt_res_pause_001", "sub_res_001", "paused"))
+	rec := sendPaddleEvent(t, se, subEventBody("subscription.resumed", "evt_res_001", "sub_res_001", "active"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	subRec, err := app.FindFirstRecordByData("subscriptions", "paddle_sub_id", "sub_res_001")
+	if err != nil {
+		t.Fatalf("subscription not found: %v", err)
+	}
+	if subRec.GetString("status") != "active" {
+		t.Errorf("expected resumed -> active, got %q", subRec.GetString("status"))
+	}
+	if !strings.Contains(subRec.GetString("signed_payload"), `"status":"active"`) {
+		t.Errorf("resumed subscription must be re-signed as active, got: %s", subRec.GetString("signed_payload"))
+	}
+}
+
+func TestPaddleWebhook_SubscriptionPastDue_StaysActive(t *testing.T) {
+	resetPaddleDedup()
+	setPaddleEnv(t)
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	provisionForEvents(t, app, se, "sub_due_001")
+
+	rec := sendPaddleEvent(t, se, subEventBody("subscription.past_due", "evt_due_001", "sub_due_001", "past_due"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// past_due is acknowledged without touching the subscription (Paddle is
+	// still retrying the payment) — it must remain active.
+	subRec, err := app.FindFirstRecordByData("subscriptions", "paddle_sub_id", "sub_due_001")
+	if err != nil {
+		t.Fatalf("subscription not found: %v", err)
+	}
+	if subRec.GetString("status") != "active" {
+		t.Errorf("expected past_due to leave subscription active, got %q", subRec.GetString("status"))
+	}
+}
+
+func TestPaddleWebhook_ReceiptEmailFailure_NonFatal(t *testing.T) {
+	// Provisioning must succeed even when the receipt email fails — the key
+	// is also visible in the dashboard, so a mail hiccup must not block it.
+	resetPaddleDedup()
+	setPaddleEnv(t)
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	orig := sendReceiptEmail
+	sendReceiptEmail = func(to, key, tier, expires string) error {
+		return fmt.Errorf("relay down")
+	}
+	defer func() { sendReceiptEmail = orig }()
+
+	body := paddleCreatedBody("evt_rcpt_fail_001", "sub_rcpt_fail_001", "cus_001", "buyer@example.com", "pri_test_pro")
+	rec := sendPaddleEvent(t, se, body)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 despite email failure, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if _, err := app.FindFirstRecordByData("license_keys", "paddle_sub_id", "sub_rcpt_fail_001"); err != nil {
+		t.Fatalf("license key must still be minted when the receipt fails: %v", err)
+	}
+}
+
+func TestPaddleWebhook_UpdateUnknownSubscription_Acknowledged(t *testing.T) {
+	// subscription.updated for a paddle_sub_id we have no local record for
+	// (e.g. created before the webhook shipped) must acknowledge, not 500 —
+	// otherwise Paddle retries forever.
+	resetPaddleDedup()
+	setPaddleEnv(t)
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	rec := sendPaddleEvent(t, se, subEventBody("subscription.updated", "evt_unknown_upd_001", "sub_unknown_001", "active"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 ack, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestPaddleWebhook_CancelUnknownSubscription_Acknowledged(t *testing.T) {
+	resetPaddleDedup()
+	setPaddleEnv(t)
+	app, se := setupDirectApp(t)
+	defer app.Cleanup()
+
+	rec := sendPaddleEvent(t, se, subEventBody("subscription.canceled", "evt_unknown_can_001", "sub_unknown_001", "canceled"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 ack, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
