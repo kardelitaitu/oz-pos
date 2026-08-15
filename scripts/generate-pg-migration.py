@@ -93,6 +93,12 @@ TS_PG = "to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')"
 # SQLite datetime('now') → 'YYYY-MM-DD HH:MM:SS'.
 DT_PG = "to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')"
 
+# Indexes that exist ONLY in the SQLite schema. PostgreSQL cannot build
+# them: an expression index on a value derived from a TEXT column via a
+# cast (`date(created_at)` / `created_at::date`) is rejected because the
+# text→date cast is STABLE (DateStyle-dependent), not IMMUTABLE.
+SQLITE_ONLY_INDEXES = {"idx_sales_status_created_date"}
+
 HEADER = """\
 -- ====================================================================
 -- OZ-POS Database Schema — Postgres port of 20260813_init.sql
@@ -237,6 +243,7 @@ def main() -> None:
 
     tables: list[tuple[str, set[str], str]] = []
     indexes: list[str] = []
+    skipped_indexes: list[str] = []
     seeds: list[str] = []
 
     for stmt in split_statements(text):
@@ -250,6 +257,17 @@ def main() -> None:
         elif head.startswith("CREATE TRIGGER"):
             continue  # replaced by TRIGGERS_SQL
         elif head.startswith("CREATE INDEX") or head.startswith("CREATE UNIQUE INDEX"):
+            name = re.search(r"idx_\w+|uq_\w+", head)
+            if name and name.group(0) in SQLITE_ONLY_INDEXES:
+                # PostgreSQL cannot index an expression derived from a TEXT
+                # column via a cast (`date(created_at)` / `created_at::date`
+                # are STABLE, DateStyle-dependent) — CREATE INDEX rejects
+                # them as non-IMMUTABLE. The desktop analytics queries are
+                # served by SQLite's `date()` expression index instead; the
+                # PG report job remains a scan (fine for a background daily
+                # job; see the plan doc).
+                skipped_indexes.append(name.group(0))
+                continue
             indexes.append(stmt.rstrip())
         elif head.startswith("INSERT OR IGNORE"):
             seeds.append(convert_seed(stmt))
@@ -273,6 +291,11 @@ def main() -> None:
     body = body.replace("\n", "\r\n")
     io.open(DST, "w", encoding="utf-8", newline="").write(body)
     print(f"wrote {DST} ({len(ordered)} tables, {len(indexes)} indexes, {len(seeds)} seeds)")
+    if skipped_indexes:
+        print(
+            "skipped PG-incompatible indexes (SQLite-only): "
+            + ", ".join(sorted(skipped_indexes))
+        )
 
 
 if __name__ == "__main__":

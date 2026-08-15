@@ -1256,6 +1256,9 @@ CREATE INDEX IF NOT EXISTS idx_sale_lines_store_sale ON sale_lines(store_id, sal
 
 CREATE INDEX IF NOT EXISTS idx_sales_created_at ON sales(created_at);
 
+CREATE INDEX IF NOT EXISTS idx_sales_status_created_date
+    ON sales(status, date(created_at));
+
 CREATE INDEX IF NOT EXISTS idx_sales_pending_expires ON sales(pending_expires_at) WHERE status = 'pending';
 
 CREATE INDEX IF NOT EXISTS idx_sales_store_status ON sales(store_id, status, created_at DESC);

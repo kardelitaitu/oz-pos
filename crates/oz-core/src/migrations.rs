@@ -485,7 +485,7 @@ mod tests {
         );
     }
 
-    /// Pin the consolidated schema surface: 92 tables, 121 indexes, 4
+    /// Pin the consolidated schema surface: 93 tables, 123 indexes, 4
     /// triggers. (The generated `*.pg.sql` Postgres port is excluded — see
     /// [`pg_init_declares_same_table_surface_as_sqlite`].) A count assertion catches a table/index/trigger silently
     /// dropping out of `init.sql` — something a name-list check misses when a
@@ -509,7 +509,7 @@ mod tests {
                 &conn,
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'",
             ),
-            122,
+            123,
             "index surface drifted"
         );
         assert_eq!(
@@ -519,6 +519,46 @@ mod tests {
             ),
             4,
             "trigger surface drifted"
+        );
+    }
+
+    /// The analytics report queries filter `status = 'completed'` plus
+    /// `DATE(created_at) BETWEEN …`, which the plain `idx_sales_created_at`
+    /// cannot serve (the cast defeats it). `idx_sales_status_created_date` is
+    /// the expression index built for exactly that shape — prove the SQLite
+    /// planner actually picks it, so a future query rewrite that silently
+    /// stops matching (e.g. `strftime` instead of `date()`) fails here.
+    #[test]
+    fn analytics_query_uses_status_created_date_index() {
+        let mut conn = fresh();
+        run(&mut conn).unwrap();
+
+        let mut stmt = conn
+            .prepare(
+                "EXPLAIN QUERY PLAN
+                 SELECT DATE(s.created_at) AS date, SUM(s.total_minor) AS total_minor
+                   FROM sales s
+                  WHERE s.status = 'completed'
+                    AND DATE(s.created_at) BETWEEN ?1 AND ?2
+                  GROUP BY DATE(s.created_at)",
+            )
+            .unwrap();
+        let plan = stmt
+            .query_map(["2026-01-01", "2026-12-31"], |r| r.get::<_, String>(3))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+            .join("\n");
+
+        assert!(
+            plan.contains("idx_sales_status_created_date"),
+            "analytics query did not use idx_sales_status_created_date; plan:\n{plan}"
+        );
+        // And it must NOT fall back to the plain created_at index, which the
+        // cast defeats — the whole point of the expression index.
+        assert!(
+            !plan.contains("idx_sales_created_at"),
+            "analytics query fell back to idx_sales_created_at; plan:\n{plan}"
         );
     }
 
