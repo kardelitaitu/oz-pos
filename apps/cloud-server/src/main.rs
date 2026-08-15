@@ -512,6 +512,7 @@ mod tests {
             database_url: None,
             require_tls: false,
             db_pool_size: 20,
+            apply_schema: true,
             port: 3099,
             admin_key: None,
             enforce_plans: false,

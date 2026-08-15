@@ -467,6 +467,7 @@ DATABASE_URL=postgres://user:pass@host:5432/ozpos?sslmode=require  # require = e
 OZ_PRODUCTION=1                  # fail startup if OZ_API_SECRET/OZ_ADMIN_KEY unset; also implies OZ_DB_REQUIRE_TLS
 OZ_DB_REQUIRE_TLS=1              # fail startup if DATABASE_URL omits sslmode=require (implied by OZ_PRODUCTION=1)
 OZ_DB_POOL_SIZE=20               # max Postgres pool connections (positive integer; ignored for SQLite)
+OZ_APPLY_SCHEMA=1                # apply PG_INIT at startup; set to 0 once the schema exists and the app runs as the restricted oz_app role post-cutover (the migration tool applies DDL once as owner)
 OZ_API_SECRET=...                # HS256 JWT signing secret — required when OZ_PRODUCTION=1 (unset falls back to the hard-coded dev secret; JWTs become forgeable)
 OZ_ADMIN_KEY=...                 # gates POST /api/v1/tokens — required when OZ_PRODUCTION=1 (unset = open token mint, dev mode)
 OZ_ENFORCE_PLANS=1               # reject free-plan sync (403 plan_required)

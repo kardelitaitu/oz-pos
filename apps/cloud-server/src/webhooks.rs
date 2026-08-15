@@ -1354,7 +1354,7 @@ mod tests {
     async fn pg_integration_webhooks_read_write_postgres() {
         let url = std::env::var("OZ_TEST_PG_URL")
             .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
-        let pool = match crate::db::DbPool::connect_postgres(&url, false, 20).await {
+        let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, true).await {
             Ok(crate::db::DbPool::Postgres(pool)) => pool,
             Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
             Err(e) => {

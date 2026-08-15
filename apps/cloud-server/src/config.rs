@@ -43,6 +43,15 @@ pub struct CloudServerConfig {
     /// (`OZ_DB_POOL_SIZE`, default: `20`). Ignored for SQLite.
     pub db_pool_size: usize,
 
+    /// When `true` (default), startup applies the full schema (`PG_INIT`) to
+    /// the Postgres database. Set `OZ_APPLY_SCHEMA=0` once the schema exists
+    /// and the app runs as the restricted post-cutover role (`oz_app`, see
+    /// `scripts/rls-cutover.sql`): that role only has DML grants, so the
+    /// unconditional DDL re-apply would fail with `permission denied for
+    /// schema public`. The migration tool applies the schema once as the
+    /// owner; the app then boots without touching DDL.
+    pub apply_schema: bool,
+
     /// HTTP listen port (default: `3099`).
     pub port: u16,
 
@@ -136,6 +145,16 @@ impl CloudServerConfig {
         let db_path = std::env::var("OZ_DB_PATH").unwrap_or_else(|_| "oz-pos.db".into());
         let require_tls = resolve_require_tls(env_bool("OZ_DB_REQUIRE_TLS"), production);
         let db_pool_size = env_usize("OZ_DB_POOL_SIZE", 20);
+        // Schema application is on by default; only an explicit `0`/`false`/
+        // `off` disables it (the opposite of `env_bool`, where unset means
+        // false). `OZ_APPLY_SCHEMA=0` is the post-cutover deployment shape.
+        let apply_schema = !matches!(
+            std::env::var("OZ_APPLY_SCHEMA")
+                .as_deref()
+                .map(str::trim)
+                .unwrap_or("1"),
+            "0" | "false" | "FALSE" | "off" | "OFF"
+        );
 
         validate_production(production, api_secret.as_deref(), admin_key.as_deref())?;
 
@@ -144,6 +163,7 @@ impl CloudServerConfig {
             database_url,
             require_tls,
             db_pool_size,
+            apply_schema,
             port,
             admin_key,
             enforce_plans,
@@ -345,6 +365,69 @@ mod tests {
     /// The startup config gate — the first thing `main()` does before serving
     /// — must fail when `OZ_PRODUCTION=1` but a required secret is missing, so
     /// the process exits instead of falling back to the dev secret.
+    #[serial]
+    #[test]
+    fn apply_schema_defaults_to_true_when_unset() {
+        with_env(
+            &[("OZ_APPLY_SCHEMA", None), ("OZ_REDIRECT_ONLY", None)],
+            || {
+                let config = CloudServerConfig::from_env().expect("config should parse");
+                assert!(
+                    config.apply_schema,
+                    "unset OZ_APPLY_SCHEMA must default to true"
+                );
+            },
+        );
+    }
+
+    #[serial]
+    #[test]
+    fn apply_schema_disabled_by_zero() {
+        with_env(
+            &[("OZ_APPLY_SCHEMA", Some("0")), ("OZ_REDIRECT_ONLY", None)],
+            || {
+                let config = CloudServerConfig::from_env().expect("config should parse");
+                assert!(
+                    !config.apply_schema,
+                    "OZ_APPLY_SCHEMA=0 must disable schema application"
+                );
+            },
+        );
+    }
+
+    #[serial]
+    #[test]
+    fn apply_schema_disabled_by_false() {
+        with_env(
+            &[
+                ("OZ_APPLY_SCHEMA", Some("false")),
+                ("OZ_REDIRECT_ONLY", None),
+            ],
+            || {
+                let config = CloudServerConfig::from_env().expect("config should parse");
+                assert!(
+                    !config.apply_schema,
+                    "OZ_APPLY_SCHEMA=false must disable it"
+                );
+            },
+        );
+    }
+
+    #[serial]
+    #[test]
+    fn apply_schema_explicit_one_stays_enabled() {
+        with_env(
+            &[("OZ_APPLY_SCHEMA", Some("1")), ("OZ_REDIRECT_ONLY", None)],
+            || {
+                let config = CloudServerConfig::from_env().expect("config should parse");
+                assert!(
+                    config.apply_schema,
+                    "OZ_APPLY_SCHEMA=1 must keep it enabled"
+                );
+            },
+        );
+    }
+
     #[serial]
     #[test]
     fn production_mode_fails_startup_without_api_secret() {

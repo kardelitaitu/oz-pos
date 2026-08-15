@@ -274,10 +274,14 @@ data is exposed:
    `psql "$DATABASE_URL" -f scripts/rls-cutover.sql` — it creates the
    restricted `oz_app` role, grants DML, and `FORCE ROW LEVEL SECURITY`s the
    15 tables so the table-owner bypass no longer applies. Then enable login
-   on the role and **point `DATABASE_URL` at `oz_app`**. From then on, a
-   missed `WHERE tenant_id = ?` returns zero rows instead of leaking.
-   Reversible: `ALTER TABLE ... NO FORCE ROW LEVEL SECURITY` on all 15 +
-   `DROP ROLE oz_app`.
+   on the role and **point `DATABASE_URL` at `oz_app`** **and set
+   `OZ_APPLY_SCHEMA=0`** — without it, startup re-applies `PG_INIT` (full
+   DDL) and fails with `permission denied for schema public`, because
+   `oz_app` only has DML grants. The schema is applied once by the
+   migration tool as the owner; the app then boots without touching DDL.
+   From then on, a missed `WHERE tenant_id = ?` returns zero rows instead
+   of leaking. Reversible: `ALTER TABLE ... NO FORCE ROW LEVEL SECURITY`
+   on all 15 + `DROP ROLE oz_app`.
 
 ### 6.4 Rate limits (self-protection — do not weaken)
 

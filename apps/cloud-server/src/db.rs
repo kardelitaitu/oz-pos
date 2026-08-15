@@ -52,7 +52,13 @@ impl DbPool {
         if let Some(ref url) = config.database_url
             && (url.starts_with("postgres://") || url.starts_with("postgresql://"))
         {
-            return Self::connect_postgres(url, config.require_tls, config.db_pool_size).await;
+            return Self::connect_postgres(
+                url,
+                config.require_tls,
+                config.db_pool_size,
+                config.apply_schema,
+            )
+            .await;
         }
         Self::connect_sqlite(&config.db_path)
     }
@@ -121,10 +127,18 @@ impl DbPool {
     /// When `require_tls` is set, the URL must specify `sslmode=require`;
     /// otherwise startup fails rather than allowing a plaintext fallback.
     /// `pool_size` bounds the deadpool connection pool (max open connections).
+    ///
+    /// When `apply_schema` is true (the default), the full schema (`PG_INIT`)
+    /// is applied at startup. Set it to false (via `OZ_APPLY_SCHEMA=0`) for
+    /// the post-cutover deployment shape, where the app runs as the
+    /// restricted `oz_app` role that only has DML grants — re-running the DDL
+    /// would fail with `permission denied for schema public`. The schema is
+    /// then applied once by the migration tool as the table owner.
     pub async fn connect_postgres(
         url: &str,
         require_tls: bool,
         pool_size: usize,
+        apply_schema: bool,
     ) -> Result<Self, DbError> {
         use deadpool_postgres::{Manager, ManagerConfig, RecyclingMethod};
 
@@ -184,17 +198,23 @@ impl DbPool {
             .map_err(|e| DbError::Connection(e.to_string()))?;
 
         // Apply the full schema — the Postgres port of the SQLite init
-        // migration (92 tables, indexes, triggers, seed rows). `batch_execute`
+        // migration (93 tables, indexes, triggers, seed rows). `batch_execute`
         // sends the whole script as one simple-query message, which Postgres
         // executes in a single implicit transaction, so the migration is
         // atomic as well as idempotent (`IF NOT EXISTS` / `ON CONFLICT DO
-        // NOTHING` / `CREATE OR REPLACE`).
-        client
-            .batch_execute(oz_core::migrations::PG_INIT)
-            .await
-            .map_err(|e| DbError::Migration(e.to_string()))?;
-
-        info!("PostgreSQL database connected and full schema applied");
+        // NOTHING` / `CREATE OR REPLACE`). Skipped when `apply_schema` is
+        // false — the post-cutover restricted role (`oz_app`) only has DML
+        // grants, so the DDL re-apply would fail; the migration tool applies
+        // the schema once as the owner instead.
+        if apply_schema {
+            client
+                .batch_execute(oz_core::migrations::PG_INIT)
+                .await
+                .map_err(|e| DbError::Migration(e.to_string()))?;
+            info!("PostgreSQL database connected and full schema applied");
+        } else {
+            info!("PostgreSQL database connected (schema application skipped: OZ_APPLY_SCHEMA=0)");
+        }
         Ok(Self::Postgres(pool))
     }
 
@@ -349,7 +369,7 @@ mod tests {
 
     #[tokio::test]
     async fn postgres_url_parsing_rejects_bad_url() {
-        let result = DbPool::connect_postgres("not-a-url", false, 20).await;
+        let result = DbPool::connect_postgres("not-a-url", false, 20, true).await;
         // This should fail because Config::from_str will reject invalid URLs
         assert!(result.is_err());
     }
@@ -357,7 +377,8 @@ mod tests {
     #[tokio::test]
     async fn postgres_url_parsing_accepts_valid_url() {
         // This won't connect, but the URL parsing should succeed
-        let result = DbPool::connect_postgres("postgresql://localhost:5432/test", false, 20).await;
+        let result =
+            DbPool::connect_postgres("postgresql://localhost:5432/test", false, 20, true).await;
         // Will fail at connection, not parsing
         let err = result.unwrap_err();
         let msg = err.to_string();
@@ -371,7 +392,7 @@ mod tests {
     async fn require_tls_rejects_url_without_sslmode_require() {
         // No sslmode → defaults to `prefer`, which could fall back to
         // plaintext, so the TLS requirement must fail before connecting.
-        let err = DbPool::connect_postgres("postgresql://localhost:5432/test", true, 20)
+        let err = DbPool::connect_postgres("postgresql://localhost:5432/test", true, 20, true)
             .await
             .unwrap_err();
         assert!(
@@ -384,10 +405,14 @@ mod tests {
     async fn require_tls_accepts_sslmode_require_and_fails_on_connection() {
         // sslmode=require passes the check; it then fails because no server
         // is listening — a Connection error, not a config error.
-        let err =
-            DbPool::connect_postgres("postgresql://localhost:5432/test?sslmode=require", true, 20)
-                .await
-                .unwrap_err();
+        let err = DbPool::connect_postgres(
+            "postgresql://localhost:5432/test?sslmode=require",
+            true,
+            20,
+            true,
+        )
+        .await
+        .unwrap_err();
         let msg = err.to_string();
         assert!(
             msg.contains("Connection") || msg.contains("connection"),
@@ -495,7 +520,7 @@ mod tests {
     async fn pg_integration_connect_and_create_tables() {
         let url = std::env::var("OZ_TEST_PG_URL")
             .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
-        let pool = match DbPool::connect_postgres(&url, false, 20).await {
+        let pool = match DbPool::connect_postgres(&url, false, 20, true).await {
             Ok(p) => p,
             Err(e) => {
                 eprintln!("PG integration test skipped: {e}");
@@ -554,6 +579,117 @@ mod tests {
         );
     }
 
+    /// Integration test: `OZ_APPLY_SCHEMA=0` skips the `PG_INIT` re-apply.
+    ///
+    /// `connect_postgres` applies the full schema at startup by default —
+    /// fine while the app connects as the table owner, but a hard failure
+    /// once the RLS cutover (`scripts/rls-cutover.sql`) points the app at the
+    /// restricted `oz_app` role, which only has DML grants (the DDL re-apply
+    /// hits `permission denied for schema public`). This test proves the
+    /// escape hatch on a throwaway database:
+    ///
+    /// * `apply_schema = false` connects cleanly and leaves the database
+    ///   EMPTY (no `PG_INIT` ran);
+    /// * `apply_schema = true` on the same database applies the full
+    ///   93-table schema — the flag is the only difference;
+    /// * the throwaway database is dropped afterwards.
+    ///
+    /// Skips when Postgres is unreachable or the URL role lacks `CREATE
+    /// DATABASE` (matching the established skip-if-unreachable pattern).
+    #[tokio::test]
+    async fn pg_integration_apply_schema_can_be_skipped() {
+        let url = std::env::var("OZ_TEST_PG_URL")
+            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+        let pool = match DbPool::connect_postgres(&url, false, 20, true).await {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("PG integration test skipped: {e}");
+                return;
+            }
+        };
+        let admin = pool.pg_client().await.expect("pg_client should succeed");
+
+        let db_name = format!("oz_apply_schema_{}", std::process::id());
+        // CREATE DATABASE cannot run inside a transaction; execute() uses
+        // autocommit. The name is process-unique; drop any stale leftover
+        // from a crashed previous run first.
+        admin
+            .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
+            .await
+            .expect("drop stale database should succeed");
+        if let Err(e) = admin
+            .execute(&format!("CREATE DATABASE {db_name}"), &[])
+            .await
+        {
+            eprintln!("PG integration test skipped: cannot CREATE DATABASE ({e})");
+            return;
+        }
+
+        // Build the URL for the new database by swapping the path segment,
+        // preserving any query string (e.g. `?sslmode=require`).
+        let (base, query) = match url.split_once('?') {
+            Some((b, q)) => (b, Some(q)),
+            None => (url.as_str(), None),
+        };
+        let (head, _old_db) = base
+            .rsplit_once('/')
+            .expect("URL must have a database path");
+        let db_url = match query {
+            Some(q) => format!("{head}/{db_name}?{q}"),
+            None => format!("{head}/{db_name}"),
+        };
+
+        // 1. apply_schema = false: connects, but no PG_INIT ran.
+        let pool_no_schema = DbPool::connect_postgres(&db_url, false, 20, false)
+            .await
+            .expect("connecting with apply_schema=false must succeed");
+        let client = pool_no_schema
+            .pg_client()
+            .await
+            .expect("pg_client should succeed");
+        let tables: i64 = client
+            .query_one(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'",
+                &[],
+            )
+            .await
+            .expect("count should succeed")
+            .get(0);
+        assert_eq!(
+            tables, 0,
+            "apply_schema=false must skip PG_INIT entirely (found {tables} tables)"
+        );
+        drop(pool_no_schema);
+
+        // 2. apply_schema = true on the same database: full schema appears.
+        let pool_with_schema = DbPool::connect_postgres(&db_url, false, 20, true)
+            .await
+            .expect("connecting with apply_schema=true must succeed");
+        let client = pool_with_schema
+            .pg_client()
+            .await
+            .expect("pg_client should succeed");
+        let tables: i64 = client
+            .query_one(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'",
+                &[],
+            )
+            .await
+            .expect("count should succeed")
+            .get(0);
+        assert!(
+            tables >= 93,
+            "apply_schema=true must apply the full schema (found {tables} tables)"
+        );
+        drop(pool_with_schema);
+
+        // 3. Cleanup the throwaway database (terminate lingering connections).
+        admin
+            .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
+            .await
+            .expect("drop throwaway database should succeed");
+    }
+
     /// Integration test: Row-Level Security fails closed for non-owner roles.
     ///
     /// The schema enables RLS on every tenant-scoped table (see
@@ -575,7 +711,7 @@ mod tests {
     async fn pg_integration_rls_fails_closed() {
         let url = std::env::var("OZ_TEST_PG_URL")
             .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
-        let pool = match DbPool::connect_postgres(&url, false, 20).await {
+        let pool = match DbPool::connect_postgres(&url, false, 20, true).await {
             Ok(p) => p,
             Err(e) => {
                 eprintln!("PG integration test skipped: {e}");
@@ -731,7 +867,7 @@ mod tests {
     async fn pg_integration_rls_force_blocks_owner() {
         let url = std::env::var("OZ_TEST_PG_URL")
             .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
-        let pool = match DbPool::connect_postgres(&url, false, 20).await {
+        let pool = match DbPool::connect_postgres(&url, false, 20, true).await {
             Ok(p) => p,
             Err(e) => {
                 eprintln!("PG integration test skipped: {e}");
