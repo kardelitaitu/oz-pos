@@ -1,7 +1,8 @@
 ---
+import { getAbsoluteLocaleUrl } from 'astro:i18n';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
-import { t } from '../i18n';
+import { locales, t } from '../i18n';
 import '../styles/global.css';
 
 interface Props {
@@ -12,6 +13,12 @@ interface Props {
 const { title, description } = Astro.props;
 const locale = Astro.currentLocale ?? 'en';
 const desc = description ?? t(locale, 'meta.description');
+// hreflang alternates for the same page in the other locale. Reuse the
+// locale-stripping logic from LocaleSwitcher so /en/docs/x → /id/docs/x.
+// The 404 page is served at /404 (no locale prefix) — fall back to home
+// like LocaleSwitcher so hreflang never points at /en/404/.
+const rawPath = Astro.url.pathname.replace(/^\/(?:en|id)(?:\/|$)/, '');
+const path = !rawPath || rawPath.replace(/^\/+/, '').startsWith('404') ? '/' : rawPath;
 ---
 
 <!doctype html>
@@ -28,7 +35,11 @@ const desc = description ?? t(locale, 'meta.description');
     </script>
     <meta name="description" content={desc} />
     <link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} />
+    <link rel="sitemap" href="/sitemap-index.xml" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    {locales.map((code) => (
+      <link rel="alternate" hreflang={code} href={getAbsoluteLocaleUrl(code, path)} />
+    ))}
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="OZ-POS" />
     <meta property="og:locale" content={locale} />

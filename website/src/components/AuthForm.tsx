@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { t } from '../i18n';
 
 /**
- * Sign in / Create account (website-plan.md §5). Two tabs share one OTP flow:
+ * Sign-in form (website-plan.md §5). No self-signup: tenant records are
+ * created by the Paddle webhook at first purchase, so the only web flow is
+ * OTP sign-in for existing tenants:
  *
- *  - Sign in:      request-otp  → verify-otp  → session token
- *  - Create acct:  register     → verify-otp  → session token
+ *   request-otp → verify-otp → session token
  *
  * The session token stays in sessionStorage (the v1 choice from §11; the
  * hardening follow-up is an httpOnly cookie). Degrades to a "not configured"
@@ -17,13 +18,10 @@ interface Props {
   locale: string;
 }
 
-type Mode = 'signin' | 'signup';
 type Step = 'form' | 'code';
 
 export default function AuthForm({ locale }: Props) {
-  const [mode, setMode] = useState<Mode>('signin');
   const [step, setStep] = useState<Step>('form');
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
@@ -33,21 +31,20 @@ export default function AuthForm({ locale }: Props) {
     return <p className="rounded-md border border-ink/10 p-4 text-sm text-muted">{t(locale, 'login.notConfigured')}</p>;
   }
 
-  const submitForm = async (e: { preventDefault(): void }) => {
+  const requestOtp = async (e: { preventDefault(): void }) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      const path = mode === 'signup' ? '/api/v1/web/register' : '/api/v1/web/request-otp';
-      const res = await fetch(`${API}${path}`, {
+      const res = await fetch(`${API}/api/v1/web/request-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(mode === 'signup' ? { name, email } : { email }),
+        body: JSON.stringify({ email }),
       });
-      if (!res.ok) throw new Error(`${path} failed`);
+      if (!res.ok) throw new Error('request-otp failed');
       setStep('code');
     } catch {
-      setError(t(locale, mode === 'signup' ? 'login.errorSignup' : 'login.errorSend'));
+      setError(t(locale, 'login.errorSend'));
     } finally {
       setLoading(false);
     }
@@ -73,13 +70,6 @@ export default function AuthForm({ locale }: Props) {
     } finally {
       setLoading(false);
     }
-  };
-
-  const switchMode = (next: Mode) => {
-    setMode(next);
-    setStep('form');
-    setError('');
-    setCode('');
   };
 
   const inputClass =
@@ -125,49 +115,7 @@ export default function AuthForm({ locale }: Props) {
 
   return (
     <div className="mx-auto w-full max-w-sm rounded-xl border border-ink/10 bg-surface/40 p-6">
-      <div
-        role="group"
-        aria-label={t(locale, 'login.title')}
-        className="mb-6 grid grid-cols-2 rounded-lg border border-ink/10 bg-primary p-1"
-      >
-        <button
-          type="button"
-          onClick={() => switchMode('signin')}
-          aria-pressed={mode === 'signin'}
-          className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-            mode === 'signin' ? 'bg-accent text-black' : 'text-muted hover:text-ink'
-          }`}
-        >
-          {t(locale, 'login.signInTab')}
-        </button>
-        <button
-          type="button"
-          onClick={() => switchMode('signup')}
-          aria-pressed={mode === 'signup'}
-          className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-            mode === 'signup' ? 'bg-accent text-black' : 'text-muted hover:text-ink'
-          }`}
-        >
-          {t(locale, 'login.signUpTab')}
-        </button>
-      </div>
-
-      <form onSubmit={submitForm} className="space-y-4" aria-label={mode === 'signup' ? t(locale, 'login.signUpTab') : t(locale, 'login.signInTab')}>
-        {mode === 'signup' && (
-          <label className="block">
-            <span className="mb-1 block text-sm text-muted">{t(locale, 'login.name')}</span>
-            <input
-              type="text"
-              required
-              maxLength={100}
-              autoComplete="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={t(locale, 'login.namePlaceholder')}
-              className={inputClass}
-            />
-          </label>
-        )}
+      <form onSubmit={requestOtp} className="space-y-4" aria-label={t(locale, 'login.title')}>
         <label className="block">
           <span className="mb-1 block text-sm text-muted">{t(locale, 'login.email')}</span>
           <input
@@ -186,7 +134,7 @@ export default function AuthForm({ locale }: Props) {
           disabled={loading}
           className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90 disabled:opacity-60"
         >
-          {loading ? '…' : t(locale, mode === 'signup' ? 'login.createAccount' : 'login.sendCode')}
+          {loading ? '…' : t(locale, 'login.sendCode')}
         </button>
         <p className="text-xs text-muted">{t(locale, 'login.otpNote')}</p>
       </form>

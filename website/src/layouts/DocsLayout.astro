@@ -1,8 +1,9 @@
 ---
+import { getAbsoluteLocaleUrl } from 'astro:i18n';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import DocSidebar, { type CategoryGroup } from '../components/DocSidebar.astro';
-import { t } from '../i18n';
+import { locales, t } from '../i18n';
 import '../styles/global.css';
 
 interface Heading {
@@ -15,13 +16,18 @@ interface Props {
   locale: string;
   title: string;
   description?: string;
+  updated?: string;
   entries: CategoryGroup[];
   currentSlug?: string;
   headings?: Heading[];
 }
 
-const { locale, title, description, entries, currentSlug, headings } = Astro.props;
+const { locale, title, description, updated, entries, currentSlug, headings } = Astro.props;
 const toc = (headings ?? []).filter((h) => h.depth >= 2 && h.depth <= 3);
+// hreflang alternates for the same doc in the other locale. DocsLayout is
+// never rendered on the 404 page, but keep the same fallback for safety.
+const rawPath = Astro.url.pathname.replace(/^\/(?:en|id)(?:\/|$)/, '');
+const path = !rawPath || rawPath.replace(/^\/+/, '').startsWith('404') ? '/' : rawPath;
 ---
 
 <!doctype html>
@@ -38,7 +44,11 @@ const toc = (headings ?? []).filter((h) => h.depth >= 2 && h.depth <= 3);
     </script>
     <meta name="description" content={description ?? t(locale, 'docs.title')} />
     <link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} />
+    <link rel="sitemap" href="/sitemap-index.xml" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    {locales.map((code) => (
+      <link rel="alternate" hreflang={code} href={getAbsoluteLocaleUrl(code, path)} />
+    ))}
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="OZ-POS" />
     <meta property="og:locale" content={locale} />
@@ -77,6 +87,11 @@ const toc = (headings ?? []).filter((h) => h.depth >= 2 && h.depth <= 3);
         <article class="docs-content mx-auto max-w-3xl">
           <h1 class="text-3xl font-bold">{title}</h1>
           {description && <p class="mt-3 text-muted">{description}</p>}
+          {updated && (
+            <p class="mt-4 text-xs text-muted">
+              {t(locale, 'docs.updated')} {updated}
+            </p>
+          )}
           <div class="mt-8">
             <slot />
           </div>

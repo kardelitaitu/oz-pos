@@ -12,14 +12,16 @@
     "login": "Sign in",
     "menu": "Menu",
     "theme": "Toggle theme",
-    "language": "Language"
+    "language": "Language",
+    "homeAria": "OZ-POS home",
+    "mainNav": "Main navigation"
   },
   "pageDesc": {
     "features": "Offline-first point of sale: sales, shifts, and stock that keep working with zero connectivity.",
     "pricing": "Simple pricing — start free for 90 days. Trial, Pro, Premium, and Enterprise plans.",
     "download": "Download OZ-POS for Windows, macOS, or Linux. Free 90-day trial, no signup required.",
     "support": "Get help with OZ-POS — email support and answers to the most common questions.",
-    "login": "Sign in to your OZ-POS account or create one with just your email.",
+    "login": "Sign in to your OZ-POS account with just your email.",
     "account": "Your OZ-POS license, subscription, and billing information.",
     "privacy": "How OZ-POS collects, uses, and protects your data.",
     "terms": "The terms that govern your use of OZ-POS."
@@ -49,6 +51,7 @@
   "docs": {
     "title": "Documentation",
     "onThisPage": "On this page",
+    "updated": "Updated",
     "categories": {
       "gettingStarted": "Getting Started",
       "guides": "Guides",
@@ -114,11 +117,6 @@
   "login": {
     "title": "Sign in to your account",
     "subtitle": "We'll email you a one-time code. No password to remember or reset.",
-    "signInTab": "Sign in",
-    "signUpTab": "Create account",
-    "name": "Name",
-    "namePlaceholder": "Your name",
-    "createAccount": "Create account",
     "email": "Email",
     "emailPlaceholder": "you@example.com",
     "sendCode": "Send code",
@@ -129,7 +127,6 @@
     "codeSent": "We sent a verification code to your email.",
     "otpNote": "Verification is rate-limited to protect your account.",
     "errorSend": "Couldn't send the code. Please try again later.",
-    "errorSignup": "Couldn't create your account. Please try again later.",
     "errorVerify": "Invalid or expired code. Please try again.",
     "notConfigured": "The auth API is not configured on this deployment."
   },
@@ -150,7 +147,8 @@
   "footer": {
     "rights": "All rights reserved.",
     "privacy": "Privacy",
-    "terms": "Terms"
+    "terms": "Terms",
+    "legal": "Legal"
   },
   "legal": {
     "privacyTitle": "Privacy Policy",

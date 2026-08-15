@@ -2,8 +2,8 @@
 // in both en.json and id.json, and both dicts have identical key sets.
 // Missing keys or en/id parity drift EXIT 1 (fails `npm run prebuild`).
 // Unused keys are reported for information only — dynamic keys built from
-// template literals (e.g. `docs.categories.${group.category}`) look "unused"
-// to the static regex, so they must not fail the gate.
+// template literals (e.g. `docs.categories.${group.category}`) are validated
+// by prefix (the static part must resolve to a section in both dicts).
 // Run: node scripts/audit-i18n.mjs
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, extname } from 'node:path';
@@ -32,23 +32,51 @@ function collect(dir) {
   });
 }
 
+// Resolve a dotted chain against a dict; returns the value or undefined.
+function resolveChain(obj, parts) {
+  return parts.reduce((acc, part) => (acc && typeof acc === 'object' ? acc[part] : undefined), obj);
+}
+
 const src = collect(root);
-// Single or double quotes are both matched so a stray "t(\"en\", \"key\")"
-// can't silently escape the gate.
+// Direct form: t(locale, 'key') or t('en','key').
 const reT = /t\(\s*locale\s*,\s*(['"])([^'"]+)\1\s*\)/g;
 const reT2 = /t\(\s*(['"])([^'"]+)\1\s*,\s*(['"])([^'"]+)\3\s*\)/g; // t('en','key') literal-locale form
+// Ternary / variable forms: t(locale, cond ? 'keyA' : 'keyB') — grab every
+// quoted dotted literal inside the call so conditional keys can't slip through.
+const reT3 = /t\(\s*locale\s*,\s*([^)]*)\)/g;
+const reQuoted = /(['"])([a-zA-Z0-9]+\.[a-zA-Z0-9_.]+)\1/g;
+// Template-literal prefixes: t(locale, `docs.categories.${group.category}`)
+// — the static prefix before ${ must resolve to a section in both dicts.
+const reTpl = /t\(\s*locale\s*,\s*`([^`${]+)\$\{/g;
+
 const referenced = new Set();
+const tplPrefixes = new Set();
 const problems = [];
 
 for (const file of src) {
   const text = readFileSync(file, 'utf8');
   for (const m of text.matchAll(reT)) referenced.add(m[2]);
   for (const m of text.matchAll(reT2)) referenced.add(m[4]);
+  for (const m of text.matchAll(reT3)) {
+    for (const q of m[1].matchAll(reQuoted)) referenced.add(q[2]);
+  }
+  for (const m of text.matchAll(reTpl)) tplPrefixes.add(m[1].replace(/\.$/, ''));
 }
 
 for (const key of [...referenced].sort()) {
   if (!enKeys.has(key)) problems.push(`MISSING in en.json: ${key}`);
   if (!idKeys.has(key)) problems.push(`MISSING in id.json: ${key}`);
+}
+
+// Template-literal prefixes must resolve to a (non-leaf) section in both dicts.
+for (const prefix of [...tplPrefixes].sort()) {
+  const parts = prefix.split('.');
+  for (const [label, dict] of [['en.json', en], ['id.json', id]]) {
+    const val = resolveChain(dict, parts);
+    if (typeof val !== 'object' || val === null) {
+      problems.push(`TEMPLATE PREFIX missing or not a section in ${label}: ${prefix}`);
+    }
+  }
 }
 
 // Also find dict(locale).x.y access chains (structured data)
@@ -82,6 +110,6 @@ if (problems.length) {
   console.log('parity + presence: OK');
 }
 if (unused.length) {
-  console.log('\nUNUSED (informational — template-literal keys may be false positives):');
+  console.log('\nUNUSED (informational — dynamic keys may be false positives):');
   for (const u of unused) console.log('  ' + u);
 }

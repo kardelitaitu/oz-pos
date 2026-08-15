@@ -19,10 +19,10 @@ const login = getRelativeLocaleUrl(locale, 'login');
 
 <header class="sticky top-0 z-40 border-b border-ink/5 bg-primary/90 backdrop-blur">
   <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-    <a href={home} class="text-lg font-bold tracking-tight" aria-label="OZ-POS home">
+    <a href={home} class="text-lg font-bold tracking-tight" aria-label={t(locale, 'nav.homeAria')}>
       <span class="text-accent">OZ</span>-POS
     </a>
-    <nav class="hidden items-center gap-6 md:flex" aria-label="Main navigation">
+    <nav class="hidden items-center gap-6 md:flex" aria-label={t(locale, 'nav.mainNav')}>
       {
         nav.map((item) => (
           <a href={item.href} class="text-sm text-muted transition hover:text-ink">

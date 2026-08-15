@@ -12,14 +12,16 @@
     "login": "Masuk",
     "menu": "Menu",
     "theme": "Ganti tema",
-    "language": "Bahasa"
+    "language": "Bahasa",
+    "homeAria": "Beranda OZ-POS",
+    "mainNav": "Navigasi utama"
   },
   "pageDesc": {
     "features": "Kasir offline-first: penjualan, shift, dan stok yang tetap berjalan tanpa koneksi sama sekali.",
     "pricing": "Harga sederhana — mulai gratis 90 hari. Paket Trial, Pro, Premium, dan Enterprise.",
     "download": "Unduh OZ-POS untuk Windows, macOS, atau Linux. Uji coba gratis 90 hari, tanpa pendaftaran.",
     "support": "Dapatkan bantuan OZ-POS — dukungan email dan jawaban untuk pertanyaan paling umum.",
-    "login": "Masuk ke akun OZ-POS Anda atau buat akun hanya dengan email.",
+    "login": "Masuk ke akun OZ-POS Anda hanya dengan email.",
     "account": "Lisensi, langganan, dan informasi penagihan OZ-POS Anda.",
     "privacy": "Bagaimana OZ-POS mengumpulkan, menggunakan, dan melindungi data Anda.",
     "terms": "Ketentuan yang mengatur penggunaan OZ-POS Anda."
@@ -49,6 +51,7 @@
   "docs": {
     "title": "Dokumentasi",
     "onThisPage": "Di halaman ini",
+    "updated": "Diperbarui",
     "categories": {
       "gettingStarted": "Memulai",
       "guides": "Panduan",
@@ -114,11 +117,6 @@
   "login": {
     "title": "Masuk ke akun Anda",
     "subtitle": "Kami akan mengirimkan kode sekali pakai lewat email. Tanpa kata sandi untuk diingat atau diatur ulang.",
-    "signInTab": "Masuk",
-    "signUpTab": "Buat akun",
-    "name": "Nama",
-    "namePlaceholder": "Nama Anda",
-    "createAccount": "Buat akun",
     "email": "Email",
     "emailPlaceholder": "anda@contoh.com",
     "sendCode": "Kirim kode",
@@ -129,7 +127,6 @@
     "codeSent": "Kami mengirim kode verifikasi ke email Anda.",
     "otpNote": "Verifikasi dibatasi kecepatannya untuk melindungi akun Anda.",
     "errorSend": "Tidak dapat mengirim kode. Silakan coba lagi nanti.",
-    "errorSignup": "Tidak dapat membuat akun Anda. Silakan coba lagi nanti.",
     "errorVerify": "Kode tidak valid atau kedaluwarsa. Silakan coba lagi.",
     "notConfigured": "API autentikasi belum dikonfigurasi pada deployment ini."
   },
@@ -150,7 +147,8 @@
   "footer": {
     "rights": "Hak cipta dilindungi.",
     "privacy": "Privasi",
-    "terms": "Ketentuan"
+    "terms": "Ketentuan",
+    "legal": "Legal"
   },
   "legal": {
     "privacyTitle": "Kebijakan Privasi",

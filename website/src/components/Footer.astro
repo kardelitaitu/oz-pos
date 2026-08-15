@@ -11,7 +11,7 @@ const year = new Date().getFullYear();
     <p class="text-xs text-muted">
       © {year} OZ-POS. {t(locale, 'footer.rights')}
     </p>
-    <nav class="flex gap-4 text-xs text-muted" aria-label="Legal">
+    <nav class="flex gap-4 text-xs text-muted" aria-label={t(locale, 'footer.legal')}>
       <a href={getRelativeLocaleUrl(locale, 'legal/privacy')} class="transition hover:text-ink">
         {t(locale, 'footer.privacy')}
       </a>
