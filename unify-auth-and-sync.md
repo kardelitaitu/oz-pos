@@ -65,6 +65,7 @@
 │                                                          │
 │  Auth function (PocketBase + Go hooks — kept)            │
 │    /api/v1/license/activate|renew|status                 │
+│    /api/v1/web/contact (support form → Discord)          │
 │    RSA-2048 subscription signing                         │
 │    web_users auth (future website)                       │
 │    admin UI /_/                                          │
