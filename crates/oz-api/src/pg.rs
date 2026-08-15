@@ -671,6 +671,7 @@ pub async fn get_product(
 /// Create a product (scoped to `tenant_id`), mirroring the SQLite path:
 /// the product row plus — for `initial_stock > 0` — the `inventory`,
 /// `stock_movements` ledger, and `stock_summary` rows in one transaction.
+#[allow(clippy::too_many_arguments)]
 pub async fn create_product(
     pool: &Pool,
     tenant_id: &str,
@@ -1284,6 +1285,29 @@ mod tests {
         }
     }
 
+    /// Build a pool WITHOUT applying the schema. Used for admin connections
+    /// (CREATE/DROP DATABASE) so a test that needs a throwaway database does
+    /// not re-run the full PG_INIT DDL on the shared dev database — under
+    /// full-suite load every PG test process already applies PG_INIT to the
+    /// same base DB, and concurrent catalog DDL there is a flake source.
+    async fn raw_pool(url: &str) -> Option<deadpool_postgres::Pool> {
+        use deadpool_postgres::Manager;
+        use std::str::FromStr;
+        let config = tokio_postgres::Config::from_str(url).expect("valid postgres URL");
+        let manager = Manager::new(config, tokio_postgres::NoTls);
+        let pool = deadpool_postgres::Pool::builder(manager)
+            .max_size(3)
+            .build()
+            .expect("pool build");
+        match pool.get().await {
+            Ok(_) => Some(pool),
+            Err(e) => {
+                eprintln!("PG integration: admin pool get failed: {e}");
+                None
+            }
+        }
+    }
+
     fn unique_id(prefix: &str) -> String {
         format!("{prefix}-{}", uuid::Uuid::now_v7())
     }
@@ -1511,17 +1535,16 @@ mod tests {
             verified.as_ref().and_then(|t| t.tenant_id.as_deref()),
             Some(tenant.as_str())
         );
-        assert_eq!(
+        assert!(
             verify_terminal_credentials(&pool, &term_id, "wrong")
                 .await
                 .unwrap()
-                .is_none(),
-            true
+                .is_none()
         );
 
         // ── Categories (endpoint must respond; the shared dev DB may
         //    hold categories from parallel tests, so no emptiness claim) ──
-        assert!(list_categories(&pool).await.expect("list_categories").len() >= 0);
+        let _ = list_categories(&pool).await.expect("list_categories");
 
         // Clean up the rows this test created so a shared dev DB stays tidy
         // (the sync-store integration test does the same).
@@ -1609,7 +1632,7 @@ mod tests {
         // non-RLS `sale_lines` and `roles` tables the REST layer touches.
         let owner = pool.get().await.expect("owner connection");
         owner
-            .batch_execute(&format!(
+            .batch_execute(
                 "DO $$\n\
                  BEGIN\n\
                      IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'oz_rest_probe') THEN\n\
@@ -1622,8 +1645,8 @@ mod tests {
                  GRANT SELECT, INSERT, UPDATE, DELETE ON products, sales, users,\n\
                      tax_rates, tenant_plans, sync_terminals, roles,\n\
                      sale_lines, categories, inventory, stock_movements,\n\
-                     stock_summary TO oz_rest_probe;"
-            ))
+                     stock_summary TO oz_rest_probe;",
+            )
             .await
             .expect("probe role setup should succeed");
 
@@ -1785,12 +1808,74 @@ mod tests {
     /// is exactly `start - N`. (The pre-fix code read `previous_qty` outside
     /// the transaction, so every concurrent call saw the same starting value
     /// and the last writer won.)
+    ///
+    /// Runs on a throwaway database: other PG tests (PG_INIT re-applies, the
+    /// RLS cutover's FORCE, migration bulk copies) run DDL/DML on the shared
+    /// `products` table concurrently, and a lock-ordering collision with this
+    /// test's `FOR UPDATE` chain surfaces as a spurious deadlock abort — the
+    /// throwaway DB removes that whole class of flake while keeping the
+    /// concurrency semantics identical.
     #[tokio::test]
     async fn pg_integration_concurrent_adjust_stock() {
         let url = std::env::var("OZ_TEST_PG_URL")
             .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
-        let Some(pool) = test_pool(&url).await else {
+        // Admin connection is raw (no schema): it only creates/drops the
+        // throwaway database, so it must not re-apply PG_INIT to the shared
+        // base DB (concurrent catalog DDL across parallel test binaries).
+        let Some(admin_pool) = raw_pool(&url).await else {
             eprintln!("PG concurrent adjust test skipped (Postgres unreachable at {url})");
+            return;
+        };
+        let admin = admin_pool.get().await.expect("admin client");
+
+        // Sweep throwaway databases a crashed run left behind (only this test
+        // creates `oz_race_%`), so stale DBs cannot accumulate or collide
+        // with a fresh run after an OS PID is reused.
+        let stale: Vec<String> = admin
+            .query(
+                "SELECT datname FROM pg_database WHERE datname LIKE 'oz_race_%'",
+                &[],
+            )
+            .await
+            .expect("stale database query")
+            .iter()
+            .map(|r| r.get::<_, String>(0))
+            .collect();
+        for d in &stale {
+            admin
+                .batch_execute(&format!("DROP DATABASE IF EXISTS {d} WITH (FORCE);"))
+                .await
+                .expect("drop stale test database");
+        }
+        // PID + random suffix: unique even if the OS reuses a PID while a
+        // stale DB from a crashed run is still present.
+        let db_name = format!("oz_race_{}_{}", std::process::id(), uuid::Uuid::now_v7());
+        if admin
+            .execute(&format!("CREATE DATABASE {db_name}"), &[])
+            .await
+            .is_err()
+        {
+            eprintln!("PG concurrent adjust test skipped: cannot CREATE DATABASE");
+            return;
+        }
+        let (base, query) = match url.split_once('?') {
+            Some((b, q)) => (b, Some(q)),
+            None => (url.as_str(), None),
+        };
+        let (head, _old_db) = base
+            .rsplit_once('/')
+            .expect("URL must have a database path");
+        let db_url = match query {
+            Some(q) => format!("{head}/{db_name}?{q}"),
+            None => format!("{head}/{db_name}"),
+        };
+        // `test_pool` applies PG_INIT (full schema) to the throwaway DB.
+        let Some(pool) = test_pool(&db_url).await else {
+            eprintln!("PG concurrent adjust test skipped: cannot connect to {db_name}");
+            admin
+                .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
+                .await
+                .ok();
             return;
         };
 
@@ -1829,8 +1914,13 @@ mod tests {
         }
         assert!(
             results.iter().all(Result::is_ok),
-            "all adjustments must succeed, got {:?}",
-            results.iter().filter(|r| r.is_err()).count()
+            "all adjustments must succeed, {} failed: {:?}",
+            results.iter().filter(|r| r.is_err()).count(),
+            results
+                .iter()
+                .filter_map(|r| r.as_ref().err().map(|e| e.to_string()))
+                .take(5)
+                .collect::<Vec<_>>()
         );
 
         let fetched = get_product(&pool, &tenant, &sku)
@@ -1865,19 +1955,16 @@ mod tests {
             "initial-stock + each adjustment"
         );
 
-        // Cleanup so the shared dev DB stays tidy.
-        let client = pool.get().await.unwrap();
-        client
-            .execute(
-                "DELETE FROM stock_movements WHERE item_id IN (SELECT id FROM products WHERE tenant_id = $1)",
-                &[&tenant],
-            )
+        // Cleanup: drop the throwaway database (and any lingering handles).
+        drop(pool);
+        drop(admin);
+        admin_pool
+            .get()
             .await
-            .unwrap();
-        client
-            .execute("DELETE FROM products WHERE tenant_id = $1", &[&tenant])
+            .expect("cleanup admin client")
+            .batch_execute(&format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE);"))
             .await
-            .unwrap();
+            .expect("drop throwaway database should succeed");
     }
 
     /// Two concurrent transitions of the same sale must not both validate

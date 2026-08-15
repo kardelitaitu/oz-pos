@@ -1676,7 +1676,11 @@ mod tests {
     async fn pg_integration_webhooks_restricted_role_after_cutover() {
         let url = std::env::var("OZ_TEST_PG_URL")
             .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
-        let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, true).await {
+        // Admin connection is raw (apply_schema = false): it only sweeps
+        // stale databases/roles and creates the throwaway DB, so it must not
+        // re-apply PG_INIT to the shared base DB (concurrent catalog DDL
+        // across parallel PG test binaries is a flake source).
+        let pool = match crate::db::DbPool::connect_postgres(&url, false, 20, false).await {
             Ok(crate::db::DbPool::Postgres(pool)) => pool,
             Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
             Err(e) => {

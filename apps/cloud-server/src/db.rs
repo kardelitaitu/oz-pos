@@ -600,7 +600,11 @@ mod tests {
     async fn pg_integration_apply_schema_can_be_skipped() {
         let url = std::env::var("OZ_TEST_PG_URL")
             .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
-        let pool = match DbPool::connect_postgres(&url, false, 20, true).await {
+        // Admin connection is raw (apply_schema = false): it only drops /
+        // creates the throwaway database, so it must not re-apply PG_INIT to
+        // the shared base DB (concurrent catalog DDL across parallel PG test
+        // binaries is a flake source).
+        let pool = match DbPool::connect_postgres(&url, false, 20, false).await {
             Ok(p) => p,
             Err(e) => {
                 eprintln!("PG integration test skipped: {e}");
@@ -727,11 +731,19 @@ mod tests {
         let beta = format!("{ns}-beta");
         let sku = format!("{ns}-sku");
 
-        // Set up the non-owner role (idempotent) and clear prior rows. The
-        // owner bypasses RLS, so the cleanup is unconditional.
+        // Set up the non-owner role (idempotent) and clear prior rows. A
+        // previous run's role persists WITH its grants (this test
+        // intentionally leaves them for the probe connection), so DROP OWNED
+        // BY must run first — DROP ROLE IF EXISTS alone fails on the
+        // dependent privileges.
         client
             .batch_execute(&format!(
-                "DROP ROLE IF EXISTS oz_rls_probe;
+                "DO $$ BEGIN
+                    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'oz_rls_probe') THEN
+                        EXECUTE 'DROP OWNED BY oz_rls_probe';
+                        EXECUTE 'DROP ROLE oz_rls_probe';
+                    END IF;
+                 END $$;
                  CREATE ROLE oz_rls_probe;
                  GRANT USAGE ON SCHEMA public TO oz_rls_probe;
                  GRANT SELECT, INSERT, UPDATE, DELETE ON products TO oz_rls_probe;
@@ -792,10 +804,14 @@ mod tests {
             )
             .await
             .expect_err("RLS must reject the write when oz.tenant_id is unset");
-        assert!(
-            insert_err.to_string().contains("row-level security"),
-            "expected an RLS violation, got: {insert_err}"
-        );
+        // tokio_postgres renders every DB error as the terse "db error"; the
+        // real message lives in the DbError payload (SQLSTATE 42501,
+        // insufficient_privilege). Check it directly so a genuine RLS
+        // rejection is recognized even when the Display text is opaque.
+        let is_rls = insert_err
+            .as_db_error()
+            .is_some_and(|db| db.message().contains("row-level security"));
+        assert!(is_rls, "expected an RLS violation, got: {insert_err}");
 
         // 2. With the GUC set: only that tenant's row is visible, and the
         //    shared SKU resolves to the right tenant's price.
@@ -825,10 +841,11 @@ mod tests {
             )
             .await
             .expect_err("RLS must reject writing another tenant's row");
-        assert!(
-            wrong_tenant.to_string().contains("row-level security"),
-            "expected an RLS violation, got: {wrong_tenant}"
-        );
+        // Same opaque-Display caveat as the first rejection above.
+        let is_rls = wrong_tenant
+            .as_db_error()
+            .is_some_and(|db| db.message().contains("row-level security"));
+        assert!(is_rls, "expected an RLS violation, got: {wrong_tenant}");
 
         // 4. An UPDATE on the visible row succeeds (normal app workflow).
         probe
