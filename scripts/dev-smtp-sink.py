@@ -4,8 +4,24 @@ Accepts EHLO/MAIL/RCPT/DATA, never advertises STARTTLS or AUTH, prints
 each captured message to stdout so the OTP code can be read.
 """
 import asyncio
+import sys
+
+# Windows consoles default to cp1252, which cannot encode the '→' used in
+# the receipt email body — print every captured message ASCII-escaped so
+# the sink never dies mid-protocol (the SMTP client needs its final 250).
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(errors="backslashreplace")
 
 MESSAGES = []
+
+
+def safe_print(msg: str):
+    """Print a captured message without letting an encoding error kill the
+    handler before the SMTP client receives its 250 OK."""
+    try:
+        print(msg, flush=True)
+    except UnicodeEncodeError:
+        print(msg.encode("ascii", "backslashreplace").decode("ascii"), flush=True)
 
 
 async def handle(reader, writer):
@@ -35,10 +51,10 @@ async def handle(reader, writer):
                 if line == ".":
                     msg = "\n".join(data_lines)
                     MESSAGES.append((mail_from, list(rcpt_to), msg))
-                    print(f"[smtp] captured message from={mail_from} to={rcpt_to}")
-                    print("----- BEGIN MESSAGE -----")
-                    print(msg)
-                    print("----- END MESSAGE -----")
+                    print(f"[smtp] captured message from={mail_from} to={rcpt_to}", flush=True)
+                    print("----- BEGIN MESSAGE -----", flush=True)
+                    safe_print(msg)
+                    print("----- END MESSAGE -----", flush=True)
                     in_data = False
                     data_lines = []
                     mail_from = None
