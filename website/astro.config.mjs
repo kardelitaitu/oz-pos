@@ -23,8 +23,12 @@ export default defineConfig({
         },
       },
       // Skip the auth pages — no indexable content on /account (session-gated)
-      // or /login (form-only).
-      filter: (page) => !/\/account\/$/.test(page) && !/\/login\/$/.test(page),
+      // or /login (form-only). The docs index is a 301 in _redirects, so it
+      // has no indexable content either (the individual /docs/* pages stay).
+      filter: (page) =>
+        !/\/account\/$/.test(page) &&
+        !/\/login\/$/.test(page) &&
+        !/\/docs\/$/.test(page),
     }),
   ],
   markdown: {

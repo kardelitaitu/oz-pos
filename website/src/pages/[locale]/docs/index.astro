@@ -13,6 +13,8 @@ const first = docs
   .sort((a, b) => a.data.order - b.data.order)[0];
 // Redirect to the first Getting Started doc; fall back to the locale home if
 // the collection is empty so the page can never render a broken target.
+// NOTE: production serves a real 301 from public/_redirects — this meta
+// refresh is the fallback for local dev/preview, so keep the two in sync.
 const target = first ? `/${locale}/docs/${first.id.slice(locale.length + 1)}` : `/${locale}/`;
 ---
 
