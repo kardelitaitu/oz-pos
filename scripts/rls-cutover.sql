@@ -80,6 +80,27 @@ BEGIN
     EXECUTE 'GRANT USAGE ON SCHEMA public TO oz_app';
 END $$;
 
+-- 2b. DML on the auxiliary (non-RLS) tables the REST layer also touches.
+--     These tables have NO tenant_id column — they are children of
+--     tenant-scoped parents (sale_lines→sales, inventory / stock_movements /
+--     stock_summary→products) or shared catalogs (categories, roles) — so
+--     they are not RLS-enforced, but oz_app still needs full DML to serve
+--     create_sale / create_product / create_user / list_products. Without
+--     these grants the REST surface fails with permission denied the moment
+--     FORCE RLS is switched on.
+DO $$
+DECLARE
+    t text;
+BEGIN
+    FOREACH t IN ARRAY ARRAY['sale_lines','inventory','stock_movements',
+                            'stock_summary','categories','roles']
+    LOOP
+        EXECUTE format(
+            'GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO oz_app', t
+        );
+    END LOOP;
+END $$;
+
 -- 3. FORCE ROW LEVEL SECURITY: the owner bypass no longer applies, so a
 --    missed `WHERE tenant_id = ?` fails closed instead of leaking.
 DO $$
