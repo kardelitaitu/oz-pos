@@ -397,14 +397,24 @@ Data comes from `/api/v1/web/me` — the account page is read-only.
 
 ## 10. Deployment
 
-### Cloudflare Pages
+### Cloudflare Workers (static assets)
+
+Live at `https://oz-pos.adikaradwiatmaja.workers.dev` until the custom domain is bought.
 
 | Setting | Value |
 |---------|-------|
+| Platform | Workers static assets (`wrangler deploy` from `website/`) |
+| Config | `website/wrangler.toml` (built in) |
+| CI | `.github/workflows/website.yml` — check+build on PRs; build+deploy on main (fail-closed on missing secrets) |
 | Framework | Astro |
 | Build command | `npm run build` |
 | Output | `dist/` |
 | Root dir | `website/` |
+
+> Cloudflare Pages (Git integration) remains a valid alternative — same build
+> command/output; `wrangler.toml` is then ignored and env vars go in Pages →
+> Settings → Builds. `public/_headers` (CSP) and `public/_redirects` (301s)
+> are honored by both platforms.
 
 ### Custom Domain (path-based locales — no subdomains)
 
@@ -416,13 +426,14 @@ Data comes from `/api/v1/web/me` — the account page is read-only.
 
 ### Environment Variables
 
-**Cloudflare Pages (site):**
+**Cloudflare (site) — Workers static assets (deployed via `.github/workflows/website.yml`, `wrangler deploy`):**
 
 | Variable | Value | Purpose |
 |----------|-------|---------|
-| `LICENSE_API_URL` | `https://license.oz-pos.com` | Web auth + license API (replaces any direct PocketBase URL) |
-| `PADDLE_VENDOR_ID` | `12345` | Paddle vendor ID |
-| `PADDLE_CLIENT_TOKEN` | `xxxxx` | Paddle.js token |
+| `PUBLIC_LICENSE_API_URL` | `https://license.oz-pos.com` | Web auth + license API (replaces any direct PocketBase URL). Astro only exposes `PUBLIC_*` vars — this is set at **build time**, not in wrangler.toml |
+| `PUBLIC_PADDLE_CLIENT_TOKEN` | `xxxxx` | Paddle.js v2 client token (`Paddle.Checkout`, `custom_data.email`). Empty = checkout buttons degrade to the mailto fallback |
+| `PUBLIC_PADDLE_ENVIRONMENT` | `sandbox` | Paddle SDK env: `sandbox` or `production` (defaults to `production` when unset — set `sandbox` until real price ids ship) |
+| `PUBLIC_CONTACT_ENDPOINT` | `https://license.oz-pos.com/api/v1/web/contact` | Support contact-form target; empty = mailto fallback |
 
 **Northflank (license server, new):**
 

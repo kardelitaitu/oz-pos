@@ -1,0 +1,29 @@
+# OZ-POS Website — Cloudflare Workers (static assets)
+#
+# The site is a pure static build (Astro outputs dist/), served from a
+# workers.dev URL until the oz-pos.com domain is bought. Workers static
+# assets honors public/_headers (CSP) and public/_redirects (301s) exactly
+# like Pages does.
+#
+# Deploy (from website/):   npm run build && npx wrangler deploy
+# Or via CI:                .github/workflows/website.yml
+#
+# Alternative: Cloudflare Pages (Git integration) also works — the build
+# command/output are the same (`npm run build` → `dist/`); wrangler.toml is
+# then ignored and the env vars go in Pages → Settings → Builds.
+
+name = "oz-pos"
+
+# Workers static assets: serve the built site with zero server code.
+# NOTE: an assets-only Worker must NOT declare a binding — wrangler rejects
+# `binding` in that mode ("Cannot use assets with a binding in an assets-only
+# Worker"). Plain directory form is correct.
+assets = { directory = "./dist" }
+
+# The runtime compatibility date. Bump deliberately (never forward-date):
+# `npx wrangler deploy` warns if this is more than a few days old.
+compatibility_date = "2026-08-16"
+
+# PUBLIC_* env vars are baked into the JS at BUILD time (import.meta.env),
+# so nothing goes here — set them when running `npm run build`:
+#   PUBLIC_LICENSE_API_URL=… PUBLIC_PADDLE_CLIENT_TOKEN=… npm run build
