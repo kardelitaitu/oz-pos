@@ -166,23 +166,41 @@ fn currency_str(currency: &Currency) -> Result<String, PgError> {
         .map_err(|e| PgError::Validation(format!("invalid UTF-8 in currency bytes: {e}")))
 }
 
+// RLS contract: every tenant-scoped REST function below opens a transaction
+// and sets `oz.tenant_id` as a LOCAL setting (`set_config(..., is_local :=
+// true)`) as its first statement. Under the cutover (`scripts/rls-cutover.sql`,
+// `FORCE ROW LEVEL SECURITY`) a query on a tenant table fails closed without
+// it; the LOCAL scope auto-resets on commit/rollback, so a pooled connection
+// never leaks one tenant's scope to the next borrower.
+
 // ── Tenant plans ──────────────────────────────────────────────────────
 
 /// Read a tenant's sync plan, or `None` when the tenant has no row.
 pub async fn get_tenant_plan(pool: &Pool, tenant_id: &str) -> Result<Option<TenantPlan>, PgError> {
-    let client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
-    let row = client
+    let mut client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
+    let tx = client
+        .transaction()
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    // RLS: scope to the tenant (LOCAL setting — auto-resets on commit).
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    let row = tx
         .query_opt(
             "SELECT plan FROM tenant_plans WHERE tenant_id = $1",
             &[&tenant_id],
         )
         .await
         .map_err(|e| PgError::Db(e.to_string()))?;
-    row.map(|r| {
-        let plan: String = r.try_get(0).map_err(|e| PgError::Db(e.to_string()))?;
-        Ok(TenantPlan::from_db(&plan))
-    })
-    .transpose()
+    let result = row
+        .map(|r| {
+            let plan: String = r.try_get(0).map_err(|e| PgError::Db(e.to_string()))?;
+            Ok(TenantPlan::from_db(&plan))
+        })
+        .transpose();
+    tx.commit().await.map_err(|e| PgError::Db(e.to_string()))?;
+    result
 }
 
 /// Assign or change a tenant's plan (upsert).
@@ -191,15 +209,23 @@ pub async fn set_tenant_plan(
     tenant_id: &str,
     plan: TenantPlan,
 ) -> Result<(), PgError> {
-    let client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
-    client
-        .execute(
-            "INSERT INTO tenant_plans (tenant_id, plan, updated_at) VALUES ($1, $2, $3)
-             ON CONFLICT (tenant_id) DO UPDATE SET plan = excluded.plan, updated_at = excluded.updated_at",
-            &[&tenant_id, &plan.as_db_str(), &now_rfc3339()],
-        )
+    let mut client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
+    let tx = client
+        .transaction()
         .await
         .map_err(|e| PgError::Db(e.to_string()))?;
+    // RLS: scope to the tenant (LOCAL setting — auto-resets on commit).
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    tx.execute(
+        "INSERT INTO tenant_plans (tenant_id, plan, updated_at) VALUES ($1, $2, $3)
+         ON CONFLICT (tenant_id) DO UPDATE SET plan = excluded.plan, updated_at = excluded.updated_at",
+        &[&tenant_id, &plan.as_db_str(), &now_rfc3339()],
+    )
+    .await
+    .map_err(|e| PgError::Db(e.to_string()))?;
+    tx.commit().await.map_err(|e| PgError::Db(e.to_string()))?;
     Ok(())
 }
 
@@ -253,6 +279,10 @@ pub async fn create_tax_rate(
     let mut client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
     let tx = client
         .transaction()
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    // RLS: scope this transaction to the tenant (LOCAL, auto-resets on commit).
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
         .await
         .map_err(|e| PgError::Db(e.to_string()))?;
 
@@ -332,6 +362,10 @@ pub async fn create_user(
     let mut client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
     let tx = client
         .transaction()
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    // RLS: scope this transaction to the tenant (LOCAL, auto-resets on commit).
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
         .await
         .map_err(|e| PgError::Db(e.to_string()))?;
 
@@ -414,29 +448,52 @@ pub async fn register_terminal(
     label: &str,
     tenant_id: Option<&str>,
 ) -> Result<(), PgError> {
-    let client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
-    client
-        .execute(
-            "INSERT INTO sync_terminals (terminal_id, secret_hash, label, tenant_id, created_at)
-             VALUES ($1, $2, $3, $4, $5)
-             ON CONFLICT (terminal_id) DO UPDATE SET
-                secret_hash = excluded.secret_hash,
-                label = excluded.label,
-                tenant_id = excluded.tenant_id",
-            &[
-                &terminal_id,
-                &secret_hash,
-                &label,
-                &tenant_id,
-                &now_rfc3339(),
-            ],
-        )
+    let mut client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
+    let tx = client
+        .transaction()
         .await
         .map_err(|e| PgError::Db(e.to_string()))?;
+    if let Some(tenant) = tenant_id {
+        // RLS: scope to the tenant (LOCAL setting — auto-resets on commit).
+        // A `None` tenant is a legacy/NULL-tenant row: no GUC can be set, and
+        // under FORCE the RLS WITH CHECK rejects the write anyway.
+        tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant])
+            .await
+            .map_err(|e| PgError::Db(e.to_string()))?;
+    }
+    tx.execute(
+        "INSERT INTO sync_terminals (terminal_id, secret_hash, label, tenant_id, created_at)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (terminal_id) DO UPDATE SET
+            secret_hash = excluded.secret_hash,
+            label = excluded.label,
+            tenant_id = excluded.tenant_id",
+        &[
+            &terminal_id,
+            &secret_hash,
+            &label,
+            &tenant_id,
+            &now_rfc3339(),
+        ],
+    )
+    .await
+    .map_err(|e| PgError::Db(e.to_string()))?;
+    tx.commit().await.map_err(|e| PgError::Db(e.to_string()))?;
     Ok(())
 }
 
 /// Resolve a terminal from client credentials, or `None` on mismatch.
+///
+/// RLS exception (pre-tenant by design): this lookup IS the tenant-resolution
+/// step — the `oz.tenant_id` GUC is read FROM the terminal row it returns, so
+/// it cannot set the GUC first. Under `FORCE ROW LEVEL SECURITY` with the
+/// restricted `oz_app` role the query therefore returns zero rows and
+/// client-credential minting fails closed. Same class as the webhook
+/// `stripe_customers` lookup documented in `scripts/rls-cutover.sql`; a
+/// policy decision (e.g. a bootstrap role or a non-tenant policy on
+/// `sync_terminals` keyed on the unique `terminal_id`) is required before
+/// client-credential minting can work under the cutover. The admin-key mint
+/// path is unaffected.
 pub async fn verify_terminal_credentials(
     pool: &Pool,
     client_id: &str,
@@ -562,15 +619,25 @@ pub async fn list_products(
     pool: &Pool,
     tenant_id: &str,
 ) -> Result<Vec<ProductWithDetails>, PgError> {
-    let client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
-    let rows = client
+    let mut client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
+    let tx = client
+        .transaction()
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    // RLS: scope to the tenant (LOCAL setting — auto-resets on commit).
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    let rows = tx
         .query(
             &format!("{PRODUCT_SELECT} WHERE p.tenant_id = $1 ORDER BY p.name"),
             &[&tenant_id],
         )
         .await
         .map_err(|e| PgError::Db(e.to_string()))?;
-    rows.iter().map(pg_row_to_product_with_details).collect()
+    let result = rows.iter().map(pg_row_to_product_with_details).collect();
+    tx.commit().await.map_err(|e| PgError::Db(e.to_string()))?;
+    result
 }
 
 /// Get a single product by SKU (tenant-scoped), including category name and
@@ -580,15 +647,25 @@ pub async fn get_product(
     tenant_id: &str,
     sku: &str,
 ) -> Result<Option<ProductWithDetails>, PgError> {
-    let client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
-    let row = client
+    let mut client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
+    let tx = client
+        .transaction()
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    // RLS: scope to the tenant (LOCAL setting — auto-resets on commit).
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    let row = tx
         .query_opt(
             &format!("{PRODUCT_SELECT} WHERE p.tenant_id = $1 AND p.sku = $2"),
             &[&tenant_id, &sku],
         )
         .await
         .map_err(|e| PgError::Db(e.to_string()))?;
-    row.map(|r| pg_row_to_product_with_details(&r)).transpose()
+    let result = row.map(|r| pg_row_to_product_with_details(&r)).transpose();
+    tx.commit().await.map_err(|e| PgError::Db(e.to_string()))?;
+    result
 }
 
 /// Create a product (scoped to `tenant_id`), mirroring the SQLite path:
@@ -626,6 +703,10 @@ pub async fn create_product(
     let mut client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
     let tx = client
         .transaction()
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    // RLS: scope this transaction to the tenant (LOCAL, auto-resets on commit).
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
         .await
         .map_err(|e| PgError::Db(e.to_string()))?;
 
@@ -745,6 +826,10 @@ pub async fn adjust_stock(
         .transaction()
         .await
         .map_err(|e| PgError::Db(e.to_string()))?;
+    // RLS: scope this transaction to the tenant (LOCAL, auto-resets on commit).
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
 
     // Lock the product row first: every adjustment to this SKU contends on
     // the same row lock, so the inventory read below always sees the latest
@@ -854,6 +939,10 @@ pub async fn create_sale(pool: &Pool, tenant_id: &str, sale: &Sale) -> Result<()
     let mut client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
     let tx = client
         .transaction()
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    // RLS: scope this transaction to the tenant (LOCAL, auto-resets on commit).
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
         .await
         .map_err(|e| PgError::Db(e.to_string()))?;
 
@@ -984,10 +1073,17 @@ fn pg_row_to_sale_line(row: &tokio_postgres::Row) -> Result<SaleLine, PgError> {
 }
 
 /// Get a single sale by id, including line items.
-pub async fn get_sale(pool: &Pool, id: &str) -> Result<Option<Sale>, PgError> {
-    let client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
-
-    let sale_row = client
+pub async fn get_sale(pool: &Pool, tenant_id: &str, id: &str) -> Result<Option<Sale>, PgError> {
+    let mut client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
+    let tx = client
+        .transaction()
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    // RLS: scope to the tenant (LOCAL setting — auto-resets on commit).
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    let sale_row = tx
         .query_opt(
             "SELECT id, total_minor, currency, line_count, status, payment_method, tendered_minor,
                     discount_percent, discount_label, user_id, created_at, updated_at,
@@ -1068,7 +1164,7 @@ pub async fn get_sale(pool: &Pool, id: &str) -> Result<Option<Sale>, PgError> {
             .map_err(|e| PgError::Db(e.to_string()))?,
     };
 
-    let line_rows = client
+    let line_rows = tx
         .query(
             "SELECT id, sale_id, sku, qty, unit_minor, line_minor, currency, line_position,
                     tax_minor, tax_rate_id, tax_breakdown_json, serial_number, course, modifiers_json
@@ -1081,7 +1177,9 @@ pub async fn get_sale(pool: &Pool, id: &str) -> Result<Option<Sale>, PgError> {
         sale.lines.push(pg_row_to_sale_line(row)?);
     }
 
-    Ok(Some(sale))
+    let result = Ok(Some(sale));
+    tx.commit().await.map_err(|e| PgError::Db(e.to_string()))?;
+    result
 }
 
 /// Transition a sale's status, validating the state machine first.
@@ -1090,10 +1188,22 @@ pub async fn get_sale(pool: &Pool, id: &str) -> Result<Option<Sale>, PgError> {
 /// two concurrent transitions cannot both validate against the same stale
 /// status and double-apply (the loser re-reads and reports the current
 /// state).
-pub async fn update_sale_status(pool: &Pool, id: &str, to: SaleStatus) -> Result<Sale, PgError> {
-    let client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
-
-    let current_str: Option<String> = client
+pub async fn update_sale_status(
+    pool: &Pool,
+    tenant_id: &str,
+    id: &str,
+    to: SaleStatus,
+) -> Result<Sale, PgError> {
+    let mut client = pool.get().await.map_err(|e| PgError::Db(e.to_string()))?;
+    let tx = client
+        .transaction()
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    // RLS: scope to the tenant (LOCAL setting — auto-resets on commit).
+    tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
+        .await
+        .map_err(|e| PgError::Db(e.to_string()))?;
+    let current_str: Option<String> = tx
         .query_opt("SELECT status FROM sales WHERE id = $1", &[&id])
         .await
         .map_err(|e| PgError::Db(e.to_string()))?
@@ -1112,10 +1222,10 @@ pub async fn update_sale_status(pool: &Pool, id: &str, to: SaleStatus) -> Result
     }
 
     let now = now_rfc3339();
-    let updated = client
+    let updated = tx
         .execute(
             "UPDATE sales SET status = $1, updated_at = $2, version = version + 1 \
-             WHERE id = $3 AND status = $4",
+                 WHERE id = $3 AND status = $4",
             &[&to.as_stored_str(), &now, &id, &current_str],
         )
         .await
@@ -1124,7 +1234,7 @@ pub async fn update_sale_status(pool: &Pool, id: &str, to: SaleStatus) -> Result
     if updated == 0 {
         // Lost the race to a concurrent transition — re-read to report the
         // status we actually saw, rather than silently succeeding.
-        let now_str: Option<String> = client
+        let now_str: Option<String> = tx
             .query_opt("SELECT status FROM sales WHERE id = $1", &[&id])
             .await
             .map_err(|e| PgError::Db(e.to_string()))?
@@ -1137,7 +1247,8 @@ pub async fn update_sale_status(pool: &Pool, id: &str, to: SaleStatus) -> Result
         };
     }
 
-    match get_sale(pool, id).await? {
+    tx.commit().await.map_err(|e| PgError::Db(e.to_string()))?;
+    match get_sale(pool, tenant_id, id).await? {
         Some(sale) => Ok(sale),
         None => Err(PgError::NotFound),
     }
@@ -1348,7 +1459,7 @@ mod tests {
             .await
             .expect("create_sale");
 
-        let fetched_sale = get_sale(&pool, &sale.id)
+        let fetched_sale = get_sale(&pool, &tenant, &sale.id)
             .await
             .expect("get_sale")
             .expect("sale must exist");
@@ -1357,26 +1468,28 @@ mod tests {
         assert_eq!(fetched_sale.total.minor_units, 700);
         assert_eq!(fetched_sale.status, SaleStatus::Pending);
         assert_eq!(
-            get_sale(&pool, &unique_id("pg-nosale")).await.unwrap(),
+            get_sale(&pool, &tenant, &unique_id("pg-nosale"))
+                .await
+                .unwrap(),
             None
         );
 
         // Pending → Completed is invalid (the state machine requires Active).
         assert!(matches!(
-            update_sale_status(&pool, &sale.id, SaleStatus::Completed).await,
+            update_sale_status(&pool, &tenant, &sale.id, SaleStatus::Completed).await,
             Err(PgError::Validation(_))
         ));
         // Pending → Active → Completed is the legal path.
-        let updated = update_sale_status(&pool, &sale.id, SaleStatus::Active)
+        let updated = update_sale_status(&pool, &tenant, &sale.id, SaleStatus::Active)
             .await
             .expect("update_sale_status");
         assert_eq!(updated.status, SaleStatus::Active);
-        let completed = update_sale_status(&pool, &sale.id, SaleStatus::Completed)
+        let completed = update_sale_status(&pool, &tenant, &sale.id, SaleStatus::Completed)
             .await
             .expect("update_sale_status");
         assert_eq!(completed.status, SaleStatus::Completed);
         assert!(matches!(
-            update_sale_status(&pool, &unique_id("pg-nosale"), SaleStatus::Active).await,
+            update_sale_status(&pool, &tenant, &unique_id("pg-nosale"), SaleStatus::Active).await,
             Err(PgError::NotFound)
         ));
 
@@ -1458,6 +1571,212 @@ mod tests {
                 .await
                 .unwrap();
         }
+    }
+
+    /// Integration test: the REST layer works under RLS as a NON-OWNER role
+    /// because every tenant-scoped transaction sets `SET LOCAL oz.tenant_id`.
+    ///
+    /// The init schema enables RLS + the `tenant_isolation` policy on all 15
+    /// tenant tables, but a non-owner connection sees nothing until the
+    /// `oz.tenant_id` GUC is set. Each REST function now opens a transaction
+    /// and sets the GUC first; this test drives the real functions through a
+    /// pool that connects as a restricted `oz_rest_probe` role (password
+    /// login, DML grants only — no table ownership, no superuser), exactly
+    /// the deployment shape the RLS cutover prescribes (`oz_app`).
+    ///
+    /// Two proofs:
+    /// 1. The barrier is genuinely live: a dedicated probe connection with no
+    ///    GUC sees ZERO products (and an INSERT is rejected) even though the
+    ///    owner created a row — otherwise the round trip would pass trivially.
+    /// 2. The REST round trip succeeds as the restricted role
+    ///    (create_product → get_product → list_products → create_sale →
+    ///    get_sale), which is only possible because every function scopes its
+    ///    transaction with the tenant GUC before touching the DB.
+    #[tokio::test]
+    async fn pg_integration_rest_rls_non_owner() {
+        let url = std::env::var("OZ_TEST_PG_URL")
+            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+        let Some(pool) = test_pool(&url).await else {
+            eprintln!("PG REST RLS test skipped (Postgres unreachable at {url})");
+            return;
+        };
+
+        let tenant = unique_id("pg-rls");
+        let sku = unique_id("PG-RLS-SKU");
+        let currency: Currency = "USD".parse().unwrap();
+
+        // Restricted role (idempotent): DML on the tenant tables + the
+        // non-RLS `sale_lines` and `roles` tables the REST layer touches.
+        let owner = pool.get().await.expect("owner connection");
+        owner
+            .batch_execute(&format!(
+                "DO $$\n\
+                 BEGIN\n\
+                     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'oz_rest_probe') THEN\n\
+                         EXECUTE 'DROP OWNED BY oz_rest_probe';\n\
+                         EXECUTE 'DROP ROLE oz_rest_probe';\n\
+                     END IF;\n\
+                 END $$;\n\
+                 CREATE ROLE oz_rest_probe LOGIN PASSWORD 'oz_rest_probe_pw';\n\
+                 GRANT USAGE ON SCHEMA public TO oz_rest_probe;\n\
+                 GRANT SELECT, INSERT, UPDATE, DELETE ON products, sales, users,\n\
+                     tax_rates, tenant_plans, sync_terminals, roles,\n\
+                     sale_lines, categories, inventory, stock_movements,\n\
+                     stock_summary TO oz_rest_probe;"
+            ))
+            .await
+            .expect("probe role setup should succeed");
+
+        // Probe pool connecting AS the restricted role (same endpoint, just
+        // different credentials) — never applies PG_INIT, the owner did.
+        let scheme_end = url.find("://").expect("URL has a scheme") + 3;
+        let at = url.find('@').expect("URL has credentials");
+        let probe_url = format!(
+            "{}oz_rest_probe:oz_rest_probe_pw@{}",
+            &url[..scheme_end],
+            &url[at + 1..]
+        );
+        let probe_pool = {
+            use deadpool_postgres::Manager;
+            use std::str::FromStr;
+            let config = tokio_postgres::Config::from_str(&probe_url).expect("valid probe URL");
+            let manager = Manager::new(config, tokio_postgres::NoTls);
+            deadpool_postgres::Pool::builder(manager)
+                .max_size(2)
+                .build()
+                .expect("probe pool build")
+        };
+
+        // Owner creates the product; the probe role must NOT see it without
+        // the GUC.
+        create_product(
+            &pool,
+            &tenant,
+            &sku,
+            "RLS Espresso",
+            Money {
+                minor_units: 350,
+                currency,
+            },
+            None,
+            None,
+            10,
+        )
+        .await
+        .expect("owner create_product");
+
+        // Proof 1a: dedicated probe connection, no GUC → zero rows visible.
+        let (probe_raw, conn) = tokio_postgres::connect(&url, tokio_postgres::NoTls)
+            .await
+            .expect("dedicated probe connection");
+        tokio::spawn(async move {
+            let _ = conn.await;
+        });
+        probe_raw
+            .batch_execute("SET ROLE oz_rest_probe")
+            .await
+            .expect("SET ROLE should succeed");
+        let visible: i64 = probe_raw
+            .query_one("SELECT COUNT(*) FROM products", &[])
+            .await
+            .expect("count should succeed")
+            .get(0);
+        assert_eq!(
+            visible, 0,
+            "RLS must hide the owner's row when oz.tenant_id is unset"
+        );
+
+        // Proof 1b: an INSERT without the GUC is rejected by WITH CHECK.
+        let insert_err = probe_raw
+            .execute(
+                "INSERT INTO products (id, sku, name, price_minor, currency, tenant_id)
+                 VALUES ($1, $2, 'Intruder', 500, 'USD', $3)",
+                &[&unique_id("pg-rls-x"), &sku, &tenant],
+            )
+            .await
+            .expect_err("RLS must reject the write when oz.tenant_id is unset");
+        assert!(
+            insert_err
+                .as_db_error()
+                .is_some_and(|d| d.message().contains("row-level security")),
+            "expected an RLS violation, got: {insert_err:?}"
+        );
+
+        // Proof 2: the REST functions work as the restricted role — only
+        // possible if each transaction sets the tenant GUC.
+        let fetched = get_product(&probe_pool, &tenant, &sku)
+            .await
+            .expect("get_product as restricted role")
+            .expect("product must exist");
+        assert_eq!(fetched.product.name, "RLS Espresso");
+        assert_eq!(fetched.stock_qty, Some(10));
+
+        let listed = list_products(&probe_pool, &tenant)
+            .await
+            .expect("list_products as restricted role");
+        assert!(
+            listed.iter().any(|p| p.product.sku.as_str() == sku),
+            "the product must be visible via the REST listing"
+        );
+
+        // Sales round trip as the restricted role (single-line sale).
+        let mut sale = Sale::from_cart(&oz_core::Cart::new(currency)).expect("from_cart");
+        sale.line_count = 1;
+        sale.total = Money {
+            minor_units: 700,
+            currency,
+        };
+        sale.subtotal = Money {
+            minor_units: 700,
+            currency,
+        };
+        sale.lines = vec![SaleLine {
+            id: unique_id("pg-rls-line"),
+            sale_id: sale.id.clone(),
+            sku: sku.clone(),
+            qty: 2,
+            unit_price: Money {
+                minor_units: 350,
+                currency,
+            },
+            line_total: Money {
+                minor_units: 700,
+                currency,
+            },
+            line_position: 1,
+            tax_amount: Money::zero(currency),
+            tax_rate_id: None,
+            tax_breakdown_json: None,
+            serial_number: None,
+            course: None,
+            modifiers_json: None,
+        }];
+        create_sale(&probe_pool, &tenant, &sale)
+            .await
+            .expect("create_sale as restricted role");
+
+        let fetched_sale = get_sale(&probe_pool, &tenant, &sale.id)
+            .await
+            .expect("get_sale as restricted role")
+            .expect("sale must exist");
+        assert_eq!(fetched_sale.lines.len(), 1);
+        assert_eq!(fetched_sale.lines[0].sku, sku);
+        assert_eq!(fetched_sale.status, SaleStatus::Pending);
+
+        // Cleanup: owner removes the namespaced rows, then the probe role
+        // (DROP OWNED clears its grants first, so the drop can't fail).
+        owner
+            .batch_execute(&format!(
+                "DELETE FROM sale_lines WHERE sale_id = '{}' AND sale_id IN \
+                     (SELECT id FROM sales WHERE tenant_id = '{tenant}');\n\
+                 DELETE FROM sales WHERE tenant_id = '{tenant}';\n\
+                 DELETE FROM products WHERE tenant_id = '{tenant}';\n\
+                 DROP OWNED BY oz_rest_probe;\n\
+                 DROP ROLE oz_rest_probe;",
+                sale.id
+            ))
+            .await
+            .expect("cleanup should succeed");
     }
 
     /// Concurrent `adjust_stock` calls must not lose updates: the whole
@@ -1593,7 +1912,9 @@ mod tests {
         for _ in 0..2 {
             let pool = pool.clone();
             let id = sale.id.clone();
-            set.spawn(async move { update_sale_status(&pool, &id, SaleStatus::Active).await });
+            set.spawn(async move {
+                update_sale_status(&pool, "default", &id, SaleStatus::Active).await
+            });
         }
         let mut results = Vec::new();
         while let Some(res) = set.join_next().await {
@@ -1612,7 +1933,7 @@ mod tests {
             Some(Err(PgError::Validation(_)))
         ));
 
-        let final_sale = get_sale(&pool, &sale.id)
+        let final_sale = get_sale(&pool, "default", &sale.id)
             .await
             .expect("get_sale")
             .expect("sale must exist");

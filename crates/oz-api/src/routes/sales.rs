@@ -147,9 +147,14 @@ pub async fn create_sale(
 /// Get a single sale by id, including all line items.
 ///
 /// Returns JSON `null` when the sale is not found.
-pub async fn get_sale(State(state): State<AppState>, Path(id): Path<String>) -> Response {
+pub async fn get_sale(
+    State(state): State<AppState>,
+    Extension(claims): Extension<ApiTokenClaims>,
+    Path(id): Path<String>,
+) -> Response {
     if let Some(pool) = &state.pg {
-        return match crate::pg::get_sale(pool, &id).await {
+        let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
+        return match crate::pg::get_sale(pool, tenant_id, &id).await {
             Ok(Some(sale)) => Json(Some(sale)).into_response(),
             Ok(None) => Json(None as Option<Sale>).into_response(),
             Err(e) => e.into_response(),
@@ -172,11 +177,13 @@ pub async fn get_sale(State(state): State<AppState>, Path(id): Path<String>) -> 
 /// success, 404 if the sale doesn't exist, 422 for invalid transitions.
 pub async fn update_sale_status(
     State(state): State<AppState>,
+    Extension(claims): Extension<ApiTokenClaims>,
     Path(id): Path<String>,
     Json(body): Json<UpdateSaleStatusRequest>,
 ) -> Response {
     if let Some(pool) = &state.pg {
-        return match crate::pg::update_sale_status(pool, &id, body.status).await {
+        let tenant_id = claims.tenant_id.as_deref().unwrap_or("default");
+        return match crate::pg::update_sale_status(pool, tenant_id, &id, body.status).await {
             Ok(sale) => {
                 let resp = SaleStatusResponse {
                     id: sale.id,
