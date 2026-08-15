@@ -119,6 +119,14 @@ func main() {
 		se.Router.POST("/api/v1/license/status", handleStatus(app))
 		// Public website support form → Discord channel (see contact.go).
 		se.Router.POST("/api/v1/web/contact", handleContact(app))
+		// Website tenant-email OTP auth + account dashboard (see web_otp.go).
+		// request-otp / verify-otp are the login flow; /me reads the session;
+		// logout invalidates it. All four enforce the CORS allowlist from
+		// OZ_WEB_ALLOWED_ORIGINS and per-email/IP rate limits in-handler.
+		se.Router.POST("/api/v1/web/request-otp", handleRequestOTP(app))
+		se.Router.POST("/api/v1/web/verify-otp", handleVerifyOTP(app))
+		se.Router.GET("/api/v1/web/me", handleMe(app))
+		se.Router.POST("/api/v1/web/logout", handleLogout(app))
 		// P8-2: Machine-level revocation is integrated into the /status
 		// endpoint (send revoke:true with machine_id in the request body).
 		// P8-4: /api/health is now served by PocketBase's built-in endpoint (v0.39.6+).

@@ -79,6 +79,11 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 		&core.DateField{Name: "revoked_at"},
 		&core.TextField{Name: "notes"},
 	)
+	// Autodate created/updated mirror the production pb_schema.json so
+	// handlers sorting by "-created" (e.g. /web/me license lookup) work
+	// identically in tests.
+	licenseKeys.Fields.Add(&core.AutodateField{Name: "created", OnCreate: true})
+	licenseKeys.Fields.Add(&core.AutodateField{Name: "updated", OnCreate: true, OnUpdate: true})
 	licenseKeys.CreateRule = types.Pointer("")
 	licenseKeys.ListRule = types.Pointer("")
 	licenseKeys.ViewRule = types.Pointer("")
@@ -139,6 +144,10 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))
 		se.Router.POST("/api/v1/license/status", handleStatus(app))
 		se.Router.POST("/api/v1/web/contact", handleContact(app))
+		se.Router.POST("/api/v1/web/request-otp", handleRequestOTP(app))
+		se.Router.POST("/api/v1/web/verify-otp", handleVerifyOTP(app))
+		se.Router.GET("/api/v1/web/me", handleMe(app))
+		se.Router.POST("/api/v1/web/logout", handleLogout(app))
 		return se.Next()
 	})
 }
@@ -266,6 +275,11 @@ func createMinimalCollections(t *testing.T, app *tests.TestApp, skip map[string]
 	if tenantsID != "" {
 		licenseKeys.Fields.Add(&core.RelationField{Name: "activated_by", CollectionId: tenantsID, MaxSelect: 1})
 	}
+	// Autodate created/updated mirror the production pb_schema.json so
+	// handlers sorting by "-created" (e.g. /web/me license lookup) work
+	// identically in tests.
+	licenseKeys.Fields.Add(&core.AutodateField{Name: "created", OnCreate: true})
+	licenseKeys.Fields.Add(&core.AutodateField{Name: "updated", OnCreate: true, OnUpdate: true})
 	licenseKeys.CreateRule = types.Pointer("")
 	licenseKeys.ListRule = types.Pointer("")
 	licenseKeys.ViewRule = types.Pointer("")
@@ -346,6 +360,10 @@ func setupDirectAppWithoutCollection(t *testing.T, skip map[string]bool) (*tests
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))
 		se.Router.POST("/api/v1/license/status", handleStatus(app))
 		se.Router.POST("/api/v1/web/contact", handleContact(app))
+		se.Router.POST("/api/v1/web/request-otp", handleRequestOTP(app))
+		se.Router.POST("/api/v1/web/verify-otp", handleVerifyOTP(app))
+		se.Router.GET("/api/v1/web/me", handleMe(app))
+		se.Router.POST("/api/v1/web/logout", handleLogout(app))
 		return se.Next()
 	})
 
@@ -830,6 +848,23 @@ func resetRateLimiters() {
 	// contactRateLimiter is intentionally in-memory only (see contact.go).
 	contactRateLimiter.db = nil
 	contactRateLimiter.mu.Unlock()
+
+	// Web OTP stores + windowed limiters (web_otp.go) are in-memory and
+	// keyed by email/IP — clear them so tests start from a clean slate.
+	webOtpStore.mu.Lock()
+	webOtpStore.codes = make(map[string]*otpCode)
+	webOtpStore.sessions = make(map[string]*webSession)
+	webOtpStore.mu.Unlock()
+
+	otpRequestLimiter.mu.Lock()
+	otpRequestLimiter.entries = make(map[string]*windowEntry)
+	otpRequestLimiter.mu.Unlock()
+	otpVerifyLimiter.mu.Lock()
+	otpVerifyLimiter.entries = make(map[string]*windowEntry)
+	otpVerifyLimiter.mu.Unlock()
+	otpIPLimiter.mu.Lock()
+	otpIPLimiter.entries = make(map[string]*windowEntry)
+	otpIPLimiter.mu.Unlock()
 
 	ipRateLimiter.startCleanup()
 	keyFailTracker.startCleanup()

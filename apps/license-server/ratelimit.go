@@ -658,6 +658,12 @@ func init() {
 	ipRateLimiter.startCleanup()
 	keyFailTracker.startCleanup()
 	contactRateLimiter.startCleanup()
+
+	// Web OTP store + windowed limiters (web_otp.go) sweep on the same
+	// 30-min cadence so expired codes/sessions and old windows don't
+	// accumulate in memory.
+	go webSweepLoop()
+	go windowSweepLoop()
 }
 
 // ── Tenant-level activation lock (Fix #3: renewal TOCTOU) ─────────

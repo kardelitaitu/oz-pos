@@ -45,6 +45,13 @@ export default function AccountView({ locale }: Props) {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(async (res) => {
+        if (res.status === 401) {
+          // Expired/revoked session — clear the stored token and show the
+          // signed-out state instead of a confusing generic error.
+          sessionStorage.removeItem('oz_session');
+          if (!cancelled) setState('anon');
+          return;
+        }
         if (!res.ok) throw new Error('me failed');
         const data = (await res.json()) as MeResponse;
         if (!cancelled) {
@@ -113,7 +120,21 @@ export default function AccountView({ locale }: Props) {
       )}
       <button
         type="button"
-        onClick={() => {
+        onClick={async () => {
+          // Best-effort server-side invalidation; the local token is always
+          // cleared regardless of network outcome so the user is never
+          // stuck signed in.
+          const token = sessionStorage.getItem('oz_session');
+          if (API && token) {
+            try {
+              await fetch(`${API}/api/v1/web/logout`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
+              });
+            } catch {
+              // Ignore network errors — logout is idempotent server-side.
+            }
+          }
           sessionStorage.removeItem('oz_session');
           window.location.href = `/${locale}`;
         }}
