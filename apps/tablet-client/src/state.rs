@@ -110,6 +110,17 @@ impl AppState {
         migrations::run(&mut conn)
             .map_err(|e| AppError::Internal(format!("running migrations: {e}")))?;
 
+        // ── Tenant-integrity gate (fail loud) ────────────────────────
+        // Tablet store DBs are scoped by construction to the `default`
+        // tenant. A foreign-tenant row here means a sync/restore mishap
+        // planted another store's data into this file; refuse to boot so
+        // the operator reconciles it instead of silently mixing tenants.
+        // Two indexed COUNTs (`idx_products_tenant` / `idx_users_tenant`)
+        // — cheap enough to run at every startup.
+        oz_core::db::Store::new(&conn)
+            .check_tenant_integrity()
+            .map_err(|e| AppError::Internal(format!("tenant integrity check: {e}")))?;
+
         // ── Popularity full pass (ADR #37) ────────────────────────────
         // Materialize popularity scores right after migrations so product
         // lookups rank recently-managed items from the first launch (sales
