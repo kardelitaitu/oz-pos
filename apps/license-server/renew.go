@@ -27,23 +27,25 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
-		// Resolve api_key: prefer Authorization: Bearer <key>, fall back to
-		// the body field for backward-compat with C1-pre-audit wire format.
-		// Bearer keeps the credential out of CDN / webserver access logs
-		// that capture request bodies; we deprecation-log the body path on
-		// successful auth only (failed attempts above are noise).
-		apiKey, usedBodyFallback, authErr := extractAPIKey(req.APIKey, e.Request.Header.Get("Authorization"))
+		// ── Authenticate via Authorization: Bearer <api_key> ──────
+		// The Bearer header is the SOLE credential channel (C1-followup
+		// hardening removed the legacy body `api_key` fallback — a body
+		// credential leaks into CDN / webserver access logs that capture
+		// request bodies). The body field on RenewRequest is ignored for
+		// authentication; the header is authoritative.
+		apiKey, authErr := extractAPIKey(e.Request.Header.Get("Authorization"))
 		if authErr != nil {
+			e.Response.Header().Set("WWW-Authenticate", `Bearer realm="license"`)
 			return e.JSON(http.StatusUnauthorized, map[string]any{
-				"error": "api_key in body does not match Authorization header",
+				"error": "api_key must be sent in the Authorization: Bearer <api_key> header (body api_key is no longer accepted)",
 			})
 		}
 		req.APIKey = apiKey
 
 		// ── Validate required fields ──────────────────────────────
-		if req.TenantID == "" || req.APIKey == "" || req.Key == "" {
+		if req.TenantID == "" || req.Key == "" {
 			return e.JSON(http.StatusBadRequest, map[string]any{
-				"error": "tenant_id, api_key, and key are required",
+				"error": "tenant_id and key are required",
 			})
 		}
 
@@ -76,13 +78,6 @@ func handleRenew(app core.App) func(e *core.RequestEvent) error {
 				"error": "tenant_id does not match api_key",
 			})
 		}
-		if usedBodyFallback {
-			// Nudge operator toward the Bearer header. Logged
-			// post-auth-success only so failed-auth attempts don't
-			// spam the log.
-			log.Printf("DEPRECATION: /renew authenticated via legacy body api_key for tenant_id=%q; migrate client to Authorization: Bearer <api_key> to keep the credential out of CDN / webserver access logs that capture request bodies", tenant.Id)
-		}
-
 		// ── Per-tenant lock (Fix #3: renewal TOCTOU) ─────────────
 		// Two concurrent renewals with DIFFERENT keys for the SAME
 		// tenant must serialize. Without this, both read the same

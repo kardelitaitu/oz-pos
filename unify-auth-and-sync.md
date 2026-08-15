@@ -572,16 +572,22 @@ Lock to an explicit allowlist before serving the website:
   falls back to the hard-coded `oz-pos-dev-secret-change-in-production`
   (forgeable JWTs) and the token mint opens to anyone.
 - **Rate-limit `/api/v1/tokens`** — done: 30/min per client IP (keyed on
-  `X-Forwarded-For`/`X-Real-IP`). License `/status` is still unthrottled.
+  `X-Forwarded-For`/`X-Real-IP`). License `/status` now shares the license
+  server's persisted 5/IP/hr token bucket (was unthrottled).
 - **Hash the tenant `api_key` at rest** — done: `tenants.api_key` now stores a
   bcrypt hash and `tenants.api_key_lookup` (hidden, uniquely indexed) stores a
   hex SHA-256 for O(1) lookup. `/renew` + `/status` resolve via
   `findTenantByAPIKey`; legacy plaintext rows are lazily migrated on their
   first successful auth. A re-activation without the key rotates it (the key
-  is write-only). The legacy body-`api_key` fallback is still a deprecation
-  item (it leaks the secret into CDN/access logs).
+  is write-only). The legacy body-`api_key` fallback is **removed**: the
+  `Authorization: Bearer <api_key>` header is the sole credential channel on
+  all three endpoints (body-only requests → 401 + `WWW-Authenticate` hint),
+  and the desktop client sends the key via the header on activate/renew too
+  (`#[serde(skip_serializing)]` keeps it out of the request body), so the
+  secret can never land in CDN/access logs.
 - **Keep the license server's 5/IP/hr activate/renew limiter** — it persists
-  state to SQLite so restarts don't reset brute-force state.
+  state to SQLite so restarts don't reset brute-force state; `/status` shares
+  the same bucket.
 - Store `OZ_API_SECRET`, `OZ_ADMIN_KEY`, and `OZ_LICENSE_PRIVATE_KEY` in
   Northflank secrets, never in the image.
 - Lock down PocketBase's `/_/` admin UI (`DisableSignUp` + IP allowlist).
@@ -889,7 +895,7 @@ plan's design.
 | 4 | **`sent_reports` retention** — the PG prune cycle now deletes claims older than 90 days (same horizon as `offline_queue`), after the queue loop | The dedup table grows one row per (tenant, period) forever; old claims are only useful while a crash-recovery retry window could still collide | `pg_integration_prune_ages_out_old_sent_reports` (live-PG): seeds an old claim + fresh claims for two tenants → only the old one is swept, fresh claims for *both* tenants survive (no over-delete); new `prune_sent_reports_deleted_total` counter mirrors the queue one |
 | 5 | **Desktop tenant-foreign-row startup check** — **done**: `Store::check_tenant_integrity()` (two indexed COUNTs on `idx_products_tenant`/`idx_users_tenant`, naming the offending table(s)) wired into both `AppState::new` startup paths (desktop + tablet) right after migrations — a foreign row refuses to boot | §11.5's desktop audit recommends exactly this instead of sprinkling 40+ `WHERE tenant_id` clauses; today only `PRAGMA integrity_check` (page corruption) exists | `check_tenant_integrity_passes_on_clean_db` (clean + default-tenant rows); `_rejects_foreign_product` / `_rejects_foreign_user` (error names the table); `_reports_both_violations` — all in `backup_restore_integration.rs` |
 | 6 | **RLS deployment cutover** — **done**: `scripts/rls-cutover.sql` (idempotent, pure SQL: creates restricted non-owner `oz_app` role, grants DML on the 15 tenant tables, `FORCE ROW LEVEL SECURITY` on all 15; header documents the webhook/`distinct_tenant_count` GUC exceptions) + the cloud sync data layer now opens every Postgres transaction with `SET LOCAL oz.tenant_id` (`set_config(..., is_local := true)`, auto-reset on pool return) | The last enforcement item; schema-side RLS shipped + proven, but the owner bypassed it | `pg_integration_rls_force_blocks_owner` (live-PG): executes the real script verbatim in a transaction twice (idempotency; 15 tables FORCEd; rollback restores), then proves on a dedicated non-superuser OWNED table that FORCE blocks the owner without the GUC (0 rows + INSERT rejected) and unblocks with it; the sync PG roundtrip test stays green through the transaction refactor |
-| 7 | **License server** — throttle `/status` (share the persisted 5/IP/hr bucket) and remove/flag the legacy body-`api_key` fallback | Both are documented gaps (§11): `/status` is unthrottled; the body fallback leaks the secret into access logs | Go tests: 6th `/status` call in an hour → 429; a body-`api_key` request after the fallback removal → 401 with a header-only hint |
+| 7 | **License server** — **done**: `/status` now shares the persisted 5/IP/hr token bucket (applied before auth, like activate/renew), and the legacy body-`api_key` fallback is **removed** from all three endpoints — the `Authorization: Bearer` header is the sole credential channel (body-only → 401 + `WWW-Authenticate: Bearer` hint; activate still allows a credential-less first activation). The desktop client matches: activate/renew send the key via `.bearer_auth()` and `#[serde(skip_serializing)]` keeps it out of the request body | Both were documented gaps (§11): `/status` was unthrottled; the body fallback leaked the secret into access logs | `TestStatusHandler_RateLimited` (6th `/status` call in an hour → 429); `TestRenewHandler_RejectsBodyAPIKey` + the AuthPaths tables (body-only → 401 + `WWW-Authenticate`; header wins when both present, body ignored); all pre-existing handler tests migrated to the Bearer header; Rust `renew_license_request_serializes_snake_case` asserts `api_key` never appears in the request body |
 | 8 | **Doc hygiene** — §12 risk row still says "92-table schema" (→ 93), and the §11.5 test matrix lacks the RLS, per-tenant email, settings-endpoint, and `sent_reports` rows | Keep the plan doc truthful | — |
 | 9 | **Operations checklist (deploy-time)** — Postgres PITR + PocketBase litestream/nightly `VACUUM INTO` + a restore drill; alerting on retention flatline, queue depth, webhook 5xx, token-mint rate; metrics for rate-limit 429s and webhook 5xx | §11 reliability table items are all still paper | a `docs/operations/` runbook entry; the metrics additions get a smoke test that the endpoint renders the new counters |
 

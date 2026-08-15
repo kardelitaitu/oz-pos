@@ -744,10 +744,15 @@ mod tests {
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(json.contains("\"tenant_id\""));
-        assert!(json.contains("\"api_key\""));
         assert!(json.contains("\"key\""));
         assert!(json.contains("test-tenant"));
         assert!(json.contains("OZ-PRO-NEW-KEY"));
+        // The api_key must NOT be serialized into the body — it travels in
+        // the Authorization: Bearer header so access logs never capture it.
+        assert!(
+            !json.contains("api_key"),
+            "api_key must stay out of the request body, got: {json}"
+        );
     }
 
     #[test]

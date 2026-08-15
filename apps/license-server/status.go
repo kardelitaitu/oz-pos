@@ -29,19 +29,36 @@ func handleStatus(app core.App) func(e *core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		// Cap request body at 64KB to prevent OOM via oversized JSON payloads (M4 audit).
 		e.Request.Body = http.MaxBytesReader(e.Response, e.Request.Body, 64*1024)
+
+		// ── Rate limit: 5 requests per IP per hour (shared bucket) ──
+		// /status used to be unthrottled, letting an attacker hammer the
+		// bcrypt verification in findTenantByAPIKey without ever touching
+		// the activate/renew bucket. It now shares the persisted per-IP
+		// token bucket so brute-forcing /status burns the same budget as
+		// the other endpoints. Applied BEFORE auth (like /activate and
+		// /renew) so failed attempts cannot bypass the limiter.
+		clientIP := e.RealIP()
+		if !ipRateLimiter.allow(clientIP) {
+			return e.JSON(http.StatusTooManyRequests, map[string]any{
+				"error": "rate limit exceeded, try again later",
+			})
+		}
+
 		// ── Authenticate via Authorization: Bearer header ────────
 		auth := e.Request.Header.Get("Authorization")
 		if !strings.HasPrefix(auth, bearerPrefix) {
 			log.Printf("/status: missing or malformed Authorization header")
+			e.Response.Header().Set("WWW-Authenticate", `Bearer realm="license"`)
 			return e.JSON(http.StatusUnauthorized, map[string]any{
-				"error": "missing or malformed Authorization header (expected: Bearer <api_key>)",
+				"error": "api_key must be sent in the Authorization: Bearer <api_key> header (body api_key is no longer accepted)",
 			})
 		}
 		apiKey := strings.TrimSpace(strings.TrimPrefix(auth, bearerPrefix))
 		if apiKey == "" {
 			log.Printf("/status: empty api_key after Bearer prefix")
+			e.Response.Header().Set("WWW-Authenticate", `Bearer realm="license"`)
 			return e.JSON(http.StatusUnauthorized, map[string]any{
-				"error": "missing or malformed Authorization header (expected: Bearer <api_key>)",
+				"error": "api_key must be sent in the Authorization: Bearer <api_key> header (body api_key is no longer accepted)",
 			})
 		}
 

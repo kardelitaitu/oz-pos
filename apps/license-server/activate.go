@@ -39,20 +39,34 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			})
 		}
 
-		// Resolve api_key: prefer Authorization: Bearer <key>, fall back to
-		// the body field for backward-compat with C1-pre-audit wire format
-		// (C1 audit fix that was only applied to /status). The Bearer path
-		// keeps the credential out of CDN / webserver access logs that
-		// capture request bodies, so we nudge body-fallback callers via a
-		// deprecation log line (logged ONLY on successful auth so attackers
-		// can't spam the log by sending failing body-auth requests).
-		apiKey, usedBodyFallback, authErr := extractAPIKey(req.APIKey, e.Request.Header.Get("Authorization"))
-		if authErr != nil {
+		// ── Authenticate via Authorization: Bearer <api_key> ──────
+		// The Bearer header is the SOLE credential channel (C1-followup
+		// hardening removed the legacy body `api_key` fallback — a body
+		// credential leaks into CDN / webserver access logs that capture
+		// request bodies). Two cases:
+		//   * header present → it is authoritative (the body field is
+		//     ignored for authentication);
+		//   * header absent + body api_key present → the caller is a
+		//     legacy client sending the credential where access logs can
+		//     capture it — reject with a hint pointing at the header;
+		//   * header absent + no body api_key → first-time activation
+		//     has no credential yet (the server issues one) — proceed.
+		authHeader := e.Request.Header.Get("Authorization")
+		if strings.HasPrefix(authHeader, bearerPrefix) {
+			apiKey := strings.TrimSpace(strings.TrimPrefix(authHeader, bearerPrefix))
+			if apiKey == "" {
+				e.Response.Header().Set("WWW-Authenticate", `Bearer realm="license"`)
+				return e.JSON(http.StatusUnauthorized, map[string]any{
+					"error": "api_key must be sent in the Authorization: Bearer <api_key> header (body api_key is no longer accepted)",
+				})
+			}
+			req.APIKey = apiKey
+		} else if req.APIKey != "" {
+			e.Response.Header().Set("WWW-Authenticate", `Bearer realm="license"`)
 			return e.JSON(http.StatusUnauthorized, map[string]any{
-				"error": "api_key in body does not match Authorization header",
+				"error": "api_key must be sent in the Authorization: Bearer <api_key> header (body api_key is no longer accepted)",
 			})
 		}
-		req.APIKey = apiKey
 
 		// Normalize email to lowercase + trim so that lookup-by-email
 		// is case-insensitive and whitespace-tolerant. Email addresses
@@ -382,12 +396,6 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 				})
 			}
 
-			if usedBodyFallback {
-				// Nudge operator toward the Bearer header. Logged
-				// post-auth-success only so failed-auth attempts (which
-				// hit the 401 branch above) don't spam the log.
-				log.Printf("DEPRECATION: /activate authenticated via legacy body api_key for tenant_id=%q; migrate client to Authorization: Bearer <api_key> to keep the credential out of CDN / webserver access logs that capture request bodies", tenant.Id)
-			}
 		}
 
 		tenantID := tenant.Id

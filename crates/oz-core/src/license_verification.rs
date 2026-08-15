@@ -74,7 +74,12 @@ pub struct ActivateLicenseRequest {
     /// issues a new api_key in the response which must be persisted
     /// locally and re-sent on every subsequent activation call.
     /// `None` for first activation; `Some(api_key)` for re-activation.
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    ///
+    /// The key is sent in the `Authorization: Bearer <api_key>` header
+    /// (see [`activate_license`]) and is deliberately NEVER serialized
+    /// into the request body — a body credential leaks into CDN /
+    /// webserver access logs that capture request bodies.
+    #[serde(skip_serializing, default)]
     pub api_key: Option<String>,
 }
 
@@ -98,7 +103,12 @@ pub struct ActivateLicenseResponse {
 pub struct RenewLicenseRequest {
     /// The tenant ID.
     pub tenant_id: String,
-    /// The API key obtained during activation.
+    /// The API key obtained during activation. Sent in the
+    /// `Authorization: Bearer <api_key>` header (see [`renew_license`])
+    /// and deliberately NEVER serialized into the request body — a body
+    /// credential leaks into CDN / webserver access logs that capture
+    /// request bodies.
+    #[serde(default, skip_serializing)]
     pub api_key: String,
     /// The new license key.
     pub key: String,
@@ -240,8 +250,14 @@ pub async fn activate_license(
     let url = format!("{}/api/v1/license/activate", license_server_url());
     let client = reqwest::Client::new();
 
-    let resp = client
-        .post(&url)
+    let mut request = client.post(&url);
+    // The api_key authenticates the caller as the tenant admin on
+    // re-activations; it travels in the Authorization header (never the
+    // body, which access logs capture). First activations have no key yet.
+    if let Some(api_key) = &req.api_key {
+        request = request.bearer_auth(api_key);
+    }
+    let resp = request
         .json(req)
         .timeout(std::time::Duration::from_secs(30))
         .send()
@@ -285,6 +301,7 @@ pub async fn renew_license(req: &RenewLicenseRequest) -> Result<RenewLicenseResp
 
     let resp = client
         .post(&url)
+        .bearer_auth(&req.api_key)
         .json(req)
         .timeout(std::time::Duration::from_secs(30))
         .send()
