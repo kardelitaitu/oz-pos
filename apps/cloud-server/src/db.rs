@@ -703,4 +703,234 @@ mod tests {
             .await
             .expect("update of the visible row should succeed");
     }
+
+    /// Integration test: the deployment cutover script
+    /// (`scripts/rls-cutover.sql`) ends the owner bypass with
+    /// `FORCE ROW LEVEL SECURITY`.
+    ///
+    /// The test above proves NON-owner roles are isolated, but today's app
+    /// role is the table owner, which bypasses RLS entirely — the policies
+    /// ship inert. The cutover script closes that gap: it creates the
+    /// restricted `oz_app` role, grants DML on the tenant tables, and sets
+    /// `FORCE ROW LEVEL SECURITY` so the owner is isolated too.
+    ///
+    /// Two proofs, both on a dedicated connection (never the shared pool):
+    ///
+    /// 1. **The shipped script executes.** Run verbatim (via `include_str!`)
+    ///    inside a transaction, twice (idempotency), and assert all 15
+    ///    tenant-scoped tables are FORCEd; the rollback leaves the shared
+    ///    schema untouched.
+    /// 2. **FORCE blocks the table owner.** A dedicated NON-superuser role
+    ///    owns a dedicated table (superusers bypass RLS even with FORCE, so
+    ///    the proof must use a real non-superuser owner): with the GUC unset
+    ///    the owner sees zero rows and writes are rejected; with the GUC set
+    ///    (the sync data layer's per-request `SET LOCAL`) the owner's rows
+    ///    are visible again. This is exactly the mechanism the cutover
+    ///    relies on for a non-superuser deployment role.
+    #[tokio::test]
+    async fn pg_integration_rls_force_blocks_owner() {
+        let url = std::env::var("OZ_TEST_PG_URL")
+            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+        let pool = match DbPool::connect_postgres(&url, false, 20).await {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("PG integration test skipped: {e}");
+                return;
+            }
+        };
+        let client = pool.pg_client().await.expect("pg_client should succeed");
+        let ns = format!("rls-force-{}", std::process::id());
+        let tenant = format!("{ns}-alpha");
+        let table = format!("rls_force_probe_{}", std::process::id());
+        let owner_role = format!("oz_rls_owner_{}", std::process::id());
+
+        // Clear any probe leftovers from a crashed previous run.
+        client
+            .batch_execute(
+                "DO $$ DECLARE r record; BEGIN
+                    FOR r IN
+                        SELECT relname FROM pg_class
+                        WHERE relkind = 'r' AND relname LIKE 'rls_force_probe_%'
+                    LOOP
+                        EXECUTE format('DROP TABLE IF EXISTS %I', r.relname);
+                    END LOOP;
+                    FOR r IN
+                        SELECT rolname FROM pg_roles WHERE rolname LIKE 'oz_rls_owner_%'
+                    LOOP
+                        EXECUTE format('REVOKE ALL ON SCHEMA public FROM %I', r.rolname);
+                        EXECUTE format('DROP ROLE IF EXISTS %I', r.rolname);
+                    END LOOP;
+                END $$;",
+            )
+            .await
+            .expect("probe leftovers cleanup should succeed");
+
+        // ── Proof 1: the real cutover script executes and is idempotent. ──
+        const CUTOVER: &str = include_str!("../../../scripts/rls-cutover.sql");
+        client
+            .batch_execute("BEGIN")
+            .await
+            .expect("begin should succeed");
+        client
+            .batch_execute(CUTOVER)
+            .await
+            .expect("cutover script should execute cleanly");
+        client
+            .batch_execute(CUTOVER)
+            .await
+            .expect("cutover script must be idempotent");
+        // Count FORCEd tables among the 15 canonical tenant-scoped tables
+        // only (a stray probe table must not skew the proof).
+        let forced: i64 = client
+            .query_one(
+                "SELECT count(*) FROM pg_class c
+                 JOIN unnest(ARRAY['bundle_items','offline_queue','product_activity',
+                                   'product_bundles','product_taxes','product_variants',
+                                   'products','sales','sent_reports','stripe_customers',
+                                   'sync_terminals','tax_rates','tenant_plans',
+                                   'tenant_subscription','users']) AS t(name)
+                   ON c.relname = t.name
+                 WHERE c.relforcerowsecurity",
+                &[],
+            )
+            .await
+            .expect("count should succeed")
+            .get(0);
+        assert_eq!(
+            forced, 15,
+            "the cutover must FORCE every tenant-scoped table"
+        );
+        client
+            .batch_execute("ROLLBACK")
+            .await
+            .expect("rollback should succeed");
+        let forced: i64 = client
+            .query_one(
+                "SELECT count(*) FROM pg_class c
+                 JOIN unnest(ARRAY['bundle_items','offline_queue','product_activity',
+                                   'product_bundles','product_taxes','product_variants',
+                                   'products','sales','sent_reports','stripe_customers',
+                                   'sync_terminals','tax_rates','tenant_plans',
+                                   'tenant_subscription','users']) AS t(name)
+                   ON c.relname = t.name
+                 WHERE c.relforcerowsecurity",
+                &[],
+            )
+            .await
+            .expect("count should succeed")
+            .get(0);
+        assert_eq!(
+            forced, 0,
+            "the rollback must leave the shared schema untouched"
+        );
+
+        // ── Proof 2: FORCE blocks a non-superuser table owner. ──
+        // The dev connection is a superuser (superusers bypass RLS even with
+        // FORCE), so this proof uses a dedicated non-superuser role that OWNS
+        // a dedicated table — the same ownership relationship the cutover
+        // assumes between the migration role and the app role.
+        client
+            .batch_execute(&format!(
+                "DROP TABLE IF EXISTS {table};
+                 DROP ROLE IF EXISTS {owner_role};
+                 CREATE ROLE {owner_role} NOLOGIN;
+                 GRANT USAGE ON SCHEMA public TO {owner_role};
+                 CREATE TABLE {table} (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL);
+                 ALTER TABLE {table} OWNER TO {owner_role};
+                 ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;
+                 ALTER TABLE {table} FORCE ROW LEVEL SECURITY;
+                 CREATE POLICY tenant_isolation ON {table}
+                   USING (tenant_id = current_setting('oz.tenant_id', true))
+                   WITH CHECK (tenant_id = current_setting('oz.tenant_id', true));"
+            ))
+            .await
+            .expect("probe table setup should succeed");
+
+        // Act as the owner on a dedicated connection so SET ROLE never leaks
+        // onto a pooled connection another test might reuse.
+        let (owner, conn) = tokio_postgres::connect(&url, tokio_postgres::NoTls)
+            .await
+            .expect("dedicated owner connection should succeed");
+        tokio::spawn(async move {
+            let _ = conn.await;
+        });
+        owner
+            .execute(&format!("SET ROLE {owner_role}"), &[])
+            .await
+            .expect("SET ROLE should succeed");
+        // Seed the owner's row WITH the GUC set (WITH CHECK requires it).
+        owner
+            .execute("SELECT set_config('oz.tenant_id', $1, false)", &[&tenant])
+            .await
+            .expect("set_config should succeed");
+        owner
+            .execute(
+                &format!("INSERT INTO {table} (id, tenant_id) VALUES ($1, $2)"),
+                &[&format!("{ns}-row"), &tenant],
+            )
+            .await
+            .expect("owner seed should succeed");
+        // Clear the GUC — from here on the owner runs WITHOUT it.
+        owner
+            .execute("RESET oz.tenant_id", &[])
+            .await
+            .expect("reset should succeed");
+
+        // Without the GUC, FORCE applies to the OWNER: nothing visible,
+        // writes rejected — a missed `WHERE tenant_id = ?` fails closed.
+        let visible: i64 = owner
+            .query_one(&format!("SELECT count(*) FROM {table}"), &[])
+            .await
+            .expect("count should succeed")
+            .get(0);
+        assert_eq!(
+            visible, 0,
+            "FORCE must isolate the table owner when oz.tenant_id is unset"
+        );
+        let insert_err = owner
+            .execute(
+                &format!("INSERT INTO {table} (id, tenant_id) VALUES ($1, $2)"),
+                &[&format!("{ns}-intruder"), &tenant],
+            )
+            .await
+            .expect_err("FORCE must reject the owner's write when oz.tenant_id is unset");
+        let detail = insert_err
+            .as_db_error()
+            .map(|d| d.message().to_string())
+            .unwrap_or_default();
+        assert!(
+            detail.contains("row-level security"),
+            "expected an RLS violation, got: {detail}"
+        );
+
+        // With the GUC set, the owner sees only that tenant's rows again.
+        owner
+            .execute("SELECT set_config('oz.tenant_id', $1, false)", &[&tenant])
+            .await
+            .expect("set_config should succeed");
+        let visible: i64 = owner
+            .query_one(&format!("SELECT count(*) FROM {table}"), &[])
+            .await
+            .expect("count should succeed")
+            .get(0);
+        assert_eq!(
+            visible, 1,
+            "the seeded row must be visible with the GUC set"
+        );
+
+        // Cleanup: drop the owner role and its table unconditionally.
+        owner
+            .execute("RESET ROLE", &[])
+            .await
+            .expect("reset role should succeed");
+        drop(owner);
+        client
+            .batch_execute(&format!(
+                "DROP TABLE IF EXISTS {table};
+                 REVOKE ALL ON SCHEMA public FROM {owner_role};
+                 DROP ROLE IF EXISTS {owner_role};"
+            ))
+            .await
+            .expect("probe cleanup should succeed");
+    }
 }

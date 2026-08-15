@@ -35,6 +35,20 @@ use oz_core::TenantPlan;
 use oz_core::offline::{OfflineQueueItem, OfflineQueueStatus, SyncPriority};
 use platform_sync::transport::PushOutcome;
 
+/// Open a Postgres connection scoped to `tenant_id` for RLS enforcement.
+///
+/// Every Postgres branch below opens a transaction and sets the
+/// `oz.tenant_id` GUC **locally** (`set_config(..., is_local := true)`), so
+/// it auto-resets when the transaction ends — a leaked session-level
+/// setting on a recycled pooled connection could expose the previous
+/// borrower's tenant once RLS is FORCEd (see `scripts/rls-cutover.sql`).
+/// While the app still connects as the table owner (which bypasses RLS)
+/// this is a no-op; at cutover it becomes the per-request `SET LOCAL
+/// oz.tenant_id` the `tenant_isolation` policy keys on.
+///
+/// Read paths rely on drop-to-roll-back; the write path (`push_item`)
+/// commits explicitly.
+///
 /// The sync function's data backend.
 ///
 /// [`SyncStore::Sqlite`] wraps the shared SQLite connection behind its
@@ -72,8 +86,12 @@ impl SyncStore {
                     .map_err(|e| e.to_string())
             }
             Self::Postgres(pool) => {
-                let client = pool.get().await.map_err(|e| e.to_string())?;
-                let row = client
+                let mut client = pool.get().await.map_err(|e| e.to_string())?;
+                let mut tx = client.transaction().await.map_err(|e| e.to_string())?;
+                tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
+                    .await
+                    .map_err(|e| e.to_string())?;
+                let row = tx
                     .query_opt(
                         "SELECT plan FROM tenant_plans WHERE tenant_id = $1",
                         &[&tenant_id],
@@ -130,23 +148,28 @@ impl SyncStore {
                 }
             }
             Self::Postgres(pool) => {
-                let client = pool.get().await.map_err(|e| e.to_string())?;
-                match client
+                let mut client = pool.get().await.map_err(|e| e.to_string())?;
+                let tx = client.transaction().await.map_err(|e| e.to_string())?;
+                tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
+                    .await
+                    .map_err(|e| e.to_string())?;
+                let params: &[&(dyn tokio_postgres::types::ToSql + Sync)] = &[
+                    &item.id,
+                    &item.action,
+                    &item.payload,
+                    &status,
+                    &item.retry_count,
+                    &item.last_error,
+                    &item.created_at,
+                    &item.synced_at,
+                    &tenant_id,
+                ];
+                let outcome = match tx
                     .execute(
                         "INSERT INTO offline_queue (id, action, payload, status, retry_count, \
-                         last_error, created_at, synced_at, tenant_id)
-                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-                        &[
-                            &item.id,
-                            &item.action,
-                            &item.payload,
-                            &status,
-                            &item.retry_count,
-                            &item.last_error,
-                            &item.created_at,
-                            &item.synced_at,
-                            &tenant_id,
-                        ],
+                     last_error, created_at, synced_at, tenant_id)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+                        params,
                     )
                     .await
                 {
@@ -163,7 +186,10 @@ impl SyncStore {
                     Err(e) => Ok(PushOutcome::Rejected {
                         reason: format!("database error: {e}"),
                     }),
-                }
+                };
+                // The write path must COMMIT (drop would roll back the insert).
+                tx.commit().await.map_err(|e| e.to_string())?;
+                outcome
             }
         }
     }
@@ -187,16 +213,19 @@ impl SyncStore {
                 .flatten()
             }
             Self::Postgres(pool) => {
-                let client = pool.get().await.ok()?;
-                client
-                    .query_opt(
-                        "SELECT MIN(created_at) FROM offline_queue WHERE tenant_id = $1",
-                        &[&tenant_id],
-                    )
+                let mut client = pool.get().await.ok()?;
+                let tx = client.transaction().await.ok()?;
+                tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
                     .await
-                    .ok()
-                    .flatten()
-                    .and_then(|r| r.try_get::<_, Option<String>>(0).ok().flatten())
+                    .ok()?;
+                tx.query_opt(
+                    "SELECT MIN(created_at) FROM offline_queue WHERE tenant_id = $1",
+                    &[&tenant_id],
+                )
+                .await
+                .ok()
+                .flatten()
+                .and_then(|r| r.try_get::<_, Option<String>>(0).ok().flatten())
             }
         }
     }
@@ -217,8 +246,12 @@ impl SyncStore {
                 sqlite_pull_items(&conn, tenant_id, since, cursor, limit)
             }
             Self::Postgres(pool) => {
-                let client = pool.get().await.map_err(|e| e.to_string())?;
-                pg_pull_items(&client, tenant_id, since, cursor, limit).await
+                let mut client = pool.get().await.map_err(|e| e.to_string())?;
+                let mut tx = client.transaction().await.map_err(|e| e.to_string())?;
+                tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
+                    .await
+                    .map_err(|e| e.to_string())?;
+                pg_pull_items(&mut tx, tenant_id, since, cursor, limit).await
             }
         }
     }
@@ -236,22 +269,40 @@ impl SyncStore {
                 .unwrap_or(0)
             }
             Self::Postgres(pool) => {
-                let Ok(client) = pool.get().await else {
-                    return 0;
+                let mut client = match pool.get().await {
+                    Ok(c) => c,
+                    Err(_) => return 0,
                 };
-                client
-                    .query_one(
-                        "SELECT COUNT(*) FROM offline_queue WHERE status = 'pending' AND tenant_id = $1",
-                        &[&tenant_id],
-                    )
+                let tx = match client.transaction().await {
+                    Ok(t) => t,
+                    Err(_) => return 0,
+                };
+                if tx
+                    .execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
                     .await
-                    .map(|r| r.get::<_, i64>(0))
-                    .unwrap_or(0)
+                    .is_err()
+                {
+                    return 0;
+                }
+                tx.query_one(
+                    "SELECT COUNT(*) FROM offline_queue WHERE status = 'pending' AND tenant_id = $1",
+                    &[&tenant_id],
+                )
+                .await
+                .map(|r| r.get::<_, i64>(0))
+                .unwrap_or(0)
             }
         }
     }
 
     /// Number of distinct tenants in the queue (status endpoint).
+    ///
+    /// Deliberately NOT tenant-scoped: this is a global operator-facing
+    /// aggregate, so it intentionally runs without the `oz.tenant_id` GUC.
+    /// Once RLS is FORCEd at cutover (`scripts/rls-cutover.sql`), the policy
+    /// hides every row from the app role and this counter reads 0 — the
+    /// status endpoint keeps working, the number is simply not visible to
+    /// the restricted role.
     pub async fn distinct_tenant_count(&self) -> i64 {
         match self {
             Self::Sqlite(conn) => {
@@ -287,8 +338,12 @@ impl SyncStore {
                 sqlite_snapshot_products(&conn, tenant_id)
             }
             Self::Postgres(pool) => {
-                let client = pool.get().await.map_err(|e| e.to_string())?;
-                pg_snapshot_products(&client, tenant_id).await
+                let mut client = pool.get().await.map_err(|e| e.to_string())?;
+                let mut tx = client.transaction().await.map_err(|e| e.to_string())?;
+                tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
+                    .await
+                    .map_err(|e| e.to_string())?;
+                pg_snapshot_products(&mut tx, tenant_id).await
             }
         }
     }
@@ -304,8 +359,12 @@ impl SyncStore {
                 sqlite_snapshot_tax_rates(&conn, tenant_id)
             }
             Self::Postgres(pool) => {
-                let client = pool.get().await.map_err(|e| e.to_string())?;
-                pg_snapshot_tax_rates(&client, tenant_id).await
+                let mut client = pool.get().await.map_err(|e| e.to_string())?;
+                let mut tx = client.transaction().await.map_err(|e| e.to_string())?;
+                tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
+                    .await
+                    .map_err(|e| e.to_string())?;
+                pg_snapshot_tax_rates(&mut tx, tenant_id).await
             }
         }
     }
@@ -318,8 +377,12 @@ impl SyncStore {
                 sqlite_snapshot_users(&conn, tenant_id)
             }
             Self::Postgres(pool) => {
-                let client = pool.get().await.map_err(|e| e.to_string())?;
-                pg_snapshot_users(&client, tenant_id).await
+                let mut client = pool.get().await.map_err(|e| e.to_string())?;
+                let mut tx = client.transaction().await.map_err(|e| e.to_string())?;
+                tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
+                    .await
+                    .map_err(|e| e.to_string())?;
+                pg_snapshot_users(&mut tx, tenant_id).await
             }
         }
     }
@@ -514,8 +577,12 @@ fn sqlite_snapshot_users(
 
 /// Pull rows via Postgres, mirroring the three SQLite query shapes with
 /// `$n` placeholders. Row decode failures fail the whole pull (SYNC-10).
+///
+/// Generic over `deadpool_postgres::GenericClient` so the same code runs on
+/// the tenant-scoped transaction (the `oz.tenant_id` GUC from [`tenant_tx`])
+/// or on a plain pooled client (tests).
 async fn pg_pull_items(
-    client: &deadpool_postgres::Client,
+    client: &mut impl deadpool_postgres::GenericClient,
     tenant_id: &str,
     since: Option<&str>,
     cursor: Option<(&str, &str)>,
@@ -600,7 +667,7 @@ fn pg_bool(row: &tokio_postgres::Row, column: &str) -> Result<bool, String> {
 }
 
 async fn pg_snapshot_products(
-    client: &deadpool_postgres::Client,
+    client: &mut impl deadpool_postgres::GenericClient,
     tenant_id: &str,
 ) -> Result<Vec<serde_json::Value>, String> {
     let rows = client
@@ -641,7 +708,7 @@ async fn pg_snapshot_products(
 }
 
 async fn pg_snapshot_tax_rates(
-    client: &deadpool_postgres::Client,
+    client: &mut impl deadpool_postgres::GenericClient,
     tenant_id: &str,
 ) -> Result<Vec<serde_json::Value>, String> {
     let rows = client
@@ -671,7 +738,7 @@ async fn pg_snapshot_tax_rates(
 }
 
 async fn pg_snapshot_users(
-    client: &deadpool_postgres::Client,
+    client: &mut impl deadpool_postgres::GenericClient,
     tenant_id: &str,
 ) -> Result<Vec<serde_json::Value>, String> {
     let rows = client

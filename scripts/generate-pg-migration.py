@@ -46,17 +46,19 @@ ROOT = Path(__file__).resolve().parent.parent
 #
 # Behaviour:
 #   * The table owner (today's app role) bypasses RLS, so nothing changes
-#     until the deployment splits the app role from the owner (see
-#     unify-auth-and-sync.md §11.5). FORCE ROW LEVEL SECURITY is deliberately
-#     NOT set here — with no GUC in place it would break every query.
+#     until the cutover runs. FORCE ROW LEVEL SECURITY is deliberately NOT
+#     set here — with no GUC in place it would break every query.
 #   * Any NON-owner role is isolated immediately: without `oz.tenant_id`
 #     set, current_setting(..., true) is NULL and the policy matches no
 #     rows — reads return nothing and writes are rejected, so a missed
 #     `WHERE tenant_id = ?` fails CLOSED instead of leaking.
-#   * Cutover to enforcement: create a restricted app role, GRANT on the
-#     tenant tables, set FORCE ROW LEVEL SECURITY, and have the app run
-#     `SET LOCAL oz.tenant_id = <jwt tenant>` as the first statement of
-#     every request transaction (reset on connection return).
+#   * Cutover to enforcement is SHIPPED: `scripts/rls-cutover.sql` creates
+#     the restricted app role, GRANTs on the tenant tables, and sets FORCE
+#     ROW LEVEL SECURITY; the cloud sync data layer
+#     (apps/cloud-server/src/sync_store.rs) already runs `SET LOCAL
+#     oz.tenant_id = <jwt tenant>` as the first statement of every request
+#     transaction (auto-reset on pool return). See unify-auth-and-sync.md
+#     §11.5 item 6.
 RLS_SQL = """-- ── Row-Level Security: tenant isolation (PG-only) ─────────────────────
 -- See the appendix source in scripts/generate-pg-migration.py.
 DO $$
