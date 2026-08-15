@@ -5,6 +5,23 @@
 *.exe
 *.test
 *.out
+coverage.html
+
+# Local runtime data (dev SQLite DB with seeded test superusers). The
+# Dockerfile copies explicit source files, so this never enters the image —
+# but keeping it out of the build context avoids shipping dev credentials
+# to the daemon and bloating every build with the DB.
+pb_data/
+pb_data_*/
+
+# Dev log files
+*.log
+
+# Windows-only build resources (go-winres manifest; irrelevant to the
+# Linux container image)
+*.syso
+winres/
+app.manifest
 
 # IDE files
 .vscode/
