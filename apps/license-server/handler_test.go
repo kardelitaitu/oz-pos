@@ -138,6 +138,7 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		se.Router.POST("/api/v1/license/activate", handleActivate(app))
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))
 		se.Router.POST("/api/v1/license/status", handleStatus(app))
+		se.Router.POST("/api/v1/web/contact", handleContact(app))
 		return se.Next()
 	})
 }
@@ -344,6 +345,7 @@ func setupDirectAppWithoutCollection(t *testing.T, skip map[string]bool) (*tests
 		se.Router.POST("/api/v1/license/activate", handleActivate(app))
 		se.Router.POST("/api/v1/license/renew", handleRenew(app))
 		se.Router.POST("/api/v1/license/status", handleStatus(app))
+		se.Router.POST("/api/v1/web/contact", handleContact(app))
 		return se.Next()
 	})
 
@@ -808,6 +810,7 @@ func TestStatusHandler_WithSubscription(t *testing.T) {
 func resetRateLimiters() {
 	ipRateLimiter.stop()
 	keyFailTracker.stop()
+	contactRateLimiter.stop()
 
 	ipRateLimiter.mu.Lock()
 	ipRateLimiter.buckets = make(map[string]*tokenBucket)
@@ -822,8 +825,15 @@ func resetRateLimiters() {
 	keyFailTracker.db = nil
 	keyFailTracker.mu.Unlock()
 
+	contactRateLimiter.mu.Lock()
+	contactRateLimiter.buckets = make(map[string]*tokenBucket)
+	// contactRateLimiter is intentionally in-memory only (see contact.go).
+	contactRateLimiter.db = nil
+	contactRateLimiter.mu.Unlock()
+
 	ipRateLimiter.startCleanup()
 	keyFailTracker.startCleanup()
+	contactRateLimiter.startCleanup()
 }
 
 func TestRenewHandler_NoSubscription(t *testing.T) {

@@ -657,6 +657,7 @@ func init() {
 
 	ipRateLimiter.startCleanup()
 	keyFailTracker.startCleanup()
+	contactRateLimiter.startCleanup()
 }
 
 // ── Tenant-level activation lock (Fix #3: renewal TOCTOU) ─────────

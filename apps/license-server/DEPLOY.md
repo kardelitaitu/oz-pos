@@ -209,16 +209,23 @@ The license server requires the RSA private key as an environment variable. **Ne
    Get-Content -Raw crates/oz-core/oz-license-private.pem | Set-Clipboard
    ```
 
-4. Click **Save**.
+4. (Optional) Add the support-contact webhook:
+   - **Key:** `OZ_DISCORD_WEBHOOK`
+   - **Value:** The **Discord channel webhook URL** (Discord → channel → Settings → Integrations → Webhooks → New Webhook). This is what `/api/v1/web/contact` forwards website support-form messages to. **Never expose this URL to the browser** — the website only talks to the license server, which keeps the secret server-side. If it is unset, `/api/v1/web/contact` returns `503 not configured` and the website's contact form falls back to a mailto link.
+5. Click **Save**.
 
-### 7.2 Attach to the service
+### 7.2 CORS for the website
+
+The website (static, hosted on `https://oz-pos.com`) calls `/api/v1/web/contact` cross-origin. PocketBase's CORS middleware allows **all origins by default** (it is stateless and does not rely on cookies), so no configuration is needed for the contact form to work. For hardening you can restrict origins by adding the `--origins` flag to the `serve` command in the Dockerfile `CMD` (e.g. `--origins=https://oz-pos.com,http://localhost:4321`).
+
+### 7.3 Attach to the service
 
 1. Go to your service → **Environment** tab.
 2. Under **Secret Groups**, click **Attach**.
 3. Select `license-server-secrets`.
 4. Click **Save**.
 
-### 7.3 Redeploy
+### 7.4 Redeploy
 
 Click **Redeploy** on the service. After deployment, the service should start without errors.
 

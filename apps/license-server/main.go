@@ -117,6 +117,8 @@ func main() {
 		// credential out of URLs (which would otherwise leak it to webserver
 		// access logs, CDN logs, browser history, and Referer headers).
 		se.Router.POST("/api/v1/license/status", handleStatus(app))
+		// Public website support form → Discord channel (see contact.go).
+		se.Router.POST("/api/v1/web/contact", handleContact(app))
 		// P8-2: Machine-level revocation is integrated into the /status
 		// endpoint (send revoke:true with machine_id in the request body).
 		// P8-4: /api/health is now served by PocketBase's built-in endpoint (v0.39.6+).
