@@ -169,6 +169,9 @@ if command -v npm &>/dev/null && [ -f ui/package-lock.json ]; then
     # validation matches check-ui.mjs and the pre-commit gate.
     step "ftl dedupe" "python3 scripts/dedupe-ftl.py" python3 scripts/dedupe-ftl.py
     step "feature registry parity" "python3 scripts/verify-feature-registry.py" python3 scripts/verify-feature-registry.py
+    # Topology contract parity — the vendored oz-core copy and the UI copy
+    # must stay byte-identical (both sides of the IPC boundary read it).
+    step "topology contract parity" "python3 scripts/verify-topology-parity.py" python3 scripts/verify-topology-parity.py
     # npm run build skipped — typecheck + vitest already cover correctness;
     # the production vite bundle is validated by CI independently.
     # AUDIT-27 CI-07: E2E is NOT run here (Docker backend not provisioned).

@@ -2,8 +2,12 @@
 //!
 //! The topology graph (nodes + wires as serde_json values) is validated
 //! against the shared semantic contract (`topologySemantics.json`) and the
-//! ADR #34 typed-connection gates. This module is the domain-level core of
-//! the validation engine: it is Tauri-free and value-level, so any client
+//! ADR #34 typed-connection gates. The contract is VENDORED here in
+//! `crates/oz-core/src/topologySemantics.json` (embedded via `include_str!`)
+//! so server builds never depend on the UI tree; the UI copy in
+//! `ui/src/features/stores/` is kept byte-identical by a parity test and
+//! `scripts/verify-topology-parity.py`. This module is the domain-level core
+//! of the validation engine: it is Tauri-free and value-level, so any client
 //! (desktop Apply, tablet preview, tooling) can run the same gates.
 //!
 //! The desktop command layer (`apps/desktop-client/.../topology/semantics.rs`)
@@ -16,8 +20,13 @@ use std::sync::OnceLock;
 use crate::error::CoreError;
 
 /// Shared semantic pairing contract consumed by the validation engine.
-const SHARED_TOPOLOGY_SEMANTICS_JSON: &str =
-    include_str!("../../../ui/src/features/stores/topologySemantics.json");
+///
+/// Vendored into oz-core (see the module doc) so compiling the server never
+/// touches the UI tree; `topology.rs` sits next to the file it embeds. The
+/// UI copy stays canonical for the TypeScript side, and
+/// [`tests::vendored_contract_matches_ui_canonical`] plus
+/// `scripts/verify-topology-parity.py` keep the two byte-identical.
+const SHARED_TOPOLOGY_SEMANTICS_JSON: &str = include_str!("topologySemantics.json");
 
 /// Load the shared topology semantics contract JSON as a parsed value.
 ///
@@ -27,10 +36,11 @@ pub fn shared_topology_semantics() -> &'static Value {
     static CONTRACT: OnceLock<Value> = OnceLock::new();
     CONTRACT.get_or_init(|| {
         serde_json::from_str(SHARED_TOPOLOGY_SEMANTICS_JSON)
-            // INVARIANT: topologySemantics.json is a checked-in compile-time
-            // contract; malformed JSON is a developer/build error, not runtime
-            // user data, so initialization must fail closed.
-            // INVARIANT: checked-in contract JSON is validated at build time.
+            // INVARIANT: the vendored topologySemantics.json is a checked-in
+            // compile-time contract; malformed JSON is a developer/build
+            // error, not runtime user data, so initialization must fail
+            // closed. Its parity with the UI copy is enforced by the
+            // `vendored_contract_matches_ui_canonical` test.
             .expect("shared topology semantics JSON must be valid")
     })
 }
@@ -674,6 +684,31 @@ pub fn validate_semantic_json(nodes: &[Value], wires: &[Value]) -> Result<(), Co
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// The semantic contract is vendored into oz-core so server builds never
+    /// depend on the UI tree (the `include_str!` above resolves to the local
+    /// copy). The UI file remains the TypeScript side's source; this test
+    /// keeps the two byte-identical whenever the full repo is checked out,
+    /// and skips gracefully in a server-only build context where `ui/` is
+    /// not part of the source tree (e.g. the Docker builder stage).
+    #[test]
+    fn vendored_contract_matches_ui_canonical() {
+        let ui_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../ui/src/features/stores/topologySemantics.json");
+        if !ui_path.exists() {
+            eprintln!("topology parity: ui/ absent (server-only build context) — skipping");
+            return;
+        }
+        let ui_bytes =
+            std::fs::read(&ui_path).unwrap_or_else(|e| panic!("read {}: {e}", ui_path.display()));
+        assert_eq!(
+            SHARED_TOPOLOGY_SEMANTICS_JSON.as_bytes(),
+            ui_bytes.as_slice(),
+            "vendored crates/oz-core/src/topologySemantics.json drifted from \
+             ui/src/features/stores/topologySemantics.json — copy the file \
+             across (scripts/verify-topology-parity.py enforces this too)"
+        );
+    }
 
     fn semantic_node(id: &str, node_type: &str, store_profile_id: Option<&str>) -> Value {
         let mut node = json!({
