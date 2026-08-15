@@ -322,7 +322,6 @@ mod tests {
         assert!(item.created_at.ends_with('Z'));
     }
 
-
     // ── SyncPriority tests ─────────────────────────────────────────────
 
     #[test]
@@ -338,18 +337,33 @@ mod tests {
 
     #[test]
     fn sync_priority_from_str_lenient_known() {
-        assert_eq!(SyncPriority::from_str_lenient("critical"), SyncPriority::Critical);
-        assert_eq!(SyncPriority::from_str_lenient("normal"), SyncPriority::Normal);
+        assert_eq!(
+            SyncPriority::from_str_lenient("critical"),
+            SyncPriority::Critical
+        );
+        assert_eq!(
+            SyncPriority::from_str_lenient("normal"),
+            SyncPriority::Normal
+        );
         assert_eq!(SyncPriority::from_str_lenient("low"), SyncPriority::Low);
     }
 
     #[test]
     fn sync_priority_from_str_lenient_unknown_defaults_to_normal() {
         // Unknown strings should NEVER escalate to Critical — they default to Normal
-        assert_eq!(SyncPriority::from_str_lenient("unknown"), SyncPriority::Normal);
+        assert_eq!(
+            SyncPriority::from_str_lenient("unknown"),
+            SyncPriority::Normal
+        );
         assert_eq!(SyncPriority::from_str_lenient(""), SyncPriority::Normal);
-        assert_eq!(SyncPriority::from_str_lenient("CRITICAL"), SyncPriority::Normal); // case-sensitive
-        assert_eq!(SyncPriority::from_str_lenient("critical "), SyncPriority::Normal); // trailing space
+        assert_eq!(
+            SyncPriority::from_str_lenient("CRITICAL"),
+            SyncPriority::Normal
+        ); // case-sensitive
+        assert_eq!(
+            SyncPriority::from_str_lenient("critical "),
+            SyncPriority::Normal
+        ); // trailing space
     }
 
     #[test]
@@ -360,8 +374,6 @@ mod tests {
         assert_eq!(SyncPriority::from(99), SyncPriority::Normal); // unknown → Normal
         assert_eq!(SyncPriority::from(-1), SyncPriority::Normal); // negative → Normal
     }
-
-
 
     // ── OfflineQueueStatus tests ───────────────────────────────────────
 
@@ -449,6 +461,4 @@ mod tests {
         assert!(json.contains("\"retryCount\"") || json.contains("\"retry_count\""));
         assert!(json.contains("\"tenantId\"") || json.contains("\"tenant_id\""));
     }
-
 }
-

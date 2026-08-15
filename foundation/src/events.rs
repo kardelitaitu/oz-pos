@@ -87,7 +87,6 @@ impl DomainEvent for StockAdjusted {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

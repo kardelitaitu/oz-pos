@@ -855,7 +855,6 @@ mod tests {
         assert_eq!(OFFLINE_GRACE_DAYS, 14);
     }
 
-
     // ── SubscriptionTier feature-flag coverage ─────────────────────────
 
     #[test]
@@ -974,7 +973,11 @@ mod tests {
 
     #[test]
     fn allows_workspace_type_pro_tier_allows_all() {
-        for tier in [SubscriptionTier::Pro, SubscriptionTier::Premium, SubscriptionTier::Enterprise] {
+        for tier in [
+            SubscriptionTier::Pro,
+            SubscriptionTier::Premium,
+            SubscriptionTier::Enterprise,
+        ] {
             assert!(tier.allows_workspace_type("store-pos"));
             assert!(tier.allows_workspace_type("restaurant-pos"));
             assert!(tier.allows_workspace_type("warehouse"));
@@ -990,21 +993,45 @@ mod tests {
         assert_eq!(SubscriptionTier::from_db("free"), SubscriptionTier::Free);
         assert_eq!(SubscriptionTier::from_db("trial"), SubscriptionTier::Free);
         assert_eq!(SubscriptionTier::from_db("FREE"), SubscriptionTier::Free);
-        assert_eq!(SubscriptionTier::from_db("one_time"), SubscriptionTier::OneTime);
-        assert_eq!(SubscriptionTier::from_db("perpetual"), SubscriptionTier::OneTime);
-        assert_eq!(SubscriptionTier::from_db("one-time"), SubscriptionTier::OneTime);
-        assert_eq!(SubscriptionTier::from_db("onetime"), SubscriptionTier::OneTime);
-        assert_eq!(SubscriptionTier::from_db("standard"), SubscriptionTier::Standard);
+        assert_eq!(
+            SubscriptionTier::from_db("one_time"),
+            SubscriptionTier::OneTime
+        );
+        assert_eq!(
+            SubscriptionTier::from_db("perpetual"),
+            SubscriptionTier::OneTime
+        );
+        assert_eq!(
+            SubscriptionTier::from_db("one-time"),
+            SubscriptionTier::OneTime
+        );
+        assert_eq!(
+            SubscriptionTier::from_db("onetime"),
+            SubscriptionTier::OneTime
+        );
+        assert_eq!(
+            SubscriptionTier::from_db("standard"),
+            SubscriptionTier::Standard
+        );
         assert_eq!(SubscriptionTier::from_db("pro"), SubscriptionTier::Pro);
-        assert_eq!(SubscriptionTier::from_db("premium"), SubscriptionTier::Premium);
-        assert_eq!(SubscriptionTier::from_db("enterprise"), SubscriptionTier::Enterprise);
+        assert_eq!(
+            SubscriptionTier::from_db("premium"),
+            SubscriptionTier::Premium
+        );
+        assert_eq!(
+            SubscriptionTier::from_db("enterprise"),
+            SubscriptionTier::Enterprise
+        );
     }
 
     #[test]
     fn from_db_unknown_defaults_to_free() {
         assert_eq!(SubscriptionTier::from_db("unknown"), SubscriptionTier::Free);
         assert_eq!(SubscriptionTier::from_db(""), SubscriptionTier::Free);
-        assert_eq!(SubscriptionTier::from_db("ENTREPRISE"), SubscriptionTier::Free); // case-sensitive after to_lowercase
+        assert_eq!(
+            SubscriptionTier::from_db("ENTREPRISE"),
+            SubscriptionTier::Free
+        ); // case-sensitive after to_lowercase
     }
 
     #[test]
@@ -1016,6 +1043,4 @@ mod tests {
         assert_eq!(SubscriptionTier::Premium.name(), "Premium (Pro)");
         assert_eq!(SubscriptionTier::Enterprise.name(), "Enterprise");
     }
-
 }
-
