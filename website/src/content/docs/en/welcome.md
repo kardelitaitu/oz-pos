@@ -18,6 +18,11 @@ guides for [cloud sync](../cloud-sync/) and [payments & QRIS](../payments/).
 > **Note:** Callouts render with the accent color — great for tips, warnings,
 > and important notes. Write them as blockquotes starting with a bold label.
 
+> **Info:** The guides cover day-to-day workflows like sync and payments.
+
+> **Warning:** This page is placeholder content — it will be replaced with
+> real documentation before launch.
+
 ## How the docs are organized
 
 - **Getting Started** — install, activate, and ring up your first sale.

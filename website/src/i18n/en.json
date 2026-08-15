@@ -11,7 +11,8 @@
     "support": "Support",
     "login": "Sign in",
     "account": "Account",
-    "menu": "Menu"
+    "menu": "Menu",
+    "theme": "Toggle theme"
   },
   "pageDesc": {
     "features": "Offline-first point of sale: sales, shifts, and stock that keep working with zero connectivity.",

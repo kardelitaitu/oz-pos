@@ -20,6 +20,11 @@ sesungguhnya. Lihat panduan untuk [sinkron cloud](../cloud-sync/) dan
 > untuk tips, peringatan, dan catatan penting. Tulis sebagai blockquote yang
 > diawali label tebal.
 
+> **Info:** Panduan mencakup alur kerja harian seperti sinkron dan pembayaran.
+
+> **Warning:** Halaman ini masih placeholder — akan diganti dengan dokumentasi
+> sesungguhnya sebelum peluncuran.
+
 ## Cara dokumentasi disusun
 
 - **Memulai** — instal, aktivasi, dan transaksi pertama Anda.

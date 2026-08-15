@@ -19,6 +19,13 @@ const desc = description ?? t(locale, 'meta.description');
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Apply the stored theme before first paint (dark is the default). -->
+    <script is:inline>
+      (() => {
+        const t = localStorage.getItem('oz_theme');
+        document.documentElement.dataset.theme = t === 'light' ? 'light' : 'dark';
+      })();
+    </script>
     <meta name="description" content={desc} />
     <link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />

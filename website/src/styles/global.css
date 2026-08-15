@@ -2,9 +2,11 @@
 
 /* Design tokens — absolute black + Freebuff-style lime accent
    (website-plan.md §9; ink = the plan's --color-text).
-   The default theme is dark; a light theme is layered on below via
-   prefers-color-scheme. Components use ink/* utilities for borders and
-   faint fills (never white/*) so they adapt to both themes automatically. */
+   Dark is the DEFAULT theme regardless of OS preference; a light theme is
+   layered on via :root[data-theme="light"] (set by the ThemeToggle header
+   icon + a small inline script in each layout head, stored in localStorage).
+   Components use ink/* utilities for borders and faint fills (never
+   white/*) so they adapt to both themes automatically. */
 @theme {
   --color-primary: #000000;
   --color-surface: #0a0a0a;
@@ -16,17 +18,57 @@
 /* Form controls and scrollbars match the active theme. */
 :root {
   color-scheme: dark;
+  /* callout variant colors (dark values; overridden for light below) */
+  --callout-info: #38bdf8;
+  --callout-warning: #fbbf24;
+  --callout-tip: #34d399;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color-scheme: light;
-    --color-primary: #ffffff;
-    --color-surface: #fafafa;
-    /* darker green — the lime is unreadable as text on white */
-    --color-accent: #16a34a;
-    --color-ink: #0a0a0a;
-    --color-muted: #525252;
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-primary: #ffffff;
+  --color-surface: #fafafa;
+  /* darker green — the lime is unreadable as text on white */
+  --color-accent: #16a34a;
+  --color-ink: #0a0a0a;
+  --color-muted: #525252;
+  --callout-info: #0284c7;
+  --callout-warning: #d97706;
+  --callout-tip: #059669;
+}
+
+/* Theme toggle icon: both icons overlap absolutely inside the button;
+   the moon shows in dark mode and the sun in light mode, cross-fading
+   with a slight rotate/scale on the incoming icon. */
+.theme-toggle {
+  position: relative;
+}
+.theme-toggle svg {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  transition: opacity 200ms ease, transform 300ms ease;
+}
+.theme-toggle .icon-moon {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
+}
+.theme-toggle .icon-sun {
+  opacity: 0;
+  transform: rotate(90deg) scale(0.5);
+}
+:root[data-theme="light"] .theme-toggle .icon-moon {
+  opacity: 0;
+  transform: rotate(-90deg) scale(0.5);
+}
+:root[data-theme="light"] .theme-toggle .icon-sun {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-toggle svg {
+    transition: none;
   }
 }
 
@@ -113,7 +155,9 @@
   padding: 0;
 }
 /* GitBook-style callout: accent left border + tinted box. A leading bold
-   label (e.g. "> **Note:** …”) renders as the accent-colored label. */
+   label (e.g. "> **Note:** …”) renders as the accent-colored label; the
+   rehype-callouts plugin adds callout-info / callout-warning / callout-tip
+   classes for the variant colors below (Note keeps the accent default). */
 .docs-content blockquote {
   margin-top: 1.25rem;
   border-left: 3px solid var(--color-accent);
@@ -128,6 +172,27 @@
 }
 .docs-content blockquote p:first-child strong {
   color: var(--color-accent);
+}
+.docs-content blockquote.callout-info {
+  border-left-color: var(--callout-info);
+  background: color-mix(in srgb, var(--callout-info) 9%, transparent);
+}
+.docs-content blockquote.callout-info p:first-child strong {
+  color: var(--callout-info);
+}
+.docs-content blockquote.callout-warning {
+  border-left-color: var(--callout-warning);
+  background: color-mix(in srgb, var(--callout-warning) 9%, transparent);
+}
+.docs-content blockquote.callout-warning p:first-child strong {
+  color: var(--callout-warning);
+}
+.docs-content blockquote.callout-tip {
+  border-left-color: var(--callout-tip);
+  background: color-mix(in srgb, var(--callout-tip) 9%, transparent);
+}
+.docs-content blockquote.callout-tip p:first-child strong {
+  color: var(--callout-tip);
 }
 .docs-content hr {
   margin-top: 2rem;

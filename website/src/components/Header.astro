@@ -2,6 +2,7 @@
 import { getRelativeLocaleUrl } from 'astro:i18n';
 import { t } from '../i18n';
 import LocaleSwitcher from './LocaleSwitcher.astro';
+import ThemeToggle from './ThemeToggle.astro';
 
 const locale = Astro.currentLocale ?? 'en';
 const nav = [
@@ -31,6 +32,7 @@ const login = getRelativeLocaleUrl(locale, 'login');
       }
     </nav>
     <div class="flex items-center gap-3">
+      <ThemeToggle />
       <LocaleSwitcher />
       <a
         href={login}

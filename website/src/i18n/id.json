@@ -11,7 +11,8 @@
     "support": "Dukungan",
     "login": "Masuk",
     "account": "Akun",
-    "menu": "Menu"
+    "menu": "Menu",
+    "theme": "Ganti tema"
   },
   "pageDesc": {
     "features": "Kasir offline-first: penjualan, shift, dan stok yang tetap berjalan tanpa koneksi sama sekali.",
