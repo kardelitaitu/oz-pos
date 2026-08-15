@@ -61,7 +61,7 @@ const contactHref = 'mailto:sales@oz-pos.com';
   <ul class="mt-6 space-y-2 text-sm">
     {tier.features.map((f) => (
       <li class:list={['flex items-center gap-2', f.included ? '' : 'text-muted']}>
-        <span aria-hidden="true" class:list={[f.included ? 'text-accent' : 'text-muted/50']}>
+        <span aria-hidden="true" class:list={[f.included ? 'text-link' : 'text-muted/50']}>
           {f.included ? '✓' : '✗'}
         </span>
         {f.label}

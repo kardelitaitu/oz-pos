@@ -13,15 +13,8 @@ retail. Every feature keeps working with no internet connection, and data
 syncs to the cloud the moment the connection returns.
 
 This placeholder page will be replaced with real product documentation. See the
-guides for [cloud sync](../cloud-sync/) and [payments & QRIS](../payments/).
-
-> **Note:** Callouts render with the accent color — great for tips, warnings,
-> and important notes. Write them as blockquotes starting with a bold label.
-
-> **Info:** The guides cover day-to-day workflows like sync and payments.
-
-> **Warning:** This page is placeholder content — it will be replaced with
-> real documentation before launch.
+guides for [cloud sync](../cloud-sync/) and [payments & QRIS](../payments/), or
+the [docs styling guide](../docs-authoring/) for how these pages are written.
 
 ## How the docs are organized
 

@@ -20,7 +20,7 @@ const KINDS = {
   tip: 'tip',
   warning: 'warning',
   caution: 'warning',
-  danger: 'warning',
+  danger: 'danger',
 };
 
 function walk(node) {

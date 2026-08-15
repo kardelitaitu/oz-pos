@@ -22,7 +22,7 @@ const download = getRelativeLocaleUrl(locale, 'download');
       {
         features.map((f, i) => (
           <article class="rounded-xl border border-ink/10 bg-surface/40 p-6">
-            <p class="text-sm font-bold text-accent">{String(i + 1).padStart(2, '0')}</p>
+            <p class="text-sm font-bold text-link">{String(i + 1).padStart(2, '0')}</p>
             <h2 class="mt-2 text-xl font-semibold">{f.title}</h2>
             <p class="mt-2 text-sm text-muted">{f.description}</p>
           </article>

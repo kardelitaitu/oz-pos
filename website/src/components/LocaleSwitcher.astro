@@ -1,6 +1,6 @@
 ---
 import { getRelativeLocaleUrl } from 'astro:i18n';
-import { locales } from '../i18n';
+import { locales, t } from '../i18n';
 
 const locale = (Astro.currentLocale ?? 'en') as 'en' | 'id';
 // Strip the locale prefix so the toggle keeps the same page in the other locale.
@@ -10,7 +10,7 @@ const path = Astro.url.pathname.replace(/^\/(?:en|id)(?:\/|$)/, '');
 <div
   class="flex items-center rounded-full border border-ink/10 bg-primary p-0.5"
   role="group"
-  aria-label="Language"
+  aria-label={t(locale, 'nav.language')}
 >
   {
     locales.map((code) => (

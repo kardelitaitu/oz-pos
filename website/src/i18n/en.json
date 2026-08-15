@@ -12,7 +12,8 @@
     "login": "Sign in",
     "account": "Account",
     "menu": "Menu",
-    "theme": "Toggle theme"
+    "theme": "Toggle theme",
+    "language": "Language"
   },
   "pageDesc": {
     "features": "Offline-first point of sale: sales, shifts, and stock that keep working with zero connectivity.",
@@ -21,7 +22,6 @@
     "support": "Get help with OZ-POS — email support and answers to the most common questions.",
     "login": "Sign in to your OZ-POS account or create one with just your email.",
     "account": "Your OZ-POS license, subscription, and billing information.",
-    "docs": "Documentation for OZ-POS — getting started, guides, and reference.",
     "privacy": "How OZ-POS collects, uses, and protects your data.",
     "terms": "The terms that govern your use of OZ-POS."
   },
@@ -30,6 +30,15 @@
     "subtitle": "We're here to help — reach out any time.",
     "emailLabel": "Email us",
     "email": "support@oz-pos.com",
+    "name": "Name",
+    "namePlaceholder": "Your name",
+    "message": "Message",
+    "messagePlaceholder": "How can we help?",
+    "submit": "Send message",
+    "sending": "Sending…",
+    "success": "Thanks! Your message is on its way — we'll reply soon.",
+    "sendAnother": "Send another message",
+    "formError": "Couldn't send your message. Please try again later.",
     "faqTitle": "Frequently asked questions",
     "faq": [
       { "q": "How do I start the free trial?", "a": "Download OZ-POS and launch it — the 90-day trial starts automatically, no signup required." },
@@ -84,7 +93,8 @@
     "subtitle": "Every plan includes the full offline-first core. Upgrade for more stores, registers, and automation.",
     "trust1": "30-day money back",
     "trust2": "Cancel anytime",
-    "note": "One-time (perpetual) licensing is not available yet — see the roadmap."
+    "note": "One-time (perpetual) licensing is not available yet — see the roadmap.",
+    "comparison": "Feature comparison across plans"
   },
   "download": {
     "title": "Download OZ-POS",
@@ -135,8 +145,6 @@
     "tier": "Plan",
     "status": "Status",
     "expires": "Expires",
-    "subscription": "Subscription",
-    "billing": "Billing",
     "logout": "Sign out",
     "notConfigured": "The license API is not configured on this deployment."
   },
@@ -149,11 +157,6 @@
     "privacyTitle": "Privacy Policy",
     "termsTitle": "Terms of Service",
     "placeholder": "This page is a placeholder. Legal text will be added before launch."
-  },
-  "common": {
-    "loading": "Loading…",
-    "contactUs": "Contact us",
-    "notAvailable": "Not available yet"
   },
   "notFound": {
     "title": "Page not found",

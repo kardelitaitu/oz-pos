@@ -62,7 +62,7 @@ const toc = (headings ?? []).filter((h) => h.depth >= 2 && h.depth <= 3);
 
     <div class="mx-auto flex w-full max-w-7xl flex-1">
       <!-- Desktop sidebar -->
-      <aside class="sticky top-16 hidden h-[calc(100vh-4rem)] w-60 shrink-0 overflow-y-auto border-r border-ink/5 px-4 py-8 md:block">
+      <aside class="sticky top-[4.5rem] hidden h-[calc(100vh-4.5rem)] w-60 shrink-0 overflow-y-auto border-r border-ink/5 px-4 py-8 md:block">
         <p class="px-2 text-xs font-semibold uppercase tracking-wide text-muted">
           {t(locale, 'docs.title')}
         </p>
@@ -82,7 +82,7 @@ const toc = (headings ?? []).filter((h) => h.depth >= 2 && h.depth <= 3);
       <!-- On-this-page TOC -->
       {
         toc.length > 0 && (
-          <aside class="sticky top-16 hidden h-[calc(100vh-4rem)] w-56 shrink-0 overflow-y-auto px-4 py-8 xl:block">
+          <aside class="sticky top-[4.5rem] hidden h-[calc(100vh-4.5rem)] w-56 shrink-0 overflow-y-auto px-4 py-8 xl:block">
             <p class="text-xs font-semibold uppercase tracking-wide text-muted">
               {t(locale, 'docs.onThisPage')}
             </p>

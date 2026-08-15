@@ -1,5 +1,6 @@
 ---
 import { getCollection } from 'astro:content';
+import { t } from '../../../i18n';
 
 export async function getStaticPaths() {
   return [{ params: { locale: 'en' } }, { params: { locale: 'id' } }];
@@ -10,7 +11,9 @@ const docs = (await getCollection('docs')).filter((d) => d.id.startsWith(`${loca
 const first = docs
   .filter((d) => d.data.category === 'gettingStarted')
   .sort((a, b) => a.data.order - b.data.order)[0];
-const target = `/${locale}/docs/${first.id.slice(locale.length + 1)}`;
+// Redirect to the first Getting Started doc; fall back to the locale home if
+// the collection is empty so the page can never render a broken target.
+const target = first ? `/${locale}/docs/${first.id.slice(locale.length + 1)}` : `/${locale}/`;
 ---
 
 <!doctype html>
@@ -18,7 +21,7 @@ const target = `/${locale}/docs/${first.id.slice(locale.length + 1)}`;
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Documentation</title>
+    <title>OZ-POS — {t(locale, 'docs.title')}</title>
     <meta http-equiv="refresh" content={`0; url=${target}`} />
   </head>
   <body></body>

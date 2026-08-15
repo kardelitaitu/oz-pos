@@ -103,7 +103,7 @@ export default function AuthForm({ locale }: Props) {
               className={inputClass}
             />
           </label>
-          {error && <p className="text-sm text-accent" role="alert">{error}</p>}
+          {error && <p className="text-sm text-link" role="alert">{error}</p>}
           <button
             type="submit"
             disabled={loading}
@@ -159,6 +159,7 @@ export default function AuthForm({ locale }: Props) {
             <input
               type="text"
               required
+              maxLength={100}
               autoComplete="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -179,7 +180,7 @@ export default function AuthForm({ locale }: Props) {
             className={inputClass}
           />
         </label>
-        {error && <p className="text-sm text-accent" role="alert">{error}</p>}
+        {error && <p className="text-sm text-link" role="alert">{error}</p>}
         <button
           type="submit"
           disabled={loading}

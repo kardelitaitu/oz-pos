@@ -35,8 +35,15 @@ export default function CheckoutButton({ tier }: { tier: PricingTier }) {
 
   const openCheckout = () => {
     setLoading(true);
+    // If the Paddle script can't load (CDN blocked, offline) or the checkout
+    // fails to start, fall back to the mailto so the user isn't stuck on "…".
+    const mailtoFallback = () => {
+      window.location.href = `mailto:sales@oz-pos.com?subject=${encodeURIComponent('OZ-POS plan: ' + tier.name)}`;
+      setLoading(false);
+    };
+
     const ensurePaddle = () =>
-      new Promise<void>((resolve) => {
+      new Promise<void>((resolve, reject) => {
         const existing = document.getElementById('paddle-js') as HTMLScriptElement | null;
         if (existing) {
           resolve();
@@ -47,14 +54,29 @@ export default function CheckoutButton({ tier }: { tier: PricingTier }) {
         script.src = 'https://cdn.paddle.com/paddle/paddle.js';
         script.async = true;
         script.onload = () => resolve();
+        script.onerror = () => reject(new Error('paddle failed to load'));
         document.head.appendChild(script);
       });
 
-    void ensurePaddle().then(() => {
-      window.Paddle?.Setup({ token, environment });
-      window.Paddle?.Checkout({ items: [{ priceId, quantity: 1 }] });
-      setLoading(false);
-    });
+    const timer = window.setTimeout(() => {
+      mailtoFallback();
+    }, 8000);
+
+    void ensurePaddle()
+      .then(() => {
+        window.clearTimeout(timer);
+        if (!window.Paddle) {
+          mailtoFallback();
+          return;
+        }
+        window.Paddle.Setup({ token, environment });
+        window.Paddle.Checkout({ items: [{ priceId, quantity: 1 }] });
+        setLoading(false);
+      })
+      .catch(() => {
+        window.clearTimeout(timer);
+        mailtoFallback();
+      });
   };
 
   return (

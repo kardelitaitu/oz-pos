@@ -12,7 +12,8 @@
     "login": "Masuk",
     "account": "Akun",
     "menu": "Menu",
-    "theme": "Ganti tema"
+    "theme": "Ganti tema",
+    "language": "Bahasa"
   },
   "pageDesc": {
     "features": "Kasir offline-first: penjualan, shift, dan stok yang tetap berjalan tanpa koneksi sama sekali.",
@@ -21,7 +22,6 @@
     "support": "Dapatkan bantuan OZ-POS — dukungan email dan jawaban untuk pertanyaan paling umum.",
     "login": "Masuk ke akun OZ-POS Anda atau buat akun hanya dengan email.",
     "account": "Lisensi, langganan, dan informasi penagihan OZ-POS Anda.",
-    "docs": "Dokumentasi OZ-POS — memulai, panduan, dan referensi.",
     "privacy": "Bagaimana OZ-POS mengumpulkan, menggunakan, dan melindungi data Anda.",
     "terms": "Ketentuan yang mengatur penggunaan OZ-POS Anda."
   },
@@ -30,6 +30,15 @@
     "subtitle": "Kami siap membantu — hubungi kami kapan saja.",
     "emailLabel": "Email kami",
     "email": "support@oz-pos.com",
+    "name": "Nama",
+    "namePlaceholder": "Nama Anda",
+    "message": "Pesan",
+    "messagePlaceholder": "Apa yang bisa kami bantu?",
+    "submit": "Kirim pesan",
+    "sending": "Mengirim…",
+    "success": "Terima kasih! Pesan Anda sedang dalam perjalanan — kami akan segera membalas.",
+    "sendAnother": "Kirim pesan lain",
+    "formError": "Tidak dapat mengirim pesan. Silakan coba lagi nanti.",
     "faqTitle": "Pertanyaan yang sering diajukan",
     "faq": [
       { "q": "Bagaimana memulai uji coba gratis?", "a": "Unduh OZ-POS dan jalankan — uji coba 90 hari dimulai otomatis, tanpa pendaftaran." },
@@ -84,7 +93,8 @@
     "subtitle": "Setiap paket mencakup inti offline-first penuh. Tingkatkan untuk lebih banyak toko, register, dan otomatisasi.",
     "trust1": "Garansi uang kembali 30 hari",
     "trust2": "Batalkan kapan saja",
-    "note": "Lisensi satu kali (perpetual) belum tersedia — lihat peta jalan."
+    "note": "Lisensi satu kali (perpetual) belum tersedia — lihat peta jalan.",
+    "comparison": "Perbandingan fitur antar paket"
   },
   "download": {
     "title": "Unduh OZ-POS",
@@ -135,8 +145,6 @@
     "tier": "Paket",
     "status": "Status",
     "expires": "Berakhir",
-    "subscription": "Langganan",
-    "billing": "Penagihan",
     "logout": "Keluar",
     "notConfigured": "API lisensi belum dikonfigurasi pada deployment ini."
   },
@@ -149,11 +157,6 @@
     "privacyTitle": "Kebijakan Privasi",
     "termsTitle": "Ketentuan Layanan",
     "placeholder": "Halaman ini masih placeholder. Teks hukum akan ditambahkan sebelum peluncuran."
-  },
-  "common": {
-    "loading": "Memuat…",
-    "contactUs": "Hubungi kami",
-    "notAvailable": "Belum tersedia"
   },
   "notFound": {
     "title": "Halaman tidak ditemukan",

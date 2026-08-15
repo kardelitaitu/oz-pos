@@ -11,6 +11,9 @@
   --color-primary: #000000;
   --color-surface: #0a0a0a;
   --color-accent: #7cff3f;
+  /* link/text accent — same lime in dark, darker green in light so links
+     and labels keep WCAG AA contrast on white (see light override below) */
+  --color-link: #7cff3f;
   --color-ink: #ffffff;
   --color-muted: #a1a1a1;
 }
@@ -22,19 +25,25 @@
   --callout-info: #38bdf8;
   --callout-warning: #fbbf24;
   --callout-tip: #34d399;
+  --callout-danger: #f87171;
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
   --color-primary: #ffffff;
   --color-surface: #fafafa;
-  /* darker green — the lime is unreadable as text on white */
+  /* darker green — the lime is unreadable as text on white. The accent stays
+     green-600 for BUTTON backgrounds (black text reads well); --color-link is
+     green-700 so text keeps AA contrast (≥4.5:1) on white. */
   --color-accent: #16a34a;
+  --color-link: #15803d;
   --color-ink: #0a0a0a;
   --color-muted: #525252;
-  --callout-info: #0284c7;
-  --callout-warning: #d97706;
-  --callout-tip: #059669;
+  /* callout label colors darkened to ≥4.5:1 on white */
+  --callout-info: #0369a1;
+  --callout-warning: #b45309;
+  --callout-tip: #047857;
+  --callout-danger: #dc2626;
 }
 
 /* Theme toggle icon: both icons overlap absolutely inside the button;
@@ -109,14 +118,14 @@
   font-weight: 600;
 }
 .docs-content a {
-  color: var(--color-accent);
+  color: var(--color-link);
   text-decoration: underline;
   text-underline-offset: 3px;
-  text-decoration-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--color-link) 45%, transparent);
   transition: text-decoration-color 150ms;
 }
 .docs-content a:hover {
-  text-decoration-color: var(--color-accent);
+  text-decoration-color: var(--color-link);
 }
 .docs-content ul {
   margin-top: 0.875rem;
@@ -171,7 +180,7 @@
   margin-top: 0;
 }
 .docs-content blockquote p:first-child strong {
-  color: var(--color-accent);
+  color: var(--color-link);
 }
 .docs-content blockquote.callout-info {
   border-left-color: var(--callout-info);
@@ -193,6 +202,13 @@
 }
 .docs-content blockquote.callout-tip p:first-child strong {
   color: var(--callout-tip);
+}
+.docs-content blockquote.callout-danger {
+  border-left-color: var(--callout-danger);
+  background: color-mix(in srgb, var(--callout-danger) 9%, transparent);
+}
+.docs-content blockquote.callout-danger p:first-child strong {
+  color: var(--callout-danger);
 }
 .docs-content hr {
   margin-top: 2rem;

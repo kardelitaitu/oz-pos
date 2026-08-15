@@ -124,7 +124,7 @@ const pricingHref = getRelativeLocaleUrl(locale, 'pricing');
       {pricing.map((tier) => <PricingCard tier={tier} />)}
     </div>
     <div class="mt-8 text-center">
-      <a href={pricingHref} class="text-sm font-semibold text-accent hover:underline">
+      <a href={pricingHref} class="text-sm font-semibold text-link hover:underline">
         {t(locale, 'pricingPreview.viewAll')} →
       </a>
     </div>
