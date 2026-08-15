@@ -221,7 +221,12 @@ The license server requires the RSA private key as an environment variable. **Ne
    - **Key:** `OZ_WEB_ALLOWED_ORIGINS` — comma-separated origins allowed to call the web endpoints. **Defaults are already correct** for the current setup (`https://oz-pos.adikaradwiatmaja.workers.dev`, `https://oz-pos.com`, `http://localhost:4321`); only set this if you deploy the website to a different origin.
 7. (Optional) Session lifetime override:
    - **Key:** `OZ_WEB_SESSION_TTL` — Go duration, default `24h` (e.g. `72h` to extend dashboard sessions).
-8. Click **Save**.
+8. Add the **Paddle webhook** secrets (required for the checkout → provisioning flow):
+   - **Key:** `PADDLE_WEBHOOK_SECRET` — the endpoint secret key from Paddle → Developer tools → Notifications → Edit destination. Without it the webhook answers `503 not configured`.
+   - **Key:** `PADDLE_PRICE_TIERS` — comma-separated `price_id:tier_key` pairs mapping every Paddle price to a tier, e.g. `pri_01h7abc123:pro,pri_01h7def456:premium`. Unmapped prices make provisioning fail with 500 (Paddle retries) until this is fixed. Copy the real price IDs from the Paddle dashboard (Catalog → Prices).
+   - **Key:** `PADDLE_API_KEY` (optional) — server-side Paddle API key. Only needed when the customer email isn't passed in `custom_data` at checkout; the webhook falls back to fetching it via `GET /customers/{id}`.
+   - **Key:** `PADDLE_API_URL` (optional) — defaults to `https://api.paddle.com`.
+9. Click **Save**.
 
 ### 7.2 CORS for the website
 
@@ -240,6 +245,17 @@ The website is currently served from `https://oz-pos.adikaradwiatmaja.workers.de
 ### 7.4 Redeploy
 
 Click **Redeploy** on the service. After deployment, the service should start without errors.
+
+### 7.5 Configure the Paddle webhook
+
+In the Paddle dashboard (**Developer tools → Notifications**):
+
+1. Create a notification destination of type **URL (webhook)** pointing at `https://license.oz-pos.com/api/v1/paddle/webhook`.
+2. Subscribe to the **Subscription** events: `subscription.created`, `subscription.activated`, `subscription.trialing`, `subscription.updated`, `subscription.canceled`, `subscription.paused`, `subscription.resumed`, `subscription.past_due` — plus `transaction.completed` / `transaction.payment_failed` (currently acknowledged and logged; one-time purchases only provision once a lifetime tier ships).
+3. Copy the **endpoint secret key** into the `PADDLE_WEBHOOK_SECRET` secret (Step 8 in §7.1).
+4. **Signature verification:** every request carries a `Paddle-Signature` header (`ts=<unix>;h1=<hex>`). The server verifies HMAC-SHA256 over `ts:rawBody` with the endpoint secret and rejects timestamps older than 5 minutes. Nothing else is trusted.
+5. **Idempotency:** Paddle retries non-2xx responses; the server dedups by `event_id` (24h in-memory window) and upserts on `paddle_sub_id`, so replays are no-ops.
+6. **Customer email:** the webhook resolves the email from `custom_data.email` (pass it at checkout) or the Paddle API (`PADDLE_API_KEY`). Until the checkout passes `custom_data`, set `PADDLE_API_KEY` or provisioning will fail with 500 (Paddle retries).
 
 ---
 
@@ -391,6 +407,19 @@ Send 6 activation requests in quick succession. The 6th should return **429 Too 
 ### 11.5 Test key brute-force protection
 
 Send 3 invalid key attempts. The 4th should return **429 Too Many Requests** with a "too many attempts for this key" message.
+
+### 11.6 Test the Paddle webhook
+
+Send a **signed** `subscription.created` event (compute `Paddle-Signature: ts=<now>;h1=<hex HMAC-SHA256 of "ts:body" with the endpoint secret>`):
+
+```bash
+curl -X POST https://license.oz-pos.com/api/v1/paddle/webhook \
+  -H "Paddle-Signature: ts=$(date +%s);h1=..." \
+  -H "Content-Type: application/json" \
+  -d '{"event_id":"evt_test_1","event_type":"subscription.created","data":{"id":"sub_test_1","status":"active","customer_id":"cus_test_1","custom_data":{"email":"buyer@test.com"},"items":[{"price":{"id":"<your_price_id>","product_id":"pro_1"},"quantity":1}],"current_billing_period":{"starts_at":"2026-08-16T00:00:00Z","ends_at":"2027-08-16T00:00:00Z"}}}'
+```
+
+The response must be **200** and a tenant + `OZ-PRO-...` license key + subscription must appear in the admin UI. An unsigned or tampered request must return **401** and create nothing.
 
 ---
 

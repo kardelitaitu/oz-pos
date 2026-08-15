@@ -53,7 +53,7 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 	tenants := core.NewBaseCollection("tenants")
 	tenants.Fields.Add(
 		&core.EmailField{Name: "email", Required: true},
-		&core.TextField{Name: "phone", Required: true},
+		&core.TextField{Name: "phone"},
 		&core.TextField{Name: "api_key", Required: true},
 		&core.TextField{Name: "api_key_lookup"},
 		&core.SelectField{Name: "status", Required: true, Values: []string{"active", "suspended", "revoked"}},
@@ -69,15 +69,16 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 	licenseKeys.Fields.Add(
 		&core.TextField{Name: "key", Required: true},
 		&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "pro", "premium", "enterprise"}},
-		&core.NumberField{Name: "max_stores", Required: true},
-		&core.NumberField{Name: "max_pos_instances", Required: true},
-		&core.JSONField{Name: "allowed_types", Required: true},
+		&core.NumberField{Name: "max_stores"},
+		&core.NumberField{Name: "max_pos_instances"},
+		&core.JSONField{Name: "allowed_types"},
 		&core.SelectField{Name: "status", Required: true, Values: []string{"unused", "activated", "expired", "revoked"}},
 		&core.DateField{Name: "expires_at", Required: true},
 		&core.DateField{Name: "activated_at"},
 		&core.RelationField{Name: "activated_by", CollectionId: tenants.Id, MaxSelect: 1},
 		&core.DateField{Name: "revoked_at"},
 		&core.TextField{Name: "notes"},
+		&core.TextField{Name: "paddle_sub_id"},
 	)
 	// Autodate created/updated mirror the production pb_schema.json so
 	// handlers sorting by "-created" (e.g. /web/me license lookup) work
@@ -105,6 +106,7 @@ func createTestCollections(t *testing.T, app *tests.TestApp) {
 		&core.DateField{Name: "grace_until"},
 		&core.TextField{Name: "signed_payload", Required: true},
 		&core.TextField{Name: "signature", Required: true},
+		&core.TextField{Name: "paddle_sub_id"},
 	)
 	subscriptions.CreateRule = types.Pointer("")
 	subscriptions.ListRule = types.Pointer("")
@@ -148,6 +150,7 @@ func registerTestRoutes(t *testing.T, app *tests.TestApp) {
 		se.Router.POST("/api/v1/web/verify-otp", handleVerifyOTP(app))
 		se.Router.GET("/api/v1/web/me", handleMe(app))
 		se.Router.POST("/api/v1/web/logout", handleLogout(app))
+		se.Router.POST(paddleWebhookPath, handlePaddleWebhook(app))
 		return se.Next()
 	})
 }
@@ -242,7 +245,7 @@ func createMinimalCollections(t *testing.T, app *tests.TestApp, skip map[string]
 		tenants := core.NewBaseCollection("tenants")
 		tenants.Fields.Add(
 			&core.EmailField{Name: "email", Required: true},
-			&core.TextField{Name: "phone", Required: true},
+			&core.TextField{Name: "phone"},
 			&core.TextField{Name: "api_key", Required: true},
 			&core.TextField{Name: "api_key_lookup"},
 			&core.SelectField{Name: "status", Required: true, Values: []string{"active", "suspended", "revoked"}},
@@ -263,14 +266,15 @@ func createMinimalCollections(t *testing.T, app *tests.TestApp, skip map[string]
 	licenseKeys.Fields.Add(
 		&core.TextField{Name: "key", Required: true},
 		&core.SelectField{Name: "tier_key", Required: true, Values: []string{"free", "pro", "premium", "enterprise"}},
-		&core.NumberField{Name: "max_stores", Required: true},
-		&core.NumberField{Name: "max_pos_instances", Required: true},
-		&core.JSONField{Name: "allowed_types", Required: true},
+		&core.NumberField{Name: "max_stores"},
+		&core.NumberField{Name: "max_pos_instances"},
+		&core.JSONField{Name: "allowed_types"},
 		&core.SelectField{Name: "status", Required: true, Values: []string{"unused", "activated", "expired", "revoked"}},
 		&core.DateField{Name: "expires_at", Required: true},
 		&core.DateField{Name: "activated_at"},
 		&core.DateField{Name: "revoked_at"},
 		&core.TextField{Name: "notes"},
+		&core.TextField{Name: "paddle_sub_id"},
 	)
 	if tenantsID != "" {
 		licenseKeys.Fields.Add(&core.RelationField{Name: "activated_by", CollectionId: tenantsID, MaxSelect: 1})
@@ -313,12 +317,12 @@ func createMinimalCollections(t *testing.T, app *tests.TestApp, skip map[string]
 			&core.NumberField{Name: "max_stores"},
 			&core.NumberField{Name: "max_pos_instances"},
 			&core.JSONField{Name: "allowed_types"},
-			&core.SelectField{Name: "status", Required: true, Values: []string{"active", "expired", "grace_period", "revoked"}},
-			&core.DateField{Name: "starts_at", Required: true},
+			&core.SelectField{Name: "status", Required: true, Values: []string{"active", "expired", "grace_period", "revoked"}}, &core.DateField{Name: "starts_at", Required: true},
 			&core.DateField{Name: "expires_at", Required: true},
 			&core.DateField{Name: "grace_until"},
 			&core.TextField{Name: "signed_payload", Required: true},
 			&core.TextField{Name: "signature", Required: true},
+			&core.TextField{Name: "paddle_sub_id"},
 		)
 		subscriptions.CreateRule = types.Pointer("")
 		subscriptions.ListRule = types.Pointer("")
@@ -364,6 +368,7 @@ func setupDirectAppWithoutCollection(t *testing.T, skip map[string]bool) (*tests
 		se.Router.POST("/api/v1/web/verify-otp", handleVerifyOTP(app))
 		se.Router.GET("/api/v1/web/me", handleMe(app))
 		se.Router.POST("/api/v1/web/logout", handleLogout(app))
+		se.Router.POST(paddleWebhookPath, handlePaddleWebhook(app))
 		return se.Next()
 	})
 

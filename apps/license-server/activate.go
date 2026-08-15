@@ -381,8 +381,32 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			// ── New activation for existing tenant: api_key required ──
 			// The caller must prove they are the registered tenant admin
 			// by presenting the api_key that was issued on first activation.
+			// EXCEPTION: webhook-issued keys (paddle_sub_id set) are bound
+			// to this tenant's email at purchase, so email + key is sufficient
+			// proof (the same model as re-activation). The tenant's api_key is
+			// minted NOW and returned in the response so /status and /renew
+			// work for the POS — the webhook only stored a placeholder hash.
 			if keyStatus == "unused" || keyStatus == "" {
-				if !verifyAPIKey(tenant.GetString("api_key"), req.APIKey) {
+				paddleIssued := keyRecord.GetString("paddle_sub_id") != ""
+				if paddleIssued {
+					newAPIKey := generateAPIKey()
+					apiKeyHash, apiKeyLookup, hashErr := hashAPIKey(newAPIKey)
+					if hashErr != nil {
+						log.Printf("Paddle-key activation api_key mint failed for tenant %q: %v", tenant.Id, hashErr)
+						return e.JSON(http.StatusInternalServerError, map[string]any{
+							"error": "failed to create api_key",
+						})
+					}
+					tenant.Set("api_key", apiKeyHash)
+					tenant.Set("api_key_lookup", apiKeyLookup)
+					if saveErr := app.Save(tenant); saveErr != nil {
+						log.Printf("Paddle-key activation api_key save failed for tenant %q: %v", tenant.Id, saveErr)
+						return e.JSON(http.StatusInternalServerError, map[string]any{
+							"error": "failed to create api_key",
+						})
+					}
+					issuedAPIKey = newAPIKey
+				} else if !verifyAPIKey(tenant.GetString("api_key"), req.APIKey) {
 					return e.JSON(http.StatusUnauthorized, map[string]any{
 						"error": "api_key required (or mismatched) — caller is not the registered administrator of this tenant",
 					})
@@ -469,6 +493,41 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 			}
 		}
 
+		// ── Webhook-issued key: reuse the Paddle-created subscription ──
+		// The Paddle webhook created the active subscription at purchase and
+		// keeps it in sync via subscription.* events. Don't mint a duplicate
+		// here — return the existing signed payload so the POS gets the same
+		// tier/expiry Paddle authorized. Manual keys never hit this branch.
+		if keyRecord.GetString("paddle_sub_id") != "" {
+			subs, err := app.FindRecordsByFilter(
+				"subscriptions",
+				"tenant_id = {:tenant_id} && status = 'active'",
+				"-starts_at", 1, 0,
+				map[string]any{"tenant_id": tenantID},
+			)
+			if err == nil && len(subs) > 0 {
+				subRecord := subs[0]
+				keyRecord.Set("status", "activated")
+				keyRecord.Set("activated_at", time.Now().UTC().Format(time.RFC3339))
+				keyRecord.Set("activated_by", tenantID)
+				if err := app.Save(keyRecord); err != nil {
+					log.Printf("WARNING: failed to mark key %s as activated: %v", req.Key, err)
+				}
+				keyFailTracker.clearKey(req.Key)
+				resp := map[string]any{
+					"signed_payload": subRecord.GetString("signed_payload"),
+					"signature":      subRecord.GetString("signature"),
+					"tenant_id":      tenantID,
+				}
+				if issuedAPIKey != "" {
+					resp["api_key"] = issuedAPIKey
+				}
+				return e.JSON(http.StatusOK, resp)
+			}
+			// No active subscription yet (edge case: webhook raced the
+			// activation) — fall through and create one from the key below.
+		}
+
 		// ── Build and sign subscription ───────────────────────────
 		tierKey := keyRecord.GetString("tier_key")
 		expiresAt := calculateExpiry(tierKey)
@@ -548,7 +607,7 @@ func handleActivate(app core.App) func(e *core.RequestEvent) error {
 		// of an already-activated key is handled earlier (rotation). Existing
 		// tenants activating a new key already proved they hold the key, so
 		// nothing is re-emitted (H1 audit).
-		if isNewTenant {
+		if isNewTenant || issuedAPIKey != "" {
 			resp["api_key"] = issuedAPIKey
 		}
 		return e.JSON(http.StatusOK, resp)

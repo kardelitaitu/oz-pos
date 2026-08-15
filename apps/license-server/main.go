@@ -127,6 +127,10 @@ func main() {
 		se.Router.POST("/api/v1/web/verify-otp", handleVerifyOTP(app))
 		se.Router.GET("/api/v1/web/me", handleMe(app))
 		se.Router.POST("/api/v1/web/logout", handleLogout(app))
+		// Paddle Billing webhook — signature-verified, server-to-server (see
+		// paddle_webhook.go). NOT behind the web CORS allowlist: Paddle sends
+		// no Origin, and the Paddle-Signature header is the gate.
+		se.Router.POST(paddleWebhookPath, handlePaddleWebhook(app))
 		// P8-2: Machine-level revocation is integrated into the /status
 		// endpoint (send revoke:true with machine_id in the request body).
 		// P8-4: /api/health is now served by PocketBase's built-in endpoint (v0.39.6+).

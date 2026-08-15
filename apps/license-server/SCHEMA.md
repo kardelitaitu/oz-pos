@@ -19,16 +19,20 @@ Stores the license keys generated for customers. You create these manually in th
 | `activated_by` | Relation | *Auto-filled* | Links to the `tenants` record that activated the key. |
 | `revoked_at` | Date | *Optional* | Set manually by admins to revoke a key. |
 | `notes` | Text | *Optional* | Internal notes for staff. |
+| `max_stores` | Number | *Optional* | Tier quota (0 = unlimited). Populated by the Paddle webhook. |
+| `max_pos_instances` | Number | *Optional* | Tier quota (0 = unlimited). Populated by the Paddle webhook. |
+| `allowed_types` | JSON | *Optional* | JSON array of allowed workspace types for the tier. |
+| `paddle_sub_id` | Text | *Optional* | Paddle Billing `sub_...` id that issued the key. Set ⇒ webhook-issued (enables email+key activation and expiry sync on `subscription.updated`). Uniquely indexed (partial). |
 
 ---
 
 ## 2. `tenants`
-Stores the business entities (customers) using the POS software. A record is automatically created here upon their first license activation.
+Stores the business entities (customers) using the POS software. A record is created by the Paddle webhook at first purchase, or automatically upon their first license activation.
 
 | Field Name | Type | Requirement | Description |
 |---|---|---|---|
 | `email` | Email | **Mandatory** | Contact email address. |
-| `phone` | Text | **Mandatory** | Contact phone number. |
+| `phone` | Text | *Optional* | Contact phone number (Paddle customers may not provide one; the activation path defaults it to `-`). |
 | `api_key` | Text | **Mandatory** | Bcrypt hash of the tenant API key — the plaintext is never stored. |
 | `api_key_lookup` | Text | *Auto-filled* | Hex SHA-256 lookup hash of the `api_key` (hidden, uniquely indexed) used for O(1) tenant resolution. |
 | `status` | Select | **Mandatory** | Account standing (`active`, `suspended`, `revoked`). |
@@ -45,7 +49,7 @@ Stores the business entities (customers) using the POS software. A record is aut
 ---
 
 ## 3. `subscriptions`
-Stores the cryptographically signed subscription payload. This record is automatically generated and updated during activation or renewal calls.
+Stores the cryptographically signed subscription payload. This record is automatically generated and updated during activation or renewal calls, and by the Paddle webhook at purchase/subscription events.
 
 | Field Name | Type | Requirement | Description |
 |---|---|---|---|
@@ -57,6 +61,7 @@ Stores the cryptographically signed subscription payload. This record is automat
 | `signed_payload`| Text | **Mandatory** | The JSON string signed by the RSA private key. |
 | `signature` | Text | **Mandatory** | The base64 cryptographic signature verified by the POS client. |
 | `grace_until` | Date | *Optional* | Secondary date allowing limited offline usage buffering if the POS cannot connect. |
+| `paddle_sub_id` | Text | *Optional* | Paddle Billing `sub_...` id this record mirrors — the lookup key for `subscription.updated` / `canceled` events. Uniquely indexed (partial). |
 
 ---
 
