@@ -351,7 +351,7 @@ per-process, DB-agnostic.
 
 | Step | Action |
 |------|--------|
-| 1.1 | Port the full 92-table migration set to Postgres DDL — **done**: `scripts/generate-pg-migration.py` → `20260813_init.pg.sql` (type-mapped, FK-order topo-sorted, 4 triggers → plpgsql); applied + verified idempotent on Postgres 16 (92 tables, 121 indexes, 4 triggers) |
+| 1.1 | Port the full 93-table migration set to Postgres DDL — **done**: `scripts/generate-pg-migration.py` → `20260813_init.pg.sql` (type-mapped, FK-order topo-sorted, 4 triggers → 3 plpgsql functions + 4 triggers); applied + verified idempotent on Postgres 16 (93 tables, 122 indexes, 4 triggers; the SQLite schema has 123 indexes — the `idx_sales_status_created_date` expression index is SQLite-only, see §11.5 deferred item 2) |
 | 1.2 | Make oz-api REST handlers run on Postgres (drop the in-memory SQLite fallback) — **done**: the sync function (`SyncStore`, via `SyncState.pg`), the REST surface (`crates/oz-api/src/pg.rs`, via `AppState.pg` — products, categories, tax_rates, users, plans, sales, terminals, token client-credentials), **and** the Stripe/Square webhook layer (dedup, `finalize_sale` enqueue, payment lookup, stripe-customer mapping, plan writes) all read/write Postgres on the cloud branch; the report-sender loop remains on SQLite |
 | 1.3 | Raise the pool above the 8-connection default — **done**: `OZ_DB_POOL_SIZE` (default 20); TLS via rustls already wired |
 | 1.4 | Migrate live sync data from SQLite to Postgres; verify row counts + checksums — **done**: `apps/cloud-server/src/bin/migrate_sqlite_to_pg.rs` copies the cloud surface (FK-topo-sorted from `pg_constraint`, `ON CONFLICT DO NOTHING` so re-runs are safe, per-table row-count + FNV-1a checksum verification); verified end-to-end + idempotent re-run against live Postgres |
@@ -855,16 +855,21 @@ queries that break under them, not a wholesale tenant API.
 | REST round-trip (product/tax/user/plan/sale/terminal, oversell, state machine) | `pg_integration_rest_roundtrip` (oz-api) | live PG |
 | Concurrency (stock, status transitions) | the two `pg_integration_concurrent_*` tests | live PG |
 | Multi-tenant isolation (shared SKU/username across tenants) | `pg_integration_tenant_sku_isolation` | live PG |
+| RLS fail-closed + deployment cutover | `pg_integration_rls_fails_closed` + `pg_integration_rls_force_blocks_owner` (cloud-server) | live PG |
 | Sync store push/pull/snapshot/plan | `pg_integration_sync_store_*` (cloud-server) | live PG |
 | Webhooks dedup, tenant resolution, plan writes | `pg_integration_webhooks_read_write_postgres` | live PG |
 | Prune retention batching + hostile-id-as-data | `pg_integration_prune_*` + unit tests | live PG + SQLite |
 | Email analytics bundle + settings | `pg_integration_email_loop_reads_postgres` | live PG |
+| Per-tenant report scheduling (bundle isolation, scoped settings keys, enumeration order) | `pg_integration_email_loop_reads_postgres` per-tenant assertions | live PG |
+| `sent_reports` at-most-once claim + 90-day retention | `pg_integration_sent_reports_claim_release` + `pg_integration_sent_reports_skips_claimed_period_before_smtp` + `pg_integration_prune_ages_out_old_sent_reports` | live PG |
+| Settings endpoint (admin-gated provisioning) | `settings_*` unit tests in `crates/oz-api/src/routes/settings.rs` — `settings_require_admin_key_when_configured`, `put_then_get_round_trips_typed_config`, `scoped_keys_are_written_suffix_form`, `scoped_key_falls_back_to_bare`, `null_deletes_scoped_override`, malformed-input rejections | unit |
 | SQLite → Postgres cutover | migration bin unit tests + live-PG integration incl. idempotent re-run | live PG |
 | CI gate | Postgres service container added to `ci.yml` (`rust-test-fast` + `rust-test-apps`) with `OZ_TEST_PG_URL`, so the skip-if-unreachable tests can no longer silently skip in CI | CI |
 
 All tests run with `OZ_TEST_PG_URL` set against one Postgres 16 and coexist
-(unique namespaces + cleanup); `cargo test -p oz-api` 154, `oz-cloud-server`
-162, `oz-core --lib` 1773, migration bin 5.
+(unique namespaces + cleanup); `cargo test -p oz-api` 162 (+1 doctest),
+`oz-cloud-server` 166 (+5 migration bin +2 main bin), `oz-core --lib` 1774,
+migration bin 5 — all verified green on the 2026-08-15 final pass.
 
 ### Implementation audit (2026-08-15): claims vs. code
 
@@ -896,12 +901,13 @@ plan's design.
 | 5 | **Desktop tenant-foreign-row startup check** — **done**: `Store::check_tenant_integrity()` (two indexed COUNTs on `idx_products_tenant`/`idx_users_tenant`, naming the offending table(s)) wired into both `AppState::new` startup paths (desktop + tablet) right after migrations — a foreign row refuses to boot | §11.5's desktop audit recommends exactly this instead of sprinkling 40+ `WHERE tenant_id` clauses; today only `PRAGMA integrity_check` (page corruption) exists | `check_tenant_integrity_passes_on_clean_db` (clean + default-tenant rows); `_rejects_foreign_product` / `_rejects_foreign_user` (error names the table); `_reports_both_violations` — all in `backup_restore_integration.rs` |
 | 6 | **RLS deployment cutover** — **done**: `scripts/rls-cutover.sql` (idempotent, pure SQL: creates restricted non-owner `oz_app` role, grants DML on the 15 tenant tables, `FORCE ROW LEVEL SECURITY` on all 15; header documents the webhook/`distinct_tenant_count` GUC exceptions) + the cloud sync data layer now opens every Postgres transaction with `SET LOCAL oz.tenant_id` (`set_config(..., is_local := true)`, auto-reset on pool return) | The last enforcement item; schema-side RLS shipped + proven, but the owner bypassed it | `pg_integration_rls_force_blocks_owner` (live-PG): executes the real script verbatim in a transaction twice (idempotency; 15 tables FORCEd; rollback restores), then proves on a dedicated non-superuser OWNED table that FORCE blocks the owner without the GUC (0 rows + INSERT rejected) and unblocks with it; the sync PG roundtrip test stays green through the transaction refactor |
 | 7 | **License server** — **done**: `/status` now shares the persisted 5/IP/hr token bucket (applied before auth, like activate/renew), and the legacy body-`api_key` fallback is **removed** from all three endpoints — the `Authorization: Bearer` header is the sole credential channel (body-only → 401 + `WWW-Authenticate: Bearer` hint; activate still allows a credential-less first activation). The desktop client matches: activate/renew send the key via `.bearer_auth()` and `#[serde(skip_serializing)]` keeps it out of the request body | Both were documented gaps (§11): `/status` was unthrottled; the body fallback leaked the secret into access logs | `TestStatusHandler_RateLimited` (6th `/status` call in an hour → 429); `TestRenewHandler_RejectsBodyAPIKey` + the AuthPaths tables (body-only → 401 + `WWW-Authenticate`; header wins when both present, body ignored); all pre-existing handler tests migrated to the Bearer header; Rust `renew_license_request_serializes_snake_case` asserts `api_key` never appears in the request body |
-| 8 | **Doc hygiene** — §12 risk row still says "92-table schema" (→ 93), and the §11.5 test matrix lacks the RLS, per-tenant email, settings-endpoint, and `sent_reports` rows | Keep the plan doc truthful | — |
+| 8 | **Doc hygiene** — **done**: the §6.1 step-1.1 row now states the real surface (93 tables / 122 PG indexes / 4 triggers; SQLite 123 indexes with the SQLite-only expression index called out), and the §11.5 test matrix gained rows for RLS fail-closed + cutover, per-tenant report scheduling, `sent_reports` at-most-once + retention, and the settings endpoint | Keep the plan doc truthful | — |
 | 9 | **Operations checklist (deploy-time)** — **done**: `docs/operations/runbook.md` now documents Postgres PITR (managed addon, RPO ≤ 5 min / RTO ≤ 1 h, monthly restore drill), PocketBase backup (litestream **or** nightly `VACUUM INTO` / `scripts/backup-db.sh`, RPO ≤ 24 h), the desktop `backup-db.sh`/`restore-db.sh` pair, a quarterly two-DB restore drill checklist, Prometheus rules for retention flatline, queue depth (polling `/health` — a JSON field, not a gauge), webhook 5xx, token-mint rate, sync 429s, health degraded, pull decode failures, and DB contention, plus the RLS cutover deploy step and the startup-secret/TLS fail-closed contract; and `rate_limit_429_total{limiter}` + `webhook_5xx_total` counters ship with `metrics_render_rate_limit_and_webhook_counters` (drives both paths through a real router and asserts `/metrics` renders them) | §11 reliability table items are all still paper | a `docs/operations/` runbook entry; the metrics additions get a smoke test that the endpoint renders the new counters |
 
-Items 1–5 + 8 are self-contained code/doc slices with tests (each ~1 commit).
-Item 6 is the big remaining enforcement step (deployment + request wiring).
-Items 7 and 9 touch the Go license server / ops runbook respectively.
+All nine items are done and committed individually — 1–5 + 8 as code/doc slices
+with tests, 6 as the RLS enforcement step (deployment script + request wiring +
+FORCE proof), 7 in the Go license server, 9 as the ops runbook + metrics
+counters. Every item's row above is marked **done** with its tests listed.
 
 ---
 
