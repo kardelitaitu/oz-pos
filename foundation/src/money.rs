@@ -559,4 +559,156 @@ mod tests {
         let jpy: Currency = "Jpy".parse().unwrap();
         assert_eq!(jpy.minor_unit_exponent(), 0, "'Jpy' should have 0 exponent");
     }
+
+
+    // ── Additional edge-case tests ───────────────────────────────────────
+
+    #[test]
+    fn format_minor_jpy_no_decimal_places() {
+        let jpy: Currency = "JPY".parse().unwrap();
+        assert_eq!(format_minor(12345, jpy), "12345");
+    }
+
+    #[test]
+    fn format_minor_kwd_three_decimal_places() {
+        let kwd: Currency = "KWD".parse().unwrap();
+        assert_eq!(format_minor(12345, kwd), "12.345");
+    }
+
+    #[test]
+    fn format_minor_usd_two_decimal_places() {
+        assert_eq!(format_minor(12345, usd()), "123.45");
+    }
+
+    #[test]
+    fn format_minor_usd_zero() {
+        assert_eq!(format_minor(0, usd()), "0.00");
+    }
+
+    #[test]
+    fn format_minor_usd_one_cent() {
+        assert_eq!(format_minor(1, usd()), "0.01");
+    }
+
+    #[test]
+    fn format_minor_idr_no_decimal() {
+        let idr: Currency = "IDR".parse().unwrap();
+        assert_eq!(format_minor(50000, idr), "50000");
+    }
+
+    #[test]
+    fn money_from_major_various_currencies() {
+        let usd_val = Money::from_major(10, usd()).unwrap();
+        assert_eq!(usd_val.minor_units, 1000);
+        let jpy = Money::from_major(500, "JPY".parse().unwrap()).unwrap();
+        assert_eq!(jpy.minor_units, 500);
+    }
+
+    #[test]
+    fn money_checked_add_same_currency() {
+        let a = Money { minor_units: 100, currency: usd() };
+        let b = Money { minor_units: 250, currency: usd() };
+        let sum = a.checked_add(b).unwrap();
+        assert_eq!(sum.minor_units, 350);
+        assert_eq!(sum.currency, usd());
+    }
+
+    #[test]
+    fn money_checked_add_different_currency_returns_none() {
+        let usd_val = Money { minor_units: 100, currency: usd() };
+        let eur_val = Money { minor_units: 100, currency: "EUR".parse().unwrap() };
+        assert!(usd_val.checked_add(eur_val).is_none());
+    }
+
+    #[test]
+    fn money_checked_sub_underflow_returns_none() {
+        let a = Money { minor_units: i64::MIN, currency: usd() };
+        let b = Money { minor_units: 1, currency: usd() };
+        assert!(a.checked_sub(b).is_none());
+    }
+
+    #[test]
+    fn money_checked_mul_overflow_returns_none() {
+        let m = Money { minor_units: i64::MAX, currency: usd() };
+        assert!(m.checked_mul(2).is_none());
+    }
+
+    #[test]
+    fn money_checked_div_by_zero_returns_none() {
+        let m = Money { minor_units: 100, currency: usd() };
+        assert!(m.checked_div(0).is_none());
+    }
+
+    #[test]
+    fn money_negate_flips_sign() {
+        let m = Money { minor_units: 500, currency: usd() };
+        assert_eq!(m.negate().minor_units, -500);
+        assert_eq!(m.negate().negate().minor_units, 500);
+    }
+
+    #[test]
+    fn money_abs_makes_positive() {
+        let m = Money { minor_units: -300, currency: usd() };
+        assert_eq!(m.abs().minor_units, 300);
+        assert_eq!(m.abs().currency, usd());
+    }
+
+    #[test]
+    fn money_is_zero() {
+        assert!(Money::zero(usd()).is_zero());
+        assert!(!Money { minor_units: 1, currency: usd() }.is_zero());
+    }
+
+    #[test]
+    fn money_equality_by_minor_units_and_currency() {
+        let a = Money { minor_units: 100, currency: usd() };
+        let b = Money { minor_units: 100, currency: usd() };
+        let c = Money { minor_units: 200, currency: usd() };
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+    }
+
+    #[test]
+    fn money_partialord_different_currency_not_equal() {
+        let usd_val = Money { minor_units: 100, currency: usd() };
+        let eur_val = Money { minor_units: 100, currency: "EUR".parse().unwrap() };
+        assert_ne!(usd_val, eur_val);
+    }
+
+    #[test]
+    fn money_hash_consistent_with_eq() {
+        use std::collections::HashMap;
+        let mut map = HashMap::new();
+        let key = Money { minor_units: 100, currency: usd() };
+        map.insert(key, "one hundred");
+        let lookup = Money { minor_units: 100, currency: usd() };
+        assert_eq!(map.get(&lookup), Some(&"one hundred"));
+    }
+
+    #[test]
+    fn currency_idr_has_zero_exponent() {
+        let idr: Currency = "IDR".parse().unwrap();
+        assert_eq!(idr.minor_unit_exponent(), 0);
+    }
+
+    #[test]
+    fn currency_jpy_has_zero_exponent() {
+        let jpy: Currency = "JPY".parse().unwrap();
+        assert_eq!(jpy.minor_unit_exponent(), 0);
+    }
+
+    #[test]
+    fn currency_kwd_has_three_exponent() {
+        let kwd: Currency = "KWD".parse().unwrap();
+        assert_eq!(kwd.minor_unit_exponent(), 3);
+    }
+
+    #[test]
+    fn currency_usd_has_two_exponent() {
+        assert_eq!(usd().minor_unit_exponent(), 2);
+    }
+
 }
+
+
+

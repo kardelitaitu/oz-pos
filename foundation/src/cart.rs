@@ -927,4 +927,122 @@ mod tests {
         assert_eq!(back.fixed_discount_minor(), 0);
         assert_eq!(back.discount_label(), Some("sale"));
     }
+
+
+    // ── Additional Cart edge-case tests ──────────────────────────────────
+
+    #[test]
+    fn fixed_discount_capped_to_total() {
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("A"), 1, Money { minor_units: 500, currency: usd() })).unwrap();
+        // Total is 500. Fixed discount of 1000 should be capped to 500.
+        cart.set_fixed_discount(1000, Some("Over-cap".into()));
+        assert_eq!(cart.fixed_discount_minor(), 1000);
+        // ...but total() caps the effective discount to the available amount.
+        assert_eq!(cart.total().unwrap().minor_units, 0);
+    }
+
+    #[test]
+    fn fixed_discount_exactly_equals_total() {
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("A"), 1, Money { minor_units: 500, currency: usd() })).unwrap();
+        cart.set_fixed_discount(500, Some("Exact".into()));
+        assert_eq!(cart.total().unwrap().minor_units, 0);
+    }
+
+    #[test]
+    fn fixed_discount_less_than_total() {
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("A"), 1, Money { minor_units: 1000, currency: usd() })).unwrap();
+        cart.set_fixed_discount(300, Some("Partial".into()));
+        assert_eq!(cart.total().unwrap().minor_units, 700);
+    }
+
+    #[test]
+    fn discount_amount_with_fixed_discount() {
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("A"), 2, Money { minor_units: 500, currency: usd() })).unwrap();
+        // Total = 1000. Fixed discount = 250.
+        cart.set_fixed_discount(250, Some("Coupon".into()));
+        assert_eq!(cart.discount_amount().unwrap().minor_units, 250);
+    }
+
+    #[test]
+    fn discount_amount_with_percentage_discount() {
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("A"), 1, Money { minor_units: 1000, currency: usd() })).unwrap();
+        // 15% of 1000 = 150
+        cart.set_discount(Percentage::new(15).unwrap(), Some("VIP".into()));
+        assert_eq!(cart.discount_amount().unwrap().minor_units, 150);
+    }
+
+    #[test]
+    fn cart_with_multiple_lines_total() {
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("A"), 2, Money { minor_units: 300, currency: usd() })).unwrap();
+        cart.add_line(CartLine::new(Sku::new("B"), 1, Money { minor_units: 500, currency: usd() })).unwrap();
+        // 2*300 + 1*500 = 1100
+        assert_eq!(cart.total().unwrap().minor_units, 1100);
+        assert_eq!(cart.line_count(), 2);
+    }
+
+    #[test]
+    fn cart_total_with_all_lines_removed() {
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("A"), 1, Money { minor_units: 500, currency: usd() })).unwrap();
+        cart.add_line(CartLine::new(Sku::new("B"), 1, Money { minor_units: 300, currency: usd() })).unwrap();
+        cart.remove_sku("A").unwrap();
+        cart.remove_sku("B").unwrap();
+        assert_eq!(cart.line_count(), 0);
+        assert_eq!(cart.total().unwrap().minor_units, 0);
+    }
+
+    #[test]
+    fn set_fixed_discount_zero_clears_label() {
+        let mut cart = Cart::new(usd());
+        cart.set_fixed_discount(100, Some("Test".into()));
+        assert!(cart.discount_label().is_some());
+        cart.set_fixed_discount(0, None);
+        assert!(cart.discount_label().is_none());
+        assert_eq!(cart.fixed_discount_minor(), 0);
+    }
+
+    #[test]
+    fn set_fixed_discount_negative_treated_as_zero() {
+        let mut cart = Cart::new(usd());
+        cart.set_fixed_discount(-500, Some("Neg".into()));
+        assert_eq!(cart.fixed_discount_minor(), 0);
+        assert!(cart.discount_label().is_none());
+    }
+
+    #[test]
+    fn discount_percentage_accessor() {
+        let mut cart = Cart::new(usd());
+        assert_eq!(cart.discount_percentage().get(), 0);
+        cart.set_discount(Percentage::new(25).unwrap(), None);
+        assert_eq!(cart.discount_percentage().get(), 25);
+    }
+
+    #[test]
+    fn set_discount_clears_fixed_discount() {
+        let mut cart = Cart::new(usd());
+        cart.set_fixed_discount(500, Some("Fixed".into()));
+        assert_eq!(cart.fixed_discount_minor(), 500);
+        cart.set_discount(Percentage::new(10).unwrap(), None);
+        assert_eq!(cart.fixed_discount_minor(), 0);
+    }
+
+    #[test]
+    fn cart_serialization_roundtrip_with_lines_and_discount() {
+        let mut cart = Cart::new(usd());
+        cart.add_line(CartLine::new(Sku::new("SKU-1"), 3, Money { minor_units: 250, currency: usd() })).unwrap();
+        cart.set_discount(Percentage::new(5).unwrap(), Some("test".into()));
+        let json = serde_json::to_string(&cart).unwrap();
+        let back: Cart = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.line_count(), 1);
+        // 3*250 = 750. 5% discount via complement_apply: 750 * 95 / 100 = 712
+        assert_eq!(back.total().unwrap().minor_units, 712);
+        assert_eq!(back.discount_percentage().get(), 5);
+    }
+
 }
