@@ -31,7 +31,7 @@ const contactHref = 'mailto:sales@oz-pos.com';
     {
       tier.priceId ? (
         hasCheckout ? (
-          <CheckoutButton client:load tier={tier} />
+          <CheckoutButton client:load tier={tier} locale={locale} />
         ) : (
           <a
             href={contactHref}

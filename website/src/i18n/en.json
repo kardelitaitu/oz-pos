@@ -42,10 +42,22 @@
     "formError": "Couldn't send your message. Please try again later.",
     "faqTitle": "Frequently asked questions",
     "faq": [
-      { "q": "How do I start the free trial?", "a": "Download OZ-POS and launch it — the 90-day trial starts automatically, no signup required." },
-      { "q": "Does OZ-POS work without internet?", "a": "Yes. Every feature works offline and syncs to the cloud when the connection returns." },
-      { "q": "How do I activate my license key?", "a": "Open Settings → License, enter your key, and activate. The key binds to your device hardware." },
-      { "q": "Where can I report a bug?", "a": "Email us at support@oz-pos.com with your version number and a description of what happened." }
+      {
+        "q": "How do I start the free trial?",
+        "a": "Download OZ-POS and launch it — the 90-day trial starts automatically, no signup required."
+      },
+      {
+        "q": "Does OZ-POS work without internet?",
+        "a": "Yes. Every feature works offline and syncs to the cloud when the connection returns."
+      },
+      {
+        "q": "How do I activate my license key?",
+        "a": "Open Settings → License, enter your key, and activate. The key binds to your device hardware."
+      },
+      {
+        "q": "Where can I report a bug?",
+        "a": "Email us at support@oz-pos.com with your version number and a description of what happened."
+      }
     ]
   },
   "docs": {
@@ -68,12 +80,30 @@
     "title": "Built for the real world",
     "subtitle": "Point of sale that doesn't stop when the internet does.",
     "items": [
-      { "title": "Offline-first", "description": "Sales, shifts, and stock keep working with zero connectivity — nothing is lost." },
-      { "title": "Cloud sync", "description": "Changes merge to the cloud the moment you're back online, across stores and registers." },
-      { "title": "QRIS payments", "description": "Accept Indonesian QR payments natively, no extra hardware." },
-      { "title": "Multi-store", "description": "Warehouses, registers, and branches in one topology you can edit visually." },
-      { "title": "Lua scripting", "description": "Automate pricing, discounts, and flows with a small script surface." },
-      { "title": "Shift & reconciliation", "description": "Cashier shifts close cleanly, with full audit history for every change." }
+      {
+        "title": "Offline-first",
+        "description": "Sales, shifts, and stock keep working with zero connectivity — nothing is lost."
+      },
+      {
+        "title": "Cloud sync",
+        "description": "Changes merge to the cloud the moment you're back online, across stores and registers."
+      },
+      {
+        "title": "QRIS payments",
+        "description": "Accept Indonesian QR payments natively, no extra hardware."
+      },
+      {
+        "title": "Multi-store",
+        "description": "Warehouses, registers, and branches in one topology you can edit visually."
+      },
+      {
+        "title": "Lua scripting",
+        "description": "Automate pricing, discounts, and flows with a small script surface."
+      },
+      {
+        "title": "Shift & reconciliation",
+        "description": "Cashier shifts close cleanly, with full audit history for every change."
+      }
     ]
   },
   "screenshots": {
@@ -163,5 +193,10 @@
   "docsSearch": {
     "placeholder": "Search docs…",
     "noResults": "No results"
+  },
+  "checkout": {
+    "email": "Email for license delivery",
+    "emailPlaceholder": "you@example.com",
+    "emailRequired": "Enter a valid email — we'll send your license key to it."
   }
 }

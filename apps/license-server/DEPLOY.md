@@ -255,7 +255,7 @@ In the Paddle dashboard (**Developer tools → Notifications**):
 3. Copy the **endpoint secret key** into the `PADDLE_WEBHOOK_SECRET` secret (Step 8 in §7.1).
 4. **Signature verification:** every request carries a `Paddle-Signature` header (`ts=<unix>;h1=<hex>`). The server verifies HMAC-SHA256 over `ts:rawBody` with the endpoint secret and rejects timestamps older than 5 minutes. Nothing else is trusted.
 5. **Idempotency:** Paddle retries non-2xx responses; the server dedups by `event_id` (24h in-memory window) and upserts on `paddle_sub_id`, so replays are no-ops.
-6. **Customer email:** the webhook resolves the email from `custom_data.email` (pass it at checkout) or the Paddle API (`PADDLE_API_KEY`). Until the checkout passes `custom_data`, set `PADDLE_API_KEY` or provisioning will fail with 500 (Paddle retries).
+6. **Customer email:** the website checkout passes `custom_data.email` (the email the customer types on the pricing card), which the webhook reads to upsert the tenant — **no `PADDLE_API_KEY` needed**. `PADDLE_API_KEY` remains an optional fallback for events whose `custom_data` lacks the email.
 
 ---
 

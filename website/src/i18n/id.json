@@ -42,10 +42,22 @@
     "formError": "Tidak dapat mengirim pesan. Silakan coba lagi nanti.",
     "faqTitle": "Pertanyaan yang sering diajukan",
     "faq": [
-      { "q": "Bagaimana memulai uji coba gratis?", "a": "Unduh OZ-POS dan jalankan — uji coba 90 hari dimulai otomatis, tanpa pendaftaran." },
-      { "q": "Apakah OZ-POS berfungsi tanpa internet?", "a": "Ya. Semua fitur berjalan offline dan tersinkron ke cloud saat koneksi kembali." },
-      { "q": "Bagaimana cara mengaktifkan kunci lisensi saya?", "a": "Buka Pengaturan → Lisensi, masukkan kunci Anda, lalu aktifkan. Kunci terikat ke perangkat keras Anda." },
-      { "q": "Di mana saya bisa melaporkan bug?", "a": "Email kami di support@oz-pos.com dengan nomor versi Anda dan deskripsi kejadian." }
+      {
+        "q": "Bagaimana memulai uji coba gratis?",
+        "a": "Unduh OZ-POS dan jalankan — uji coba 90 hari dimulai otomatis, tanpa pendaftaran."
+      },
+      {
+        "q": "Apakah OZ-POS berfungsi tanpa internet?",
+        "a": "Ya. Semua fitur berjalan offline dan tersinkron ke cloud saat koneksi kembali."
+      },
+      {
+        "q": "Bagaimana cara mengaktifkan kunci lisensi saya?",
+        "a": "Buka Pengaturan → Lisensi, masukkan kunci Anda, lalu aktifkan. Kunci terikat ke perangkat keras Anda."
+      },
+      {
+        "q": "Di mana saya bisa melaporkan bug?",
+        "a": "Email kami di support@oz-pos.com dengan nomor versi Anda dan deskripsi kejadian."
+      }
     ]
   },
   "docs": {
@@ -68,12 +80,30 @@
     "title": "Dibangun untuk dunia nyata",
     "subtitle": "Kasir yang tidak berhenti saat internet mati.",
     "items": [
-      { "title": "Offline-first", "description": "Penjualan, shift, dan stok tetap berjalan tanpa koneksi sama sekali — tidak ada yang hilang." },
-      { "title": "Sinkron cloud", "description": "Perubahan tergabung ke cloud begitu kembali online, lintas toko dan register." },
-      { "title": "Pembayaran QRIS", "description": "Terima QRIS secara native, tanpa perangkat tambahan." },
-      { "title": "Multi-toko", "description": "Gudang, register, dan cabang dalam satu topologi yang bisa diedit secara visual." },
-      { "title": "Skrip Lua", "description": "Otomatiskan harga, diskon, dan alur dengan permukaan skrip yang kecil." },
-      { "title": "Shift & rekonsiliasi", "description": "Shift kasir ditutup rapi, dengan riwayat audit lengkap untuk setiap perubahan." }
+      {
+        "title": "Offline-first",
+        "description": "Penjualan, shift, dan stok tetap berjalan tanpa koneksi sama sekali — tidak ada yang hilang."
+      },
+      {
+        "title": "Sinkron cloud",
+        "description": "Perubahan tergabung ke cloud begitu kembali online, lintas toko dan register."
+      },
+      {
+        "title": "Pembayaran QRIS",
+        "description": "Terima QRIS secara native, tanpa perangkat tambahan."
+      },
+      {
+        "title": "Multi-toko",
+        "description": "Gudang, register, dan cabang dalam satu topologi yang bisa diedit secara visual."
+      },
+      {
+        "title": "Skrip Lua",
+        "description": "Otomatiskan harga, diskon, dan alur dengan permukaan skrip yang kecil."
+      },
+      {
+        "title": "Shift & rekonsiliasi",
+        "description": "Shift kasir ditutup rapi, dengan riwayat audit lengkap untuk setiap perubahan."
+      }
     ]
   },
   "screenshots": {
@@ -163,5 +193,10 @@
   "docsSearch": {
     "placeholder": "Cari dokumentasi…",
     "noResults": "Tidak ada hasil"
+  },
+  "checkout": {
+    "email": "Email untuk pengiriman lisensi",
+    "emailPlaceholder": "anda@contoh.com",
+    "emailRequired": "Masukkan email yang valid — kunci lisensi akan dikirim ke email tersebut."
   }
 }

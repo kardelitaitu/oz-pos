@@ -430,7 +430,7 @@ Data comes from `/api/v1/web/me` — the account page is read-only.
 |----------|-------|---------|
 | `PADDLE_WEBHOOK_SECRET` | `xxxxx` | Verify webhook signatures (HMAC-SHA256 over `ts:rawBody`, 5-min replay window) |
 | `PADDLE_PRICE_TIERS` | `pri_x:pro,pri_y:premium` | Price id → tier_key map (unmapped prices fail provisioning with 500 → Paddle retries) |
-| `PADDLE_API_KEY` | optional | Server-side Paddle API key — email fallback via `GET /customers/{id}` when `custom_data.email` is absent |
+| `PADDLE_API_KEY` | optional | Server-side Paddle API key — fallback via `GET /customers/{id}` when `custom_data.email` is absent (the checkout now passes it, so this is rarely needed) |
 | `OZ_SMTP_HOST` / `OZ_SMTP_PORT` / `OZ_SMTP_USER` / `OZ_SMTP_PASSWORD` / `OZ_SMTP_FROM` | relay creds | OTP + license-key receipt emails (`net/smtp`, port defaults 587) |
 | `OZ_WEB_ALLOWED_ORIGINS` | `https://oz-pos.com,https://oz-pos.adikaradwiatmaja.workers.dev,http://localhost:4321` | Web API CORS allowlist |
 | `OZ_WEB_SESSION_TTL` | `24h` | Web session lifetime (Go duration) |
