@@ -176,8 +176,12 @@ pub fn start_prune_loop_pg(pool: deadpool_postgres::Pool) {
     });
 }
 
-/// Execute a single Postgres prune cycle: delete `offline_queue` rows older
-/// than the 90-day horizon in cursor-based batches (P-1 Retention).
+/// Execute a single Postgres prune cycle:
+/// 1. delete `offline_queue` rows older than the 90-day horizon in
+///    cursor-based batches (P-1 Retention);
+/// 2. delete `sent_reports` claims older than the same horizon — the dedup
+///    table grows one row per (tenant, period) forever, and a claim is only
+///    useful while a crash-recovery retry window could still collide.
 async fn run_prune_cycle_pg(pool: &deadpool_postgres::Pool) {
     let cutoff = retention_cutoff();
     let mut queue_deleted: usize = 0;
@@ -228,9 +232,33 @@ async fn run_prune_cycle_pg(pool: &deadpool_postgres::Pool) {
         metrics::PRUNE_QUEUE_DELETED_TOTAL.inc_by(deleted as f64);
     }
 
-    if queue_deleted > 0 {
+    // Age out `sent_reports` claims. Single DELETE — the table is small
+    // (one row per tenant/period per cadence) and the same 90-day horizon
+    // bounds its size, so batching is unnecessary.
+    let sent_reports_deleted = match pool.get().await {
+        Ok(client) => match client
+            .execute("DELETE FROM sent_reports WHERE sent_at < $1", &[&cutoff])
+            .await
+        {
+            Ok(count) => count as usize,
+            Err(e) => {
+                error!(error = %e, "prune (pg): sent_reports sweep failed");
+                0
+            }
+        },
+        Err(e) => {
+            error!(error = %e, "prune (pg): failed to acquire connection for sent_reports sweep");
+            0
+        }
+    };
+    if sent_reports_deleted > 0 {
+        metrics::PRUNE_SENT_REPORTS_DELETED_TOTAL.inc_by(sent_reports_deleted as f64);
+    }
+
+    if queue_deleted > 0 || sent_reports_deleted > 0 {
         info!(
             queue_deleted = queue_deleted,
+            sent_reports_deleted = sent_reports_deleted,
             "prune cycle (Postgres) completed"
         );
     }
@@ -409,6 +437,76 @@ mod tests {
 
             client
                 .execute("DELETE FROM offline_queue WHERE tenant_id = $1", &[&tenant])
+                .await
+                .unwrap();
+        }
+    }
+
+    /// The `sent_reports` dedup table must not grow forever: claims older
+    /// than the 90-day horizon are aged out by the same prune cycle that
+    /// handles `offline_queue`. Seed an old claim plus fresh claims for two
+    /// tenants and assert only the old one is swept (fresh claims survive
+    /// regardless of tenant — the sweep must not over-delete).
+    #[tokio::test]
+    async fn pg_integration_prune_ages_out_old_sent_reports() {
+        let url = std::env::var("OZ_TEST_PG_URL")
+            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:15432/postgres".into());
+
+        let pool = match crate::db::DbPool::connect_postgres(&url, false, 20).await {
+            Ok(crate::db::DbPool::Postgres(pool)) => pool,
+            Ok(_) => unreachable!("connect_postgres with a postgres:// URL returns Postgres"),
+            Err(e) => {
+                eprintln!("PG prune sent_reports integration test skipped: {e}");
+                return;
+            }
+        };
+
+        let ns = format!("pg-prune-sr-{}", uuid::Uuid::now_v7());
+        let tenant_a = format!("{ns}-a");
+        let tenant_b = format!("{ns}-b");
+        let old = "2025-01-01T00:00:00Z"; // > 90 days before now
+        let recent = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        {
+            let client = pool.get().await.unwrap();
+            client
+                .execute(
+                    "INSERT INTO sent_reports (tenant_id, period, report_id, sent_at) VALUES
+                     ($1, '2025-01-01', 'r-old', $3),
+                     ($2, '2026-08-01', 'r-fresh-a', $4),
+                     ($2, '2026-08-02', 'r-fresh-b', $4)",
+                    &[&tenant_a, &tenant_b, &old, &recent],
+                )
+                .await
+                .unwrap();
+        }
+
+        super::run_prune_cycle_pg(&pool).await;
+
+        {
+            let client = pool.get().await.unwrap();
+            let rows = client
+                .query(
+                    "SELECT tenant_id, period FROM sent_reports WHERE tenant_id IN ($1, $2) ORDER BY tenant_id, period",
+                    &[&tenant_a, &tenant_b],
+                )
+                .await
+                .unwrap();
+            let remaining: Vec<(String, String)> =
+                rows.iter().map(|r| (r.get(0), r.get(1))).collect();
+            assert_eq!(
+                remaining,
+                vec![
+                    (tenant_b.clone(), "2026-08-01".to_string()),
+                    (tenant_b.clone(), "2026-08-02".to_string()),
+                ],
+                "only the old claim is swept; fresh claims for both tenants survive"
+            );
+
+            client
+                .execute(
+                    "DELETE FROM sent_reports WHERE tenant_id LIKE $1",
+                    &[&format!("{ns}-%")],
+                )
                 .await
                 .unwrap();
         }

@@ -67,6 +67,22 @@ pub static PRUNE_QUEUE_DELETED_TOTAL: LazyLock<Counter> = LazyLock::new(|| {
     c
 });
 
+/// Total number of `sent_reports` claims deleted by the hourly prune loop.
+/// The dedup table grows one row per (tenant, period) forever; claims are
+/// only useful while a crash-recovery retry window could still collide, so
+/// they are aged out at the same 90-day horizon as `offline_queue`. A flat
+/// count while claims age past the horizon signals the retention path is
+/// not covering them.
+pub static PRUNE_SENT_REPORTS_DELETED_TOTAL: LazyLock<Counter> = LazyLock::new(|| {
+    let c = Counter::new(
+        "prune_sent_reports_deleted_total",
+        "Total sent_reports claims deleted by the hourly prune",
+    )
+    .unwrap(); // SAFETY: static metric name/opts are compile-time constants; construction cannot fail
+    REGISTRY.register(Box::new(c.clone())).unwrap(); // SAFETY: static registration of a freshly-constructed metric cannot fail
+    c
+});
+
 // ── Histograms ────────────────────────────────────────────────────────
 
 /// Duration of push requests in milliseconds.
