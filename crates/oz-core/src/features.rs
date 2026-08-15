@@ -1359,6 +1359,136 @@ mod tests {
         assert_eq!(features.len(), 2);
         assert!(features.contains(&Feature::CashPayment));
     }
+
+    // ── Additional edge-case tests ─────────────────────────────
+
+    #[test]
+    fn feature_from_key_unknown_returns_none() {
+        assert_eq!(feature_from_key("unknown-feature"), None);
+        assert_eq!(feature_from_key(""), None);
+        assert_eq!(feature_from_key("SimpleRetail"), None);
+        assert_eq!(feature_from_key("SIMPLE-RETAIL"), None);
+    }
+
+    #[test]
+    fn feature_key_is_lowercase_kebab_case() {
+        for &feature in &[
+            Feature::SimpleRetail,
+            Feature::StaffRoles,
+            Feature::CashDrawer,
+            Feature::KitchenDisplay,
+            Feature::MultiTerminal,
+            Feature::CloudSync,
+            Feature::Analytics,
+            Feature::SelfServiceKiosk,
+            Feature::PromotionsEngine,
+        ] {
+            let key = feature_key(feature);
+            assert!(!key.is_empty(), "key for {feature:?} should not be empty");
+            assert!(
+                key.chars().all(|c| c.is_ascii_lowercase() || c == '-'),
+                "key '{key}' for {feature:?} should be lowercase kebab-case"
+            );
+        }
+    }
+
+    #[test]
+    fn from_settings_rows_with_mixed_keys_and_values() {
+        let rows = vec![
+            ("feature.simple-retail".into(), "1".into()),
+            ("feature.cash-payment".into(), "0".into()),
+            ("feature.staff-login".into(), "1".into()),
+            ("store.name".into(), "1".into()),
+            ("feature.unknown-feature".into(), "1".into()),
+        ];
+        let reg = FeatureRegistry::from_settings_rows(&rows);
+        assert!(reg.is_enabled(Feature::SimpleRetail));
+        assert!(!reg.is_enabled(Feature::CashPayment));
+        assert!(reg.is_enabled(Feature::StaffLogin));
+        assert_eq!(reg.count(), 2);
+    }
+
+    #[test]
+    fn to_settings_rows_sorted_deterministic() {
+        let mut reg = FeatureRegistry::new();
+        reg.enable(Feature::SimpleRetail);
+        reg.enable(Feature::StaffRoles); // cascades StaffLogin
+        let rows = reg.to_settings_rows();
+        for (key, value) in &rows {
+            assert!(key.starts_with("feature."));
+            assert_eq!(value, "1");
+        }
+        assert_eq!(rows.len(), 3);
+    }
+
+    #[test]
+    fn enable_deep_chain_with_multi_level_deps() {
+        let mut reg = FeatureRegistry::new();
+        reg.enable(Feature::MultiTerminal);
+        assert!(reg.is_enabled(Feature::MultiTerminal));
+        assert!(reg.is_enabled(Feature::MultiStore));
+        assert_eq!(reg.count(), 2);
+    }
+
+    #[test]
+    fn enable_cloud_sync_brings_in_multi_store() {
+        let mut reg = FeatureRegistry::new();
+        reg.enable(Feature::CloudSync);
+        assert!(reg.is_enabled(Feature::CloudSync));
+        assert!(reg.is_enabled(Feature::MultiStore));
+    }
+
+    #[test]
+    fn disable_multi_store_does_not_affect_multi_terminal() {
+        let mut reg = FeatureRegistry::new();
+        reg.enable(Feature::MultiTerminal);
+        reg.enable(Feature::CloudSync);
+        reg.disable(Feature::MultiStore);
+        assert!(reg.is_enabled(Feature::MultiTerminal));
+        assert!(reg.is_enabled(Feature::CloudSync));
+    }
+
+    #[test]
+    fn simple_retail_preset_count() {
+        let reg = FeatureRegistry::simple_retail();
+        assert!(
+            reg.count() >= 5,
+            "simple retail should have at least 5 features"
+        );
+    }
+
+    #[test]
+    fn full_store_preset_count() {
+        let reg = FeatureRegistry::full_store();
+        assert!(reg.count() > 20, "full store should have many features");
+    }
+
+    #[test]
+    fn from_set_deduplicates() {
+        let mut set = HashSet::new();
+        set.insert(Feature::SimpleRetail);
+        let reg = FeatureRegistry::from_set(set);
+        assert_eq!(reg.count(), 1);
+    }
+
+    #[test]
+    fn kitchen_display_requires_restaurant() {
+        let mut reg = FeatureRegistry::new();
+        reg.enable(Feature::KitchenDisplay);
+        // KitchenDisplay depends on Restaurant, so Restaurant is auto-enabled
+        assert!(reg.is_enabled(Feature::KitchenDisplay));
+        assert!(reg.is_enabled(Feature::Restaurant));
+    }
+
+    #[test]
+    fn restaurant_does_not_auto_enable_kitchen_display() {
+        let mut reg = FeatureRegistry::new();
+        reg.enable(Feature::Restaurant);
+        assert!(reg.is_enabled(Feature::Restaurant));
+        // KitchenDisplay depends ON Restaurant, not the other way around
+        assert!(!reg.is_enabled(Feature::KitchenDisplay));
+        assert!(!reg.is_enabled(Feature::TableManagement));
+    }
 } // ── Feature guards ──────────────────────────────────────────────
 
 #[test]
@@ -1591,6 +1721,140 @@ fn guard_registry_collects_all_failures() {
 }
 
 // ── Property-based tests (proptest) ─────────────────────────────────
+
+// ── Additional edge-case tests ─────────────────────────────
+
+#[test]
+fn feature_from_key_unknown_returns_none() {
+    assert_eq!(feature_from_key("unknown-feature"), None);
+    assert_eq!(feature_from_key(""), None);
+    assert_eq!(feature_from_key("SimpleRetail"), None);
+    assert_eq!(feature_from_key("SIMPLE-RETAIL"), None);
+}
+
+#[test]
+fn feature_key_is_lowercase_kebab_case() {
+    for &feature in &[
+        Feature::SimpleRetail,
+        Feature::StaffRoles,
+        Feature::CashDrawer,
+        Feature::KitchenDisplay,
+        Feature::MultiTerminal,
+        Feature::CloudSync,
+        Feature::Analytics,
+        Feature::SelfServiceKiosk,
+        Feature::PromotionsEngine,
+    ] {
+        let key = feature_key(feature);
+        assert!(!key.is_empty(), "key for {feature:?} should not be empty");
+        assert!(
+            key.chars().all(|c| c.is_ascii_lowercase() || c == '-'),
+            "key '{key}' for {feature:?} should be lowercase kebab-case"
+        );
+    }
+}
+
+#[test]
+fn from_settings_rows_with_mixed_keys_and_values() {
+    let rows = vec![
+        ("feature.simple-retail".into(), "1".into()),
+        ("feature.cash-payment".into(), "0".into()),
+        ("feature.staff-login".into(), "1".into()),
+        ("store.name".into(), "1".into()),
+        ("feature.unknown-feature".into(), "1".into()),
+    ];
+    let reg = FeatureRegistry::from_settings_rows(&rows);
+    assert!(reg.is_enabled(Feature::SimpleRetail));
+    assert!(!reg.is_enabled(Feature::CashPayment));
+    assert!(reg.is_enabled(Feature::StaffLogin));
+    assert_eq!(reg.count(), 2);
+}
+
+#[test]
+fn to_settings_rows_sorted_deterministic() {
+    let mut reg = FeatureRegistry::new();
+    reg.enable(Feature::SimpleRetail);
+    reg.enable(Feature::StaffRoles); // cascades StaffLogin
+    let rows = reg.to_settings_rows();
+    // All keys should start with "feature."
+    for (key, value) in &rows {
+        assert!(key.starts_with("feature."));
+        assert_eq!(value, "1");
+    }
+    // Should contain all 3 enabled features
+    assert_eq!(rows.len(), 3);
+}
+
+#[test]
+fn enable_deep_chain_with_multi_level_deps() {
+    let mut reg = FeatureRegistry::new();
+    // MultiTerminal -> MultiStore -> (nothing)
+    reg.enable(Feature::MultiTerminal);
+    assert!(reg.is_enabled(Feature::MultiTerminal));
+    assert!(reg.is_enabled(Feature::MultiStore));
+    assert_eq!(reg.count(), 2);
+}
+
+#[test]
+fn enable_cloud_sync_brings_in_multi_store() {
+    let mut reg = FeatureRegistry::new();
+    reg.enable(Feature::CloudSync);
+    assert!(reg.is_enabled(Feature::CloudSync));
+    assert!(reg.is_enabled(Feature::MultiStore));
+}
+
+#[test]
+fn disable_multi_store_does_not_affect_multi_terminal() {
+    let mut reg = FeatureRegistry::new();
+    reg.enable(Feature::MultiTerminal); // brings in MultiStore
+    reg.enable(Feature::CloudSync); // also needs MultiStore
+    reg.disable(Feature::MultiStore);
+    // MultiTerminal and CloudSync remain enabled (stale state)
+    assert!(reg.is_enabled(Feature::MultiTerminal));
+    assert!(reg.is_enabled(Feature::CloudSync));
+}
+
+#[test]
+fn simple_retail_preset_count() {
+    let reg = FeatureRegistry::simple_retail();
+    assert!(
+        reg.count() >= 5,
+        "simple retail should have at least 5 features"
+    );
+}
+
+#[test]
+fn full_store_preset_count() {
+    let reg = FeatureRegistry::full_store();
+    assert!(reg.count() > 20, "full store should have many features");
+}
+
+#[test]
+fn from_set_deduplicates() {
+    let mut set = HashSet::new();
+    set.insert(Feature::SimpleRetail);
+    let reg = FeatureRegistry::from_set(set);
+    assert_eq!(reg.count(), 1);
+}
+
+#[test]
+fn kitchen_display_requires_restaurant() {
+    let mut reg = FeatureRegistry::new();
+    reg.enable(Feature::KitchenDisplay);
+    // KitchenDisplay depends on Restaurant, so Restaurant is auto-enabled
+    assert!(reg.is_enabled(Feature::KitchenDisplay));
+    assert!(reg.is_enabled(Feature::Restaurant));
+}
+
+#[test]
+fn restaurant_does_not_auto_enable_kitchen_display() {
+    let mut reg = FeatureRegistry::new();
+    reg.enable(Feature::Restaurant);
+    assert!(reg.is_enabled(Feature::Restaurant));
+    // KitchenDisplay depends ON Restaurant, not the other way around
+    assert!(!reg.is_enabled(Feature::KitchenDisplay));
+    assert!(!reg.is_enabled(Feature::TableManagement));
+}
 
 #[cfg(test)]
 mod proptests {
@@ -1884,3 +2148,5 @@ mod proptests {
         );
     }
 }
+
+// ── Deterministic unit tests ────────────────────────────────────
