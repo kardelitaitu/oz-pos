@@ -1,0 +1,160 @@
+@import "tailwindcss";
+
+/* Design tokens — absolute black + Freebuff-style lime accent
+   (website-plan.md §9; ink = the plan's --color-text).
+   The default theme is dark; a light theme is layered on below via
+   prefers-color-scheme. Components use ink/* utilities for borders and
+   faint fills (never white/*) so they adapt to both themes automatically. */
+@theme {
+  --color-primary: #000000;
+  --color-surface: #0a0a0a;
+  --color-accent: #7cff3f;
+  --color-ink: #ffffff;
+  --color-muted: #a1a1a1;
+}
+
+/* Form controls and scrollbars match the active theme. */
+:root {
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --color-primary: #ffffff;
+    --color-surface: #fafafa;
+    /* darker green — the lime is unreadable as text on white */
+    --color-accent: #16a34a;
+    --color-ink: #0a0a0a;
+    --color-muted: #525252;
+  }
+}
+
+/* Prose styles for the docs pages. The accent token (--color-accent) is the
+   lime brand color in dark mode and green-600 in light mode; every rule here
+   consumes it via var(), so links/callouts adapt to both themes automatically.
+
+   Markdown authors can use:
+     - links:          [text](https://…)  → lime underlined
+     - callouts:       > **Note:** …      → accent-left-border box;
+                       the leading **Label:** renders as the accent label
+                       (GitBook-style). Any leading bold word works.
+     - tables, hr, img → styled below.
+*/
+.docs-content {
+  scroll-margin-top: 6rem;
+}
+.docs-content :is(h1, h2, h3, h4) {
+  font-weight: 600;
+  color: var(--color-ink);
+  scroll-margin-top: 6rem;
+}
+.docs-content h2 {
+  margin-top: 2.5rem;
+  font-size: 1.5rem;
+}
+.docs-content h3 {
+  margin-top: 1.75rem;
+  font-size: 1.125rem;
+}
+.docs-content p {
+  margin-top: 0.875rem;
+  color: var(--color-muted);
+  line-height: 1.7;
+}
+.docs-content strong {
+  color: var(--color-ink);
+  font-weight: 600;
+}
+.docs-content a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+  transition: text-decoration-color 150ms;
+}
+.docs-content a:hover {
+  text-decoration-color: var(--color-accent);
+}
+.docs-content ul {
+  margin-top: 0.875rem;
+  padding-left: 1.25rem;
+  list-style: disc;
+  color: var(--color-muted);
+  line-height: 1.7;
+}
+.docs-content ol {
+  margin-top: 0.875rem;
+  padding-left: 1.25rem;
+  list-style: decimal;
+  color: var(--color-muted);
+  line-height: 1.7;
+}
+.docs-content li {
+  margin-top: 0.25rem;
+}
+.docs-content code {
+  border-radius: 0.25rem;
+  background: color-mix(in srgb, var(--color-ink) 8%, transparent);
+  padding: 0.125rem 0.375rem;
+  font-size: 0.875em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.docs-content pre {
+  margin-top: 0.875rem;
+  overflow-x: auto;
+  border: 1px solid color-mix(in srgb, var(--color-ink) 10%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--color-ink) 4%, transparent);
+  padding: 1rem;
+}
+.docs-content pre code {
+  background: transparent;
+  padding: 0;
+}
+/* GitBook-style callout: accent left border + tinted box. A leading bold
+   label (e.g. "> **Note:** …”) renders as the accent-colored label. */
+.docs-content blockquote {
+  margin-top: 1.25rem;
+  border-left: 3px solid var(--color-accent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--color-accent) 7%, transparent);
+  padding: 0.875rem 1rem;
+  color: var(--color-muted);
+  line-height: 1.7;
+}
+.docs-content blockquote p {
+  margin-top: 0;
+}
+.docs-content blockquote p:first-child strong {
+  color: var(--color-accent);
+}
+.docs-content hr {
+  margin-top: 2rem;
+  border-color: color-mix(in srgb, var(--color-ink) 10%, transparent);
+}
+.docs-content table {
+  margin-top: 1rem;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.docs-content :is(th, td) {
+  border: 1px solid color-mix(in srgb, var(--color-ink) 10%, transparent);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+.docs-content th {
+  color: var(--color-ink);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--color-ink) 5%, transparent);
+}
+.docs-content td {
+  color: var(--color-muted);
+}
+.docs-content img {
+  margin-top: 1rem;
+  max-width: 100%;
+  border: 1px solid color-mix(in srgb, var(--color-ink) 10%, transparent);
+  border-radius: 0.5rem;
+}

@@ -1,0 +1,23 @@
+---
+import { getRelativeLocaleUrl } from 'astro:i18n';
+import { t } from '../i18n';
+
+const locale = Astro.currentLocale ?? 'en';
+const year = new Date().getFullYear();
+---
+
+<footer class="border-t border-ink/5 bg-surface/40">
+  <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 py-8 sm:flex-row">
+    <p class="text-xs text-muted">
+      © {year} OZ-POS. {t(locale, 'footer.rights')}
+    </p>
+    <nav class="flex gap-4 text-xs text-muted" aria-label="Legal">
+      <a href={getRelativeLocaleUrl(locale, 'legal/privacy')} class="transition hover:text-ink">
+        {t(locale, 'footer.privacy')}
+      </a>
+      <a href={getRelativeLocaleUrl(locale, 'legal/terms')} class="transition hover:text-ink">
+        {t(locale, 'footer.terms')}
+      </a>
+    </nav>
+  </div>
+</footer>

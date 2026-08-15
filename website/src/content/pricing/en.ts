@@ -1,0 +1,87 @@
+import type { FeatureRow, PricingTier } from './types';
+
+// Placeholder prices — see website-plan.md §6. Prices are per locale.
+export const pricing: PricingTier[] = [
+  {
+    id: 'trial',
+    tierKey: 'trial',
+    name: 'Free',
+    price: '$0',
+    period: '90-day trial',
+    description: 'Everything you need to run one store — fully offline.',
+    cta: 'Start Free Trial',
+    features: [
+      { label: '1 store', included: true },
+      { label: '1 register', included: true },
+      { label: '1 warehouse', included: true },
+      { label: 'QRIS payments', included: false },
+      { label: 'Cloud sync', included: false },
+      { label: 'Lua scripting', included: false },
+    ],
+  },
+  {
+    id: 'pro',
+    tierKey: 'pro',
+    name: 'Pro',
+    price: '$19',
+    period: '/month',
+    description: 'For growing stores that want cloud sync and QRIS.',
+    cta: 'Choose Pro',
+    highlight: true,
+    priceId: 'pri_placeholder_pro',
+    features: [
+      { label: '1 store', included: true },
+      { label: '2 registers', included: true },
+      { label: '1 warehouse', included: true },
+      { label: 'QRIS payments', included: true },
+      { label: 'Cloud sync', included: true },
+      { label: 'Lua scripting', included: false },
+    ],
+  },
+  {
+    id: 'premium',
+    tierKey: 'premium',
+    name: 'Premium',
+    price: '$49',
+    period: '/month',
+    description: 'Unlimited stores, registers, and automation.',
+    cta: 'Choose Premium',
+    priceId: 'pri_placeholder_premium',
+    features: [
+      { label: 'Unlimited stores', included: true },
+      { label: 'Unlimited registers', included: true },
+      { label: 'Unlimited warehouses', included: true },
+      { label: 'QRIS payments', included: true },
+      { label: 'Cloud sync', included: true },
+      { label: 'Lua scripting', included: true },
+    ],
+  },
+  {
+    id: 'enterprise',
+    tierKey: 'enterprise',
+    name: 'Enterprise',
+    price: 'Custom',
+    period: '',
+    description: 'Tailored limits, onboarding, and priority support.',
+    cta: 'Contact us',
+    features: [
+      { label: 'Unlimited stores', included: true },
+      { label: 'Unlimited registers', included: true },
+      { label: 'Unlimited warehouses', included: true },
+      { label: 'QRIS payments', included: true },
+      { label: 'Cloud sync', included: true },
+      { label: 'Lua scripting', included: true },
+    ],
+  },
+];
+
+export const featureRows: FeatureRow[] = [
+  { label: 'Duration', values: { trial: '90 days', pro: 'Monthly', premium: 'Monthly', enterprise: 'Custom' } },
+  { label: 'Stores', values: { trial: 1, pro: 1, premium: 'Unlimited', enterprise: 'Unlimited' } },
+  { label: 'Registers', values: { trial: 1, pro: 2, premium: 'Unlimited', enterprise: 'Unlimited' } },
+  { label: 'Warehouses', values: { trial: 1, pro: 1, premium: 'Unlimited', enterprise: 'Unlimited' } },
+  { label: 'QRIS payment', values: { trial: false, pro: true, premium: true, enterprise: true } },
+  { label: 'Cloud sync', values: { trial: false, pro: true, premium: true, enterprise: true } },
+  { label: 'Lua scripting', values: { trial: false, pro: false, premium: true, enterprise: true } },
+  { label: 'Priority support', values: { trial: false, pro: false, premium: true, enterprise: true } },
+];

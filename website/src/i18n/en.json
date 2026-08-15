@@ -1,0 +1,166 @@
+{
+  "meta": {
+    "description": "The offline-first POS platform for cafes, restaurants, and retail. Works without internet, syncs when you're back online."
+  },
+  "nav": {
+    "home": "Home",
+    "features": "Features",
+    "pricing": "Pricing",
+    "download": "Download",
+    "docs": "Docs",
+    "support": "Support",
+    "login": "Sign in",
+    "account": "Account",
+    "menu": "Menu"
+  },
+  "pageDesc": {
+    "features": "Offline-first point of sale: sales, shifts, and stock that keep working with zero connectivity.",
+    "pricing": "Simple pricing — start free for 90 days. Trial, Pro, Premium, and Enterprise plans.",
+    "download": "Download OZ-POS for Windows, macOS, or Linux. Free 90-day trial, no signup required.",
+    "support": "Get help with OZ-POS — email support and answers to the most common questions.",
+    "login": "Sign in to your OZ-POS account or create one with just your email.",
+    "account": "Your OZ-POS license, subscription, and billing information.",
+    "docs": "Documentation for OZ-POS — getting started, guides, and reference.",
+    "privacy": "How OZ-POS collects, uses, and protects your data.",
+    "terms": "The terms that govern your use of OZ-POS."
+  },
+  "support": {
+    "title": "Support",
+    "subtitle": "We're here to help — reach out any time.",
+    "emailLabel": "Email us",
+    "email": "support@oz-pos.com",
+    "faqTitle": "Frequently asked questions",
+    "faq": [
+      { "q": "How do I start the free trial?", "a": "Download OZ-POS and launch it — the 90-day trial starts automatically, no signup required." },
+      { "q": "Does OZ-POS work without internet?", "a": "Yes. Every feature works offline and syncs to the cloud when the connection returns." },
+      { "q": "How do I activate my license key?", "a": "Open Settings → License, enter your key, and activate. The key binds to your device hardware." },
+      { "q": "Where can I report a bug?", "a": "Email us at support@oz-pos.com with your version number and a description of what happened." }
+    ]
+  },
+  "docs": {
+    "title": "Documentation",
+    "onThisPage": "On this page",
+    "categories": {
+      "gettingStarted": "Getting Started",
+      "guides": "Guides",
+      "reference": "Reference"
+    }
+  },
+  "hero": {
+    "title": "The Offline-First POS Platform",
+    "subtitle": "Keep selling through outages. OZ-POS runs entirely on your device and syncs to the cloud when the connection returns.",
+    "ctaPrimary": "Start Free Trial",
+    "ctaSecondary": "See Pricing"
+  },
+  "features": {
+    "title": "Built for the real world",
+    "subtitle": "Point of sale that doesn't stop when the internet does.",
+    "items": [
+      { "title": "Offline-first", "description": "Sales, shifts, and stock keep working with zero connectivity — nothing is lost." },
+      { "title": "Cloud sync", "description": "Changes merge to the cloud the moment you're back online, across stores and registers." },
+      { "title": "QRIS payments", "description": "Accept Indonesian QR payments natively, no extra hardware." },
+      { "title": "Multi-store", "description": "Warehouses, registers, and branches in one topology you can edit visually." },
+      { "title": "Lua scripting", "description": "Automate pricing, discounts, and flows with a small script surface." },
+      { "title": "Shift & reconciliation", "description": "Cashier shifts close cleanly, with full audit history for every change." }
+    ]
+  },
+  "screenshots": {
+    "title": "One workspace, every station",
+    "caption": "Desktop and tablet — the same offline-first core, purpose-built screens."
+  },
+  "pricingPreview": {
+    "title": "Simple pricing",
+    "subtitle": "Start free for 90 days. Upgrade when you're ready.",
+    "viewAll": "Compare all plans"
+  },
+  "ctaBanner": {
+    "title": "Start your free trial today",
+    "subtitle": "No credit card, no signup. Download and sell.",
+    "cta": "Download OZ-POS"
+  },
+  "pricingPage": {
+    "title": "Pricing",
+    "subtitle": "Every plan includes the full offline-first core. Upgrade for more stores, registers, and automation.",
+    "trust1": "30-day money back",
+    "trust2": "Cancel anytime",
+    "note": "One-time (perpetual) licensing is not available yet — see the roadmap."
+  },
+  "download": {
+    "title": "Download OZ-POS",
+    "subtitle": "Version 0.0.25 — free 90-day trial, no signup required.",
+    "version": "Current version",
+    "versionValue": "0.0.25",
+    "platformsTitle": "Choose your platform",
+    "requirementsTitle": "System requirements",
+    "requirements": [
+      "Windows 10 / 11 (64-bit)",
+      "macOS 12 or newer",
+      "Linux (x86_64, glibc 2.31+)",
+      "4 GB RAM · 1 GB free disk"
+    ],
+    "note": "Release downloads are published on GitHub Releases.",
+    "releaseLink": "View GitHub Releases"
+  },
+  "login": {
+    "title": "Sign in to your account",
+    "subtitle": "We'll email you a one-time code. No password to remember or reset.",
+    "signInTab": "Sign in",
+    "signUpTab": "Create account",
+    "name": "Name",
+    "namePlaceholder": "Your name",
+    "createAccount": "Create account",
+    "email": "Email",
+    "emailPlaceholder": "you@example.com",
+    "sendCode": "Send code",
+    "code": "Verification code",
+    "codePlaceholder": "6-digit code",
+    "verify": "Verify and continue",
+    "backToEmail": "Use a different email",
+    "codeSent": "We sent a verification code to your email.",
+    "otpNote": "Verification is rate-limited to protect your account.",
+    "errorSend": "Couldn't send the code. Please try again later.",
+    "errorSignup": "Couldn't create your account. Please try again later.",
+    "errorVerify": "Invalid or expired code. Please try again.",
+    "notConfigured": "The auth API is not configured on this deployment."
+  },
+  "account": {
+    "title": "Account",
+    "loading": "Loading your license…",
+    "notSignedIn": "You're not signed in.",
+    "signIn": "Sign in",
+    "error": "Couldn't load your account. Please try again.",
+    "license": "License",
+    "licenseKey": "Key",
+    "tier": "Plan",
+    "status": "Status",
+    "expires": "Expires",
+    "subscription": "Subscription",
+    "billing": "Billing",
+    "logout": "Sign out",
+    "notConfigured": "The license API is not configured on this deployment."
+  },
+  "footer": {
+    "rights": "All rights reserved.",
+    "privacy": "Privacy",
+    "terms": "Terms"
+  },
+  "legal": {
+    "privacyTitle": "Privacy Policy",
+    "termsTitle": "Terms of Service",
+    "placeholder": "This page is a placeholder. Legal text will be added before launch."
+  },
+  "common": {
+    "loading": "Loading…",
+    "contactUs": "Contact us",
+    "notAvailable": "Not available yet"
+  },
+  "notFound": {
+    "title": "Page not found",
+    "subtitle": "The page you're looking for doesn't exist or has moved.",
+    "home": "Back to home"
+  },
+  "docsSearch": {
+    "placeholder": "Search docs…",
+    "noResults": "No results"
+  }
+}

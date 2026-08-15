@@ -1,0 +1,96 @@
+---
+import { getRelativeLocaleUrl } from 'astro:i18n';
+import { t } from '../i18n';
+
+export interface DocLink {
+  slug: string;
+  title: string;
+  order: number;
+}
+
+export interface CategoryGroup {
+  category: string;
+  docs: DocLink[];
+}
+
+interface Props {
+  locale: string;
+  entries: CategoryGroup[];
+  currentSlug?: string;
+}
+
+const { locale, entries, currentSlug } = Astro.props;
+---
+
+<div class="doc-sidebar">
+  <div class="relative">
+    <input
+      type="search"
+      data-doc-search
+      placeholder={t(locale, 'docsSearch.placeholder')}
+      class="w-full rounded-md border border-ink/10 bg-primary px-3 py-1.5 text-sm text-ink outline-none transition focus:border-accent"
+      aria-label={t(locale, 'docsSearch.placeholder')}
+    />
+  </div>
+
+  <p data-doc-none class="mt-6 hidden px-2 text-sm text-muted">{t(locale, 'docsSearch.noResults')}</p>
+
+  {
+    entries.map((group) => (
+      <div class="mt-6" data-doc-group>
+        <p class="px-2 text-xs font-semibold uppercase tracking-wide text-accent">
+          {t(locale, `docs.categories.${group.category}`)}
+        </p>
+        <ul class="mt-2 space-y-0.5">
+          {
+            group.docs.map((doc) => (
+              <li data-doc-item>
+                <a
+                  href={getRelativeLocaleUrl(locale, `docs/${doc.slug}`)}
+                  aria-current={doc.slug === currentSlug ? 'page' : undefined}
+                  class:list={[
+                    'block rounded-md px-2 py-1.5 text-sm transition',
+                    doc.slug === currentSlug
+                      ? 'bg-accent font-medium text-black'
+                      : 'text-muted hover:text-ink',
+                  ]}
+                >
+                  {doc.title}
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    ))
+  }
+</div>
+
+<script>
+  // Client-side filter: each DocSidebar instance is scoped independently, so
+  // the mobile dropdown and the desktop aside both work without colliding.
+  for (const sidebar of document.querySelectorAll<HTMLElement>('.doc-sidebar')) {
+    const input = sidebar.querySelector<HTMLInputElement>('[data-doc-search]');
+    const groups = [...sidebar.querySelectorAll<HTMLElement>('[data-doc-group]')];
+    const none = sidebar.querySelector<HTMLElement>('[data-doc-none]');
+    if (!input) continue;
+
+    input.addEventListener('input', () => {
+      const q = input.value.trim().toLowerCase();
+      let anyVisible = false;
+      for (const group of groups) {
+        const items = [...group.querySelectorAll<HTMLElement>('[data-doc-item]')];
+        let visible = 0;
+        for (const item of items) {
+          const title = item.textContent?.trim().toLowerCase() ?? '';
+          const match = !q || title.includes(q);
+          item.style.display = match ? '' : 'none';
+          if (match) visible += 1;
+        }
+        group.style.display = visible > 0 ? '' : 'none';
+        anyVisible = anyVisible || visible > 0;
+      }
+      if (none) none.classList.toggle('hidden', anyVisible);
+    });
+  }
+</script>

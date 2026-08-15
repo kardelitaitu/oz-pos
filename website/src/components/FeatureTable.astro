@@ -1,0 +1,46 @@
+---
+import type { FeatureRow, PricingTier } from '../content/pricing/types';
+
+interface Props {
+  rows: FeatureRow[];
+  columns: PricingTier[];
+}
+
+const { rows, columns } = Astro.props;
+
+function cell(value: boolean | string | number): string {
+  return value === true ? '✓' : value === false ? '✗' : String(value);
+}
+---
+
+<div class="overflow-x-auto rounded-lg border border-ink/10">
+  <table class="w-full min-w-[560px] border-collapse text-left text-sm">
+    <caption class="sr-only">Feature comparison across plans</caption>
+    <thead>
+      <tr class="border-b border-ink/10">
+        <th scope="col" class="px-4 py-3 text-muted"> </th>
+        {
+          columns.map((c) => (
+            <th scope="col" class="px-4 py-3 font-semibold">
+              {c.name}
+            </th>
+          ))
+        }
+      </tr>
+    </thead>
+    <tbody>
+      {
+        rows.map((row) => (
+          <tr class="border-b border-ink/5 last:border-0">
+            <th scope="row" class="px-4 py-3 font-normal text-muted">
+              {row.label}
+            </th>
+            {columns.map((c) => (
+              <td class="px-4 py-3">{cell(row.values[c.tierKey])}</td>
+            ))}
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+</div>

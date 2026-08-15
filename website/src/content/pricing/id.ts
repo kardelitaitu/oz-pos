@@ -1,0 +1,87 @@
+import type { FeatureRow, PricingTier } from './types';
+
+// Placeholder prices — see website-plan.md §6. Prices are per locale.
+export const pricing: PricingTier[] = [
+  {
+    id: 'trial',
+    tierKey: 'trial',
+    name: 'Gratis',
+    price: 'Rp 0',
+    period: 'uji coba 90 hari',
+    description: 'Semua yang Anda butuhkan untuk satu toko — sepenuhnya offline.',
+    cta: 'Mulai Uji Coba Gratis',
+    features: [
+      { label: '1 toko', included: true },
+      { label: '1 register', included: true },
+      { label: '1 gudang', included: true },
+      { label: 'Pembayaran QRIS', included: false },
+      { label: 'Sinkron cloud', included: false },
+      { label: 'Skrip Lua', included: false },
+    ],
+  },
+  {
+    id: 'pro',
+    tierKey: 'pro',
+    name: 'Pro',
+    price: 'Rp 299.000',
+    period: '/bulan',
+    description: 'Untuk toko berkembang yang ingin sinkron cloud dan QRIS.',
+    cta: 'Pilih Pro',
+    highlight: true,
+    priceId: 'pri_placeholder_pro',
+    features: [
+      { label: '1 toko', included: true },
+      { label: '2 register', included: true },
+      { label: '1 gudang', included: true },
+      { label: 'Pembayaran QRIS', included: true },
+      { label: 'Sinkron cloud', included: true },
+      { label: 'Skrip Lua', included: false },
+    ],
+  },
+  {
+    id: 'premium',
+    tierKey: 'premium',
+    name: 'Premium',
+    price: 'Rp 749.000',
+    period: '/bulan',
+    description: 'Toko, register, dan otomatisasi tanpa batas.',
+    cta: 'Pilih Premium',
+    priceId: 'pri_placeholder_premium',
+    features: [
+      { label: 'Toko tanpa batas', included: true },
+      { label: 'Register tanpa batas', included: true },
+      { label: 'Gudang tanpa batas', included: true },
+      { label: 'Pembayaran QRIS', included: true },
+      { label: 'Sinkron cloud', included: true },
+      { label: 'Skrip Lua', included: true },
+    ],
+  },
+  {
+    id: 'enterprise',
+    tierKey: 'enterprise',
+    name: 'Enterprise',
+    price: 'Kustom',
+    period: '',
+    description: 'Batas yang disesuaikan, onboarding, dan dukungan prioritas.',
+    cta: 'Hubungi kami',
+    features: [
+      { label: 'Toko tanpa batas', included: true },
+      { label: 'Register tanpa batas', included: true },
+      { label: 'Gudang tanpa batas', included: true },
+      { label: 'Pembayaran QRIS', included: true },
+      { label: 'Sinkron cloud', included: true },
+      { label: 'Skrip Lua', included: true },
+    ],
+  },
+];
+
+export const featureRows: FeatureRow[] = [
+  { label: 'Durasi', values: { trial: '90 hari', pro: 'Bulanan', premium: 'Bulanan', enterprise: 'Kustom' } },
+  { label: 'Toko', values: { trial: 1, pro: 1, premium: 'Tanpa batas', enterprise: 'Tanpa batas' } },
+  { label: 'Register', values: { trial: 1, pro: 2, premium: 'Tanpa batas', enterprise: 'Tanpa batas' } },
+  { label: 'Gudang', values: { trial: 1, pro: 1, premium: 'Tanpa batas', enterprise: 'Tanpa batas' } },
+  { label: 'Pembayaran QRIS', values: { trial: false, pro: true, premium: true, enterprise: true } },
+  { label: 'Sinkron cloud', values: { trial: false, pro: true, premium: true, enterprise: true } },
+  { label: 'Skrip Lua', values: { trial: false, pro: false, premium: true, enterprise: true } },
+  { label: 'Dukungan prioritas', values: { trial: false, pro: false, premium: true, enterprise: true } },
+];
