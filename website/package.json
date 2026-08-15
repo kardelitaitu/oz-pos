@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "preview": "astro preview",
+    "prebuild": "node scripts/audit-i18n.mjs",
     "check": "astro check",
+    "precheck": "node scripts/audit-i18n.mjs",
+    "check:i18n": "node scripts/audit-i18n.mjs",
     "astro": "astro"
   },
   "dependencies": {

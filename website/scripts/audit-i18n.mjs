@@ -1,6 +1,10 @@
-// Temporary audit: check every t() key referenced in source exists in both
-// en.json and id.json, both dicts have identical key sets, and report
-// unused keys. Run: node scripts/audit-i18n.mjs
+// i18n audit (build gate): check every t() key referenced in source exists
+// in both en.json and id.json, and both dicts have identical key sets.
+// Missing keys or en/id parity drift EXIT 1 (fails `npm run prebuild`).
+// Unused keys are reported for information only — dynamic keys built from
+// template literals (e.g. `docs.categories.${group.category}`) look "unused"
+// to the static regex, so they must not fail the gate.
+// Run: node scripts/audit-i18n.mjs
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, extname } from 'node:path';
 
@@ -29,15 +33,17 @@ function collect(dir) {
 }
 
 const src = collect(root);
-const reT = /t\(\s*locale\s*,\s*'([^']+)'\s*\)/g;
-const reT2 = /t\(\s*'([^']+)'\s*,\s*'([^']+)'\s*\)/g; // t('en','key') literal-locale form
+// Single or double quotes are both matched so a stray "t(\"en\", \"key\")"
+// can't silently escape the gate.
+const reT = /t\(\s*locale\s*,\s*(['"])([^'"]+)\1\s*\)/g;
+const reT2 = /t\(\s*(['"])([^'"]+)\1\s*,\s*(['"])([^'"]+)\3\s*\)/g; // t('en','key') literal-locale form
 const referenced = new Set();
 const problems = [];
 
 for (const file of src) {
   const text = readFileSync(file, 'utf8');
-  for (const m of text.matchAll(reT)) referenced.add(m[1]);
-  for (const m of text.matchAll(reT2)) referenced.add(m[2]);
+  for (const m of text.matchAll(reT)) referenced.add(m[2]);
+  for (const m of text.matchAll(reT2)) referenced.add(m[4]);
 }
 
 for (const key of [...referenced].sort()) {
@@ -69,10 +75,13 @@ const unused = [...enKeys].filter((k) => !referenced.has(k)).sort();
 console.log(`referenced keys: ${referenced.size}`);
 console.log(`en keys: ${enKeys.size}, id keys: ${idKeys.size}`);
 if (problems.length) {
-  console.log('\nPROBLEMS:');
+  console.log('\nPROBLEMS (failing build):');
   for (const p of problems) console.log('  ' + p);
+  process.exitCode = 1;
 } else {
   console.log('parity + presence: OK');
 }
-console.log('\nUNUSED (referenced nowhere):');
-for (const u of unused) console.log('  ' + u);
+if (unused.length) {
+  console.log('\nUNUSED (informational — template-literal keys may be false positives):');
+  for (const u of unused) console.log('  ' + u);
+}
