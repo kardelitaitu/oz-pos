@@ -1628,3 +1628,217 @@ fn backend_warehouse_capacity_rejects_stock_routing_into_full_pro_room() {
         matches!(result, Err(AppError::TopologyValidation { code, .. }) if code == "warehouse-at-capacity")
     );
 }
+
+#[tokio::test]
+async fn restore_topology_setting_none_removes_the_key() {
+    // The remove path: restore_topology_setting with previous=None must
+    // delete the setting key entirely, not leave behind an empty value.
+    // The crash-recovery tests always use Some(previous) — this pins the
+    // remove branch that fires when no prior topology existed.
+    let _store_id = "store-restore-none";
+    let (_dir, state) = state_with_store();
+    let key = TOPOLOGY_SETTING_KEY;
+    {
+        let db = state.db.lock().await;
+        oz_core::Settings::set(&db, key, "stale-data").unwrap();
+        assert!(
+            oz_core::Settings::get(&db, key).unwrap().is_some(),
+            "setting must exist before restore"
+        );
+    }
+    {
+        let db = state.db.lock().await;
+        restore_topology_setting(&db, key, None).unwrap();
+    }
+    let db = state.db.lock().await;
+    assert!(
+        oz_core::Settings::get(&db, key).unwrap().is_none(),
+        "setting must be removed when previous is None"
+    );
+}
+
+/// Helper: seed a workspace instance with specific field values in the store DB.
+fn seed_instance_in_store(
+    state: &AppState,
+    store_id: &str,
+    id: &str,
+    name: &str,
+    description: &str,
+    purpose_key: &str,
+    status: &str,
+) {
+    let store_conn = state.db_manager.open_store(store_id).unwrap();
+    let store = store_conn.lock().unwrap();
+    let tx = store.unchecked_transaction().unwrap();
+    tx.execute(
+        "INSERT OR IGNORE INTO store_profiles (id, name) VALUES (?1, ?2)",
+        rusqlite::params![store_id, "Test Store"],
+    )
+    .unwrap();
+    tx.execute(
+        "INSERT OR IGNORE INTO workspace_types \
+             (key, name, description, layout_mode, icon, sort_order, accent_colour) \
+             VALUES ('pos', 'POS', '', 'fullscreen', '', 0, '')",
+        [],
+    )
+    .unwrap();
+    tx.execute(
+        "INSERT INTO workspace_instances \
+             (id, type_key, store_id, name, description, colour, purpose_key, status, \
+              last_accessed_at) \
+             VALUES (?1, 'pos', ?2, ?3, ?4, NULL, ?5, ?6, \
+                     strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+        rusqlite::params![id, store_id, name, description, purpose_key, status],
+    )
+    .unwrap();
+    tx.commit().unwrap();
+}
+
+/// Read the current field values of a workspace instance from the store DB.
+fn read_instance_fields(
+    state: &AppState,
+    store_id: &str,
+    id: &str,
+) -> (String, String, String, String) {
+    let store_conn = state.db_manager.open_store(store_id).unwrap();
+    let store = store_conn.lock().unwrap();
+    store
+        .query_row(
+            "SELECT name, description, purpose_key, status FROM workspace_instances WHERE id = ?1",
+            rusqlite::params![id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .unwrap()
+}
+
+#[tokio::test]
+async fn crash_recovery_with_snapshots_restores_pre_mutation_rows() {
+    // The existing crash tests only exercise creations (DELETE on compensation).
+    // This test pins the snapshot-restore path: when Apply modifies existing
+    // workspace rows (update + archive), the recovery journal stores pre-mutation
+    // snapshots. Compensation must restore those rows to their exact prior state.
+    let store_id = "store-snapshot";
+    let (_dir, state) = state_with_store();
+
+    // 1. Seed two workspace instances with known pre-mutation values.
+    seed_instance_in_store(
+        &state,
+        store_id,
+        "ws-pre",
+        "Pre-Mutation",
+        "Original description",
+        "general",
+        "active",
+    );
+    seed_instance_in_store(
+        &state,
+        store_id,
+        "ws-archive",
+        "To-Archive",
+        "Will be archived",
+        "general",
+        "active",
+    );
+
+    // 2. Simulate the Apply mutation: update ws-pre, archive ws-archive.
+    //    The Apply flow would UPDATE ws-pre's fields and SET status='archived'
+    //    on ws-archive — then crash before the global save commits.
+    {
+        let store_conn = state.db_manager.open_store(store_id).unwrap();
+        let store = store_conn.lock().unwrap();
+        let tx = store.unchecked_transaction().unwrap();
+        tx.execute(
+            "UPDATE workspace_instances SET name = 'Updated Name', description = 'Changed', \
+             purpose_key = 'kitchen', status = 'active' WHERE id = 'ws-pre'",
+            [],
+        )
+        .unwrap();
+        tx.execute(
+            "UPDATE workspace_instances SET status = 'archived' WHERE id = 'ws-archive'",
+            [],
+        )
+        .unwrap();
+        tx.commit().unwrap();
+    }
+
+    // 3. Write the recovery journal with pre-mutation snapshots and one creation.
+    let creation = crash_creation(store_id, "ws-new");
+    let snapshot_pre: WorkspaceApplySnapshot = serde_json::from_value(serde_json::json!({
+        "id": "ws-pre",
+        "name": "Pre-Mutation",
+        "description": "Original description",
+        "colour": null,
+        "purpose_key": "general",
+        "status": "active",
+    }))
+    .unwrap();
+    let snapshot_archive: WorkspaceApplySnapshot = serde_json::from_value(serde_json::json!({
+        "id": "ws-archive",
+        "name": "To-Archive",
+        "description": "Will be archived",
+        "colour": null,
+        "purpose_key": "general",
+        "status": "active",
+    }))
+    .unwrap();
+    let previous = topology_envelope_json(&[], &[], 0, &[]).unwrap();
+    let desired = topology_envelope_json(&[], &[], 1, &[]).unwrap();
+    {
+        let db = state.db.lock().await;
+        oz_core::Settings::set(&db, TOPOLOGY_SETTING_KEY, &previous).unwrap();
+        persist_topology_recovery(
+            &db,
+            &TopologyApplyRecovery {
+                store_id: store_id.into(),
+                topology_branch_id: None,
+                creations: vec![creation.clone()],
+                snapshots: vec![snapshot_pre, snapshot_archive],
+                previous_topology: Some(previous.clone()),
+                desired_topology: Some(desired),
+            },
+        )
+        .unwrap();
+    }
+    // The creation was committed to the store (crash landed after store commit).
+    commit_creation_to_store(&state, &creation);
+    assert!(store_has_instance(&state, store_id, "ws-new"));
+
+    // 4. Run recovery.
+    recover_pending_topology_apply(&state, store_id)
+        .await
+        .unwrap();
+
+    // 5. Verify: creations deleted, snapshots restored.
+    assert!(
+        !store_has_instance(&state, store_id, "ws-new"),
+        "created instance must be deleted"
+    );
+    let (name, desc, purpose, status) = read_instance_fields(&state, store_id, "ws-pre");
+    assert_eq!(name, "Pre-Mutation", "ws-pre name must be restored");
+    assert_eq!(
+        desc, "Original description",
+        "ws-pre description must be restored"
+    );
+    assert_eq!(purpose, "general", "ws-pre purpose_key must be restored");
+    assert_eq!(status, "active", "ws-pre status must be restored");
+    let (name2, _, _, status2) = read_instance_fields(&state, store_id, "ws-archive");
+    assert_eq!(name2, "To-Archive", "ws-archive name must be preserved");
+    assert_eq!(
+        status2, "active",
+        "ws-archive status must be restored from archived to active"
+    );
+
+    // 6. Global topology restored, journal cleared.
+    let db = state.db.lock().await;
+    assert!(
+        oz_core::Settings::get(&db, TOPOLOGY_APPLY_RECOVERY_KEY)
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        oz_core::Settings::get(&db, TOPOLOGY_SETTING_KEY)
+            .unwrap()
+            .unwrap(),
+        previous
+    );
+}

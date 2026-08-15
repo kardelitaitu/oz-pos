@@ -2627,3 +2627,157 @@ fn roundtrip_preserves_subtitle_independent_of_other_fields() {
         Some("standalone-subtitle")
     );
 }
+
+#[test]
+fn runtime_plan_excludes_location_wires_and_unknown_endpoints() {
+    // The runtime manifest carries only operational (non-location) routes.
+    // Location ownership edges are diagram-only; they must never be
+    // compiled into the runtime routing artifact. Wires whose endpoints
+    // dangle (reference node ids not present in the payload) must also be
+    // filtered out rather than emitted with empty instance ids.
+    let nodes = vec![
+        semantic_node("branch", "branch-location", Some("default")),
+        semantic_node("resto-pos", "workspace", None),
+        semantic_node("kds", "workspace", None),
+    ];
+    let wires = vec![
+        semantic_location_wire("wire-location", "resto-pos"),
+        serde_json::json!({
+            "id": "wire-op",
+            "from_node_id": "resto-pos",
+            "to_node_id": "kds",
+            "direction": "one-way",
+            "from_port_id": "operation-out",
+            "to_port_id": "operation-in",
+            "relationship_type": "generic",
+        }),
+        serde_json::json!({
+            "id": "wire-dangling",
+            "from_node_id": "ghost-node",
+            "to_node_id": "kds",
+            "direction": "one-way",
+            "from_port_id": "operation-out",
+            "to_port_id": "operation-in",
+            "relationship_type": "generic",
+        }),
+    ];
+
+    let plan = compile_topology_runtime_plan(&nodes, &wires, Some("default".to_string()));
+    assert_eq!(plan["schema_version"], TOPOLOGY_SCHEMA_VERSION);
+    assert_eq!(plan["branch_id"], "default");
+    let routes = plan["routes"].as_array().unwrap();
+    assert_eq!(
+        routes.len(),
+        1,
+        "only the valid operational wire should be compiled; location and dangling wires must be excluded"
+    );
+    assert_eq!(routes[0]["wire_id"], "wire-op");
+    assert_eq!(routes[0]["source_instance_id"], "resto-pos");
+    assert_eq!(routes[0]["target_instance_id"], "kds");
+    assert_eq!(routes[0]["from_port_id"], "operation-out");
+    assert_eq!(routes[0]["to_port_id"], "operation-in");
+    assert_eq!(routes[0]["relationship_type"], "generic");
+    assert_eq!(routes[0]["target_node_kind"], "workspace");
+}
+
+#[test]
+fn runtime_plan_carries_target_node_kind_and_branch_id() {
+    // The manifest's target_node_kind is resolved from the target node's
+    // `type` field — consumers use it to decide routing behaviour without
+    // re-parsing the diagram. A branch-scoped plan must echo the branch id.
+    let nodes = vec![
+        semantic_node("branch", "branch-location", Some("b1")),
+        semantic_node("resto", "workspace", None),
+        serde_json::json!({
+            "id": "wh",
+            "type": "warehouse",
+            "name": "WH",
+            "x": 0.0,
+            "y": 0.0,
+        }),
+    ];
+    let wires = vec![
+        semantic_location_wire("loc", "resto"),
+        serde_json::json!({
+            "id": "stock-wire",
+            "from_node_id": "resto",
+            "to_node_id": "wh",
+            "direction": "one-way",
+            "from_port_id": "stock-out",
+            "to_port_id": "stock-in",
+            "relationship_type": "stock-routing",
+        }),
+    ];
+
+    let plan = compile_topology_runtime_plan(&nodes, &wires, Some("b1".to_string()));
+    assert_eq!(plan["branch_id"], "b1");
+    let routes = plan["routes"].as_array().unwrap();
+    assert_eq!(routes.len(), 1);
+    assert_eq!(routes[0]["target_node_kind"], "warehouse");
+    assert_eq!(routes[0]["relationship_type"], "stock-routing");
+}
+
+#[test]
+fn runtime_plan_unscoped_has_null_branch_and_filters_non_operational() {
+    // Unscoped plans (branch_id = None) serialize branch_id as JSON null.
+    // Only relationship types other than "location" are operational.
+    let nodes = vec![
+        semantic_node("branch", "branch-location", Some("default")),
+        semantic_node("ws", "workspace", None),
+    ];
+    let wires = vec![
+        semantic_location_wire("loc", "ws"),
+        serde_json::json!({
+            "id": "op",
+            "from_node_id": "ws",
+            "to_node_id": "branch",
+            "direction": "one-way",
+            "from_port_id": "op-out",
+            "to_port_id": "op-in",
+            "relationship_type": "generic",
+        }),
+    ];
+    let plan = compile_topology_runtime_plan(&nodes, &wires, None);
+    assert!(plan["branch_id"].is_null());
+    let routes = plan["routes"].as_array().unwrap();
+    assert_eq!(routes.len(), 1);
+    assert_eq!(routes[0]["wire_id"], "op");
+}
+
+#[test]
+fn runtime_setting_key_unscoped_returns_base_key() {
+    // When the topology key has no branch suffix (legacy unscoped path),
+    // the runtime key must resolve to the base constant — no branch id
+    // appended.
+    let key = topology_runtime_setting_key(TOPOLOGY_SETTING_KEY).unwrap();
+    assert_eq!(key, TOPOLOGY_RUNTIME_SETTING_KEY);
+}
+
+#[test]
+fn runtime_setting_key_branch_scoped_appends_branch_id() {
+    // A branch-scoped topology key "oz-pos/topology/{branch}" must map to
+    // "oz-pos/topology-runtime/{branch}".
+    let key = topology_runtime_setting_key("oz-pos/topology/default").unwrap();
+    assert_eq!(key, "oz-pos/topology-runtime/default");
+
+    let key = topology_runtime_setting_key("oz-pos/topology/my-branch-42").unwrap();
+    assert_eq!(key, "oz-pos/topology-runtime/my-branch-42");
+}
+
+#[test]
+fn runtime_setting_key_rejects_arbitrary_key_without_prefix() {
+    // Any key that is not the base topology key and lacks the prefix must
+    // fail — a corrupted or mismatched key must not silently resolve.
+    let err = topology_runtime_setting_key("some/other/key");
+    assert!(err.is_err(), "arbitrary key must fail");
+}
+
+#[test]
+fn runtime_setting_key_rejects_empty_branch_suffix() {
+    // "oz-pos/topology/" (trailing slash, empty branch) must not resolve
+    // to "oz-pos/topology-runtime/" — empty suffix is an invalid topology
+    // key (topology_setting_key rejects it), so the runtime resolver must
+    // also reject it.
+    let err = topology_runtime_setting_key("oz-pos/topology/");
+    assert!(err.is_err(), "empty branch suffix must fail");
+}
