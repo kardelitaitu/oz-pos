@@ -1,8 +1,8 @@
 # CI Pipeline Dashboard — OZ-POS
 
-<!-- Audit stamp: 2026-08-03 · AUDIT-27 remediation · status: REWRITTEN — matrix and gate policy reconciled with current workflows (ci.yml, e2e-pr.yml, nightly.yml, release.yml, security.yml, docs.yml) and local runners (check.sh, check-ui.mjs) -->
+<!-- Audit stamp: 2026-08-03 · AUDIT-27 remediation · status: REWRITTEN — matrix and gate policy reconciled with current workflows (ci.yml, e2e-pr.yml, nightly.yml, release.yml, security.yml, docs.yml) and local runners (check.sh, check-ui.mjs). Updated 2026-08-16: website.yml added to workflow inventory. -->
 
-> Last updated: 2026-08-05
+> Last updated: 2026-08-16
 
 ## Workflow inventory
 
@@ -14,6 +14,7 @@
 | `release.yml` | Tag push `v*` | Build + blocking Trivy scan + publish all artifacts |
 | `security.yml` | Weekly Monday + manual | Full-tree cargo audit, cargo deny, Trivy scans |
 | `docs.yml` | Push to `main` (docs paths) + PR (docs/workflow paths) | cargo doc → GitHub Pages on push, preceded by the required `ci-docs-drift` gate so a stale job matrix can't be published. PRs also run `build-docs` (cargo doc compile) — deploy stays push-only because the `github-pages` environment rejects PR refs (AUDIT-29/30) |
+| `website.yml` | PR (website paths) + push to `main` (website paths) | Marketing site (Astro, `website/`): `check` job runs astro check + i18n audit + build on every PR/push; `deploy` job runs on main only and `wrangler deploy`s to Cloudflare Workers static assets. Fail-closed: a missing `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` secret fails the deploy job loudly instead of silently skipping |
 | `android.yml` / `ios.yml` | Push to `main` | Mobile build pipelines |
 
 ## Job Matrix (ci.yml)
