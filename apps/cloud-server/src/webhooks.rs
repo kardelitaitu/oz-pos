@@ -33,7 +33,9 @@
 //!    and creates an `offline_queue` `finalize_sale` action so the next
 //!    sync cycle finalizes the pending sale
 
-use axum::{Router, extract::State, http::StatusCode, routing::post};
+use axum::{
+    Router, extract::State, http::StatusCode, middleware, response::Response, routing::post,
+};
 use hmac::{Hmac, Mac};
 use rusqlite::params;
 use sha2::Sha256;
@@ -45,11 +47,28 @@ type HmacSha256 = Hmac<Sha256>;
 
 /// Build the webhooks router (unauthenticated — Stripe/Square verify
 /// themselves via HMAC signatures, not JWT).
+///
+/// A response-status middleware counts every 5xx into
+/// `webhook_5xx_total` — webhooks are the payment-authenticity boundary,
+/// so a server-side failure (misconfigured secret, DB error, bad event
+/// shape) is an operator-visible signal that payment/plan state may be
+/// stale.
 pub fn webhooks_router(state: CloudServerState) -> Router {
     Router::new()
         .route("/api/webhooks/stripe", post(stripe_webhook_handler))
         .route("/api/webhooks/square", post(square_webhook_handler))
+        .layer(middleware::from_fn(count_webhook_5xx))
         .with_state(state)
+}
+
+/// Axum middleware that counts 5xx responses from the webhook handlers
+/// into the `webhook_5xx_total` Prometheus counter.
+async fn count_webhook_5xx(request: axum::extract::Request, next: middleware::Next) -> Response {
+    let response = next.run(request).await;
+    if response.status().is_server_error() {
+        crate::metrics::WEBHOOK_5XX_TOTAL.inc();
+    }
+    response
 }
 
 /// Stripe webhook event payload (minimal — we only need `type` and `id`).

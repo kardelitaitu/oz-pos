@@ -83,6 +83,39 @@ pub static PRUNE_SENT_REPORTS_DELETED_TOTAL: LazyLock<Counter> = LazyLock::new(|
     c
 });
 
+/// Total number of `429 Too Many Requests` responses returned by the rate
+/// limiters, labelled by limiter. Alerting keys off this: a sustained rate
+/// of 429s on `token` means the mint endpoint is being brute-forced; a
+/// sustained rate on `sync` means a tenant is misbehaving (or a buggy
+/// client is hammering push/pull).
+pub static RATE_LIMIT_429_TOTAL: LazyLock<CounterVec> = LazyLock::new(|| {
+    let c = CounterVec::new(
+        Opts::new(
+            "rate_limit_429_total",
+            "Total 429 Too Many Requests responses, by limiter",
+        ),
+        &["limiter"], // sync | token
+    )
+    .unwrap(); // SAFETY: static metric name/opts are compile-time constants; construction cannot fail
+    REGISTRY.register(Box::new(c.clone())).unwrap(); // SAFETY: static registration of a freshly-constructed metric cannot fail
+    c
+});
+
+/// Total number of `5xx` responses from the webhook handlers (Stripe /
+/// Square). Webhooks are the payment-authenticity boundary: a non-zero
+/// count means real events are failing server-side (misconfigured secret,
+/// DB error, bad event shape) and the payment/plan state may be stale.
+/// Alert on any sustained increase.
+pub static WEBHOOK_5XX_TOTAL: LazyLock<Counter> = LazyLock::new(|| {
+    let c = Counter::new(
+        "webhook_5xx_total",
+        "Total 5xx responses from webhook handlers",
+    )
+    .unwrap(); // SAFETY: static metric name/opts are compile-time constants; construction cannot fail
+    REGISTRY.register(Box::new(c.clone())).unwrap(); // SAFETY: static registration of a freshly-constructed metric cannot fail
+    c
+});
+
 // ── Histograms ────────────────────────────────────────────────────────
 
 /// Duration of push requests in milliseconds.
@@ -183,6 +216,11 @@ fn ensure_registered() {
     let _ = &*HEALTH_CHECK_FAILURES_TOTAL;
     let _ = &*HEALTH_DB_LATENCY_MICROS;
     let _ = &*DB_CONTENTION_SECONDS;
+    let _ = &*PRUNE_QUEUE_DELETED_TOTAL;
+    let _ = &*PRUNE_SENT_REPORTS_DELETED_TOTAL;
+    let _ = RATE_LIMIT_429_TOTAL.with_label_values(&["sync"]);
+    let _ = RATE_LIMIT_429_TOTAL.with_label_values(&["token"]);
+    let _ = &*WEBHOOK_5XX_TOTAL;
 }
 
 /// Render all registered metrics in Prometheus text format.

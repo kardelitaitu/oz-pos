@@ -259,6 +259,9 @@ pub async fn rate_limit_middleware(
                 retry_after_secs = retry_secs,
                 "rate limit exceeded"
             );
+            crate::metrics::RATE_LIMIT_429_TOTAL
+                .with_label_values(&["sync"])
+                .inc();
             (
                 StatusCode::TOO_MANY_REQUESTS,
                 [("Retry-After", &retry_secs.to_string())],
@@ -303,6 +306,9 @@ pub async fn token_rate_limit_middleware(
                 retry_after_secs = retry_secs,
                 "token mint rate limit exceeded"
             );
+            crate::metrics::RATE_LIMIT_429_TOTAL
+                .with_label_values(&["token"])
+                .inc();
             (
                 StatusCode::TOO_MANY_REQUESTS,
                 [("Retry-After", &retry_secs.to_string())],

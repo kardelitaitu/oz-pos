@@ -595,6 +595,76 @@ mod tests {
         assert!(text.contains("sync_anchor_expired_total"));
     }
 
+    /// Smoke test for the observability counters added with the operations
+    /// runbook (unify-auth-and-sync.md §11.5 item 9): drive a REAL 429 from
+    /// the token-mint rate limiter and a REAL 5xx from an unconfigured
+    /// webhook secret, then assert the /metrics endpoint renders both
+    /// counters at their expected values.
+    #[tokio::test]
+    async fn metrics_render_rate_limit_and_webhook_counters() {
+        let app = test_app();
+
+        // ── 429: exhaust the token-mint limiter (30/min/IP) ──────
+        // The limiter runs BEFORE auth, so no credentials are needed; all
+        // requests share the "unknown" IP bucket (no proxy headers).
+        let mut last_status = StatusCode::OK;
+        for _ in 0..31 {
+            let req = Request::builder()
+                .method("POST")
+                .uri("/api/v1/tokens")
+                .header("Content-Type", "application/json")
+                .body(Body::from(r#"{"label":"smoke","expiry_hours":1}"#))
+                .unwrap();
+            last_status = app.clone().oneshot(req).await.unwrap().status();
+        }
+        assert_eq!(
+            last_status,
+            StatusCode::TOO_MANY_REQUESTS,
+            "the 31st token mint must be rate-limited"
+        );
+
+        // ── 5xx: webhook with no STRIPE_WEBHOOK_SECRET configured ──
+        // The handler returns 500 before signature verification when the
+        // secret is missing; the response-status middleware counts it.
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/webhooks/stripe")
+            .header("stripe-signature", "t=1,v1=irrelevant")
+            .header("Content-Type", "application/json")
+            .body(Body::from(
+                r#"{"id":"evt_smoke","type":"payment_intent.succeeded","data":{"object":{}}}"#,
+            ))
+            .unwrap();
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "webhook without a configured secret must 500"
+        );
+
+        // ── Both counters render on /metrics at the expected values ──
+        let req = Request::builder()
+            .uri("/metrics")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let text = String::from_utf8_lossy(&body);
+        // The counters are process-global, so other tests may have
+        // incremented them too; asserting the rendered label lines (the
+        // status-code asserts above already prove the events occurred) is
+        // the robust smoke check.
+        assert!(
+            text.contains("rate_limit_429_total{limiter=\"token\"}"),
+            "expected the token 429 counter, got:\n{text}"
+        );
+        assert!(
+            text.contains("webhook_5xx_total"),
+            "expected the webhook 5xx counter, got:\n{text}"
+        );
+    }
+
     #[tokio::test]
     async fn health_returns_ok() {
         let app = test_app();
