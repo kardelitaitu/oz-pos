@@ -401,11 +401,15 @@ describe('MenuEngineeringScreen', () => {
     vi.mocked(reportsApi.getMenuEngineering).mockClear();
 
     const endInput = screen.getByLabelText('End date') as HTMLInputElement;
-    // Use a date different from today() to trigger a state change
-    fireEvent.change(endInput, { target: { value: '2026-08-15' } });
+    // Use a date different from today() (computed at runtime so the test never
+    // collides with the current date) to trigger a state change
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayIso = yesterday.toISOString().slice(0, 10);
+    fireEvent.change(endInput, { target: { value: yesterdayIso } });
 
     await waitFor(() => {
-      expect(reportsApi.getMenuEngineering).toHaveBeenCalledWith(expect.any(String), '2026-08-15', '');
+      expect(reportsApi.getMenuEngineering).toHaveBeenCalledWith(expect.any(String), yesterdayIso, '');
     });
   });
 

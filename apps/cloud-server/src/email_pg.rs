@@ -1268,6 +1268,7 @@ async fn category_forecast_pg(
         tenant,
     )
     .await?;
+    #[allow(clippy::type_complexity)]
     let mut groups: std::collections::HashMap<
         String,
         (Option<String>, Vec<(chrono::NaiveDate, f64)>),
@@ -1484,8 +1485,9 @@ mod tests {
                 .any(|a| a.sku == sku && a.current_qty == 4 && a.threshold == 10)
         );
 
-        // Popularity + forecast are computed (may be empty without activity).
-        assert!(bundle.category_popularity.is_empty() || bundle.category_popularity.len() >= 1);
+        // Popularity + forecast are computed (may be empty without activity —
+        // the typed bundle field is present by construction, so no claim is
+        // made about row counts here).
 
         // ── Settings round-trip (SMTP config + schedule + dedup key) ──
         let smtp = SmtpConfig {
@@ -1670,10 +1672,19 @@ mod tests {
                 .await
                 .unwrap();
         }
+        let tenants = active_tenants_pg(&pool).await.unwrap();
+        // The shared dev DB legitimately holds data-derived tenants from
+        // other tests (e.g. the migration-bin integration test), so assert
+        // the ordering properties — `default` first, this test's tenant
+        // enumerated — not the exact list.
         assert_eq!(
-            active_tenants_pg(&pool).await.unwrap(),
-            vec!["default".to_string(), "tenant-b".to_string()],
-            "default sorts first, then the data-derived tenants"
+            tenants.first(),
+            Some(&"default".to_string()),
+            "default must sort first in the tenant enumeration"
+        );
+        assert!(
+            tenants.contains(&"tenant-b".to_string()),
+            "tenant-b (data-derived via offline_queue) must be enumerated"
         );
 
         // Tenant-b has scoped SMTP + schedule + a future last-sent → not
@@ -1708,14 +1719,9 @@ mod tests {
         )
         .await
         .unwrap();
-        set_setting_scoped_pg(
-            &pool,
-            LAST_SENT_KEY,
-            &"2099-01-01T00:00:00Z".to_string(),
-            "tenant-b",
-        )
-        .await
-        .unwrap();
+        set_setting_scoped_pg(&pool, LAST_SENT_KEY, "2099-01-01T00:00:00Z", "tenant-b")
+            .await
+            .unwrap();
         try_send_scheduled_for_tenant_pg(&pool, "tenant-b")
             .await
             .expect("already-sent tenant must short-circuit before SMTP");

@@ -505,7 +505,7 @@ For the full list see the `docs/decisions/` directory.
 not hard deadlines. Every PR should move the codebase closer to the target
 architecture.*
 
-> last audited 2026-08-12 by buffy
+> last audited 12-08-26 by buffy
 > audit: Architecture doc drift correction + env-var config consolidation
 
 > status: ACCURATE (verified against actual codebase) · verified accurate: 29 workspace members (11 crates + 4 platform + 1 foundation + 10 modules + 3 apps); 58 ADRs in docs/decisions/; foundation crate has 14 source files; cloud-server uses centralized CloudServerConfig (env vars consolidated from 14 scattered reads to 1 struct); OpenAPI spec covers 22 endpoints with 23 named schemas; N+1 SKU lookup fixed in complete_sale_deduction; all clippy warnings resolved workspace-wide

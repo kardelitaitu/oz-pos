@@ -73,12 +73,15 @@ pub struct CloudServerState {
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // ── tokio-console (RUSTFLAGS="--cfg tokio_unstable" + feature "console") ─
-    #[cfg(feature = "console")]
+    // console-subscriber panics if tokio was not built with `tokio_unstable`,
+    // so the init is gated on BOTH the feature and the cfg — `--all-features`
+    // without RUSTFLAGS must not crash startup.
+    #[cfg(all(feature = "console", tokio_unstable))]
     {
         console_subscriber::init();
         tracing::info!("tokio-console subscriber initialised");
     }
-    #[cfg(not(feature = "console"))]
+    #[cfg(not(all(feature = "console", tokio_unstable)))]
     {
         tracing::debug!(
             "tokio-console disabled — compile with `--features console` + RUSTFLAGS=\"--cfg tokio_unstable\" to enable"

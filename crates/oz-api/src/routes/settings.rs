@@ -673,11 +673,7 @@ mod tests {
     async fn scoped_keys_are_written_suffix_form() {
         let app = router(state_with(None));
         let body = r#"{"tenant":"tenant-b","store_name":"B Store"}"#;
-        let resp = app
-            .clone()
-            .oneshot(put_settings(&body, None))
-            .await
-            .unwrap();
+        let resp = app.clone().oneshot(put_settings(body, None)).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
         let json = body_json(resp).await;
         assert_eq!(json["tenant"], "tenant-b");
@@ -908,15 +904,24 @@ mod tests {
             "password must be encrypted at rest, got: {stored}"
         );
 
-        // default's view must not include tenant-b's override.
+        // default's view must not include tenant-b's override. The shared
+        // dev DB may legitimately hold a bare `smtp_config` (provisioned for
+        // `default`, e.g. by the cloud-server email-loop PG test running in
+        // a parallel binary), so assert the actual isolation invariant —
+        // tenant-b's values must never surface — rather than bare-key
+        // absence (the fallback is supposed to read the bare key).
         let resp = app
             .clone()
             .oneshot(get_settings(Some("default"), Some("sekret")))
             .await
             .unwrap();
         let json = body_json(resp).await;
-        assert!(
-            json["smtp_config"].is_null(),
+        assert_ne!(
+            json["store_name"], "B Cloud Store",
+            "tenant-b's scoped config must not leak into default"
+        );
+        assert_ne!(
+            json["smtp_config"]["host"], "smtp.example.com",
             "tenant-b's scoped config must not leak into default"
         );
 

@@ -275,7 +275,7 @@ async fn read_pg_rows(pool: &Pool, table: &str, columns: &[String]) -> Result<Ve
     let mut out = Vec::with_capacity(rows.len());
     for row in rows {
         let mut cells = Vec::with_capacity(columns.len());
-        for i in 0..columns.len() {
+        for (i, col) in columns.iter().enumerate() {
             let v = row.try_get::<_, Option<i64>>(i);
             match v {
                 Ok(Some(i)) => cells.push(Cell::Int(i)),
@@ -297,7 +297,6 @@ async fn read_pg_rows(pool: &Pool, table: &str, columns: &[String]) -> Result<Ve
                                         Ok(Some(b)) => cells.push(Cell::Blob(b)),
                                         Ok(None) => cells.push(Cell::Null),
                                         Err(e) => {
-                                            let col = &columns[i];
                                             return Err(format!("decode {table}.{col}: {e}"));
                                         }
                                     }

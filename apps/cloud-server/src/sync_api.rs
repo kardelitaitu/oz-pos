@@ -262,20 +262,18 @@ async fn pull_handler(
     // check when using a cursor (subsequent pages don't re-check anchor).
     if req.cursor.is_none()
         && let Some(ref since) = req.since
+        && let Some(oldest_ts) = store.oldest_created_at(tenant_id).await
+        && since.as_str() < oldest_ts.as_str()
     {
-        if let Some(oldest_ts) = store.oldest_created_at(tenant_id).await
-            && since.as_str() < oldest_ts.as_str()
-        {
-            metrics::SYNC_ANCHOR_EXPIRED_TOTAL.inc();
-            return Err((
-                axum::http::StatusCode::GONE,
-                serde_json::json!({
-                    "error": "anchor_expired",
-                    "oldest_available": oldest_ts,
-                })
-                .to_string(),
-            ));
-        }
+        metrics::SYNC_ANCHOR_EXPIRED_TOTAL.inc();
+        return Err((
+            axum::http::StatusCode::GONE,
+            serde_json::json!({
+                "error": "anchor_expired",
+                "oldest_available": oldest_ts,
+            })
+            .to_string(),
+        ));
     }
 
     // P-3: decode cursor if present. Format: "created_at|id".

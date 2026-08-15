@@ -87,7 +87,7 @@ impl SyncStore {
             }
             Self::Postgres(pool) => {
                 let mut client = pool.get().await.map_err(|e| e.to_string())?;
-                let mut tx = client.transaction().await.map_err(|e| e.to_string())?;
+                let tx = client.transaction().await.map_err(|e| e.to_string())?;
                 tx.execute("SELECT set_config('oz.tenant_id', $1, true)", &[&tenant_id])
                     .await
                     .map_err(|e| e.to_string())?;
