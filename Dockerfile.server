@@ -122,6 +122,10 @@ RUN mkdir -p crates/oz-core/src crates/oz-api/src crates/oz-logging/src \
 # Now copy the actual source and rebuild (only changed source files
 # invalidate this layer).
 COPY crates/ crates/
+# oz-core embeds ui/src/features/stores/topologySemantics.json via
+# include_str! (see crates/oz-core/src/topology.rs) — .dockerignore
+# re-includes only that file, so COPY ui/ is cheap.
+COPY ui/ ui/
 COPY foundation/ foundation/
 COPY platform/ platform/
 COPY modules/ modules/

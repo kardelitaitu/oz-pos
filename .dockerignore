@@ -16,8 +16,15 @@
 # Documentation & design docs (not needed at compile time)
 docs
 
-# Front-end (Node.js / Tauri) — not needed for cloud-server
-ui
+# Front-end (Node.js / Tauri) — not needed for cloud-server, except the
+# single JSON that oz-core embeds at compile time (include_str! in
+# crates/oz-core/src/topology.rs). The negations below re-include just that
+# file, keeping node_modules and the rest of ui/ out of the build context.
+ui/*
+!ui/src/
+!ui/src/features/
+!ui/src/features/stores/
+!ui/src/features/stores/topologySemantics.json
 node_modules
 apps/desktop-client
 apps/tablet-client
