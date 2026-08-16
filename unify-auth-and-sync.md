@@ -421,7 +421,7 @@ The unified image was deployed to the `oz-sync` Northflank service
 
 | File | Change |
 |------|--------|
-| `crates/oz-core/src/license_verification.rs` | `LICENSE_SERVER_URL` → `https://p01--oz-sync--76cyv4d6bn54.code.run` (env override `OZ_LICENSE_SERVER_URL`) |
+| `crates/oz-core/src/license_verification.rs` | `LICENSE_SERVER_URL` → `https://oz--cloud--76cyv4d6bn54.code.run` (env override `OZ_LICENSE_SERVER_URL`) |
 | `apps/desktop-client/tauri.conf.json` | CSP `connect-src` adds the unified host |
 | `apps/tablet-client/tauri.conf.json` | CSP `connect-src` adds the unified host |
 | `ui/src/features/auth/LicenseActivationScreen.tsx` | `AUTH_SERVICE_URL` fallback → unified host (`VITE_AUTH_SERVICE_URL` overrides) |
