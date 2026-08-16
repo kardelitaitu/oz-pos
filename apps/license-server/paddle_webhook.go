@@ -298,22 +298,66 @@ func resolvePaddleEmail(sub *paddleSubscription) string {
 
 // ── Tier mapping ─────────────────────────────────────────────────────
 
-// paddleTierForPrice maps a Paddle price id to a tier_key via the
-// PADDLE_PRICE_TIERS env var ("pri_x:pro,pri_y:premium"). Returns ("", false)
-// when the price is not in the map — the handler then answers 500 so Paddle
-// retries until the operator fixes the map.
-func paddleTierForPrice(priceID string) (string, bool) {
+// paddlePriceTiers parses PADDLE_PRICE_TIERS ("pri_x:pro,pri_y:premium")
+// into a price→tier map. Returns an error for an unset or malformed value
+// so the boot gate (verifyPaddleConfig) fails fast instead of letting
+// every subscription event 500 during provisioning.
+func paddlePriceTiers() (map[string]string, error) {
 	v := strings.TrimSpace(os.Getenv("PADDLE_PRICE_TIERS"))
-	if v == "" || priceID == "" {
-		return "", false
+	if v == "" {
+		return nil, fmt.Errorf("PADDLE_PRICE_TIERS is required — without it every subscription webhook fails provisioning with 500; set it to comma-separated price_id:tier_key pairs, e.g. pri_01h7abc123:pro,pri_01h7def456:premium")
 	}
+	m := make(map[string]string)
 	for _, pair := range strings.Split(v, ",") {
 		k, tier, ok := strings.Cut(strings.TrimSpace(pair), ":")
-		if ok && strings.TrimSpace(k) == priceID {
-			return strings.TrimSpace(tier), true
+		k = strings.TrimSpace(k)
+		tier = strings.TrimSpace(tier)
+		if !ok || k == "" || tier == "" {
+			return nil, fmt.Errorf("PADDLE_PRICE_TIERS has a malformed entry %q — expected price_id:tier_key pairs, e.g. pri_01h7abc123:pro", strings.TrimSpace(pair))
 		}
+		m[k] = tier
 	}
-	return "", false
+	return m, nil
+}
+
+// paddleTierForPrice maps a Paddle price id to a tier_key via
+// PADDLE_PRICE_TIERS. Returns ("", false) when the price is not in the
+// map — the handler then answers 500 so Paddle retries until the operator
+// fixes the map. Env is re-read per call so a redeploy can fix it.
+func paddleTierForPrice(priceID string) (string, bool) {
+	if priceID == "" {
+		return "", false
+	}
+	m, err := paddlePriceTiers()
+	if err != nil {
+		return "", false
+	}
+	tier, ok := m[priceID]
+	return tier, ok
+}
+
+// verifyPaddleConfig is the boot-time webhook gate (called from main
+// before the server starts serving). It fails fast when the Paddle
+// webhook is configured to answer 503/500 on every event instead of
+// provisioning purchases:
+//
+//   - PADDLE_WEBHOOK_SECRET unset → hard error: every event answers 503
+//     and Paddle retries forever.
+//   - PADDLE_PRICE_TIERS unset or malformed → hard error: every
+//     subscription event 500s during provisioning.
+//
+// Both values are still read per-request afterwards, so a redeploy with
+// fixed env is enough to recover.
+func verifyPaddleConfig() error {
+	if paddleWebhookSecret() == "" {
+		return fmt.Errorf("PADDLE_WEBHOOK_SECRET is required — without it every Paddle webhook answers 503 and Paddle retries forever; set it to the endpoint secret from Paddle → Developer tools → Notifications → Edit destination")
+	}
+	m, err := paddlePriceTiers()
+	if err != nil {
+		return err
+	}
+	log.Printf("Paddle webhook config verified: %d price→tier mapping(s)", len(m))
+	return nil
 }
 
 // tierQuotas returns the subscription quota block for a tier, mirroring

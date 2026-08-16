@@ -237,8 +237,8 @@ The license server requires the RSA private key as an environment variable. **Ne
 7. (Optional) Session lifetime override:
    - **Key:** `OZ_WEB_SESSION_TTL` — Go duration, default `24h` (e.g. `72h` to extend dashboard sessions).
 8. Add the **Paddle webhook** secrets (required for the checkout → provisioning flow):
-   - **Key:** `PADDLE_WEBHOOK_SECRET` — the endpoint secret key from Paddle → Developer tools → Notifications → Edit destination. Without it the webhook answers `503 not configured`.
-   - **Key:** `PADDLE_PRICE_TIERS` — comma-separated `price_id:tier_key` pairs mapping every Paddle price to a tier, e.g. `pri_01h7abc123:pro,pri_01h7def456:premium`. Unmapped prices make provisioning fail with 500 (Paddle retries) until this is fixed. Copy the real price IDs from the Paddle dashboard (Catalog → Prices).
+   - **Key:** `PADDLE_WEBHOOK_SECRET` — the endpoint secret key from Paddle → Developer tools → Notifications → Edit destination. Without it the webhook answers `503 not configured`. **Boot gate:** the server fails fast at startup if this (or `PADDLE_PRICE_TIERS`) is missing or malformed, so a misconfigured deploy can never silently answer 503/500 on every event.
+   - **Key:** `PADDLE_PRICE_TIERS` — comma-separated `price_id:tier_key` pairs mapping every Paddle price to a tier, e.g. `pri_01h7abc123:pro,pri_01h7def456:premium`. Unmapped prices make provisioning fail with 500 (Paddle retries) until this is fixed. Copy the real price IDs from the Paddle dashboard (Catalog → Prices). Both vars are still read per-request, so a redeploy with fixed env recovers without a code change.
    - **Key:** `PADDLE_API_KEY` (optional) — server-side Paddle API key. Only needed when the customer email isn't passed in `custom_data` at checkout; the webhook falls back to fetching it via `GET /customers/{id}`.
    - **Key:** `PADDLE_API_URL` (optional) — defaults to `https://api.paddle.com`.
 9. Click **Save**.

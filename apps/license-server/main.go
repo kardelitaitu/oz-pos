@@ -95,6 +95,14 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// ── Bootstrap: Paddle webhook config ─────────────────────────
+	// Fail fast when the webhook would answer 503/500 on every event
+	// (missing secret or price→tier map): purchases would provision
+	// nothing and Paddle would retry forever (see verifyPaddleConfig).
+	if err := verifyPaddleConfig(); err != nil {
+		log.Fatal(err)
+	}
+
 	// ── Register custom license API routes ───────────────────────
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		// First boot on an empty pb_data volume: import the embedded

@@ -878,3 +878,60 @@ func TestPaddleWebhook_CancelUnknownSubscription_Acknowledged(t *testing.T) {
 		t.Fatalf("expected 200 ack, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
+
+// ── Boot-time webhook config gate (verifyPaddleConfig) ───────────────
+
+func TestVerifyPaddleConfig_SecretMissing_Fails(t *testing.T) {
+	t.Setenv("PADDLE_WEBHOOK_SECRET", "")
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_pro:pro")
+	err := verifyPaddleConfig()
+	if err == nil {
+		t.Fatal("missing PADDLE_WEBHOOK_SECRET must fail boot")
+	}
+	if !strings.Contains(err.Error(), "PADDLE_WEBHOOK_SECRET is required") {
+		t.Errorf("error = %q, want a clear PADDLE_WEBHOOK_SECRET message", err)
+	}
+}
+
+func TestVerifyPaddleConfig_PriceTiersMissing_Fails(t *testing.T) {
+	t.Setenv("PADDLE_WEBHOOK_SECRET", "test-webhook-secret")
+	t.Setenv("PADDLE_PRICE_TIERS", "")
+	err := verifyPaddleConfig()
+	if err == nil {
+		t.Fatal("missing PADDLE_PRICE_TIERS must fail boot")
+	}
+	if !strings.Contains(err.Error(), "PADDLE_PRICE_TIERS is required") {
+		t.Errorf("error = %q, want a clear PADDLE_PRICE_TIERS message", err)
+	}
+}
+
+func TestVerifyPaddleConfig_MalformedPriceTiers_Fails(t *testing.T) {
+	t.Setenv("PADDLE_WEBHOOK_SECRET", "test-webhook-secret")
+	for _, bad := range []string{"pro", "pri_x:pro,:pro", "pri_x:pro,pri_y", "pri_x:pro, :premium"} {
+		t.Setenv("PADDLE_PRICE_TIERS", bad)
+		if err := verifyPaddleConfig(); err == nil {
+			t.Fatalf("malformed PADDLE_PRICE_TIERS=%q must fail boot", bad)
+		}
+	}
+}
+
+func TestVerifyPaddleConfig_ValidPasses(t *testing.T) {
+	t.Setenv("PADDLE_WEBHOOK_SECRET", "test-webhook-secret")
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_pro:pro,pri_test_premium:premium")
+	if err := verifyPaddleConfig(); err != nil {
+		t.Fatalf("valid config should pass the gate: %v", err)
+	}
+}
+
+func TestPaddleTierForPrice_StillWorksViaParser(t *testing.T) {
+	t.Setenv("PADDLE_PRICE_TIERS", "pri_test_pro:pro,pri_test_premium:premium")
+	if tier, ok := paddleTierForPrice("pri_test_premium"); !ok || tier != "premium" {
+		t.Errorf("pri_test_premium → (%q, %v), want (premium, true)", tier, ok)
+	}
+	if _, ok := paddleTierForPrice("pri_unknown"); ok {
+		t.Error("unmapped price must return ok=false")
+	}
+	if _, ok := paddleTierForPrice(""); ok {
+		t.Error("empty price must return ok=false")
+	}
+}
