@@ -25,10 +25,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"net/mail"
-	"net/smtp"
 	"os"
 	"strings"
 	"sync"
@@ -380,17 +378,8 @@ func sendOTPEmailSMTP(to, code string) error {
 		from = "no-reply@oz-pos.com"
 	}
 
-	addr := net.JoinHostPort(host, port)
-	var auth smtp.Auth
-	if user != "" {
-		auth = smtp.PlainAuth("", user, password, host)
-	}
-
 	msg := buildOtpEmail(from, to, code)
-	if err := smtp.SendMail(addr, auth, from, []string{to}, msg); err != nil {
-		return fmt.Errorf("smtp.SendMail: %w", err)
-	}
-	return nil
+	return sendMailSMTP(host, port, user, password, from, []string{to}, msg)
 }
 
 // buildOtpEmail renders the plain-text OTP email (RFC 5322 message bytes).

@@ -41,7 +41,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"net/smtp"
 	"os"
 	"strconv"
 	"strings"
@@ -404,16 +403,8 @@ func sendReceiptEmailSMTP(to, licenseKey, tier, expiresAt string) error {
 		from = "no-reply@oz-pos.com"
 	}
 
-	addr := host + ":" + port
-	var auth smtp.Auth
-	if user != "" {
-		auth = smtp.PlainAuth("", user, password, host)
-	}
 	msg := buildReceiptEmail(from, to, licenseKey, tier, expiresAt)
-	if err := smtp.SendMail(addr, auth, from, []string{to}, msg); err != nil {
-		return fmt.Errorf("smtp.SendMail: %w", err)
-	}
-	return nil
+	return sendMailSMTP(host, port, user, password, from, []string{to}, msg)
 }
 
 // buildReceiptEmail renders the plain-text license-key receipt email

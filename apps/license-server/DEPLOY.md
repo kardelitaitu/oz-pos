@@ -220,7 +220,7 @@ The license server requires the RSA private key as an environment variable. **Ne
 
    **No custom domain yet?** Northflank does **not** provide SMTP/email to apps — you need a third-party transactional relay, and `code.run` / `workers.dev` are not domains you can add DNS records to (no SPF/DKIM there). Until you own a domain, use a provider that works with a **verified sender email** instead:
 
-   - **Brevo (current choice)** — SMTP login/username is a dedicated **SMTP login email** (Brevo → Settings → SMTP & API → copy the **Login** value; it is NOT your account email), password is the **SMTP key** (`xsmtpsib-…`). The `OZ_SMTP_FROM` address must be a **verified sender** in Brevo (Sender Identity → verify the email or domain) or sends fail. **Use Option A (port 587, STARTTLS)** — the license server sends via Go's `net/smtp` (`smtp.SendMail`), which does STARTTLS on 587/2525 but **not** implicit SSL, so Option B (port 465) will not work as-is. Example:
+   - **Brevo (current choice)** — SMTP login/username is a dedicated **SMTP login email** (Brevo → Settings → SMTP & API → copy the **Login** value; it is NOT your account email), password is the **SMTP key** (`xsmtpsib-…`). The `OZ_SMTP_FROM` address must be a **verified sender** in Brevo (Sender Identity → verify the email or domain) or sends fail. All three Brevo options work — **port 465 uses implicit TLS**, 587/2525 use STARTTLS (`smtp_mail.go` picks the transport by port). Example:
      ```
      OZ_SMTP_HOST=smtp-relay.brevo.com
      OZ_SMTP_PORT=587
