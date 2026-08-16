@@ -1,0 +1,17 @@
+# OZ-POS documentation portal — mdBook configuration.
+#
+# The portal aggregates hand-written guides (docs/), ADRs (docs/decisions/),
+# rustdoc output (target/doc/) and TypeDoc output (ui/src). Generated content
+# is copied into docs/src/ before building — see documentation.md at the repo
+# root for the full plan.
+[book]
+title = "OZ-POS Documentation"
+authors = ["OZ-POS contributors"]
+language = "en"
+
+[build]
+build-dir = "book"
+
+[output.html]
+additional-css = ["theme/custom.css"]
+# site-url = "/"   # set only when deploying under a subpath (e.g. GitHub Pages)
