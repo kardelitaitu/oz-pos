@@ -96,12 +96,16 @@ pub struct AppState {
 
 /// Default CORS allowlist — the documented origins in `unify-auth-and-sync.md`
 /// §11: the website (global + Indonesia), the website dev server, and the
-/// Tauri POS app.
-pub const DEFAULT_CORS_ORIGINS: [&str; 4] = [
+/// Tauri POS app. The Tauri webview origin differs per platform: `tauri://`
+/// on macOS/Linux, `http://tauri.localhost` on Windows (WebView2) — both are
+/// listed so the unified cloud server's `/api/health` answers the activation
+/// screen's direct webview fetch on every OS.
+pub const DEFAULT_CORS_ORIGINS: [&str; 5] = [
     "https://oz-pos.com",
     "https://id.oz-pos.com",
     "http://localhost:4321",
     "tauri://localhost",
+    "http://tauri.localhost",
 ];
 
 /// Parse `OZ_CORS_ORIGINS` (comma-separated) into an origin list.
@@ -1380,6 +1384,26 @@ mod tests {
             .get("access-control-allow-origin")
             .map(|v| v.to_str().unwrap());
         assert_eq!(allow_origin, Some("https://oz-pos.com"));
+    }
+
+    /// Windows WebView2 uses `http://tauri.localhost` as the Tauri v2
+    /// webview origin (macOS/Linux use `tauri://localhost`). Both must be
+    /// echoed so the unified cloud server's `/api/health` serves the
+    /// activation screen's direct webview fetch on every platform.
+    #[tokio::test]
+    async fn cors_allows_windows_webview_origin() {
+        let req = Request::builder()
+            .uri("/api/v1/health")
+            .header("Origin", "http://tauri.localhost")
+            .body(Body::empty())
+            .unwrap();
+        let resp = test_app().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let allow_origin = resp
+            .headers()
+            .get("access-control-allow-origin")
+            .map(|v| v.to_str().unwrap());
+        assert_eq!(allow_origin, Some("http://tauri.localhost"));
     }
 
     #[tokio::test]

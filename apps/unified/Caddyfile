@@ -5,7 +5,8 @@
 # one-deployment shape; add a `tls` directive here when running the image
 # self-managed with a reachable domain (see gateway/Caddyfile.example).
 #
-#   /api/v1/license/*, /api/v1/web/*, /_/*, /api/collections/* → PocketBase :8080
+#   /api/v1/license/*, /api/v1/web/*, /api/v1/paddle/*, /_/*,
+#   /api/collections/* → PocketBase :8080
 #   everything else (sync, REST, webhooks, tokens, health, metrics) → :3099
 
 (security_headers) {
@@ -26,6 +27,12 @@
 		reverse_proxy localhost:8080
 	}
 	handle /api/collections/* {
+		import security_headers
+		reverse_proxy localhost:8080
+	}
+	# Paddle Billing webhook — signature-verified in the Go license server
+	# (apps/license-server/paddle_webhook.go), NOT the Rust sync server.
+	handle /api/v1/paddle/* {
 		import security_headers
 		reverse_proxy localhost:8080
 	}

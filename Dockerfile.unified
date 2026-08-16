@@ -35,7 +35,8 @@ COPY apps/license-server/main.go apps/license-server/activate.go \
      apps/license-server/renew.go apps/license-server/status.go \
      apps/license-server/helpers.go apps/license-server/expiry.go \
      apps/license-server/ratelimit.go apps/license-server/health.go \
-     apps/license-server/api_key.go apps/license-server/contact.go ./
+     apps/license-server/api_key.go apps/license-server/contact.go \
+     apps/license-server/web_otp.go apps/license-server/paddle_webhook.go ./
 COPY apps/license-server/pb_schema.json ./
 
 RUN CGO_ENABLED=0 go build -o /out/pocketbase -ldflags="-s -w" .
