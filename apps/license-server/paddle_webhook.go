@@ -749,6 +749,14 @@ func paddleProvision(app core.App, ev paddleEvent, sendReceipt bool) error {
 	subRecord.Set("starts_at", startsAt)
 	subRecord.Set("expires_at", expiresAt)
 	subRecord.Set("grace_until", graceUntil)
+	// Persist the tier's quota block on the subscription so /status and the
+	// subscription.updated / canceled re-signs read current values instead of
+	// zero values (mirrors renew.go's M5-audit fix).
+	subRecord.Set("max_stores", maxStores)
+	subRecord.Set("max_pos_instances", maxPOS)
+	if b, err := json.Marshal(allowedTypes); err == nil {
+		subRecord.Set("allowed_types", string(b))
+	}
 	subRecord.Set("signed_payload", payloadStr)
 	subRecord.Set("signature", signature)
 	if saveErr := app.Save(subRecord); saveErr != nil {
@@ -791,8 +799,21 @@ func paddleUpdate(app core.App, ev paddleEvent) error {
 	if priceID != "" {
 		if tier, ok := paddleTierForPrice(priceID); ok {
 			subRecord.Set("tier_key", tier)
+			// Refresh the tier's quota block so the re-sign below reads the new
+			// tier's limits, not the ones captured at provisioning time.
+			maxStores, maxPOS, allowedTypes := tierQuotas(tier)
+			subRecord.Set("max_stores", maxStores)
+			subRecord.Set("max_pos_instances", maxPOS)
+			if b, err := json.Marshal(allowedTypes); err == nil {
+				subRecord.Set("allowed_types", string(b))
+			}
 			if keyRecord, err := app.FindFirstRecordByData("license_keys", "paddle_sub_id", sub.ID); err == nil {
 				keyRecord.Set("tier_key", tier)
+				keyRecord.Set("max_stores", maxStores)
+				keyRecord.Set("max_pos_instances", maxPOS)
+				if b, err := json.Marshal(allowedTypes); err == nil {
+					keyRecord.Set("allowed_types", string(b))
+				}
 				if saveErr := app.Save(keyRecord); saveErr != nil {
 					log.Printf("paddle webhook: failed to sync key tier for %s: %v", sub.ID, saveErr)
 				}

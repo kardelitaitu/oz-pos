@@ -188,6 +188,17 @@ func TestPaddleWebhook_ValidSignature_ProvisioningFlow(t *testing.T) {
 	if subRec.GetString("status") != "active" {
 		t.Errorf("expected sub status active, got %q", subRec.GetString("status"))
 	}
+
+	// The tier quota block must be persisted on the subscription record so
+	// /status and subscription.updated / canceled re-signs read real values
+	// instead of zero values.
+	if subRec.GetInt("max_stores") != 0 || subRec.GetInt("max_pos_instances") != 0 {
+		t.Errorf("expected pro tier to persist unlimited quotas, got max_stores=%d max_pos_instances=%d",
+			subRec.GetInt("max_stores"), subRec.GetInt("max_pos_instances"))
+	}
+	if got := subRec.GetString("allowed_types"); !strings.Contains(got, "restaurant-pos") {
+		t.Errorf("expected allowed_types to persist workspace types, got %q", got)
+	}
 }
 
 func TestPaddleWebhook_InvalidSignature_401(t *testing.T) {

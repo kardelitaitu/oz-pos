@@ -497,6 +497,43 @@
         "type": "text"
       },
       {
+        "help": "Max stores for this subscription's tier (0 = unlimited). Populated by the Paddle webhook; matches the license key's quota block.",
+        "hidden": false,
+        "id": "number1618033988",
+        "max": null,
+        "min": 0,
+        "name": "max_stores",
+        "onlyInt": true,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "help": "Max POS instances for this subscription's tier (0 = unlimited).",
+        "hidden": false,
+        "id": "number2718281829",
+        "max": null,
+        "min": 0,
+        "name": "max_pos_instances",
+        "onlyInt": true,
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "number"
+      },
+      {
+        "help": "JSON array of allowed workspace types for this subscription's tier.",
+        "hidden": false,
+        "id": "json3141592654",
+        "maxSize": 0,
+        "name": "allowed_types",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "json"
+      },
+      {
         "hidden": false,
         "id": "autodate7853078470",
         "name": "created",

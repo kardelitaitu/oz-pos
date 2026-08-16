@@ -1365,6 +1365,15 @@ func TestActivateHandler_Success(t *testing.T) {
 	if subs[0].GetString("status") != "active" {
 		t.Errorf("subscription status should be active, got %s", subs[0].GetString("status"))
 	}
+	// Quota block must be persisted on the subscription record (mirrors the
+	// signed payload and renew.go's M5-audit fix).
+	if subs[0].GetInt("max_stores") != 5 || subs[0].GetInt("max_pos_instances") != 3 {
+		t.Errorf("expected quota block persisted on subscription, got max_stores=%d max_pos_instances=%d",
+			subs[0].GetInt("max_stores"), subs[0].GetInt("max_pos_instances"))
+	}
+	if got := subs[0].GetString("allowed_types"); !strings.Contains(got, "store-pos") {
+		t.Errorf("expected allowed_types persisted on subscription, got %q", got)
+	}
 
 	// Verify machine was registered.
 	machines, err := app.FindRecordsByFilter(
