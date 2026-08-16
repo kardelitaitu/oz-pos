@@ -14,7 +14,7 @@
 //!
 //! The SQL is written natively for Postgres (`$n` parameters). The port
 //! schema (`20260813_init.pg.sql`) stores boolean-ish columns as `BIGINT`
-//! (0/1), so reads go through [`pg_bool`] and writes pass `i64`. The
+//! (0/1), so reads go through `pg_bool` and writes pass `i64`. The
 //! behaviour mirrors the SQLite `Store` methods the handlers used before:
 //! validation errors, unique-constraint conflicts, the `stock_movements` +
 //! `stock_summary` + `inventory` ledger writes on product/stock changes, and

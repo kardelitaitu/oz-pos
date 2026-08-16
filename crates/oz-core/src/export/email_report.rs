@@ -4,7 +4,7 @@
 //! persisted in the `settings` table under key `smtp_config` as JSON
 //! (same pattern as [`ReportScheduleConfig`](super::ReportScheduleConfig)).
 //!
-//! [`ReportEmailBuilder`] consumes an [`AnalyticsBundle`](super::AnalyticsBundle)
+//! [`ReportEmailBuilder`] consumes an [`AnalyticsBundle`]
 //! and produces a structured email with HTML and plain-text alternatives
 //! suitable for SMTP delivery.
 
@@ -106,7 +106,7 @@ impl Store<'_> {
     ///
     /// The password field is encrypted at rest before serialization
     /// so that casual database inspection does not reveal it.
-    /// Decryption happens transparently in [`get_smtp_config`].
+    /// Decryption happens transparently in [`Self::get_smtp_config`].
     pub fn save_smtp_config(&self, config: &SmtpConfig) -> Result<(), CoreError> {
         let mut config = config.clone();
         if let Some(ref pwd) = config.password

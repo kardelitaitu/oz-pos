@@ -390,7 +390,7 @@ impl Kernel {
     /// Resolve module dependencies using Kahn's algorithm (BFS-based
     /// topological sort).
     ///
-    /// Modules declare their dependencies through the [`HasDependencies`]
+    /// Modules declare their dependencies through the [`HasDependencies`](crate::kernel::dependency::HasDependencies)
     /// trait. Modules with no implemented trait are assumed to have zero
     /// dependencies.
     ///

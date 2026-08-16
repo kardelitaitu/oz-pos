@@ -579,7 +579,7 @@ fn sqlite_snapshot_users(
 /// `$n` placeholders. Row decode failures fail the whole pull (SYNC-10).
 ///
 /// Generic over `deadpool_postgres::GenericClient` so the same code runs on
-/// the tenant-scoped transaction (the `oz.tenant_id` GUC from [`tenant_tx`])
+/// the tenant-scoped transaction (the `oz.tenant_id` GUC from `tenant_tx`)
 /// or on a plain pooled client (tests).
 async fn pg_pull_items(
     client: &mut impl deadpool_postgres::GenericClient,

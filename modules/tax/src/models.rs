@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// TAX-05: tax is computed in integer minor units, so a per-line/rate
 /// result like `333.5` must be reduced to a whole minor unit. The legacy
-/// behavior silently truncated toward zero (understating tax); [`HalfUp`]
+/// behavior silently truncated toward zero (understating tax); [`HalfUp`](Self::HalfUp)
 /// is the recommended, jurisdiction-defensible default.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

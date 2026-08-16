@@ -74,7 +74,7 @@ pub fn start_report_sender_loop_pg(pool: Pool) {
 }
 
 /// Try to send the scheduled reports for every active tenant — the Postgres
-/// mirror of [`crate::email::try_send_scheduled`] walked per tenant. Each
+/// mirror of `crate::email::try_send_scheduled` walked per tenant. Each
 /// cycle: enumerate tenants, then for each one read its scoped settings,
 /// check the schedule (cadence + timezone + dedup via the shared scheduler),
 /// generate its tenant-filtered report, send, and record the send timestamp.

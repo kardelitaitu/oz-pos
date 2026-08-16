@@ -106,7 +106,7 @@ pub async fn send_test_report(state: State<'_, AppState>) -> Result<String, AppE
 
 /// Get the current report schedule configuration.
 ///
-/// Returns the saved [`ReportScheduleConfig`] or a default if none
+/// Returns the saved [`ReportScheduleConfig`](oz_core::export::ReportScheduleConfig) or a default if none
 /// has been persisted yet.
 #[tauri::command]
 pub async fn get_report_schedule(

@@ -494,7 +494,7 @@ pub async fn list_staff_scoped(
 /// Load a staff member's full profile as the session user sees it (ADR #35
 /// D6). Sensitive fields are withheld or masked unless the caller holds
 /// `staff:read_identity` / `staff:read_payroll`, and every sensitive read is
-/// audited — see [`oz_core::db::profile::Store`].
+/// audited — see [`Store`].
 #[tauri::command]
 pub async fn get_staff_profile_scoped(
     session_token: String,

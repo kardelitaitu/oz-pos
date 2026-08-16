@@ -224,7 +224,7 @@ impl Store<'_> {
     }
 
     /// The scope-aware gate (ADR #35 D5 / spec 0048): same as
-    /// [`require_permission`], plus the assignment's branch/workspace scope
+    /// [`Self::require_permission`], plus the assignment's branch/workspace scope
     /// is evaluated for scoped assignments. Global assignments and legacy
     /// users without an assignment are not scope-restricted.
     pub fn require_permission_scoped(

@@ -2,7 +2,7 @@
 //!
 //! Provides [`shutdown_signal`] which resolves when the process receives
 //! SIGTERM (Unix) or Ctrl+C (all platforms). The returned future can be
-//! passed directly to [`axum::serve(...).with_graceful_shutdown(...)`].
+//! passed directly to `axum::serve(...).with_graceful_shutdown(...)`.
 
 use tracing::{info, warn};
 

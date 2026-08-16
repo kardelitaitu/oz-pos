@@ -2,7 +2,7 @@
 //!
 //! Carts are serialised as JSON blobs in the `active_carts` table so they
 //! survive application restarts.  This is the same strategy used for
-//! [`held_carts`](super::sales).
+//! [`held_carts`](crate::db::sales).
 
 use foundation::Cart;
 use foundation::CartId;
