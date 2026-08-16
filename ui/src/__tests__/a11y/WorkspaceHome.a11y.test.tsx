@@ -23,7 +23,7 @@ vi.mock('@/contexts/WorkspaceContext', () => ({
   useWorkspace: () => ({
     availableWorkspaces: [
       { type_key: 'store-pos', instance_id: 'ws-1', store_id: 'default', store_name: 'Main', name: 'POS', description: 'Point of Sale', icon: 'store', layout_mode: 'fullscreen', colour: null, is_default: true },
-      { type_key: 'inventory', instance_id: 'ws-2', store_id: 'default', store_name: 'Main', name: 'Inventory', description: 'Stock management', icon: 'inventory', layout_mode: 'sidebar', colour: null, is_default: false },
+      { type_key: 'warehouse', instance_id: 'ws-2', store_id: 'default', store_name: 'Main', name: 'Warehouse', description: 'Product and stock management', icon: 'package', layout_mode: 'sidebar', colour: null, is_default: false },
       { type_key: 'admin', instance_id: 'ws-3', store_id: 'default', store_name: 'Main', name: 'Admin', description: 'Settings', icon: 'admin', layout_mode: 'sidebar', colour: null, is_default: false },
     ],
     loading: false,

@@ -40,9 +40,9 @@ const WORKSPACES: WorkspaceDef[] = [
     features: ['kitchen-display'],
   },
   {
-    key: 'inventory',
-    i18nKey: 'ws-preview-name-inventory',
-    colorClass: 'lsp-ws--inventory',
+    key: 'warehouse',
+    i18nKey: 'ws-preview-name-warehouse',
+    colorClass: 'lsp-ws--warehouse',
     features: ['inventory-tracking'],
   },
   {
@@ -101,7 +101,7 @@ const KNOWN_NAV_ITEMS: NavItemDef[] = [
 // ── Workspace icons (inline SVGs) ───────────────────────────────────
 
 function WorkspaceIcon({ wsKey }: { wsKey: string }) {
-  const known = ['restaurant-pos', 'store-pos', 'kds', 'inventory', 'admin'];
+  const known = ['restaurant-pos', 'store-pos', 'kds', 'warehouse', 'admin'];
   if (!known.includes(wsKey)) return null;
   return <SharedWorkspaceIcon wsKey={wsKey} />;
 }

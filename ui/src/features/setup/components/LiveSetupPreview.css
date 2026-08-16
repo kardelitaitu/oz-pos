@@ -127,7 +127,7 @@
   color: oklch(0.35 0.12 160);
 }
 
-.lsp-ws-chip.lsp-ws--inventory.lsp-ws-chip--active {
+.lsp-ws-chip.lsp-ws--warehouse.lsp-ws-chip--active {
   background: oklch(0.98 0.01 80);
   border-color: oklch(0.75 0.15 80);
   color: oklch(0.35 0.12 80);

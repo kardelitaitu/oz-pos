@@ -68,12 +68,12 @@ const FALLBACK_WORKSPACES: WorkspaceDto[] = [
     is_default: false,
   },
   {
-    instance_id: "default-inventory",
-    type_key: "inventory",
+    instance_id: "default-warehouse",
+    type_key: "warehouse",
     store_id: "default",
     store_name: "Main Store",
     purpose_key: "stock-control",
-    name: "Inventory Management",
+    name: "Warehouse",
     description:
       "Manage products, stock levels, bundles, categories, and inventory reports",
     icon: "inventory",

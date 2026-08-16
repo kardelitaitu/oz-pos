@@ -332,8 +332,8 @@ describe('WorkspaceSettingsModal', () => {
     });
   });
 
-  it('renders Inventory card for inventory type', async () => {
-    renderModal({ workspaceType: 'inventory' });
+  it('renders Inventory card for warehouse type', async () => {
+    renderModal({ workspaceType: 'warehouse' });
 
     await waitFor(() => {
       expect(screen.getByTestId('card-inventory')).toBeInTheDocument();

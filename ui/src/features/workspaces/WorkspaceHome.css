@@ -28,7 +28,7 @@
   --ws-glow: rgba(34, 197, 94, 0.15);
 }
 
-.ws-color-inventory {
+.ws-color-warehouse {
   --ws-accent: #a855f7;
   --ws-accent-bg: rgba(168, 85, 247, 0.1);
   --ws-glow: rgba(168, 85, 247, 0.15);

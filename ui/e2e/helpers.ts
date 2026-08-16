@@ -9,7 +9,7 @@ export const WORKSPACES = {
   STORE_POS: 'store-pos',
   RESTAURANT_POS: 'restaurant-pos',
   KDS: 'kds',
-  INVENTORY: 'inventory',
+  INVENTORY: 'warehouse',
   ADMIN: 'admin',
 } as const;
 
@@ -107,7 +107,7 @@ export async function selectWorkspace(
     'store-pos': 'Store POS',
     'restaurant-pos': 'Restaurant POS',
     kds: 'Kitchen Display',
-    inventory: 'Inventory Management',
+    warehouse: 'Warehouse',
     admin: 'Admin',
   };
 

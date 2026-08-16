@@ -312,7 +312,7 @@ const MOCK_WORKSPACES_SEED = [
   { instance_id: 'ws-1', type_key: 'store-pos', store_id: 'store-1', store_name: 'TOKO TEST', name: 'Store POS', description: 'Point of Sale', icon: 'shopping-cart', layout_mode: 'default', colour: '#10b981', is_default: true },
   { instance_id: 'ws-2', type_key: 'restaurant-pos', store_id: 'store-1', store_name: 'TOKO TEST', name: 'Restaurant POS', description: 'Table service', icon: 'restaurant', layout_mode: 'fullscreen', colour: '#ef4444', is_default: false },
   { instance_id: 'ws-3', type_key: 'kds', store_id: 'store-1', store_name: 'TOKO TEST', name: 'Kitchen Display', description: 'Order display', icon: 'utensils', layout_mode: 'kds', colour: '#f59e0b', is_default: false },
-  { instance_id: 'ws-4', type_key: 'inventory', store_id: 'store-1', store_name: 'TOKO TEST', name: 'Inventory Management', description: 'Stock management', icon: 'package', layout_mode: 'default', colour: '#3b82f6', is_default: false },
+  { instance_id: 'ws-4', type_key: 'warehouse', store_id: 'store-1', store_name: 'TOKO TEST', name: 'Warehouse', description: 'Product and stock management', icon: 'package', layout_mode: 'default', colour: '#3b82f6', is_default: false },
   { instance_id: 'ws-5', type_key: 'admin', store_id: 'store-1', store_name: 'TOKO TEST', name: 'Admin', description: 'Settings & management', icon: 'settings', layout_mode: 'default', colour: '#8b5cf6', is_default: false },
 ];
 const MOCK_WORKSPACES_KEY = 'oz-dev-mock:workspaces';
@@ -1532,7 +1532,7 @@ const handlers: Record<string, (args: unknown) => unknown> = {
     { key: 'store-pos', name: 'Store POS', description: 'Point of Sale', icon: 'shopping-cart' },
     { key: 'restaurant-pos', name: 'Restaurant POS', description: 'Table service', icon: 'restaurant' },
     { key: 'kds', name: 'Kitchen Display', description: 'Order display', icon: 'utensils' },
-    { key: 'inventory', name: 'Inventory Management', description: 'Stock management', icon: 'package' },
+    { key: 'warehouse', name: 'Warehouse', description: 'Product and stock management', icon: 'package' },
     { key: 'admin', name: 'Admin', description: 'Settings & management', icon: 'settings' },
   ],
   'get_user_workspace_instances_scoped': () => [],

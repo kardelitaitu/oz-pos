@@ -52,7 +52,7 @@ export default function TabletAppShell() {
         'restaurant-pos': 'pos',
         'store-pos': 'pos',
         kds: 'kds',
-        inventory: 'products',
+        warehouse: 'products',
         admin: 'settings',
       };
       setCurrentRoute(workspaceRoute[activeWorkspace ?? ''] ?? 'pos');

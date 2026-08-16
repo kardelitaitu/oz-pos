@@ -23,7 +23,7 @@ import styles from './WorkspaceSettingsModal.module.css';
 
 // ── Types ──────────────────────────────────────────────────────────
 
-export type WorkspaceType = 'store-pos' | 'restaurant-pos' | 'kds' | 'inventory';
+export type WorkspaceType = 'store-pos' | 'restaurant-pos' | 'kds' | 'warehouse';
 export type ModalPresentation = 'overlay' | 'slideover';
 
 export interface WorkspaceSettingsModalProps {
@@ -52,7 +52,7 @@ function renderWorkspaceCard(
       return <WorkspaceRestaurantPosSettings {...cardProps} />;
     case 'kds':
       return <WorkspaceKdsSettings {...cardProps} />;
-    case 'inventory':
+    case 'warehouse':
       return <WorkspaceInventorySettings {...cardProps} />;
     default:
       return <WorkspaceStorePosSettings {...cardProps} />;

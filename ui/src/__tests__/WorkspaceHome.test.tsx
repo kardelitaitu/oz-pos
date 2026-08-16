@@ -53,7 +53,7 @@ const sampleWorkspaces = [
   { instance_id: 'default-restaurant-pos', type_key: 'restaurant-pos', store_id: 'default', store_name: 'Main Store', name: 'Restaurant POS', description: 'Cashier terminal for restaurant ordering', icon: 'restaurant', layout_mode: 'fullscreen', colour: null, is_default: false },
   { instance_id: 'default-store-pos', type_key: 'store-pos', store_id: 'default', store_name: 'Main Store', name: 'Store POS', description: 'Cashier terminal for retail', icon: 'store', layout_mode: 'fullscreen', colour: null, is_default: false },
   { instance_id: 'default-kds', type_key: 'kds', store_id: 'default', store_name: 'Main Store', name: 'Kitchen Display', description: 'Order queue display for the kitchen', icon: 'kds', layout_mode: 'fullscreen', colour: null, is_default: false },
-  { instance_id: 'default-inventory', type_key: 'inventory', store_id: 'default', store_name: 'Main Store', name: 'Inventory Management', description: 'Manage products and stock', icon: 'inventory', layout_mode: 'sidebar', colour: null, is_default: false },
+  { instance_id: 'default-warehouse', type_key: 'warehouse', store_id: 'default', store_name: 'Main Store', name: 'Warehouse', description: 'Product and stock management', icon: 'package', layout_mode: 'sidebar', colour: null, is_default: false },
   { instance_id: 'default-admin', type_key: 'admin', store_id: 'default', store_name: 'Main Store', name: 'Admin', description: 'System settings and reports', icon: 'admin', layout_mode: 'sidebar', colour: null, is_default: false },
 ];
 
@@ -223,7 +223,7 @@ describe('WorkspaceHome', () => {
       });
       expect(screen.getByText('Store POS')).toBeInTheDocument();
       expect(screen.getByText('Kitchen Display')).toBeInTheDocument();
-      expect(screen.getByText('Inventory Management')).toBeInTheDocument();
+      expect(screen.getByText('Warehouse')).toBeInTheDocument();
       expect(screen.getByText('Admin')).toBeInTheDocument();
     });
 
@@ -348,7 +348,7 @@ describe('WorkspaceHome', () => {
         'Restaurant POS',
         'Store POS',
         'Kitchen Display',
-        'Inventory Management',
+        'Warehouse',
         'Admin',
       ]);
     });

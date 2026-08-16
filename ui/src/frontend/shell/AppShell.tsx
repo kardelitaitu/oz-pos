@@ -199,7 +199,7 @@ export default function AppShell() {
           'restaurant-pos': 'sales',
           'store-pos': 'products',
           kds: 'kds',
-          inventory: 'inventory',
+          warehouse: 'inventory',
           admin: 'settings',
         };
         setCurrentRoute(workspaceRoute[activeWorkspace ?? ''] ?? 'products');
@@ -277,7 +277,7 @@ export default function AppShell() {
     'restaurant-pos': 'restaurant-pos',
     'store-pos': 'store-pos',
     kds: 'kds',
-    inventory: 'inventory',
+    warehouse: 'warehouse',
   };
   const workspaceType: WorkspaceType | null = activeWorkspace ? (WORKSPACE_TO_TYPE[activeWorkspace] ?? null) : null;
 

@@ -16,11 +16,8 @@ a role for the screen in front of you — what you can do, not where you are:
 | Store POS       | Retail checkout — product lookup, customers, and loyalty                       | Ready        |
 | Restaurant POS  | Table-service checkout — menu categories and table management                   | Ready        |
 | Kitchen Display | Order queue for the kitchen — tap tickets to advance their status               | Ready        |
-| Inventory       | Products, stock levels, bundles, categories, and inventory reports              | Ready        |
+| Warehouse       | Products, stock levels, bundles, categories, and inventory reports              | Ready        |
 | Admin           | Settings, staff, reports, audit log, and configuration                          | Ready        |
-| Reports         | Sales, inventory, and analytics dashboards — KPIs, charts, and exports          | Ready        |
-| Kiosk           | Self-service checkout — customers tap to start, order, and pay themselves       | Coming soon  |
-| Bar / Beverage Station | Ticket display for the bar — bartenders see and complete drink orders    | Coming soon  |
 
 ## Access by assignment
 
@@ -52,11 +49,11 @@ primary store — and shows that store's workspaces. See [Stores & Topology](../
 
 ## Planned workspaces
 
-**Kiosk** — a self-service checkout workspace on the roadmap: a screen for
-customers to tap to start, build their order, and pay without staff. It is
-listed in the picker as **Coming soon** and will appear as a ready workspace
-once it ships.
+The picker shows placeholder cards for the workspaces still on the roadmap —
+**Loyalty**, **Marketing**, and **Online Orders**. They are marked **Coming
+soon** and will become ready workspaces as they ship.
 
-**Bar / Beverage Station** — a ticket display for the bar, like the Kitchen
-Display but for drinks: bartenders see drink orders fire from the kitchen
-queue and complete them. It is also listed as **Coming soon**.
+**Kiosk** is not a workspace — it is a locked-down, self-service checkout
+mode for an unattended screen. **Reports** are not a workspace either: sales
+and analytics dashboards live inside the Admin workspace, under the **Reports**
+screen.

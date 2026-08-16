@@ -17,11 +17,8 @@ Anda berada:
 | POS Toko        | Kasir ritel — pencarian produk, pelanggan, dan loyalitas                   | Siap         |
 | POS Restoran    | Kasir layanan meja — kategori menu dan manajemen meja                      | Siap         |
 | Tampilan Dapur  | Antrean pesanan untuk dapur — ketuk tiket untuk memajukan statusnya        | Siap         |
-| Inventaris      | Produk, tingkat stok, bundel, kategori, dan laporan inventaris             | Siap         |
+| Gudang          | Produk, tingkat stok, bundel, kategori, dan laporan inventaris             | Siap         |
 | Admin           | Pengaturan, staf, laporan, log audit, dan konfigurasi                      | Siap         |
-| Laporan         | Dasbor penjualan, inventaris, dan analitik — KPI, grafik, dan ekspor       | Siap         |
-| Kiosk           | Kasir layanan mandiri — pelanggan mengetuk untuk mulai, memesan, dan bayar | Segera hadir |
-| Bar / Stasiun Minuman | Tampilan tiket untuk bar — bartender melihat dan menyelesaikan pesanan minuman | Segera hadir |
 
 ## Akses berdasarkan penugasan
 
@@ -55,11 +52,12 @@ utama — lalu menampilkan ruang kerja toko tersebut. Lihat
 
 ## Ruang kerja yang direncanakan
 
-**Kiosk** — ruang kerja kasir layanan mandiri yang ada di peta jalan: layar
-untuk pelanggan mengetuk untuk mulai, membuat pesanan, dan membayar tanpa
-staf. Terdaftar di pemilih sebagai **Segera hadir** dan akan muncul sebagai
-ruang kerja siap pakai begitu diluncurkan.
+Pemilih menampilkan kartu tempat untuk ruang kerja yang masih ada di peta
+jalan — **Loyalitas**, **Pemasaran**, dan **Pesanan Online**. Ketiganya
+ditandai **Segera hadir** dan akan menjadi ruang kerja siap pakai begitu
+diluncurkan.
 
-**Bar / Stasiun Minuman** — tampilan tiket untuk bar, seperti Tampilan Dapur
-tetapi untuk minuman: bartender melihat pesanan minuman yang masuk dari
-antrean dapur dan menyelesaikannya. Juga terdaftar sebagai **Segera hadir**.
+**Kiosk** bukan ruang kerja — melainkan mode kasir layanan mandiri yang
+dikunci untuk layar tanpa pengawas. **Laporan** juga bukan ruang kerja:
+dasbor penjualan dan analitik berada di dalam ruang kerja Admin, pada layar
+**Laporan**.

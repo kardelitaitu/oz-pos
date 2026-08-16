@@ -15,7 +15,7 @@ const WS_COLORS: Record<string, string> = {
   'restaurant-pos': 'ws-color-restaurant-pos',
   'store-pos': 'ws-color-store-pos',
   kds: 'ws-color-kds',
-  inventory: 'ws-color-inventory',
+  warehouse: 'ws-color-warehouse',
   admin: 'ws-color-admin',
 };
 
@@ -66,7 +66,7 @@ const WS_ORDER: Record<string, number> = {
   'restaurant-pos': 1,
   'store-pos': 2,
   kds: 3,
-  inventory: 4,
+  warehouse: 4,
   admin: 5,
 };
 

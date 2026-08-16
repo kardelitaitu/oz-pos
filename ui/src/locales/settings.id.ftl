@@ -214,7 +214,7 @@ lsp-ws-status-inactive = { $name } — nonaktif
 ws-preview-name-restaurant-pos = POS Restoran
 ws-preview-name-store-pos = POS Toko
 ws-preview-name-kds = Tampilan Dapur
-ws-preview-name-inventory = Inventaris
+ws-preview-name-warehouse = Gudang
 ws-preview-name-admin = Admin
 
 # ── Settings Page (remaining) ──
