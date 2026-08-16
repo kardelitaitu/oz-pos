@@ -36,20 +36,16 @@ rm -f "$STATE"
 PASS=0
 FAIL=0
 
-# run_health <license-payload> [license-down] [max-fails]
+# run_health <license-payload> [license-down] [smtp-max-fails] [paddle-max-fails]
 # Runs healthcheck.sh with the given fake payload and prints its exit code.
 run_health() {
     payload="$1"
     down="${2:-0}"
-    maxfails="${3:-}"
     code=0
-    if [ -n "$maxfails" ]; then
-        FAKE_LICENSE_HEALTH="$payload" FAKE_LICENSE_DOWN="$down" \
-            OZ_HEALTH_SMTP_MAX_FAILS="$maxfails" PATH="$SHIM:$PATH" sh "$HERE/healthcheck.sh" || code=$?
-    else
-        FAKE_LICENSE_HEALTH="$payload" FAKE_LICENSE_DOWN="$down" \
-            PATH="$SHIM:$PATH" sh "$HERE/healthcheck.sh" || code=$?
-    fi
+    if [ -n "${3:-}" ]; then export OZ_HEALTH_SMTP_MAX_FAILS="$3"; else unset OZ_HEALTH_SMTP_MAX_FAILS; fi
+    if [ -n "${4:-}" ]; then export OZ_HEALTH_PADDLE_MAX_FAILS="$4"; else unset OZ_HEALTH_PADDLE_MAX_FAILS; fi
+    FAKE_LICENSE_HEALTH="$payload" FAKE_LICENSE_DOWN="$down" \
+        PATH="$SHIM:$PATH" sh "$HERE/healthcheck.sh" || code=$?
     echo "$code"
 }
 
@@ -68,6 +64,11 @@ VERIFIED='{"status":"ok","smtp":{"configured":true,"error":"","verified":true}}'
 BROKEN='{"status":"ok","smtp":{"configured":true,"error":"relay rejected sender","verified":false}}'
 NOT_CONFIGURED='{"status":"ok","smtp":{"configured":false,"verified":false,"error":""}}'
 OLD_IMAGE='{"status":"ok","db_connected":true}'
+# Full payloads (smtp ok) with a paddle block present / secret missing.
+PADDLE_OK='{"status":"ok","smtp":{"configured":true,"error":"","verified":true},"paddle":{"secret_configured":true,"price_tiers_configured":true,"price_tiers_mappings":2,"error":""}}'
+PADDLE_MISSING='{"status":"ok","smtp":{"configured":true,"error":"","verified":true},"paddle":{"secret_configured":false,"price_tiers_configured":true,"price_tiers_mappings":2,"error":""}}'
+# Broken SMTP + healthy paddle (for the counter-independence test).
+PADDLE_OK_WITH_BROKEN_SMTP='{"status":"ok","smtp":{"configured":true,"error":"relay rejected sender","verified":false},"paddle":{"secret_configured":true,"price_tiers_configured":true,"price_tiers_mappings":2,"error":""}}'
 
 # 1. Verified sender -> healthy, no state file.
 rm -f "$STATE"
@@ -100,6 +101,38 @@ expect "license endpoint down" 1 "$(run_health "" 1)"
 # 7. OZ_HEALTH_SMTP_MAX_FAILS=1 -> first broken probe fails immediately.
 rm -f "$STATE"
 expect "max-fails=1 fails on first broken probe" 1 "$(run_health "$BROKEN" 0 1)"
+
+# ── Paddle secret gate ────────────────────────────────────────────────
+PSTATE=/tmp/oz-health-paddle-fails
+rm -f "$STATE" "$PSTATE"
+
+# 8. Secret present -> healthy, no paddle state file.
+expect "paddle secret present is healthy" 0 "$(run_health "$PADDLE_OK")"
+[ ! -f "$PSTATE" ] && echo "PASS: paddle state file cleared on success" || { echo "FAIL: paddle state file should not exist"; FAIL=$((FAIL + 1)); }
+
+# 9. Secret missing: sub-threshold runs stay healthy, Nth run fails.
+expect "paddle missing run 1 (sub-threshold)" 0 "$(run_health "$PADDLE_MISSING")"
+expect "paddle missing run 2 (sub-threshold)" 0 "$(run_health "$PADDLE_MISSING")"
+expect "paddle missing run 3 (threshold reached)" 1 "$(run_health "$PADDLE_MISSING")"
+
+# 10. Recovery resets the paddle counter.
+expect "paddle recovery is healthy" 0 "$(run_health "$PADDLE_OK")"
+[ ! -f "$PSTATE" ] && echo "PASS: paddle recovery cleared the counter" || { echo "FAIL: paddle counter should reset on recovery"; FAIL=$((FAIL + 1)); }
+
+# 11. OZ_HEALTH_PADDLE_MAX_FAILS=1 -> fails on the first miss.
+rm -f "$PSTATE"
+expect "paddle max-fails=1 fails on first miss" 1 "$(run_health "$PADDLE_MISSING" 0 0 1)"
+
+# 12. Gate counters are independent: broken SMTP + ok paddle (and the
+#     reverse) must not trip the other gate's state.
+rm -f "$STATE" "$PSTATE"
+expect "broken smtp + ok paddle run 1" 0 "$(run_health "$PADDLE_OK_WITH_BROKEN_SMTP")"
+[ -f "$STATE" ] && [ ! -f "$PSTATE" ] && echo "PASS: only the SMTP counter incremented" || { echo "FAIL: gate counters should be independent"; FAIL=$((FAIL + 1)); }
+expect "ok smtp + missing paddle run 1" 0 "$(run_health "$PADDLE_MISSING")"
+[ -f "$PSTATE" ] && [ ! -f "$STATE" ] && echo "PASS: only the paddle counter incremented" || { echo "FAIL: gate counters should be independent"; FAIL=$((FAIL + 1)); }
+
+# 13. Old payload without the paddle block -> healthy (backward compatible).
+expect "old payload without paddle block" 0 "$(run_health "$OLD_IMAGE")"
 
 echo
 echo "== $PASS passed, $FAIL failed =="
