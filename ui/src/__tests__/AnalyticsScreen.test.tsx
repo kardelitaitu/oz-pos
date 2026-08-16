@@ -1861,11 +1861,14 @@ describe('AnalyticsScreen card error surface', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Refresh data' }));
     await flushRecalc();
 
-    // The revenue KPI (8,500,000 minor = $85,000 → compact '$85.0K')
-    // now renders data.
+    // The revenue KPI (8,500,000 minor = $85,000 → compact '$85K' or
+    // '$85.0K'). Node/ICU versions differ on whether compact notation
+    // keeps the trailing '.0' (Node 22 shows '$85.0K', Node 24 '$85K'),
+    // so match either rendering. Anchored so the KPI total itself is
+    // matched, not the 'Peak: … · $85K' / 'Low: …' insight lines.
     expect(screen.queryByRole('alert')).toBeNull();
     expect(mockGetWeeklyRevenue.mock.calls.length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText('$85.0K')).toBeTruthy();
+    expect(screen.getByText(/^\$85(?:\.0)?K$/)).toBeTruthy();
   });
 });
 
