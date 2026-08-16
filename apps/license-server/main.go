@@ -151,10 +151,10 @@ func main() {
 		se.Router.POST(paddleWebhookPath, handlePaddleWebhook(app))
 		// P8-2: Machine-level revocation is integrated into the /status
 		// endpoint (send revoke:true with machine_id in the request body).
-		// P8-4: /api/health is now served by PocketBase's built-in endpoint (v0.39.6+).
-		// The custom handler (health.go) is retained for reference but NOT registered
-		// to avoid a route-conflict panic with PocketBase's own /api/health route.
-		// se.Router.GET("/api/health", handleHealth(app))
+		// /api/health: PocketBase's built-in endpoint registers before this
+		// hook, so it can't be replaced by re-registering the route; a root
+		// middleware short-circuits it with our extended payload (health.go).
+		bindHealthOverride(app, se)
 		return se.Next()
 	})
 
