@@ -33,6 +33,32 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo fmt --all -- --check
 
+  # ── Go: format + vet (apps/license-server) ─────────────────────────
+  # Fail-closed gate for the Go license server: `gofmt -l` must report
+  # zero unformatted files and `go vet ./...` must pass. The ubuntu
+  # checkout is LF, so the strict gofmt check is authoritative (no CRLF
+  # false positives — the commit-time hook in `.githooks/pre-commit`
+  # auto-fixes instead because Windows checkouts are CRLF on disk).
+  go:
+    name: Go Format + Vet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/license-server/go.mod
+          cache-dependency-path: apps/license-server/go.sum
+      - name: Check gofmt
+        run: |
+          UNFORMATTED=$(gofmt -l apps/license-server)
+          if [ -n "$UNFORMATTED" ]; then
+            echo "::error::gofmt violations in apps/license-server:"
+            echo "$UNFORMATTED"
+            exit 1
+          fi
+      - name: Run go vet
+        run: cd apps/license-server && go vet ./...
+
   # ── Rust: Panic-inventory gate (RUST-07 / ADR #33) — fail-closed ────
   # Fails when any production unwrap()/expect() lacks a documented
   # invariant comment (// SAFETY: / // INVARIANT: on the same or preceding
