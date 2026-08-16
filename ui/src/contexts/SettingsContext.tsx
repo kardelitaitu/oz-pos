@@ -55,8 +55,11 @@ export interface SettingsState {
   appVersion: string;
 }
 
-/** Local development sync endpoint used when no server is configured. */
-export const DEFAULT_LOCAL_SYNC_SERVER_URL = 'http://localhost:3099';
+// TEMPORARILY DISABLED (2026-08-16): the local Docker dev sync endpoint
+// must not be pre-filled while testing against the deployed cloud server.
+// Re-enable by uncommenting the const + the fallback body in
+// `withSyncDefaults`.
+// export const DEFAULT_LOCAL_SYNC_SERVER_URL = 'http://localhost:3099';
 
 /**
  * Give an unconfigured settings page a usable local-sync draft.
@@ -65,14 +68,20 @@ export const DEFAULT_LOCAL_SYNC_SERVER_URL = 'http://localhost:3099';
  * whether an old API key was retained. Keep configured URLs and explicit
  * enabled states untouched; this fallback only supplies the local defaults
  * for the unconfigured settings surface.
+ *
+ * TEMPORARILY DISABLED (2026-08-16): the local-Docker default is commented
+ * out so an unconfigured sync stays unconfigured (no localhost pre-fill)
+ * while testing against the deployed cloud server. Re-enable with the
+ * `DEFAULT_LOCAL_SYNC_SERVER_URL` const above.
  */
 export function withSyncDefaults(sync: SyncSettingsDto): SyncSettingsDto {
   if (sync.serverUrl?.trim()) return sync;
-  return {
-    ...sync,
-    serverUrl: DEFAULT_LOCAL_SYNC_SERVER_URL,
-    enabled: true,
-  };
+  // return {
+  //   ...sync,
+  //   serverUrl: DEFAULT_LOCAL_SYNC_SERVER_URL,
+  //   enabled: true,
+  // };
+  return sync;
 }
 
 /** Default state used before the initial fetch completes. */
@@ -92,9 +101,10 @@ const DEFAULT_SETTINGS: SettingsState = {
   },
   store: { name: '', address: '', taxId: '', currency: 'IDR', branch: '' },
   sync: {
-    serverUrl: DEFAULT_LOCAL_SYNC_SERVER_URL,
+    // TEMPORARILY DISABLED (2026-08-16): was DEFAULT_LOCAL_SYNC_SERVER_URL
+    serverUrl: null,
     hasApiKey: false,
-    enabled: true,
+    enabled: false,
   },
   brand: { colour: '#10b981', storeName: '' },
   preferences: { cardSize: 0, fontSize: 0, fontSmoothing: 'antialiased' },
