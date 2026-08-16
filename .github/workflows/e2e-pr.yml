@@ -152,8 +152,12 @@ jobs:
           fi
 
           echo "Running: npm run e2e -- --project=${{ matrix.project }} ${ARGS}"
+          # The default shell is `bash -e` — exit 2 from run-e2e.mjs must not
+          # abort the script before the RC conversion below (AUDIT-27 CI-02).
+          set +e
           npm run e2e -- --project=${{ matrix.project }} ${ARGS}
           RC=$?
+          set -e
           # AUDIT-27 CI-02: run-e2e.mjs exits 2 (SKIPPED-NO-SPEC) when
           # --changed-only found no spec changes (e.g. an infra-only PR
           # touching Dockerfile/compose/runner). Main CI's `e2e` job still
