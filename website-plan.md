@@ -145,12 +145,16 @@ website/
 
 ## 5. Registration & Auth (Tenant Email OTP)
 
-### Why no self-signup
+### Self-signup (register-or-login)
 
-A web account is only useful once a customer has a license. Tenant records
-are **created by the Paddle webhook at first purchase** (email comes from
-Paddle). Trial users who never buy run the offline 90-day trial (`trial`
-tier) and have no web account — nothing to manage.
+Payment is **register-first**: `request-otp` self-signs an ACTIVE tenant
+when the email is new (implemented in `apps/license-server/web_otp.go`
+`createTenantForEmail`, mirroring the webhook's tenant shape), so the
+checkout always finds a tenant for `custom_data.email`. The Paddle webhook
+still upserts by email at first purchase — it just attaches the
+subscription to the account the customer registered instead of creating a
+parallel one. Trial users who never buy have a dormant account with no
+license; there is nothing to manage.
 
 ### Identity = the `tenants` collection (exists today)
 
@@ -171,7 +175,7 @@ allow-listed) and read/write PocketBase server-side. None are raw
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/api/v1/web/request-otp` | POST | `{email}` → looks up tenant, sends 6-digit code via SMTP. **Always returns 200** (no account enumeration). |
+| `/api/v1/web/request-otp` | POST | `{email}` → looks up **or self-signs** the tenant (register-or-login), sends 6-digit code via SMTP. **Always returns 200** (no account enumeration). |
 | `/api/v1/web/verify-otp` | POST | `{email, code}` → issues a short-lived session token + subscription summary |
 | `/api/v1/web/me` | GET | `Authorization: Bearer <token>` → tenant profile + subscription + license status |
 | `/api/v1/web/logout` | POST | Invalidates the session token |
@@ -208,12 +212,25 @@ cookie + CSRF header.
 
 ---
 
-## 6. Pricing (Placeholder — mapped to the real tier enum)
+## 6. Pricing (mapped to the real tier enum)
 
-> **Placeholder prices — the user will modify them.** Tier names below are
-> the **actual** `tier_key` values the schema and the client understand
-> (`free`, `trial`, `pro`, `premium`, `enterprise` in
-> `apps/license-server/pb_schema.json` and `crates/oz-core/src/subscription.rs`).
+> Tier names below are the **actual** `tier_key` values the schema and the
+> client understand (`free`, `trial`, `pro`, `premium`, `enterprise` in
+> `apps/license-server/pb_schema.json` and
+> `crates/oz-core/src/subscription.rs`).
+>
+> **Sandbox catalog (live, created 2026-08-16 via the sandbox API):**
+>
+> | Product | Price (USD) |
+> |---------|-------------|
+> | OZ-POS Pro — `pro_01m05gdcbasdrc6wczkdc1bn3v` | `pri_01m05gdnqp30xze6db73qcracp` — $19/mo |
+> | OZ-POS Premium — `pro_01m05gdctj4qcph8a957xwm9nw` | `pri_01m05gdpk4hmnm0k8e6vxm8cec` — $49/mo |
+>
+> **IDR limitation:** Paddle does not support IDR as a billing currency
+> (its price-currency allowlist has no IDR). The `id` locale displays Rp
+> but the checkout charges the USD price id above (Rp 299.000 ≈ $19,
+> Rp 749.000 ≈ $49). True IDR billing would need a local provider
+> (e.g. Midtrans/Xendit).
 
 ### Global (USD)
 
@@ -258,18 +275,39 @@ cookie + CSRF header.
 ### Setup Steps (One-Time)
 
 1. Create Paddle account at [paddle.com](https://paddle.com)
-2. Add products in Paddle dashboard (6 products: Pro/Premium/Enterprise × 2 locales)
-3. Create a webhook pointing at the **license server** (`https://license.oz-pos.com/api/v1/paddle/webhook`)
-4. Get credentials: `PADDLE_VENDOR_ID`, `PADDLE_CLIENT_TOKEN` (site) and
-   `PADDLE_WEBHOOK_SECRET` (server, new env var)
+2. **Sandbox catalog created via API** (2026-08-16): 2 products + 2 USD
+   prices (see §6). Live catalog is the same shape once approved.
+3. **Sandbox notification destination created via API** (2026-08-16):
+   `ntfset_01m05htpgfq0qmcvb0er6byrsx` →
+   `https://oz--cloud--76cyv4d6bn54.code.run/api/v1/paddle/webhook`
+   (events: subscription.created/updated/canceled, transaction.completed/
+   payment_failed). The signing secret is **dashboard-only** — copy it from
+   the sandbox dashboard (Settings → Notifications) into
+   `PADDLE_WEBHOOK_SECRET` on the license server.
+4. Credentials: `PUBLIC_PADDLE_CLIENT_TOKEN` (site, sandbox `test_…`),
+   `PADDLE_WEBHOOK_SECRET` (server, dashboard), `PADDLE_PRICE_TIERS`
+   (server — both currency ids per tier), `PADDLE_API_URL`
+   (`https://sandbox-api.paddle.com` for sandbox).
 
-### Checkout Flow
+### Checkout Flow (register-first)
 
 ```
-User clicks "Buy" → Paddle.js overlay → payment + VAT handled by Paddle
-→ Paddle webhook → license server → license key generated + emailed
+User clicks "Choose Pro" → signed out? → /login (self-signup via OTP)
+→ signed in → Paddle.js v2 overlay (Paddle.Initialize + Checkout.open,
+  prefilled with the account email) → payment + VAT handled by Paddle
+→ Paddle webhook → license server → key minted + subscription provisioned
+  onto the registered tenant → dashboard shows the key + subscription
 → customer activates in the POS with the key
 ```
+
+Implementation notes (see `website/src/components/paddle.ts`):
+- The site loads the **v2** SDK (`https://cdn.paddle.com/paddle/v2/paddle.js`).
+  The legacy URL (`cdn.paddle.com/paddle/paddle.js`) serves the v1 SDK whose
+  `Setup`/`Checkout` signatures differ and would break with this code.
+- `custom_data.email` is the **account** email (register-first) — the
+  webhook attaches the subscription to that tenant.
+- `PADDLE_PRICE_TIERS` maps both currencies of a tier to the same tier_key
+  (e.g. `pri_pro_usd:pro,pri_pro_idr:pro`).
 
 ### Paddle Product Mapping (6 products)
 
